@@ -1,0 +1,52 @@
+{
+  "name": "pasillo-arc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pasillo × Arc — AI travel agent that books real flights and settles on-chain via ERC-8183 + ERC-8004. Circle Arc Hackathon Spring 2026.",
+  "scripts": {
+    "dev": "next dev -p 3010",
+    "build": "next build",
+    "start": "next start -p 3010",
+    "lint": "next lint || true",
+    "typecheck": "tsc --noEmit || true",
+    "clean": "git clean -xdf .next .turbo node_modules",
+    "bootstrap-agent": "bun run scripts/bootstrap-agent.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.0",
+    "@ai-sdk/openai": "^2.0.0",
+    "@ai-sdk/react": "^2.0.0",
+    "@circle-fin/developer-controlled-wallets": "^8.0.0",
+    "@duffel/api": "^4.0.0",
+    "ai": "^6.0.0",
+    "next": "^15.5.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "viem": "^2.21.0",
+    "zod": "^3.25.76",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.8.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BuFi007/pasillo-arc.git"
+  },
+  "keywords": [
+    "arc",
+    "circle",
+    "usdc",
+    "erc-8183",
+    "erc-8004",
+    "duffel",
+    "travel",
+    "ai-agent",
+    "hackathon"
+  ],
+  "license": "MIT"
+}

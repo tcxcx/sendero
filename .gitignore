@@ -1,0 +1,18 @@
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Local env (credentials)
+.env
+.env.local
+.env.*.local
+
+# Bootstrap state
+.bootstrap-seed-progress.json
+
+# Logs
+*.log

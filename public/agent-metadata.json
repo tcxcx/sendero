@@ -1,0 +1,21 @@
+{
+  "name": "Pasillo Travel Agent",
+  "description": "Autonomous travel booking agent — searches flights and hotels via Duffel, books on behalf of corporate travelers, settles in USDC on Arc L2 via ERC-8183 job escrow.",
+  "image": "https://pasillo-arc.vercel.app/agent-avatar.png",
+  "agent_type": "travel",
+  "capabilities": [
+    "flight_search",
+    "flight_booking",
+    "hotel_search",
+    "hotel_booking",
+    "on_chain_settlement",
+    "policy_enforcement"
+  ],
+  "version": "1.0.0",
+  "x_pasillo": {
+    "duffel_integration": true,
+    "circle_dcw": true,
+    "erc_8183": true,
+    "erc_8004": true
+  }
+}
