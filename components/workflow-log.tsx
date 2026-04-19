@@ -5,11 +5,32 @@
  * Reads usePasillo().workflow and groups events by `group`.
  */
 
+import { useEffect, useMemo, useState } from 'react';
 import { usePasillo } from './store';
+
+interface Runtime {
+  provider: string | null;
+  model: string | null;
+  toolCount: number;
+}
 
 export function WorkflowLog() {
   const workflow = usePasillo((s) => s.workflow);
   const treasury = usePasillo((s) => s.treasury);
+
+  // Stable per-mount run id so the header doesn't flicker every render.
+  const runId = useMemo(
+    () => `wf_${Math.random().toString(36).slice(2, 10)}`,
+    [],
+  );
+
+  const [runtime, setRuntime] = useState<Runtime | null>(null);
+  useEffect(() => {
+    fetch('/api/agent/runtime', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => j && setRuntime(j))
+      .catch(() => {});
+  }, []);
 
   // Group events by `group` name, preserving order.
   const grouped = workflow.reduce<Record<string, typeof workflow>>(
@@ -19,6 +40,11 @@ export function WorkflowLog() {
     },
     {},
   );
+
+  const modelLabel = runtime?.model
+    ? `${runtime.provider}:${runtime.model}`
+    : '—';
+  const toolLabel = runtime ? `${runtime.toolCount} bound` : '—';
 
   return (
     <div className="col sunk">
@@ -35,13 +61,10 @@ export function WorkflowLog() {
             fontSize: 11,
           }}
         >
-          <Row k="run_id" v={`wf_${Date.now().toString(36).slice(-8)}`} vColor="var(--ink)" />
-          <Row k="model" v="pasillo-travel-v2" />
-          <Row k="tools" v="4 bound" />
-          <Row
-            k="chain"
-            v={`Arc L2 · ${treasury?.arc?.chainId ?? 421}`}
-          />
+          <Row k="run_id" v={runId} vColor="var(--ink)" />
+          <Row k="model" v={modelLabel} />
+          <Row k="tools" v={toolLabel} />
+          <Row k="chain" v={`Arc L2 · ${treasury?.arc?.chainId ?? '—'}`} />
           <Row k="block" v={`#${treasury?.arc?.blockNumber ?? '—'}`} />
         </div>
 

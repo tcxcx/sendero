@@ -15,20 +15,18 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  if (!env.duffelApiToken()) {
+    return NextResponse.json(
+      {
+        error: 'duffel_not_configured',
+        message: 'Set DUFFEL_API_TOKEN in .env.local.',
+      },
+      { status: 503 },
+    );
+  }
+
   try {
     const body = BodySchema.parse(await req.json());
-
-    if (!env.duffelApiToken()) {
-      return NextResponse.json({
-        orderId: `demo_ord_${Date.now()}`,
-        bookingReference: 'RG7F2K',
-        totalAmount: '1842.00',
-        totalCurrency: 'USD',
-        paymentRequiredBy: new Date(Date.now() + 20 * 60_000).toISOString(),
-        demo: true,
-      });
-    }
-
     const idempotencyKey = `pasillo-hold-${body.offerId}-${Date.now()}`;
     const result = await createHoldOrder({
       offerId: body.offerId,
@@ -38,7 +36,7 @@ export async function POST(req: NextRequest) {
       passengerGender: body.passengerGender,
       idempotencyKey,
     });
-    return NextResponse.json({ ...result, demo: false });
+    return NextResponse.json(result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json(
@@ -46,7 +44,17 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const message = err instanceof Error ? err.message : String(err);
+    const anyErr = err as any;
+    const duffelErrors =
+      anyErr?.errors ?? anyErr?.response?.data?.errors ?? null;
+    const message =
+      (duffelErrors &&
+        duffelErrors
+          .map((e: any) => e.title || e.message || JSON.stringify(e))
+          .join('; ')) ||
+      (err instanceof Error ? err.message : String(err)) ||
+      'unknown';
+    console.error('[bookings/hold] duffel error:', duffelErrors || err);
     return NextResponse.json({ error: 'hold_failed', message }, { status: 500 });
   }
 }

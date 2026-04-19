@@ -114,6 +114,27 @@ export interface TreasuryState {
   demo: boolean;
 }
 
+export type SettlementPhase =
+  | 'idle' // not started yet (booking just completed)
+  | 'userop-create' // waiting on user's passkey for createJob + approve
+  | 'server-budget' // backend setting the budget with provider wallet
+  | 'userop-fund' // waiting on user's passkey for fund
+  | 'server-submit' // backend submitting deliverable hash
+  | 'userop-complete' // waiting on user's passkey for complete + feedback
+  | 'done'
+  | 'error';
+
+export interface SettlementProgress {
+  phase: SettlementPhase;
+  jobId: string | null;
+  /** txs collected as each phase completes, in protocol order. */
+  txHashes: string[];
+  /** last error message surfaced by any phase. */
+  error: string | null;
+  /** last passkey user-op hash, useful for debugging. */
+  lastUserOpHash: string | null;
+}
+
 export type WorkflowEventBullet = 'done' | 'active' | 'pending' | 'fail';
 
 export interface WorkflowEvent {
@@ -141,12 +162,26 @@ interface Traveler {
   role: string;
 }
 
+export interface UserAuth {
+  /** Passkey-derived MSCA address on Arc Testnet. */
+  address: `0x${string}`;
+  displayName: string;
+  email: string;
+  /** E.164 phone — required by Duffel for hold orders. */
+  phone: string;
+}
+
 interface PasilloState {
   // Settings
   token: Token;
   verbosity: Verbosity;
   showGlobe: boolean;
+  showWorkflow: boolean;
   dark: boolean;
+
+  // Auth
+  userAuth: UserAuth | null;
+  setUserAuth: (a: UserAuth | null) => void;
 
   // Traveler / partner (host context)
   traveler: Traveler;
@@ -167,6 +202,15 @@ interface PasilloState {
   status: BookingStatus;
   error: string | null;
 
+  // Settlement (user-signed MSCA flow)
+  settlement: SettlementProgress;
+  setSettlementPhase: (phase: SettlementPhase) => void;
+  setSettlementJobId: (jobId: string | null) => void;
+  pushSettlementTx: (hash: string) => void;
+  setSettlementError: (msg: string | null) => void;
+  setLastUserOpHash: (hash: string | null) => void;
+  resetSettlement: () => void;
+
   // Treasury
   treasury: TreasuryState | null;
 
@@ -177,6 +221,7 @@ interface PasilloState {
   setToken: (t: Token) => void;
   setVerbosity: (v: Verbosity) => void;
   setShowGlobe: (v: boolean) => void;
+  setShowWorkflow: (v: boolean) => void;
   setDark: (v: boolean) => void;
 
   setSearch: (s: SearchParams) => void;
@@ -200,12 +245,30 @@ interface PasilloState {
   clearLog: () => void;
 }
 
-const DEFAULT_TRAVELER: Traveler = {
-  name: 'Nadia Chen',
-  initials: 'NC',
-  email: 'n.chen@acme.fin',
-  role: 'Senior PM · Acme Finance',
-};
+function travelerFromAuth(auth: UserAuth | null): Traveler {
+  if (!auth) {
+    return {
+      name: 'Guest',
+      initials: '··',
+      email: '',
+      role: 'Not signed in',
+    };
+  }
+  const initials =
+    auth.displayName
+      .split(/\s+/)
+      .map((w) => w[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || auth.address.slice(2, 4).toUpperCase();
+  return {
+    name: auth.displayName,
+    initials,
+    email: auth.email,
+    role: `Passkey · ${auth.address.slice(0, 6)}…${auth.address.slice(-4)}`,
+  };
+}
 
 const DEFAULT_PARTNER = {
   name: 'Acme Finance Co.',
@@ -219,9 +282,14 @@ export const usePasillo = create<PasilloState>((set) => ({
   token: 'AUTO',
   verbosity: 'normal',
   showGlobe: true,
+  showWorkflow: true,
   dark: false,
 
-  traveler: DEFAULT_TRAVELER,
+  userAuth: null,
+  setUserAuth: (userAuth) =>
+    set({ userAuth, traveler: travelerFromAuth(userAuth) }),
+
+  traveler: travelerFromAuth(null),
   partner: DEFAULT_PARTNER,
 
   search: null,
@@ -235,6 +303,45 @@ export const usePasillo = create<PasilloState>((set) => ({
   status: 'idle',
   error: null,
 
+  settlement: {
+    phase: 'idle',
+    jobId: null,
+    txHashes: [],
+    error: null,
+    lastUserOpHash: null,
+  },
+  setSettlementPhase: (phase) =>
+    set((s) => ({ settlement: { ...s.settlement, phase } })),
+  setSettlementJobId: (jobId) =>
+    set((s) => ({ settlement: { ...s.settlement, jobId } })),
+  pushSettlementTx: (hash) =>
+    set((s) => ({
+      settlement: {
+        ...s.settlement,
+        txHashes: [...s.settlement.txHashes, hash],
+      },
+    })),
+  setSettlementError: (error) =>
+    set((s) => ({
+      settlement: {
+        ...s.settlement,
+        error,
+        phase: error ? 'error' : s.settlement.phase,
+      },
+    })),
+  setLastUserOpHash: (lastUserOpHash) =>
+    set((s) => ({ settlement: { ...s.settlement, lastUserOpHash } })),
+  resetSettlement: () =>
+    set({
+      settlement: {
+        phase: 'idle',
+        jobId: null,
+        txHashes: [],
+        error: null,
+        lastUserOpHash: null,
+      },
+    }),
+
   treasury: null,
 
   workflow: [],
@@ -242,6 +349,7 @@ export const usePasillo = create<PasilloState>((set) => ({
   setToken: (token) => set({ token }),
   setVerbosity: (verbosity) => set({ verbosity }),
   setShowGlobe: (showGlobe) => set({ showGlobe }),
+  setShowWorkflow: (showWorkflow) => set({ showWorkflow }),
   setDark: (dark) => {
     if (typeof document !== 'undefined') {
       document.documentElement.classList.toggle('dark', dark);
@@ -254,7 +362,9 @@ export const usePasillo = create<PasilloState>((set) => ({
     set({ offers, status: offers.length > 0 ? 'selected' : 'idle' }),
   selectOffer: (selectedOfferId) => set({ selectedOfferId }),
   setHoldOrder: (holdOrder) => set({ holdOrder, status: 'held' }),
-  setPayment: (payment) => set({ payment, status: 'confirmed' }),
+  // Duffel was paid — that is NOT the full "confirmed" state. The booking is
+  // only confirmed once the user has signed the on-chain settlement.
+  setPayment: (payment) => set({ payment }),
   setOnChainSettlement: (s) => set({ onChainSettlement: s, status: 'confirmed' }),
   setHotels: (hotelSearch, hotels) => set({ hotelSearch, hotels }),
   setStatus: (status) => set({ status }),
@@ -273,6 +383,13 @@ export const usePasillo = create<PasilloState>((set) => ({
       status: 'idle',
       error: null,
       workflow: [],
+      settlement: {
+        phase: 'idle',
+        jobId: null,
+        txHashes: [],
+        error: null,
+        lastUserOpHash: null,
+      },
     }),
 
   setTreasury: (treasury) => set({ treasury }),
@@ -303,19 +420,20 @@ export const usePasillo = create<PasilloState>((set) => ({
 // Hydrate persisted settings from localStorage (client-only).
 export function hydrateFromStorage() {
   if (typeof window === 'undefined') return;
+  // Dev convenience: expose the store on window so QA flows and the
+  // browser console can poke state without wiring up React DevTools.
+  if (process.env.NODE_ENV !== 'production') {
+    (window as any).__pasillo = usePasillo;
+  }
   try {
     const raw = localStorage.getItem('pasillo:settings');
     if (!raw) return;
     const p = JSON.parse(raw) as Partial<{
-      token: Token;
-      verbosity: Verbosity;
-      showGlobe: boolean;
+      showWorkflow: boolean;
       dark: boolean;
     }>;
     usePasillo.setState({
-      token: p.token ?? 'AUTO',
-      verbosity: p.verbosity ?? 'normal',
-      showGlobe: p.showGlobe ?? true,
+      showWorkflow: p.showWorkflow ?? true,
       dark: p.dark ?? false,
     });
     if (p.dark) {
@@ -333,9 +451,7 @@ export function subscribePersist() {
       localStorage.setItem(
         'pasillo:settings',
         JSON.stringify({
-          token: state.token,
-          verbosity: state.verbosity,
-          showGlobe: state.showGlobe,
+          showWorkflow: state.showWorkflow,
           dark: state.dark,
         }),
       );
@@ -345,13 +461,80 @@ export function subscribePersist() {
   });
 }
 
-// Derive the current workflow step (0-5) for StepRail.
+/**
+ * Compact, JSON-serializable snapshot of app state for the chat agent.
+ * Sent on every /api/chat POST so the agent can see who the user is, where
+ * they are in a booking, and what just failed — without us having to restate
+ * it in the system prompt on every turn.
+ */
+export function runtimeContext(): Record<string, unknown> {
+  const s = usePasillo.getState();
+  const compactEvents = s.workflow.slice(-6).map((e) => ({
+    group: e.group,
+    bullet: e.bullet,
+    text: stripHtml(e.text),
+    at: e.t,
+  }));
+  return {
+    user: s.userAuth
+      ? {
+          name: s.traveler.name,
+          email: s.traveler.email,
+          mscaAddress: s.userAuth.address,
+        }
+      : null,
+    booking: {
+      status: s.status,
+      search: s.search
+        ? {
+            origin: s.search.origin,
+            destination: s.search.destination,
+            departureDate: s.search.departureDate,
+            returnDate: s.search.returnDate,
+            passengers: s.search.passengers,
+            cabinClass: s.search.cabinClass,
+          }
+        : null,
+      offerCount: s.offers.length,
+      selectedOfferId: s.selectedOfferId,
+      hold: s.holdOrder
+        ? {
+            pnr: s.holdOrder.bookingReference,
+            orderId: s.holdOrder.orderId,
+            total: `${s.holdOrder.totalAmount} ${s.holdOrder.totalCurrency}`,
+            paymentRequiredBy: s.holdOrder.paymentRequiredBy,
+          }
+        : null,
+      duffelPaid: !!s.payment,
+      settlement: {
+        phase: s.settlement.phase,
+        jobId: s.settlement.jobId,
+        txsCollected: s.settlement.txHashes.length,
+        lastError: s.settlement.error,
+      },
+      onChainSettled: !!s.onChainSettlement,
+    },
+    lastError: s.error,
+    recentWorkflow: compactEvents,
+  };
+}
+
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Derive the current workflow step (0-6) for StepRail. Steps:
+//   0 Intake · 1 Search · 2 Review · 3 Hold · 4 Pay · 5 Settle · 6 Done.
 export function deriveStep(state: PasilloState): number {
-  if (state.status === 'confirmed') return 6;
-  if (state.status === 'paying') return 5;
-  if (state.status === 'held') return 4;
+  if (state.onChainSettlement) return 6;
+  const phase = state.settlement.phase;
+  if (phase !== 'idle' && phase !== 'error') return 5; // settling in progress
+  if (state.payment) return 5; // Duffel paid, waiting on user to settle
+  if (state.holdOrder) return 4; // Hold created, awaiting Duffel pay
   if (state.status === 'holding') return 3;
-  if (state.status === 'selected') return 2;
+  if (state.selectedOfferId) return 3;
+  if (state.offers.length > 0) return 2;
+  if (state.search) return 1;
   if (state.status === 'searching') return 1;
   return 0;
 }

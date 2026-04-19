@@ -11,29 +11,57 @@ export async function GET() {
   const treasuryAddress = env.circleTreasuryAddress();
   const hasCircle = !!env.circleApiKey() && !!env.circleTreasuryWalletId();
 
+  if (!treasuryAddress && !hasCircle) {
+    return NextResponse.json(
+      {
+        error: 'treasury_not_configured',
+        message:
+          'Set CIRCLE_API_KEY + CIRCLE_TREASURY_WALLET_ID (and CIRCLE_TREASURY_ADDRESS) in .env.local.',
+      },
+      { status: 503 },
+    );
+  }
+
   try {
     const [balances, arcStatus, onchain] = await Promise.all([
-      hasCircle ? getTreasuryBalances().catch(() => null) : Promise.resolve(null),
+      hasCircle
+        ? getTreasuryBalances().catch(() => null)
+        : Promise.resolve(null),
       getArcStatus().catch(() => null),
-      treasuryAddress ? getOnChainBalances(treasuryAddress) : Promise.resolve(null),
+      treasuryAddress
+        ? getOnChainBalances(treasuryAddress)
+        : Promise.resolve(null),
     ]);
 
+    // Prefer Circle-reported balances, fall back to on-chain ERC-20 reads.
     const effectiveBalances =
       balances && balances.length > 0
         ? balances
         : onchain && onchain.length > 0
           ? onchain
-          : demoBalances();
+          : [];
+
+    if (!arcStatus) {
+      return NextResponse.json(
+        {
+          error: 'arc_rpc_failed',
+          message: `Failed to reach Arc RPC at ${env.arcRpcUrl()}.`,
+        },
+        { status: 502 },
+      );
+    }
 
     return NextResponse.json({
-      treasuryAddress: treasuryAddress || '0x7a2e…b18c',
+      treasuryAddress: treasuryAddress ?? null,
       balances: effectiveBalances,
-      arc: arcStatus || demoArcStatus(),
-      demo: !balances && !onchain,
+      arc: arcStatus,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: 'balance_failed', message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'balance_failed', message },
+      { status: 500 },
+    );
   }
 }
 
@@ -42,7 +70,12 @@ async function getOnChainBalances(treasuryAddress: string) {
   const eurc = env.arcEurcAddress();
   if (!usdc && !eurc) return null;
 
-  const out: { symbol: string; amount: string; chain: string; decimals: number }[] = [];
+  const out: {
+    symbol: string;
+    amount: string;
+    chain: string;
+    decimals: number;
+  }[] = [];
   if (usdc) {
     try {
       const b = await getErc20Balance(usdc as any, treasuryAddress as any);
@@ -60,21 +93,4 @@ async function getOnChainBalances(treasuryAddress: string) {
     }
   }
   return out.length > 0 ? out : null;
-}
-
-function demoBalances() {
-  return [
-    { symbol: 'USDC', amount: '412904.00', decimals: 6, chain: 'ARC' },
-    { symbol: 'EURC', amount: '88162.00', decimals: 6, chain: 'ARC' },
-  ];
-}
-
-function demoArcStatus() {
-  return {
-    blockNumber: '8482114',
-    gasPrice: '40000',
-    chainId: 421,
-    rpcUrl: 'https://rpc.arc-sepolia.circle.com',
-    explorerUrl: 'https://explorer.arc-sepolia.circle.com',
-  };
 }

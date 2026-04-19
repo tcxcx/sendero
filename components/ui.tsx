@@ -39,6 +39,18 @@ export function Subbar() {
   const traveler = usePasillo((s) => s.traveler);
   const status = usePasillo((s) => s.status);
   const search = usePasillo((s) => s.search);
+  const payment = usePasillo((s) => s.payment);
+  const settlementPhase = usePasillo((s) => s.settlement.phase);
+  const onChainSettlement = usePasillo((s) => s.onChainSettlement);
+
+  const label = statusLabel(status, {
+    payment: !!payment,
+    settling:
+      settlementPhase !== 'idle' &&
+      settlementPhase !== 'done' &&
+      settlementPhase !== 'error',
+    onChain: !!onChainSettlement,
+  });
 
   return (
     <div className="subbar">
@@ -53,7 +65,7 @@ export function Subbar() {
       </div>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <div className="scenario-chip">
-          <span>{statusLabel(status)}</span>
+          <span>{label}</span>
           {search && (
             <>
               <span className="arrow">›</span>
@@ -87,7 +99,10 @@ export function Subbar() {
   );
 }
 
-function statusLabel(status: string) {
+function statusLabel(status: string, extras: { payment: boolean; settling: boolean; onChain: boolean }) {
+  if (extras.onChain) return 'CONFIRMED · ON-CHAIN';
+  if (extras.settling) return 'SETTLING · ARC';
+  if (extras.payment) return 'PAID · AWAITING SETTLEMENT';
   switch (status) {
     case 'idle':
       return 'READY';
@@ -98,11 +113,11 @@ function statusLabel(status: string) {
     case 'holding':
       return 'HOLDING';
     case 'held':
-      return 'HELD · AWAITING PAYMENT';
+      return 'HELD';
     case 'paying':
-      return 'SETTLING · ARC';
+      return 'PAYING · DUFFEL';
     case 'confirmed':
-      return 'CONFIRMED';
+      return 'CONFIRMED · ON-CHAIN';
     case 'error':
       return 'ERROR';
     default:
@@ -161,7 +176,7 @@ export function FooterRail() {
   const token = usePasillo((s) => s.token);
   const holdOrder = usePasillo((s) => s.holdOrder);
 
-  const treasuryAddr = treasury?.treasuryAddress ?? '0x7a2e…b18c';
+  const treasuryAddr = treasury?.treasuryAddress ?? null;
   const usdc = treasury?.balances.find((b) => b.symbol === 'USDC');
   const eurc = treasury?.balances.find((b) => b.symbol === 'EURC');
   const block = treasury?.arc?.blockNumber ?? '—';
@@ -183,7 +198,12 @@ export function FooterRail() {
       </div>
       <div className="group">
         <span>
-          treasury <strong style={{ color: 'var(--text)' }}>{treasuryAddr.slice(0, 6)}…{treasuryAddr.slice(-4)}</strong>
+          treasury{' '}
+          <strong style={{ color: 'var(--text)' }}>
+            {treasuryAddr
+              ? `${treasuryAddr.slice(0, 6)}…${treasuryAddr.slice(-4)}`
+              : '—'}
+          </strong>
         </span>
         <span>·</span>
         <span>

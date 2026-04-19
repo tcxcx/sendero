@@ -20,7 +20,7 @@ export function getDuffel(): Duffel {
     const token = env.duffelApiToken();
     if (!token) {
       throw new Error(
-        'DUFFEL_API_TOKEN not set. Add it to .env.local or flip PASILLO_DEMO_FALLBACK=true.',
+        'DUFFEL_API_TOKEN not set. Add it to .env.local.',
       );
     }
     client = new Duffel({ token } as any);
@@ -138,6 +138,7 @@ export interface HoldOrderParams {
   offerId: string;
   passengerName: string;
   passengerEmail: string;
+  passengerPhone?: string;
   passengerDob?: string;
   passengerGender?: 'male' | 'female';
   idempotencyKey: string;
@@ -173,6 +174,7 @@ export async function createHoldOrder(
         given_name: givenName || 'Guest',
         family_name: familyName,
         email: params.passengerEmail,
+        phone_number: params.passengerPhone || '+447123456789',
         born_on: params.passengerDob || '1990-01-01',
         gender: params.passengerGender === 'female' ? 'f' : 'm',
         title: 'mr',
@@ -280,102 +282,6 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   seattle: { lat: 47.6062, lng: -122.3321 },
 };
 
-/**
- * Curated hotels for demo use when Duffel Stays isn't enabled on the token.
- * Photos come from Unsplash's open CDN (licensed for demo use).
- */
-function curatedHotelsFor(params: HotelSearchParams): HotelOfferSummary[] {
-  const nights = Math.max(
-    1,
-    Math.round(
-      (new Date(params.checkOutDate).getTime() -
-        new Date(params.checkInDate).getTime()) /
-        (1000 * 60 * 60 * 24),
-    ),
-  );
-  const loc = params.location;
-  const UNSPLASH = (id: string) =>
-    `https://images.unsplash.com/${id}?auto=format&fit=crop&w=640&q=80`;
-
-  const base = [
-    {
-      name: 'The Hoxton',
-      stars: 4,
-      review: 8.6,
-      nightly: 214,
-      currency: 'GBP',
-      cancel: 'free' as const,
-      photo: 'photo-1566073771259-6a8506099945',
-      amenities: ['wifi', 'breakfast', 'gym', 'bar'],
-    },
-    {
-      name: 'citizenM',
-      stars: 4,
-      review: 8.9,
-      nightly: 189,
-      currency: 'GBP',
-      cancel: 'partial' as const,
-      photo: 'photo-1578683010236-d716f9a3f461',
-      amenities: ['wifi', 'self_checkin', '24h_food'],
-    },
-    {
-      name: 'The Standard',
-      stars: 5,
-      review: 9.1,
-      nightly: 342,
-      currency: 'GBP',
-      cancel: 'free' as const,
-      photo: 'photo-1582719508461-905c673771fd',
-      amenities: ['wifi', 'pool', 'spa', 'restaurant'],
-    },
-    {
-      name: 'Hotel Edition',
-      stars: 5,
-      review: 9.3,
-      nightly: 465,
-      currency: 'GBP',
-      cancel: 'non_refundable' as const,
-      photo: 'photo-1564501049412-61c2a3083791',
-      amenities: ['wifi', 'pool', 'spa', 'fine_dining'],
-    },
-    {
-      name: 'Ace Hotel',
-      stars: 4,
-      review: 8.4,
-      nightly: 178,
-      currency: 'GBP',
-      cancel: 'partial' as const,
-      photo: 'photo-1520250497591-112f2f40a3f4',
-      amenities: ['wifi', 'coffee', 'coworking'],
-    },
-    {
-      name: 'Generator',
-      stars: 3,
-      review: 8.0,
-      nightly: 98,
-      currency: 'GBP',
-      cancel: 'free' as const,
-      photo: 'photo-1455587734955-081b22074882',
-      amenities: ['wifi', 'bar', 'common_room'],
-    },
-  ];
-
-  return base.map((h, i): HotelOfferSummary => ({
-    id: `curated_${i}`,
-    name: `${h.name}, ${loc}`,
-    city: loc,
-    country: null,
-    stars: h.stars,
-    reviewScore: h.review,
-    photos: [UNSPLASH(h.photo)],
-    price: (h.nightly * nights).toFixed(2),
-    currency: h.currency,
-    cancellation: h.cancel,
-    distanceMeters: 500 + i * 300,
-    amenities: h.amenities,
-  }));
-}
-
 function resolveCoords(
   loc: string,
 ): { lat: number; lng: number; name: string } {
@@ -433,30 +339,19 @@ export async function searchHotels(
   const coords = resolveCoords(params.location);
   const radiusKm = params.radiusKm ?? 5;
 
-  let response: any;
-  try {
-    response = await (duffel.stays as any).search({
-      location: {
-        radius: radiusKm,
-        geographic_coordinates: { latitude: coords.lat, longitude: coords.lng },
-      },
-      check_in_date: params.checkInDate,
-      check_out_date: params.checkOutDate,
-      rooms: params.rooms ?? 1,
-      guests: Array.from(
-        { length: params.guests ?? 1 },
-        () => ({ type: 'adult' } as any),
-      ),
-    } as any);
-  } catch (err) {
-    // Duffel Stays is an opt-in product — sandbox tokens typically don't
-    // have it enabled. Fall back to a curated deck with real hotel photos
-    // so the demo still works end-to-end.
-    console.warn(
-      '[stays] Duffel Stays not available on this token; using curated fallback.',
-    );
-    return curatedHotelsFor(params);
-  }
+  const response: any = await (duffel.stays as any).search({
+    location: {
+      radius: radiusKm,
+      geographic_coordinates: { latitude: coords.lat, longitude: coords.lng },
+    },
+    check_in_date: params.checkInDate,
+    check_out_date: params.checkOutDate,
+    rooms: params.rooms ?? 1,
+    guests: Array.from(
+      { length: params.guests ?? 1 },
+      () => ({ type: 'adult' } as any),
+    ),
+  } as any);
 
   const results = ((response.data as any)?.results ?? []).slice(0, 6);
 

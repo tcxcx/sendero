@@ -1,9 +1,7 @@
 /**
- * Environment variable access with explicit fallbacks.
- *
- * When a credential is missing, the getter returns `null` and callers
- * should branch to a demo-mode fallback rather than throwing. This keeps
- * the hackathon demo alive when partial env is wired up.
+ * Environment variable access with explicit nullable getters. Callers
+ * that need a credential are expected to surface a 503 when the getter
+ * returns null — no silent demo fallbacks.
  */
 
 export const env = {
@@ -26,19 +24,26 @@ export const env = {
 
   arcRpcUrl: () =>
     process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network',
-  arcChainId: () => Number(process.env.ARC_CHAIN_ID || 421),
+  // Arc Testnet canonical chain id per https://docs.arc.network
+  arcChainId: () => Number(process.env.ARC_CHAIN_ID || 5042002),
   arcUsdcAddress: () =>
     process.env.ARC_USDC_ADDRESS ||
     '0x3600000000000000000000000000000000000000',
-  arcEurcAddress: () => process.env.ARC_EURC_ADDRESS || null,
+  arcEurcAddress: () =>
+    process.env.ARC_EURC_ADDRESS ||
+    '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
   arcExplorerUrl: () =>
     process.env.ARC_EXPLORER_URL || 'https://testnet.arcscan.app',
 
-  demoFallback: () => process.env.PASILLO_DEMO_FALLBACK !== 'false',
+  // Circle Modular Wallets (user-side passkey auth). NOTE: The "Client Key"
+  // Modular Wallets expects has the `TEST_CLIENT_KEY:` / `LIVE_CLIENT_KEY:`
+  // prefix. `KIT_KEY:` values belong to App Kit / Swap Kit and will 401 here.
+  modularClientKey: () =>
+    process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY ||
+    process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_KEY ||
+    null,
+  modularClientUrl: () =>
+    process.env.NEXT_PUBLIC_CIRCLE_CLIENT_URL ||
+    process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_URL ||
+    'https://modular-sdk.circle.com/v1/rpc/w3s/buidl',
 };
-
-export function isDemoMode() {
-  return (
-    !env.duffelApiToken() || !env.circleApiKey() || !env.anthropicApiKey()
-  );
-}

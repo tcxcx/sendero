@@ -35,10 +35,14 @@ export async function searchFlights(params: SearchParams) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     });
-    if (!res.ok) throw new Error(`search_failed: ${res.status}`);
     const data = await res.json();
+    if (!res.ok) {
+      throw new Error(
+        data?.message || data?.error || `search_failed (${res.status})`,
+      );
+    }
 
-    const offers: FlightOffer[] = data.offers || data.demoHint?.demoOffers || [];
+    const offers: FlightOffer[] = data.offers || [];
     setOffers(offers);
 
     updateLastEvent('search.flights', { bullet: 'done' });
@@ -48,14 +52,6 @@ export async function searchFlights(params: SearchParams) {
       text: `rankFares(<span class="v">${offers.length} results</span>)`,
       t: now(),
     });
-    if (data.demoHint) {
-      logEvent({
-        group: 'search.flights',
-        bullet: 'active',
-        text: 'mode = <span class="v">demo fallback</span>',
-        t: now(),
-      });
-    }
 
     return offers;
   } catch (err) {
@@ -74,7 +70,7 @@ export async function searchFlights(params: SearchParams) {
 
 export async function holdFlight(
   offerId: string,
-  passenger: { name: string; email: string },
+  passenger: { name: string; email: string; phone?: string },
 ) {
   const { selectOffer, setHoldOrder, setStatus, setError, logEvent } =
     usePasillo.getState();
@@ -98,10 +94,15 @@ export async function holdFlight(
         offerId,
         passengerName: passenger.name,
         passengerEmail: passenger.email,
+        passengerPhone: passenger.phone,
       }),
     });
-    if (!res.ok) throw new Error(`hold_failed: ${res.status}`);
     const data = await res.json();
+    if (!res.ok) {
+      throw new Error(
+        data?.message || data?.error || `hold_failed (${res.status})`,
+      );
+    }
     setHoldOrder({
       orderId: data.orderId,
       bookingReference: data.bookingReference,
@@ -147,8 +148,12 @@ export async function payBooking(orderId: string) {
     const res = await fetch(`/api/bookings/${encodeURIComponent(orderId)}/pay`, {
       method: 'POST',
     });
-    if (!res.ok) throw new Error(`pay_failed: ${res.status}`);
     const data = await res.json();
+    if (!res.ok) {
+      throw new Error(
+        data?.message || data?.error || `pay_failed (${res.status})`,
+      );
+    }
     setPayment({
       paymentId: data.paymentId,
       status: data.status,

@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { usePasillo } from './store';
 import { holdFlight, payBooking, searchFlights } from './actions';
 import { StepRail, ErrorBanner } from './ui';
+import { SettlePanel } from './settle-panel';
 
 export function Stage() {
   const search = usePasillo((s) => s.search);
@@ -65,7 +66,9 @@ export function Stage() {
             />
           )}
 
-          {(payment || onChainSettlement) && <SettlementCard />}
+          {onChainSettlement && <SettlementCard />}
+
+          <SettlePanel />
 
           <HotelsCard />
 
@@ -121,7 +124,7 @@ function SearchForm() {
         onSubmit={submit}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(6, 1fr) auto',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
           gap: 12,
           padding: 16,
           alignItems: 'end',
@@ -181,8 +184,16 @@ function SearchForm() {
             <option value="first">First</option>
           </select>
         </Field>
-        <button type="submit" className="btn primary" style={{ alignSelf: 'end' }}>
-          Search →
+        <button
+          type="submit"
+          className="btn primary"
+          style={{
+            gridColumn: 'span 2',
+            alignSelf: 'end',
+            padding: '10px 12px',
+          }}
+        >
+          Search flights →
         </button>
       </form>
     </div>
@@ -231,6 +242,7 @@ function OffersCard({
   disabled: boolean;
 }) {
   const traveler = usePasillo((s) => s.traveler);
+  const userAuth = usePasillo((s) => s.userAuth);
 
   return (
     <div className="card">
@@ -322,6 +334,7 @@ function OffersCard({
                     holdFlight(offer.id, {
                       name: traveler.name,
                       email: traveler.email,
+                      phone: userAuth?.phone,
                     })
                   }
                   style={{ padding: '6px 12px', fontSize: 10 }}

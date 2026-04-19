@@ -193,7 +193,7 @@ export async function getAgentIdentity(agentId: bigint): Promise<{
       ? `https://ipfs.io/ipfs/${tokenURI.slice(7)}`
       : tokenURI;
     const res = await fetch(fetchUrl, {
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(1500),
     });
     if (res.ok) metadata = await res.json();
   } catch {
@@ -281,19 +281,38 @@ export async function getReputation(
 
   const publicClient = getArcClient();
   const latest = await publicClient.getBlockNumber();
-  const fromBlock = latest > 10_000n ? latest - 10_000n : 0n;
 
   // Filter by topic0 (event sig) + topic1 (agentId padded to 32 bytes).
   // We don't decode the full event — we just pull score from data[32:64] and
   // validator from topics[2]. That's all the aggregation needs.
   const agentIdPadded = ('0x' +
     agentId.toString(16).padStart(64, '0')) as `0x${string}`;
-  const logs = await publicClient.getLogs({
-    address: REPUTATION_REGISTRY,
-    fromBlock,
-    toBlock: latest,
-    topics: [FEEDBACK_EVENT_TOPIC0, agentIdPadded] as any,
-  } as any);
+
+  // Scan recent history in chunks and short-circuit once we've gathered
+  // enough events. Arc Testnet has ~1s blocks so 150k blocks ≈ 1.7 days,
+  // which comfortably covers a fresh bootstrap run + some drift.
+  const CHUNK = 10_000n;
+  const MAX_CHUNKS = 30;
+  const EARLY_EXIT_AT = 30;
+  const logs: any[] = [];
+  let to = latest;
+  for (let i = 0; i < MAX_CHUNKS; i++) {
+    const from = to > CHUNK ? to - CHUNK : 0n;
+    try {
+      const chunk = (await publicClient.getLogs({
+        address: REPUTATION_REGISTRY,
+        fromBlock: from,
+        toBlock: to,
+        topics: [FEEDBACK_EVENT_TOPIC0, agentIdPadded] as any,
+      } as any)) as any[];
+      logs.push(...chunk);
+      if (logs.length >= EARLY_EXIT_AT) break;
+    } catch {
+      break;
+    }
+    if (from === 0n) break;
+    to = from - 1n;
+  }
 
   const scores: number[] = [];
   const validators = new Set<string>();

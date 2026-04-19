@@ -9,23 +9,25 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
+  if (!env.duffelApiToken()) {
+    return NextResponse.json(
+      {
+        error: 'duffel_not_configured',
+        message: 'Set DUFFEL_API_TOKEN in .env.local.',
+      },
+      { status: 503 },
+    );
+  }
 
   try {
-    if (!env.duffelApiToken()) {
-      return NextResponse.json({
-        paymentId: `demo_pay_${Date.now()}`,
-        status: 'succeeded',
-        amount: '1842.00',
-        currency: 'USD',
-        demo: true,
-      });
-    }
-
+    const { id } = await params;
     const result = await payFromBalance(id);
-    return NextResponse.json({ ...result, demo: false });
+    return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: 'payment_failed', message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'payment_failed', message },
+      { status: 500 },
+    );
   }
 }

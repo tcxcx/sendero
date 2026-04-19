@@ -40,9 +40,13 @@ export function getArcClient() {
       transport: http(env.arcRpcUrl()),
       chain: {
         id: env.arcChainId(),
-        name: 'Arc Sepolia',
-        nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 6 },
+        name: 'Arc Testnet',
+        // Native gas token is USDC with 18-decimal representation on Arc.
+        nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
         rpcUrls: { default: { http: [env.arcRpcUrl()] } },
+        blockExplorers: {
+          default: { name: 'Arcscan', url: env.arcExplorerUrl() },
+        },
       },
     });
   }

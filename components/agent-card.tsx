@@ -18,23 +18,30 @@ interface AgentIdentity {
   validators: number;
   metadata: { name?: string; description?: string } | null;
   explorerUrl: string;
-  demo: boolean;
 }
 
 export function AgentCard() {
   const [data, setData] = useState<AgentIdentity | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     const fetchIdentity = async () => {
       try {
         const res = await fetch('/api/agent/identity', { cache: 'no-store' });
-        if (!res.ok) return;
-        const json = (await res.json()) as AgentIdentity;
-        if (alive) setData(json);
-      } catch {
-        /* ignore */
+        const json = await res.json();
+        if (!alive) return;
+        if (!res.ok) {
+          setFetchError(json?.message || json?.error || `HTTP ${res.status}`);
+          return;
+        }
+        setFetchError(null);
+        setData(json as AgentIdentity);
+      } catch (err) {
+        if (alive) {
+          setFetchError(err instanceof Error ? err.message : String(err));
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -49,10 +56,80 @@ export function AgentCard() {
 
   if (loading && !data) {
     return (
-      <div className="agent-card agent-card-loading">
-        <span className="agent-card-dot" />
-        <span className="mono" style={{ color: 'var(--text-dim)' }}>
-          Loading agent…
+      <div className="agent-card agent-card-loading" aria-busy="true">
+        <span className="agent-card-avatar agent-card-avatar-skel">PS</span>
+        <div className="agent-card-body">
+          <div className="agent-card-row">
+            <span className="agent-card-skel-bar" style={{ width: 140 }} />
+            <span className="agent-card-skel-chip" />
+          </div>
+          <div className="agent-card-row">
+            <span className="agent-card-skel-bar" style={{ width: 40 }} />
+            <span className="agent-card-sep">·</span>
+            <span className="agent-card-skel-bar" style={{ width: 70 }} />
+            <span className="agent-card-sep">·</span>
+            <span className="agent-card-skel-bar" style={{ width: 80 }} />
+            <span className="agent-card-sep">·</span>
+            <span className="agent-card-skel-bar mono" style={{ width: 92 }} />
+          </div>
+        </div>
+        <span className="agent-card-arrow">↗</span>
+        <style jsx>{`
+          .agent-card-loading {
+            border-color: var(--border);
+            cursor: default;
+          }
+          .agent-card-avatar-skel {
+            animation: skel-pulse 1.4s ease-in-out infinite;
+          }
+          .agent-card-skel-bar {
+            display: inline-block;
+            height: 10px;
+            background: var(--border);
+            border-radius: 2px;
+            animation: skel-pulse 1.4s ease-in-out infinite;
+          }
+          .agent-card-skel-chip {
+            display: inline-block;
+            width: 80px;
+            height: 14px;
+            border: 1px solid var(--border);
+            animation: skel-pulse 1.4s ease-in-out infinite;
+          }
+          @keyframes skel-pulse {
+            0%, 100% { opacity: 0.55; }
+            50% { opacity: 0.85; }
+          }
+          .agent-card-body { display: flex; flex-direction: column; gap: 2px; }
+          .agent-card-row {
+            display: flex; align-items: center; gap: 6px; white-space: nowrap;
+          }
+          .agent-card-avatar {
+            width: 22px; height: 22px;
+            background: var(--ink); color: var(--bg-elev);
+            font-family: var(--font-pixel, var(--font-mono));
+            font-size: 10px;
+            display: grid; place-items: center;
+          }
+          .agent-card-arrow {
+            margin-left: auto; color: var(--text-dim); font-size: 12px;
+          }
+          .agent-card-sep { opacity: 0.4; }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (fetchError && !data) {
+    return (
+      <div
+        className="agent-card agent-card-loading"
+        title={fetchError}
+        style={{ borderColor: 'var(--accent-rose)' }}
+      >
+        <span className="agent-card-dot" style={{ background: 'var(--accent-rose)' }} />
+        <span className="mono" style={{ color: 'var(--accent-rose)' }}>
+          agent · {fetchError.slice(0, 48)}
         </span>
       </div>
     );
@@ -69,7 +146,7 @@ export function AgentCard() {
       href={data.explorerUrl}
       target="_blank"
       rel="noreferrer"
-      title={`View on Arcscan${data.demo ? ' — DEMO MODE' : ''}`}
+      title="View on Arcscan"
     >
       <span className="agent-card-avatar">PS</span>
       <div className="agent-card-body">
@@ -85,12 +162,6 @@ export function AgentCard() {
           <span>{data.validators} validators</span>
           <span className="agent-card-sep">·</span>
           <span className="mono">{shortAddr}</span>
-          {data.demo && (
-            <>
-              <span className="agent-card-sep">·</span>
-              <span className="agent-card-demo">DEMO</span>
-            </>
-          )}
         </div>
       </div>
       <span className="agent-card-arrow">↗</span>

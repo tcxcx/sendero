@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -29,20 +30,13 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
-        {/* Departure Mono as pixel display font — via raw <style> to match design */}
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-              @font-face {
-                font-family: 'Departure Mono';
-                src: url('https://cdn.jsdelivr.net/gh/zephsmith/departure-mono/DepartureMono-Regular.woff2') format('woff2');
-                font-weight: 400;
-                font-style: normal;
-                font-display: swap;
-              }
-            `,
-          }}
-        />
+        {process.env.NODE_ENV === 'development' && (
+          <Script
+            src="https://unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="beforeInteractive"
+          />
+        )}
       </head>
       <body>{children}</body>
     </html>

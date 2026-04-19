@@ -3,12 +3,14 @@
 /**
  * Pasillo × Arc — Root App
  *
- * Mounts: GlobeHero (optional) → Topbar + Subbar → 3-column workspace
- * (Chat · Stage · WorkflowLog) → FooterRail. Settings persist via store.
+ * Pre-auth: LandingHero (cobe globe + integrated passkey sign-up/sign-in).
+ * Post-auth: Topbar + Subbar + AgentCard + 3-column workspace (Chat · Stage
+ * · WorkflowLog) + FooterRail. Settings persist via store.
  */
 
 import { useEffect, useState } from 'react';
-import { GlobeHero } from './globe';
+import { LandingHero } from './hero';
+import { ProfileGate } from './profile-gate';
 import { Topbar, Subbar, FooterRail } from './ui';
 import { ChatCol } from './chat-col';
 import { Stage } from './stage';
@@ -18,36 +20,42 @@ import {
   hydrateFromStorage,
   subscribePersist,
   usePasillo,
-  type Token,
-  type Verbosity,
 } from './store';
 import { refreshTreasury } from './actions';
+import { logout } from '@/lib/user-wallet';
 
 export function PasilloApp() {
-  const showGlobe = usePasillo((s) => s.showGlobe);
-  const setShowGlobe = usePasillo((s) => s.setShowGlobe);
+  const showWorkflow = usePasillo((s) => s.showWorkflow);
+  const userAuth = usePasillo((s) => s.userAuth);
 
-  // Hydrate settings + start a treasury poll on mount.
+  // Hydrate settings on mount. Treasury poll only runs once the user is
+  // authed — before that we render the onboarding splash.
   useEffect(() => {
     hydrateFromStorage();
     const unsub = subscribePersist();
-    refreshTreasury();
-    const iv = setInterval(refreshTreasury, 20_000);
     return () => {
       unsub();
-      clearInterval(iv);
     };
   }, []);
 
-  return (
-    <>
-      {showGlobe && (
-        <GlobeHero
-          onEnter={() => setShowGlobe(false)}
-          onHide={() => setShowGlobe(false)}
-        />
-      )}
+  useEffect(() => {
+    if (!userAuth) return;
+    refreshTreasury();
+    const iv = setInterval(refreshTreasury, 20_000);
+    return () => clearInterval(iv);
+  }, [userAuth]);
 
+  if (!userAuth) {
+    return (
+      <>
+        <LandingHero />
+        <SettleCelebration />
+      </>
+    );
+  }
+
+  return (
+    <ProfileGate>
       <div className="app" data-screen-label="Agent Console">
         <Topbar />
         <Subbar />
@@ -57,33 +65,204 @@ export function PasilloApp() {
             padding: '8px 16px',
             borderBottom: '1px solid var(--border)',
             background: 'var(--bg-elev)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
           }}
         >
           <AgentCard />
+          <div style={{ flex: 1 }} />
+          <SignOutButton />
         </div>
 
-        <div className="workspace">
+        <div
+          className="workspace"
+          style={
+            showWorkflow
+              ? undefined
+              : { gridTemplateColumns: '360px 1fr' }
+          }
+        >
           <ChatCol />
           <Stage />
-          <WorkflowLog />
+          {showWorkflow && <WorkflowLog />}
         </div>
 
         <FooterRail />
       </div>
 
       <TweaksToggle />
-    </>
+      <SettleCelebration />
+    </ProfileGate>
+  );
+}
+
+function SettleCelebration() {
+  const onChain = usePasillo((s) => s.onChainSettlement);
+  const holdOrder = usePasillo((s) => s.holdOrder);
+  const [visible, setVisible] = useState(false);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!onChain) return;
+    if (dismissed === onChain.jobId) return;
+    setVisible(true);
+    const t = setTimeout(() => setVisible(false), 8000);
+    return () => clearTimeout(t);
+  }, [onChain, dismissed]);
+
+  if (!onChain || !visible) return null;
+
+  const amount = holdOrder?.totalAmount
+    ? `${holdOrder.totalAmount} ${holdOrder.totalCurrency}`
+    : 'USDC';
+  const pnr = holdOrder?.bookingReference ?? onChain.pnr;
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: 'fixed',
+        top: 20,
+        right: 20,
+        zIndex: 100,
+        maxWidth: 360,
+        background: 'var(--bg-elev)',
+        border: '1.5px solid var(--ink)',
+        boxShadow:
+          '0 0 0 6px color-mix(in oklab, var(--accent-green) 18%, transparent)',
+        padding: '14px 16px',
+        fontFamily: 'var(--font-sans)',
+        animation: 'celebrate-slide 260ms ease-out',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          marginBottom: 6,
+        }}
+      >
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: 'var(--accent-green)',
+          }}
+        />
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: 'var(--ink)',
+          }}
+        >
+          Booked on Arc
+        </span>
+        <button
+          aria-label="dismiss"
+          onClick={() => {
+            setVisible(false);
+            setDismissed(onChain.jobId);
+          }}
+          style={{
+            marginLeft: 'auto',
+            border: 'none',
+            background: 'none',
+            color: 'var(--text-dim)',
+            cursor: 'pointer',
+            fontSize: 14,
+            padding: 0,
+          }}
+        >
+          ×
+        </button>
+      </div>
+      <div
+        style={{
+          fontSize: 15,
+          fontWeight: 500,
+          color: 'var(--text)',
+          marginBottom: 6,
+          letterSpacing: '-0.01em',
+        }}
+      >
+        PNR {pnr} · {amount}
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          color: 'var(--text-dim)',
+          letterSpacing: '0.04em',
+          marginBottom: 10,
+        }}
+      >
+        7 txs · job #{onChain.jobId} · reputation +1
+      </div>
+      <a
+        href={`${onChain.explorerBase}/tx/${onChain.txHashes[onChain.txHashes.length - 1]}`}
+        target="_blank"
+        rel="noreferrer"
+        style={{
+          display: 'inline-block',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--ink)',
+          textDecoration: 'none',
+          borderBottom: '1px solid var(--ink)',
+          paddingBottom: 1,
+        }}
+      >
+        View on Arcscan ↗
+      </a>
+      <style jsx>{`
+        @keyframes celebrate-slide {
+          from { transform: translateY(-8px); opacity: 0; }
+          to   { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function SignOutButton() {
+  const setUserAuth = usePasillo((s) => s.setUserAuth);
+  return (
+    <button
+      onClick={() => {
+        logout();
+        setUserAuth(null);
+      }}
+      style={{
+        padding: '6px 10px',
+        border: '1px solid var(--border)',
+        background: 'var(--bg)',
+        color: 'var(--text-dim)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10,
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+      }}
+      title="Sign out of this passkey session"
+    >
+      Sign out
+    </button>
   );
 }
 
 function TweaksToggle() {
-  const token = usePasillo((s) => s.token);
-  const verbosity = usePasillo((s) => s.verbosity);
-  const showGlobe = usePasillo((s) => s.showGlobe);
+  const showWorkflow = usePasillo((s) => s.showWorkflow);
   const dark = usePasillo((s) => s.dark);
-  const setToken = usePasillo((s) => s.setToken);
-  const setVerbosity = usePasillo((s) => s.setVerbosity);
-  const setShowGlobe = usePasillo((s) => s.setShowGlobe);
+  const setShowWorkflow = usePasillo((s) => s.setShowWorkflow);
   const setDark = usePasillo((s) => s.setDark);
 
   const [open, setOpen] = useState(false);
@@ -118,46 +297,16 @@ function TweaksToggle() {
             <button onClick={() => setOpen(false)}>✕</button>
           </div>
           <div className="tweaks-body">
-            <TweakGroup label="Settlement token">
-              {(['USDC', 'EURC', 'AUTO'] as Token[]).map((t) => (
-                <button
-                  key={t}
-                  className={`tweak-opt ${token === t ? 'sel' : ''}`}
-                  onClick={() => setToken(t)}
-                >
-                  {t === 'AUTO' ? 'Auto-FX' : t}
-                </button>
-              ))}
-            </TweakGroup>
-
-            <TweakGroup label="Agent verbosity">
-              {(
-                [
-                  ['terse', 'Terse'],
-                  ['normal', 'Normal'],
-                  ['verbose', 'Verbose'],
-                ] as [Verbosity, string][]
-              ).map(([k, l]) => (
-                <button
-                  key={k}
-                  className={`tweak-opt ${verbosity === k ? 'sel' : ''}`}
-                  onClick={() => setVerbosity(k)}
-                >
-                  {l}
-                </button>
-              ))}
-            </TweakGroup>
-
             <div className="tweak-group">
-              <span className="tk-label">Globe hero</span>
+              <span className="tk-label">Workflow terminal</span>
               <div className="tweak-toggle">
                 <div
-                  className={`tw-switch ${showGlobe ? 'on' : ''}`}
-                  onClick={() => setShowGlobe(!showGlobe)}
+                  className={`tw-switch ${showWorkflow ? 'on' : ''}`}
+                  onClick={() => setShowWorkflow(!showWorkflow)}
                 >
                   <div className="knob" />
                 </div>
-                <span>{showGlobe ? 'Visible on load' : 'Hidden'}</span>
+                <span>{showWorkflow ? 'Visible' : 'Hidden'}</span>
               </div>
             </div>
 
@@ -177,21 +326,6 @@ function TweaksToggle() {
         </div>
       )}
     </>
-  );
-}
-
-function TweakGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="tweak-group">
-      <span className="tk-label">{label}</span>
-      <div className="tweak-opts">{children}</div>
-    </div>
   );
 }
 

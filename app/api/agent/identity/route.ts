@@ -13,8 +13,6 @@ export const revalidate = 0;
 /**
  * GET /api/agent/identity
  * Returns the Pasillo agent's on-chain identity + aggregated reputation.
- *
- * Falls back to demo data if bootstrap hasn't been run.
  */
 export async function GET() {
   const agentIdStr = process.env.PASILLO_AGENT_ID;
@@ -22,27 +20,19 @@ export async function GET() {
   const explorerUrl = env.arcExplorerUrl();
 
   if (!agentIdStr || !providerAddress) {
-    return NextResponse.json({
-      agentId: '1337',
-      providerAddress: '0x7a2e9a4d8e8f5c1d8e8f5c1d8e8f5c1d8e8fb18c',
-      stars: 4.82,
-      meanScore: 96.4,
-      count: 147,
-      validators: 12,
-      metadata: {
-        name: 'Pasillo Travel Agent',
-        description: '(demo mode — run bootstrap-agent to see live data)',
-        version: '1.0.0',
+    return NextResponse.json(
+      {
+        error: 'agent_not_bootstrapped',
+        message:
+          'Run `bun run scripts/bootstrap-agent.ts` to mint the agent and populate .env.local.',
       },
-      explorerUrl: `${explorerUrl}/address/${IDENTITY_REGISTRY}`,
-      demo: true,
-    });
+      { status: 503 },
+    );
   }
 
   try {
     const agentId = BigInt(agentIdStr);
 
-    // Fetch identity + reputation in parallel. Both have their own caching.
     const [identity, reputation] = await Promise.all([
       getAgentIdentity(agentId).catch(() => null),
       getReputation(agentId).catch(() => null),
@@ -57,8 +47,8 @@ export async function GET() {
       validators: reputation?.validators ?? 0,
       metadata: identity?.metadata ?? null,
       tokenURI: identity?.tokenURI ?? null,
-      explorerUrl: `${explorerUrl}/token/${IDENTITY_REGISTRY}/${agentIdStr}`,
-      demo: false,
+      // Arcscan doesn't expose a per-tokenId page; link to the contract.
+      explorerUrl: `${explorerUrl}/address/${IDENTITY_REGISTRY}`,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
