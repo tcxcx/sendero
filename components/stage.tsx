@@ -13,6 +13,7 @@ import { usePasillo } from './store';
 import { holdFlight, payBooking, searchFlights } from './actions';
 import { StepRail, ErrorBanner } from './ui';
 import { SettlePanel } from './settle-panel';
+import { FundCard } from './fund-card';
 
 export function Stage() {
   const search = usePasillo((s) => s.search);
@@ -67,6 +68,8 @@ export function Stage() {
           )}
 
           {onChainSettlement && <SettlementCard />}
+
+          {holdOrder && !onChainSettlement && <FundCard />}
 
           <SettlePanel />
 
@@ -425,11 +428,9 @@ function HoldCard({
 function SettlementCard() {
   const payment = usePasillo((s) => s.payment);
   const onChain = usePasillo((s) => s.onChainSettlement);
-  const token = usePasillo((s) => s.token);
   const treasury = usePasillo((s) => s.treasury);
 
-  const tokenLabel =
-    token === 'AUTO' ? 'AUTO-FX' : payment?.currency || token;
+  const tokenLabel = payment?.currency || 'USDC';
 
   // The 7 on-chain tx labels in order
   const TX_LABELS = [

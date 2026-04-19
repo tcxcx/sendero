@@ -28,6 +28,8 @@ export const REPUTATION_REGISTRY =
 
 const USDC_ABI = parseAbi([
   'function approve(address spender, uint256 amount) returns (bool)',
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function balanceOf(address account) view returns (uint256)',
 ]);
 
 const AGENTIC_COMMERCE_ABI = parseAbi([
@@ -68,6 +70,25 @@ export function encodeApproveUsdc(
       abi: USDC_ABI,
       functionName: 'approve',
       args: [spender, amount],
+    }),
+    value: 0n,
+  };
+}
+
+/**
+ * ERC-20 transfer of USDC from the MSCA (msg.sender in the userOp) to
+ * `recipient`. No allowance needed because the caller owns the funds.
+ */
+export function encodeUsdcTransfer(
+  recipient: Address,
+  amount: bigint,
+): EncodedCall {
+  return {
+    to: ARC_USDC_ADDRESS,
+    data: encodeFunctionData({
+      abi: USDC_ABI,
+      functionName: 'transfer',
+      args: [recipient, amount],
     }),
     value: 0n,
   };

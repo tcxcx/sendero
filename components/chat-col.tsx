@@ -124,6 +124,27 @@ export function ChatCol() {
               text: 'readBalances(USDC, EURC)',
               t: clock(),
             });
+          } else if (toolName === 'swap_tokens') {
+            s.logEvent({
+              group: 'treasury.swap',
+              bullet: 'active',
+              text: `swap(<span class="v">${toolInput.amount} ${toolInput.fromToken} → ${toolInput.toToken}</span>)`,
+              t: clock(),
+            });
+          } else if (toolName === 'send_tokens') {
+            s.logEvent({
+              group: 'treasury.send',
+              bullet: 'active',
+              text: `send(<span class="v">${toolInput.amount} ${toolInput.token ?? 'USDC'}</span> → ${(toolInput.to ?? '').slice(0, 10)}…)`,
+              t: clock(),
+            });
+          } else if (toolName === 'bridge_to_arc') {
+            s.logEvent({
+              group: 'treasury.bridge',
+              bullet: 'active',
+              text: `bridge(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc)`,
+              t: clock(),
+            });
           }
         }
 
@@ -197,6 +218,48 @@ export function ChatCol() {
               group: 'treasury',
               bullet: 'done',
               text: `<span class="v">${output.balances.length} tokens</span> read`,
+              t: clock(),
+            });
+          } else if (
+            toolName === 'swap_tokens' &&
+            (output.txHash || output.state)
+          ) {
+            refreshTreasury();
+            s.updateLastEvent('treasury.swap', { bullet: 'done' });
+            s.logEvent({
+              group: 'treasury.swap',
+              bullet: 'done',
+              text: output.txHash
+                ? `swap landed · <span class="v">${output.txHash.slice(0, 10)}…</span>`
+                : `swap ${output.state}`,
+              t: clock(),
+            });
+          } else if (
+            toolName === 'send_tokens' &&
+            (output.txHash || output.state)
+          ) {
+            refreshTreasury();
+            s.updateLastEvent('treasury.send', { bullet: 'done' });
+            s.logEvent({
+              group: 'treasury.send',
+              bullet: 'done',
+              text: output.txHash
+                ? `send landed · <span class="v">${output.txHash.slice(0, 10)}…</span>`
+                : `send ${output.state}`,
+              t: clock(),
+            });
+          } else if (
+            toolName === 'bridge_to_arc' &&
+            (output.txHash || output.state)
+          ) {
+            refreshTreasury();
+            s.updateLastEvent('treasury.bridge', { bullet: 'done' });
+            s.logEvent({
+              group: 'treasury.bridge',
+              bullet: 'done',
+              text: output.txHash
+                ? `bridge landed · <span class="v">${output.txHash.slice(0, 10)}…</span>`
+                : `bridge ${output.state}`,
               t: clock(),
             });
           }
@@ -303,7 +366,7 @@ export function ChatCol() {
                   )
                 }
               >
-                ✈ SFO→LHR demo
+                ✈ SFO→LHR example
               </button>
               <button
                 type="button"

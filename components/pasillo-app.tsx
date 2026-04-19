@@ -4,25 +4,28 @@
  * Pasillo × Arc — Root App
  *
  * Pre-auth: LandingHero (cobe globe + integrated passkey sign-up/sign-in).
- * Post-auth: Topbar + Subbar + AgentCard + 3-column workspace (Chat · Stage
- * · WorkflowLog) + FooterRail. Settings persist via store.
+ * Post-auth: ConsoleBar (brand + status + AgentChip + WalletDropdown) +
+ * 3-column workspace (Chat · Stage · WorkflowLog) + FooterRail.
+ * Settings persist via store.
  */
 
 import { useEffect, useState } from 'react';
 import { LandingHero } from './hero';
 import { ProfileGate } from './profile-gate';
-import { Topbar, Subbar, FooterRail } from './ui';
+import { ConsoleBar, FooterRail } from './ui';
 import { ChatCol } from './chat-col';
 import { Stage } from './stage';
 import { WorkflowLog } from './workflow-log';
-import { AgentCard } from './agent-card';
+import { SwapDialog } from './swap-dialog';
+import { SendDialog } from './send-dialog';
+import { BridgeDialog } from './bridge-dialog';
+import { DepositDialog } from './deposit-dialog';
 import {
   hydrateFromStorage,
   subscribePersist,
   usePasillo,
 } from './store';
 import { refreshTreasury } from './actions';
-import { logout } from '@/lib/user-wallet';
 
 export function PasilloApp() {
   const showWorkflow = usePasillo((s) => s.showWorkflow);
@@ -57,23 +60,7 @@ export function PasilloApp() {
   return (
     <ProfileGate>
       <div className="app" data-screen-label="Agent Console">
-        <Topbar />
-        <Subbar />
-
-        <div
-          style={{
-            padding: '8px 16px',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--bg-elev)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
-          <AgentCard />
-          <div style={{ flex: 1 }} />
-          <SignOutButton />
-        </div>
+        <ConsoleBar />
 
         <div
           className="workspace"
@@ -93,6 +80,10 @@ export function PasilloApp() {
 
       <TweaksToggle />
       <SettleCelebration />
+      <SwapDialog />
+      <SendDialog />
+      <BridgeDialog />
+      <DepositDialog />
     </ProfileGate>
   );
 }
@@ -230,32 +221,6 @@ function SettleCelebration() {
         }
       `}</style>
     </div>
-  );
-}
-
-function SignOutButton() {
-  const setUserAuth = usePasillo((s) => s.setUserAuth);
-  return (
-    <button
-      onClick={() => {
-        logout();
-        setUserAuth(null);
-      }}
-      style={{
-        padding: '6px 10px',
-        border: '1px solid var(--border)',
-        background: 'var(--bg)',
-        color: 'var(--text-dim)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        cursor: 'pointer',
-      }}
-      title="Sign out of this passkey session"
-    >
-      Sign out
-    </button>
   );
 }
 

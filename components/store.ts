@@ -10,9 +10,6 @@
 
 import { create } from 'zustand';
 
-export type Token = 'USDC' | 'EURC' | 'AUTO';
-export type Verbosity = 'terse' | 'normal' | 'verbose';
-
 export interface FlightOffer {
   id: string;
   airline: string;
@@ -115,12 +112,8 @@ export interface TreasuryState {
 }
 
 export type SettlementPhase =
-  | 'idle' // not started yet (booking just completed)
-  | 'userop-create' // waiting on user's passkey for createJob + approve
-  | 'server-budget' // backend setting the budget with provider wallet
-  | 'userop-fund' // waiting on user's passkey for fund
-  | 'server-submit' // backend submitting deliverable hash
-  | 'userop-complete' // waiting on user's passkey for complete + feedback
+  | 'idle'
+  | 'signing' // user's passkey is being prompted / userOp streaming to bundler
   | 'done'
   | 'error';
 
@@ -173,9 +166,6 @@ export interface UserAuth {
 
 interface PasilloState {
   // Settings
-  token: Token;
-  verbosity: Verbosity;
-  showGlobe: boolean;
   showWorkflow: boolean;
   dark: boolean;
 
@@ -183,9 +173,8 @@ interface PasilloState {
   userAuth: UserAuth | null;
   setUserAuth: (a: UserAuth | null) => void;
 
-  // Traveler / partner (host context)
+  // Traveler derived from userAuth
   traveler: Traveler;
-  partner: { name: string; code: string; tier: string };
 
   // Booking
   search: SearchParams | null;
@@ -218,9 +207,6 @@ interface PasilloState {
   workflow: WorkflowEvent[];
 
   // Actions
-  setToken: (t: Token) => void;
-  setVerbosity: (v: Verbosity) => void;
-  setShowGlobe: (v: boolean) => void;
   setShowWorkflow: (v: boolean) => void;
   setDark: (v: boolean) => void;
 
@@ -270,18 +256,9 @@ function travelerFromAuth(auth: UserAuth | null): Traveler {
   };
 }
 
-const DEFAULT_PARTNER = {
-  name: 'Acme Finance Co.',
-  code: 'ACME-FIN',
-  tier: 'Corporate',
-};
-
 let eventCounter = 0;
 
 export const usePasillo = create<PasilloState>((set) => ({
-  token: 'AUTO',
-  verbosity: 'normal',
-  showGlobe: true,
   showWorkflow: true,
   dark: false,
 
@@ -290,7 +267,6 @@ export const usePasillo = create<PasilloState>((set) => ({
     set({ userAuth, traveler: travelerFromAuth(userAuth) }),
 
   traveler: travelerFromAuth(null),
-  partner: DEFAULT_PARTNER,
 
   search: null,
   offers: [],
@@ -346,9 +322,6 @@ export const usePasillo = create<PasilloState>((set) => ({
 
   workflow: [],
 
-  setToken: (token) => set({ token }),
-  setVerbosity: (verbosity) => set({ verbosity }),
-  setShowGlobe: (showGlobe) => set({ showGlobe }),
   setShowWorkflow: (showWorkflow) => set({ showWorkflow }),
   setDark: (dark) => {
     if (typeof document !== 'undefined') {

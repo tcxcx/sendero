@@ -23,6 +23,17 @@ import {
   searchHotels,
 } from '@/lib/duffel';
 import { getTreasuryBalances } from '@/lib/circle';
+import type { BridgeParams, SendParams, SwapParams } from '@circle-fin/app-kit';
+import {
+  getAppKit,
+  getKitKey,
+  getTreasuryAdapter,
+  getTreasuryAddress,
+  summarizeBridge,
+  summarizeSend,
+  summarizeSwap,
+} from '@/lib/appkit';
+import { BRIDGE_CHAINS } from '@/lib/bridge-chains';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -52,6 +63,24 @@ CRITICAL — don't duplicate the UI:
 Hotels are a separate flow. Use search_hotels when the user asks for
 lodging. The Stage renders up to six property cards — DO NOT list them in
 the chat, same rule as flights.
+
+Treasury rebalance tools (Pasillo corporate wallet on Arc):
+  • check_treasury         — read current USDC + EURC balances
+  • swap_tokens            — USDC ↔ EURC on Arc via Circle App Kit
+  • send_tokens            — transfer USDC/EURC to any Arc address
+  • bridge_to_arc          — pull USDC into Arc from Ethereum_Sepolia,
+                              Base_Sepolia, Polygon_Amoy, Avalanche_Fuji,
+                              Arbitrum_Sepolia, or Optimism_Sepolia
+
+Rebalance workflow (chain these when treasury liquidity is short):
+  1. check_treasury — see what we have
+  2. If USD-side is short but USDC total is fine →  swap_tokens
+  3. If the Arc side itself is short →  bridge_to_arc from a funded chain
+  4. (Optional) send_tokens to top up the user wallet before they sign the
+     on-chain settlement
+Use these BEFORE attempting a book_flight whose totalAmount exceeds the
+Arc USDC treasury balance. Explain what you're doing in one short sentence
+each step.
 
 Keep every response under 2 sentences unless the user asks a question. When
 you call a tool, a single clause like "Searching flights…" is enough.
@@ -190,6 +219,121 @@ export async function POST(req: NextRequest) {
       execute: async () => {
         const balances = await getTreasuryBalances();
         return { balances };
+      },
+    }),
+
+    swap_tokens: tool({
+      description:
+        'Rebalance the Pasillo corporate treasury on Arc Testnet by swapping USDC ↔ EURC via Circle App Kit. Use when the treasury lacks the right token to pay for a booking, or the user explicitly asks to swap. Returns tx hashes.',
+      inputSchema: z.object({
+        fromToken: z.enum(['USDC', 'EURC']),
+        toToken: z.enum(['USDC', 'EURC']),
+        amount: z.string().describe('Decimal amount, e.g. "5.00"'),
+      }),
+      execute: async ({ fromToken, toToken, amount }) => {
+        if (fromToken === toToken) {
+          return { error: 'fromToken and toToken must differ' };
+        }
+        const treasuryAddress = getTreasuryAddress();
+        const kit = getAppKit();
+        const adapter = getTreasuryAdapter();
+        const params: SwapParams = {
+          from: {
+            adapter,
+            chain: 'Arc_Testnet',
+            address: treasuryAddress as `0x${string}`,
+          },
+          tokenIn: fromToken,
+          tokenOut: toToken,
+          amountIn: amount,
+          config: { kitKey: getKitKey() },
+        };
+        const result = await kit.swap(params);
+        const summary = summarizeSwap(result);
+        return {
+          state: summary.state,
+          fromToken,
+          toToken,
+          amountIn: result.amountIn,
+          amountOut: result.amountOut,
+          txHash: summary.txHash,
+          explorerUrl: summary.explorerUrl,
+        };
+      },
+    }),
+
+    send_tokens: tool({
+      description:
+        'Transfer USDC or EURC from the Pasillo corporate treasury to any Arc Testnet address. Use when rebalancing or topping up the user wallet.',
+      inputSchema: z.object({
+        to: z
+          .string()
+          .regex(/^0x[a-fA-F0-9]{40}$/, 'must be a 0x-prefixed address'),
+        amount: z.string(),
+        token: z.enum(['USDC', 'EURC']).default('USDC'),
+      }),
+      execute: async ({ to, amount, token }) => {
+        const treasuryAddress = getTreasuryAddress();
+        const kit = getAppKit();
+        const adapter = getTreasuryAdapter();
+        const params: SendParams = {
+          from: {
+            adapter,
+            chain: 'Arc_Testnet',
+            address: treasuryAddress as `0x${string}`,
+          },
+          to,
+          amount,
+          token,
+        };
+        const result = await kit.send(params);
+        const summary = summarizeSend(result);
+        return {
+          state: summary.state,
+          token,
+          amount,
+          to,
+          txHash: summary.txHash,
+          explorerUrl: summary.explorerUrl,
+        };
+      },
+    }),
+
+    bridge_to_arc: tool({
+      description:
+        'Bridge USDC from any App Kit–supported chain INTO Arc Testnet via Circle CCTP. Use when Arc treasury liquidity is low. Supports EVM chains (Ethereum, Base, Polygon, Avalanche, Arbitrum, Optimism, Unichain, Linea, etc.) plus Solana — mainnet and testnet variants (see BRIDGE_CHAINS for the full list).',
+      inputSchema: z.object({
+        fromChain: z.enum(BRIDGE_CHAINS),
+        amount: z.string(),
+      }),
+      execute: async ({ fromChain, amount }) => {
+        const treasuryAddress = getTreasuryAddress();
+        const kit = getAppKit();
+        const adapter = getTreasuryAdapter();
+        const params: BridgeParams = {
+          from: {
+            adapter,
+            chain: fromChain,
+            address: treasuryAddress as `0x${string}`,
+          },
+          to: {
+            adapter,
+            chain: 'Arc_Testnet',
+            address: treasuryAddress as `0x${string}`,
+          },
+          amount,
+        };
+        const result = await kit.bridge(params);
+        const summary = summarizeBridge(result);
+        return {
+          state: summary.state,
+          fromChain,
+          toChain: 'Arc_Testnet',
+          amount,
+          txHash: summary.txHash,
+          explorerUrl: summary.explorerUrl,
+          stepCount: summary.steps.length,
+        };
       },
     }),
   };

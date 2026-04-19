@@ -98,6 +98,12 @@ function ensureConfigured() {
   if (issue) throw new Error(issue);
 }
 
+// Arc Testnet's bundler rejects userOps with maxPriorityFeePerGas below 1 gwei
+// (precheck: "maxPriorityFeePerGas … must be at least 1000000000"). Viem's
+// default estimateFeesPerGas returns values far below that floor, so we need
+// to override the bundler's fee estimator to bump up.
+const ARC_MIN_PRIORITY_FEE_PER_GAS = 1_000_000_000n;
+
 function clients() {
   ensureConfigured();
   const { clientKey, clientUrl } = env();
@@ -112,6 +118,26 @@ function clients() {
   const bundlerClient = createBundlerClient({
     chain: arcTestnet,
     transport: modular,
+    userOperation: {
+      estimateFeesPerGas: async () => {
+        const estimated = await publicClient.estimateFeesPerGas({
+          chain: arcTestnet,
+          type: 'eip1559',
+        });
+        // 2x buffer, then floor to the bundler minimum.
+        const priority =
+          estimated.maxPriorityFeePerGas * 2n >= ARC_MIN_PRIORITY_FEE_PER_GAS
+            ? estimated.maxPriorityFeePerGas * 2n
+            : ARC_MIN_PRIORITY_FEE_PER_GAS;
+        const base = estimated.maxFeePerGas * 2n;
+        return {
+          maxPriorityFeePerGas: priority,
+          // maxFee must be >= priority; add the delta if our 2x base
+          // was below the floored priority.
+          maxFeePerGas: base >= priority ? base : priority + base,
+        };
+      },
+    },
   });
   return { publicClient, bundlerClient };
 }
@@ -219,9 +245,26 @@ function base64UrlToBytes(input: string): Uint8Array {
 
 // ── MSCA derivation ───────────────────────────────────────────────────
 
+/**
+ * Deterministic wallet name for `toCircleSmartAccount`.
+ *
+ * Circle's default `getDefaultWalletName(owner)` returns
+ * `passkey-${new Date().toISOString()}` — random every call, producing a
+ * DIFFERENT MSCA address each session. Using `displayName` isn't stable
+ * either: if PROFILE_KEY drops but the credential persists, the name
+ * changes and the MSCA address drifts.
+ *
+ * Derive the name from the WebAuthn credential id + public key so the
+ * same passkey always resolves to the same MSCA.
+ */
+function stableWalletName(credential: StoredCredential): string {
+  const idSlug = credential.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+  const pkSuffix = credential.publicKey.slice(-8);
+  return `pasillo-${idSlug}-${pkSuffix}`;
+}
+
 async function smartAccountFromCredential(
   credential: StoredCredential,
-  displayName: string,
 ): Promise<{ account: SmartAccount; address: Hex }> {
   const { publicClient } = clients();
   const account = await (toCircleSmartAccount as any)({
@@ -230,7 +273,7 @@ async function smartAccountFromCredential(
       credential: { id: credential.id, publicKey: credential.publicKey },
       rpId: credential.rpId,
     }) as WebAuthnAccount,
-    name: displayName,
+    name: stableWalletName(credential),
   });
   return { account, address: account.address as Hex };
 }
@@ -242,10 +285,7 @@ export async function registerPasskey(
 ): Promise<UserWallet> {
   ensureConfigured();
   const credential = await createLocalPasskey(profile.displayName);
-  const { account, address } = await smartAccountFromCredential(
-    credential,
-    profile.displayName,
-  );
+  const { account, address } = await smartAccountFromCredential(credential);
   persist(credential, profile);
   return {
     credential,
@@ -272,10 +312,7 @@ export async function loginPasskey(): Promise<UserWallet> {
     email: '',
     phone: '',
   };
-  const { account, address } = await smartAccountFromCredential(
-    stored,
-    profile.displayName,
-  );
+  const { account, address } = await smartAccountFromCredential(stored);
   persist(stored, profile);
   return { credential: stored, account, address, ...profile };
 }
@@ -290,10 +327,7 @@ export async function restoreFromStorage(): Promise<UserWallet | null> {
       email: '',
       phone: '',
     };
-    const { account, address } = await smartAccountFromCredential(
-      stored,
-      profile.displayName,
-    );
+    const { account, address } = await smartAccountFromCredential(stored);
     return { credential: stored, account, address, ...profile };
   } catch (err) {
     console.warn('[user-wallet] restoreFromStorage failed:', err);

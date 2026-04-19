@@ -339,19 +339,53 @@ export async function searchHotels(
   const coords = resolveCoords(params.location);
   const radiusKm = params.radiusKm ?? 5;
 
-  const response: any = await (duffel.stays as any).search({
-    location: {
-      radius: radiusKm,
-      geographic_coordinates: { latitude: coords.lat, longitude: coords.lng },
-    },
-    check_in_date: params.checkInDate,
-    check_out_date: params.checkOutDate,
-    rooms: params.rooms ?? 1,
-    guests: Array.from(
-      { length: params.guests ?? 1 },
-      () => ({ type: 'adult' } as any),
-    ),
-  } as any);
+  let response: any;
+  try {
+    response = await (duffel.stays as any).search({
+      location: {
+        radius: radiusKm,
+        geographic_coordinates: {
+          latitude: coords.lat,
+          longitude: coords.lng,
+        },
+      },
+      check_in_date: params.checkInDate,
+      check_out_date: params.checkOutDate,
+      rooms: params.rooms ?? 1,
+      guests: Array.from(
+        { length: params.guests ?? 1 },
+        () => ({ type: 'adult' } as any),
+      ),
+    } as any);
+  } catch (err) {
+    // Duffel Stays is an opt-in product — most sandbox tokens don't have
+    // it enabled. Surface a useful, actionable error instead of "unknown".
+    const anyErr = err as any;
+    console.error('[stays] raw error:', {
+      name: anyErr?.name,
+      code: anyErr?.code,
+      statusCode: anyErr?.statusCode ?? anyErr?.meta?.status,
+      meta: anyErr?.meta,
+      errors: anyErr?.errors,
+      message: anyErr?.message,
+    });
+    const firstDuffel = anyErr?.errors?.[0] ?? anyErr?.meta?.errors?.[0];
+    if (firstDuffel) {
+      throw new Error(
+        firstDuffel.title
+          ? `${firstDuffel.title}: ${firstDuffel.message || firstDuffel.detail || ''}`.trim()
+          : firstDuffel.message || JSON.stringify(firstDuffel),
+      );
+    }
+    if (anyErr?.message) {
+      throw new Error(
+        `Duffel Stays request failed (${anyErr.name || 'Error'}): ${anyErr.message}. Most sandbox tokens don't have Stays enabled — contact Duffel to turn it on.`,
+      );
+    }
+    throw new Error(
+      'Duffel Stays request failed. This product is opt-in; the sandbox token likely does not have Stays enabled.',
+    );
+  }
 
   const results = ((response.data as any)?.results ?? []).slice(0, 6);
 

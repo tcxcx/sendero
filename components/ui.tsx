@@ -1,41 +1,20 @@
 'use client';
 
 /**
- * Pasillo × Arc — UI primitives (Topbar, Subbar, StepRail, PolicyStrip,
- * FooterRail). Live-data versions of the original prototype components.
+ * Pasillo × Arc — shared UI primitives.
+ *
+ * One consolidated ConsoleBar replaces the old Topbar + Subbar + AgentCard
+ * row. StepRail, ErrorBanner, FooterRail unchanged.
  */
 
+import Link from 'next/link';
 import { usePasillo, deriveStep } from './store';
+import { AgentChip } from './agent-chip';
+import { WalletDropdown } from './wallet-dropdown';
 
-export function Topbar() {
-  const partner = usePasillo((s) => s.partner);
-  return (
-    <div className="topbar">
-      <div className="topbar-left">
-        <div className="logo">
-          <div className="logo-mark" />
-          <span>PASILLO</span>
-        </div>
-        <div className="breadcrumb">
-          <span>Partners</span>
-          <span className="sep">/</span>
-          <span>{partner.name}</span>
-          <span className="sep">/</span>
-          <span className="cur">Agent Console</span>
-        </div>
-      </div>
-      <div className="topbar-right">
-        <span className="tag faint">{partner.code}</span>
-        <span className="tag ink">{partner.tier}</span>
-        <span>circle · arc L2</span>
-        <span style={{ opacity: 0.4 }}>·</span>
-        <span>v0.9.4-alpha</span>
-      </div>
-    </div>
-  );
-}
+/* ─── ConsoleBar ────────────────────────────────────────────────────────── */
 
-export function Subbar() {
+export function ConsoleBar() {
   const traveler = usePasillo((s) => s.traveler);
   const status = usePasillo((s) => s.status);
   const search = usePasillo((s) => s.search);
@@ -53,77 +32,211 @@ export function Subbar() {
   });
 
   return (
-    <div className="subbar">
-      <div className="subbar-left">
-        <div className="traveler">
-          <div className="avatar">{traveler.initials}</div>
-          <div className="traveler-info">
-            <span className="name">{traveler.name}</span>
-            <span className="meta">{traveler.role}</span>
-          </div>
-        </div>
+    <div className="cbar">
+      {/* LEFT: brand + breadcrumb nav */}
+      <div className="cbar-left">
+        <Link href="/" className="cbar-brand" aria-label="Pasillo home">
+          <span className="cbar-mark" aria-hidden="true" />
+          <span className="cbar-word">PASILLO</span>
+        </Link>
+        <span className="cbar-sep">/</span>
+        <Link href="/" className="cbar-crumb">
+          Agent console
+        </Link>
+        <span className="cbar-pulse" aria-hidden="true" />
+        <span className="cbar-active">agent · active</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <div className="scenario-chip">
+
+      {/* MIDDLE: contextual status chip */}
+      <div className="cbar-mid">
+        <div className="cbar-chip">
           <span>{label}</span>
           {search && (
             <>
-              <span className="arrow">›</span>
+              <span className="cbar-arrow">›</span>
               <span>
                 {search.origin} → {search.destination}
               </span>
+              {search.departureDate && (
+                <>
+                  <span className="cbar-arrow">·</span>
+                  <span className="cbar-date">
+                    {short(search.departureDate)}
+                    {search.returnDate ? ` → ${short(search.returnDate)}` : ''}
+                  </span>
+                </>
+              )}
+              <span className="cbar-arrow">·</span>
+              <span className="cbar-date">{search.passengers} pax</span>
             </>
           )}
         </div>
       </div>
-      <div className="subbar-right">
-        <div className="status-pill">
-          <span className="pulse" />
-          <span>Agent · active</span>
-        </div>
-        {search && (
-          <div className="status-pill">
-            <span>
-              {search.departureDate}
-              {search.returnDate ? ` → ${search.returnDate}` : ''}
-            </span>
-          </div>
-        )}
-        {search && (
-          <div className="status-pill">
-            <span>{search.passengers} pax</span>
-          </div>
-        )}
+
+      {/* RIGHT: agent chip + user dropdown */}
+      <div className="cbar-right">
+        <AgentChip />
+        <WalletDropdown />
       </div>
+
+      <style jsx>{`
+        .cbar {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          align-items: center;
+          gap: 18px;
+          padding: 10px 16px;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg-elev);
+          min-height: 54px;
+        }
+        .cbar-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-family: var(--font-mono);
+          font-size: 11px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--text-dim);
+        }
+        .cbar-brand {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          text-decoration: none;
+          color: var(--ink);
+          padding: 2px 2px 2px 0;
+          letter-spacing: 0.14em;
+          font-weight: 500;
+          font-size: 12px;
+        }
+        .cbar-brand:hover .cbar-word {
+          opacity: 0.7;
+        }
+        .cbar-mark {
+          width: 10px;
+          height: 10px;
+          background: var(--ink);
+          display: inline-block;
+        }
+        .cbar-word {
+          transition: opacity 120ms;
+        }
+        .cbar-sep {
+          opacity: 0.35;
+        }
+        .cbar-crumb {
+          color: var(--text);
+          text-decoration: none;
+          padding: 2px 4px;
+          border-radius: 0;
+          transition: color 120ms;
+        }
+        .cbar-crumb:hover {
+          color: var(--ink);
+        }
+        .cbar-pulse {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--accent-green, #0cc67a);
+          margin-left: 8px;
+          animation: cbar-pulse 1.6s ease-in-out infinite;
+          flex-shrink: 0;
+        }
+        .cbar-active {
+          color: var(--accent-green, #0cc67a);
+          font-size: 10px;
+          letter-spacing: 0.12em;
+        }
+        @keyframes cbar-pulse {
+          0%, 100% { opacity: 0.45; transform: scale(0.85); }
+          50%      { opacity: 1;    transform: scale(1); }
+        }
+        .cbar-mid {
+          display: flex;
+          justify-content: center;
+        }
+        .cbar-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 5px 10px;
+          border: 1px solid var(--ink);
+          color: var(--ink);
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .cbar-arrow {
+          opacity: 0.4;
+        }
+        .cbar-date {
+          color: var(--text-dim);
+        }
+        .cbar-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        @media (max-width: 960px) {
+          .cbar {
+            grid-template-columns: auto 1fr auto;
+          }
+          .cbar-mid {
+            display: none;
+          }
+        }
+      `}</style>
     </div>
   );
 }
 
-function statusLabel(status: string, extras: { payment: boolean; settling: boolean; onChain: boolean }) {
-  if (extras.onChain) return 'CONFIRMED · ON-CHAIN';
-  if (extras.settling) return 'SETTLING · ARC';
-  if (extras.payment) return 'PAID · AWAITING SETTLEMENT';
-  switch (status) {
-    case 'idle':
-      return 'READY';
-    case 'searching':
-      return 'SEARCHING';
-    case 'selected':
-      return 'OFFERS';
-    case 'holding':
-      return 'HOLDING';
-    case 'held':
-      return 'HELD';
-    case 'paying':
-      return 'PAYING · DUFFEL';
-    case 'confirmed':
-      return 'CONFIRMED · ON-CHAIN';
-    case 'error':
-      return 'ERROR';
-    default:
-      return status.toUpperCase();
+function short(iso: string): string {
+  // 2026-05-04 → May 04
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+  } catch {
+    return iso;
   }
 }
+
+function statusLabel(
+  status: string,
+  extras: { payment: boolean; settling: boolean; onChain: boolean },
+) {
+  if (extras.onChain) return 'confirmed · on-chain';
+  if (extras.settling) return 'settling · arc';
+  if (extras.payment) return 'paid · awaiting settlement';
+  switch (status) {
+    case 'idle':
+      return 'ready';
+    case 'searching':
+      return 'searching';
+    case 'selected':
+      return 'offers';
+    case 'holding':
+      return 'holding';
+    case 'held':
+      return 'held';
+    case 'paying':
+      return 'paying · duffel';
+    case 'confirmed':
+      return 'confirmed · on-chain';
+    case 'error':
+      return 'error';
+    default:
+      return status;
+  }
+}
+
+/* ─── StepRail ──────────────────────────────────────────────────────────── */
 
 export function StepRail() {
   const state = usePasillo();
@@ -146,6 +259,8 @@ export function StepRail() {
   );
 }
 
+/* ─── ErrorBanner ──────────────────────────────────────────────────────── */
+
 export function ErrorBanner() {
   const error = usePasillo((s) => s.error);
   if (!error) return null;
@@ -153,15 +268,18 @@ export function ErrorBanner() {
     <div
       className="policy-strip"
       style={{
-        borderColor: 'color-mix(in oklab, var(--accent-rose) 35%, var(--border))',
-        background: 'color-mix(in oklab, var(--accent-rose) 5%, var(--bg-elev))',
+        borderColor:
+          'color-mix(in oklab, var(--accent-rose) 35%, var(--border))',
+        background:
+          'color-mix(in oklab, var(--accent-rose) 5%, var(--bg-elev))',
       }}
     >
       <span
         className="ico"
         style={{
           color: 'var(--accent-rose)',
-          background: 'color-mix(in oklab, var(--accent-rose) 15%, transparent)',
+          background:
+            'color-mix(in oklab, var(--accent-rose) 15%, transparent)',
         }}
       >
         !
@@ -171,15 +289,24 @@ export function ErrorBanner() {
   );
 }
 
+/* ─── FooterRail ──────────────────────────────────────────────────────── */
+
 export function FooterRail() {
   const treasury = usePasillo((s) => s.treasury);
-  const token = usePasillo((s) => s.token);
   const holdOrder = usePasillo((s) => s.holdOrder);
+  const settlementPhase = usePasillo((s) => s.settlement.phase);
+  const onChainSettlement = usePasillo((s) => s.onChainSettlement);
 
   const treasuryAddr = treasury?.treasuryAddress ?? null;
   const usdc = treasury?.balances.find((b) => b.symbol === 'USDC');
   const eurc = treasury?.balances.find((b) => b.symbol === 'EURC');
   const block = treasury?.arc?.blockNumber ?? '—';
+
+  const escrowLabel = onChainSettlement
+    ? `settled`
+    : settlementPhase === 'idle' || settlementPhase === 'error'
+      ? 'idle'
+      : 'settling';
 
   return (
     <div className="footer-rail">
@@ -193,7 +320,12 @@ export function FooterRail() {
         </span>
         <span>·</span>
         <span>
-          gas <strong>{treasury?.arc?.gasPrice ? formatGwei(treasury.arc.gasPrice) : '—'}</strong>
+          gas{' '}
+          <strong>
+            {treasury?.arc?.gasPrice
+              ? formatGwei(treasury.arc.gasPrice)
+              : '—'}
+          </strong>
         </span>
       </div>
       <div className="group">
@@ -221,10 +353,7 @@ export function FooterRail() {
       </div>
       <div className="group">
         <span>
-          settling in{' '}
-          <strong style={{ color: 'var(--ink)' }}>
-            {token === 'AUTO' ? 'split' : token}
-          </strong>
+          escrow <strong style={{ color: 'var(--ink)' }}>{escrowLabel}</strong>
         </span>
         {holdOrder && (
           <>
@@ -248,7 +377,6 @@ function formatAmount(raw: string): string {
 function formatGwei(raw: string): string {
   const n = Number(raw);
   if (!Number.isFinite(n)) return raw;
-  // Assume wei
   const gwei = n / 1e9;
   return `${gwei.toFixed(4)} gwei`;
 }

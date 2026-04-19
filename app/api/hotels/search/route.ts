@@ -38,10 +38,25 @@ export async function POST(req: NextRequest) {
     }
     const anyErr = err as any;
     const duffelErrors = anyErr?.errors ?? anyErr?.response?.data?.errors;
+    const rawTitle = Array.isArray(duffelErrors)
+      ? duffelErrors
+          .map((e: any) => e.title || e.message || JSON.stringify(e))
+          .join('; ')
+      : null;
     const message =
-      (duffelErrors && JSON.stringify(duffelErrors)) ||
+      rawTitle ||
+      anyErr?.meta?.message ||
+      anyErr?.response?.data?.message ||
       (err instanceof Error ? err.message : String(err)) ||
       'unknown';
+    console.error('[hotels/search] full error:', {
+      name: anyErr?.name,
+      code: anyErr?.code,
+      status: anyErr?.status,
+      meta: anyErr?.meta,
+      errors: duffelErrors,
+      message,
+    });
     return NextResponse.json(
       { error: 'search_failed', message },
       { status: 500 },

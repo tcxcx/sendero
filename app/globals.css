@@ -105,7 +105,8 @@ input, textarea { font: inherit; color: inherit; }
 .app {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: 44px 56px auto 1fr 34px;
+  /* ConsoleBar auto-height, workspace fills rest, FooterRail. */
+  grid-template-rows: auto 1fr 34px;
 }
 
 .topbar {
