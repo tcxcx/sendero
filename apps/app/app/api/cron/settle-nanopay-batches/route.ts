@@ -10,9 +10,13 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { buildAndSettleBatch, type BatchStore, type SettleFn } from '@sendero/billing/batch';
+import { buildAndSettleBatch, retrySettlingBatches, type BatchStore, type SettleFn } from '@sendero/billing/batch';
 import { prisma } from '@sendero/database';
-import { env } from '@sendero/env';
+import { transferUSDC } from '@sendero/nanopayments';
+import { fireBatchFailedAlert } from '@sendero/slack';
+import type { Address } from 'viem';
+// `env` previously gated the synthetic vs live settle path; real transfer
+// now owns its own env resolution inside @sendero/nanopayments.
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,14 +51,37 @@ export async function GET(req: NextRequest) {
     if (result.status === 'empty') {
       results.push({ tenantId, outcome: 'empty' });
     } else if (result.status === 'settled') {
-      results.push({
-        tenantId,
-        outcome: 'settled',
-        batchId: result.batchId,
-        txHash: result.txHash,
-      });
+      results.push({ tenantId, outcome: 'settled', batchId: result.batchId, txHash: result.txHash });
+    } else if (result.status === 'retrying') {
+      results.push({ tenantId, outcome: 'retrying', batchId: result.batchId });
     } else {
+      // status === 'failed'
+      await fireBatchFailedAlert({
+        batchId: result.batchId,
+        tenantId,
+        totalMicroUsdc: result.totalMicroUsdc,
+        retryCount: (result as { retryCount?: number }).retryCount ?? 3,
+        error: result.error,
+      });
       results.push({ tenantId, outcome: 'failed', batchId: result.batchId });
+    }
+  }
+
+  const retries = await retrySettlingBatches(store, settle, { olderThanMs: 10 * 60 * 1000 });
+  for (const r of retries) {
+    if (r.status === 'settled') {
+      results.push({ tenantId: r.tenantId, outcome: 'settled-on-retry', batchId: r.batchId, txHash: r.txHash });
+    } else if (r.status === 'failed') {
+      await fireBatchFailedAlert({
+        batchId: r.batchId,
+        tenantId: r.tenantId,
+        totalMicroUsdc: r.totalMicroUsdc,
+        retryCount: r.retryCount,
+        error: r.error,
+      });
+      results.push({ tenantId: r.tenantId, outcome: 'failed-on-retry', batchId: r.batchId });
+    } else {
+      results.push({ tenantId: r.tenantId, outcome: 'retrying', batchId: r.batchId });
     }
   }
 
@@ -113,28 +140,56 @@ function makeBatchStore(): BatchStore {
         },
       });
     },
+
+    incrementRetry: async ({ batchId, lastError }) => {
+      const row = await prisma.nanopayBatch.update({
+        where: { id: batchId },
+        data: {
+          retryCount: { increment: 1 },
+          lastError,
+        },
+        select: { retryCount: true },
+      });
+      return { retryCount: row.retryCount };
+    },
+
+    findSettlingBatches: async ({ olderThan, limit, maxRetryCount }) => {
+      const rows = await prisma.nanopayBatch.findMany({
+        where: {
+          status: 'settling',
+          updatedAt: { lte: olderThan },
+          retryCount: { lt: maxRetryCount },
+        },
+        select: { id: true, tenantId: true, totalMicroUsdc: true, retryCount: true },
+        orderBy: { updatedAt: 'asc' },
+        take: limit,
+      });
+      return rows;
+    },
   };
 }
 
 // ─── Settlement function ───────────────────────────────────────────────
 //
-// For Phase 3 / hackathon demo this is a dry-run that emits a synthetic
-// tx hash so the batch row transitions to `settled` and the admin
-// dashboard shows realistic data. Phase 4 will replace this with a real
-// Circle x402 batched transfer via @sendero/nanopayments.
+// Real on-chain USDC transfer via @sendero/nanopayments. The treasury
+// EOA is resolved inside transferUSDC; the destination address is the
+// Sendero treasury receiving address (SENDERO_TREASURY_ADDRESS env).
+
+function senderoTreasuryAddress(): Address {
+  const a = process.env.SENDERO_TREASURY_ADDRESS;
+  if (!a) throw new Error('SENDERO_TREASURY_ADDRESS not configured');
+  return a as Address;
+}
 
 function makeSettleFn(): SettleFn {
-  return async ({ batchId, tenantId, totalMicroUsdc }) => {
-    if (!env.treasuryPrivateKey()) {
-      // No treasury wired — synthetic tx hash marks the demo batch
-      // settled without risking a real transfer.
-      const synthetic = `0xdemo${Buffer.from(`${tenantId}:${batchId}`).toString('hex').slice(0, 60).padEnd(60, '0')}`;
-      return { txHash: synthetic };
-    }
-    // TODO (Phase 4): wire real Arc USDC transfer via @sendero/nanopayments.
-    void totalMicroUsdc;
-    return {
-      txHash: `0xlive${Buffer.from(`${tenantId}:${batchId}`).toString('hex').slice(0, 60).padEnd(60, '0')}`,
-    };
+  const to = senderoTreasuryAddress();
+  return async ({ totalMicroUsdc, batchId, tenantId }) => {
+    const amount = (Number(totalMicroUsdc) / 1e6).toFixed(6);
+    const { txHash } = await transferUSDC({
+      to,
+      amount,
+      label: `nanopay-batch:${tenantId}:${batchId}`,
+    });
+    return { txHash };
   };
 }
