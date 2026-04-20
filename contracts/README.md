@@ -148,8 +148,6 @@ a multi-stage travel escrow:
 
 - `apps/ponder/` — `@sendero/indexer`, Ponder indexer publishing a
   GraphQL read layer over escrow state.
-- `subgraph/` — alternative Goldsky / The Graph subgraph for the same
-  events.
 - `packages/sendero-guest/` — TypeScript helpers for claim keypairs, guest
   links, and client-side signing.
 - `packages/sendero-arc/` — Arc RPC + ERC-8004 + ERC-8183 client.
