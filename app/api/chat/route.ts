@@ -10,8 +10,8 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import { convertToModelMessages, streamText, stepCountIs } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
-import { toolList } from '@/lib/tools';
-import { buildAiSdkTools } from '@/lib/tools/adapters/ai-sdk';
+import { toolList } from '@sendero/tools';
+import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;

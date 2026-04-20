@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getTreasuryBalances } from '../circle';
+import { getTreasuryBalances } from '../../../lib/circle';
 import type { ToolDef } from './types';
 
 export const checkTreasuryTool: ToolDef = {

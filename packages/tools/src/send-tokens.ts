@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getAppKit, getTreasuryAdapter, summarizeSend } from '../appkit';
+import { getAppKit, getTreasuryAdapter, summarizeSend } from '../../../lib/appkit';
 import type { SendParams } from '@circle-fin/app-kit';
 import type { ToolDef } from './types';
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { searchHotels } from '../duffel';
+import { searchHotels } from '../../../lib/duffel';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({

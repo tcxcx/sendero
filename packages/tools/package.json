@@ -1,0 +1,21 @@
+{
+  "name": "@sendero/tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — single source of truth for AI tool definitions. Consumed by the Next.js chat route, the Hono MCP server, and future edge surfaces (WhatsApp / Slack / Discord).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./adapters/ai-sdk": "./src/adapters/ai-sdk.ts",
+    "./adapters/mcp": "./src/adapters/mcp.ts",
+    "./types": "./src/types.ts"
+  },
+  "peerDependencies": {
+    "@ai-sdk/anthropic": "*",
+    "@ai-sdk/openai": "*",
+    "@circle-fin/app-kit": "*",
+    "ai": "*",
+    "zod": "*"
+  }
+}

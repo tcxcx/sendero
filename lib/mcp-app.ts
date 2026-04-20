@@ -6,8 +6,8 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { toolList } from './tools';
-import { buildMcpCatalog } from './tools/adapters/mcp';
+import { toolList } from '@sendero/tools';
+import { buildMcpCatalog } from '@sendero/tools/adapters/mcp';
 
 const toolCatalog = buildMcpCatalog(toolList);
 

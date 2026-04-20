@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { transferViaGateway, GATEWAY_CHAINS } from '../gateway';
+import { transferViaGateway, GATEWAY_CHAINS } from '../../../lib/gateway';
 import type { ToolDef } from './types';
 
 const GATEWAY_CHAIN_KEYS = Object.keys(GATEWAY_CHAINS);

@@ -4,7 +4,7 @@ import {
   getKitKey,
   getTreasuryAdapter,
   summarizeSwap,
-} from '../appkit';
+} from '../../../lib/appkit';
 import type { SwapParams } from '@circle-fin/app-kit';
 import type { ToolDef } from './types';
 

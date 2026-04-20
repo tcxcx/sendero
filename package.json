@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Sendero × Arc — AI travel agent that books real flights and settles on-chain via ERC-8183 + ERC-8004. Circle Arc Hackathon Spring 2026.",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev -p 3010",
     "build": "next build",
@@ -32,6 +35,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "viem": "^2.21.0",
+    "webauthn-p256": "0.0.5",
     "zod": "^3.25.76",
     "zustand": "^5.0.0"
   },

@@ -23,6 +23,7 @@
         "react": "19.1.0",
         "react-dom": "19.1.0",
         "viem": "^2.21.0",
+        "webauthn-p256": "0.0.5",
         "zod": "^3.25.76",
         "zustand": "^5.0.0",
       },
@@ -31,6 +32,17 @@
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
         "typescript": "^5.8.3",
+      },
+    },
+    "packages/tools": {
+      "name": "@sendero/tools",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "@ai-sdk/anthropic": "*",
+        "@ai-sdk/openai": "*",
+        "@circle-fin/app-kit": "*",
+        "ai": "*",
+        "zod": "*",
       },
     },
   },
@@ -224,6 +236,8 @@
     "@scure/bip32": ["@scure/bip32@1.7.0", "", { "dependencies": { "@noble/curves": "~1.9.0", "@noble/hashes": "~1.8.0", "@scure/base": "~1.2.5" } }, "sha512-E4FFX/N3f4B80AKWp5dP6ow+flD1LQZo/w8UnLGYZO674jS6YnYeepycOOksv+vLPSpgN35wgKgy+ybfTb2SMw=="],
 
     "@scure/bip39": ["@scure/bip39@1.6.0", "", { "dependencies": { "@noble/hashes": "~1.8.0", "@scure/base": "~1.2.5" } }, "sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A=="],
+
+    "@sendero/tools": ["@sendero/tools@workspace:packages/tools"],
 
     "@solana-program/token": ["@solana-program/token@0.5.1", "", { "peerDependencies": { "@solana/kit": "^2.1.0" } }, "sha512-bJvynW5q9SFuVOZ5vqGVkmaPGA0MCC+m9jgJj1nk5m20I389/ms69ASnhWGoOPNcie7S9OwBX0gTj2fiyWpfag=="],
 

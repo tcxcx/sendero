@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { searchFlights } from '../duffel';
+import { searchFlights } from '../../../lib/duffel';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({

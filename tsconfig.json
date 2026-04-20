@@ -20,6 +20,18 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@sendero/tools": [
+        "./packages/tools/src/index.ts"
+      ],
+      "@sendero/tools/adapters/ai-sdk": [
+        "./packages/tools/src/adapters/ai-sdk.ts"
+      ],
+      "@sendero/tools/adapters/mcp": [
+        "./packages/tools/src/adapters/mcp.ts"
+      ],
+      "@sendero/tools/types": [
+        "./packages/tools/src/types.ts"
       ]
     },
     "plugins": [
