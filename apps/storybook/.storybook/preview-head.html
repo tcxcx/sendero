@@ -1,0 +1,22 @@
+<!-- Geist Sans + Geist Mono from Vercel's CDN. Matches the next/font
+     loader used in apps/app at runtime — ensures stories don't fall
+     back to system-ui. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+  rel="stylesheet"
+/>
+
+<style>
+  /* Hard-apply the vermilion palette at the <html> level so the
+     Storybook chrome (toolbar, backgrounds) picks it up before the
+     per-story CSS loads. */
+  :root {
+    --sb-brand: #fb542b;
+    --sb-bg: #fafaf7;
+  }
+  body {
+    font-family: 'Geist', system-ui, sans-serif;
+  }
+</style>
