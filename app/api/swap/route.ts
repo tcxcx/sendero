@@ -76,10 +76,35 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const detail = err instanceof Error ? err.message : String(err);
-    console.error('[swap] error:', detail);
+    const anyErr = err as any;
+    const rawMsg: string =
+      anyErr?.cause?.trace?.rawError?.cause?.details ||
+      anyErr?.cause?.trace?.rawError?.details ||
+      anyErr?.cause?.trace?.rawError?.shortMessage ||
+      anyErr?.cause?.trace?.rawError?.message ||
+      (err instanceof Error ? err.message : String(err));
+
+    // Known upstream: Circle Wallets transport refuses eth_call params that
+    // Swap Kit viem adds during simulation. Show a friendlier message so the
+    // UI doesn't look broken while we wait for an App Kit fix.
+    const isKnownWalletsTransportIssue = /Unsupported transaction params/i.test(
+      rawMsg,
+    );
+    const detail = isKnownWalletsTransportIssue
+      ? 'Swap on Arc Testnet is temporarily disabled — Circle Wallets transport rejects Swap Kit simulation params. Tracked upstream.'
+      : rawMsg;
+
+    console.error('[swap] error:', {
+      message: detail,
+      rawMsg,
+      code: anyErr?.code,
+    });
     return NextResponse.json(
-      { error: 'swap_failed', message: detail },
+      {
+        error: 'swap_failed',
+        message: detail,
+        upstream: isKnownWalletsTransportIssue ? rawMsg : undefined,
+      },
       { status: 500 },
     );
   }

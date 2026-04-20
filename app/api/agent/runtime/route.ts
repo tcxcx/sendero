@@ -7,9 +7,11 @@ export const revalidate = 0;
 const TOOL_NAMES = [
   'search_flights',
   'book_flight',
-  'settle_on_arc',
   'search_hotels',
   'check_treasury',
+  'swap_tokens',
+  'send_tokens',
+  'bridge_to_arc',
 ] as const;
 
 /**

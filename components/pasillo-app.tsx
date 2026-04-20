@@ -36,6 +36,12 @@ export function PasilloApp() {
   useEffect(() => {
     hydrateFromStorage();
     const unsub = subscribePersist();
+    // Dev-only QA hatch: expose the zustand store so /browse-style harnesses
+    // can mount the post-auth shell without going through a real passkey
+    // ceremony. Gated on NODE_ENV so it never leaks to prod bundles.
+    if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+      (window as any).__pasillo = usePasillo;
+    }
     return () => {
       unsub();
     };
