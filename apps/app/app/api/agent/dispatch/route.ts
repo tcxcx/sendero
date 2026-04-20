@@ -24,6 +24,7 @@ import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 import { buildAgentContext } from '@sendero/intelligence';
 import { getLocaleSlice } from '@sendero/locale';
+import { listWorkflows } from '@sendero/workflows';
 import { preflight, recordMetered, type MeterStore } from '@sendero/billing/meter';
 import type { CapStore } from '@sendero/billing/caps';
 import { prisma } from '@sendero/database';
@@ -119,6 +120,7 @@ export async function POST(req: NextRequest) {
       localeSlice,
       trip: tripSnapshot,
     }),
+    renderWorkflowCatalog(),
     SENDERO_PERSONA,
   ].join('\n\n');
 
@@ -178,7 +180,31 @@ const SENDERO_PERSONA = `
 You are Sendero, a concise AI travel agent. Prefer concrete next actions
 over long explanations. When you call a tool, say one sentence about why.
 Respond in the traveler's locale. Never ask for seed phrases or passwords.
+
+Routing rules:
+- If the request matches a declared Sendero workflow (see "Workflows"
+  above), prefer calling the workflow by name over chaining tools yourself.
+  Tell the traveler "running <workflow.label>…" before you start, and
+  surface the result as a short status summary — not a step-by-step dump.
+- Corporate buyers saying "fund a trip", "give my employee a budget", or
+  "prefund this contractor" → sendero.guest_prefund.
+- Agencies saying "set up a cohort", "fund these 50 people" → sendero.agency_cohort.
+- Individual travelers booking their own flight → sendero.book_flight.
+- A group planning together → sendero.group_trip.
+- Cancel + refund → sendero.refund.
+- Only call tools directly when none of the canonical workflows fits.
 `;
+
+function renderWorkflowCatalog(): string {
+  const workflows = listWorkflows();
+  if (workflows.length === 0) return '';
+  return [
+    '## Workflows available to invoke by id',
+    ...workflows.map(
+      w => `- \`${w.id}\` — ${w.label}${w.description ? `\n    ${w.description}` : ''}`
+    ),
+  ].join('\n');
+}
 
 function tripIntentToRoute(intent: unknown): string {
   if (!intent || typeof intent !== 'object') return '—';

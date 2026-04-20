@@ -30,6 +30,14 @@ export const env = {
   arcEurcAddress: () =>
     process.env.ARC_EURC_ADDRESS || '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
   arcExplorerUrl: () => process.env.ARC_EXPLORER_URL || 'https://testnet.arcscan.app',
+  senderoGuestEscrowAddress: () =>
+    (process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW || process.env.SENDERO_GUEST_ESCROW || null) as
+      | `0x${string}`
+      | null,
+  senderoAgentTokenId: () =>
+    process.env.SENDERO_AGENT_TOKEN_ID || process.env.SENDERO_AGENT_ID || null,
+  senderoGuestLinkOrigin: () =>
+    process.env.NEXT_PUBLIC_SENDERO_GUEST_LINK_ORIGIN || 'https://sendero.travel',
 
   // Circle Modular Wallets (user-side passkey auth). NOTE: The "Client Key"
   // Modular Wallets expects has the `TEST_CLIENT_KEY:` / `LIVE_CLIENT_KEY:`

@@ -230,11 +230,159 @@ export const checkInReminderWorkflow: WorkflowDef = {
   ],
 };
 
+// ─── guest-prefund: Navan-style but WA-native + AI-native ─────────────
+//
+// Corporate buyer funds a trip on-chain (prefund_trip) → Sendero DMs
+// the guest a WA link → guest claims with their MSCA passkey
+// (guest_claim_link) → booking agent searches + reserves + commits →
+// final Duffel confirm + settle pays the vendor + fee legs.
+
+export const guestPrefundWorkflow: WorkflowDef = {
+  id: 'sendero.guest_prefund',
+  version: 1,
+  label: 'Prefund a guest trip',
+  description:
+    'Corporate buyer prefunds a trip budget in USDC, Sendero emits a WA-shareable guest link, the guest claims with their Modular Wallet, and the booking agent draws down via reserve → commit → confirm → settle for each leg. Replaces the Navan virtual-card + reimbursement loop with a single on-chain escrow.',
+  steps: [
+    {
+      kind: 'tool',
+      id: 'prefund',
+      tool: 'prefund_trip',
+      label: 'Corporate buyer prefunds escrow + gets share link',
+      as: 'prefund',
+      args: {
+        budgetUsdc: $('input.budgetUsdc'),
+        expiresInDays: $('input.expiresInDays'),
+        metadataCID: $('input.metadataCID'),
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'log_invite',
+      tool: 'log_agent_action',
+      label: 'Record invite dispatch on-chain',
+      args: { tripId: $('prefund.tripId'), actionType: 'other', feeMicroUsdc: '0' },
+    },
+    {
+      kind: 'pause',
+      id: 'await_guest_claim',
+      label: 'Guest opens the WA link + claims',
+      reason: 'external_event',
+      payload: { via: 'whatsapp_guest_link' },
+      timeoutMs: 30 * 24 * 60 * 60 * 1000,
+    },
+    {
+      kind: 'tool',
+      id: 'search',
+      tool: 'search_flights',
+      label: 'Search flights with the claimed budget',
+      as: 'offers',
+      args: $('input.search'),
+    },
+    {
+      kind: 'tool',
+      id: 'policy',
+      tool: 'check_policy',
+      label: 'Check the top offer against policy',
+      as: 'policy',
+      args: { policyId: $('input.policyId'), offer: $('offers.topOffer') },
+    },
+    {
+      kind: 'tool',
+      id: 'reserve',
+      tool: 'reserve_booking',
+      label: 'Reserve upper-bound USDC from escrow',
+      as: 'reservation',
+      args: {
+        tripId: $('prefund.tripId'),
+        upperBoundUsdc: $('offers.topOffer.priceUsdc'),
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'hold',
+      tool: 'book_flight',
+      label: 'Hold Duffel offer',
+      as: 'hold',
+      args: { offerId: $('offers.topOffer.id') },
+    },
+    {
+      kind: 'tool',
+      id: 'commit',
+      tool: 'commit_booking',
+      label: 'Commit vendor amount + release slack',
+      args: {
+        bookingId: $('reservation.bookingId'),
+        vendorAmountUsdc: $('hold.vendorAmountUsdc'),
+        feeAmountUsdc: $('hold.feeAmountUsdc'),
+        vendorAddress: $('hold.vendorAddress'),
+        itineraryHash: $('hold.itineraryHash'),
+        itineraryCID: $('hold.itineraryCID'),
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'settle',
+      tool: 'settle_split',
+      label: 'Settle commission fan-out',
+      args: {
+        gross: $('hold.totalUsd'),
+        supplier: $('hold.vendorAddress'),
+        commissionBps: 1000,
+        senderoFeeBps: 50,
+      },
+    },
+  ],
+};
+
+// ─── agency-cohort: pre-funded bulk travel (TMC / bootcamp / charter)
+
+export const agencyCohortWorkflow: WorkflowDef = {
+  id: 'sendero.agency_cohort',
+  version: 1,
+  label: 'Fund a cohort of N trips',
+  description:
+    'Agency path: fund N guest trips atomically via batchCreateTrip, emit one WA-shareable link per traveler, then let each traveler claim + book independently. Enables pre-funded bootcamps, incentive trips, sports-team charters without wiring money to each person.',
+  steps: [
+    {
+      kind: 'parallel',
+      id: 'create_all',
+      label: 'Create N trips in parallel',
+      failFast: false,
+      branches: [
+        {
+          id: 'primary',
+          steps: [
+            {
+              kind: 'tool',
+              id: 'prefund',
+              tool: 'prefund_trip',
+              label: 'Prefund + emit WA link for primary seat',
+              args: $('input.primarySeat'),
+              as: 'prefund',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      kind: 'pause',
+      id: 'await_claims',
+      label: 'Await per-traveler claims',
+      reason: 'external_event',
+      payload: { via: 'whatsapp_guest_link', bulkCohort: true },
+      timeoutMs: 14 * 24 * 60 * 60 * 1000,
+    },
+  ],
+};
+
 export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [bookFlightWorkflow.id]: bookFlightWorkflow,
   [groupTripWorkflow.id]: groupTripWorkflow,
   [refundWorkflow.id]: refundWorkflow,
   [checkInReminderWorkflow.id]: checkInReminderWorkflow,
+  [guestPrefundWorkflow.id]: guestPrefundWorkflow,
+  [agencyCohortWorkflow.id]: agencyCohortWorkflow,
 };
 
 /** Resolve a workflow by id; returns null if unknown. */

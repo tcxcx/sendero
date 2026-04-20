@@ -12,6 +12,13 @@ import { settleSplitTool } from './settle-split';
 import { checkPolicyTool } from './check-policy';
 import { quoteFxTool } from './quote-fx';
 import { rateAgentTool } from './rate-agent';
+import {
+  commitBookingTool,
+  guestClaimLinkTool,
+  logAgentActionTool,
+  prefundTripTool,
+  reserveBookingTool,
+} from './guest-escrow';
 import type { ToolDef } from './types';
 
 export type { ToolDef, ToolContext, JsonSchemaObject } from './types';
@@ -36,6 +43,12 @@ export const toolList: ToolDef[] = [
   checkPolicyTool,
   quoteFxTool,
   rateAgentTool,
+  // Guest escrow — prefund-then-share (Peanut-style)
+  prefundTripTool,
+  guestClaimLinkTool,
+  reserveBookingTool,
+  commitBookingTool,
+  logAgentActionTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */

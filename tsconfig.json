@@ -51,6 +51,7 @@
       "@sendero/seo/*": ["./packages/seo/src/*"],
       "@sendero/workflows": ["./packages/workflows/src/index.ts"],
       "@sendero/workflows/*": ["./packages/workflows/src/*"],
+      "@sendero/guest": ["./packages/sendero-guest/src/index.ts"],
       "@sendero/tools": ["./packages/tools/src/index.ts"],
       "@sendero/tools/adapters/ai-sdk": ["./packages/tools/src/adapters/ai-sdk.ts"],
       "@sendero/tools/adapters/mcp": ["./packages/tools/src/adapters/mcp.ts"],

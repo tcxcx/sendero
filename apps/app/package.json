@@ -42,6 +42,8 @@
     "@sendero/intelligence": "workspace:*",
     "@sendero/billing": "workspace:*",
     "@sendero/commission": "workspace:*",
+    "@sendero/workflows": "workspace:*",
+    "@sendero/guest": "workspace:*",
     "@sendero/analytics": "workspace:*",
     "@sendero/collaboration": "workspace:*",
     "@sendero/tools": "workspace:*",
