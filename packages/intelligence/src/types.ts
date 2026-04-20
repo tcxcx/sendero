@@ -10,8 +10,7 @@ export type MemoryKind =
   | 'fact' // "passport expires 2028-04-12"
   | 'relation' // "traveler Alice is on team Acme Engineering"
   | 'trip_event' // "booking confirmed PNR ABC123"
-  | 'policy_note' // "Vale 2026 requires approver over $2k"
-  ;
+  | 'policy_note'; // "Vale 2026 requires approver over $2k"
 
 export interface MemoryRecord {
   id: string;

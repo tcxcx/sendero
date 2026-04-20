@@ -126,9 +126,7 @@ export function normalizeWebhookPayload(
         if (!phoneNumberId) continue;
 
         for (const update of change.value?.user_id_update ?? []) {
-          identityChanges.push(
-            normalizeUserIdUpdate(phoneNumberId, update, opts.defaultCountry)
-          );
+          identityChanges.push(normalizeUserIdUpdate(phoneNumberId, update, opts.defaultCountry));
         }
 
         // Build a phone-number → contact index so we can upgrade

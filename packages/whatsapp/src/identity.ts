@@ -160,10 +160,11 @@ export function normalizeSystemIdentityChange(
   const current: WhatsAppIdentity = {
     ...EMPTY_IDENTITY,
     phoneRaw: sys.new_wa_id?.trim() || sys.wa_id?.trim() || null,
-    phone: (sys.new_wa_id ?? sys.wa_id)
-      ? (normalizeToE164((sys.new_wa_id ?? sys.wa_id) as string, defaultCountry) ??
-        `+${sys.new_wa_id ?? sys.wa_id}`)
-      : null,
+    phone:
+      (sys.new_wa_id ?? sys.wa_id)
+        ? (normalizeToE164((sys.new_wa_id ?? sys.wa_id) as string, defaultCountry) ??
+          `+${sys.new_wa_id ?? sys.wa_id}`)
+        : null,
     businessScopedUserId: sys.new_user_id?.trim() || null,
   };
   return {

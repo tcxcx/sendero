@@ -14,7 +14,7 @@ export const enUS: TravelGlossary = {
     'premium economy': 'wider seat + better food, cheaper than business',
     TSA: 'Transportation Security Administration — airport security',
     'TSA PreCheck': 'expedited security for registered travelers',
-    'CLEAR': 'biometric fast-lane separate from TSA PreCheck',
+    CLEAR: 'biometric fast-lane separate from TSA PreCheck',
   },
   moneySlang: {
     bucks: 'dollars',
@@ -22,8 +22,8 @@ export const enUS: TravelGlossary = {
   },
   commonPhrases: {
     'I need a flight': 'search_flights intent',
-    'cheapest': 'sort by price ascending',
-    'nonstop': 'direct, no layover',
+    cheapest: 'sort by price ascending',
+    nonstop: 'direct, no layover',
     'can I expense this': 'check policy before booking',
   },
   loyaltyPrograms: ['SkyMiles (Delta)', 'AAdvantage (AA)', 'MileagePlus (UA)'],

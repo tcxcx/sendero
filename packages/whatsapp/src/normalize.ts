@@ -12,10 +12,7 @@ import parsePhoneNumberFromString, {
   isValidPhoneNumber,
 } from 'libphonenumber-js';
 
-export function normalizeToE164(
-  raw: string,
-  defaultCountry?: string | CountryCode
-): string | null {
+export function normalizeToE164(raw: string, defaultCountry?: string | CountryCode): string | null {
   if (!raw) return null;
   const withPlus = raw.startsWith('+') ? raw : `+${raw}`;
   const parsed = parsePhoneNumberFromString(withPlus, defaultCountry as CountryCode | undefined);

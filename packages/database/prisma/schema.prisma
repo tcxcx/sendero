@@ -133,6 +133,54 @@ enum SettlementLegKind {
   other
 }
 
+enum MemoryKind {
+  preference
+  observation
+  fact
+  relation
+  trip_event
+  policy_note
+}
+
+enum PreferenceCategory {
+  seat
+  cabin_class
+  carrier
+  meal
+  hotel_chain
+  hotel_room_type
+  bag_allowance
+  layover_tolerance
+  departure_time
+  price_ceiling
+}
+
+enum PreferenceSignal {
+  approve
+  reject
+  select
+  skip
+}
+
+enum ChannelKind {
+  whatsapp
+  slack
+  email
+  web
+}
+
+enum NanopayBatchStatus {
+  pending
+  settling
+  settled
+  failed
+}
+
+enum CapPeriod {
+  daily
+  monthly
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TENANCY
 // ─────────────────────────────────────────────────────────────────────────────
@@ -156,16 +204,23 @@ model Tenant {
   parent     Tenant?        @relation("TenantHierarchy", fields: [parentTenantId], references: [id], onDelete: SetNull)
   children   Tenant[]       @relation("TenantHierarchy")
 
-  memberships  Membership[]
-  policies     Policy[]
-  trips        Trip[]
-  bookings     Booking[]
-  suppliers    Supplier[]
-  meterEvents  MeterEvent[]
-  settlements  Settlement[]
-  subscription Subscription?
-  sessions     Session[]
-  attestations Attestation[]
+  memberships       Membership[]
+  policies          Policy[]
+  trips             Trip[]
+  bookings          Booking[]
+  suppliers         Supplier[]
+  meterEvents       MeterEvent[]
+  settlements       Settlement[]
+  subscription      Subscription?
+  sessions          Session[]
+  attestations      Attestation[]
+  agentMemories     AgentMemory[]
+  preferenceLogs    PreferenceLog[]
+  channelIdentities ChannelIdentity[]
+  slackInstalls     SlackInstall[]
+  whatsappLinkTokens WhatsAppLinkToken[]
+  spendCaps         TenantSpendCap[]
+  nanopayBatches    NanopayBatch[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -186,14 +241,16 @@ model User {
   updatedAt     DateTime @updatedAt       @db.Timestamptz(6)
   lastSeenAt    DateTime? @db.Timestamptz(6)
 
-  memberships   Membership[]
-  wallets       Wallet[]
-  travelerTrips Trip[]       @relation("TripTraveler")
-  createdTrips  Trip[]       @relation("TripCreatedBy")
-  bookings      Booking[]    @relation("BookingCreatedBy")
-  suppliers     Supplier[]   @relation("SupplierCreatedBy")
-  meterEvents   MeterEvent[]
-  sessions      Session[]
+  memberships        Membership[]
+  wallets            Wallet[]
+  travelerTrips      Trip[]       @relation("TripTraveler")
+  createdTrips       Trip[]       @relation("TripCreatedBy")
+  bookings           Booking[]    @relation("BookingCreatedBy")
+  suppliers          Supplier[]   @relation("SupplierCreatedBy")
+  meterEvents        MeterEvent[]
+  sessions           Session[]
+  channelIdentities  ChannelIdentity[]
+  whatsappLinkTokens WhatsAppLinkToken[]
 
   @@index([createdAt])
   @@map("users")
@@ -331,6 +388,8 @@ model Booking {
   /// Raw provider payload (Duffel offer / order), kept for reconciliation.
   rawDuffel     Json?
   segments      Json?    // normalized itinerary
+  /// Free-form booking lifecycle metadata (approvals, policy notes, etc.).
+  metadata      Json?
   bookedAt      DateTime? @db.Timestamptz(6)
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt       @db.Timestamptz(6)
@@ -541,4 +600,194 @@ model Session {
   @@index([tripId])
   @@index([clerkSessionId])
   @@map("sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTELLIGENCE — agent memory + preference learning (Phase 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Agent memory store — per-tenant, per-subject. Phase 1 retrieval is
+/// trigram-based keyword match; Phase 2 will add pgvector embeddings.
+/// Append-only in practice, but lastAccessedAt/accessCount are mutable.
+model AgentMemory {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String
+  /// Traveler / trip / user id this memory attaches to.
+  subjectId      String
+  /// Agent that created it ("sendero", "sendero:booking", "sendero:support").
+  agentId        String   @default("sendero")
+  kind           MemoryKind
+  /// One-liner the agent reads. ≤ 240 chars.
+  summary        String   @db.VarChar(240)
+  /// Optional longer free-text. Indexed by trigram in Phase 2 migration.
+  body           String?
+  metadata       Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  lastAccessedAt DateTime? @db.Timestamptz(6)
+  accessCount    Int      @default(0)
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, subjectId, kind])
+  @@index([tenantId, agentId, createdAt])
+  @@map("agent_memories")
+}
+
+/// Raw preference decision log. Aggregated into PreferencePattern by
+/// @sendero/intelligence at recall time; not materialized server-side to
+/// keep the hot path simple in Phase 2.
+model PreferenceLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String
+  subjectId  String
+  category   PreferenceCategory
+  /// "window", "premium_economy", "BA", "16:00-21:00"
+  key        String
+  signal     PreferenceSignal
+  amountUsd  Decimal? @db.Decimal(12, 2)
+  context    Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, subjectId, category])
+  @@index([tenantId, createdAt])
+  @@map("preference_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHANNELS — WhatsApp / Slack installations + per-tenant identity mapping
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Binds a channel user (WhatsApp phone/BSUID, Slack user) to a Sendero
+/// User within a Tenant. BSUID is the preferred primary key on WhatsApp
+/// post-April-2026; phone is nullable to match the Meta rollout.
+model ChannelIdentity {
+  id                         String   @id @default(uuid()) @db.Uuid
+  tenantId                   String
+  userId                     String?
+  kind                       ChannelKind
+  /// For WhatsApp: E.164 phone (nullable — BSUID-only is possible).
+  /// For Slack: member id on the workspace.
+  externalUserId             String?
+  /// WhatsApp only — primary identity key post-BSUID rollout.
+  businessScopedUserId       String?
+  parentBusinessScopedUserId String?
+  username                   String?
+  /// Arbitrary per-channel metadata (display name, timezone, locale hints).
+  metadata                   Json?
+  createdAt                  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt                  DateTime @updatedAt       @db.Timestamptz(6)
+
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                       User?    @relation(fields: [userId],   references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, kind, businessScopedUserId])
+  @@unique([tenantId, kind, externalUserId])
+  @@index([tenantId, kind])
+  @@index([userId])
+  @@map("channel_identities")
+}
+
+/// Persisted Slack OAuth install. Keyed on (enterpriseId, teamId) so
+/// Enterprise Grid installs spanning multiple workspaces resolve to one
+/// install. `enterpriseId` is nullable for classic (non-Grid) installs.
+model SlackInstall {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String
+  /// Nullable for classic installs; required for Grid.
+  enterpriseId         String?
+  enterpriseName       String?
+  teamId               String
+  teamName             String
+  appId                String
+  botUserId            String
+  /// Encrypt-at-rest in production. Plaintext acceptable on testnet demo.
+  botToken             String
+  scope                String
+  isEnterpriseInstall  Boolean  @default(false)
+  authedUserId         String
+  installedAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt       @db.Timestamptz(6)
+  raw                  Json?
+
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([enterpriseId, teamId])
+  @@index([tenantId])
+  @@map("slack_installs")
+}
+
+/// Short-lived token bridging a web-signed-in user to a WhatsApp number.
+/// User messages the token to the Sendero WA bot; the webhook consumes
+/// the token and writes a ChannelIdentity row.
+model WhatsAppLinkToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String
+  userId     String
+  token      String   @unique
+  expiresAt  DateTime @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId],   references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([expiresAt])
+  @@map("whatsapp_link_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BILLING — tenant caps + batched nanopayment settlement
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Configurable per-tenant nanopayment spend cap. Enforced by
+/// @sendero/billing before a tool call is charged. Absence = no cap.
+model TenantSpendCap {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String
+  period          CapPeriod @default(daily)
+  /// Cap in micro-USDC (e.g. 5_000_000 = $5.00 per day).
+  amountMicroUsdc BigInt
+  /// Soft cap = alert but don't block. Hard cap rejects further calls.
+  hardCap         Boolean  @default(true)
+  /// Webhook target for cap breach notifications.
+  alertWebhookUrl String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt       @db.Timestamptz(6)
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, period])
+  @@index([tenantId])
+  @@map("tenant_spend_caps")
+}
+
+/// A batched USDC settlement of many MeterEvents. One on-chain transfer
+/// per batch to amortize gas. Append-only once settled.
+model NanopayBatch {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String
+  status           NanopayBatchStatus @default(pending)
+  /// Sum of priceMicroUsdc across all member events.
+  totalMicroUsdc   BigInt
+  eventCount       Int
+  /// ISO 8601 window start (inclusive).
+  windowStartedAt  DateTime @db.Timestamptz(6)
+  /// ISO 8601 window end (exclusive).
+  windowEndedAt    DateTime @db.Timestamptz(6)
+  /// On-chain settlement reference once the batch ships.
+  txHash           String?
+  chain            String?  @default("arc-testnet")
+  settledAt        DateTime? @db.Timestamptz(6)
+  error            String?
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt       @db.Timestamptz(6)
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, windowStartedAt])
+  @@index([status, windowEndedAt])
+  @@map("nanopay_batches")
 }

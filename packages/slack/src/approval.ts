@@ -38,9 +38,7 @@ export function buildApprovalBlocks(subject: ApprovalSubject, reviewUrl?: string
 
   const blocks: KnownBlock[] = [
     header(`Approval requested · ${subject.travelerName}`),
-    sectionMarkdown(
-      `*${subject.route}* · ${subject.fareClass}\n_Departs ${subject.departAt}_`
-    ),
+    sectionMarkdown(`*${subject.route}* · ${subject.fareClass}\n_Departs ${subject.departAt}_`),
     sectionFields([
       { label: 'Amount', value: `$${subject.amountUsd.toFixed(2)} USD` },
       { label: 'Fare class', value: subject.fareClass },
@@ -72,7 +70,14 @@ export function buildApprovalBlocks(subject: ApprovalSubject, reviewUrl?: string
         style: 'danger',
       }),
       ...(reviewUrl
-        ? [button({ text: 'Open in Sendero', actionId: `${ACTION_PREFIX}.open`, value: subject.tripId, url: reviewUrl })]
+        ? [
+            button({
+              text: 'Open in Sendero',
+              actionId: `${ACTION_PREFIX}.open`,
+              value: subject.tripId,
+              url: reviewUrl,
+            }),
+          ]
         : []),
     ]),
     context([`Booking held for 15 min · Sendero × Arc · _requested ${new Date().toISOString()}_`])

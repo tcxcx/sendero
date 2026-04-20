@@ -36,7 +36,9 @@
         "@prisma/client": "^5.22.0",
         "@sendero/arc": "workspace:*",
         "@sendero/auth": "workspace:*",
+        "@sendero/billing": "workspace:*",
         "@sendero/circle": "workspace:*",
+        "@sendero/commission": "workspace:*",
         "@sendero/database": "workspace:*",
         "@sendero/duffel": "workspace:*",
         "@sendero/env": "workspace:*",
@@ -151,6 +153,27 @@
       "optionalPeers": [
         "hono",
       ],
+    },
+    "packages/billing": {
+      "name": "@sendero/billing",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "@sendero/database": "*",
+        "@sendero/nanopayments": "*",
+      },
+    },
+    "packages/commission": {
+      "name": "@sendero/commission",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "@sendero/database": "*",
+      },
     },
     "packages/database": {
       "name": "@sendero/database",
@@ -767,7 +790,11 @@
 
     "@sendero/auth": ["@sendero/auth@workspace:packages/auth"],
 
+    "@sendero/billing": ["@sendero/billing@workspace:packages/billing"],
+
     "@sendero/circle": ["@sendero/circle@workspace:packages/sendero-circle"],
+
+    "@sendero/commission": ["@sendero/commission@workspace:packages/commission"],
 
     "@sendero/database": ["@sendero/database@workspace:packages/database"],
 

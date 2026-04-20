@@ -42,4 +42,19 @@ export const env = {
     process.env.NEXT_PUBLIC_CIRCLE_CLIENT_URL ||
     process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_URL ||
     'https://modular-sdk.circle.com/v1/rpc/w3s/buidl',
+
+  // ── Channels (Phase 2) ────────────────────────────────────────────
+  whatsappAppSecret: () => process.env.WHATSAPP_APP_SECRET || null,
+  whatsappVerifyToken: () => process.env.WHATSAPP_VERIFY_TOKEN || null,
+  whatsappAccessToken: () => process.env.WHATSAPP_ACCESS_TOKEN || null,
+  whatsappPhoneNumberId: () => process.env.WHATSAPP_PHONE_NUMBER_ID || null,
+  whatsappApiBaseUrl: () => process.env.WHATSAPP_API_BASE_URL || null,
+  whatsappDefaultCountry: () => process.env.WHATSAPP_DEFAULT_COUNTRY || 'US',
+  whatsappDefaultTenantId: () => process.env.WHATSAPP_DEFAULT_TENANT_ID || null,
+
+  slackSigningSecret: () => process.env.SLACK_SIGNING_SECRET || null,
+  slackClientId: () => process.env.SLACK_CLIENT_ID || null,
+  slackClientSecret: () => process.env.SLACK_CLIENT_SECRET || null,
+  slackRedirectUri: () => process.env.SLACK_REDIRECT_URI || null,
+  slackStateSecret: () => process.env.SLACK_STATE_SECRET || null,
 };

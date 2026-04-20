@@ -75,9 +75,7 @@ export async function loadTenantPolicy(
  */
 export async function listSwitchableTenants(prisma: {
   tenant: {
-    findMany: (
-      args: any
-    ) => Promise<
+    findMany: (args: any) => Promise<
       Array<{
         id: string;
         slug: string;

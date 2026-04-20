@@ -52,7 +52,11 @@ export function formatRelativeTime(date: Date | string | number, locale: string)
   return rtf.format(Math.round(diffSec / 86_400), 'day');
 }
 
-export function formatList(items: string[], locale: string, type: 'conjunction' | 'disjunction' = 'conjunction'): string {
+export function formatList(
+  items: string[],
+  locale: string,
+  type: 'conjunction' | 'disjunction' = 'conjunction'
+): string {
   return new Intl.ListFormat(locale, { style: 'long', type }).format(items);
 }
 

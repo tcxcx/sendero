@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "description": "Sendero × Arc — AI travel agent monorepo. apps/{app, edge, docs, storybook} + packages/{auth, database, tools, circle, duffel, arc, erc8183, nanopayments, env}. Circle Arc Hackathon Spring 2026.",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "packageManager": "bun@1.3.10",
   "scripts": {
     "dev": "turbo run dev --filter=@sendero/app",

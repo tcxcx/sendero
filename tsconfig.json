@@ -27,9 +27,7 @@
       "@sendero/circle/wallets": ["./packages/sendero-circle/src/wallets.ts"],
       "@sendero/circle/app-kit": ["./packages/sendero-circle/src/app-kit.ts"],
       "@sendero/circle/gateway": ["./packages/sendero-circle/src/gateway.ts"],
-      "@sendero/circle/modular-wallets": [
-        "./packages/sendero-circle/src/modular-wallets.ts"
-      ],
+      "@sendero/circle/modular-wallets": ["./packages/sendero-circle/src/modular-wallets.ts"],
       "@sendero/nanopayments": ["./packages/sendero-nanopayments/src/index.ts"],
       "@sendero/whatsapp": ["./packages/whatsapp/src/index.ts"],
       "@sendero/whatsapp/*": ["./packages/whatsapp/src/*"],
@@ -39,6 +37,10 @@
       "@sendero/locale/*": ["./packages/locale/src/*"],
       "@sendero/intelligence": ["./packages/intelligence/src/index.ts"],
       "@sendero/intelligence/*": ["./packages/intelligence/src/*"],
+      "@sendero/billing": ["./packages/billing/src/index.ts"],
+      "@sendero/billing/*": ["./packages/billing/src/*"],
+      "@sendero/commission": ["./packages/commission/src/index.ts"],
+      "@sendero/commission/*": ["./packages/commission/src/*"],
       "@sendero/tools": ["./packages/tools/src/index.ts"],
       "@sendero/tools/adapters/ai-sdk": ["./packages/tools/src/adapters/ai-sdk.ts"],
       "@sendero/tools/adapters/mcp": ["./packages/tools/src/adapters/mcp.ts"],

@@ -19,22 +19,24 @@ export function bestMatchFromAcceptLanguage(header: string | null | undefined): 
     .split(',')
     .map(part => {
       const [tag, ...rest] = part.trim().split(';');
-      const q = rest
-        .map(s => s.trim())
-        .find(s => s.startsWith('q='));
+      const q = rest.map(s => s.trim()).find(s => s.startsWith('q='));
       return { tag: tag.trim(), q: q ? Number(q.slice(2)) : 1.0 };
     })
     .filter(c => c.tag)
     .sort((a, b) => b.q - a.q);
 
   for (const { tag } of candidates) {
-    const match = (SUPPORTED_LOCALES as readonly string[]).find(l => l.toLowerCase() === tag.toLowerCase());
+    const match = (SUPPORTED_LOCALES as readonly string[]).find(
+      l => l.toLowerCase() === tag.toLowerCase()
+    );
     if (match) return match;
   }
   // Language-only fallback
   for (const { tag } of candidates) {
     const lang = tag.toLowerCase().split('-')[0];
-    const match = (SUPPORTED_LOCALES as readonly string[]).find(l => l.toLowerCase().startsWith(`${lang}-`));
+    const match = (SUPPORTED_LOCALES as readonly string[]).find(l =>
+      l.toLowerCase().startsWith(`${lang}-`)
+    );
     if (match) return match;
   }
   return null;

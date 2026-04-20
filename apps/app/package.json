@@ -40,6 +40,8 @@
     "@sendero/slack": "workspace:*",
     "@sendero/locale": "workspace:*",
     "@sendero/intelligence": "workspace:*",
+    "@sendero/billing": "workspace:*",
+    "@sendero/commission": "workspace:*",
     "@sendero/tools": "workspace:*",
     "@x402/core": "^2.10.0",
     "@x402/evm": "^2.10.0",

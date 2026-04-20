@@ -86,8 +86,7 @@ export function aggregatePreferences(logs: PreferenceLog[]): PreferencePattern[]
       key: items[0].key,
       totalObservations: items.length,
       positiveRatio: positives / items.length,
-      avgAmountUsd:
-        amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : null,
+      avgAmountUsd: amounts.length > 0 ? amounts.reduce((a, b) => a + b, 0) / amounts.length : null,
       lastSeenAt: lastSeen,
     });
   }
