@@ -291,11 +291,14 @@ export function ErrorBanner() {
 
 /* ─── FooterRail ──────────────────────────────────────────────────────── */
 
+import { useMeterSummary } from './use-meter';
+
 export function FooterRail() {
   const treasury = useSendero((s) => s.treasury);
   const holdOrder = useSendero((s) => s.holdOrder);
   const settlementPhase = useSendero((s) => s.settlement.phase);
   const onChainSettlement = useSendero((s) => s.onChainSettlement);
+  const { summary: meter } = useMeterSummary(1500);
 
   const treasuryAddr = treasury?.treasuryAddress ?? null;
   const usdc = treasury?.balances.find((b) => b.symbol === 'USDC');
@@ -355,6 +358,38 @@ export function FooterRail() {
         <span>
           escrow <strong style={{ color: 'var(--ink)' }}>{escrowLabel}</strong>
         </span>
+        <span>·</span>
+        <span>
+          nano{' '}
+          <strong
+            style={{
+              color:
+                (meter?.paidCalls ?? 0) >= 50
+                  ? 'var(--accent-green)'
+                  : 'var(--ink)',
+            }}
+          >
+            {meter ? `${meter.paidCalls}/${meter.totalEvents} calls` : '—'}
+          </strong>
+        </span>
+        <span>·</span>
+        <span>
+          paid{' '}
+          <strong style={{ color: 'var(--usdc)' }}>
+            {meter ? `$${meter.totalUsdc}` : '—'}
+          </strong>
+        </span>
+        {meter && meter.ethereum.marginFactor > 0 && (
+          <>
+            <span>·</span>
+            <span>
+              arc vs eth{' '}
+              <strong style={{ color: 'var(--accent-green)' }}>
+                {meter.ethereum.marginFactor}×
+              </strong>
+            </span>
+          </>
+        )}
         {holdOrder && (
           <>
             <span>·</span>

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "bun install",
+  "buildCommand": "echo 'no build step — Hono handler'",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api" }
+  ],
+  "functions": {
+    "api/[[...route]].ts": {
+      "maxDuration": 60,
+      "includeFiles": "packages/tools/src/**"
+    }
+  }
+}

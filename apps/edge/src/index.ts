@@ -72,17 +72,14 @@ mountDiscord(app);
 mountPaidTools(app);
 
 /**
- * Default export is a Hono app. Bun auto-serves the default export on
- * $PORT (defaults 3000, we override via env), so `bun run src/index.ts`
- * just works. For Cloudflare Workers / Vercel Edge, this same default
- * export is also the handler — `export default app` is the standard.
+ * Default export is the raw Hono `app`. That's the shape Vercel's
+ * `hono/vercel` `handle()` wraps, and also what Cloudflare Workers
+ * expects. For local Bun dev we run via `bun run dev` in this
+ * package which uses `@hono/node-server` compat under the hood.
  */
 // eslint-disable-next-line no-console
 console.log(
-  `[sendero/edge] ready · surfaces: / · /mcp · /whatsapp · /slack · /discord`,
+  `[sendero/edge] ready · surfaces: / · /mcp · /whatsapp · /slack · /discord · /tools`,
 );
 
-export default {
-  port: Number(process.env.PORT ?? 3020),
-  fetch: app.fetch,
-};
+export default app;

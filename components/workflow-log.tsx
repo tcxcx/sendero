@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSendero } from './store';
+import { useMeterStream, useMeterSummary } from './use-meter';
 
 interface Runtime {
   provider: string | null;
@@ -31,6 +32,10 @@ export function WorkflowLog() {
       .then((j) => j && setRuntime(j))
       .catch(() => {});
   }, []);
+
+  const { events: meterEvents, connected: meterConnected } =
+    useMeterStream(30);
+  const { summary: meterSummary } = useMeterSummary(1500);
 
   // Group events by `group` name, preserving order.
   const grouped = workflow.reduce<Record<string, typeof workflow>>(
@@ -111,6 +116,119 @@ export function WorkflowLog() {
           </div>
         ))}
 
+        <div className="log-group">
+          <div className="log-head">
+            <span className="name">
+              ▸ nanopayments · x402 · arc
+            </span>
+            <span className="dur">
+              {meterSummary
+                ? `${meterSummary.paidCalls}p / ${meterSummary.rejectedCalls}r`
+                : meterConnected
+                  ? 'live'
+                  : 'offline'}
+            </span>
+          </div>
+
+          <div
+            style={{
+              padding: '4px 14px 8px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: 'var(--text-dim)',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 2,
+            }}
+          >
+            <span>arc paid</span>
+            <span
+              style={{
+                color: 'var(--usdc)',
+                textAlign: 'right',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {meterSummary ? `$${meterSummary.totalUsdc}` : '—'}
+            </span>
+            <span>ethereum (est)</span>
+            <span
+              style={{
+                color: 'var(--accent-rose)',
+                textAlign: 'right',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {meterSummary
+                ? `$${meterSummary.ethereum.totalUsd.toFixed(2)}`
+                : '—'}
+            </span>
+            <span>margin delta</span>
+            <span
+              style={{
+                color:
+                  meterSummary && meterSummary.ethereum.marginFactor > 0
+                    ? 'var(--accent-green)'
+                    : 'var(--text-faint)',
+                textAlign: 'right',
+                fontWeight: 500,
+              }}
+            >
+              {meterSummary && meterSummary.ethereum.marginFactor > 0
+                ? `${meterSummary.ethereum.marginFactor}×`
+                : '—'}
+            </span>
+          </div>
+
+          {meterEvents.slice(-12).map((e, i) => {
+            const bullet =
+              e.status === 'paid'
+                ? 'done'
+                : e.status === 'rejected'
+                  ? 'fail'
+                  : 'pending';
+            return (
+              <div key={`m-${i}`} className={`log-event ${bullet}`}>
+                <span className="bullet">
+                  {e.status === 'paid'
+                    ? '●'
+                    : e.status === 'rejected'
+                      ? '○'
+                      : '◌'}
+                </span>
+                <span className="txt">
+                  <span style={{ color: 'var(--ink)' }}>{e.toolName}</span>
+                  <span style={{ color: 'var(--text-faint)' }}>
+                    {' · '}
+                    ${e.priceUsdc}
+                    {e.status === 'rejected' && e.note
+                      ? ` · ${e.note}`
+                      : ''}
+                  </span>
+                </span>
+                <span className="t">
+                  {new Date(e.at).toTimeString().slice(0, 8)}
+                </span>
+              </div>
+            );
+          })}
+
+          {meterEvents.length === 0 && (
+            <div
+              style={{
+                padding: '8px 14px 14px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--text-faint)',
+              }}
+            >
+              {meterConnected
+                ? '// waiting for first metered call…'
+                : '// edge worker unreachable. run `bun apps/edge/src/index.ts`.'}
+            </div>
+          )}
+        </div>
+
         <div
           style={{
             padding: '16px 14px',
@@ -120,8 +238,8 @@ export function WorkflowLog() {
             lineHeight: 1.6,
           }}
         >
-          <div>{'// powered by Circle CCTP v2 + Arc L2'}</div>
-          <div>{'// duffel hold-then-pay · balance settlement'}</div>
+          <div>{'// powered by Circle Nanopayments + Arc L2'}</div>
+          <div>{'// x402 batched settlement · duffel hold-then-pay'}</div>
           <div>{'// ─────────────────────────────'}</div>
         </div>
       </div>

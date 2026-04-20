@@ -25,10 +25,28 @@ curl -X POST localhost:3020/mcp -H 'content-type: application/json' \
 
 ## Deploy
 
-- **Bare Bun** (Fly, Railway, VM): as-is.
-- **Cloudflare Workers**: remove the `Bun.serve(...)` block — `export default app` already works.
-- **Vercel Edge**: move `src/index.ts` under `apps/edge-vercel/` or use `@hono/adapter-vercel`.
-- **Deno Deploy**: `Deno.serve(app.fetch)`.
+### Cloudflare Workers (recommended — Hono is first-class there)
+
+```bash
+cd apps/edge
+npx wrangler secret put ANTHROPIC_API_KEY   # and each other secret
+npx wrangler deploy
+```
+
+Routes map cleanly out of the Hono app. Free tier covers hackathon load.
+
+### Local dev
+
+```bash
+bun run dev:edge          # from repo root, listens on :3020
+```
+
+### Vercel (experimental)
+
+`vercel.json` + `api/[[...route]].ts` route exist, but Vercel's monorepo
+handling of `workspace:*` deps is thin. Either vendor `@sendero/tools/src`
+into this package or deploy via Cloudflare. Local `bun run dev:edge`
+always works.
 
 ## Adapter status
 

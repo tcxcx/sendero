@@ -5,15 +5,19 @@
   "type": "module",
   "description": "Sendero × Arc — AI travel agent that books real flights and settles on-chain via ERC-8183 + ERC-8004. Circle Arc Hackathon Spring 2026.",
   "workspaces": [
+    "apps/*",
     "packages/*"
   ],
   "scripts": {
     "dev": "next dev -p 3010",
+    "dev:edge": "bun run --cwd apps/edge dev",
+    "dev:all": "turbo dev",
     "build": "next build",
     "start": "next start -p 3010",
     "lint": "next lint || true",
     "typecheck": "tsc --noEmit || true",
-    "clean": "git clean -xdf .next .turbo node_modules",
+    "typecheck:all": "turbo typecheck",
+    "clean": "git clean -xdf .next .turbo node_modules apps/*/node_modules packages/*/node_modules",
     "bootstrap-agent": "bun run scripts/bootstrap-agent.ts"
   },
   "dependencies": {
@@ -46,6 +50,7 @@
     "@types/node": "^22.9.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "turbo": "^2.9.6",
     "typescript": "^5.8.3"
   },
   "repository": {

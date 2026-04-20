@@ -1,0 +1,24 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "globalEnv": [
+    "NODE_ENV",
+    "VERCEL_ENV",
+    "NEXT_PUBLIC_SENDERO_EDGE_URL",
+    "NEXT_PUBLIC_CIRCLE_CLIENT_KEY",
+    "NEXT_PUBLIC_CIRCLE_CLIENT_URL"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {}
+  }
+}

@@ -1,0 +1,8 @@
+.env.local
+.env
+node_modules
+apps/edge/node_modules
+.next
+.turbo
+bun.lock
+docs/
