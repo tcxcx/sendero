@@ -189,38 +189,38 @@ enum CapPeriod {
 /// A Tenant can be a TMC (e.g. "SP Corporate Travel") or a corp client
 /// ("Vale"). Sub-agencies modeled via self-referencing parentTenantId.
 model Tenant {
-  id             String   @id @default(cuid())
-  clerkOrgId     String   @unique
-  slug           String   @unique // URL-safe, e.g. "sp-corporate-travel"
+  id             String      @id @default(cuid())
+  clerkOrgId     String      @unique
+  slug           String      @unique // URL-safe, e.g. "sp-corporate-travel"
   displayName    String
   billingTier    BillingTier @default(free)
-  fiscalCountry  String?  // ISO-3166-1 alpha-2, e.g. "BR"
-  arcAddress     String?  // treasury MSCA on Arc (0x…)
+  fiscalCountry  String? // ISO-3166-1 alpha-2, e.g. "BR"
+  arcAddress     String? // treasury MSCA on Arc (0x…)
   parentTenantId String?
-  metadata       Json?    // free-form; logo, phone, custom branding
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt       @db.Timestamptz(6)
+  metadata       Json? // free-form; logo, phone, custom branding
+  createdAt      DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime    @updatedAt @db.Timestamptz(6)
 
-  parent     Tenant?        @relation("TenantHierarchy", fields: [parentTenantId], references: [id], onDelete: SetNull)
-  children   Tenant[]       @relation("TenantHierarchy")
+  parent   Tenant?  @relation("TenantHierarchy", fields: [parentTenantId], references: [id], onDelete: SetNull)
+  children Tenant[] @relation("TenantHierarchy")
 
-  memberships       Membership[]
-  policies          Policy[]
-  trips             Trip[]
-  bookings          Booking[]
-  suppliers         Supplier[]
-  meterEvents       MeterEvent[]
-  settlements       Settlement[]
-  subscription      Subscription?
-  sessions          Session[]
-  attestations      Attestation[]
-  agentMemories     AgentMemory[]
-  preferenceLogs    PreferenceLog[]
-  channelIdentities ChannelIdentity[]
-  slackInstalls     SlackInstall[]
+  memberships        Membership[]
+  policies           Policy[]
+  trips              Trip[]
+  bookings           Booking[]
+  suppliers          Supplier[]
+  meterEvents        MeterEvent[]
+  settlements        Settlement[]
+  subscription       Subscription?
+  sessions           Session[]
+  attestations       Attestation[]
+  agentMemories      AgentMemory[]
+  preferenceLogs     PreferenceLog[]
+  channelIdentities  ChannelIdentity[]
+  slackInstalls      SlackInstall[]
   whatsappLinkTokens WhatsAppLinkToken[]
-  spendCaps         TenantSpendCap[]
-  nanopayBatches    NanopayBatch[]
+  spendCaps          TenantSpendCap[]
+  nanopayBatches     NanopayBatch[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -230,23 +230,23 @@ model Tenant {
 /// Human user. Identified by Clerk; cached MSCA address is deterministic
 /// from the passkey (Circle Modular Wallets).
 model User {
-  id            String   @id @default(cuid())
-  clerkUserId   String   @unique
-  email         String   @unique
-  displayName   String?
-  imageUrl      String?
-  mscaAddress   String?  @unique // 0x…, nullable until first passkey link
-  phone         String?
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt       @db.Timestamptz(6)
-  lastSeenAt    DateTime? @db.Timestamptz(6)
+  id          String    @id @default(cuid())
+  clerkUserId String    @unique
+  email       String    @unique
+  displayName String?
+  imageUrl    String?
+  mscaAddress String?   @unique // 0x…, nullable until first passkey link
+  phone       String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  lastSeenAt  DateTime? @db.Timestamptz(6)
 
   memberships        Membership[]
   wallets            Wallet[]
-  travelerTrips      Trip[]       @relation("TripTraveler")
-  createdTrips       Trip[]       @relation("TripCreatedBy")
-  bookings           Booking[]    @relation("BookingCreatedBy")
-  suppliers          Supplier[]   @relation("SupplierCreatedBy")
+  travelerTrips      Trip[]              @relation("TripTraveler")
+  createdTrips       Trip[]              @relation("TripCreatedBy")
+  bookings           Booking[]           @relation("BookingCreatedBy")
+  suppliers          Supplier[]          @relation("SupplierCreatedBy")
   meterEvents        MeterEvent[]
   sessions           Session[]
   channelIdentities  ChannelIdentity[]
@@ -258,19 +258,19 @@ model User {
 
 /// Many-to-many User↔Tenant with a per-tenant role.
 model Membership {
-  id         String   @id @default(cuid())
-  tenantId   String
-  userId     String
-  role       Role     @default(traveler)
-  status     MembershipStatus @default(active)
-  invitedBy  String?
-  invitedAt  DateTime? @db.Timestamptz(6)
-  joinedAt   DateTime? @db.Timestamptz(6)
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime @updatedAt       @db.Timestamptz(6)
+  id        String           @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      Role             @default(traveler)
+  status    MembershipStatus @default(active)
+  invitedBy String?
+  invitedAt DateTime?        @db.Timestamptz(6)
+  joinedAt  DateTime?        @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(6)
 
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId],   references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, userId])
   @@index([tenantId, role])
@@ -284,19 +284,19 @@ model Membership {
 
 /// One Subscription per Tenant (Clerk Billing mirror).
 model Subscription {
-  id                String   @id @default(cuid())
-  tenantId          String   @unique
-  clerkSubId        String?  @unique
-  tier              BillingTier @default(free)
+  id                String             @id @default(cuid())
+  tenantId          String             @unique
+  clerkSubId        String?            @unique
+  tier              BillingTier        @default(free)
   status            SubscriptionStatus @default(active)
-  currentPeriodEnd  DateTime? @db.Timestamptz(6)
+  currentPeriodEnd  DateTime?          @db.Timestamptz(6)
   /// Signed micro-USDC balance for the current billing period (negative = owed).
-  meterBalanceMicro BigInt   @default(0)
+  meterBalanceMicro BigInt             @default(0)
   metadata          Json?
-  createdAt         DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime @updatedAt       @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
 
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@map("subscriptions")
@@ -308,21 +308,21 @@ model Subscription {
 
 /// Corporate travel ruleset JSON. Many per tenant (e.g. per corp client).
 model Policy {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   tenantId      String
-  slug          String   // "vale-corp-2026"
+  slug          String // "vale-corp-2026"
   displayName   String
   /// JSON rules: maxNightUsd, intlCabinRequired, preferredCarriers, fiscalCountry, etc.
   rules         Json
-  isDefault     Boolean  @default(false)
-  version       Int      @default(1)
+  isDefault     Boolean   @default(false)
+  version       Int       @default(1)
   effectiveFrom DateTime? @db.Timestamptz(6)
   effectiveTo   DateTime? @db.Timestamptz(6)
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt       @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trips         Trip[]
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trips  Trip[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, isDefault])
@@ -336,32 +336,32 @@ model Policy {
 
 /// A persistent conversational thread for one trip. Core object.
 model Trip {
-  id              String   @id @default(cuid())
+  id              String     @id @default(cuid())
   tenantId        String
   policyId        String?
-  travelerId      String?          // User.id — may be guest
-  createdById     String?          // booking agent
-  intent          Json             // parsed intent: {origin,dest,dates,pax,purpose}
+  travelerId      String? // User.id — may be guest
+  createdById     String? // booking agent
+  intent          Json // parsed intent: {origin,dest,dates,pax,purpose}
   status          TripStatus @default(draft)
   /// Append-only event log (agent turns, tool calls, approvals).
-  events          Json     @default("[]")
-  settlementRef   String?          // convenience pointer to latest Settlement
-  cfdiRef         String?          // MX fiscal invoice reference
-  reputationScore Int?             // 0-100, mirrored from Attestation
-  totalUsdc       Decimal? @db.Decimal(18, 6) // denormalized from bookings
+  events          Json       @default("[]")
+  settlementRef   String? // convenience pointer to latest Settlement
+  cfdiRef         String? // MX fiscal invoice reference
+  reputationScore Int? // 0-100, mirrored from Attestation
+  totalUsdc       Decimal?   @db.Decimal(18, 6) // denormalized from bookings
   metadata        Json?
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt       @db.Timestamptz(6)
+  createdAt       DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime   @updatedAt @db.Timestamptz(6)
 
-  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  policy          Policy?  @relation(fields: [policyId], references: [id], onDelete: SetNull)
-  traveler        User?    @relation("TripTraveler",   fields: [travelerId],  references: [id], onDelete: SetNull)
-  createdBy       User?    @relation("TripCreatedBy",  fields: [createdById], references: [id], onDelete: SetNull)
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  policy    Policy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  traveler  User?   @relation("TripTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
+  createdBy User?   @relation("TripCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  bookings        Booking[]
-  settlements     Settlement[]
-  attestations    Attestation[]
-  sessions        Session[]
+  bookings     Booking[]
+  settlements  Settlement[]
+  attestations Attestation[]
+  sessions     Session[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
@@ -373,23 +373,27 @@ model Trip {
 
 /// One reserved product inside a Trip (flight, hotel, rail, car).
 model Booking {
-  id            String   @id @default(cuid())
-  tenantId      String
-  tripId        String
-  supplierId    String?
-  createdById   String?
-  kind          BookingKind
-  status        BookingStatus @default(pending)
+  id                   String        @id @default(cuid())
+  tenantId             String
+  tripId               String
+  supplierId           String?
+  createdById          String?
+  kind                 BookingKind
+  status               BookingStatus @default(pending)
   /// Duffel order id, Amadeus PNR locator, etc.
-  externalId    String?
-  pnr           String?
-  totalUsd      Decimal  @db.Decimal(12, 2)
-  currency      String   @default("USD") @db.Char(3)
+  externalId           String?
+  /// Duffel order id once the hold is placed. Separate column (not
+  /// externalId) so we can put a global @unique on it for webhook
+  /// lookups independent of tenant.
+  duffelOrderId        String?       @unique
+  pnr                  String?
+  totalUsd             Decimal       @db.Decimal(12, 2)
+  currency             String        @default("USD") @db.Char(3)
   /// Raw provider payload (Duffel offer / order), kept for reconciliation.
-  rawDuffel     Json?
-  segments      Json?    // normalized itinerary
+  rawDuffel            Json?
+  segments             Json? // normalized itinerary
   /// Free-form booking lifecycle metadata (approvals, policy notes, etc.).
-  metadata      Json?
+  metadata             Json?
   /// Which policy (+ which version of its rules) was applied at booking time.
   appliedPolicyId      String?
   appliedPolicyVersion Int?
@@ -397,16 +401,16 @@ model Booking {
   policyCheckResult    String?
   /// Structured policy violations captured at book time.
   policyViolations     Json?
-  bookedAt      DateTime? @db.Timestamptz(6)
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt       @db.Timestamptz(6)
+  bookedAt             DateTime?     @db.Timestamptz(6)
+  createdAt            DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(6)
 
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trip          Trip     @relation(fields: [tripId],   references: [id], onDelete: Cascade)
-  supplier      Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  createdBy     User?    @relation("BookingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip      Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  supplier  Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdBy User?     @relation("BookingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  settlements   Settlement[]
+  settlements Settlement[]
 
   @@unique([tenantId, externalId])
   @@index([tenantId, createdAt])
@@ -423,24 +427,24 @@ model Booking {
 /// Airline / hotel / DMC. Either tenant-private (preferred partner) or
 /// public (shared registry — tenantId is NULL, visibility = "public").
 model Supplier {
-  id            String   @id @default(cuid())
-  tenantId      String?          // null = public registry
+  id            String             @id @default(cuid())
+  tenantId      String? // null = public registry
   createdById   String?
   kind          SupplierKind
   visibility    SupplierVisibility @default(public)
-  status        SupplierStatus      @default(active)
+  status        SupplierStatus     @default(active)
   name          String
-  iataCode      String?          // for airlines
-  country       String?          // ISO-3166-1 alpha-2
-  arcAddress    String?          // on-chain payout address on Arc
-  commissionBps Int      @default(0) // basis points, 100 = 1%
+  iataCode      String? // for airlines
+  country       String? // ISO-3166-1 alpha-2
+  arcAddress    String? // on-chain payout address on Arc
+  commissionBps Int                @default(0) // basis points, 100 = 1%
   metadata      Json?
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt       @db.Timestamptz(6)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime           @updatedAt @db.Timestamptz(6)
 
-  tenant        Tenant?  @relation(fields: [tenantId],   references: [id], onDelete: Cascade)
-  createdBy     User?    @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  bookings      Booking[]
+  tenant    Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  bookings  Booking[]
 
   @@unique([tenantId, iataCode])
   @@index([visibility, status])
@@ -457,19 +461,19 @@ model Supplier {
 /// A user may have multiple wallet rows (one per chain), but MSCA address
 /// is deterministic per passkey so (userId, chainId, address) is unique.
 model Wallet {
-  id                     String   @id @default(cuid())
-  userId                 String
-  address                String
-  chainId                Int
+  id                  String    @id @default(cuid())
+  userId              String
+  address             String
+  chainId             Int
   /// Cached Circle Gateway unified-USDC balance, in micro-USDC (1e-6).
-  gatewayBalanceMicro    BigInt   @default(0)
+  gatewayBalanceMicro BigInt    @default(0)
   /// Human label ("daily-ops", "treasury").
-  label                  String?
-  lastSeenAt             DateTime? @db.Timestamptz(6)
-  createdAt              DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt              DateTime @updatedAt       @db.Timestamptz(6)
+  label               String?
+  lastSeenAt          DateTime? @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
 
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, chainId, address])
   @@index([address])
@@ -479,24 +483,24 @@ model Wallet {
 /// Append-only nanopayment ledger. Mirrors packages/tools/src/meter.ts
 /// MeterEvent but durable. NEVER update or delete rows — audit trail.
 model MeterEvent {
-  id             String   @id @default(uuid()) @db.Uuid
-  at             DateTime @default(now()) @db.Timestamptz(6)
+  id             String      @id @default(uuid()) @db.Uuid
+  at             DateTime    @default(now()) @db.Timestamptz(6)
   tenantId       String?
   userId         String?
-  payerAddress   String?          // on-chain payer (x402)
+  payerAddress   String? // on-chain payer (x402)
   toolName       String
   /// USDC price charged, in micro-USDC (atomic). e.g. 5000 = $0.005.
   priceMicroUsdc BigInt
   status         MeterStatus
-  settlementRef  String?          // Gateway transfer id or tx hash
+  settlementRef  String? // Gateway transfer id or tx hash
   note           String?
   metadata       Json?
   /// Idempotency key — unique per (tenantId, key). Duplicate writes
   /// from retried webhook deliveries no-op at the DB layer.
   idempotencyKey String?
 
-  tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  user           User?    @relation(fields: [userId],   references: [id], onDelete: SetNull)
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, at])
@@ -512,27 +516,27 @@ model MeterEvent {
 
 /// One on-chain settlement per Booking (ERC-8183 fan-out). Append-only.
 model Settlement {
-  id           String   @id @default(cuid())
-  tenantId     String
-  tripId       String?
-  bookingId    String?
+  id             String           @id @default(cuid())
+  tenantId       String
+  tripId         String?
+  bookingId      String?
   /// Gross USDC amount distributed, in micro-USDC.
   grossMicroUsdc BigInt
-  chain        String   // "arc-testnet", "arc-mainnet", "base", etc.
-  chainId      Int?
-  status       SettlementStatus @default(pending)
-  txHashes     String[] @default([])
-  initiatedAt  DateTime @default(now()) @db.Timestamptz(6)
-  confirmedAt  DateTime? @db.Timestamptz(6)
-  metadata     Json?
-  createdAt    DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt       @db.Timestamptz(6)
+  chain          String // "arc-testnet", "arc-mainnet", "base", etc.
+  chainId        Int?
+  status         SettlementStatus @default(pending)
+  txHashes       String[]         @default([])
+  initiatedAt    DateTime         @default(now()) @db.Timestamptz(6)
+  confirmedAt    DateTime?        @db.Timestamptz(6)
+  metadata       Json?
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
 
-  tenant       Tenant   @relation(fields: [tenantId],  references: [id], onDelete: Restrict)
-  trip         Trip?    @relation(fields: [tripId],    references: [id], onDelete: SetNull)
-  booking      Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  trip    Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
 
-  legs         SettlementLeg[]
+  legs SettlementLeg[]
 
   @@index([tenantId, createdAt])
   @@index([bookingId])
@@ -543,17 +547,17 @@ model Settlement {
 
 /// One payout leg of a Settlement (supplier, agency, rail, validator, ...).
 model SettlementLeg {
-  id              String   @id @default(uuid()) @db.Uuid
+  id              String            @id @default(uuid()) @db.Uuid
   settlementId    String
   kind            SettlementLegKind
   toAddress       String
   amountMicroUsdc BigInt
   txHash          String?
-  index           Int      @default(0)
+  index           Int               @default(0)
   note            String?
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  createdAt       DateTime          @default(now()) @db.Timestamptz(6)
 
-  settlement      Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  settlement Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
 
   @@index([settlementId, index])
   @@index([toAddress])
@@ -569,16 +573,16 @@ model Attestation {
   id               String   @id @default(cuid())
   tenantId         String
   tripId           String?
-  agentId          String   // ERC-8004 agent identifier
+  agentId          String // ERC-8004 agent identifier
   validatorAddress String
-  stars            Int      // 1-5
+  stars            Int // 1-5
   txHash           String?
   chain            String?
   at               DateTime @default(now()) @db.Timestamptz(6)
   metadata         Json?
 
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  trip             Trip?    @relation(fields: [tripId],   references: [id], onDelete: SetNull)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  trip   Trip?  @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, at])
   @@index([tripId])
@@ -593,7 +597,7 @@ model Attestation {
 /// Clerk session → workflow thread context. Lets the agent resume an
 /// interrupted turn (e.g. OTP, 3DS, approval gate).
 model Session {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   tenantId       String
   userId         String?
   tripId         String?
@@ -602,14 +606,14 @@ model Session {
   /// MCP actor id). Lets runAgentTurn look up an ambient conversation session
   /// across channels without rebuilding context each turn.
   subjectKey     String?
-  threadContext  Json?    // in-flight tool call, pending approvals, turns log
+  threadContext  Json? // in-flight tool call, pending approvals, turns log
   expiresAt      DateTime? @db.Timestamptz(6)
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt       @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(6)
 
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user           User?    @relation(fields: [userId],   references: [id], onDelete: SetNull)
-  trip           Trip?    @relation(fields: [tripId],   references: [id], onDelete: SetNull)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  trip   Trip?  @relation(fields: [tripId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, subjectKey])
   @@index([tenantId, createdAt])
@@ -626,23 +630,23 @@ model Session {
 /// trigram-based keyword match; Phase 2 will add pgvector embeddings.
 /// Append-only in practice, but lastAccessedAt/accessCount are mutable.
 model AgentMemory {
-  id             String   @id @default(uuid()) @db.Uuid
+  id             String     @id @default(uuid()) @db.Uuid
   tenantId       String
   /// Traveler / trip / user id this memory attaches to.
   subjectId      String
   /// Agent that created it ("sendero", "sendero:booking", "sendero:support").
-  agentId        String   @default("sendero")
+  agentId        String     @default("sendero")
   kind           MemoryKind
   /// One-liner the agent reads. ≤ 240 chars.
-  summary        String   @db.VarChar(240)
+  summary        String     @db.VarChar(240)
   /// Optional longer free-text. Indexed by trigram in Phase 2 migration.
   body           String?
   metadata       Json?
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
-  lastAccessedAt DateTime? @db.Timestamptz(6)
-  accessCount    Int      @default(0)
+  createdAt      DateTime   @default(now()) @db.Timestamptz(6)
+  lastAccessedAt DateTime?  @db.Timestamptz(6)
+  accessCount    Int        @default(0)
 
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, subjectId, kind])
   @@index([tenantId, agentId, createdAt])
@@ -653,18 +657,18 @@ model AgentMemory {
 /// @sendero/intelligence at recall time; not materialized server-side to
 /// keep the hot path simple in Phase 2.
 model PreferenceLog {
-  id         String   @id @default(uuid()) @db.Uuid
-  tenantId   String
-  subjectId  String
-  category   PreferenceCategory
+  id        String             @id @default(uuid()) @db.Uuid
+  tenantId  String
+  subjectId String
+  category  PreferenceCategory
   /// "window", "premium_economy", "BA", "16:00-21:00"
-  key        String
-  signal     PreferenceSignal
-  amountUsd  Decimal? @db.Decimal(12, 2)
-  context    Json?
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  key       String
+  signal    PreferenceSignal
+  amountUsd Decimal?           @db.Decimal(12, 2)
+  context   Json?
+  createdAt DateTime           @default(now()) @db.Timestamptz(6)
 
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, subjectId, category])
   @@index([tenantId, createdAt])
@@ -679,7 +683,7 @@ model PreferenceLog {
 /// User within a Tenant. BSUID is the preferred primary key on WhatsApp
 /// post-April-2026; phone is nullable to match the Meta rollout.
 model ChannelIdentity {
-  id                         String   @id @default(uuid()) @db.Uuid
+  id                         String      @id @default(uuid()) @db.Uuid
   tenantId                   String
   userId                     String?
   kind                       ChannelKind
@@ -692,11 +696,11 @@ model ChannelIdentity {
   username                   String?
   /// Arbitrary per-channel metadata (display name, timezone, locale hints).
   metadata                   Json?
-  createdAt                  DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt                  DateTime @updatedAt       @db.Timestamptz(6)
+  createdAt                  DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt                  DateTime    @updatedAt @db.Timestamptz(6)
 
-  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user                       User?    @relation(fields: [userId],   references: [id], onDelete: SetNull)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, kind, businessScopedUserId])
   @@unique([tenantId, kind, externalUserId])
@@ -709,25 +713,25 @@ model ChannelIdentity {
 /// Enterprise Grid installs spanning multiple workspaces resolve to one
 /// install. `enterpriseId` is nullable for classic (non-Grid) installs.
 model SlackInstall {
-  id                   String   @id @default(uuid()) @db.Uuid
-  tenantId             String
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String
   /// Nullable for classic installs; required for Grid.
-  enterpriseId         String?
-  enterpriseName       String?
-  teamId               String
-  teamName             String
-  appId                String
-  botUserId            String
+  enterpriseId        String?
+  enterpriseName      String?
+  teamId              String
+  teamName            String
+  appId               String
+  botUserId           String
   /// Encrypt-at-rest in production. Plaintext acceptable on testnet demo.
-  botToken             String
-  scope                String
-  isEnterpriseInstall  Boolean  @default(false)
-  authedUserId         String
-  installedAt          DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime @updatedAt       @db.Timestamptz(6)
-  raw                  Json?
+  botToken            String
+  scope               String
+  isEnterpriseInstall Boolean  @default(false)
+  authedUserId        String
+  installedAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+  raw                 Json?
 
-  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([enterpriseId, teamId])
   @@index([tenantId])
@@ -738,16 +742,16 @@ model SlackInstall {
 /// User messages the token to the Sendero WA bot; the webhook consumes
 /// the token and writes a ChannelIdentity row.
 model WhatsAppLinkToken {
-  id         String   @id @default(uuid()) @db.Uuid
+  id         String    @id @default(uuid()) @db.Uuid
   tenantId   String
   userId     String
-  token      String   @unique
-  expiresAt  DateTime @db.Timestamptz(6)
+  token      String    @unique
+  expiresAt  DateTime  @db.Timestamptz(6)
   consumedAt DateTime? @db.Timestamptz(6)
-  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
 
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId],   references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, userId])
   @@index([expiresAt])
@@ -761,47 +765,67 @@ model WhatsAppLinkToken {
 /// Configurable per-tenant nanopayment spend cap. Enforced by
 /// @sendero/billing before a tool call is charged. Absence = no cap.
 model TenantSpendCap {
-  id              String   @id @default(uuid()) @db.Uuid
+  id              String    @id @default(uuid()) @db.Uuid
   tenantId        String
   period          CapPeriod @default(daily)
   /// Cap in micro-USDC (e.g. 5_000_000 = $5.00 per day).
   amountMicroUsdc BigInt
   /// Soft cap = alert but don't block. Hard cap rejects further calls.
-  hardCap         Boolean  @default(true)
+  hardCap         Boolean   @default(true)
   /// Webhook target for cap breach notifications.
   alertWebhookUrl String?
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt       @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
 
-  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, period])
   @@index([tenantId])
   @@map("tenant_spend_caps")
 }
 
+/// Generic webhook dedupe ledger. Every inbound webhook (Duffel, Slack,
+/// WhatsApp, Stripe, ...) writes one row keyed by provider + externalId
+/// so retries are idempotent. Processed rows carry `processedAt`.
+model WebhookEvent {
+  id              String    @id @default(uuid()) @db.Uuid
+  receivedAt      DateTime  @default(now()) @db.Timestamptz(6)
+  processedAt     DateTime? @db.Timestamptz(6)
+  provider        String
+  externalId      String
+  eventType       String
+  payload         Json
+  processingError String?
+
+  @@unique([provider, externalId])
+  @@index([provider, processedAt])
+  @@map("webhook_events")
+}
+
 /// A batched USDC settlement of many MeterEvents. One on-chain transfer
 /// per batch to amortize gas. Append-only once settled.
 model NanopayBatch {
-  id               String   @id @default(uuid()) @db.Uuid
-  tenantId         String
-  status           NanopayBatchStatus @default(pending)
+  id              String             @id @default(uuid()) @db.Uuid
+  tenantId        String
+  status          NanopayBatchStatus @default(pending)
   /// Sum of priceMicroUsdc across all member events.
-  totalMicroUsdc   BigInt
-  eventCount       Int
+  totalMicroUsdc  BigInt
+  eventCount      Int
   /// ISO 8601 window start (inclusive).
-  windowStartedAt  DateTime @db.Timestamptz(6)
+  windowStartedAt DateTime           @db.Timestamptz(6)
   /// ISO 8601 window end (exclusive).
-  windowEndedAt    DateTime @db.Timestamptz(6)
+  windowEndedAt   DateTime           @db.Timestamptz(6)
   /// On-chain settlement reference once the batch ships.
-  txHash           String?
-  chain            String?  @default("arc-testnet")
-  settledAt        DateTime? @db.Timestamptz(6)
-  error            String?
-  createdAt        DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime @updatedAt       @db.Timestamptz(6)
+  txHash          String?
+  chain           String?            @default("arc-testnet")
+  settledAt       DateTime?          @db.Timestamptz(6)
+  error           String?
+  retryCount      Int                @default(0)
+  lastError       String?
+  createdAt       DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @db.Timestamptz(6)
 
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, status, windowStartedAt])
   @@index([status, windowEndedAt])
