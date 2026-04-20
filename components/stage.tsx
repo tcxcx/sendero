@@ -9,20 +9,20 @@
  */
 
 import { useState } from 'react';
-import { usePasillo } from './store';
+import { useSendero } from './store';
 import { holdFlight, payBooking, searchFlights } from './actions';
 import { StepRail, ErrorBanner } from './ui';
 import { SettlePanel } from './settle-panel';
 import { FundCard } from './fund-card';
 
 export function Stage() {
-  const search = usePasillo((s) => s.search);
-  const offers = usePasillo((s) => s.offers);
-  const status = usePasillo((s) => s.status);
-  const holdOrder = usePasillo((s) => s.holdOrder);
-  const payment = usePasillo((s) => s.payment);
-  const onChainSettlement = usePasillo((s) => s.onChainSettlement);
-  const selectedOfferId = usePasillo((s) => s.selectedOfferId);
+  const search = useSendero((s) => s.search);
+  const offers = useSendero((s) => s.offers);
+  const status = useSendero((s) => s.status);
+  const holdOrder = useSendero((s) => s.holdOrder);
+  const payment = useSendero((s) => s.payment);
+  const onChainSettlement = useSendero((s) => s.onChainSettlement);
+  const selectedOfferId = useSendero((s) => s.selectedOfferId);
 
   return (
     <div className="col" style={{ background: 'var(--bg)' }}>
@@ -35,7 +35,7 @@ export function Stage() {
                   ? `Booking ${holdOrder.bookingReference}`
                   : search
                     ? `${search.origin} → ${search.destination}`
-                    : 'Pasillo agent console'}
+                    : 'Sendero agent console'}
               </h1>
               <div className="stage-sub">
                 {search
@@ -244,8 +244,8 @@ function OffersCard({
   selectedId: string | null;
   disabled: boolean;
 }) {
-  const traveler = usePasillo((s) => s.traveler);
-  const userAuth = usePasillo((s) => s.userAuth);
+  const traveler = useSendero((s) => s.traveler);
+  const userAuth = useSendero((s) => s.userAuth);
 
   return (
     <div className="card">
@@ -426,9 +426,9 @@ function HoldCard({
 }
 
 function SettlementCard() {
-  const payment = usePasillo((s) => s.payment);
-  const onChain = usePasillo((s) => s.onChainSettlement);
-  const treasury = usePasillo((s) => s.treasury);
+  const payment = useSendero((s) => s.payment);
+  const onChain = useSendero((s) => s.onChainSettlement);
+  const treasury = useSendero((s) => s.treasury);
 
   const tokenLabel = payment?.currency || 'USDC';
 
@@ -567,8 +567,8 @@ function isoDateOffset(days: number) {
 /* ─── HotelsCard ────────────────────────────────────────────────────────── */
 
 function HotelsCard() {
-  const hotels = usePasillo((s) => s.hotels);
-  const search = usePasillo((s) => s.hotelSearch);
+  const hotels = useSendero((s) => s.hotels);
+  const search = useSendero((s) => s.hotelSearch);
   if (!hotels || hotels.length === 0) return null;
 
   const nights = search

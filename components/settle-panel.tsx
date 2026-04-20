@@ -17,7 +17,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { usePasillo } from './store';
+import { useSendero } from './store';
 import { restoreFromStorage, sendUserOp } from '@/lib/user-wallet';
 import {
   encodeGiveFeedback,
@@ -53,18 +53,18 @@ async function fetchAgentIdentity(): Promise<AgentIdentityResponse> {
 }
 
 export function SettlePanel() {
-  const holdOrder = usePasillo((s) => s.holdOrder);
-  const onChainSettlement = usePasillo((s) => s.onChainSettlement);
-  const settlement = usePasillo((s) => s.settlement);
-  const userAuth = usePasillo((s) => s.userAuth);
+  const holdOrder = useSendero((s) => s.holdOrder);
+  const onChainSettlement = useSendero((s) => s.onChainSettlement);
+  const settlement = useSendero((s) => s.settlement);
+  const userAuth = useSendero((s) => s.userAuth);
 
-  const setSettlementPhase = usePasillo((s) => s.setSettlementPhase);
-  const pushSettlementTx = usePasillo((s) => s.pushSettlementTx);
-  const setSettlementError = usePasillo((s) => s.setSettlementError);
-  const setLastUserOpHash = usePasillo((s) => s.setLastUserOpHash);
-  const resetSettlement = usePasillo((s) => s.resetSettlement);
-  const setOnChainSettlement = usePasillo((s) => s.setOnChainSettlement);
-  const logEvent = usePasillo((s) => s.logEvent);
+  const setSettlementPhase = useSendero((s) => s.setSettlementPhase);
+  const pushSettlementTx = useSendero((s) => s.pushSettlementTx);
+  const setSettlementError = useSendero((s) => s.setSettlementError);
+  const setLastUserOpHash = useSendero((s) => s.setLastUserOpHash);
+  const resetSettlement = useSendero((s) => s.resetSettlement);
+  const setOnChainSettlement = useSendero((s) => s.setOnChainSettlement);
+  const logEvent = useSendero((s) => s.logEvent);
 
   const [busy, setBusy] = useState(false);
 

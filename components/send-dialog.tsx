@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * SendDialog — same-chain USDC / EURC transfer from the Pasillo treasury.
+ * SendDialog — same-chain USDC / EURC transfer from the Sendero treasury.
  * State lives in `?send=open&token=USDC&to=0x...&amount=1.00`.
  */
 
@@ -76,7 +76,7 @@ export function SendDialog() {
       onClose={close}
     >
       <p className="dlg-sub">
-        Sends {tok} from the Pasillo treasury to any Arc Testnet address.
+        Sends {tok} from the Sendero treasury to any Arc Testnet address.
         Gas paid in Arc-native USDC.
       </p>
 

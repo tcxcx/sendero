@@ -8,7 +8,7 @@
  * The viem adapter talks directly to Arc RPC and sidesteps the filter.
  *
  * Used by /api/swap, /api/send, /api/bridge and the corresponding chat
- * tools so the Pasillo agent can rebalance the corporate treasury in
+ * tools so the Sendero agent can rebalance the corporate treasury in
  * one place.
  */
 

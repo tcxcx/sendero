@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Pasillo live booking state — Zustand store.
+ * Sendero live booking state — Zustand store.
  *
  * Single source of truth for: current search, offers, selected offer,
  * hold order, payment, treasury status, workflow log. Replaces the
@@ -164,7 +164,7 @@ export interface UserAuth {
   phone: string;
 }
 
-interface PasilloState {
+interface SenderoState {
   // Settings
   showWorkflow: boolean;
   dark: boolean;
@@ -258,7 +258,7 @@ function travelerFromAuth(auth: UserAuth | null): Traveler {
 
 let eventCounter = 0;
 
-export const usePasillo = create<PasilloState>((set) => ({
+export const useSendero = create<SenderoState>((set) => ({
   showWorkflow: true,
   dark: false,
 
@@ -396,16 +396,16 @@ export function hydrateFromStorage() {
   // Dev convenience: expose the store on window so QA flows and the
   // browser console can poke state without wiring up React DevTools.
   if (process.env.NODE_ENV !== 'production') {
-    (window as any).__pasillo = usePasillo;
+    (window as any).__sendero = useSendero;
   }
   try {
-    const raw = localStorage.getItem('pasillo:settings');
+    const raw = localStorage.getItem('sendero:settings');
     if (!raw) return;
     const p = JSON.parse(raw) as Partial<{
       showWorkflow: boolean;
       dark: boolean;
     }>;
-    usePasillo.setState({
+    useSendero.setState({
       showWorkflow: p.showWorkflow ?? true,
       dark: p.dark ?? false,
     });
@@ -419,10 +419,10 @@ export function hydrateFromStorage() {
 
 export function subscribePersist() {
   if (typeof window === 'undefined') return () => {};
-  return usePasillo.subscribe((state) => {
+  return useSendero.subscribe((state) => {
     try {
       localStorage.setItem(
-        'pasillo:settings',
+        'sendero:settings',
         JSON.stringify({
           showWorkflow: state.showWorkflow,
           dark: state.dark,
@@ -441,7 +441,7 @@ export function subscribePersist() {
  * it in the system prompt on every turn.
  */
 export function runtimeContext(): Record<string, unknown> {
-  const s = usePasillo.getState();
+  const s = useSendero.getState();
   const compactEvents = s.workflow.slice(-6).map((e) => ({
     group: e.group,
     bullet: e.bullet,
@@ -498,7 +498,7 @@ function stripHtml(s: string): string {
 
 // Derive the current workflow step (0-6) for StepRail. Steps:
 //   0 Intake · 1 Search · 2 Review · 3 Hold · 4 Pay · 5 Settle · 6 Done.
-export function deriveStep(state: PasilloState): number {
+export function deriveStep(state: SenderoState): number {
   if (state.onChainSettlement) return 6;
   const phase = state.settlement.phase;
   if (phase !== 'idle' && phase !== 'error') return 5; // settling in progress

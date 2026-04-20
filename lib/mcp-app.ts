@@ -1,7 +1,7 @@
 /**
- * Pasillo MCP server — Hono instance that speaks MCP over Streamable
+ * Sendero MCP server — Hono instance that speaks MCP over Streamable
  * HTTP. Exposes the same 8 tools the chat agent uses so Claude Desktop
- * / ChatGPT Apps / Gemini extensions can plug Pasillo in as a travel
+ * / ChatGPT Apps / Gemini extensions can plug Sendero in as a travel
  * rail natively.
  *
  * Tools mirror app/api/chat/route.ts. We don't import the chat module
@@ -105,7 +105,7 @@ const toolCatalog = {
 
   check_treasury: {
     description:
-      "Read the Pasillo corporate treasury's current USDC + EURC balances on Arc Testnet.",
+      "Read the Sendero corporate treasury's current USDC + EURC balances on Arc Testnet.",
     inputSchema: { type: 'object', properties: {} },
     handler: async () => {
       const balances = await getTreasuryBalances();
@@ -207,7 +207,7 @@ const toolCatalog = {
 
   send_tokens: {
     description:
-      'Transfer USDC or EURC from the Pasillo treasury to any Arc Testnet address.',
+      'Transfer USDC or EURC from the Sendero treasury to any Arc Testnet address.',
     inputSchema: {
       type: 'object',
       required: ['to', 'amount'],
@@ -241,7 +241,7 @@ const toolCatalog = {
 
   settle_split: {
     description:
-      'Execute a canonical commission fan-out on Arc Testnet in a single batch: gross splits atomically into supplier net + agency commission + Pasillo rail + validator tip. Pass gross + supplier address; defaults fill other parties.',
+      'Execute a canonical commission fan-out on Arc Testnet in a single batch: gross splits atomically into supplier net + agency commission + Sendero rail + validator tip. Pass gross + supplier address; defaults fill other parties.',
     inputSchema: {
       type: 'object',
       required: ['gross', 'supplier'],
@@ -252,7 +252,7 @@ const toolCatalog = {
         },
         supplier: { type: 'string', pattern: '^0x[a-fA-F0-9]{40}$' },
         commissionBps: { type: 'integer', default: 1000 },
-        pasilloFeeBps: { type: 'integer', default: 100 },
+        senderoFeeBps: { type: 'integer', default: 100 },
       },
     },
     handler: async (input: any) => {
@@ -262,14 +262,14 @@ const toolCatalog = {
         agency:
           (process.env.DEMO_CLIENT_ADDRESS as any) ||
           '0x6a5d2a2e56ed5162f5e29fe1179e59f2b07140e7',
-        pasillo:
-          (process.env.PASILLO_PROVIDER_ADDRESS as any) ||
+        sendero:
+          (process.env.SENDERO_PROVIDER_ADDRESS as any) ||
           '0x2dd43b06e707d45b40790abd5fa6e39403225425',
         validator:
           (process.env.AUX_VALIDATOR_1_ADDRESS as any) ||
           '0x22f7536934d6a00ade239474465b823418dd84bc',
         commissionBps: input.commissionBps,
-        pasilloFeeBps: input.pasilloFeeBps,
+        senderoFeeBps: input.senderoFeeBps,
       });
       return settleCommissionSplit(legs);
     },
@@ -369,7 +369,7 @@ async function handleRpc(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
             protocolVersion: PROTOCOL_VERSION,
             capabilities: { tools: {} },
             serverInfo: {
-              name: 'pasillo-arc',
+              name: 'sendero-arc',
               version: '0.9.5-alpha',
               description:
                 'AI travel agent + USDC settlement rail on Arc L2. Books real flights via Duffel, settles via Circle Gateway + App Kit.',
@@ -429,15 +429,15 @@ export const mcpApp = new Hono().basePath('/api/mcp')
   )
   .get('/', (c) =>
     c.json({
-      name: 'pasillo-arc',
+      name: 'sendero-arc',
       version: '0.9.5-alpha',
       description:
-        'Pasillo MCP — AI travel booking + Arc L2 USDC settlement + Circle Gateway treasury rails.',
+        'Sendero MCP — AI travel booking + Arc L2 USDC settlement + Circle Gateway treasury rails.',
       protocolVersion: PROTOCOL_VERSION,
       transports: ['streamable-http'],
       endpoint: '/api/mcp',
       tools: Object.keys(toolCatalog),
-      docs: 'https://github.com/criptopoeta/pasillo-arc',
+      docs: 'https://github.com/criptopoeta/sendero-arc',
     }),
   )
   .post('/', async (c) => {

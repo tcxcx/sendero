@@ -19,10 +19,10 @@ const CanonicalBody = z.object({
   gross: z.string().regex(/^\d+(\.\d{1,6})?$/),
   supplier: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   agency: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
-  pasillo: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
+  sendero: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
   validator: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
   commissionBps: z.number().int().min(0).max(5000).optional(),
-  pasilloFeeBps: z.number().int().min(0).max(1000).optional(),
+  senderoFeeBps: z.number().int().min(0).max(1000).optional(),
 });
 
 const CustomBody = z.object({
@@ -56,10 +56,10 @@ export async function POST(req: NextRequest) {
   try {
     const raw = await req.json();
 
-    // Fallback defaults for agency/pasillo/validator — reuse demo
+    // Fallback defaults for agency/sendero/validator — reuse demo
     // wallets from env so the demo works without supplying 4 addresses.
     const providerAddr =
-      process.env.PASILLO_PROVIDER_ADDRESS ||
+      process.env.SENDERO_PROVIDER_ADDRESS ||
       '0x2dd43b06e707d45b40790abd5fa6e39403225425';
     const validatorAddr =
       process.env.AUX_VALIDATOR_1_ADDRESS ||
@@ -77,10 +77,10 @@ export async function POST(req: NextRequest) {
         gross: body.gross,
         supplier: body.supplier as `0x${string}`,
         agency: (body.agency ?? agencyAddr) as `0x${string}`,
-        pasillo: (body.pasillo ?? providerAddr) as `0x${string}`,
+        sendero: (body.sendero ?? providerAddr) as `0x${string}`,
         validator: (body.validator ?? validatorAddr) as `0x${string}`,
         commissionBps: body.commissionBps,
-        pasilloFeeBps: body.pasilloFeeBps,
+        senderoFeeBps: body.senderoFeeBps,
       });
     }
 

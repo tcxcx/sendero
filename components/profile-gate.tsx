@@ -7,14 +7,14 @@
  */
 
 import { useEffect, useState } from 'react';
-import { usePasillo } from './store';
+import { useSendero } from './store';
 import { logout } from '@/lib/user-wallet';
 
-const PROFILE_KEY = 'pasillo:passkey-profile';
+const PROFILE_KEY = 'sendero:passkey-profile';
 
 export function ProfileGate({ children }: { children: React.ReactNode }) {
-  const userAuth = usePasillo((s) => s.userAuth);
-  const setUserAuth = usePasillo((s) => s.setUserAuth);
+  const userAuth = useSendero((s) => s.userAuth);
+  const setUserAuth = useSendero((s) => s.setUserAuth);
 
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -72,7 +72,7 @@ export function ProfileGate({ children }: { children: React.ReactNode }) {
       <div className="pg-card">
         <div className="pg-brand">
           <span className="pg-mark" />
-          <span className="pg-word">PASILLO</span>
+          <span className="pg-word">SENDERO</span>
           <span className="pg-sub">× complete your profile</span>
         </div>
 

@@ -1,5 +1,5 @@
 /**
- * Pasillo agent chat — streaming AI with on-chain tool calling.
+ * Sendero agent chat — streaming AI with on-chain tool calling.
  *
  * 4 tools:
  *   1. search_flights  — Duffel offer request
@@ -37,7 +37,7 @@ import { BRIDGE_CHAINS } from '@/lib/bridge-chains';
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-const SYSTEM_PROMPT = `You are Pasillo, a B2B2C AI travel agent running on Circle's Arc L2.
+const SYSTEM_PROMPT = `You are Sendero, a B2B2C AI travel agent running on Circle's Arc L2.
 
 You book flights for corporate travelers using Duffel, and every booking is
 settled on-chain via an ERC-8183 job backed by USDC escrow. You have an
@@ -63,7 +63,7 @@ Hotels are a separate flow. Use search_hotels when the user asks for
 lodging. The Stage renders up to six property cards — DO NOT list them in
 the chat, same rule as flights.
 
-Treasury rebalance tools (Pasillo corporate wallet on Arc):
+Treasury rebalance tools (Sendero corporate wallet on Arc):
   • check_treasury         — read current USDC + EURC balances
   • swap_tokens            — USDC ↔ EURC on Arc via Circle App Kit
   • send_tokens            — transfer USDC/EURC to any Arc address
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     | { name?: string; email?: string; phone?: string }
     | undefined;
   const travelerName = traveler?.name || 'Traveler';
-  const travelerEmail = traveler?.email || 'traveler@pasillo.demo';
+  const travelerEmail = traveler?.email || 'traveler@sendero.demo';
   const travelerPhone = traveler?.phone || '';
 
   // Live snapshot of UI state sent by the client. Used to augment the system
@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
           passengerName: travelerName,
           passengerEmail: travelerEmail,
           passengerPhone: travelerPhone || undefined,
-          idempotencyKey: `pasillo-${offerId}-${Date.now()}`,
+          idempotencyKey: `sendero-${offerId}-${Date.now()}`,
         });
         const payment = await payFromBalance(hold.orderId);
         return {
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
 
     swap_tokens: tool({
       description:
-        'Rebalance the Pasillo corporate treasury on Arc Testnet by swapping USDC ↔ EURC via Circle App Kit. Use when the treasury lacks the right token to pay for a booking, or the user explicitly asks to swap. Returns tx hashes.',
+        'Rebalance the Sendero corporate treasury on Arc Testnet by swapping USDC ↔ EURC via Circle App Kit. Use when the treasury lacks the right token to pay for a booking, or the user explicitly asks to swap. Returns tx hashes.',
       inputSchema: z.object({
         fromToken: z.enum(['USDC', 'EURC']),
         toToken: z.enum(['USDC', 'EURC']),
@@ -264,7 +264,7 @@ export async function POST(req: NextRequest) {
 
     send_tokens: tool({
       description:
-        'Transfer USDC or EURC from the Pasillo corporate treasury to any Arc Testnet address. Use when rebalancing or topping up the user wallet.',
+        'Transfer USDC or EURC from the Sendero corporate treasury to any Arc Testnet address. Use when rebalancing or topping up the user wallet.',
       inputSchema: z.object({
         to: z
           .string()

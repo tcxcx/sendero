@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Pasillo × Arc — Root App
+ * Sendero × Arc — Root App
  *
  * Pre-auth: LandingHero (cobe globe + integrated passkey sign-up/sign-in).
  * Post-auth: ConsoleBar (brand + status + AgentChip + WalletDropdown) +
@@ -23,13 +23,13 @@ import { DepositDialog } from './deposit-dialog';
 import {
   hydrateFromStorage,
   subscribePersist,
-  usePasillo,
+  useSendero,
 } from './store';
 import { refreshTreasury } from './actions';
 
-export function PasilloApp() {
-  const showWorkflow = usePasillo((s) => s.showWorkflow);
-  const userAuth = usePasillo((s) => s.userAuth);
+export function SenderoApp() {
+  const showWorkflow = useSendero((s) => s.showWorkflow);
+  const userAuth = useSendero((s) => s.userAuth);
 
   // Hydrate settings on mount. Treasury poll only runs once the user is
   // authed — before that we render the onboarding splash.
@@ -40,7 +40,7 @@ export function PasilloApp() {
     // can mount the post-auth shell without going through a real passkey
     // ceremony. Gated on NODE_ENV so it never leaks to prod bundles.
     if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
-      (window as any).__pasillo = usePasillo;
+      (window as any).__sendero = useSendero;
     }
     return () => {
       unsub();
@@ -95,8 +95,8 @@ export function PasilloApp() {
 }
 
 function SettleCelebration() {
-  const onChain = usePasillo((s) => s.onChainSettlement);
-  const holdOrder = usePasillo((s) => s.holdOrder);
+  const onChain = useSendero((s) => s.onChainSettlement);
+  const holdOrder = useSendero((s) => s.holdOrder);
   const [visible, setVisible] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
 
@@ -231,10 +231,10 @@ function SettleCelebration() {
 }
 
 function TweaksToggle() {
-  const showWorkflow = usePasillo((s) => s.showWorkflow);
-  const dark = usePasillo((s) => s.dark);
-  const setShowWorkflow = usePasillo((s) => s.setShowWorkflow);
-  const setDark = usePasillo((s) => s.setDark);
+  const showWorkflow = useSendero((s) => s.showWorkflow);
+  const dark = useSendero((s) => s.dark);
+  const setShowWorkflow = useSendero((s) => s.setShowWorkflow);
+  const setDark = useSendero((s) => s.setDark);
 
   const [open, setOpen] = useState(false);
 

@@ -1,4 +1,4 @@
-# Pasillo × Arc
+# Sendero × Arc
 
 **An AI travel agent that books and settles itself.**
 
@@ -75,7 +75,7 @@ Every scenario shows a per-invoice breakdown settled via **Circle CCTP v2 on Arc
 ## File structure
 
 ```
-pasillo-arc/
+sendero-arc/
 ├── app/
 │   ├── api/
 │   │   ├── agent/{identity,runtime}/  # ERC-8004 reputation + runtime meta
@@ -89,7 +89,7 @@ pasillo-arc/
 │   └── globals.css
 ├── components/
 │   ├── hero.tsx            # Landing: cobe globe + integrated passkey auth
-│   ├── pasillo-app.tsx     # LandingHero → Console
+│   ├── sendero-app.tsx     # LandingHero → Console
 │   ├── agent-card.tsx      # Live ERC-8004 reputation chip
 │   ├── chat-col.tsx        # useChat() — drives store on tool calls
 │   ├── stage.tsx           # Offers / Hold / Settlement / Hotels

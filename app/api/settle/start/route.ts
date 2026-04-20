@@ -24,14 +24,14 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const providerWalletId = process.env.PASILLO_PROVIDER_WALLET_ID;
-  const providerAddress = process.env.PASILLO_PROVIDER_ADDRESS;
+  const providerWalletId = process.env.SENDERO_PROVIDER_WALLET_ID;
+  const providerAddress = process.env.SENDERO_PROVIDER_ADDRESS;
   if (!providerWalletId || !providerAddress) {
     return NextResponse.json(
       {
         error: 'provider_not_configured',
         message:
-          'Set PASILLO_PROVIDER_WALLET_ID and PASILLO_PROVIDER_ADDRESS in .env.local (run scripts/bootstrap-agent.ts).',
+          'Set SENDERO_PROVIDER_WALLET_ID and SENDERO_PROVIDER_ADDRESS in .env.local (run scripts/bootstrap-agent.ts).',
       },
       { status: 503 },
     );

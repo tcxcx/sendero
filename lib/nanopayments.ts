@@ -123,32 +123,32 @@ export async function settleCommissionSplit(
 }
 
 /**
- * Helper for typical Pasillo booking split. Given gross amount and a
+ * Helper for typical Sendero booking split. Given gross amount and a
  * supplier address, returns the canonical 4-way breakdown:
  *   - supplier: gross minus commission minus rail minus tip
  *   - agency: commissionBps of gross
- *   - rail: PASILLO_FEE_BPS of gross
+ *   - rail: SENDERO_FEE_BPS of gross
  *   - validator-tip: fixed 0.02 USDC
  */
 export function canonicalSplit(params: {
   gross: string;
   supplier: Address;
   agency: Address;
-  pasillo: Address;
+  sendero: Address;
   validator: Address;
   commissionBps?: number;
-  pasilloFeeBps?: number;
+  senderoFeeBps?: number;
 }): SplitLeg[] {
   const gross = Number(params.gross);
   if (!Number.isFinite(gross) || gross <= 0) {
     throw new Error('Invalid gross amount');
   }
   const commissionBps = params.commissionBps ?? 1000; // 10%
-  const pasilloFeeBps = params.pasilloFeeBps ?? 100; // 1%
+  const senderoFeeBps = params.senderoFeeBps ?? 100; // 1%
   const validatorTip = 0.02;
 
   const commission = +(gross * commissionBps / 10_000).toFixed(6);
-  const rail = +(gross * pasilloFeeBps / 10_000).toFixed(6);
+  const rail = +(gross * senderoFeeBps / 10_000).toFixed(6);
   const net = +(gross - commission - rail - validatorTip).toFixed(6);
 
   if (net <= 0) {
@@ -164,7 +164,7 @@ export function canonicalSplit(params: {
       amount: commission.toFixed(6),
       label: 'agency-commission',
     },
-    { to: params.pasillo, amount: rail.toFixed(6), label: 'pasillo-rail' },
+    { to: params.sendero, amount: rail.toFixed(6), label: 'sendero-rail' },
     {
       to: params.validator,
       amount: validatorTip.toFixed(6),

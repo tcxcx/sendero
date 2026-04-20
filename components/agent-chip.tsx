@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * AgentChip — compact representation of the Pasillo travel agent's
+ * AgentChip — compact representation of the Sendero travel agent's
  * ERC-8004 identity. Click to expand into a popover with the full card
  * (stars, feedback count, validators, arcscan link).
  */
@@ -76,7 +76,7 @@ export function AgentChip() {
   }
   if (!data) return null;
 
-  const name = data.metadata?.name ?? 'Pasillo Travel Agent';
+  const name = data.metadata?.name ?? 'Sendero Travel Agent';
   const shortAddr = `${data.providerAddress.slice(0, 6)}…${data.providerAddress.slice(-4)}`;
 
   return (

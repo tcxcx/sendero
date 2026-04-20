@@ -7,7 +7,7 @@
  * with what's happening on the wire.
  */
 
-import { usePasillo, type SearchParams, type FlightOffer } from './store';
+import { useSendero, type SearchParams, type FlightOffer } from './store';
 
 function now() {
   const d = new Date();
@@ -16,7 +16,7 @@ function now() {
 
 export async function searchFlights(params: SearchParams) {
   const { setSearch, setOffers, setError, logEvent, updateLastEvent, clearLog } =
-    usePasillo.getState();
+    useSendero.getState();
 
   clearLog();
   setSearch(params);
@@ -73,7 +73,7 @@ export async function holdFlight(
   passenger: { name: string; email: string; phone?: string },
 ) {
   const { selectOffer, setHoldOrder, setStatus, setError, logEvent } =
-    usePasillo.getState();
+    useSendero.getState();
 
   selectOffer(offerId);
   setStatus('holding');
@@ -133,7 +133,7 @@ export async function holdFlight(
 }
 
 export async function payBooking(orderId: string) {
-  const { setPayment, setStatus, setError, logEvent } = usePasillo.getState();
+  const { setPayment, setStatus, setError, logEvent } = useSendero.getState();
   setStatus('paying');
   setError(null);
 
@@ -183,7 +183,7 @@ export async function payBooking(orderId: string) {
 }
 
 export async function refreshTreasury() {
-  const { setTreasury } = usePasillo.getState();
+  const { setTreasury } = useSendero.getState();
   try {
     const res = await fetch('/api/treasury/balance');
     if (!res.ok) return;

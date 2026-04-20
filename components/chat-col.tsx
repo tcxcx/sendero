@@ -11,7 +11,7 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useEffect, useRef, useState } from 'react';
-import { usePasillo, runtimeContext } from './store';
+import { useSendero, runtimeContext } from './store';
 import { refreshTreasury } from './actions';
 
 function clock() {
@@ -19,8 +19,8 @@ function clock() {
 }
 
 export function ChatCol() {
-  const traveler = usePasillo((s) => s.traveler);
-  const userAuth = usePasillo((s) => s.userAuth);
+  const traveler = useSendero((s) => s.traveler);
+  const userAuth = useSendero((s) => s.userAuth);
 
   // Send the signed-in traveler alongside every chat request so server-side
   // tools (book_flight) can authoritatively fill passenger name + email +
@@ -56,7 +56,7 @@ export function ChatCol() {
   // StepRail, WorkflowLog, FooterRail and AgentCard all move in lockstep
   // with the chat — not just the chat bubble.
   useEffect(() => {
-    const s = usePasillo.getState();
+    const s = useSendero.getState();
 
     for (const m of messages) {
       const parts = (m as any).parts || [];
@@ -322,7 +322,7 @@ export function ChatCol() {
           <MessageView
             key={m.id}
             role={m.role === 'user' ? 'human' : 'agent'}
-            who={m.role === 'user' ? traveler.name : 'Pasillo'}
+            who={m.role === 'user' ? traveler.name : 'Sendero'}
             initials={m.role === 'user' ? traveler.initials : 'PS'}
             message={m}
           />
@@ -333,7 +333,7 @@ export function ChatCol() {
             <div className="msg-avatar agent">PS</div>
             <div className="msg-body">
               <div className="msg-meta">
-                <span className="who">Pasillo</span>
+                <span className="who">Sendero</span>
                 <span>·</span>
                 <span>now</span>
                 <span style={{ color: 'var(--ink)' }}>agent</span>
@@ -365,7 +365,7 @@ export function ChatCol() {
       <div className="composer">
         <form onSubmit={submit} className="composer-input">
           <textarea
-            placeholder={`Ask Pasillo to book a trip…`}
+            placeholder={`Ask Sendero to book a trip…`}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -423,7 +423,7 @@ function AgentWelcome({
       <div className="msg-avatar agent">PS</div>
       <div className="msg-body">
         <div className="msg-meta">
-          <span className="who">Pasillo</span>
+          <span className="who">Sendero</span>
           <span>·</span>
           <span>ready</span>
           <span style={{ color: 'var(--ink)' }}>agent</span>

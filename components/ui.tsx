@@ -1,26 +1,26 @@
 'use client';
 
 /**
- * Pasillo × Arc — shared UI primitives.
+ * Sendero × Arc — shared UI primitives.
  *
  * One consolidated ConsoleBar replaces the old Topbar + Subbar + AgentCard
  * row. StepRail, ErrorBanner, FooterRail unchanged.
  */
 
 import Link from 'next/link';
-import { usePasillo, deriveStep } from './store';
+import { useSendero, deriveStep } from './store';
 import { AgentChip } from './agent-chip';
 import { WalletDropdown } from './wallet-dropdown';
 
 /* ─── ConsoleBar ────────────────────────────────────────────────────────── */
 
 export function ConsoleBar() {
-  const traveler = usePasillo((s) => s.traveler);
-  const status = usePasillo((s) => s.status);
-  const search = usePasillo((s) => s.search);
-  const payment = usePasillo((s) => s.payment);
-  const settlementPhase = usePasillo((s) => s.settlement.phase);
-  const onChainSettlement = usePasillo((s) => s.onChainSettlement);
+  const traveler = useSendero((s) => s.traveler);
+  const status = useSendero((s) => s.status);
+  const search = useSendero((s) => s.search);
+  const payment = useSendero((s) => s.payment);
+  const settlementPhase = useSendero((s) => s.settlement.phase);
+  const onChainSettlement = useSendero((s) => s.onChainSettlement);
 
   const label = statusLabel(status, {
     payment: !!payment,
@@ -35,9 +35,9 @@ export function ConsoleBar() {
     <div className="cbar">
       {/* LEFT: brand + breadcrumb nav */}
       <div className="cbar-left">
-        <Link href="/" className="cbar-brand" aria-label="Pasillo home">
+        <Link href="/" className="cbar-brand" aria-label="Sendero home">
           <span className="cbar-mark" aria-hidden="true" />
-          <span className="cbar-word">PASILLO</span>
+          <span className="cbar-word">SENDERO</span>
         </Link>
         <span className="cbar-sep">/</span>
         <Link href="/" className="cbar-crumb">
@@ -239,7 +239,7 @@ function statusLabel(
 /* ─── StepRail ──────────────────────────────────────────────────────────── */
 
 export function StepRail() {
-  const state = usePasillo();
+  const state = useSendero();
   const currentStep = deriveStep(state);
 
   const steps = ['Intake', 'Search', 'Review', 'Hold', 'Pay', 'Settle'];
@@ -262,7 +262,7 @@ export function StepRail() {
 /* ─── ErrorBanner ──────────────────────────────────────────────────────── */
 
 export function ErrorBanner() {
-  const error = usePasillo((s) => s.error);
+  const error = useSendero((s) => s.error);
   if (!error) return null;
   return (
     <div
@@ -292,10 +292,10 @@ export function ErrorBanner() {
 /* ─── FooterRail ──────────────────────────────────────────────────────── */
 
 export function FooterRail() {
-  const treasury = usePasillo((s) => s.treasury);
-  const holdOrder = usePasillo((s) => s.holdOrder);
-  const settlementPhase = usePasillo((s) => s.settlement.phase);
-  const onChainSettlement = usePasillo((s) => s.onChainSettlement);
+  const treasury = useSendero((s) => s.treasury);
+  const holdOrder = useSendero((s) => s.holdOrder);
+  const settlementPhase = useSendero((s) => s.settlement.phase);
+  const onChainSettlement = useSendero((s) => s.onChainSettlement);
 
   const treasuryAddr = treasury?.treasuryAddress ?? null;
   const usdc = treasury?.balances.find((b) => b.symbol === 'USDC');

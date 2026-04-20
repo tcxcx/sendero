@@ -85,7 +85,7 @@ export function SwapDialog() {
       onClose={close}
     >
       <p className="dlg-sub">
-        Rebalances the Pasillo corporate treasury between USDC and EURC on
+        Rebalances the Sendero corporate treasury between USDC and EURC on
         Arc. Gas paid in Arc-native USDC.
       </p>
 

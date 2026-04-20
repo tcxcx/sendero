@@ -49,7 +49,7 @@ async function readBalanceOf(
   return BigInt(hex as string);
 }
 import { useQueryState } from 'nuqs';
-import { usePasillo } from './store';
+import { useSendero } from './store';
 import { logout } from '@/lib/user-wallet';
 
 const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;
@@ -69,8 +69,8 @@ const ERC20_ABI = [
 type Token = 'USDC' | 'EURC';
 
 export function WalletDropdown() {
-  const userAuth = usePasillo((s) => s.userAuth);
-  const setUserAuth = usePasillo((s) => s.setUserAuth);
+  const userAuth = useSendero((s) => s.userAuth);
+  const setUserAuth = useSendero((s) => s.setUserAuth);
 
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);

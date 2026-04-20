@@ -1,5 +1,5 @@
 /**
- * Pasillo × Arc — one-time bootstrap.
+ * Sendero × Arc — one-time bootstrap.
  *
  * Creates provider + demo-client + 2 aux-validator wallets via Circle DCW on
  * Arc Testnet, funds them from the treasury, mints the agent identity NFT,
@@ -39,7 +39,7 @@ const SEED_PROGRESS = path.join(APP_ROOT, '.bootstrap-seed-progress.json');
 
 // Hackathon default: Arc docs example metadata URI. Swap for a pinned
 // web3.storage URL if you want agent-specific metadata.
-const METADATA_URI_DEFAULT = 'https://pasillo-arc.vercel.app/agent-metadata.json';
+const METADATA_URI_DEFAULT = 'https://sendero-arc.vercel.app/agent-metadata.json';
 
 const SLEEP_MS = 2000; // dodge Circle DCW rate limit
 
@@ -126,7 +126,7 @@ async function main() {
   let walletSetId = env.CIRCLE_WALLET_SET_ID;
   if (!walletSetId) {
     console.log('── Creating wallet set ──');
-    const ws = await circle.createWalletSet({ name: 'Pasillo Arc Agent' });
+    const ws = await circle.createWalletSet({ name: 'Sendero Arc Agent' });
     walletSetId = (ws.data as any)?.walletSet?.id;
     if (!walletSetId) throw new Error('Failed to create wallet set');
     saveEnvUpdates({ CIRCLE_WALLET_SET_ID: walletSetId });
@@ -189,7 +189,7 @@ async function main() {
   > = {} as any;
 
   const haveProvider =
-    env.PASILLO_PROVIDER_WALLET_ID && env.PASILLO_PROVIDER_ADDRESS;
+    env.SENDERO_PROVIDER_WALLET_ID && env.SENDERO_PROVIDER_ADDRESS;
   const haveClient =
     env.DEMO_CLIENT_WALLET_ID && env.DEMO_CLIENT_ADDRESS;
   const haveAux1 = env.AUX_VALIDATOR_1_WALLET_ID && env.AUX_VALIDATOR_1_ADDRESS;
@@ -198,8 +198,8 @@ async function main() {
   if (haveProvider && haveClient && haveAux1 && haveAux2) {
     console.log('\n── Wallets exist, skipping creation ──');
     wallets.provider = {
-      id: env.PASILLO_PROVIDER_WALLET_ID!,
-      address: env.PASILLO_PROVIDER_ADDRESS!,
+      id: env.SENDERO_PROVIDER_WALLET_ID!,
+      address: env.SENDERO_PROVIDER_ADDRESS!,
     };
     wallets.demoClient = {
       id: env.DEMO_CLIENT_WALLET_ID!,
@@ -229,8 +229,8 @@ async function main() {
     wallets.aux2 = { id: created[3].id, address: created[3].address };
 
     saveEnvUpdates({
-      PASILLO_PROVIDER_WALLET_ID: wallets.provider.id,
-      PASILLO_PROVIDER_ADDRESS: wallets.provider.address,
+      SENDERO_PROVIDER_WALLET_ID: wallets.provider.id,
+      SENDERO_PROVIDER_ADDRESS: wallets.provider.address,
       DEMO_CLIENT_WALLET_ID: wallets.demoClient.id,
       DEMO_CLIENT_ADDRESS: wallets.demoClient.address,
       AUX_VALIDATOR_1_WALLET_ID: wallets.aux1.id,
@@ -297,12 +297,12 @@ async function main() {
   }
 
   // ─── 4. Mint agent identity NFT ──────────────────────────────────────────
-  let agentId = env.PASILLO_AGENT_ID;
+  let agentId = env.SENDERO_AGENT_ID;
   if (agentId) {
     console.log(`\n── Agent already registered: #${agentId} — skipping mint`);
   } else {
     console.log('\n── Minting agent identity NFT ──');
-    const metadataURI = env.PASILLO_METADATA_URI || METADATA_URI_DEFAULT;
+    const metadataURI = env.SENDERO_METADATA_URI || METADATA_URI_DEFAULT;
     console.log(`  metadata: ${metadataURI}`);
     const { agentId: newAgentId, txHash } = await registerAgent({
       ownerWalletAddress: wallets.provider.address,
@@ -310,7 +310,7 @@ async function main() {
       metadataURI,
     });
     agentId = newAgentId.toString();
-    saveEnvUpdates({ PASILLO_AGENT_ID: agentId });
+    saveEnvUpdates({ SENDERO_AGENT_ID: agentId });
     console.log(`  ✓ agent #${agentId} minted — tx ${txHash}`);
   }
 
@@ -368,8 +368,8 @@ async function main() {
   console.log(`  validators: ${summary.validators}`);
 
   console.log('\n✓ Bootstrap complete. .env.local populated:');
-  console.log(`    PASILLO_AGENT_ID=${agentId}`);
-  console.log(`    PASILLO_PROVIDER_ADDRESS=${wallets.provider.address}`);
+  console.log(`    SENDERO_AGENT_ID=${agentId}`);
+  console.log(`    SENDERO_PROVIDER_ADDRESS=${wallets.provider.address}`);
   console.log(`    DEMO_CLIENT_ADDRESS=${wallets.demoClient.address}`);
   console.log(
     `    Arcscan: https://testnet.arcscan.app/address/${IDENTITY_REGISTRY}`,

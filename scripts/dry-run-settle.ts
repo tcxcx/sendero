@@ -41,9 +41,9 @@ const need = (k: string): string => {
   return v;
 };
 
-const providerAddress = need('PASILLO_PROVIDER_ADDRESS');
+const providerAddress = need('SENDERO_PROVIDER_ADDRESS');
 const clientAddress = need('DEMO_CLIENT_ADDRESS');
-const agentId = BigInt(need('PASILLO_AGENT_ID'));
+const agentId = BigInt(need('SENDERO_AGENT_ID'));
 const explorerBase =
   process.env.ARC_EXPLORER_URL || 'https://testnet.arcscan.app';
 

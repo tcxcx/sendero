@@ -2,11 +2,11 @@
 
 /**
  * WorkflowLog — live stream of the last search/hold/pay pipeline.
- * Reads usePasillo().workflow and groups events by `group`.
+ * Reads useSendero().workflow and groups events by `group`.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { usePasillo } from './store';
+import { useSendero } from './store';
 
 interface Runtime {
   provider: string | null;
@@ -15,8 +15,8 @@ interface Runtime {
 }
 
 export function WorkflowLog() {
-  const workflow = usePasillo((s) => s.workflow);
-  const treasury = usePasillo((s) => s.treasury);
+  const workflow = useSendero((s) => s.workflow);
+  const treasury = useSendero((s) => s.treasury);
 
   // Stable per-mount run id so the header doesn't flicker every render.
   const runId = useMemo(

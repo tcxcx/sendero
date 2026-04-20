@@ -2,7 +2,7 @@
  * Circle Gateway — unified USDC balance across chains with sub-500ms
  * cross-chain transfers. We use the server-side treasury EOA (the same
  * key backing `lib/appkit.ts`) as the sole depositor so the demo can
- * show "Pasillo treasury = one balance across Ethereum Sepolia, Base
+ * show "Sendero treasury = one balance across Ethereum Sepolia, Base
  * Sepolia, Arc Testnet" and pull to Arc at booking time.
  *
  * Flow:
@@ -58,7 +58,7 @@ export interface GatewayChain {
 }
 
 /**
- * Testnet chains Pasillo supports for Gateway. Arc is the settle-here
+ * Testnet chains Sendero supports for Gateway. Arc is the settle-here
  * destination; the others are source-chain liquidity buckets.
  */
 export const GATEWAY_CHAINS: Record<string, GatewayChain> = {
@@ -237,7 +237,7 @@ export interface GatewayBalance {
 
 /**
  * Query the unified Gateway balance for a depositor across all
- * Pasillo-tracked testnet chains in one round-trip.
+ * Sendero-tracked testnet chains in one round-trip.
  */
 export async function queryUnifiedBalance(
   depositor?: Address,

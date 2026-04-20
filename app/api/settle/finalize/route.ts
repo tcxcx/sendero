@@ -27,13 +27,13 @@ export async function POST(req: NextRequest) {
   try {
     const raw = await req.json().catch(() => ({}));
     const body = BodySchema.parse(raw ?? {});
-    const agentIdStr = body.agentId ?? process.env.PASILLO_AGENT_ID;
+    const agentIdStr = body.agentId ?? process.env.SENDERO_AGENT_ID;
     if (!agentIdStr) {
       return NextResponse.json(
         {
           error: 'agent_not_configured',
           message:
-            'Provide agentId in the request body or set PASILLO_AGENT_ID in .env.local.',
+            'Provide agentId in the request body or set SENDERO_AGENT_ID in .env.local.',
         },
         { status: 503 },
       );

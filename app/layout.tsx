@@ -4,11 +4,11 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Pasillo × Arc · AI Travel Agent',
+  title: 'Sendero × Arc · AI Travel Agent',
   description:
     'B2B2C travel platform — partners plug in their corporate traveler base, every flight, hotel and ground leg is booked by an AI workflow and settled on Arc L2 in USDC or EURC.',
-  applicationName: 'Pasillo × Arc',
-  authors: [{ name: 'Pasillo' }],
+  applicationName: 'Sendero × Arc',
+  authors: [{ name: 'Sendero' }],
   keywords: ['travel', 'AI agent', 'USDC', 'EURC', 'Circle', 'Arc', 'CCTP', 'B2B2C'],
 };
 

@@ -29,8 +29,8 @@ import {
 } from 'webauthn-p256';
 import { toModularTransport } from '@circle-fin/modular-wallets-core';
 
-const CRED_KEY = 'pasillo:passkey-credential';
-const PROFILE_KEY = 'pasillo:passkey-profile';
+const CRED_KEY = 'sendero:passkey-credential';
+const PROFILE_KEY = 'sendero:passkey-profile';
 
 export interface StoredCredential {
   id: string;
@@ -146,11 +146,11 @@ function clients() {
 
 function rpForCurrentOrigin(): { id: string; name: string } {
   if (typeof window === 'undefined') {
-    return { id: 'localhost', name: 'Pasillo · Arc' };
+    return { id: 'localhost', name: 'Sendero · Arc' };
   }
   return {
     id: window.location.hostname,
-    name: document.title || 'Pasillo · Arc',
+    name: document.title || 'Sendero · Arc',
   };
 }
 
@@ -260,7 +260,7 @@ function base64UrlToBytes(input: string): Uint8Array {
 function stableWalletName(credential: StoredCredential): string {
   const idSlug = credential.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
   const pkSuffix = credential.publicKey.slice(-8);
-  return `pasillo-${idSlug}-${pkSuffix}`;
+  return `sendero-${idSlug}-${pkSuffix}`;
 }
 
 async function smartAccountFromCredential(
@@ -393,8 +393,8 @@ function loadProfile(): UserProfile | null {
   if (typeof window === 'undefined') return null;
   const raw = window.localStorage.getItem(PROFILE_KEY);
   if (!raw) {
-    // Migrate from older single-field storage ("pasillo:passkey-display-name").
-    const legacy = window.localStorage.getItem('pasillo:passkey-display-name');
+    // Migrate from older single-field storage ("sendero:passkey-display-name").
+    const legacy = window.localStorage.getItem('sendero:passkey-display-name');
     if (legacy) return { displayName: legacy, email: '', phone: '' };
     return null;
   }

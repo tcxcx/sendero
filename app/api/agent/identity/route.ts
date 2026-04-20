@@ -12,11 +12,11 @@ export const revalidate = 0;
 
 /**
  * GET /api/agent/identity
- * Returns the Pasillo agent's on-chain identity + aggregated reputation.
+ * Returns the Sendero agent's on-chain identity + aggregated reputation.
  */
 export async function GET() {
-  const agentIdStr = process.env.PASILLO_AGENT_ID;
-  const providerAddress = process.env.PASILLO_PROVIDER_ADDRESS;
+  const agentIdStr = process.env.SENDERO_AGENT_ID;
+  const providerAddress = process.env.SENDERO_PROVIDER_ADDRESS;
   const explorerUrl = env.arcExplorerUrl();
 
   if (!agentIdStr || !providerAddress) {

@@ -8,12 +8,12 @@
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
 import { DialogShell, dialogStyles } from './dialog-shell';
-import { usePasillo } from './store';
+import { useSendero } from './store';
 
 export function DepositDialog() {
   const [deposit, setDeposit] = useQueryState('deposit');
   const [amount, setAmount] = useQueryState('dripAmount', { defaultValue: '5' });
-  const userAuth = usePasillo((s) => s.userAuth);
+  const userAuth = useSendero((s) => s.userAuth);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -1,6 +1,6 @@
-# Pasillo × Arc
+# Sendero × Arc
 
-> Pasillo is an AI travel agent that books real Duffel flights + hotels and settles every payment on Arc L2 (Circle's USDC-native chain). It exposes an MCP server so other AI agents (Claude Desktop, ChatGPT Apps, Gemini extensions) can plug Pasillo in as a travel rail. Treasury liquidity is unified across 7+ testnet chains via Circle Gateway; settlements run through Circle App Kit with a viem-adapter treasury signer. Corporate commission splits execute atomically in a single user operation on Arc Testnet (chain id 5042002).
+> Sendero is an AI travel agent that books real Duffel flights + hotels and settles every payment on Arc L2 (Circle's USDC-native chain). It exposes an MCP server so other AI agents (Claude Desktop, ChatGPT Apps, Gemini extensions) can plug Sendero in as a travel rail. Treasury liquidity is unified across 7+ testnet chains via Circle Gateway; settlements run through Circle App Kit with a viem-adapter treasury signer. Corporate commission splits execute atomically in a single user operation on Arc Testnet (chain id 5042002).
 
 ## Endpoints
 
@@ -42,4 +42,4 @@ The MCP server exposes these tools. Call them via JSON-RPC `tools/call`.
 ## Non-goals
 
 - Not a consumer OTA. Not a Navan competitor. Not a token launch.
-- Pasillo monetizes via take-rate on settlement flow + optional B2B corridors embedded inside corporate travel platforms.
+- Sendero monetizes via take-rate on settlement flow + optional B2B corridors embedded inside corporate travel platforms.

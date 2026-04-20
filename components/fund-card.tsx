@@ -3,7 +3,7 @@
 /**
  * FundCard — shows when the signed-in MSCA has 0 USDC and the user is about
  * to need it (for settlement). Two paths:
- *   1. Drip 5 USDC from the Pasillo treasury (Circle DCW, ~10s)
+ *   1. Drip 5 USDC from the Sendero treasury (Circle DCW, ~10s)
  *   2. Open the Circle faucet with the MSCA address pre-selected
  *
  * Polls the MSCA balance every 10s so it auto-dismisses once funded.
@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPublicClient, http, formatUnits } from 'viem';
 import { arcTestnet } from 'viem/chains';
-import { usePasillo } from './store';
+import { useSendero } from './store';
 import { ARC_USDC_ADDRESS } from '@/lib/erc8183-client';
 
 const USDC_ABI = [
@@ -26,8 +26,8 @@ const USDC_ABI = [
 ] as const;
 
 export function FundCard() {
-  const userAuth = usePasillo((s) => s.userAuth);
-  const holdOrder = usePasillo((s) => s.holdOrder);
+  const userAuth = useSendero((s) => s.userAuth);
+  const holdOrder = useSendero((s) => s.holdOrder);
 
   const [balanceRaw, setBalanceRaw] = useState<bigint | null>(null);
   const [dripping, setDripping] = useState(false);
@@ -125,7 +125,7 @@ export function FundCard() {
           {userAuth.address.slice(0, 6)}…{userAuth.address.slice(-4)}
         </strong>
         . It needs USDC on Arc Testnet before settlement can run. Drip from
-        the Pasillo treasury for an instant 5 USDC, or top up bigger amounts
+        the Sendero treasury for an instant 5 USDC, or top up bigger amounts
         via the Circle faucet.
       </div>
 

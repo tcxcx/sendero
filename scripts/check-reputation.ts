@@ -18,9 +18,9 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const agentIdStr = process.env.PASILLO_AGENT_ID;
+const agentIdStr = process.env.SENDERO_AGENT_ID;
 if (!agentIdStr) {
-  console.error('PASILLO_AGENT_ID not set in .env.local');
+  console.error('SENDERO_AGENT_ID not set in .env.local');
   process.exit(1);
 }
 

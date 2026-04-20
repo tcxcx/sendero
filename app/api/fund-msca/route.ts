@@ -5,7 +5,7 @@ import { env } from '@/lib/env';
 
 /**
  * POST /api/fund-msca
- * Sandbox-only: drip USDC from the Pasillo treasury (Circle DCW) to the
+ * Sandbox-only: drip USDC from the Sendero treasury (Circle DCW) to the
  * user's MSCA so the one-userOp settlement has something to spend.
  *
  * Body: { to: 0x<40hex>, amount?: "5" }   (amount clamped to 0.1–20 USDC)

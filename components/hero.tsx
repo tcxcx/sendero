@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Pasillo × Arc — Landing Hero.
+ * Sendero × Arc — Landing Hero.
  *
  * Editorial split: left column is the pitch + passkey onboarding, right
  * column is a live cobe globe. Once the user registers or signs in, the
@@ -17,7 +17,7 @@ import {
   registerPasskey,
   restoreFromStorage,
 } from '@/lib/user-wallet';
-import { usePasillo, type UserAuth } from './store';
+import { useSendero, type UserAuth } from './store';
 
 type Mode = 'register' | 'login';
 
@@ -37,7 +37,7 @@ const MARKERS: Array<{ location: [number, number]; size: number }> = [
 ];
 
 export function LandingHero() {
-  const setUserAuth = usePasillo((s) => s.setUserAuth);
+  const setUserAuth = useSendero((s) => s.setUserAuth);
 
   const [restoring, setRestoring] = useState(true);
   const [mode, setMode] = useState<Mode>('register');
@@ -125,7 +125,7 @@ export function LandingHero() {
       <header className="hero-nav">
         <div className="hero-brand">
           <span className="hero-mark" />
-          <span className="hero-word">PASILLO</span>
+          <span className="hero-word">SENDERO</span>
           <span className="hero-x">×</span>
           <span className="hero-word hero-word-alt">ARC</span>
         </div>

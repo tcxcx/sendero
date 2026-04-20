@@ -4,7 +4,7 @@ import { env } from '@/lib/env';
 
 /**
  * GET /api/gateway/balance
- * Returns the Pasillo treasury's unified USDC balance across every
+ * Returns the Sendero treasury's unified USDC balance across every
  * Gateway-supported testnet we track, plus the per-chain breakdown.
  */
 export const runtime = 'nodejs';

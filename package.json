@@ -1,9 +1,9 @@
 {
-  "name": "pasillo-arc",
+  "name": "sendero-arc",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pasillo × Arc — AI travel agent that books real flights and settles on-chain via ERC-8183 + ERC-8004. Circle Arc Hackathon Spring 2026.",
+  "description": "Sendero × Arc — AI travel agent that books real flights and settles on-chain via ERC-8183 + ERC-8004. Circle Arc Hackathon Spring 2026.",
   "scripts": {
     "dev": "next dev -p 3010",
     "build": "next build",
@@ -43,7 +43,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/BuFi007/pasillo-arc.git"
+    "url": "https://github.com/BuFi007/sendero-arc.git"
   },
   "keywords": [
     "arc",

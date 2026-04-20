@@ -1,5 +1,5 @@
-import { PasilloApp } from '@/components/pasillo-app';
+import { SenderoApp } from '@/components/sendero-app';
 
 export default function Page() {
-  return <PasilloApp />;
+  return <SenderoApp />;
 }

@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = BodySchema.parse(await req.json());
-    const idempotencyKey = `pasillo-hold-${body.offerId}-${Date.now()}`;
+    const idempotencyKey = `sendero-hold-${body.offerId}-${Date.now()}`;
     const result = await createHoldOrder({
       offerId: body.offerId,
       passengerName: body.passengerName,
