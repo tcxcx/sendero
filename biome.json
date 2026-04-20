@@ -1,0 +1,161 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "maxSize": 5000000,
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/.turbo",
+      "!**/.wrangler",
+      "!**/dist",
+      "!**/build",
+      "!**/out",
+      "!**/*.generated.*",
+      "!**/*.d.ts",
+      "!**/coverage",
+      "!lib-deprecated",
+      "!apps/docs/.source",
+      "!apps/storybook/storybook-static",
+      "!packages/database/prisma/migrations"
+    ]
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              ["react", "react/**", "react-dom/**"],
+              ":BLANK_LINE:",
+              ["next", "next/**"],
+              ":BLANK_LINE:",
+              ":PACKAGE:",
+              ":BLANK_LINE:",
+              ":ALIAS:",
+              ":BLANK_LINE:",
+              ":PATH:"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 100,
+    "bracketSpacing": true,
+    "useEditorconfig": true
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "trailingCommas": "es5",
+      "semicolons": "always",
+      "arrowParentheses": "asNeeded",
+      "bracketSameLine": false,
+      "quoteProperties": "asNeeded"
+    }
+  },
+  "json": {
+    "formatter": {
+      "trailingCommas": "none"
+    }
+  },
+  "css": {
+    "parser": {
+      "cssModules": true,
+      "tailwindDirectives": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "correctness": {
+        "recommended": true,
+        "useExhaustiveDependencies": "off",
+        "noUnusedVariables": "warn",
+        "noUnusedImports": "warn",
+        "useHookAtTopLevel": "warn"
+      },
+      "a11y": {
+        "recommended": true,
+        "noSvgWithoutTitle": "off",
+        "useKeyWithClickEvents": "off",
+        "useSemanticElements": "warn",
+        "noLabelWithoutControl": "warn",
+        "useButtonType": "warn",
+        "noStaticElementInteractions": "warn",
+        "useKeyWithMouseEvents": "warn",
+        "noAutofocus": "warn",
+        "useAriaPropsSupportedByRole": "warn",
+        "useValidAnchor": "warn",
+        "useFocusableInteractive": "warn",
+        "useMediaCaption": "warn",
+        "noRedundantRoles": "warn",
+        "noNoninteractiveElementToInteractiveRole": "warn",
+        "useValidAriaRole": "warn",
+        "useHtmlLang": "warn",
+        "useAltText": "warn",
+        "noNoninteractiveTabindex": "warn"
+      },
+      "style": {
+        "recommended": true,
+        "noNonNullAssertion": "off",
+        "useImportType": "warn",
+        "useNodejsImportProtocol": "warn",
+        "useTemplate": "warn",
+        "useSelfClosingElements": "warn",
+        "useConsistentArrayType": "off",
+        "useDefaultParameterLast": "warn",
+        "useShorthandAssign": "warn",
+        "useEnumInitializers": "off",
+        "noParameterAssign": "warn",
+        "noUselessElse": "warn",
+        "noInferrableTypes": "warn"
+      },
+      "suspicious": {
+        "recommended": true,
+        "noExplicitAny": "warn",
+        "noArrayIndexKey": "warn",
+        "noAssignInExpressions": "warn",
+        "noImplicitAnyLet": "warn",
+        "noNonNullAssertedOptionalChain": "warn",
+        "useIterableCallbackReturn": "warn",
+        "noShadowRestrictedNames": "warn",
+        "noDuplicateObjectKeys": "warn",
+        "noDuplicateElseIf": "warn",
+        "noDuplicateCustomProperties": "warn",
+        "noDuplicateFontNames": "warn",
+        "noUnknownAtRules": "warn",
+        "noDoubleEquals": "warn",
+        "noRedeclare": "warn",
+        "noShorthandPropertyOverrides": "warn",
+        "noDuplicateProperties": "warn",
+        "noThenProperty": "warn",
+        "noConsole": "off"
+      },
+      "complexity": {
+        "recommended": true,
+        "noForEach": "off",
+        "noBannedTypes": "warn",
+        "noUselessFragments": "warn",
+        "noUselessTernary": "warn"
+      }
+    }
+  }
+}

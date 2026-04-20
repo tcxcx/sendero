@@ -36,10 +36,7 @@ const isTenantScoped = createRouteMatcher([
   '/api/(agency|trips|finance|settlements)/(.*)',
 ]);
 
-const isAdmin = createRouteMatcher([
-  '/app/admin(.*)',
-  '/api/admin/(.*)',
-]);
+const isAdmin = createRouteMatcher(['/app/admin(.*)', '/api/admin/(.*)']);
 
 export function senderoMiddleware() {
   return clerkMiddleware(async (auth, req) => {

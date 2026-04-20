@@ -44,8 +44,7 @@ const need = (k: string): string => {
 const providerAddress = need('SENDERO_PROVIDER_ADDRESS');
 const clientAddress = need('DEMO_CLIENT_ADDRESS');
 const agentId = BigInt(need('SENDERO_AGENT_ID'));
-const explorerBase =
-  process.env.ARC_EXPLORER_URL || 'https://testnet.arcscan.app';
+const explorerBase = process.env.ARC_EXPLORER_URL || 'https://testnet.arcscan.app';
 
 const pnr = `DRY${Date.now().toString(36).toUpperCase().slice(-5)}`;
 const amountUsd = '1.80';
@@ -123,5 +122,7 @@ invalidateReputationCache(agentId);
 console.log(`      ${arcscan(feedbackTx.txHash)}`);
 
 console.log(`\n✓ All 7 txs landed on Arc Testnet.`);
-console.log(`  Agent NFT: ${explorerBase}/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/${agentId}`);
+console.log(
+  `  Agent NFT: ${explorerBase}/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/${agentId}`
+);
 console.log(`  Escrow contract: ${explorerBase}/address/${AGENTIC_COMMERCE_ADDRESS}`);

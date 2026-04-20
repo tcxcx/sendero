@@ -1,0 +1,11 @@
+{
+  "name": "@sendero/env",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — typed environment-variable accessors shared across every app and package. Leaf package, zero internal deps.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

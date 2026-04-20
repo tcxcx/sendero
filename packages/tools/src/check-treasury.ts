@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { getTreasuryBalances } from '../../../lib/circle';
+import { getTreasuryBalances } from '@sendero/circle/wallets';
 import type { ToolDef } from './types';
 
 export const checkTreasuryTool: ToolDef = {
   name: 'check_treasury',
   description:
-    "Check Circle treasury USDC/EURC balance on Arc. Use when the user asks about funds.",
+    'Check Circle treasury USDC/EURC balance on Arc. Use when the user asks about funds.',
   inputSchema: z.object({}),
   jsonSchema: { type: 'object', properties: {} },
   async handler() {

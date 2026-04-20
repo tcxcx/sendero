@@ -5,9 +5,9 @@ import {
   getTreasuryAdapter,
   summarizeBridge,
   summarizeSwap,
-} from '../../../lib/appkit';
+} from '@sendero/circle/app-kit';
 import type { BridgeParams, SwapParams } from '@circle-fin/app-kit';
-import { BRIDGE_CHAINS } from '../../../lib/bridge-chains';
+import { BRIDGE_CHAINS } from '@sendero/arc/bridge-chains';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({

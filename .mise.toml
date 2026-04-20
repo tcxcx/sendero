@@ -1,0 +1,69 @@
+# .mise.toml — Sendero × Arc reproducible dev toolchain
+#
+# Install mise: https://mise.run  (one-liner: `curl https://mise.run | sh`)
+# Activate:     `eval "$(mise activate zsh)"` in ~/.zshrc (or bash)
+# Auto-pins bun + node + prisma on `cd` into this repo. Vercel ignores this file.
+
+[tools]
+node   = "22.18.0"
+bun    = "1.3.10"
+prisma = "5.22.0"
+
+[env]
+# Perf: unchain libuv thread pool on M-series (matches desk-v1)
+UV_THREADPOOL_SIZE = "14"
+# Perf: 8 GB V8 heap for Turbopack cold starts + big TS graphs
+NODE_OPTIONS       = "--max-old-space-size=8192"
+# Skip @t3-oss/env validation for local CLI tasks; Vercel + CI inject real env.
+SKIP_ENV_VALIDATION = "1"
+
+# --- Dev ---
+
+[tasks.dev]
+description = "Everything — web (3010) + edge worker + docs"
+run         = "bun run dev:all"
+
+[tasks."dev:web"]
+description = "Next.js web only (root) — fastest cold start"
+run         = "bun run dev"
+
+[tasks."dev:edge"]
+description = "Hono edge worker (apps/edge)"
+run         = "bun run dev:edge"
+
+# --- Quality gates ---
+
+[tasks.typecheck]
+description = "Typecheck entire monorepo via turbo"
+run         = "bunx turbo run typecheck"
+
+[tasks.lint]
+description = "Lint entire monorepo via turbo"
+run         = "bunx turbo run lint --continue"
+
+[tasks.build]
+description = "Production build — all workspaces"
+run         = "bunx turbo run build"
+
+# --- DB ---
+
+[tasks."db:generate"]
+description = "Prisma client generate"
+run         = "bun run --cwd packages/database db:generate"
+
+[tasks."db:migrate"]
+description = "Prisma migrate dev"
+run         = "bun run --cwd packages/database db:migrate"
+
+[tasks."db:studio"]
+description = "Prisma studio"
+run         = "bun run --cwd packages/database db:studio"
+
+# --- Setup ---
+
+[tasks.bootstrap]
+description = "Fresh install matching mise-pinned bun + generate prisma client"
+run         = """
+bun install --frozen-lockfile
+bunx prisma generate --schema=packages/database/prisma/schema.prisma
+"""

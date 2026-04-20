@@ -21,7 +21,7 @@ export function toMcpTool(def: ToolDef, ctx: ToolContext = {}): McpToolEntry {
 
 export function buildMcpCatalog(
   defs: ToolDef[],
-  ctx: ToolContext = {},
+  ctx: ToolContext = {}
 ): Record<string, McpToolEntry> {
-  return Object.fromEntries(defs.map((d) => [d.name, toMcpTool(d, ctx)]));
+  return Object.fromEntries(defs.map(d => [d.name, toMcpTool(d, ctx)]));
 }

@@ -1,0 +1,12 @@
+// @ts-nocheck -- skip type checking
+import * as docs_7 from "../content/docs/tools/settle_split.mdx?collection=docs&hash=1776663795339"
+import * as docs_6 from "../content/docs/tools/search_flights.mdx?collection=docs&hash=1776663795339"
+import * as docs_5 from "../content/docs/tools/overview.mdx?collection=docs&hash=1776663795339"
+import * as docs_4 from "../content/docs/x402-nanopayments.mdx?collection=docs&hash=1776663795339"
+import * as docs_3 from "../content/docs/quickstart.mdx?collection=docs&hash=1776663795339"
+import * as docs_2 from "../content/docs/pricing.mdx?collection=docs&hash=1776663795339"
+import * as docs_1 from "../content/docs/mcp-integration.mdx?collection=docs&hash=1776663795339"
+import * as docs_0 from "../content/docs/index.mdx?collection=docs&hash=1776663795339"
+import { _runtime } from "fumadocs-mdx"
+import * as _source from "../source.config"
+export const docs = _runtime.docs<typeof _source.docs>([{ info: {"path":"index.mdx","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/index.mdx"}, data: docs_0 }, { info: {"path":"mcp-integration.mdx","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/mcp-integration.mdx"}, data: docs_1 }, { info: {"path":"pricing.mdx","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/pricing.mdx"}, data: docs_2 }, { info: {"path":"quickstart.mdx","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/quickstart.mdx"}, data: docs_3 }, { info: {"path":"x402-nanopayments.mdx","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/x402-nanopayments.mdx"}, data: docs_4 }, { info: {"path":"tools/overview.mdx","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/tools/overview.mdx"}, data: docs_5 }, { info: {"path":"tools/search_flights.mdx","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/tools/search_flights.mdx"}, data: docs_6 }, { info: {"path":"tools/settle_split.mdx","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/tools/settle_split.mdx"}, data: docs_7 }], [{"info":{"path":"meta.json","absolutePath":"/Users/criptopoeta/coding-dojo/pasillo-arc/apps/docs/content/docs/meta.json"},"data":{"title":"Sendero API","pages":["index","quickstart","---Tools---","tools/overview","tools/search_flights","tools/settle_split","---Protocol---","x402-nanopayments","mcp-integration","pricing"]}}])

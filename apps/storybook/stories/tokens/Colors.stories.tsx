@@ -18,7 +18,7 @@ function Grid({ swatches }: { swatches: Swatch[] }) {
         gap: 16,
       }}
     >
-      {swatches.map((s) => (
+      {swatches.map(s => (
         <div
           key={s.name}
           style={{
@@ -86,8 +86,8 @@ export const Vermilion: Story = {
     <div style={{ padding: 32 }}>
       <h2 style={{ marginTop: 0 }}>Vermilion — Sendero's primary</h2>
       <p style={{ color: 'var(--text-dim)', maxWidth: 520 }}>
-        Warmer than fintech blue, LATAM-adjacent without being literal. Reads
-        on cream and on near-black.
+        Warmer than fintech blue, LATAM-adjacent without being literal. Reads on cream and on
+        near-black.
       </p>
       <Grid
         swatches={[

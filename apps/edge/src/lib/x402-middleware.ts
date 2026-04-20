@@ -42,7 +42,7 @@ function sellerAddress(): string {
     process.env.SENDERO_PROVIDER_ADDRESS;
   if (!a) {
     throw new Error(
-      'SENDERO_SELLER_ADDRESS (or TREASURY_VIEM_ADDRESS) required on the edge worker.',
+      'SENDERO_SELLER_ADDRESS (or TREASURY_VIEM_ADDRESS) required on the edge worker.'
     );
   }
   return a;
@@ -101,7 +101,7 @@ export function requirePayment(toolName: string): MiddlewareHandler {
           accepts: [requirements],
         },
         402,
-        { 'PAYMENT-REQUIRED': base64Encode({ x402Version: 2, accepts: [requirements] }) },
+        { 'PAYMENT-REQUIRED': base64Encode({ x402Version: 2, accepts: [requirements] }) }
       );
     }
 
@@ -137,7 +137,7 @@ export function requirePayment(toolName: string): MiddlewareHandler {
             error: 'payment_rejected',
             reason: settle.errorReason,
           },
-          402,
+          402
         );
       }
 
@@ -169,10 +169,7 @@ export function requirePayment(toolName: string): MiddlewareHandler {
         status: 'rejected',
         note: `settle threw: ${message}`,
       });
-      return c.json(
-        { error: 'settle_failed', message },
-        500,
-      );
+      return c.json({ error: 'settle_failed', message }, 500);
     }
   };
 }

@@ -1,11 +1,9 @@
 import { z } from 'zod';
-import { searchHotels } from '../../../lib/duffel';
+import { searchHotels } from '@sendero/duffel';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
-  location: z
-    .string()
-    .describe('City, neighborhood, or airport code. Free-form text works.'),
+  location: z.string().describe('City, neighborhood, or airport code. Free-form text works.'),
   checkInDate: z.string().describe('YYYY-MM-DD'),
   checkOutDate: z.string().describe('YYYY-MM-DD'),
   guests: z.number().int().min(1).max(9).default(1),

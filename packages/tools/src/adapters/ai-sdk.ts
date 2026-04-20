@@ -6,7 +6,7 @@
  * stays `(input) => Promise<output>`, which is what the AI SDK expects.
  */
 
-import { tool } from 'ai';
+import { tool, type ToolSet } from 'ai';
 import type { ToolDef, ToolContext } from '../types';
 
 export function toAiSdkTool(def: ToolDef, ctx: ToolContext = {}) {
@@ -17,9 +17,10 @@ export function toAiSdkTool(def: ToolDef, ctx: ToolContext = {}) {
   });
 }
 
-export function buildAiSdkTools(
-  defs: ToolDef[],
-  ctx: ToolContext = {},
-): Record<string, ReturnType<typeof toAiSdkTool>> {
-  return Object.fromEntries(defs.map((d) => [d.name, toAiSdkTool(d, ctx)]));
+export function buildAiSdkTools(defs: ToolDef[], ctx: ToolContext = {}): ToolSet {
+  const entries: [string, ReturnType<typeof toAiSdkTool>][] = defs.map(d => [
+    d.name,
+    toAiSdkTool(d, ctx),
+  ]);
+  return Object.fromEntries(entries);
 }

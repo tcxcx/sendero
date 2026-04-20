@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { queryUnifiedBalance } from '../../../lib/gateway';
+import { queryUnifiedBalance } from '@sendero/circle/gateway';
 import type { ToolDef } from './types';
 
 export const gatewayBalanceTool: ToolDef = {

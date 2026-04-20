@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createHoldOrder, payFromBalance } from '../../../lib/duffel';
+import { createHoldOrder, payFromBalance } from '@sendero/duffel';
 import type { ToolDef, ToolContext } from './types';
 
 const inputSchema = z.object({

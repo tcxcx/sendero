@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { canonicalSplit, settleCommissionSplit } from '../../../lib/nanopayments';
+import { canonicalSplit, settleCommissionSplit } from '@sendero/nanopayments';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({

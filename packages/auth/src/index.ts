@@ -13,12 +13,7 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import {
-  useUser,
-  useOrganization,
-  useOrganizationList,
-  shapeClerkSession,
-} from './clerk';
+import { useUser, useOrganization, useOrganizationList, shapeClerkSession } from './clerk';
 import { useMscaStore } from './store';
 import { restoreFromStorage } from './msca';
 import type { SenderoAuth } from './types';
@@ -44,10 +39,10 @@ export function useSenderoAuth(): SenderoAuth {
   const orgList = useOrganizationList({
     userMemberships: { infinite: true },
   });
-  const mscaWallet = useMscaStore((s) => s.wallet);
-  const mscaRestoring = useMscaStore((s) => s.isRestoring);
-  const setWallet = useMscaStore((s) => s.setWallet);
-  const setRestoring = useMscaStore((s) => s.setRestoring);
+  const mscaWallet = useMscaStore(s => s.wallet);
+  const mscaRestoring = useMscaStore(s => s.isRestoring);
+  const setWallet = useMscaStore(s => s.setWallet);
+  const setRestoring = useMscaStore(s => s.setRestoring);
 
   // Lazy-restore the MSCA from localStorage on first mount.
   useEffect(() => {

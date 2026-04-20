@@ -60,7 +60,7 @@ export async function loadTenantPolicy(
       findUnique: (args: { where: { tenantId: string } }) => Promise<any>;
     };
   },
-  tenantId: string,
+  tenantId: string
 ): Promise<TenantPolicy> {
   const row = await prisma.tenantPolicy.findUnique({ where: { tenantId } });
   if (!row) return TenantPolicy.parse({ tenantId, ...DEFAULT_POLICY });
@@ -73,31 +73,38 @@ export async function loadTenantPolicy(
  * explicit case; this helper additionally includes children of the primary
  * tenant when the user has `agency-admin` role on the parent.
  */
-export async function listSwitchableTenants(
-  prisma: {
-    tenant: {
-      findMany: (args: any) => Promise<Array<{ id: string; slug: string; name: string; parentTenantId: string | null; billingTier: string; createdAt: Date }>>;
-    };
-  },
-): Promise<SenderoTenant[]> {
+export async function listSwitchableTenants(prisma: {
+  tenant: {
+    findMany: (
+      args: any
+    ) => Promise<
+      Array<{
+        id: string;
+        slug: string;
+        name: string;
+        parentTenantId: string | null;
+        billingTier: string;
+        createdAt: Date;
+      }>
+    >;
+  };
+}): Promise<SenderoTenant[]> {
   const { user } = await getClerkSessionNext();
   if (!user) return [];
 
-  const parentIds = user.memberships
-    .filter((m) => m.role === 'agency-admin')
-    .map((m) => m.tenantId);
+  const parentIds = user.memberships.filter(m => m.role === 'agency-admin').map(m => m.tenantId);
 
   const rows = await prisma.tenant.findMany({
     where: {
       OR: [
-        { id: { in: user.memberships.map((m) => m.tenantId) } },
+        { id: { in: user.memberships.map(m => m.tenantId) } },
         parentIds.length ? { parentTenantId: { in: parentIds } } : { id: '__none__' },
       ],
     },
     orderBy: { createdAt: 'asc' },
   });
 
-  return rows.map((r) => ({
+  return rows.map(r => ({
     id: r.id,
     slug: r.slug,
     displayName: r.name,
@@ -112,7 +119,10 @@ export async function listSwitchableTenants(
 // ──────────────────────────────────────────────────────────────────────
 
 export class AuthError extends Error {
-  constructor(public code: 'UNAUTHENTICATED' | 'NO_TENANT' | 'FORBIDDEN', msg: string) {
+  constructor(
+    public code: 'UNAUTHENTICATED' | 'NO_TENANT' | 'FORBIDDEN',
+    msg: string
+  ) {
     super(msg);
   }
 }

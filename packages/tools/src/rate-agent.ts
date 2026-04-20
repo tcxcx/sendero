@@ -24,7 +24,7 @@ export interface AgentRating {
 const _ratings: AgentRating[] = [];
 
 export function getAgentRatings(agentId?: string): AgentRating[] {
-  return agentId ? _ratings.filter((r) => r.agentId === agentId) : _ratings.slice();
+  return agentId ? _ratings.filter(r => r.agentId === agentId) : _ratings.slice();
 }
 
 export function summarizeAgent(agentId: string): {

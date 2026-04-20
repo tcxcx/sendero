@@ -5,12 +5,8 @@
     "moduleResolution": "bundler",
     "paths": {
       "@sendero/tools": ["../../packages/tools/src/index.ts"],
-      "@sendero/tools/adapters/ai-sdk": [
-        "../../packages/tools/src/adapters/ai-sdk.ts"
-      ],
-      "@sendero/tools/adapters/mcp": [
-        "../../packages/tools/src/adapters/mcp.ts"
-      ],
+      "@sendero/tools/adapters/ai-sdk": ["../../packages/tools/src/adapters/ai-sdk.ts"],
+      "@sendero/tools/adapters/mcp": ["../../packages/tools/src/adapters/mcp.ts"],
       "@sendero/tools/agent": ["../../packages/tools/src/agent.ts"],
       "@sendero/tools/meter": ["../../packages/tools/src/meter.ts"],
       "@sendero/tools/pricing": ["../../packages/tools/src/pricing.ts"],

@@ -12,11 +12,6 @@
     },
     "types": ["node", "react", "react-dom"]
   },
-  "include": [
-    ".storybook/**/*.ts",
-    ".storybook/**/*.tsx",
-    "stories/**/*.ts",
-    "stories/**/*.tsx"
-  ],
+  "include": [".storybook/**/*.ts", ".storybook/**/*.tsx", "stories/**/*.ts", "stories/**/*.tsx"],
   "exclude": ["node_modules", "storybook-static"]
 }

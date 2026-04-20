@@ -7,7 +7,7 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./clerk": "./src/clerk.ts",
+    "./clerk": "./src/clerk.tsx",
     "./clerk/server": "./src/clerk.server.ts",
     "./msca": "./src/msca.ts",
     "./tenant": "./src/tenant.ts",
@@ -31,7 +31,11 @@
     "zustand": "^5.0.0"
   },
   "peerDependenciesMeta": {
-    "@sendero/database": { "optional": false },
-    "hono": { "optional": true }
+    "@sendero/database": {
+      "optional": false
+    },
+    "hono": {
+      "optional": true
+    }
   }
 }

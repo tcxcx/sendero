@@ -1,10 +1,5 @@
 import { z } from 'zod';
-import {
-  getAppKit,
-  getKitKey,
-  getTreasuryAdapter,
-  summarizeSwap,
-} from '../../../lib/appkit';
+import { getAppKit, getKitKey, getTreasuryAdapter, summarizeSwap } from '@sendero/circle/app-kit';
 import type { SwapParams } from '@circle-fin/app-kit';
 import type { ToolDef } from './types';
 

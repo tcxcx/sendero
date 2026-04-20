@@ -1,10 +1,6 @@
 {
   "compilerOptions": {
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": false,
@@ -14,50 +10,45 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./*"
+      "@sendero/env": ["./packages/sendero-env/src/index.ts"],
+      "@sendero/arc": ["./packages/sendero-arc/src/index.ts"],
+      "@sendero/arc/chain": ["./packages/sendero-arc/src/chain.ts"],
+      "@sendero/arc/identity": ["./packages/sendero-arc/src/identity.ts"],
+      "@sendero/arc/jobs": ["./packages/sendero-arc/src/jobs.ts"],
+      "@sendero/arc/bridge-chains": ["./packages/sendero-arc/src/bridge-chains.ts"],
+      "@sendero/erc8183": ["./packages/sendero-erc8183/src/index.ts"],
+      "@sendero/erc8183/client": ["./packages/sendero-erc8183/src/client.ts"],
+      "@sendero/duffel": ["./packages/sendero-duffel/src/index.ts"],
+      "@sendero/circle": ["./packages/sendero-circle/src/index.ts"],
+      "@sendero/circle/wallets": ["./packages/sendero-circle/src/wallets.ts"],
+      "@sendero/circle/app-kit": ["./packages/sendero-circle/src/app-kit.ts"],
+      "@sendero/circle/gateway": ["./packages/sendero-circle/src/gateway.ts"],
+      "@sendero/circle/modular-wallets": [
+        "./packages/sendero-circle/src/modular-wallets.ts"
       ],
-      "@sendero/tools": [
-        "./packages/tools/src/index.ts"
-      ],
-      "@sendero/tools/adapters/ai-sdk": [
-        "./packages/tools/src/adapters/ai-sdk.ts"
-      ],
-      "@sendero/tools/adapters/mcp": [
-        "./packages/tools/src/adapters/mcp.ts"
-      ],
-      "@sendero/tools/agent": [
-        "./packages/tools/src/agent.ts"
-      ],
-      "@sendero/tools/meter": [
-        "./packages/tools/src/meter.ts"
-      ],
-      "@sendero/tools/pricing": [
-        "./packages/tools/src/pricing.ts"
-      ],
-      "@sendero/tools/types": [
-        "./packages/tools/src/types.ts"
-      ]
+      "@sendero/nanopayments": ["./packages/sendero-nanopayments/src/index.ts"],
+      "@sendero/tools": ["./packages/tools/src/index.ts"],
+      "@sendero/tools/adapters/ai-sdk": ["./packages/tools/src/adapters/ai-sdk.ts"],
+      "@sendero/tools/adapters/mcp": ["./packages/tools/src/adapters/mcp.ts"],
+      "@sendero/tools/agent": ["./packages/tools/src/agent.ts"],
+      "@sendero/tools/meter": ["./packages/tools/src/meter.ts"],
+      "@sendero/tools/pricing": ["./packages/tools/src/pricing.ts"],
+      "@sendero/tools/types": ["./packages/tools/src/types.ts"]
     },
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
     "target": "ES2020"
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ],
+  "include": ["packages/**/*.ts", "packages/**/*.tsx"],
   "exclude": [
     "node_modules",
-    "scripts"
+    "scripts",
+    "apps",
+    "lib-deprecated",
+    "**/node_modules",
+    "**/.next",
+    "**/dist"
   ]
 }

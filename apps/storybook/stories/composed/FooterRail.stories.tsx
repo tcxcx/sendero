@@ -38,12 +38,12 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          "The persistent bottom rail. Shows treasury state, Arc block number, balance, and live meter totals. Imported as-is from `components/ui.tsx` — this story wraps it in a fixture-seeded provider rather than rewriting.",
+          'The persistent bottom rail. Shows treasury state, Arc block number, balance, and live meter totals. Imported as-is from `components/ui.tsx` — this story wraps it in a fixture-seeded provider rather than rewriting.',
       },
     },
   },
   decorators: [
-    (Story) => (
+    Story => (
       <WithFixtures>
         <div style={{ minHeight: 240, position: 'relative', padding: 24 }}>
           <Story />
@@ -61,7 +61,7 @@ export const Idle: Story = {
 
 export const Settling: Story = {
   decorators: [
-    (Story) => {
+    Story => {
       React.useLayoutEffect(() => {
         useSendero.setState({ settlement: { phase: 'broadcasting' } } as any);
       }, []);
@@ -73,7 +73,7 @@ export const Settling: Story = {
 
 export const Settled: Story = {
   decorators: [
-    (Story) => {
+    Story => {
       React.useLayoutEffect(() => {
         useSendero.setState({
           settlement: { phase: 'done' } as any,

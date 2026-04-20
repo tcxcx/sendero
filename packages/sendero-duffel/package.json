@@ -1,0 +1,17 @@
+{
+  "name": "@sendero/duffel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — Duffel flights + hotels adapter.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@sendero/env": "workspace:*"
+  },
+  "peerDependencies": {
+    "@duffel/api": "^4.0.0"
+  }
+}

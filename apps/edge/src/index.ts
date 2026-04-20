@@ -43,10 +43,10 @@ app.use(
       'X-Signature-Timestamp',
     ],
     allowMethods: ['GET', 'POST', 'OPTIONS'],
-  }),
+  })
 );
 
-app.get('/', (c) =>
+app.get('/', c =>
   c.json({
     name: '@sendero/edge',
     version: '0.1.0',
@@ -54,14 +54,14 @@ app.get('/', (c) =>
       'Sendero multi-surface edge worker. MCP + WhatsApp + Slack + Discord from one tool registry.',
     surfaces: ['/mcp', '/whatsapp', '/slack', '/discord', '/tools'],
     toolCount: toolList.length,
-    tools: toolList.map((t) => t.name),
-  }),
+    tools: toolList.map(t => t.name),
+  })
 );
 
-app.get('/llms.txt', (c) => {
+app.get('/llms.txt', c => {
   c.header('Content-Type', 'text/plain; charset=utf-8');
   return c.body(
-    `# Sendero edge\n\n> Edge worker serving ${toolList.length} AI tools over MCP, WhatsApp, Slack, and Discord. Same registry (@sendero/tools) powers the Next.js web app.\n\n## Tools\n${toolList.map((t) => `- ${t.name} — ${t.description.split('. ')[0]}`).join('\n')}\n`,
+    `# Sendero edge\n\n> Edge worker serving ${toolList.length} AI tools over MCP, WhatsApp, Slack, and Discord. Same registry (@sendero/tools) powers the Next.js web app.\n\n## Tools\n${toolList.map(t => `- ${t.name} — ${t.description.split('. ')[0]}`).join('\n')}\n`
   );
 });
 
@@ -78,8 +78,6 @@ mountPaidTools(app);
  * package which uses `@hono/node-server` compat under the hood.
  */
 // eslint-disable-next-line no-console
-console.log(
-  `[sendero/edge] ready · surfaces: / · /mcp · /whatsapp · /slack · /discord · /tools`,
-);
+console.log(`[sendero/edge] ready · surfaces: / · /mcp · /whatsapp · /slack · /discord · /tools`);
 
 export default app;

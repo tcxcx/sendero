@@ -71,9 +71,7 @@ const inputSchema = z.object({
       priceUsd: z.number(),
       carrierIata: z.string().optional(),
       durationHours: z.number().optional(),
-      cabin: z
-        .enum(['economy', 'premium_economy', 'business', 'first'])
-        .optional(),
+      cabin: z.enum(['economy', 'premium_economy', 'business', 'first']).optional(),
       supplierId: z.string().optional(),
       pricePerNightUsd: z.number().optional(),
     })
@@ -121,9 +119,7 @@ export const checkPolicyTool: ToolDef = {
 
     if (offer.kind === 'flight') {
       if (offer.priceUsd > policy.maxFlightUsd) {
-        reasons.push(
-          `price_exceeds_max: ${offer.priceUsd} > ${policy.maxFlightUsd}`,
-        );
+        reasons.push(`price_exceeds_max: ${offer.priceUsd} > ${policy.maxFlightUsd}`);
       }
       if (
         offer.durationHours &&
@@ -132,7 +128,7 @@ export const checkPolicyTool: ToolDef = {
         rankCabin(offer.cabin) < rankCabin(policy.intlCabinRequired)
       ) {
         reasons.push(
-          `cabin_below_policy: ${offer.cabin} < ${policy.intlCabinRequired} for ${offer.durationHours}h intl`,
+          `cabin_below_policy: ${offer.cabin} < ${policy.intlCabinRequired} for ${offer.durationHours}h intl`
         );
       }
       if (
@@ -141,25 +137,18 @@ export const checkPolicyTool: ToolDef = {
         !policy.preferredCarriers.includes(offer.carrierIata)
       ) {
         warnings.push(
-          `carrier_not_preferred: ${offer.carrierIata} not in [${policy.preferredCarriers.join(',')}]`,
+          `carrier_not_preferred: ${offer.carrierIata} not in [${policy.preferredCarriers.join(',')}]`
         );
       }
       if (offer.priceUsd > policy.requireApproverOverUsd) {
-        warnings.push(
-          `requires_approver_above: ${policy.requireApproverOverUsd}`,
-        );
+        warnings.push(`requires_approver_above: ${policy.requireApproverOverUsd}`);
       }
     } else if (offer.kind === 'hotel') {
       const ppn = offer.pricePerNightUsd ?? offer.priceUsd;
       if (ppn > policy.maxNightUsd) {
-        reasons.push(
-          `per_night_exceeds_max: ${ppn} > ${policy.maxNightUsd}`,
-        );
+        reasons.push(`per_night_exceeds_max: ${ppn} > ${policy.maxNightUsd}`);
       }
-      if (
-        offer.supplierId &&
-        policy.blacklistSuppliers.includes(offer.supplierId)
-      ) {
+      if (offer.supplierId && policy.blacklistSuppliers.includes(offer.supplierId)) {
         reasons.push(`supplier_blacklisted: ${offer.supplierId}`);
       }
     }
@@ -176,11 +165,13 @@ export const checkPolicyTool: ToolDef = {
 
 function rankCabin(c: string): number {
   return (
-    ({
-      economy: 0,
-      premium_economy: 1,
-      business: 2,
-      first: 3,
-    } as const)[c as keyof any] ?? 0
+    (
+      {
+        economy: 0,
+        premium_economy: 1,
+        business: 2,
+        first: 3,
+      } as const
+    )[c as keyof any] ?? 0
   );
 }

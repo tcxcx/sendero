@@ -21,7 +21,7 @@ const config: StorybookConfig = {
   typescript: {
     reactDocgen: 'react-docgen-typescript',
   },
-  viteFinal: async (cfg) =>
+  viteFinal: async cfg =>
     mergeConfig(cfg, {
       resolve: {
         alias: {

@@ -87,7 +87,7 @@ function saveEnvUpdates(updates: Record<string, string>): void {
   fs.writeFileSync(ENV_LOCAL, out + '\n', 'utf8');
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 // ─── Progress tracking ──────────────────────────────────────────────────────
 
@@ -115,9 +115,7 @@ async function main() {
   const apiKey = env.CIRCLE_API_KEY;
   const entitySecret = env.CIRCLE_ENTITY_SECRET || env.CIRCLE_ENTITY_SECRET_CIPHERTEXT;
   if (!apiKey || !entitySecret) {
-    throw new Error(
-      'CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET must be set in .env.local',
-    );
+    throw new Error('CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET must be set in .env.local');
   }
 
   const circle = initiateDeveloperControlledWalletsClient({ apiKey, entitySecret });
@@ -161,9 +159,7 @@ async function main() {
   console.log('\n── Pre-flight: treasury balance ──');
   console.log(`  Treasury wallet: ${treasuryAddress}`);
   const balances = await circle.getWalletTokenBalance({ id: treasuryWalletId! });
-  const usdc = (balances.data as any)?.tokenBalances?.find(
-    (b: any) => b.token?.symbol === 'USDC',
-  );
+  const usdc = (balances.data as any)?.tokenBalances?.find((b: any) => b.token?.symbol === 'USDC');
   const usdcAmount = parseFloat(usdc?.amount ?? '0');
   console.log(`  Treasury USDC: ${usdcAmount}`);
   if (usdcAmount < 30) {
@@ -177,7 +173,7 @@ async function main() {
     https://faucet.circle.com  (select "Arc Testnet" + "USDC")
 
   After funding, re-run this script (it will pick up where it left off).
-`,
+`
     );
     process.exit(1);
   }
@@ -188,10 +184,8 @@ async function main() {
     { id: string; address: string }
   > = {} as any;
 
-  const haveProvider =
-    env.SENDERO_PROVIDER_WALLET_ID && env.SENDERO_PROVIDER_ADDRESS;
-  const haveClient =
-    env.DEMO_CLIENT_WALLET_ID && env.DEMO_CLIENT_ADDRESS;
+  const haveProvider = env.SENDERO_PROVIDER_WALLET_ID && env.SENDERO_PROVIDER_ADDRESS;
+  const haveClient = env.DEMO_CLIENT_WALLET_ID && env.DEMO_CLIENT_ADDRESS;
   const haveAux1 = env.AUX_VALIDATOR_1_WALLET_ID && env.AUX_VALIDATOR_1_ADDRESS;
   const haveAux2 = env.AUX_VALIDATOR_2_WALLET_ID && env.AUX_VALIDATOR_2_ADDRESS;
 
@@ -248,7 +242,12 @@ async function main() {
   const USDC_TOKEN_ADDR = '0x3600000000000000000000000000000000000000';
   const funding: { from: string; to: string; amount: string; label: string }[] = [
     { from: treasuryAddress, to: wallets.provider.address, amount: '2', label: 'provider gas' },
-    { from: treasuryAddress, to: wallets.demoClient.address, amount: '20', label: 'demo-client escrow' },
+    {
+      from: treasuryAddress,
+      to: wallets.demoClient.address,
+      amount: '20',
+      label: 'demo-client escrow',
+    },
     { from: treasuryAddress, to: wallets.aux1.address, amount: '0.5', label: 'aux-1 gas' },
     { from: treasuryAddress, to: wallets.aux2.address, amount: '0.5', label: 'aux-2 gas' },
   ];
@@ -256,10 +255,17 @@ async function main() {
   for (const t of funding) {
     // Skip if destination already has ≥ target
     const dstBalances = await circle.getWalletTokenBalance({
-      id: t === funding[0] ? wallets.provider.id : t === funding[1] ? wallets.demoClient.id : t === funding[2] ? wallets.aux1.id : wallets.aux2.id,
+      id:
+        t === funding[0]
+          ? wallets.provider.id
+          : t === funding[1]
+            ? wallets.demoClient.id
+            : t === funding[2]
+              ? wallets.aux1.id
+              : wallets.aux2.id,
     });
     const dstUsdc = (dstBalances.data as any)?.tokenBalances?.find(
-      (b: any) => b.token?.symbol === 'USDC',
+      (b: any) => b.token?.symbol === 'USDC'
     );
     if (parseFloat(dstUsdc?.amount ?? '0') >= parseFloat(t.amount)) {
       console.log(`  ⏭  ${t.label} already funded (${dstUsdc.amount} USDC)`);
@@ -318,7 +324,11 @@ async function main() {
   console.log('\n── Seeding reputation (~50 events, ~3 min) ──');
   const progress = loadSeedProgress();
   const validators: { address: string; walletAddress: string; label: string }[] = [
-    { address: wallets.demoClient.address, walletAddress: wallets.demoClient.address, label: 'demo-client' },
+    {
+      address: wallets.demoClient.address,
+      walletAddress: wallets.demoClient.address,
+      label: 'demo-client',
+    },
     { address: wallets.aux1.address, walletAddress: wallets.aux1.address, label: 'aux-1' },
     { address: wallets.aux2.address, walletAddress: wallets.aux2.address, label: 'aux-2' },
   ];
@@ -347,7 +357,7 @@ async function main() {
         progress.totalCompleted++;
         saveSeedProgress(progress);
         process.stdout.write(
-          `\r  ${validator.label} ${i + 1}/${target}  score=${score} tag=${tag}   `,
+          `\r  ${validator.label} ${i + 1}/${target}  score=${score} tag=${tag}   `
         );
       } catch (e) {
         console.error(`\n  ✗ ${validator.label} #${i}: ${(e as Error).message}`);
@@ -371,12 +381,10 @@ async function main() {
   console.log(`    SENDERO_AGENT_ID=${agentId}`);
   console.log(`    SENDERO_PROVIDER_ADDRESS=${wallets.provider.address}`);
   console.log(`    DEMO_CLIENT_ADDRESS=${wallets.demoClient.address}`);
-  console.log(
-    `    Arcscan: https://testnet.arcscan.app/address/${IDENTITY_REGISTRY}`,
-  );
+  console.log(`    Arcscan: https://testnet.arcscan.app/address/${IDENTITY_REGISTRY}`);
 }
 
-main().catch((err) => {
+main().catch(err => {
   console.error('\n✗ bootstrap failed:', err?.message ?? err);
   process.exit(1);
 });

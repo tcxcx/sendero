@@ -1,27 +1,122 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "daemon": true,
+  "globalDependencies": ["**/.env", "**/.env.local", ".mise.toml"],
   "globalEnv": [
     "NODE_ENV",
+    "VERCEL",
     "VERCEL_ENV",
-    "NEXT_PUBLIC_SENDERO_EDGE_URL",
-    "NEXT_PUBLIC_CIRCLE_CLIENT_KEY",
-    "NEXT_PUBLIC_CIRCLE_CLIENT_URL",
+    "VERCEL_URL",
+    "CI",
+    "SKIP_ENV_VALIDATION",
     "DATABASE_URL",
     "DIRECT_URL",
-    "SENDERO_DB_DRIVER"
+    "SENDERO_DB_DRIVER",
+    "CLERK_SECRET_KEY",
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+    "NEXT_PUBLIC_CLERK_SIGN_IN_URL",
+    "NEXT_PUBLIC_CLERK_SIGN_UP_URL",
+    "CIRCLE_API_KEY",
+    "CIRCLE_ENTITY_SECRET",
+    "NEXT_PUBLIC_CIRCLE_CLIENT_KEY",
+    "NEXT_PUBLIC_CIRCLE_CLIENT_URL",
+    "NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_KEY",
+    "DUFFEL_ACCESS_TOKEN",
+    "DUFFEL_API_TOKEN",
+    "TREASURY_PRIVATE_KEY",
+    "TREASURY_WALLET_ID",
+    "TREASURY_WALLET_ADDRESS",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "ARC_RPC_URL",
+    "ARC_CHAIN_ID",
+    "NEXT_PUBLIC_SENDERO_EDGE_URL",
+    "CF_API_TOKEN",
+    "CF_ACCOUNT_ID",
+    "TURBO_TOKEN",
+    "TURBO_TEAM"
   ],
   "tasks": {
+    "topo": {
+      "dependsOn": ["^topo"]
+    },
     "build": {
+      "dependsOn": ["^build", "db:generate"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env",
+        ".env.local",
+        ".env.production",
+        "!.next/**",
+        "!dist/**"
+      ],
+      "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts", "dist/**", ".vercel/output/**"]
+    },
+    "@sendero/edge#build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "outputs": ["dist/**", ".wrangler/**"]
     },
-    "typecheck": {
-      "dependsOn": ["^build"]
+    "@sendero/database#db:generate": {
+      "inputs": ["prisma/schema.prisma", "package.json"],
+      "outputs": ["node_modules/.prisma/**", "node_modules/@prisma/client/**", "src/generated/**"],
+      "cache": true
     },
-    "dev": {
+    "db:generate": {
+      "dependsOn": ["@sendero/database#db:generate"],
+      "cache": true
+    },
+    "db:migrate": {
+      "cache": false,
+      "persistent": false
+    },
+    "db:seed": {
+      "cache": false,
+      "dependsOn": ["@sendero/database#db:generate"]
+    },
+    "db:studio": {
       "cache": false,
       "persistent": true
     },
-    "lint": {}
+    "typecheck": {
+      "dependsOn": ["^build", "db:generate"],
+      "inputs": ["$TURBO_DEFAULT$", "tsconfig.json", "tsconfig.*.json", "!.next/**", "!dist/**"],
+      "outputs": ["*.tsbuildinfo", ".tsbuildinfo"]
+    },
+    "lint": {
+      "dependsOn": ["^topo"],
+      "inputs": ["$TURBO_DEFAULT$", ".eslintrc*", "eslint.config.*", "biome.json"],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^build", "db:generate"],
+      "outputs": ["coverage/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["^build", "db:generate"]
+    },
+    "@sendero/edge#dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["^build"]
+    },
+    "start": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["build"]
+    },
+    "clean": {
+      "cache": false
+    },
+    "deploy": {
+      "cache": false,
+      "dependsOn": ["build", "typecheck"]
+    },
+    "format": {
+      "dependsOn": ["^topo"],
+      "outputs": []
+    }
   }
 }

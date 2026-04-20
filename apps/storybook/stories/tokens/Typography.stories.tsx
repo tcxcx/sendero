@@ -31,7 +31,7 @@ export const GeistSansScale: Story = {
         Default UI stack. Negative tracking at display sizes; neutral at body.
       </p>
       <div style={{ display: 'grid', gap: 24 }}>
-        {sizes.map((s) => (
+        {sizes.map(s => (
           <div key={s.label}>
             <div
               style={{
@@ -67,11 +67,10 @@ export const GeistMono: Story = {
     <div style={{ padding: 32 }}>
       <h2 style={{ marginTop: 0, fontFamily: 'var(--font-sans)' }}>Geist Mono</h2>
       <p style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
-        Labels, meter readouts, tx hashes. Ships with stylistic set 05 for
-        humanist punctuation.
+        Labels, meter readouts, tx hashes. Ships with stylistic set 05 for humanist punctuation.
       </p>
       <div style={{ display: 'grid', gap: 20 }}>
-        {monoSamples.map((s) => (
+        {monoSamples.map(s => (
           <div key={s.label}>
             <div
               style={{

@@ -45,7 +45,7 @@ export async function getClerkSessionNext(): Promise<{
         displayName: cu.fullName || cu.username || 'traveler',
         imageUrl: cu.imageUrl ?? null,
         role: clerkRoleToSendero(orgRole),
-        memberships: memberships.data.map((m) => ({
+        memberships: memberships.data.map(m => ({
           tenantId: m.organization.id,
           role: clerkRoleToSendero(m.role),
         })),
@@ -62,11 +62,10 @@ export async function getClerkSessionNext(): Promise<{
       slug: org.slug ?? org.id,
       displayName: org.name,
       billingTier:
-        ((org.publicMetadata?.billingTier as string | undefined) as
+        (org.publicMetadata?.billingTier as string | undefined as
           | SenderoTenant['billingTier']
           | undefined) ?? 'free',
-      parentTenantId:
-        (org.publicMetadata?.parentTenantId as string | null) ?? null,
+      parentTenantId: (org.publicMetadata?.parentTenantId as string | null) ?? null,
       createdAt: new Date(org.createdAt).toISOString(),
     };
   }

@@ -20,7 +20,6 @@ import ws from 'ws';
 
 // Required for Node runtimes where global WebSocket isn't available.
 if (typeof globalThis.WebSocket === 'undefined') {
-  // @ts-expect-error — runtime polyfill
   neonConfig.webSocketConstructor = ws;
 }
 
@@ -38,8 +37,8 @@ type GlobalWithPrisma = typeof globalThis & {
 const g = globalThis as GlobalWithPrisma;
 
 function makeClient(): PrismaClient {
-  const driver = process.env.SENDERO_DB_DRIVER
-    ?? (process.env.VERCEL_ENV === 'production' ? 'neon' : 'node');
+  const driver =
+    process.env.SENDERO_DB_DRIVER ?? (process.env.VERCEL_ENV === 'production' ? 'neon' : 'node');
 
   if (driver === 'neon' && DATABASE_URL) {
     const pool = new Pool({ connectionString: DATABASE_URL });

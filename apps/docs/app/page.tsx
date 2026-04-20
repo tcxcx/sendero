@@ -27,8 +27,7 @@ export default function HomePage() {
           margin: '16px 0 24px',
         }}
       >
-        Book flights.{' '}
-        <span style={{ color: 'var(--ink)' }}>Settle on-chain.</span>
+        Book flights. <span style={{ color: 'var(--ink)' }}>Settle on-chain.</span>
       </h1>
       <p
         style={{
@@ -38,9 +37,8 @@ export default function HomePage() {
           marginBottom: 48,
         }}
       >
-        Sendero exposes {toolCount} MCP tools — search flights, quote FX,
-        settle a 4-way commission split — each one priced in sub-cent USDC
-        via x402 nanopayments on Circle Arc.
+        Sendero exposes {toolCount} MCP tools — search flights, quote FX, settle a 4-way commission
+        split — each one priced in sub-cent USDC via x402 nanopayments on Circle Arc.
       </p>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <Link

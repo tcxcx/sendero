@@ -27,18 +27,15 @@ export {
   sendUserOp,
   isPasskeyConfigured,
   passkeyConfigIssue,
-} from '../../../lib/user-wallet';
+} from '@sendero/circle/modular-wallets';
 export type {
   UserWallet,
   StoredCredential,
   UserProfile,
-} from '../../../lib/user-wallet';
+} from '@sendero/circle/modular-wallets';
 
 // Re-export for callers that need to recover / debug deterministic names.
-export function stableWalletName(credential: {
-  id: string;
-  publicKey: Hex;
-}): string {
+export function stableWalletName(credential: { id: string; publicKey: Hex }): string {
   const idSlug = credential.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
   const pkSuffix = credential.publicKey.slice(-8);
   return `sendero-${idSlug}-${pkSuffix}`;
@@ -80,15 +77,11 @@ export type LinkMscaInput = z.infer<typeof LinkMscaInput>;
 export async function linkMscaToClerkUser(
   prisma: {
     userWallet: {
-      upsert: (args: {
-        where: { clerkUserId: string };
-        create: any;
-        update: any;
-      }) => Promise<any>;
+      upsert: (args: { where: { clerkUserId: string }; create: any; update: any }) => Promise<any>;
     };
   },
   input: LinkMscaInput,
-  opts: { tenantId?: string | null } = {},
+  opts: { tenantId?: string | null } = {}
 ) {
   const parsed = LinkMscaInput.parse(input);
   return prisma.userWallet.upsert({
@@ -118,7 +111,7 @@ export async function getMscaForClerkUser(
       findUnique: (args: { where: { clerkUserId: string } }) => Promise<any>;
     };
   },
-  clerkUserId: string,
+  clerkUserId: string
 ) {
   return prisma.userWallet.findUnique({ where: { clerkUserId } });
 }

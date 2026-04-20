@@ -49,12 +49,10 @@ export function logMeter(event: MeterEvent): void {
 
 export function getMeterEvents(since?: number): MeterEvent[] {
   if (since === undefined) return _events.slice();
-  return _events.filter((e) => e.at >= since);
+  return _events.filter(e => e.at >= since);
 }
 
-export function subscribeMeter(
-  listener: (e: MeterEvent) => void,
-): () => void {
+export function subscribeMeter(listener: (e: MeterEvent) => void): () => void {
   _listeners.add(listener);
   return () => {
     _listeners.delete(listener);
@@ -96,9 +94,7 @@ export function meterSummary(): MeterSummary {
     if (e.status === 'paid') {
       paidCalls++;
       const [whole, frac = ''] = e.priceUsdc.split('.');
-      const atomic = BigInt(
-        (whole || '0') + (frac + '000000').slice(0, 6),
-      );
+      const atomic = BigInt((whole || '0') + (frac + '000000').slice(0, 6));
       totalMicro += atomic;
       const bucket = byTool[e.toolName] || { count: 0, micro: 0n };
       bucket.count++;
@@ -114,9 +110,7 @@ export function meterSummary(): MeterSummary {
   const totalUsdc = (Number(totalMicro) / 1e6).toFixed(6);
   const totalCount = paidCalls + rejectedCalls + freeCalls;
   const ethereumTotal = totalCount * ETHEREUM_MAINNET_PER_CALL_USD;
-  const marginFactor = totalMicro > 0n
-    ? (ethereumTotal * 1e6) / Number(totalMicro)
-    : 0;
+  const marginFactor = totalMicro > 0n ? (ethereumTotal * 1e6) / Number(totalMicro) : 0;
 
   return {
     totalUsdc,
@@ -128,7 +122,7 @@ export function meterSummary(): MeterSummary {
       Object.entries(byTool).map(([k, v]) => [
         k,
         { count: v.count, usdc: (Number(v.micro) / 1e6).toFixed(6) },
-      ]),
+      ])
     ),
     ethereum: {
       perCallUsd: ETHEREUM_MAINNET_PER_CALL_USD,

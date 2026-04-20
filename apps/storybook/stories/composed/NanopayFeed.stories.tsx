@@ -26,13 +26,7 @@ type Summary = {
   ethereum: { perCallUsd: number; totalUsd: number; marginFactor: number };
 };
 
-function NanopayFeed({
-  summary,
-  events,
-}: {
-  summary: Summary;
-  events: MeterEvent[];
-}) {
+function NanopayFeed({ summary, events }: { summary: Summary; events: MeterEvent[] }) {
   return (
     <div
       style={{
@@ -75,8 +69,8 @@ function NanopayFeed({
             color: 'var(--text-faint)',
           }}
         >
-          On Ethereum mainnet: ${summary.ethereum.totalUsd.toFixed(2)} — we
-          charge {summary.ethereum.marginFactor.toFixed(0)}× less.
+          On Ethereum mainnet: ${summary.ethereum.totalUsd.toFixed(2)} — we charge{' '}
+          {summary.ethereum.marginFactor.toFixed(0)}× less.
         </div>
       </div>
 
@@ -94,26 +88,29 @@ function NanopayFeed({
           Recent
         </div>
         <div style={{ display: 'grid', gap: 4 }}>
-          {events.slice(-8).reverse().map((e, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                color:
-                  e.status === 'rejected'
-                    ? 'var(--accent-rose)'
-                    : e.status === 'free'
-                      ? 'var(--text-dim)'
-                      : 'var(--text)',
-              }}
-            >
-              <span>{e.toolName}</span>
-              <span style={{ color: 'var(--ink)' }}>${e.priceUsdc}</span>
-            </div>
-          ))}
+          {events
+            .slice(-8)
+            .reverse()
+            .map((e, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color:
+                    e.status === 'rejected'
+                      ? 'var(--accent-rose)'
+                      : e.status === 'free'
+                        ? 'var(--text-dim)'
+                        : 'var(--text)',
+                }}
+              >
+                <span>{e.toolName}</span>
+                <span style={{ color: 'var(--ink)' }}>${e.priceUsdc}</span>
+              </div>
+            ))}
         </div>
       </div>
     </div>

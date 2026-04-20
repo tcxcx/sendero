@@ -1,0 +1,15 @@
+{
+  "name": "@sendero/erc8183",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — ERC-8183 agentic commerce escrow client (browser-safe, encodeFunctionData only).",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "peerDependencies": {
+    "viem": "^2.21.0"
+  }
+}

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { transferViaGateway, GATEWAY_CHAINS } from '../../../lib/gateway';
+import { transferViaGateway, GATEWAY_CHAINS } from '@sendero/circle/gateway';
 import type { ToolDef } from './types';
 
 const GATEWAY_CHAIN_KEYS = Object.keys(GATEWAY_CHAINS);
@@ -8,10 +8,7 @@ const inputSchema = z.object({
   from: z.string(),
   to: z.string(),
   amount: z.string().describe('Decimal USDC amount, e.g. "5.00"'),
-  recipient: z
-    .string()
-    .optional()
-    .describe('0x-address on destination (defaults to treasury)'),
+  recipient: z.string().optional().describe('0x-address on destination (defaults to treasury)'),
 });
 
 export const gatewayTransferTool: ToolDef = {

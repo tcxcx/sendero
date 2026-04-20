@@ -42,33 +42,26 @@ interface WhatsAppWebhookPayload {
   }>;
 }
 
-async function sendMessage(
-  phoneNumberId: string,
-  to: string,
-  body: string,
-): Promise<void> {
+async function sendMessage(phoneNumberId: string, to: string, body: string): Promise<void> {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   if (!token) {
     // eslint-disable-next-line no-console
     console.log(`[whatsapp] (stub) → ${to}: ${body}`);
     return;
   }
-  const res = await fetch(
-    `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body },
-      }),
+  const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
     },
-  );
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'text',
+      text: { body },
+    }),
+  });
   if (!res.ok) {
     // eslint-disable-next-line no-console
     console.error('[whatsapp] send failed:', res.status, await res.text());
@@ -83,14 +76,14 @@ async function inferReply(text: string, senderPhone: string): Promise<string> {
   // Log for observability — lands in the edge worker logs.
   // eslint-disable-next-line no-console
   console.log(
-    `[whatsapp] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`,
+    `[whatsapp] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`
   );
   return result.text;
 }
 
 export function mountWhatsApp(app: Hono): void {
   // Meta webhook verification handshake.
-  app.get('/whatsapp', (c) => {
+  app.get('/whatsapp', c => {
     const mode = c.req.query('hub.mode');
     const token = c.req.query('hub.verify_token');
     const challenge = c.req.query('hub.challenge');
@@ -101,7 +94,7 @@ export function mountWhatsApp(app: Hono): void {
     return c.text('forbidden', 403);
   });
 
-  app.post('/whatsapp', async (c) => {
+  app.post('/whatsapp', async c => {
     const payload = (await c.req.json()) as WhatsAppWebhookPayload;
 
     for (const entry of payload.entry ?? []) {

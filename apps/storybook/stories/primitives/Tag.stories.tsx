@@ -17,9 +17,17 @@ export function Tag({
   children: React.ReactNode;
 }) {
   const styles: Record<Variant, React.CSSProperties> = {
-    default: { color: 'var(--text-dim)', border: '1px solid var(--border)', background: 'transparent' },
+    default: {
+      color: 'var(--text-dim)',
+      border: '1px solid var(--border)',
+      background: 'transparent',
+    },
     ink: { color: 'var(--ink)', border: '1px solid var(--ink)', background: 'transparent' },
-    'solid-ink': { color: 'var(--bg-elev)', border: '1px solid var(--ink)', background: 'var(--ink)' },
+    'solid-ink': {
+      color: 'var(--bg-elev)',
+      border: '1px solid var(--ink)',
+      background: 'var(--ink)',
+    },
     usdc: { color: 'var(--usdc)', border: '1px solid var(--usdc)', background: 'transparent' },
     eurc: { color: 'var(--eurc)', border: '1px solid var(--eurc)', background: 'transparent' },
   };

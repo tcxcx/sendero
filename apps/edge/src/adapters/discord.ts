@@ -28,10 +28,7 @@ interface DiscordInteraction {
   user?: { id: string; username: string };
 }
 
-async function inferReply(
-  text: string,
-  user: { id: string; name: string },
-): Promise<string> {
+async function inferReply(text: string, user: { id: string; name: string }): Promise<string> {
   if (!text.trim()) {
     return 'Sendero · pass a prompt. E.g. `/sendero text:book SFO→LHR May 10`.';
   }
@@ -41,13 +38,13 @@ async function inferReply(
   });
   // eslint-disable-next-line no-console
   console.log(
-    `[discord] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`,
+    `[discord] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`
   );
   return result.text;
 }
 
 export function mountDiscord(app: Hono): void {
-  app.post('/discord', async (c) => {
+  app.post('/discord', async c => {
     const payload = (await c.req.json()) as DiscordInteraction;
 
     if (payload.type === INTERACTION_TYPE_PING) {
@@ -55,12 +52,13 @@ export function mountDiscord(app: Hono): void {
     }
 
     if (payload.type === INTERACTION_TYPE_APPLICATION_COMMAND) {
-      const textOption = payload.data?.options?.find((o) => o.name === 'text');
+      const textOption = payload.data?.options?.find(o => o.name === 'text');
       const text = String(textOption?.value ?? '');
-      const user = payload.member?.user ?? payload.user ?? {
-        id: 'unknown',
-        username: 'traveler',
-      };
+      const user = payload.member?.user ??
+        payload.user ?? {
+          id: 'unknown',
+          username: 'traveler',
+        };
       const reply = await inferReply(text, {
         id: user.id,
         name: user.username,
@@ -71,6 +69,9 @@ export function mountDiscord(app: Hono): void {
       });
     }
 
-    return c.json({ type: CALLBACK_TYPE_CHANNEL_MESSAGE, data: { content: 'Unsupported interaction type.' } });
+    return c.json({
+      type: CALLBACK_TYPE_CHANNEL_MESSAGE,
+      data: { content: 'Unsupported interaction type.' },
+    });
   });
 }

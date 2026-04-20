@@ -21,7 +21,7 @@ type PrismaClientLike = Parameters<typeof getMscaForClerkUser>[0];
  */
 export async function getServerAuth(
   prisma: PrismaClientLike,
-  _req?: NextRequest,
+  _req?: NextRequest
 ): Promise<SenderoAuth> {
   const { user, tenant, clerkUserId } = await getClerkSessionNext();
   if (!clerkUserId) {
@@ -53,12 +53,14 @@ export async function getServerAuth(
  */
 export async function getServerAuthHono(
   c: Context,
-  prisma: PrismaClientLike,
-): Promise<Pick<SenderoAuth, 'msca'> & {
-  clerkUserId: string | null;
-  orgId: string | null;
-  orgRole: string | null;
-}> {
+  prisma: PrismaClientLike
+): Promise<
+  Pick<SenderoAuth, 'msca'> & {
+    clerkUserId: string | null;
+    orgId: string | null;
+    orgRole: string | null;
+  }
+> {
   const { clerkUserId, orgId, orgRole } = await getClerkSessionHono(c);
   if (!clerkUserId) return { msca: null, clerkUserId: null, orgId: null, orgRole: null };
 

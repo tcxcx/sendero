@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { getAppKit, getTreasuryAdapter, summarizeBridge } from '../../../lib/appkit';
+import { getAppKit, getTreasuryAdapter, summarizeBridge } from '@sendero/circle/app-kit';
 import type { BridgeParams } from '@circle-fin/app-kit';
-import { BRIDGE_CHAINS } from '../../../lib/bridge-chains';
+import { BRIDGE_CHAINS } from '@sendero/arc/bridge-chains';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({

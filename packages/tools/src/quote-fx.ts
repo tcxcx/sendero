@@ -36,12 +36,8 @@ function drift(base: number): number {
 }
 
 const inputSchema = z.object({
-  fromCurrency: z
-    .string()
-    .describe('ISO 4217 code of the local currency on the invoice.'),
-  toCurrency: z
-    .enum(['USDC', 'USD', 'EURC'])
-    .describe('Settlement currency (USDC / USD / EURC).'),
+  fromCurrency: z.string().describe('ISO 4217 code of the local currency on the invoice.'),
+  toCurrency: z.enum(['USDC', 'USD', 'EURC']).describe('Settlement currency (USDC / USD / EURC).'),
   amount: z.number().describe('Local-currency amount to convert.'),
 });
 
@@ -63,12 +59,7 @@ export const quoteFxTool: ToolDef = {
     const from = String(input.fromCurrency).toUpperCase();
     const to = String(input.toCurrency).toUpperCase();
     const fromRate = SNAPSHOT[from];
-    const toRate =
-      to === 'USDC' || to === 'USD'
-        ? 1
-        : to === 'EURC'
-          ? SNAPSHOT.EUR ?? 1
-          : 1;
+    const toRate = to === 'USDC' || to === 'USD' ? 1 : to === 'EURC' ? (SNAPSHOT.EUR ?? 1) : 1;
     if (!fromRate) {
       return { error: `unsupported_currency: ${from}` };
     }

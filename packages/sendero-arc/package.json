@@ -1,0 +1,22 @@
+{
+  "name": "@sendero/arc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Arc L2 chain config + ERC-8004 identity reads + ERC-8183 job escrow + bridge chain registry.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./chain": "./src/chain.ts",
+    "./identity": "./src/identity.ts",
+    "./jobs": "./src/jobs.ts",
+    "./bridge-chains": "./src/bridge-chains.ts"
+  },
+  "dependencies": {
+    "@sendero/env": "workspace:*"
+  },
+  "peerDependencies": {
+    "@circle-fin/developer-controlled-wallets": "^8.0.0",
+    "viem": "^2.21.0"
+  }
+}

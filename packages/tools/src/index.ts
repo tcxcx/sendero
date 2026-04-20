@@ -39,6 +39,4 @@ export const toolList: ToolDef[] = [
 ];
 
 /** Keyed registry for O(1) lookup by name. */
-export const tools: Record<string, ToolDef> = Object.fromEntries(
-  toolList.map((t) => [t.name, t]),
-);
+export const tools: Record<string, ToolDef> = Object.fromEntries(toolList.map(t => [t.name, t]));

@@ -1,0 +1,17 @@
+{
+  "name": "@sendero/nanopayments",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — atomic commission fan-out settlement primitive (canonicalSplit, settleCommissionSplit) on Arc.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@sendero/env": "workspace:*"
+  },
+  "peerDependencies": {
+    "viem": "^2.21.0"
+  }
+}

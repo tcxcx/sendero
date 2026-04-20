@@ -11,11 +11,7 @@
 
 import { create } from 'zustand';
 import type { Hex } from 'viem';
-import type {
-  UserWallet,
-  StoredCredential,
-  UserProfile,
-} from '../../../lib/user-wallet';
+import type { UserWallet, StoredCredential, UserProfile } from '@sendero/circle/modular-wallets';
 
 interface MscaState {
   wallet: UserWallet | null;
@@ -28,13 +24,13 @@ interface MscaState {
   clear: () => void;
 }
 
-export const useMscaStore = create<MscaState>((set) => ({
+export const useMscaStore = create<MscaState>(set => ({
   wallet: null,
   credential: null,
   profile: null,
   address: null,
   isRestoring: true,
-  setWallet: (wallet) =>
+  setWallet: wallet =>
     set(
       wallet
         ? {
@@ -54,9 +50,9 @@ export const useMscaStore = create<MscaState>((set) => ({
             profile: null,
             address: null,
             isRestoring: false,
-          },
+          }
     ),
-  setRestoring: (isRestoring) => set({ isRestoring }),
+  setRestoring: isRestoring => set({ isRestoring }),
   clear: () =>
     set({
       wallet: null,

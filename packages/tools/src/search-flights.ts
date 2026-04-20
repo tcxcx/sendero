@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { searchFlights } from '../../../lib/duffel';
+import { searchFlights } from '@sendero/duffel';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -8,9 +8,7 @@ const inputSchema = z.object({
   departureDate: z.string(),
   returnDate: z.string().optional(),
   passengers: z.number().int().min(1).max(9).default(1),
-  cabinClass: z
-    .enum(['economy', 'premium_economy', 'business', 'first'])
-    .default('economy'),
+  cabinClass: z.enum(['economy', 'premium_economy', 'business', 'first']).default('economy'),
 });
 
 export const searchFlightsTool: ToolDef = {

@@ -6,7 +6,27 @@ B2B2C travel platform for the **Circle Arc hackathon** — partners plug in thei
 
 > This app is intentionally **standalone** inside the monorepo so it can be extracted to its own repo for submission. Zero `@bu/*` workspace imports.
 
-## Running
+## One-liner setup (mise)
+
+All tool versions (bun 1.3.10, node 22.18, prisma 5.22) are pinned in
+[`.mise.toml`](./.mise.toml) and auto-activate on `cd`.
+
+```bash
+curl https://mise.run | sh                                   # install mise
+eval "$(mise activate zsh)"                                  # or bash
+mise install && mise run bootstrap                           # installs tools + deps + prisma client
+lefthook install --force                                     # enable git hooks
+```
+
+Then:
+
+```bash
+mise run dev              # full stack (web + edge)
+mise run dev:web          # web only → http://localhost:3010
+mise run typecheck        # turbo run typecheck
+```
+
+## Running (legacy / no mise)
 
 ```bash
 bun install     # or npm/pnpm/yarn

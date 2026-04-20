@@ -116,28 +116,10 @@ async function main() {
   console.log(`[seed] policy → ${policy.slug}`);
 
   // 7. Supplier (British Airways, public) -----------------------------------
-  const supplier = await prisma.supplier.upsert({
-    where: { tenantId_iataCode: { tenantId: null as unknown as string, iataCode: 'BA' } },
-    create: {
-      tenantId: null,
-      kind: 'airline',
-      visibility: 'public',
-      status: 'active',
-      name: 'British Airways',
-      iataCode: 'BA',
-      country: 'GB',
-      arcAddress: '0x2222222222222222222222222222222222222222',
-      commissionBps: 150, // 1.5%
-    },
-    update: {},
-  }).catch(async () => {
-    // Postgres treats NULL as distinct in UNIQUE constraints, so upsert by find/create.
-    const existing = await prisma.supplier.findFirst({
-      where: { iataCode: 'BA', tenantId: null },
-    });
-    if (existing) return existing;
-    return prisma.supplier.create({
-      data: {
+  const supplier = await prisma.supplier
+    .upsert({
+      where: { tenantId_iataCode: { tenantId: null as unknown as string, iataCode: 'BA' } },
+      create: {
         tenantId: null,
         kind: 'airline',
         visibility: 'public',
@@ -146,15 +128,39 @@ async function main() {
         iataCode: 'BA',
         country: 'GB',
         arcAddress: '0x2222222222222222222222222222222222222222',
-        commissionBps: 150,
+        commissionBps: 150, // 1.5%
       },
+      update: {},
+    })
+    .catch(async () => {
+      // Postgres treats NULL as distinct in UNIQUE constraints, so upsert by find/create.
+      const existing = await prisma.supplier.findFirst({
+        where: { iataCode: 'BA', tenantId: null },
+      });
+      if (existing) return existing;
+      return prisma.supplier.create({
+        data: {
+          tenantId: null,
+          kind: 'airline',
+          visibility: 'public',
+          status: 'active',
+          name: 'British Airways',
+          iataCode: 'BA',
+          country: 'GB',
+          arcAddress: '0x2222222222222222222222222222222222222222',
+          commissionBps: 150,
+        },
+      });
     });
-  });
   console.log(`[seed] supplier → ${supplier.name}`);
 
   // 8. Trip + Booking + MeterEvent -----------------------------------------
   const events: TripEvent[] = [
-    { at: new Date().toISOString(), kind: 'user_msg', data: { text: 'GRU → LHR next Tue, business' } },
+    {
+      at: new Date().toISOString(),
+      kind: 'user_msg',
+      data: { text: 'GRU → LHR next Tue, business' },
+    },
     { at: new Date().toISOString(), kind: 'tool_call', toolName: 'search_flights' },
     { at: new Date().toISOString(), kind: 'policy_check', data: { allowed: true } },
   ];
@@ -198,8 +204,20 @@ async function main() {
       totalUsd: '3200.00',
       currency: 'USD',
       segments: [
-        { from: 'GRU', to: 'LHR', carrier: 'BA', flight: 'BA246', departAt: '2026-04-28T22:45:00Z' },
-        { from: 'LHR', to: 'GRU', carrier: 'BA', flight: 'BA247', departAt: '2026-05-03T14:30:00Z' },
+        {
+          from: 'GRU',
+          to: 'LHR',
+          carrier: 'BA',
+          flight: 'BA246',
+          departAt: '2026-04-28T22:45:00Z',
+        },
+        {
+          from: 'LHR',
+          to: 'GRU',
+          carrier: 'BA',
+          flight: 'BA247',
+          departAt: '2026-05-03T14:30:00Z',
+        },
       ],
       bookedAt: new Date(),
     },
@@ -233,15 +251,39 @@ async function main() {
       confirmedAt: new Date(),
       legs: {
         create: [
-          { kind: 'supplier',  toAddress: '0x2222222222222222222222222222222222222222', amountMicroUsdc: 3_152_000_000n, index: 0, txHash: '0xdemo...01' },
-          { kind: 'agency',    toAddress: '0x3333333333333333333333333333333333333333', amountMicroUsdc: 40_000_000n,    index: 1, txHash: '0xdemo...02' },
-          { kind: 'rail',      toAddress: '0x4444444444444444444444444444444444444444', amountMicroUsdc: 5_000_000n,     index: 2, txHash: '0xdemo...03' },
-          { kind: 'validator', toAddress: '0x5555555555555555555555555555555555555555', amountMicroUsdc: 3_000_000n,     index: 3, txHash: '0xdemo...04' },
+          {
+            kind: 'supplier',
+            toAddress: '0x2222222222222222222222222222222222222222',
+            amountMicroUsdc: 3_152_000_000n,
+            index: 0,
+            txHash: '0xdemo...01',
+          },
+          {
+            kind: 'agency',
+            toAddress: '0x3333333333333333333333333333333333333333',
+            amountMicroUsdc: 40_000_000n,
+            index: 1,
+            txHash: '0xdemo...02',
+          },
+          {
+            kind: 'rail',
+            toAddress: '0x4444444444444444444444444444444444444444',
+            amountMicroUsdc: 5_000_000n,
+            index: 2,
+            txHash: '0xdemo...03',
+          },
+          {
+            kind: 'validator',
+            toAddress: '0x5555555555555555555555555555555555555555',
+            amountMicroUsdc: 3_000_000n,
+            index: 3,
+            txHash: '0xdemo...04',
+          },
         ],
       },
     },
   });
-  console.log(`[seed] settlement → ${settlement.id} (${settlement.legs?.length ?? 4} legs)`);
+  console.log(`[seed] settlement → ${settlement.id} (4 legs)`);
 
   // 10. Attestation (ERC-8004) ---------------------------------------------
   await prisma.attestation.create({
@@ -260,7 +302,7 @@ async function main() {
 }
 
 main()
-  .catch((err) => {
+  .catch(err => {
     console.error('[seed] failed', err);
     process.exit(1);
   })

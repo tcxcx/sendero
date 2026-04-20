@@ -33,8 +33,7 @@ export function pickModel(): PickedModel | null {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
-  if (forced === 'openai' && hasOpenAI)
-    return { model: openai('gpt-4o'), label: 'openai:gpt-4o' };
+  if (forced === 'openai' && hasOpenAI) return { model: openai('gpt-4o'), label: 'openai:gpt-4o' };
   if (forced === 'anthropic' && hasAnthropic)
     return {
       model: anthropic('claude-3-5-sonnet-latest'),
@@ -99,13 +98,12 @@ export interface RouteAgentResult {
  */
 export async function routeToAgent(
   text: string,
-  opts: RouteAgentOptions = {},
+  opts: RouteAgentOptions = {}
 ): Promise<RouteAgentResult> {
   const picked = pickModel();
   if (!picked) {
     return {
-      text:
-        'AI is not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY on the edge worker.',
+      text: 'AI is not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY on the edge worker.',
       steps: 0,
       provider: 'none',
       toolsCalled: [],

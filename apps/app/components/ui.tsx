@@ -1,0 +1,399 @@
+'use client';
+
+/**
+ * Sendero × Arc — shared UI primitives.
+ *
+ * One consolidated ConsoleBar replaces the old Topbar + Subbar + AgentCard
+ * row. StepRail, ErrorBanner, FooterRail unchanged.
+ */
+
+import Link from 'next/link';
+import { useSendero, deriveStep } from './store';
+import { AgentChip } from './agent-chip';
+import { WalletDropdown } from './wallet-dropdown';
+
+/* ─── ConsoleBar ────────────────────────────────────────────────────────── */
+
+export function ConsoleBar() {
+  const traveler = useSendero(s => s.traveler);
+  const status = useSendero(s => s.status);
+  const search = useSendero(s => s.search);
+  const payment = useSendero(s => s.payment);
+  const settlementPhase = useSendero(s => s.settlement.phase);
+  const onChainSettlement = useSendero(s => s.onChainSettlement);
+
+  const label = statusLabel(status, {
+    payment: !!payment,
+    settling:
+      settlementPhase !== 'idle' && settlementPhase !== 'done' && settlementPhase !== 'error',
+    onChain: !!onChainSettlement,
+  });
+
+  return (
+    <div className="cbar">
+      {/* LEFT: brand + breadcrumb nav */}
+      <div className="cbar-left">
+        <Link href="/" className="cbar-brand" aria-label="Sendero home">
+          <span className="cbar-mark" aria-hidden="true" />
+          <span className="cbar-word">SENDERO</span>
+        </Link>
+        <span className="cbar-sep">/</span>
+        <Link href="/" className="cbar-crumb">
+          Agent console
+        </Link>
+        <span className="cbar-pulse" aria-hidden="true" />
+        <span className="cbar-active">agent · active</span>
+      </div>
+
+      {/* MIDDLE: contextual status chip */}
+      <div className="cbar-mid">
+        <div className="cbar-chip">
+          <span>{label}</span>
+          {search && (
+            <>
+              <span className="cbar-arrow">›</span>
+              <span>
+                {search.origin} → {search.destination}
+              </span>
+              {search.departureDate && (
+                <>
+                  <span className="cbar-arrow">·</span>
+                  <span className="cbar-date">
+                    {short(search.departureDate)}
+                    {search.returnDate ? ` → ${short(search.returnDate)}` : ''}
+                  </span>
+                </>
+              )}
+              <span className="cbar-arrow">·</span>
+              <span className="cbar-date">{search.passengers} pax</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT: agent chip + user dropdown */}
+      <div className="cbar-right">
+        <AgentChip />
+        <WalletDropdown />
+      </div>
+
+      <style jsx>{`
+        .cbar {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          align-items: center;
+          gap: 18px;
+          padding: 10px 16px;
+          border-bottom: 1px solid var(--border);
+          background: var(--bg-elev);
+          min-height: 54px;
+        }
+        .cbar-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-family: var(--font-mono);
+          font-size: 11px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--text-dim);
+        }
+        .cbar-brand {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          text-decoration: none;
+          color: var(--ink);
+          padding: 2px 2px 2px 0;
+          letter-spacing: 0.14em;
+          font-weight: 500;
+          font-size: 12px;
+        }
+        .cbar-brand:hover .cbar-word {
+          opacity: 0.7;
+        }
+        .cbar-mark {
+          width: 10px;
+          height: 10px;
+          background: var(--ink);
+          display: inline-block;
+        }
+        .cbar-word {
+          transition: opacity 120ms;
+        }
+        .cbar-sep {
+          opacity: 0.35;
+        }
+        .cbar-crumb {
+          color: var(--text);
+          text-decoration: none;
+          padding: 2px 4px;
+          border-radius: 0;
+          transition: color 120ms;
+        }
+        .cbar-crumb:hover {
+          color: var(--ink);
+        }
+        .cbar-pulse {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--accent-green, #0cc67a);
+          margin-left: 8px;
+          animation: cbar-pulse 1.6s ease-in-out infinite;
+          flex-shrink: 0;
+        }
+        .cbar-active {
+          color: var(--accent-green, #0cc67a);
+          font-size: 10px;
+          letter-spacing: 0.12em;
+        }
+        @keyframes cbar-pulse {
+          0%, 100% { opacity: 0.45; transform: scale(0.85); }
+          50%      { opacity: 1;    transform: scale(1); }
+        }
+        .cbar-mid {
+          display: flex;
+          justify-content: center;
+        }
+        .cbar-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 5px 10px;
+          border: 1px solid var(--ink);
+          color: var(--ink);
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+        .cbar-arrow {
+          opacity: 0.4;
+        }
+        .cbar-date {
+          color: var(--text-dim);
+        }
+        .cbar-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        @media (max-width: 960px) {
+          .cbar {
+            grid-template-columns: auto 1fr auto;
+          }
+          .cbar-mid {
+            display: none;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function short(iso: string): string {
+  // 2026-05-04 → May 04
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+  } catch {
+    return iso;
+  }
+}
+
+function statusLabel(
+  status: string,
+  extras: { payment: boolean; settling: boolean; onChain: boolean }
+) {
+  if (extras.onChain) return 'confirmed · on-chain';
+  if (extras.settling) return 'settling · arc';
+  if (extras.payment) return 'paid · awaiting settlement';
+  switch (status) {
+    case 'idle':
+      return 'ready';
+    case 'searching':
+      return 'searching';
+    case 'selected':
+      return 'offers';
+    case 'holding':
+      return 'holding';
+    case 'held':
+      return 'held';
+    case 'paying':
+      return 'paying · duffel';
+    case 'confirmed':
+      return 'confirmed · on-chain';
+    case 'error':
+      return 'error';
+    default:
+      return status;
+  }
+}
+
+/* ─── StepRail ──────────────────────────────────────────────────────────── */
+
+export function StepRail() {
+  const state = useSendero();
+  const currentStep = deriveStep(state);
+
+  const steps = ['Intake', 'Search', 'Review', 'Hold', 'Pay', 'Settle'];
+  return (
+    <div className="step-rail">
+      {steps.map((name, i) => {
+        const st = i < currentStep ? 'done' : i === currentStep ? 'active' : 'pending';
+        return (
+          <div className={`step-cell ${st}`} key={name}>
+            <span className="step-dot" />
+            <span className="step-name">{name}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── ErrorBanner ──────────────────────────────────────────────────────── */
+
+export function ErrorBanner() {
+  const error = useSendero(s => s.error);
+  if (!error) return null;
+  return (
+    <div
+      className="policy-strip"
+      style={{
+        borderColor: 'color-mix(in oklab, var(--accent-rose) 35%, var(--border))',
+        background: 'color-mix(in oklab, var(--accent-rose) 5%, var(--bg-elev))',
+      }}
+    >
+      <span
+        className="ico"
+        style={{
+          color: 'var(--accent-rose)',
+          background: 'color-mix(in oklab, var(--accent-rose) 15%, transparent)',
+        }}
+      >
+        !
+      </span>
+      <span>{error}</span>
+    </div>
+  );
+}
+
+/* ─── FooterRail ──────────────────────────────────────────────────────── */
+
+import { useMeterSummary } from './use-meter';
+
+export function FooterRail() {
+  const treasury = useSendero(s => s.treasury);
+  const holdOrder = useSendero(s => s.holdOrder);
+  const settlementPhase = useSendero(s => s.settlement.phase);
+  const onChainSettlement = useSendero(s => s.onChainSettlement);
+  const { summary: meter } = useMeterSummary(1500);
+
+  const treasuryAddr = treasury?.treasuryAddress ?? null;
+  const usdc = treasury?.balances.find(b => b.symbol === 'USDC');
+  const eurc = treasury?.balances.find(b => b.symbol === 'EURC');
+  const block = treasury?.arc?.blockNumber ?? '—';
+
+  const escrowLabel = onChainSettlement
+    ? `settled`
+    : settlementPhase === 'idle' || settlementPhase === 'error'
+      ? 'idle'
+      : 'settling';
+
+  return (
+    <div className="footer-rail">
+      <div className="group">
+        <span>
+          <strong>CIRCLE</strong> · Arc L2
+        </span>
+        <span>·</span>
+        <span>
+          block <strong style={{ color: 'var(--ink)' }}>#{block}</strong>
+        </span>
+        <span>·</span>
+        <span>
+          gas <strong>{treasury?.arc?.gasPrice ? formatGwei(treasury.arc.gasPrice) : '—'}</strong>
+        </span>
+      </div>
+      <div className="group">
+        <span>
+          treasury{' '}
+          <strong style={{ color: 'var(--text)' }}>
+            {treasuryAddr ? `${treasuryAddr.slice(0, 6)}…${treasuryAddr.slice(-4)}` : '—'}
+          </strong>
+        </span>
+        <span>·</span>
+        <span>
+          balance{' '}
+          <strong style={{ color: 'var(--usdc)' }}>
+            {usdc ? `${formatAmount(usdc.amount)} USDC` : '— USDC'}
+          </strong>
+        </span>
+        <span>·</span>
+        <span>
+          <strong style={{ color: 'var(--eurc)' }}>
+            {eurc ? `${formatAmount(eurc.amount)} EURC` : '— EURC'}
+          </strong>
+        </span>
+      </div>
+      <div className="group">
+        <span>
+          escrow <strong style={{ color: 'var(--ink)' }}>{escrowLabel}</strong>
+        </span>
+        <span>·</span>
+        <span>
+          nano{' '}
+          <strong
+            style={{
+              color: (meter?.paidCalls ?? 0) >= 50 ? 'var(--accent-green)' : 'var(--ink)',
+            }}
+          >
+            {meter ? `${meter.paidCalls}/${meter.totalEvents} calls` : '—'}
+          </strong>
+        </span>
+        <span>·</span>
+        <span>
+          paid{' '}
+          <strong style={{ color: 'var(--usdc)' }}>{meter ? `$${meter.totalUsdc}` : '—'}</strong>
+        </span>
+        {meter && meter.ethereum.marginFactor > 0 && (
+          <>
+            <span>·</span>
+            <span>
+              arc vs eth{' '}
+              <strong style={{ color: 'var(--accent-green)' }}>
+                {meter.ethereum.marginFactor}×
+              </strong>
+            </span>
+          </>
+        )}
+        {holdOrder && (
+          <>
+            <span>·</span>
+            <span>
+              memo <strong>{holdOrder.bookingReference}</strong>
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatAmount(raw: string): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+function formatGwei(raw: string): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  const gwei = n / 1e9;
+  return `${gwei.toFixed(4)} gwei`;
+}

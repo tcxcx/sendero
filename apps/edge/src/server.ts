@@ -15,6 +15,6 @@ if (typeof (globalThis as any).Bun !== 'undefined') {
 } else {
   // eslint-disable-next-line no-console
   console.warn(
-    '[sendero/edge] server.ts requires Bun. Use apps/edge/api/[[...route]].ts on Vercel.',
+    '[sendero/edge] server.ts requires Bun. Use apps/edge/api/[[...route]].ts on Vercel.'
   );
 }

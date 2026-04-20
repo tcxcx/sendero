@@ -1,0 +1,72 @@
+# lefthook.yml — Sendero × Arc parallel git hooks
+#
+# Install:          brew install lefthook && lefthook install --force
+# Skip hooks once:  LEFTHOOK=0 git commit   OR   git commit --no-verify
+# WIP bypass:       prefix commit with "wip" or "WIP" → pre-commit skipped
+# Emergency push:   SKIP_PUSH_CHECKS=1 git push
+#
+# Ownership:
+#   pre-commit → only what's staged (biome) + affected typecheck (HEAD^1)
+#   pre-push   → full turbo build/typecheck/lint (catches pre-CI breakage)
+#
+# Fast-by-default. Heavy correctness (e2e, wrangler dry-run) stays in CI.
+
+min_version: 1.7.0
+
+pre-commit:
+  parallel: true
+  # Skip the whole hook for WIP commits — read the subject from prepared msg if
+  # present, else let it through. Lefthook's native skip only reads env/branch,
+  # so we rely on commit --no-verify or LEFTHOOK=0 for true bypass; the `wip`
+  # branch skip below gives a lightweight ergonomic escape.
+  skip:
+    - ref: wip
+    - ref: wip/*
+  commands:
+    biome:
+      glob: "*.{ts,tsx,js,jsx,json,jsonc,css}"
+      run: bunx biome format --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+    # Typecheck only packages affected since the last commit. `...[HEAD^1]`
+    # expands to changed workspace + downstream deps. Uses turbo daemon + cache.
+    typecheck-affected:
+      run: bunx turbo run typecheck --filter=...[HEAD^1] --cache-dir=.turbo
+
+pre-push:
+  parallel: true
+  commands:
+    build:
+      skip:
+        - ref: $SKIP_PUSH_CHECKS
+      run: bunx turbo run build --cache-dir=.turbo
+
+    typecheck:
+      skip:
+        - ref: $SKIP_PUSH_CHECKS
+      run: bunx turbo run typecheck --cache-dir=.turbo
+
+    lint:
+      skip:
+        - ref: $SKIP_PUSH_CHECKS
+      run: bunx turbo run lint --cache-dir=.turbo
+
+commit-msg:
+  commands:
+    non-empty:
+      run: |
+        msg=$(cat {1})
+        if [ -z "$(echo "$msg" | tr -d '[:space:]#')" ]; then
+          echo "x empty commit message"; exit 1
+        fi
+    conventional:
+      # Advisory only — warn but don't block.
+      run: |
+        msg=$(head -1 {1})
+        pattern='^(feat|fix|chore|docs|style|refactor|perf|test|ci|build|revert|wip)(\([a-zA-Z0-9_/-]+\))?!?: .+'
+        if ! echo "$msg" | grep -qE "$pattern"; then
+          echo "! commit message does not follow Conventional Commits format"
+          echo "  Expected: type(scope): description"
+          echo "  Got:      $msg"
+          echo "  (advisory — commit proceeds)"
+        fi

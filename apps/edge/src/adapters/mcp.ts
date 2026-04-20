@@ -41,9 +41,7 @@ async function callTool(name: string, args: any) {
   if (!t) throw new Error(`Unknown tool: ${name}`);
   const result = await t.handler(args ?? {});
   return {
-    content: [
-      { type: 'text' as const, text: JSON.stringify(result, null, 2) },
-    ],
+    content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
     isError: false,
   };
 }
@@ -93,7 +91,7 @@ async function handleRpc(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
 }
 
 export function mountMcp(app: Hono): void {
-  app.get('/mcp', (c) =>
+  app.get('/mcp', c =>
     c.json({
       name: 'sendero-edge/mcp',
       version: '0.1.0',
@@ -101,10 +99,10 @@ export function mountMcp(app: Hono): void {
       transports: ['streamable-http'],
       endpoint: '/mcp',
       tools: Object.keys(toolCatalog),
-    }),
+    })
   );
 
-  app.post('/mcp', async (c) => {
+  app.post('/mcp', async c => {
     const body = (await c.req.json()) as JsonRpcRequest | JsonRpcRequest[];
     const batch = Array.isArray(body) ? body : [body];
     const responses: JsonRpcResponse[] = [];

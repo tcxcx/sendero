@@ -28,10 +28,7 @@ interface SlashCommandPayload {
   trigger_id: string;
 }
 
-async function inferReply(
-  text: string,
-  slackUser: { id: string; name: string },
-): Promise<string> {
+async function inferReply(text: string, slackUser: { id: string; name: string }): Promise<string> {
   if (!text.trim()) {
     return 'Sendero · try `/sendero <prompt>`. E.g. `/sendero book SFO→LHR May 10 premium economy`.';
   }
@@ -41,19 +38,17 @@ async function inferReply(
   });
   // eslint-disable-next-line no-console
   console.log(
-    `[slack] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`,
+    `[slack] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`
   );
   return result.text;
 }
 
 export function mountSlack(app: Hono): void {
-  app.post('/slack', async (c) => {
+  app.post('/slack', async c => {
     // Slack sends application/x-www-form-urlencoded for slash commands.
     const raw = await c.req.text();
     const params = new URLSearchParams(raw);
-    const payload = Object.fromEntries(
-      params.entries(),
-    ) as unknown as SlashCommandPayload;
+    const payload = Object.fromEntries(params.entries()) as unknown as SlashCommandPayload;
 
     // Slack expects a 200 within 3s. Acknowledge immediately, post
     // follow-ups to response_url.
@@ -66,7 +61,7 @@ export function mountSlack(app: Hono): void {
         name: payload.user_name ?? 'traveler',
       };
       // Fire the real reply asynchronously — don't block the ack.
-      inferReply(payload.text ?? '', slackUser).then(async (reply) => {
+      inferReply(payload.text ?? '', slackUser).then(async reply => {
         try {
           await fetch(payload.response_url, {
             method: 'POST',
