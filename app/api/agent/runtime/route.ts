@@ -16,6 +16,9 @@ const TOOL_NAMES = [
   'gateway_balance',
   'gateway_transfer',
   'settle_split',
+  'check_policy',
+  'quote_fx',
+  'rate_agent',
 ] as const;
 
 /**

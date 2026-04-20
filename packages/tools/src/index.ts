@@ -9,6 +9,9 @@ import { sendTokensTool } from './send-tokens';
 import { bridgeToArcTool } from './bridge-to-arc';
 import { swapAndBridgeTool } from './swap-and-bridge';
 import { settleSplitTool } from './settle-split';
+import { checkPolicyTool } from './check-policy';
+import { quoteFxTool } from './quote-fx';
+import { rateAgentTool } from './rate-agent';
 import type { ToolDef } from './types';
 
 export type { ToolDef, ToolContext, JsonSchemaObject } from './types';
@@ -30,6 +33,9 @@ export const toolList: ToolDef[] = [
   bridgeToArcTool,
   swapAndBridgeTool,
   settleSplitTool,
+  checkPolicyTool,
+  quoteFxTool,
+  rateAgentTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */

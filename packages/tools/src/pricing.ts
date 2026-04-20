@@ -16,7 +16,10 @@
 export const TOOL_PRICING: Record<string, string> = {
   // Reads — cheap
   check_treasury: '0.0005',
+  check_policy: '0.0005',
   gateway_balance: '0.001',
+  quote_fx: '0.0008',
+  rate_agent: '0.0005',
 
   // External API reads (Duffel) — we pay a provider
   search_flights: '0.002',
