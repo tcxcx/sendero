@@ -1,0 +1,54 @@
+{
+  "name": "pasillo-arc",
+  "displayName": "Pasillo",
+  "description": "AI travel agent that books real Duffel flights and settles on Arc L2 in USDC. Exposes an MCP server so any AI can plug it in as a travel rail.",
+  "version": "0.9.5-alpha",
+  "protocolVersion": "2024-11-05",
+  "provider": {
+    "organization": "Pasillo",
+    "url": "https://pasillo-arc.vercel.app"
+  },
+  "identity": {
+    "onchain": {
+      "chain": "Arc Testnet",
+      "chainId": 5042002,
+      "agentId": "2286",
+      "address": "0x2dd43b06e707d45b40790abd5fa6e39403225425",
+      "standard": "ERC-8004",
+      "explorerUrl": "https://testnet.arcscan.app/address/0x2dd43b06e707d45b40790abd5fa6e39403225425"
+    }
+  },
+  "endpoints": {
+    "mcp": "/api/mcp",
+    "wellKnown": "/.well-known/agent.json",
+    "llmsTxt": "/llms.txt"
+  },
+  "skills": [
+    {
+      "id": "travel-booking",
+      "name": "Travel booking",
+      "description": "Search and book flights + hotels via Duffel. Issue real PNR, hold-then-pay.",
+      "tools": ["search_flights", "book_flight"]
+    },
+    {
+      "id": "arc-settlement",
+      "name": "Arc L2 settlement",
+      "description": "USDC/EURC settlement on Arc Testnet with gasless user ops via passkey MSCA.",
+      "tools": ["check_treasury", "swap_tokens", "send_tokens"]
+    },
+    {
+      "id": "cross-chain-liquidity",
+      "name": "Cross-chain liquidity",
+      "description": "Unified treasury USDC across Ethereum Sepolia, Base Sepolia, Arc Testnet, Avalanche Fuji, Optimism Sepolia, Arbitrum Sepolia, Polygon Amoy via Circle Gateway.",
+      "tools": ["gateway_balance", "gateway_transfer", "bridge_to_arc"]
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": false
+  },
+  "authentication": {
+    "schemes": ["none"]
+  }
+}
