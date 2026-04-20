@@ -1,0 +1,24 @@
+{
+  "name": "@sendero/whatsapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — WhatsApp Business channel. Meta Cloud API (or Kapso proxy) client, HMAC-verified webhook, interactive buttons, media download, E.164 normalization. Per-tenant phone-number → traveler mapping lives in the consuming app.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./webhook": "./src/webhook.ts",
+    "./templates": "./src/templates.ts",
+    "./media": "./src/media.ts",
+    "./normalize": "./src/normalize.ts",
+    "./link-token": "./src/link-token.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.11.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

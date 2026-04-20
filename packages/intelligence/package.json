@@ -1,0 +1,22 @@
+{
+  "name": "@sendero/intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — agent memory + preference learning + context building. Adapted from @bu/intelligence. Prisma-backed storage (agent_memories), pluggable retriever (trigram text now, pgvector later). Traveler preference loop feeds autonomous agent decisions.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./memory": "./src/memory.ts",
+    "./preferences": "./src/preferences.ts",
+    "./context": "./src/context.ts",
+    "./retriever": "./src/retriever.ts"
+  },
+  "peerDependencies": {
+    "@sendero/database": "*",
+    "@sendero/locale": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

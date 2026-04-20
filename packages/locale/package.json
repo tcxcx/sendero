@@ -1,0 +1,17 @@
+{
+  "name": "@sendero/locale",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — locale resolution, Intl formatters, and compact locale slices for LLM system prompts. Travel-domain glossaries (airline/fare/seat/loyalty) per country. Pattern adapted from @bu/intelligence.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./glossary": "./src/glossary.ts",
+    "./format": "./src/format.ts",
+    "./slice": "./src/slice.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

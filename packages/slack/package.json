@@ -1,0 +1,23 @@
+{
+  "name": "@sendero/slack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — Slack channel. Events API + OAuth (with Enterprise Grid), interactive Block Kit approvals for corporate travel. Token store is an injectable interface so the consuming app owns persistence.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./webhook": "./src/webhook.ts",
+    "./oauth": "./src/oauth.ts",
+    "./interactions": "./src/interactions.ts",
+    "./approval": "./src/approval.ts",
+    "./blocks": "./src/blocks.ts"
+  },
+  "dependencies": {
+    "@slack/web-api": "^7.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
