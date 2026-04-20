@@ -11,6 +11,7 @@
 
 import { prisma } from '@sendero/database';
 import { redirect } from 'next/navigation';
+import { EmbeddedSignupButton } from './EmbeddedSignupButton';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -86,6 +87,22 @@ export default async function AgencyOnboardingPage({ searchParams }: Props) {
         Configure your WhatsApp Business number + branding. We'll route inbound messages to a
         Sendero agent instance that wears your colors.
       </p>
+
+      <div style={embeddedStyle}>
+        <div style={eyebrowStyle}>One-click install · Meta Embedded Signup</div>
+        <p style={embeddedDescStyle}>
+          If your Meta app is approved for the WhatsApp Business API, use Embedded Signup — we
+          exchange the code server-side and persist the phone_number_id automatically.
+        </p>
+        <EmbeddedSignupButton />
+      </div>
+
+      <div style={orRowStyle}>
+        <span style={orLineStyle} />
+        <span style={orLabelStyle}>or paste manually</span>
+        <span style={orLineStyle} />
+      </div>
+
       <form action={configureAgency} style={formStyle}>
         <label style={labelStyle}>
           <span>Agency slug</span>
@@ -184,4 +201,34 @@ const submitStyle: React.CSSProperties = {
   textTransform: 'uppercase',
   cursor: 'pointer',
   marginTop: 8,
+};
+const embeddedStyle: React.CSSProperties = {
+  border: '1.5px solid #25D366',
+  padding: 20,
+  marginBottom: 24,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+};
+const eyebrowStyle: React.CSSProperties = {
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 10,
+  letterSpacing: '0.14em',
+  textTransform: 'uppercase',
+  color: '#25D366',
+};
+const embeddedDescStyle: React.CSSProperties = { fontSize: 13, color: '#555', margin: 0 };
+const orRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  margin: '12px 0 20px',
+};
+const orLineStyle: React.CSSProperties = { flex: 1, height: 1, background: '#e6e6e6' };
+const orLabelStyle: React.CSSProperties = {
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 10,
+  letterSpacing: '0.14em',
+  textTransform: 'uppercase',
+  color: '#8a8a8a',
 };
