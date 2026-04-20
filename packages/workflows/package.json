@@ -1,0 +1,20 @@
+{
+  "name": "@sendero/workflows",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — first-class declarative agent workflows. Multi-step plans with branches, pauses (awaiting_approval, awaiting_user_reply), checkpoints (resume across deploys via Session), parallel fan-out, retries, and per-step meter attribution. Adapted from the POC demo-workflow pattern into a reusable runner consumed by /api/agent/dispatch, cron jobs, and the MCP surface.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./runner": "./src/runner.ts",
+    "./catalog": "./src/catalog.ts",
+    "./types": "./src/types.ts"
+  },
+  "peerDependencies": {
+    "@sendero/tools": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

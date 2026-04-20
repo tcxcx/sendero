@@ -164,4 +164,4 @@ Track: **Agent-to-Agent Payment Loop** (primary) + **Per-API Monetization Engine
 - [ ] Include the Claude Desktop `mcpServers` config snippet (so judges can reproduce)
 - [ ] Note any issues found while running the on-site demo on Apr 25-26
 - [ ] Capture x402 facilitator latency numbers (verify + settle) in our environment
-- [ ] Fix agent-metadata.json host (NFT #2286 tokenURI points at legacy `pasillo-arc.vercel.app` — deploy a redirect or mint a new metadata URI)
+- [ ] Fix agent-metadata.json host (NFT #2286 tokenURI points at legacy host — deploy a redirect from the old host or mint a new metadata URI at `sendero.travel/agent-metadata.json`)

@@ -1,0 +1,26 @@
+:root {
+  --bg: #fff;
+  --fg: #111;
+  --muted: #6b6b6b;
+  --accent: #fb542b;
+  --border: #e6e6e6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0b;
+    --fg: #f4f4f4;
+    --muted: #9a9a9a;
+    --border: #222;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+}
