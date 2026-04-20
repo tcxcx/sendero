@@ -20,7 +20,10 @@
   "scripts": {
     "dev": "turbo run dev --filter=@sendero/app",
     "dev:edge": "turbo run dev --filter=@sendero/edge",
+    "dev:indexer": "turbo run dev --filter=@sendero/indexer",
     "dev:all": "turbo run dev",
+    "indexer:codegen": "turbo run codegen --filter=@sendero/indexer",
+    "indexer:sync-abi": "bun run --cwd apps/ponder sync-abi",
     "build": "turbo run build",
     "start": "turbo run start --filter=@sendero/app",
     "lint": "biome lint .",

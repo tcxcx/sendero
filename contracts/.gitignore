@@ -1,0 +1,23 @@
+# Foundry artifacts + caches
+out/
+cache/
+artifacts/
+
+# Forge-installed libraries — install via `forge install ...` (see README)
+lib/
+
+# Broadcast logs contain RPC-submitted tx data — keep signed deployments
+# under broadcast/ gitignored except explicitly curated records.
+broadcast/**/dry-run/
+broadcast/**/run-latest.json
+
+# Coverage
+lcov.info
+coverage/
+
+# Node (foundry-upgrades CLI shells out to node)
+node_modules/
+
+# Env
+.env
+.env.local

@@ -1,0 +1,27 @@
+{
+  "name": "@sendero/indexer",
+  "version": "0.1.0",
+  "description": "Sendero × Arc — Ponder indexer for SenderoGuestEscrow. Publishes a GraphQL read layer over trip/booking/agent-action state.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "ponder dev",
+    "start": "ponder start",
+    "build": "ponder codegen",
+    "codegen": "ponder codegen",
+    "serve": "ponder serve",
+    "sync-abi": "node ./scripts/sync-abi.js",
+    "lint": "biome lint .",
+    "typecheck": "tsc --noEmit",
+    "deploy:railway": "railway up"
+  },
+  "dependencies": {
+    "hono": "^4.12.0",
+    "ponder": "^0.16.6",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.3"
+  }
+}

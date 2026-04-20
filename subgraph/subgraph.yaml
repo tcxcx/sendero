@@ -1,0 +1,51 @@
+specVersion: 1.2.0
+description: SenderoGuestEscrow - pre-funded guest-link travel escrow on Arc L2
+repository: https://github.com/sendero/pasillo-arc
+
+schema:
+  file: ./schema.graphql
+
+dataSources:
+  - kind: ethereum/contract
+    name: SenderoGuestEscrow
+    network: arc-testnet
+    source:
+      address: "0x42B447Fe874CbC5cCD18a8Ab4Ffa2E297eb7F873"
+      abi: SenderoGuestEscrow
+      startBlock: 38182687
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Trip
+        - Booking
+        - AgentAction
+        - TripEvent
+      abis:
+        - name: SenderoGuestEscrow
+          file: ./abis/SenderoGuestEscrow.json
+      eventHandlers:
+        - event: TripCreated(indexed bytes32,indexed address,address,uint256,uint64,bytes32,string,uint256,bytes32)
+          handler: handleTripCreated
+        - event: TripClaimed(indexed bytes32,indexed address)
+          handler: handleTripClaimed
+        - event: TripCancelled(indexed bytes32)
+          handler: handleTripCancelled
+        - event: BookingReserved(indexed bytes32,indexed bytes32,uint256)
+          handler: handleBookingReserved
+        - event: BookingCommitted(indexed bytes32,uint256,uint256,address,bytes32,string,uint256)
+          handler: handleBookingCommitted
+        - event: DuffelConfirmed(indexed bytes32,bytes32)
+          handler: handleDuffelConfirmed
+        - event: BookingSettled(indexed bytes32,address,uint256,uint256)
+          handler: handleBookingSettled
+        - event: BookingRefunded(indexed bytes32,uint256)
+          handler: handleBookingRefunded
+        - event: BookingReclaimed(indexed bytes32,uint256,uint8)
+          handler: handleBookingReclaimed
+        - event: Swept(indexed bytes32,uint256)
+          handler: handleSwept
+        - event: AgentActionLogged(indexed bytes32,indexed uint256,uint8,uint256)
+          handler: handleAgentActionLogged
+      file: ./src/mapping.ts
