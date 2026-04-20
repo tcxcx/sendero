@@ -619,10 +619,14 @@ Note the exported `slackClient()` or `postMessage` function. The alert helper wi
  * thrown, so a misconfig can't break the cron.
  */
 
-import { postMessage } from './client';
+import { createSlackClient, postMessage } from './client';
 
 function opsChannelId(): string | null {
   return process.env.SENDERO_OPS_SLACK_CHANNEL_ID ?? null;
+}
+
+function botToken(): string | null {
+  return process.env.SLACK_BOT_TOKEN ?? null;
 }
 
 export interface BatchFailedAlert {
@@ -635,8 +639,9 @@ export interface BatchFailedAlert {
 
 export async function fireBatchFailedAlert(a: BatchFailedAlert): Promise<void> {
   const channel = opsChannelId();
-  if (!channel) {
-    console.warn('[slack.alerts] SENDERO_OPS_SLACK_CHANNEL_ID not set; skipping batch-failed alert');
+  const token = botToken();
+  if (!channel || !token) {
+    console.warn('[slack.alerts] SLACK_BOT_TOKEN or SENDERO_OPS_SLACK_CHANNEL_ID not set; skipping batch-failed alert');
     return;
   }
   const text =
@@ -645,14 +650,15 @@ export async function fireBatchFailedAlert(a: BatchFailedAlert): Promise<void> {
     `> total \`${(Number(a.totalMicroUsdc) / 1e6).toFixed(6)} USDC\`\n` +
     `> last error: \`${a.error}\``;
   try {
-    await postMessage({ channel, text });
+    const client = createSlackClient(token);
+    await postMessage(client, { channel, text });
   } catch (err) {
     console.warn('[slack.alerts] postMessage failed:', err instanceof Error ? err.message : err);
   }
 }
 ```
 
-If `postMessage` doesn't exist in `client.ts`, use whatever the existing slack module exposes (likely `slackClient().chat.postMessage({...})` with `@slack/web-api`). Adapt the call site accordingly — the shape of the helper stays the same.
+Verified against `packages/slack/src/client.ts`: `createSlackClient(botToken)` returns a `WebClient`; `postMessage(client, { channel, text })` is the call signature.
 
 - [ ] **Step 3: Export from the slack package index**
 
@@ -1185,23 +1191,121 @@ export function makeToolRegistry(): ToolRegistry {
 }
 ```
 
-> **IMPLEMENTATION NOTE 2:** The `WorkflowRun` Prisma model may or may not exist. Check with `grep -n "model WorkflowRun" packages/database/prisma/schema.prisma`. If absent, that's a blocking finding — pause this task, add a run-checkpoint Prisma model in a follow-up sub-task, then return. The spec assumes workflow runs are persisted so Duffel webhooks can resume them. If persistence isn't wired yet, add it here as:
+> **IMPLEMENTATION NOTE 2 (resolved):** `WorkflowRun` Prisma model does not exist and we are NOT adding one. Instead, the workflow snapshot lives on `Booking.metadata.workflow = { workflowId, runId, snapshot, pausedAt }`. Write it from the workflow runner's `onPause` hook at the call site (the chat route / book_flight invocation), keyed by the `bookingId` already in scratchpad. Dispatcher reads it back from the booking row.
 >
-> ```prisma
-> model WorkflowRun {
->   id         String   @id @default(uuid()) @db.Uuid
->   workflowId String
->   status     String   // 'running' | 'paused' | 'completed' | 'failed'
->   snapshot   Json
->   tenantId   String?
->   createdAt  DateTime @default(now()) @db.Timestamptz(6)
->   updatedAt  DateTime @updatedAt       @db.Timestamptz(6)
->   @@index([workflowId, status])
->   @@map("workflow_runs")
-> }
+> This means the actual dispatcher shape is:
+>
+> ```typescript
+> const booking = await prisma.booking.findUnique({
+>   where: { duffelOrderId: args.event.orderId },
+>   select: { id: true, tenantId: true, metadata: true, tripId: true },
+> });
+> if (!booking) return { matched: false };
+>
+> const wf = (booking.metadata as any)?.workflow as
+>   | { workflowId: string; runId: string; snapshot: unknown; pausedAt: string }
+>   | undefined;
+> if (!wf) return { matched: false };
+>
+> const workflow = wf.workflowId === bookFlightWorkflow.id ? bookFlightWorkflow
+>                : wf.workflowId === guestPrefundWorkflow.id ? guestPrefundWorkflow
+>                : null;
+> if (!workflow) return { matched: false };
+>
+> const status = args.event.status === 'ticketed' ? 'ticketed' : 'failed';
+> await resumeRun({
+>   workflow,
+>   run: wf.snapshot as WorkflowRun,
+>   resolution: { status, duffelOrderId: args.event.orderId },
+>   tools: makeToolRegistry(),
+> });
+> return { matched: true, runId: wf.runId };
 > ```
 >
-> And modify the runner's `onPause` hook to persist the `WorkflowRun.snapshot`. This is a spec clarification — surface to the user before writing.
+> The `onPause` hook that writes the snapshot is a separate concern handled by whatever call site kicks off the `book_flight` workflow (chat route, guest-prefund server action, etc.). Writing the `onPause` hook is IN-SCOPE for phase-11a — add a sub-task below (Task 14b) covering the shared hook in `apps/app/lib/workflow-pause.ts`.
+
+- [ ] **Step 2b (new): Add Task 14b — persistent `onPause` hook**
+
+File: `apps/app/lib/workflow-pause.ts` (new):
+
+```typescript
+/**
+ * Shared pause persistence. Call this as the `onPause` hook when
+ * kicking off any workflow that may pause awaiting an external event
+ * (Duffel ticket, Slack approval, guest claim). Snapshot is stored on
+ * the booking's metadata so the webhook dispatcher can resume it.
+ *
+ * The booking must already exist. For workflows that pause BEFORE a
+ * booking row exists (guestPrefund's `await_guest_claim`), the caller
+ * should stash under a different table (Trip or WorkflowPause) — that
+ * path is not exercised by phase-11a webhook resume, which only cares
+ * about the post-commit Duffel pause.
+ */
+
+import { prisma } from '@sendero/database';
+import type { PauseStep, WorkflowDef, WorkflowRun } from '@sendero/workflows';
+
+export function makePausePersister(args: { bookingId: string; workflow: WorkflowDef }) {
+  return async (pause: { runId: string; step: PauseStep; scratchpad: Record<string, unknown> }) => {
+    await prisma.booking.update({
+      where: { id: args.bookingId },
+      data: {
+        metadata: {
+          workflow: {
+            workflowId: args.workflow.id,
+            runId: pause.runId,
+            snapshot: /* caller must serialize the WorkflowRun; see below */ null,
+            pausedAt: new Date().toISOString(),
+            pausedStepId: pause.step.id,
+          },
+        },
+      },
+    });
+  };
+}
+
+/**
+ * Persist a full snapshot of a paused WorkflowRun onto the booking.
+ * Call this from the workflow's call site after startRun() returns
+ * with status === 'paused'.
+ */
+export async function persistPausedRun(args: {
+  bookingId: string;
+  workflow: WorkflowDef;
+  run: WorkflowRun;
+}) {
+  const existing = await prisma.booking.findUnique({
+    where: { id: args.bookingId },
+    select: { metadata: true },
+  });
+  const merged = {
+    ...((existing?.metadata as object | null) ?? {}),
+    workflow: {
+      workflowId: args.workflow.id,
+      runId: args.run.runId,
+      snapshot: args.run,
+      pausedAt: new Date().toISOString(),
+      pausedStepId: args.run.nextStepId,
+    },
+  };
+  await prisma.booking.update({
+    where: { id: args.bookingId },
+    data: { metadata: merged as object },
+  });
+}
+```
+
+- [ ] **Step 2c: Typecheck + commit**
+
+```bash
+bun run typecheck 2>&1 | tail -5
+git add apps/app/lib/workflow-pause.ts
+git commit -m "feat(phase-11a): persistent workflow pause — booking.metadata snapshot
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
+```
+
+The call-site wiring (actually *invoking* `persistPausedRun` from the chat route / book_flight entrypoint) is deferred to whichever surface first exercises the Duffel pause — documented as a follow-up in the final gate.
 
 - [ ] **Step 2: Typecheck**
 
@@ -2253,8 +2357,8 @@ If any step fails, fix the root cause before moving to phase-11b. Do not paper o
 - **Type consistency** — tool handler returns match existing `ToolDef` shape; `retrySettlingBatches` result union matches consumer expectations in cron; `DuffelWebhookEvent` used identically in dispatcher + route. ✓
 - **Scope check** — no invoice, no buyer UI, no agency markup. Bounded. ✓
 
-## Open items to confirm with user before execution
+## Open items resolved / carried
 
-1. **Does `WorkflowRun` Prisma persistence exist?** If not, Task 14 includes a mini-spec to add it. If that scope expansion is unwelcome, we instead keep the resume path in-memory only and reconcile via cron (lose webhook-driven resumption → fall back to cron sweeper; this regresses the spec choice back toward option D).
-2. **Slack `postMessage` helper** — verify `packages/slack/src/client.ts` exposes one; Task 8 adapts to whatever it finds.
-3. **Cron schedule** — `/api/cron/settle-nanopay-batches` exists but repo has no `vercel.json` at root OR under `apps/app/` with a `crons` block. Either it's scheduled out-of-band or scheduling was missed. Operational item, not in this plan.
+1. ~~WorkflowRun Prisma persistence?~~ **RESOLVED**: no new model; snapshot stored on `Booking.metadata.workflow`. Task 14 updated; Task 14b covers the shared `persistPausedRun` helper.
+2. ~~Slack `postMessage` helper shape?~~ **RESOLVED**: `createSlackClient(botToken)` + `postMessage(client, args)`. Task 8 updated.
+3. **Cron schedule** — `/api/cron/settle-nanopay-batches` exists but repo has no `vercel.json` at root OR under `apps/app/` with a `crons` block. Either it's scheduled out-of-band or scheduling was missed. Operational item tracked under **Track A** — confirm + add a `crons` block to the right vercel.json before production cutover.
