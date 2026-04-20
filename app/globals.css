@@ -67,7 +67,24 @@ html, body {
 
 button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
 input, textarea { font: inherit; color: inherit; }
-::selection { background: var(--ink-dim); color: var(--ink); }
+/* Text selection — vermilion bg with cream text. Brand-carrying,
+   unmistakable. Pairs the warm primary with cream pulled from the
+   page background (var(--bg) at full opacity) for maximum contrast. */
+::selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
+}
+::-moz-selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
+}
+.dark ::selection,
+.dark ::-moz-selection {
+  background: var(--ink);
+  color: #0a0b0d;
+}
 
 /* =====================================================
    Type utilities (Cobe vibes)
