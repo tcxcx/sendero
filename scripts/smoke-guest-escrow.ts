@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * End-to-end smoke test against the live SenderoGuestEscrow on Arc Testnet.
  *
@@ -25,6 +26,7 @@
 
 import {
   buildClaimTripCalls,
+  buildGuestLink,
   computeGuestIdHash,
   encodeCommitBooking,
   encodeReserveForBooking,
@@ -32,20 +34,19 @@ import {
   generateClaimKeypair,
   generateTripId,
   parseGuestLink,
-  buildGuestLink,
-  signClaim,
   SENDERO_GUEST_ESCROW_ABI,
-  USDC_ABI,
+  signClaim,
   toUsdcMicro,
+  USDC_ABI,
 } from '@sendero/guest';
 import {
+  type Address,
   createPublicClient,
   createWalletClient,
+  type Hex,
   http,
   parseEventLogs,
   zeroHash,
-  type Address,
-  type Hex,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -175,6 +176,7 @@ async function main() {
       zeroHash,
       'ipfs://smoke-test',
       BigInt(process.env.SENDERO_AGENT_TOKEN_ID ?? '2286'),
+      zeroHash, // claimCodeHash = 0 → no 2FA for the smoke test
     ],
   });
   const createReceipt = await publicClient.waitForTransactionReceipt({ hash: createTx });
@@ -211,6 +213,8 @@ async function main() {
     tripId: parts.tripId,
     guestWallet: operator.address,
     signature,
+    // trip created without 2FA → empty preimage
+    claimCodePreimage: '0x',
   });
   const claimTx = await wallet.sendTransaction({
     to: claimCall.to,

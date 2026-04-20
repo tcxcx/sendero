@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+import { directProviderModel, gatewayConfigured, MODEL_TIERS, selectModel } from '@sendero/agent';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -19,30 +21,40 @@ const TOOL_NAMES = [
   'check_policy',
   'quote_fx',
   'rate_agent',
+  'prefund_trip',
+  'guest_claim_link',
+  'reserve_booking',
+  'commit_booking',
+  'log_agent_action',
 ] as const;
 
-/**
- * Mirrors app/api/chat/route.ts `pickModel()` so the workflow panel can
- * render the active provider/model without a round-trip through /api/chat.
- */
-function activeModel(): { provider: string; model: string } | null {
-  const forced = process.env.AI_PROVIDER?.toLowerCase();
-  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
-  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+type ActiveModel = {
+  provider: string;
+  model: string;
+  tier: 'smart' | 'fast' | 'cheap';
+  routing: 'gateway' | 'direct';
+};
 
-  if (forced === 'openai' && hasOpenAI) {
-    return { provider: 'openai', model: 'gpt-4o' };
+/**
+ * Mirrors /api/chat + /api/agent/dispatch selection logic so the workflow
+ * panel shows the same model that would actually run. Prefers the Vercel
+ * AI Gateway when credentials are present, else falls back to whichever
+ * direct provider key exists.
+ */
+function activeModel(): ActiveModel | null {
+  // 'fast' is the chat default — what the user sees on the homepage.
+  const tier: 'smart' | 'fast' | 'cheap' = 'fast';
+
+  if (gatewayConfigured()) {
+    const { model } = selectModel({ tier });
+    const [provider, id] = model.split('/');
+    return { provider, model: id, tier, routing: 'gateway' };
   }
-  if (forced === 'anthropic' && hasAnthropic) {
-    return { provider: 'anthropic', model: 'claude-3-5-sonnet-latest' };
-  }
-  if (hasAnthropic) {
-    return { provider: 'anthropic', model: 'claude-3-5-sonnet-latest' };
-  }
-  if (hasOpenAI) {
-    return { provider: 'openai', model: 'gpt-4o' };
-  }
-  return null;
+
+  const direct = directProviderModel(tier);
+  if (!direct) return null;
+  const [provider, id] = direct.split('/');
+  return { provider, model: id, tier, routing: 'direct' };
 }
 
 export async function GET() {
@@ -50,6 +62,14 @@ export async function GET() {
   return NextResponse.json({
     provider: picked?.provider ?? null,
     model: picked?.model ?? null,
+    tier: picked?.tier ?? null,
+    routing: picked?.routing ?? null,
+    tiers: Object.fromEntries(
+      Object.entries(MODEL_TIERS).map(([k, v]) => [
+        k,
+        { primary: v.primary, fallbacks: v.fallbacks },
+      ])
+    ),
     tools: TOOL_NAMES,
     toolCount: TOOL_NAMES.length,
   });

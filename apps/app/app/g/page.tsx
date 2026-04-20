@@ -19,7 +19,8 @@
  * The private key stays in the URL fragment and in-memory only.
  */
 
-import { buildClaimTripCalls, parseGuestLink, signClaim } from '@sendero/guest';
+import { useEffect, useMemo, useState } from 'react';
+
 import {
   isPasskeyConfigured,
   loginPasskey,
@@ -29,7 +30,12 @@ import {
   sendUserOp,
   type UserWallet,
 } from '@sendero/circle/modular-wallets';
-import { useEffect, useMemo, useState } from 'react';
+import {
+  buildClaimCodePreimage,
+  buildClaimTripCalls,
+  parseGuestLink,
+  signClaim,
+} from '@sendero/guest';
 import type { Address, Hex } from 'viem';
 
 type Phase = 'preview' | 'enroll' | 'submitting' | 'done' | 'error';
@@ -46,6 +52,11 @@ export default function GuestClaimPage() {
   const [phase, setPhase] = useState<Phase>('preview');
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<Hex | null>(null);
+  // 2FA — only used when the link fragment carries `&n=<nonce>`. When
+  // present, the trip was created with a claimCodeHash and the guest
+  // must enter the 6-digit OTP from their invite email to reproduce
+  // the preimage on-chain.
+  const [claimCode, setClaimCode] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') setLink(window.location.href);
@@ -98,6 +109,16 @@ export default function GuestClaimPage() {
   async function onClaim() {
     if (!parts || !ESCROW_ADDRESS) return;
     setError(null);
+
+    // 2FA guard — when the link includes a nonce (`&n=`), the trip was
+    // prefunded with require2fa=true and will revert with InvalidClaimCode
+    // unless we submit the real preimage. Fail fast with a friendly UI
+    // message instead of a gas-sunken revert.
+    if (parts.claimCodeNonce && !/^\d{6}$/.test(claimCode)) {
+      setError('This invite requires a 6-digit code. Check the email from Sendero and paste it above.');
+      return;
+    }
+
     setPhase('enroll');
     try {
       let wallet: UserWallet;
@@ -122,11 +143,18 @@ export default function GuestClaimPage() {
         tripId: parts.tripId,
         guestWallet: wallet.address,
       });
+      // Preimage resolution:
+      //   • trip with 2FA  → nonce in the URL fragment + code typed by guest → `${code}|${nonce}`
+      //   • trip no 2FA    → claimCodeHash is 0x00..00 on-chain → any bytes pass (we send '0x')
+      const claimCodePreimage: Hex = parts.claimCodeNonce
+        ? buildClaimCodePreimage(claimCode, parts.claimCodeNonce)
+        : ('0x' as Hex);
       const calls = buildClaimTripCalls({
         escrow: ESCROW_ADDRESS,
         tripId: parts.tripId,
         guestWallet: wallet.address,
         signature,
+        claimCodePreimage,
       });
       const { txHash: hash } = await sendUserOp(
         wallet,
@@ -174,6 +202,12 @@ export default function GuestClaimPage() {
         <div style={codeFadedStyle}>
           {parts.claimPrivateKey.slice(0, 10)}…{parts.claimPrivateKey.slice(-8)}
         </div>
+        {parts.claimCodeNonce && (
+          <>
+            <div style={eyebrowStyle}>2FA</div>
+            <div style={pillStyle}>One-time code required — check your email</div>
+          </>
+        )}
       </section>
 
       {!configured && (
@@ -247,7 +281,34 @@ export default function GuestClaimPage() {
             <p style={hintStyle}>Use the passkey on this device — biometric confirmation only.</p>
           )}
 
-          <button type="submit" style={ctaStyle} disabled={!configured}>
+          {parts.claimCodeNonce && (
+            <label style={labelStyle}>
+              <span>One-time code · 6 digits</span>
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="\d{6}"
+                value={claimCode}
+                onChange={e => setClaimCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="123456"
+                required
+                maxLength={6}
+                style={{
+                  ...inputStyle,
+                  fontSize: 22,
+                  letterSpacing: '0.3em',
+                  textAlign: 'center',
+                  fontFamily: 'ui-monospace, Menlo, monospace',
+                }}
+              />
+            </label>
+          )}
+
+          <button
+            type="submit"
+            style={ctaStyle}
+            disabled={!configured || (!!parts.claimCodeNonce && !/^\d{6}$/.test(claimCode))}
+          >
             Claim trip with passkey →
           </button>
         </form>
@@ -337,6 +398,18 @@ const codeStyle: React.CSSProperties = {
   marginTop: 4,
 };
 const codeFadedStyle: React.CSSProperties = { ...codeStyle, color: '#8a8a8a' };
+const pillStyle: React.CSSProperties = {
+  display: 'inline-block',
+  marginTop: 6,
+  padding: '4px 10px',
+  background: '#fff1ea',
+  color: '#b34b2e',
+  border: '1px solid #f0c8b4',
+  borderRadius: 999,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: 11,
+  letterSpacing: '0.06em',
+};
 const formStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',

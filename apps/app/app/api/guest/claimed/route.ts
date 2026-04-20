@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { prisma } from '@sendero/database';
 import { toolList } from '@sendero/tools';
 import { findWorkflow, resumeRun, type ToolRegistry } from '@sendero/workflows';
+import { capture } from '@sendero/analytics/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,6 +74,18 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  // Fire-and-forget analytics — never block the resume call.
+  capture({
+    event: 'guest_trip_claimed',
+    distinctId: body.guestWallet.toLowerCase(),
+    properties: {
+      tripId: body.tripId,
+      guestWallet: body.guestWallet,
+      txHash: body.txHash,
+      channel: 'web',
+    },
+  });
 
   const candidates = await prisma.session.findMany({
     where: { OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] },

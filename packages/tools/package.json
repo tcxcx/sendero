@@ -18,7 +18,12 @@
     "@ai-sdk/anthropic": "*",
     "@ai-sdk/openai": "*",
     "@circle-fin/app-kit": "*",
+    "@sendero/arc": "*",
+    "@sendero/circle": "*",
+    "@sendero/duffel": "*",
     "@sendero/guest": "*",
+    "@sendero/nanopayments": "*",
+    "@sendero/notifications": "*",
     "ai": "*",
     "viem": "*",
     "zod": "*"

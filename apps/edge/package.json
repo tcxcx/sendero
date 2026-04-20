@@ -21,8 +21,17 @@
     "@ai-sdk/openai": "^2.0.0",
     "ai": "^6.0.0",
     "@duffel/api": "^4.0.0",
+    "@sendero/agent": "workspace:*",
+    "@sendero/arc": "workspace:*",
+    "@sendero/circle": "workspace:*",
+    "@sendero/duffel": "workspace:*",
+    "@sendero/guest": "workspace:*",
+    "@sendero/nanopayments": "workspace:*",
+    "@sendero/tools": "workspace:*",
     "viem": "^2.21.0",
     "zod": "^3.25.76"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
 }

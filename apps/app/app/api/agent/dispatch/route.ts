@@ -12,22 +12,29 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+
 import { anthropic } from '@ai-sdk/anthropic';
-import { z } from 'zod';
+import { openai } from '@ai-sdk/openai';
 import {
-  runAgentTurn,
   type AgentInput,
   type Channel,
   type ConversationState,
+  directProviderModel,
+  gatewayConfigured,
+  type ModelTier,
+  runAgentTurn,
   type SessionStore,
+  selectModel,
 } from '@sendero/agent';
+import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
+import type { CapStore } from '@sendero/billing/caps';
+import type { MeterEventInput, MeterStore } from '@sendero/billing/meter';
+import type { BillingSegment } from '@sendero/billing/pricing';
+import { prisma } from '@sendero/database';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
-import type { BillingSegment } from '@sendero/billing/pricing';
-import type { CapStore } from '@sendero/billing/caps';
-import type { MeterStore, MeterEventInput } from '@sendero/billing/meter';
-import { prisma } from '@sendero/database';
-import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
+import type { LanguageModel } from 'ai';
+import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -99,9 +106,23 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  const tier: ModelTier = 'smart';
+  const modelHandle = resolveModel(tier);
+  if (!modelHandle) {
+    return NextResponse.json(
+      {
+        error: 'no_llm_configured',
+        message:
+          'Set AI_GATEWAY_API_KEY (preferred) or ANTHROPIC_API_KEY or OPENAI_API_KEY before running the agent.',
+      },
+      { status: 503 }
+    );
+  }
+
   const result = await runAgentTurn({
     input: agentInput,
-    model: anthropic('claude-opus-4-7'),
+    model: modelHandle,
+    tier,
     tools,
     capStore: makeCapStore(),
     meterStore: makeMeterStore(),
@@ -239,6 +260,28 @@ function makeSessionStore(): SessionStore {
       return { id: row.id };
     },
   };
+}
+
+/**
+ * Pick the model handle for this turn.
+ *
+ *   1. If Vercel AI Gateway is configured → pass the gateway string
+ *      form (`'anthropic/claude-opus-4.6'`); AI SDK auto-routes and
+ *      providerOptions.gateway.order drives fallback.
+ *   2. Else fall back to a direct provider SDK when that provider's
+ *      key is present (Anthropic, then OpenAI).
+ *   3. Else return null and the route 503s with a clear error.
+ */
+function resolveModel(tier: ModelTier): LanguageModel | string | null {
+  if (gatewayConfigured()) {
+    return selectModel({ tier }).model;
+  }
+  const direct = directProviderModel(tier);
+  if (!direct) return null;
+  const [provider, model] = direct.split('/') as [string, string];
+  if (provider === 'anthropic') return anthropic(model);
+  if (provider === 'openai') return openai(model);
+  return null;
 }
 
 async function resolveSegment(tenantId: string): Promise<BillingSegment> {

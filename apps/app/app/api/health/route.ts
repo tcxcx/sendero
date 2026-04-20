@@ -16,12 +16,13 @@
  */
 
 import { NextResponse } from 'next/server';
-import { env } from '@sendero/env';
-import { prisma } from '@sendero/database';
-import { listWorkflows } from '@sendero/workflows';
-import { toolList } from '@sendero/tools';
-import { SUPPORTED_LOCALES } from '@sendero/locale';
+
 import { DEFAULT_PRICING } from '@sendero/billing/pricing';
+import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
+import { SUPPORTED_LOCALES } from '@sendero/locale';
+import { toolList } from '@sendero/tools';
+import { listWorkflows } from '@sendero/workflows';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -66,11 +67,26 @@ export async function GET() {
 // ─── subsystem checks ───────────────────────────────────────────────
 
 async function checkAgent(): Promise<Subsystem> {
+  const gatewayKey = process.env.AI_GATEWAY_API_KEY;
+  const oidc = process.env.VERCEL_OIDC_TOKEN;
+  const anthropicKey = env.anthropicApiKey();
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const anyLlmKey = Boolean(gatewayKey || oidc || anthropicKey || openaiKey);
   const checks: Check[] = [
     {
-      name: 'anthropic_api_key',
-      ok: Boolean(env.anthropicApiKey()),
-      detail: env.anthropicApiKey() ? undefined : 'set ANTHROPIC_API_KEY',
+      name: 'llm_credential',
+      ok: anyLlmKey,
+      detail: gatewayKey
+        ? 'Vercel AI Gateway (preferred) — providerOptions.gateway.order drives fallback'
+        : oidc
+          ? 'Vercel OIDC — gateway auth via platform token'
+          : anthropicKey && openaiKey
+            ? 'direct BYOK: Anthropic + OpenAI both set — used as fallbacks'
+            : anthropicKey
+              ? 'direct: ANTHROPIC_API_KEY only — add AI_GATEWAY_API_KEY for fallback coverage'
+              : openaiKey
+                ? 'direct: OPENAI_API_KEY only — add AI_GATEWAY_API_KEY for fallback coverage'
+                : 'set AI_GATEWAY_API_KEY (preferred) or any direct provider key',
     },
     {
       name: 'tool_catalog',

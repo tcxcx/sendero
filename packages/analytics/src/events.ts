@@ -38,6 +38,18 @@ export interface SenderoEventMap {
 
   // ── Trip lifecycle ────────────────────────────────────────
   trip_started: BaseContext & { origin: string; destination: string };
+  guest_invite_issued: BaseContext & {
+    tenantId: string | null;
+    tripId: string;
+    budgetUsdc: string;
+    require2fa: boolean;
+    emailOk: boolean;
+  };
+  guest_trip_claimed: BaseContext & {
+    tripId: string;
+    guestWallet: string;
+    txHash: string;
+  };
   offer_viewed: BaseContext & { carrier: string; fareClass: string; priceUsd: number };
   booking_held: BaseContext & { priceUsd: number };
   booking_confirmed: BaseContext & { pnr: string; priceUsd: number };

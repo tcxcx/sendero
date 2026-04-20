@@ -23,6 +23,16 @@ import type { ToolDef } from './types';
 
 export type { ToolDef, ToolContext, JsonSchemaObject } from './types';
 
+// Re-export individual tool defs so API routes + workflow steps can
+// import a single tool without walking the full registry.
+export {
+  commitBookingTool,
+  guestClaimLinkTool,
+  logAgentActionTool,
+  prefundTripTool,
+  reserveBookingTool,
+} from './guest-escrow';
+
 /**
  * Ordered canonical list of every tool Sendero ships. Register here
  * once; both the AI SDK chat route and the MCP server derive their

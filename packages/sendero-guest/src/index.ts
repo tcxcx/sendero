@@ -51,10 +51,10 @@ export const AGENT_ACTION = {
 // ──────────────────────────────────────────────────────────────────────
 
 export const SENDERO_GUEST_ESCROW_ABI = parseAbi([
-  'struct TripInput { bytes32 tripId; address claimPubKey20; uint256 budget; uint64 expiresAt; bytes32 metadataHash; string metadataCID; uint256 agentTokenId; }',
-  'function createTrip(bytes32 tripId, address claimPubKey20, uint256 budget, uint64 expiresAt, bytes32 metadataHash, string metadataCID, uint256 agentTokenId)',
+  'struct TripInput { bytes32 tripId; address claimPubKey20; uint256 budget; uint64 expiresAt; bytes32 metadataHash; string metadataCID; uint256 agentTokenId; bytes32 claimCodeHash; }',
+  'function createTrip(bytes32 tripId, address claimPubKey20, uint256 budget, uint64 expiresAt, bytes32 metadataHash, string metadataCID, uint256 agentTokenId, bytes32 claimCodeHash)',
   'function batchCreateTrip(TripInput[] inputs)',
-  'function claimTrip(bytes32 tripId, address guestWallet, bytes signature)',
+  'function claimTrip(bytes32 tripId, address guestWallet, bytes signature, bytes claimCodePreimage)',
   'function reserveForBooking(bytes32 tripId, bytes32 bookingId, uint256 upperBound)',
   'function commitBooking(bytes32 bookingId, uint256 vendorAmount, uint256 feeAmount, address vendor, bytes32 itineraryHash, string itineraryCID)',
   'function confirmDuffel(bytes32 bookingId, bytes32 duffelOrderHash)',
@@ -94,6 +94,8 @@ export interface ClaimKeypair {
 export interface GuestLinkParts {
   tripId: Hex;
   claimPrivateKey: Hex;
+  /** 32-byte OTP nonce when the trip was created with 2FA enabled. */
+  claimCodeNonce?: Hex;
 }
 
 export interface EncodedCall {
@@ -110,6 +112,8 @@ export interface CreateTripArgs {
   metadataHash: Hex;
   metadataCID: string;
   agentTokenId: bigint;
+  /** keccak256 of the OTP preimage; pass `0x00..00` to disable 2FA. */
+  claimCodeHash: Hex;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -177,19 +181,29 @@ export async function signClaim(params: {
 /**
  * Build the guest link. Fragment never hits the server.
  *
- *   https://sendero.app/g#t=0xTRIP&k=0xCLAIMKEY
+ *   https://sendero.app/g#t=0xTRIP&k=0xCLAIMKEY             (no 2FA)
+ *   https://sendero.app/g#t=0xTRIP&k=0xCLAIMKEY&n=0xNONCE   (2FA on — OTP carried out-of-band)
+ *
+ * When 2FA is enabled the nonce rides in the fragment (same privacy
+ * envelope as the claim key) while the 6-digit code is delivered to
+ * the guest out-of-band (email/SMS). Both must be recombined at claim
+ * time to reproduce the on-chain hash.
  */
 export function buildGuestLink(params: {
   origin: string; // e.g. 'https://sendero.app'
   path?: string; // default '/g'
   tripId: Hex;
   claimPrivateKey: Hex;
+  /** Pass the nonce when the trip was created with a non-zero claimCodeHash. */
+  claimCodeNonce?: Hex;
 }): string {
   const path = params.path ?? '/g';
-  const fragment = new URLSearchParams({
+  const parts: Record<string, string> = {
     t: params.tripId,
     k: params.claimPrivateKey,
-  }).toString();
+  };
+  if (params.claimCodeNonce) parts.n = params.claimCodeNonce;
+  const fragment = new URLSearchParams(parts).toString();
   return `${params.origin}${path}#${fragment}`;
 }
 
@@ -199,10 +213,16 @@ export function parseGuestLink(url: string): GuestLinkParts | null {
     const params = new URLSearchParams(u.hash.slice(1));
     const tripId = params.get('t');
     const claimPrivateKey = params.get('k');
+    const nonce = params.get('n');
     if (!tripId || !claimPrivateKey) return null;
     if (!/^0x[0-9a-fA-F]{64}$/.test(tripId)) return null;
     if (!/^0x[0-9a-fA-F]{64}$/.test(claimPrivateKey)) return null;
-    return { tripId: tripId as Hex, claimPrivateKey: claimPrivateKey as Hex };
+    const parsedNonce = nonce && /^0x[0-9a-fA-F]{64}$/.test(nonce) ? (nonce as Hex) : undefined;
+    return {
+      tripId: tripId as Hex,
+      claimPrivateKey: claimPrivateKey as Hex,
+      ...(parsedNonce ? { claimCodeNonce: parsedNonce } : {}),
+    };
   } catch {
     return null;
   }
@@ -246,6 +266,7 @@ export function encodeCreateTrip(params: { escrow: Address; args: CreateTripArgs
         params.args.metadataHash,
         params.args.metadataCID,
         params.args.agentTokenId,
+        params.args.claimCodeHash,
       ],
     }),
     value: 0n,
@@ -257,13 +278,15 @@ export function encodeClaimTrip(params: {
   tripId: Hex;
   guestWallet: Address;
   signature: Hex;
+  /** OTP preimage bytes. Pass '0x' if trip has no claim code. */
+  claimCodePreimage: Hex;
 }): EncodedCall {
   return {
     to: params.escrow,
     data: encodeFunctionData({
       abi: SENDERO_GUEST_ESCROW_ABI,
       functionName: 'claimTrip',
-      args: [params.tripId, params.guestWallet, params.signature],
+      args: [params.tripId, params.guestWallet, params.signature, params.claimCodePreimage],
     }),
     value: 0n,
   };
@@ -344,6 +367,7 @@ export function buildClaimTripCalls(params: {
   tripId: Hex;
   guestWallet: Address;
   signature: Hex;
+  claimCodePreimage: Hex;
 }): EncodedCall[] {
   return [encodeClaimTrip(params)];
 }
@@ -400,4 +424,81 @@ export function fromUsdcMicro(amount: bigint): string {
 /** Conventional 5% headroom for GDS price drift. */
 export function withHeadroom(quoted: bigint, bps: number = 500): bigint {
   return (quoted * BigInt(10_000 + bps)) / 10_000n;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Claim code / OTP helpers (2FA)
+// ──────────────────────────────────────────────────────────────────────
+
+/** Zero hash, used to disable the 2FA on-chain. */
+export const NO_CLAIM_CODE: Hex =
+  '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+/** 32-byte random hex. For `metadataHash` nonces and OTP nonces. */
+export function generateNonce32(): Hex {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return `0x${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')}` as Hex;
+}
+
+/**
+ * Generate a human-friendly 6-digit code.
+ * Uniform over [0, 999999]. Leading zeros preserved.
+ */
+export function generateClaimCode(): string {
+  const bytes = new Uint8Array(4);
+  crypto.getRandomValues(bytes);
+  const n = new DataView(bytes.buffer).getUint32(0) % 1_000_000;
+  return n.toString().padStart(6, '0');
+}
+
+/**
+ * Build the OTP preimage that will be hashed on-chain.
+ * Preimage format is implementation-defined; we use `${code}|${nonce}`.
+ * Must be recomputable client-side at claim time with both values.
+ */
+export function buildClaimCodePreimage(code: string, nonce: Hex): Hex {
+  const text = `${code}|${nonce}`;
+  const bytes = new TextEncoder().encode(text);
+  return `0x${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')}` as Hex;
+}
+
+/**
+ * Compute the on-chain `claimCodeHash` from a code + nonce.
+ * This is what the admin passes to `createTrip`.
+ */
+export function computeClaimCodeHash(code: string, nonce: Hex): Hex {
+  return keccak256(buildClaimCodePreimage(code, nonce));
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Metadata hash with nonce (rainbow-table-resistant)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Commit metadata as `keccak256(plaintext || nonce)`. Nonce lives
+ * off-chain (encrypted blob or URL fragment). Prevents an attacker
+ * from confirming guesses about the plaintext (e.g. an email address)
+ * by comparing candidate hashes.
+ */
+export function computeMetadataHash(plaintext: string, nonce: Hex): Hex {
+  const ptBytes = new TextEncoder().encode(plaintext);
+  const nonceBytes = hexToBytes(nonce);
+  const combined = new Uint8Array(ptBytes.length + nonceBytes.length);
+  combined.set(ptBytes, 0);
+  combined.set(nonceBytes, ptBytes.length);
+  return keccak256(`0x${bytesToHex(combined)}` as Hex);
+}
+
+function hexToBytes(hex: Hex): Uint8Array {
+  const h = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(h.substr(i * 2, 2), 16);
+  }
+  return out;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }

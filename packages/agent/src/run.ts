@@ -21,18 +21,25 @@
  * Anthropic / Prisma imports they don't need.
  */
 
-import type { LanguageModel, ToolSet } from 'ai';
-import { generateText, stepCountIs } from 'ai';
+import type { CapStore } from '@sendero/billing/caps';
+import { type MeterStore, preflight } from '@sendero/billing/meter';
+import type { BillingSegment } from '@sendero/billing/pricing';
 import type { MeterStatus } from '@sendero/database';
 import { buildAgentContext } from '@sendero/intelligence';
 import { getLocaleSlice } from '@sendero/locale';
-import { preflight, type MeterStore } from '@sendero/billing/meter';
-import type { CapStore } from '@sendero/billing/caps';
-import type { BillingSegment } from '@sendero/billing/pricing';
 import { listWorkflows } from '@sendero/workflows';
-import { buildIdempotencyKey, isDuplicateKeyError } from './idempotency';
-import { appendTurn, type ConversationState, type SessionStore } from './session';
+import type { LanguageModel, ToolSet } from 'ai';
+import { generateText, stepCountIs } from 'ai';
+
 import type { AgentInput, AgentOutput } from './channels';
+import { buildIdempotencyKey, isDuplicateKeyError } from './idempotency';
+import {
+  type AgentProviderOptions,
+  buildProviderOptions,
+  type ModelTier,
+  selectModel,
+} from './models';
+import { appendTurn, type ConversationState, type SessionStore } from './session';
 
 export interface TripSnapshot {
   tripId: string;
@@ -45,8 +52,14 @@ export interface TripSnapshot {
 
 export interface RunAgentTurnArgs {
   input: AgentInput;
-  /** LLM model handle — e.g. anthropic('claude-opus-4-7'). */
-  model: LanguageModel;
+  /**
+   * LLM model — either a gateway string like `'anthropic/claude-opus-4.6'`
+   * (AI SDK auto-routes through Vercel AI Gateway when AI_GATEWAY_API_KEY
+   * is set) OR a direct `LanguageModel` instance for local / test paths.
+   */
+  model: LanguageModel | string;
+  /** Tier this turn uses — feeds `providerOptions.gateway.order`. */
+  tier?: ModelTier;
   /** Tool catalog adapted via buildAiSdkTools. */
   tools: ToolSet;
   /** Injected stores. */
@@ -130,7 +143,13 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     .filter(Boolean)
     .join('\n\n');
 
-  // 5. LLM turn
+  // 5. LLM turn — when `model` is a gateway string AND AI_GATEWAY_API_KEY
+  //    (or VERCEL_OIDC_TOKEN) is set, AI SDK auto-routes through the
+  //    Vercel AI Gateway and honors providerOptions.gateway.order for
+  //    automatic fallback across providers.
+  const tier: ModelTier = args.tier ?? 'smart';
+  const providerOptions: AgentProviderOptions | undefined =
+    typeof args.model === 'string' ? buildProviderOptions(tier) : undefined;
   const result = await generateText({
     model: args.model,
     system: systemPrompt,
@@ -138,6 +157,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     tools: args.tools,
     stopWhen: stepCountIs(4),
     maxRetries: 2,
+    providerOptions,
   });
 
   const latencyMs = Date.now() - startedAt;

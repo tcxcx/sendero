@@ -10,7 +10,8 @@
     "./channels": "./src/channels.ts",
     "./run": "./src/run.ts",
     "./session": "./src/session.ts",
-    "./idempotency": "./src/idempotency.ts"
+    "./idempotency": "./src/idempotency.ts",
+    "./models": "./src/models.ts"
   },
   "peerDependencies": {
     "@sendero/billing": "*",

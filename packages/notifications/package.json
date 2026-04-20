@@ -1,0 +1,21 @@
+{
+  "name": "@sendero/notifications",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — outbound notifications (email, SMS). Resend-backed templates for guest invites, trip claimed receipts, booking confirmations. Consumed by @sendero/tools (prefund_trip), /api/guest/claimed, and workflow resume hooks.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates": "./src/templates.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "resend": "^4.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

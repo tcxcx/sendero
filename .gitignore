@@ -18,3 +18,10 @@ node_modules/
 *.log
 .gstack/
 .vercel
+
+# Turbo cache
+.turbo/
+
+# Local agent scratch (per-session, not repo state)
+.agents/
+.claude/

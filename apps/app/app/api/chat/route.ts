@@ -6,12 +6,20 @@
  * registry — no duplication.
  */
 
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
-import { convertToModelMessages, streamText, stepCountIs } from 'ai';
-import { NextRequest, NextResponse } from 'next/server';
+import {
+  buildProviderOptions,
+  directProviderModel,
+  gatewayConfigured,
+  type ModelTier,
+  selectModel,
+} from '@sendero/agent';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
+import { convertToModelMessages, type LanguageModel, stepCountIs, streamText } from 'ai';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -68,22 +76,28 @@ you call a tool, a single clause like "Searching flights…" is enough.
 
 Today's date: ${new Date().toISOString().split('T')[0]}.`;
 
-function pickModel(): { model: any; label: string } | null {
-  const forced = process.env.AI_PROVIDER?.toLowerCase();
-  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
-  const hasOpenAI = !!process.env.OPENAI_API_KEY;
-  if (forced === 'openai' && hasOpenAI) return { model: openai('gpt-4o'), label: 'openai:gpt-4o' };
-  if (forced === 'anthropic' && hasAnthropic)
-    return {
-      model: anthropic('claude-3-5-sonnet-latest'),
-      label: 'anthropic:claude-3-5-sonnet',
-    };
-  if (hasAnthropic)
-    return {
-      model: anthropic('claude-3-5-sonnet-latest'),
-      label: 'anthropic:claude-3-5-sonnet',
-    };
-  if (hasOpenAI) return { model: openai('gpt-4o'), label: 'openai:gpt-4o' };
+type Picked = { model: LanguageModel | string; label: string; tier: ModelTier };
+
+/**
+ * Route selection: prefer Vercel AI Gateway string form so providerOptions
+ * kicks in fallback chains and we keep unified observability. Only fall
+ * back to a direct `@ai-sdk/anthropic` or `@ai-sdk/openai` model when no
+ * gateway credential is present — matches the pattern in /api/agent/dispatch.
+ */
+function pickModel(tier: ModelTier = 'fast'): Picked | null {
+  if (gatewayConfigured()) {
+    const { model } = selectModel({ tier });
+    return { model, label: `gateway:${model}`, tier };
+  }
+  const direct = directProviderModel(tier);
+  if (!direct) return null;
+  const [provider, modelId] = direct.split('/') as [string, string];
+  if (provider === 'anthropic') {
+    return { model: anthropic(modelId), label: `direct:${direct}`, tier };
+  }
+  if (provider === 'openai') {
+    return { model: openai(modelId), label: `direct:${direct}`, tier };
+  }
   return null;
 }
 
@@ -94,12 +108,16 @@ export async function POST(req: NextRequest) {
 
   const runtimeContextJson = body.context ? JSON.stringify(body.context, null, 2) : null;
 
-  const picked = pickModel();
+  // Chat tier defaults to 'fast' (sonnet-class) for responsive replies.
+  // A trailing body.tier override lets power users force a smart/cheap turn.
+  const requestedTier = (body.tier as ModelTier | undefined) ?? 'fast';
+  const picked = pickModel(requestedTier);
   if (!picked) {
     return NextResponse.json(
       {
         error: 'ai_not_configured',
-        message: 'Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env.local.',
+        message:
+          'Set AI_GATEWAY_API_KEY (preferred), or provision Vercel OIDC, or fall back to ANTHROPIC_API_KEY / OPENAI_API_KEY in .env.local.',
       },
       { status: 503 }
     );
@@ -126,6 +144,9 @@ ${runtimeContextJson}
     console.error(`[chat] ${picked.label} error:`, msg);
   };
 
+  const providerOptions =
+    typeof picked.model === 'string' ? buildProviderOptions(picked.tier) : undefined;
+
   const result = streamText({
     model: picked.model,
     system: systemPrompt,
@@ -133,6 +154,7 @@ ${runtimeContextJson}
     tools,
     stopWhen: stepCountIs(6),
     maxRetries: 2,
+    providerOptions,
     onError,
   });
 

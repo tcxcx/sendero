@@ -25,7 +25,12 @@ interface Required {
 const REQUIRED: Required[] = [
   { name: 'DATABASE_URL', scope: 'db', hint: 'Neon pooled connection string' },
   { name: 'DIRECT_URL', scope: 'db', hint: 'Neon direct (non-pooled) connection string' },
-  { name: 'ANTHROPIC_API_KEY', scope: 'agent' },
+  {
+    name: 'AI_GATEWAY_API_KEY',
+    scope: 'agent',
+    accepts: ['AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
+    hint: 'Vercel AI Gateway (preferred) OR a direct provider key — any one satisfies the agent',
+  },
   { name: 'CLERK_SECRET_KEY', scope: 'auth' },
   { name: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', scope: 'auth' },
   { name: 'TREASURY_PRIVATE_KEY', scope: 'onchain', hint: 'Operator EOA for escrow' },
@@ -53,6 +58,9 @@ const REQUIRED: Required[] = [
     accepts: ['CIRCLE_ENTITY_SECRET', 'CIRCLE_ENTITY_SECRET_CIPHERTEXT'],
   },
   { name: 'DUFFEL_API_TOKEN', scope: 'duffel' },
+  // Keep ANTHROPIC_API_KEY as a soft fallback check too so operators see
+  // it listed — but the agent-level check above already accepts gateway OR
+  // any direct key, so this is informational.
   {
     name: 'NEXT_PUBLIC_ARC_CHAIN_ID',
     scope: 'onchain',

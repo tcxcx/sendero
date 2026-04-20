@@ -19,23 +19,31 @@
  * passkey userOp in the browser, or a scheduled Trigger.dev task).
  */
 
-import { z } from 'zod';
-import type { Address, Hex } from 'viem';
 import {
+  buildClaimCodePreimage,
   buildClaimTripCalls,
   buildCreateTripCalls,
   buildGuestLink,
+  computeClaimCodeHash,
+  type EncodedCall,
   encodeCommitBooking,
   encodeReserveForBooking,
+  fromUsdcMicro,
   generateBookingId,
+  generateClaimCode,
   generateClaimKeypair,
+  generateNonce32,
   generateTripId,
+  NO_CLAIM_CODE,
   parseGuestLink,
-  signClaim,
   SENDERO_GUEST_ESCROW_ABI,
+  signClaim,
   toUsdcMicro,
-  type EncodedCall,
 } from '@sendero/guest';
+import { createNotifier, notificationsConfigured } from '@sendero/notifications';
+import type { Address, Hex } from 'viem';
+import { z } from 'zod';
+
 import type { ToolDef } from './types';
 
 // ─── Shared input helpers ───────────────────────────────────────────
@@ -84,6 +92,27 @@ const prefundInput = z.object({
   agentTokenId: z.string().optional(),
   escrowAddress: hex20.optional(),
   linkOrigin: z.string().url().optional(),
+  require2fa: z
+    .boolean()
+    .default(false)
+    .describe('When true, mint a 6-digit OTP + nonce that the guest must present at claim time.'),
+  guestEmail: z
+    .string()
+    .email()
+    .optional()
+    .describe('When provided, emails the guest the claim link + OTP via @sendero/notifications.'),
+  guestName: z.string().min(1).max(80).optional().describe('Display name for the guest greeting.'),
+  buyerName: z
+    .string()
+    .min(1)
+    .max(120)
+    .default('Sendero')
+    .describe('Display name rendered in the email subject & greeting (e.g. "Acme Travel Desk").'),
+  tripSummary: z
+    .string()
+    .max(200)
+    .optional()
+    .describe('Short route summary for the subject line, e.g. "SFO → LHR" or "Mexico City holiday".'),
 });
 
 export const prefundTripTool: ToolDef = {
@@ -102,6 +131,15 @@ export const prefundTripTool: ToolDef = {
       agentTokenId: { type: 'string', description: 'ERC-8004 agent token id.' },
       escrowAddress: { type: 'string', description: 'Override the default escrow address.' },
       linkOrigin: { type: 'string', description: 'Override the guest link origin.' },
+      require2fa: {
+        type: 'boolean',
+        default: false,
+        description: 'Require a 6-digit OTP at claim time (out-of-band share).',
+      },
+      guestEmail: { type: 'string', description: 'Email the guest directly when provided.' },
+      guestName: { type: 'string', description: 'Display name for the email greeting.' },
+      buyerName: { type: 'string', description: 'Buyer display name in subject + greeting.' },
+      tripSummary: { type: 'string', description: 'Short route summary for email copy.' },
     },
   },
   async handler(input) {
@@ -120,6 +158,15 @@ export const prefundTripTool: ToolDef = {
       (parsed.metadataHash as Hex | undefined) ??
       ('0x0000000000000000000000000000000000000000000000000000000000000000' as Hex);
 
+    let claimCode: string | null = null;
+    let codeNonce: Hex | null = null;
+    let claimCodeHash: Hex = NO_CLAIM_CODE;
+    if (parsed.require2fa) {
+      claimCode = generateClaimCode();
+      codeNonce = generateNonce32();
+      claimCodeHash = computeClaimCodeHash(claimCode, codeNonce);
+    }
+
     const calls: EncodedCall[] = buildCreateTripCalls({
       escrow,
       trip: {
@@ -130,10 +177,41 @@ export const prefundTripTool: ToolDef = {
         metadataHash,
         metadataCID: parsed.metadataCID,
         agentTokenId,
+        claimCodeHash,
       },
     });
 
-    const link = buildGuestLink({ origin, tripId, claimPrivateKey: privateKey });
+    // Nonce rides in the URL fragment when 2FA is on — same privacy
+    // envelope as the claim key. The 6-digit code goes out-of-band.
+    const link = buildGuestLink({
+      origin,
+      tripId,
+      claimPrivateKey: privateKey,
+      ...(codeNonce ? { claimCodeNonce: codeNonce } : {}),
+    });
+
+    // Fire the email invite when the caller supplied a guest email AND
+    // the notifier is configured. Failures never block the on-chain flow —
+    // we return the send result so the caller can log + retry.
+    let emailResult: { ok: boolean; id?: string; error?: string; skipped?: boolean } | null = null;
+    if (parsed.guestEmail) {
+      if (!notificationsConfigured()) {
+        emailResult = { ok: false, skipped: true, error: 'RESEND_API_KEY / SENDERO_EMAIL_FROM not set' };
+      } else {
+        const notifier = createNotifier();
+        const expiresIso = new Date(Number(expiresAt) * 1000).toISOString();
+        const budgetHuman = `$${fromUsdcMicro(budget).replace(/\.?0+$/, '')} USDC`;
+        emailResult = await notifier.sendGuestInvite(parsed.guestEmail, {
+          buyerName: parsed.buyerName,
+          guestName: parsed.guestName,
+          guestLink: link,
+          claimCode,
+          budget: budgetHuman,
+          expiresAtIso: expiresIso,
+          tripSummary: parsed.tripSummary,
+        });
+      }
+    }
 
     return {
       tripId,
@@ -143,8 +221,24 @@ export const prefundTripTool: ToolDef = {
       escrowAddress: escrow,
       guestLink: link,
       claimPubKey20: pubKey20,
+      require2fa: parsed.require2fa,
+      claimCode,
+      codeNonce,
+      invite: parsed.guestEmail
+        ? {
+            channel: 'email' as const,
+            to: parsed.guestEmail,
+            ...emailResult,
+          }
+        : null,
       onchainCalls: calls.map(c => ({ to: c.to, data: c.data, value: c.value.toString() })),
-      note: 'Submit the calls via the buyer MSCA userOp. DM the guestLink to the traveler over WhatsApp. The URL fragment never hits the server.',
+      note: parsed.require2fa
+        ? parsed.guestEmail && emailResult?.ok
+          ? 'Submit the calls via the buyer MSCA userOp. The guest was emailed their claim link (with the nonce embedded) and their 6-digit code separately in the email body.'
+          : 'Submit the calls via the buyer MSCA userOp. Deliver the guestLink AND the 6-digit claimCode to the traveler (email/SMS) — both are required at claim time.'
+        : parsed.guestEmail && emailResult?.ok
+          ? 'Submit the calls via the buyer MSCA userOp. The guest was emailed their claim link. The URL fragment never hits any server.'
+          : 'Submit the calls via the buyer MSCA userOp. DM the guestLink to the traveler. The URL fragment never hits the server.',
     };
   },
 };
@@ -158,6 +252,12 @@ const claimInput = z.object({
   guestWallet: hex20.describe('Modular Wallet address that will receive the trip.'),
   chainId: z.number().int().default(5042002).describe('Arc Testnet chain id.'),
   escrowAddress: hex20.optional(),
+  claimCode: z
+    .string()
+    .regex(/^\d{6}$/)
+    .optional()
+    .describe('6-digit OTP if the trip was created with require2fa=true.'),
+  codeNonce: hex32.optional().describe('32-byte nonce returned by prefund_trip when 2FA is on.'),
 });
 
 export const guestClaimLinkTool: ToolDef = {
@@ -173,6 +273,8 @@ export const guestClaimLinkTool: ToolDef = {
       guestWallet: { type: 'string' },
       chainId: { type: 'integer', default: 5042002 },
       escrowAddress: { type: 'string' },
+      claimCode: { type: 'string', description: '6-digit OTP if 2FA is on.' },
+      codeNonce: { type: 'string', description: '32-byte nonce returned by prefund_trip.' },
     },
   },
   async handler(input) {
@@ -189,17 +291,31 @@ export const guestClaimLinkTool: ToolDef = {
       tripId: parts.tripId,
       guestWallet: parsed.guestWallet as Address,
     });
+
+    // If the buyer set require2fa at prefund time, the trip has a non-zero
+    // claimCodeHash on-chain and claimTrip() will revert without a matching
+    // preimage. The preimage is `${code}|${nonce}` encoded as UTF-8 bytes.
+    const hasCode = Boolean(parsed.claimCode && parsed.codeNonce);
+    if ((parsed.claimCode && !parsed.codeNonce) || (!parsed.claimCode && parsed.codeNonce)) {
+      throw new Error('claim_code_pair: both claimCode and codeNonce are required together.');
+    }
+    const claimCodePreimage: Hex = hasCode
+      ? buildClaimCodePreimage(parsed.claimCode!, parsed.codeNonce as Hex)
+      : ('0x' as Hex);
+
     const calls = buildClaimTripCalls({
       escrow,
       tripId: parts.tripId,
       guestWallet: parsed.guestWallet as Address,
       signature,
+      claimCodePreimage,
     });
     return {
       tripId: parts.tripId,
       guestWallet: parsed.guestWallet,
       signature,
       escrowAddress: escrow,
+      claimCodeProvided: hasCode,
       onchainCalls: calls.map(c => ({ to: c.to, data: c.data, value: c.value.toString() })),
       note: 'Submit the call via the guest MSCA userOp (Circle Paymaster covers gas). MSCA may be uninitialized — include initCode in the userOp to deploy atomically.',
     };
