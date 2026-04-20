@@ -390,6 +390,13 @@ model Booking {
   segments      Json?    // normalized itinerary
   /// Free-form booking lifecycle metadata (approvals, policy notes, etc.).
   metadata      Json?
+  /// Which policy (+ which version of its rules) was applied at booking time.
+  appliedPolicyId      String?
+  appliedPolicyVersion Int?
+  /// Result of the policy evaluation: "allowed", "allowed_with_warnings", "escalated", "rejected".
+  policyCheckResult    String?
+  /// Structured policy violations captured at book time.
+  policyViolations     Json?
   bookedAt      DateTime? @db.Timestamptz(6)
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt       @db.Timestamptz(6)
@@ -484,10 +491,14 @@ model MeterEvent {
   settlementRef  String?          // Gateway transfer id or tx hash
   note           String?
   metadata       Json?
+  /// Idempotency key — unique per (tenantId, key). Duplicate writes
+  /// from retried webhook deliveries no-op at the DB layer.
+  idempotencyKey String?
 
   tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   user           User?    @relation(fields: [userId],   references: [id], onDelete: SetNull)
 
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId, at])
   @@index([userId, at])
   @@index([toolName, at])
@@ -587,7 +598,11 @@ model Session {
   userId         String?
   tripId         String?
   clerkSessionId String?
-  threadContext  Json?    // in-flight tool call, pending approvals
+  /// Channel-agnostic subject key (WA BSUID, Slack (ent:team:user), web userId,
+  /// MCP actor id). Lets runAgentTurn look up an ambient conversation session
+  /// across channels without rebuilding context each turn.
+  subjectKey     String?
+  threadContext  Json?    // in-flight tool call, pending approvals, turns log
   expiresAt      DateTime? @db.Timestamptz(6)
   createdAt      DateTime @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt       @db.Timestamptz(6)
@@ -596,6 +611,7 @@ model Session {
   user           User?    @relation(fields: [userId],   references: [id], onDelete: SetNull)
   trip           Trip?    @relation(fields: [tripId],   references: [id], onDelete: SetNull)
 
+  @@unique([tenantId, subjectKey])
   @@index([tenantId, createdAt])
   @@index([tripId])
   @@index([clerkSessionId])

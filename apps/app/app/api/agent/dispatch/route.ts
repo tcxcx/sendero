@@ -1,35 +1,33 @@
 /**
- * Per-trip agent dispatch endpoint.
+ * POST /api/agent/dispatch
  *
- * The webhook layer (WhatsApp + Slack) calls POST /api/agent/dispatch
- * after it has resolved the traveler's ChannelIdentity → tenant + user.
- * This endpoint is the single fan-in:
+ * Single fan-in for every channel (WhatsApp, Slack, Web, MCP). The
+ * channel-specific webhook routes translate their native payload into
+ * an AgentInput and call this endpoint. runAgentTurn() from
+ * @sendero/agent does the rest — cap preflight, session lookup,
+ * context build, LLM turn, idempotent meter write, session update.
  *
- *   1. Resolve the active Trip (or spawn a new one if the traveler is
- *      starting fresh).
- *   2. Build agent context via @sendero/intelligence (locale slice +
- *      learned preferences + recalled memories + trip state).
- *   3. Run the LLM turn with the @sendero/tools tool catalog.
- *   4. Price + record the meter event via @sendero/billing.
- *   5. Return the reply text + any side-effects (booking id, tx hash).
- *
- * The WA / Slack webhook routes translate this reply back into the
- * channel-appropriate shape (WA free-form text, Slack message).
+ * This route is intentionally thin: parse → build stores → runTurn →
+ * capture analytics → return AgentOutput. No channel-specific logic.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { generateText, stepCountIs } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
+import { z } from 'zod';
+import {
+  runAgentTurn,
+  type AgentInput,
+  type Channel,
+  type ConversationState,
+  type SessionStore,
+} from '@sendero/agent';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
-import { buildAgentContext } from '@sendero/intelligence';
-import { getLocaleSlice } from '@sendero/locale';
-import { listWorkflows } from '@sendero/workflows';
-import { preflight, recordMetered, type MeterStore } from '@sendero/billing/meter';
+import type { BillingSegment } from '@sendero/billing/pricing';
 import type { CapStore } from '@sendero/billing/caps';
+import type { MeterStore, MeterEventInput } from '@sendero/billing/meter';
 import { prisma } from '@sendero/database';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
-import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,11 +36,28 @@ export const maxDuration = 60;
 const BodySchema = z.object({
   tenantId: z.string().min(1),
   userId: z.string().min(1),
-  channel: z.enum(['whatsapp', 'slack', 'web', 'mcp']),
+  channel: z.enum(['whatsapp', 'slack', 'web', 'mcp', 'email']),
   tripId: z.string().optional(),
   text: z.string().min(1).max(4000),
   locale: z.string().optional(),
+  /** Optional — adapters pass their native message id for idempotency. */
+  turnId: z.string().optional(),
 });
+
+const SENDERO_PERSONA = `
+You are Sendero, a concise AI travel agent. Prefer concrete next actions over long
+explanations. When you call a tool, say one sentence about why. Respond in the traveler's locale.
+Never ask for seed phrases or passwords.
+
+Routing rules:
+- Corporate buyers saying "fund a trip", "give my employee a budget", or "prefund this contractor"
+  → sendero.guest_prefund.
+- Agencies saying "set up a cohort", "fund these 50 people" → sendero.agency_cohort.
+- Individual traveler booking their own flight → sendero.book_flight.
+- A group planning together → sendero.group_trip.
+- Cancel + refund → sendero.refund.
+- Only call tools directly when none of the canonical workflows fits.
+`;
 
 export async function POST(req: NextRequest) {
   let body: z.infer<typeof BodySchema>;
@@ -55,8 +70,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const start = Date.now();
   const distinctId = hashDistinctId(body.userId);
+  const tools = buildAiSdkTools(toolList, {
+    traveler: { userId: body.userId, tenantId: body.tenantId },
+  });
+
+  const agentInput: AgentInput = {
+    actor: {
+      tenantId: body.tenantId,
+      userId: body.userId,
+      tripId: body.tripId ?? null,
+      locale: body.locale,
+    },
+    channel: body.channel as Channel,
+    text: body.text,
+    turnId: body.turnId ?? `${body.channel}:${body.userId}:${Date.now()}`,
+  };
 
   capture({
     event: 'agent_message_received',
@@ -70,175 +99,59 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const segment = await resolveSegment(body.tenantId);
-  const pre = await preflight(makeCapStore(), {
-    tenantId: body.tenantId,
-    action: 'chat_reply',
-    segment,
+  const result = await runAgentTurn({
+    input: agentInput,
+    model: anthropic('claude-opus-4-7'),
+    tools,
+    capStore: makeCapStore(),
+    meterStore: makeMeterStore(),
+    sessionStore: makeSessionStore(),
+    resolveSegment,
+    loadTrip,
+    persona: SENDERO_PERSONA,
   });
-  if (pre.blocked) {
+
+  if (!result.blocked) {
+    capture({
+      event: 'agent_reply_sent',
+      distinctId,
+      properties: {
+        tenantId: body.tenantId,
+        channel: body.channel,
+        locale: body.locale,
+        tripId: body.tripId ?? null,
+        latencyMs: result.latencyMs,
+      },
+    });
+  }
+
+  await flush();
+
+  if (result.blocked) {
     return NextResponse.json(
       {
         error: 'cap_exceeded',
-        message: 'Your tenant has hit its spend cap for this period.',
-        periods: pre.cap.periods,
+        text: result.text,
+        periods: result.capPeriods.map(p => ({
+          period: p.period,
+          spentMicro: p.spentMicro.toString(),
+          capMicro: p.capMicro.toString(),
+          remainingMicro: p.remainingMicro.toString(),
+        })),
       },
       { status: 402 }
     );
   }
 
-  // Build the context the LLM sees — locale + preferences + memory + trip.
-  const localeSlice = getLocaleSlice(body.locale ?? 'en-US');
-  const trip = body.tripId
-    ? await prisma.trip.findFirst({
-        where: { id: body.tripId, tenantId: body.tenantId },
-        select: {
-          id: true,
-          status: true,
-          intent: true,
-          bookings: { select: { pnr: true, externalId: true }, take: 1 },
-        },
-      })
-    : null;
-
-  const tripSnapshot = trip
-    ? {
-        tripId: trip.id,
-        route: tripIntentToRoute(trip.intent),
-        departAt: tripIntentToDepartAt(trip.intent),
-        status:
-          trip.status === 'booked' || trip.status === 'in_progress'
-            ? ('booked' as const)
-            : ('planning' as const),
-        pnr: trip.bookings[0]?.pnr ?? null,
-        bookingRef: trip.bookings[0]?.externalId ?? null,
-      }
-    : null;
-
-  const systemPrompt = [
-    buildAgentContext({
-      localeSlice,
-      trip: tripSnapshot,
-    }),
-    renderWorkflowCatalog(),
-    SENDERO_PERSONA,
-  ].join('\n\n');
-
-  const tools = buildAiSdkTools(toolList, {
-    traveler: { userId: body.userId, tenantId: body.tenantId },
-  });
-
-  const result = await generateText({
-    model: anthropic('claude-opus-4-7'),
-    system: systemPrompt,
-    prompt: body.text,
-    tools,
-    stopWhen: stepCountIs(4),
-    maxRetries: 2,
-  });
-
-  const latencyMs = Date.now() - start;
-
-  // Record meter event + capture analytics.
-  await recordMetered({
-    meter: makeMeterStore(),
-    event: {
-      tenantId: body.tenantId,
-      userId: body.userId,
-      toolName: 'chat_reply',
-      priceMicroUsdc: pre.priceMicroUsdc,
-      status: 'paid',
-      note: `channel=${body.channel}`,
-      metadata: { channel: body.channel, locale: body.locale },
-    },
-  });
-
-  capture({
-    event: 'agent_reply_sent',
-    distinctId,
-    properties: {
-      tenantId: body.tenantId,
-      channel: body.channel,
-      locale: body.locale,
-      tripId: body.tripId ?? null,
-      latencyMs,
-    },
-  });
-
-  await flush();
-
   return NextResponse.json({
     text: result.text,
-    toolCalls: result.toolCalls?.length ?? 0,
-    latencyMs,
+    trail: result.trail,
+    latencyMs: result.latencyMs,
+    billed: result.billed,
   });
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────────
-
-const SENDERO_PERSONA = `
-You are Sendero, a concise AI travel agent. Prefer concrete next actions
-over long explanations. When you call a tool, say one sentence about why.
-Respond in the traveler's locale. Never ask for seed phrases or passwords.
-
-Routing rules:
-- If the request matches a declared Sendero workflow (see "Workflows"
-  above), prefer calling the workflow by name over chaining tools yourself.
-  Tell the traveler "running <workflow.label>…" before you start, and
-  surface the result as a short status summary — not a step-by-step dump.
-- Corporate buyers saying "fund a trip", "give my employee a budget", or
-  "prefund this contractor" → sendero.guest_prefund.
-- Agencies saying "set up a cohort", "fund these 50 people" → sendero.agency_cohort.
-- Individual travelers booking their own flight → sendero.book_flight.
-- A group planning together → sendero.group_trip.
-- Cancel + refund → sendero.refund.
-- Only call tools directly when none of the canonical workflows fits.
-`;
-
-function renderWorkflowCatalog(): string {
-  const workflows = listWorkflows();
-  if (workflows.length === 0) return '';
-  return [
-    '## Workflows available to invoke by id',
-    ...workflows.map(
-      w => `- \`${w.id}\` — ${w.label}${w.description ? `\n    ${w.description}` : ''}`
-    ),
-  ].join('\n');
-}
-
-function tripIntentToRoute(intent: unknown): string {
-  if (!intent || typeof intent !== 'object') return '—';
-  const o = intent as Record<string, unknown>;
-  const origin = typeof o.origin === 'string' ? o.origin : '';
-  const destination = typeof o.destination === 'string' ? o.destination : '';
-  return origin && destination ? `${origin} → ${destination}` : '—';
-}
-
-function tripIntentToDepartAt(intent: unknown): string {
-  if (!intent || typeof intent !== 'object') return '—';
-  const o = intent as Record<string, unknown>;
-  return typeof o.departAt === 'string' ? o.departAt : '—';
-}
-
-async function resolveSegment(
-  tenantId: string
-): Promise<'consumer' | 'agency' | 'corporate' | 'ai_agent'> {
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { billingTier: true },
-  });
-  if (!tenant) return 'consumer';
-  switch (tenant.billingTier) {
-    case 'enterprise':
-      return 'corporate';
-    case 'business':
-      return 'corporate';
-    case 'pro':
-      return 'agency';
-    default:
-      return 'consumer';
-  }
-}
+// ─── store adapters — thin Prisma bindings ───────────────────────────
 
 function makeCapStore(): CapStore {
   return {
@@ -267,7 +180,14 @@ function makeCapStore(): CapStore {
 
 function makeMeterStore(): MeterStore {
   return {
-    create: async input => {
+    create: async (input: MeterEventInput) => {
+      const idempotencyKey =
+        input.metadata &&
+        typeof input.metadata === 'object' &&
+        'idempotencyKey' in input.metadata &&
+        typeof (input.metadata as Record<string, unknown>).idempotencyKey === 'string'
+          ? ((input.metadata as Record<string, unknown>).idempotencyKey as string)
+          : null;
       const row = await prisma.meterEvent.create({
         data: {
           tenantId: input.tenantId,
@@ -279,10 +199,91 @@ function makeMeterStore(): MeterStore {
           settlementRef: input.settlementRef ?? null,
           note: input.note ?? null,
           metadata: (input.metadata as object | undefined) ?? undefined,
+          idempotencyKey,
         },
         select: { id: true },
       });
       return { id: row.id };
     },
+  };
+}
+
+function makeSessionStore(): SessionStore {
+  return {
+    getByActor: async ({ tenantId, subjectKey }) => {
+      const row = await prisma.session.findUnique({
+        where: { tenantId_subjectKey: { tenantId, subjectKey } },
+        select: { id: true, threadContext: true },
+      });
+      if (!row) return null;
+      const ctx = row.threadContext as { conversation?: ConversationState } | null | undefined;
+      const state = ctx?.conversation ?? { turns: [], subjectKey };
+      return { id: row.id, state };
+    },
+    upsert: async ({ tenantId, userId, subjectKey, state, expiresAt }) => {
+      const row = await prisma.session.upsert({
+        where: { tenantId_subjectKey: { tenantId, subjectKey } },
+        create: {
+          tenantId,
+          userId: userId ?? null,
+          subjectKey,
+          threadContext: { conversation: state } as object,
+          expiresAt: expiresAt ?? null,
+        },
+        update: {
+          threadContext: { conversation: state } as object,
+          expiresAt: expiresAt ?? null,
+        },
+        select: { id: true },
+      });
+      return { id: row.id };
+    },
+  };
+}
+
+async function resolveSegment(tenantId: string): Promise<BillingSegment> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { billingTier: true },
+  });
+  if (!tenant) return 'consumer';
+  switch (tenant.billingTier) {
+    case 'enterprise':
+      return 'corporate';
+    case 'business':
+      return 'corporate';
+    case 'pro':
+      return 'agency';
+    default:
+      return 'consumer';
+  }
+}
+
+async function loadTrip(args: { tripId: string; tenantId: string }) {
+  const trip = await prisma.trip.findFirst({
+    where: { id: args.tripId, tenantId: args.tenantId },
+    select: {
+      id: true,
+      status: true,
+      intent: true,
+      bookings: { select: { pnr: true, externalId: true }, take: 1 },
+    },
+  });
+  if (!trip) return null;
+  const intent = trip.intent as Record<string, unknown> | null;
+  const origin = (intent && typeof intent.origin === 'string' && intent.origin) || '';
+  const destination =
+    (intent && typeof intent.destination === 'string' && intent.destination) || '';
+  const departAt = (intent && typeof intent.departAt === 'string' && intent.departAt) || '—';
+  return {
+    tripId: trip.id,
+    route: origin && destination ? `${origin} → ${destination}` : '—',
+    departAt,
+    status:
+      trip.status === 'booked' || trip.status === 'in_progress'
+        ? ('booked' as const)
+        : ('planning' as const),
+    pnr: trip.bookings[0]?.pnr ?? null,
+    bookingRef: trip.bookings[0]?.externalId ?? null,
   };
 }

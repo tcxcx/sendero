@@ -1,0 +1,27 @@
+{
+  "name": "@sendero/agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — channel-agnostic agent engine. Every inbound message (WhatsApp, Slack, Web, MCP) flows through runAgentTurn(). ChannelAdapter interface lets new channels land by writing an adapter, not by touching the engine. Stateful sessions, policy-as-code evaluation, idempotent metering.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./channels": "./src/channels.ts",
+    "./run": "./src/run.ts",
+    "./session": "./src/session.ts",
+    "./idempotency": "./src/idempotency.ts"
+  },
+  "peerDependencies": {
+    "@sendero/billing": "*",
+    "@sendero/database": "*",
+    "@sendero/intelligence": "*",
+    "@sendero/locale": "*",
+    "@sendero/tools": "*",
+    "@sendero/workflows": "*",
+    "ai": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
