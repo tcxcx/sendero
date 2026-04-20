@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import type { SendParams } from '@circle-fin/app-kit';
 import { env } from '@/lib/env';
-import { getCircle } from '@/lib/circle';
+import {
+  getAppKit,
+  getTreasuryAdapter,
+  summarizeSend,
+} from '@/lib/appkit';
 
 /**
  * POST /api/send
- * Same-chain treasury transfer on Arc Testnet via Circle DCW.
- *
- * App Kit's `kit.send()` calls `adapter.getAddress()` internally even when
- * `from.address` is supplied, which blows up for developer-controlled
- * adapters (see @circle-fin/app-kit v1.3 `prepareSend`). For dev-controlled
- * treasury wallets we don't need App Kit at all — Circle DCW
- * `createTransaction` is the lower-friction, battle-tested path.
- *
+ * Same-chain treasury transfer on Arc Testnet via App Kit (viem adapter).
  * Body: { to: 0xAddress, amount: decimal, token?: 'USDC'|'EURC' }
  */
 const BodySchema = z.object({
@@ -26,43 +24,33 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const treasuryAddress = env.circleTreasuryAddress();
-  const hasCircle = !!env.circleApiKey() && !!env.circleTreasuryWalletId();
-  if (!treasuryAddress || !hasCircle) {
+  if (!env.treasuryPrivateKey()) {
     return NextResponse.json(
       {
         error: 'treasury_not_configured',
-        message:
-          'Set CIRCLE_API_KEY + CIRCLE_TREASURY_WALLET_ID + CIRCLE_TREASURY_ADDRESS in .env.local.',
+        message: 'TREASURY_PRIVATE_KEY required in .env.local.',
       },
       { status: 503 },
     );
   }
-
   try {
     const body = BodySchema.parse(await req.json());
-    const tokenAddress =
-      body.token === 'USDC' ? env.arcUsdcAddress() : env.arcEurcAddress();
+    const kit = getAppKit();
+    const adapter = getTreasuryAdapter();
 
-    const circle = getCircle();
-    const response = await circle.createTransaction({
-      walletAddress: treasuryAddress,
-      blockchain: 'ARC-TESTNET' as any,
-      tokenAddress,
-      destinationAddress: body.to,
-      amount: [body.amount],
-      fee: { type: 'level', config: { feeLevel: 'MEDIUM' as any } },
-      refId: `treasury-send-${Date.now()}`,
-    } as any);
+    const params: SendParams = {
+      from: {
+        adapter,
+        chain: 'Arc_Testnet',
+      },
+      to: body.to,
+      amount: body.amount,
+      token: body.token,
+    };
 
-    const data: any = (response as any).data ?? {};
+    const result = await kit.send(params);
     return NextResponse.json({
-      state: data?.state ?? 'INITIATED',
-      txId: data?.id ?? null,
-      txHash: data?.txHash ?? null,
-      explorerUrl: data?.txHash
-        ? `${env.arcExplorerUrl()}/tx/${data.txHash}`
-        : null,
+      ...summarizeSend(result),
       amount: body.amount,
       token: body.token,
       to: body.to,
@@ -74,10 +62,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const anyErr = err as any;
-    const detail =
-      anyErr?.response?.data?.message ||
-      (err instanceof Error ? err.message : String(err));
+    const detail = err instanceof Error ? err.message : String(err);
     console.error('[send] error:', detail);
     return NextResponse.json(
       { error: 'send_failed', message: detail },

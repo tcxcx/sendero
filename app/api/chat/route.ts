@@ -28,7 +28,6 @@ import {
   getAppKit,
   getKitKey,
   getTreasuryAdapter,
-  getTreasuryAddress,
   summarizeBridge,
   summarizeSend,
   summarizeSwap,
@@ -237,14 +236,12 @@ export async function POST(req: NextRequest) {
         if (fromToken === toToken) {
           return { error: 'fromToken and toToken must differ' };
         }
-        const treasuryAddress = getTreasuryAddress();
         const kit = getAppKit();
         const adapter = getTreasuryAdapter();
         const params: SwapParams = {
           from: {
             adapter,
             chain: 'Arc_Testnet',
-            address: treasuryAddress as `0x${string}`,
           },
           tokenIn: fromToken,
           tokenOut: toToken,
@@ -276,14 +273,12 @@ export async function POST(req: NextRequest) {
         token: z.enum(['USDC', 'EURC']).default('USDC'),
       }),
       execute: async ({ to, amount, token }) => {
-        const treasuryAddress = getTreasuryAddress();
         const kit = getAppKit();
         const adapter = getTreasuryAdapter();
         const params: SendParams = {
           from: {
             adapter,
             chain: 'Arc_Testnet',
-            address: treasuryAddress as `0x${string}`,
           },
           to,
           amount,
@@ -310,19 +305,16 @@ export async function POST(req: NextRequest) {
         amount: z.string(),
       }),
       execute: async ({ fromChain, amount }) => {
-        const treasuryAddress = getTreasuryAddress();
         const kit = getAppKit();
         const adapter = getTreasuryAdapter();
         const params: BridgeParams = {
           from: {
             adapter,
             chain: fromChain,
-            address: treasuryAddress as `0x${string}`,
           },
           to: {
             adapter,
             chain: 'Arc_Testnet',
-            address: treasuryAddress as `0x${string}`,
           },
           amount,
         };
@@ -349,7 +341,6 @@ export async function POST(req: NextRequest) {
         targetToken: z.enum(['USDC', 'EURC']).default('EURC'),
       }),
       execute: async ({ fromChain, amount, targetToken }) => {
-        const treasuryAddress = getTreasuryAddress();
         const kit = getAppKit();
         const adapter = getTreasuryAdapter();
 
@@ -357,12 +348,10 @@ export async function POST(req: NextRequest) {
           from: {
             adapter,
             chain: fromChain,
-            address: treasuryAddress as `0x${string}`,
           },
           to: {
             adapter,
             chain: 'Arc_Testnet',
-            address: treasuryAddress as `0x${string}`,
           },
           amount,
         };
@@ -387,7 +376,6 @@ export async function POST(req: NextRequest) {
           from: {
             adapter,
             chain: 'Arc_Testnet',
-            address: treasuryAddress as `0x${string}`,
           },
           tokenIn: 'USDC',
           tokenOut: targetToken,

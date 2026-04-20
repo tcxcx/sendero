@@ -5,7 +5,6 @@ import { env } from '@/lib/env';
 import {
   getAppKit,
   getTreasuryAdapter,
-  getTreasuryAddress,
   summarizeBridge,
 } from '@/lib/appkit';
 
@@ -37,7 +36,6 @@ export async function POST(req: NextRequest) {
   }
   try {
     const body = BodySchema.parse(await req.json());
-    const treasuryAddress = getTreasuryAddress();
     const kit = getAppKit();
     const adapter = getTreasuryAdapter();
 
@@ -45,12 +43,10 @@ export async function POST(req: NextRequest) {
       from: {
         adapter,
         chain: body.fromChain,
-        address: treasuryAddress as `0x${string}`,
       },
       to: {
         adapter,
         chain: 'Arc_Testnet',
-        address: treasuryAddress as `0x${string}`,
       },
       amount: body.amount,
     };

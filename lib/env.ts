@@ -22,6 +22,11 @@ export const env = {
   circleTreasuryAddress: () =>
     process.env.CIRCLE_TREASURY_ADDRESS || null,
 
+  // Viem treasury (App Kit adapter). See lib/appkit.ts for why we need
+  // a private-key EOA alongside the DCW custodial treasury.
+  treasuryPrivateKey: () => process.env.TREASURY_PRIVATE_KEY || null,
+  treasuryViemAddress: () => process.env.TREASURY_VIEM_ADDRESS || null,
+
   arcRpcUrl: () =>
     process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network',
   // Arc Testnet canonical chain id per https://docs.arc.network

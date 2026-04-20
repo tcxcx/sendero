@@ -1,9 +1,15 @@
 /**
- * Circle App Kit singleton + Circle-DCW adapter binding.
+ * Circle App Kit singleton + viem-backed treasury adapter.
+ *
+ * Originally wired to `createCircleWalletsAdapter` (DCW). That adapter
+ * installs a custom JSON-RPC transport that refuses `eth_call` params
+ * Swap Kit's viem simulation needs (gas/nonce/value/gasPrice/maxFee*),
+ * so `kit.swap()` blew up with "Unsupported transaction params" on Arc.
+ * The viem adapter talks directly to Arc RPC and sidesteps the filter.
  *
  * Used by /api/swap, /api/send, /api/bridge and the corresponding chat
- * tools so the Pasillo agent can rebalance the corporate treasury in one
- * place.
+ * tools so the Pasillo agent can rebalance the corporate treasury in
+ * one place.
  */
 
 import { AppKit } from '@circle-fin/app-kit';
@@ -12,32 +18,57 @@ import type {
   BridgeStep,
   SwapResult,
 } from '@circle-fin/app-kit';
-import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
-import type {
-  CircleWalletsAdapter,
-  CircleWalletsAdapterOptions,
-} from '@circle-fin/adapter-circle-wallets';
+import {
+  createViemAdapterFromPrivateKey,
+  type ViemAdapter,
+} from '@circle-fin/adapter-viem-v2';
+import { ArcTestnet } from '@circle-fin/app-kit/chains';
+import {
+  createPublicClient,
+  http,
+  type Chain as ViemChain,
+  type PublicClient,
+} from 'viem';
 import { env } from './env';
 
 let _kit: AppKit | null = null;
-let _adapter: CircleWalletsAdapter | null = null;
+let _adapter: ViemAdapter | null = null;
 
 export function getAppKit(): AppKit {
   if (!_kit) _kit = new AppKit();
   return _kit;
 }
 
-export function getTreasuryAdapter(): CircleWalletsAdapter {
+/**
+ * Custom RPC for Arc (we pin our own RPC from env). Every other chain
+ * falls through to viem's default public HTTP for that chain. Operators
+ * can override any chain via CHAIN_RPC_<NAME_UPPER>.
+ */
+function rpcForChain(chain: ViemChain): string | undefined {
+  if (chain.name === ArcTestnet.name) return env.arcRpcUrl();
+  return process.env[`CHAIN_RPC_${chain.name.toUpperCase().replace(/ /g, '_')}`];
+}
+
+export function getTreasuryAdapter(): ViemAdapter {
   if (_adapter) return _adapter;
-  const apiKey = env.circleApiKey();
-  const entitySecret = env.circleEntitySecret();
-  if (!apiKey || !entitySecret) {
+  const privateKey = env.treasuryPrivateKey();
+  if (!privateKey) {
     throw new Error(
-      'CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET must be set to use App Kit.',
+      'TREASURY_PRIVATE_KEY required for App Kit viem adapter. ' +
+        'Generate an EOA (viem `generatePrivateKey`) and fund it from https://faucet.circle.com.',
     );
   }
-  const opts: CircleWalletsAdapterOptions = { apiKey, entitySecret };
-  _adapter = createCircleWalletsAdapter(opts);
+  _adapter = createViemAdapterFromPrivateKey({
+    privateKey,
+    getPublicClient: ({ chain }): PublicClient => {
+      const rpcUrl = rpcForChain(chain);
+      const client = createPublicClient({
+        chain,
+        transport: http(rpcUrl, { retryCount: 3, timeout: 15_000 }),
+      });
+      return client as PublicClient;
+    },
+  });
   return _adapter;
 }
 
@@ -51,15 +82,23 @@ export function getKitKey(): string {
   return k;
 }
 
+/**
+ * Treasury address used by App Kit operations — the EOA derived from
+ * TREASURY_PRIVATE_KEY. Distinct from CIRCLE_TREASURY_ADDRESS (DCW),
+ * which continues to back /api/fund-msca for user MSCA drips.
+ */
 export function getTreasuryAddress(): string {
-  const a = env.circleTreasuryAddress();
-  if (!a) throw new Error('CIRCLE_TREASURY_ADDRESS not set in .env.local.');
+  const a = env.treasuryViemAddress() || env.circleTreasuryAddress();
+  if (!a)
+    throw new Error(
+      'TREASURY_VIEM_ADDRESS (or CIRCLE_TREASURY_ADDRESS) not set in .env.local.',
+    );
   return a;
 }
 
 /**
- * BridgeResult and SwapResult have different shapes. Unified summary the
- * UI and chat tools can render without caring.
+ * BridgeResult and SwapResult have different shapes. Unified summary
+ * the UI and chat tools can render without caring.
  */
 export interface OpSummary {
   state: string;
