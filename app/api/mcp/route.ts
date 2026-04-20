@@ -1,11 +1,14 @@
 import { mcpApp } from '@/lib/mcp-app';
 
 /**
- * /api/mcp — Streamable HTTP MCP endpoint.
+ * /api/mcp — Streamable HTTP MCP endpoint (Hono instance).
  *
- * Handler delegates to the Hono app in lib/mcp-app.ts so the MCP
- * surface stays self-contained and portable (you could also run it as
- * a standalone `bun run` worker using @hono/node-server).
+ * Kept on a hand-rolled JSON-RPC 2.0 + Hono implementation instead of
+ * mcp-use because mcp-use 1.x requires Zod 4 (`z.toJSONSchema`) and
+ * our stack is locked to Zod 3.25.x by viem + Circle adapters. The
+ * Hono app exposes the same tools/list, tools/call, initialize, ping
+ * surface so any MCP client (Claude Desktop / ChatGPT Apps / Cursor /
+ * Zed) can connect.
  */
 
 export const runtime = 'nodejs';

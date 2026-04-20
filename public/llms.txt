@@ -4,7 +4,7 @@
 
 ## Endpoints
 
-- [MCP server](/api/mcp): Streamable HTTP MCP endpoint. POST JSON-RPC 2.0 requests. Exposes 8 tools — see `tools/list`.
+- [MCP server](/api/mcp): Streamable HTTP MCP endpoint. POST JSON-RPC 2.0 requests. Exposes 9 tools — see `tools/list`.
 - [Agent manifest](/.well-known/agent.json): Public agent card (A2A-compatible).
 - [Treasury balance (Arc)](/api/treasury/balance): Live USDC + EURC on Arc Testnet.
 - [Treasury balance (Gateway unified)](/api/gateway/balance): USDC across every Gateway-supported testnet the treasury holds.
@@ -23,6 +23,7 @@ The MCP server exposes these tools. Call them via JSON-RPC `tools/call`.
 - `swap_tokens` — USDC ↔ EURC on Arc via Circle App Kit.
 - `send_tokens` — USDC/EURC transfer to any Arc address.
 - `bridge_to_arc` — CCTP v2 bridge into Arc (fallback path when Gateway is unavailable).
+- `settle_split` — Canonical 4-way commission fan-out on Arc (supplier / agency / rail / validator).
 
 ## Identity
 
