@@ -43,6 +43,14 @@ export interface BatchStore {
     error?: string | null;
     settledAt?: Date | null;
   }) => Promise<void>;
+
+  incrementRetry: (args: { batchId: string; lastError: string }) => Promise<{ retryCount: number }>;
+
+  findSettlingBatches: (args: {
+    olderThan: Date;
+    limit: number;
+    maxRetryCount: number;
+  }) => Promise<Array<{ id: string; tenantId: string; totalMicroUsdc: bigint; retryCount: number }>>;
 }
 
 export type SettleFn = (args: {
@@ -63,6 +71,8 @@ export interface BuildAndSettleArgs {
 
 const DEFAULT_MAX = 256;
 
+export const MAX_RETRIES = 3;
+
 export async function buildAndSettleBatch(
   store: BatchStore,
   settle: SettleFn,
@@ -76,6 +86,7 @@ export async function buildAndSettleBatch(
       eventCount: number;
     }
   | { batchId: string; status: 'failed'; error: string; totalMicroUsdc: bigint; eventCount: number }
+  | { batchId: string; status: 'retrying'; error: string; retryCount: number; totalMicroUsdc: bigint; eventCount: number }
   | { status: 'empty' }
 > {
   const windowEndedAt = args.windowEndedAt ?? new Date();
@@ -132,13 +143,86 @@ export async function buildAndSettleBatch(
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await store.updateBatchStatus({ batchId: batch.id, status: 'failed', error: msg });
+    const { retryCount } = await store.incrementRetry({ batchId: batch.id, lastError: msg });
+    const finalFailure = retryCount >= MAX_RETRIES;
+    if (finalFailure) {
+      await store.updateBatchStatus({ batchId: batch.id, status: 'failed', error: msg });
+    }
+    // On transient failure we leave status as 'settling' (set just above by
+    // the pre-call updateBatchStatus) so the retry sweeper picks it up.
     return {
       batchId: batch.id,
-      status: 'failed',
+      status: finalFailure ? 'failed' : 'retrying',
       error: msg,
+      retryCount,
       totalMicroUsdc,
       eventCount: events.length,
     };
   }
+}
+
+/**
+ * Sweep batches stuck in `settling` (ran into a transient error on first
+ * attempt) and retry the on-chain transfer. Called by the cron alongside
+ * `buildAndSettleBatch`. Returns one entry per batch attempted. Slack-
+ * alertable failures surface via `status: 'failed'` after MAX_RETRIES.
+ */
+export async function retrySettlingBatches(
+  store: BatchStore,
+  settle: SettleFn,
+  opts: { olderThanMs?: number; limit?: number } = {}
+): Promise<Array<
+  | { batchId: string; tenantId: string; status: 'settled'; txHash: string; retryCount: number; totalMicroUsdc: bigint }
+  | { batchId: string; tenantId: string; status: 'retrying' | 'failed'; error: string; retryCount: number; totalMicroUsdc: bigint }
+>> {
+  const olderThan = new Date(Date.now() - (opts.olderThanMs ?? 10 * 60 * 1000));
+  const candidates = await store.findSettlingBatches({
+    olderThan,
+    limit: opts.limit ?? 50,
+    maxRetryCount: MAX_RETRIES,
+  });
+
+  const out: Array<
+    | { batchId: string; tenantId: string; status: 'settled'; txHash: string; retryCount: number; totalMicroUsdc: bigint }
+    | { batchId: string; tenantId: string; status: 'retrying' | 'failed'; error: string; retryCount: number; totalMicroUsdc: bigint }
+  > = [];
+  for (const b of candidates) {
+    try {
+      const { txHash } = await settle({
+        batchId: b.id,
+        tenantId: b.tenantId,
+        totalMicroUsdc: b.totalMicroUsdc,
+      });
+      await store.updateBatchStatus({
+        batchId: b.id,
+        status: 'settled',
+        txHash,
+        settledAt: new Date(),
+      });
+      out.push({
+        batchId: b.id,
+        tenantId: b.tenantId,
+        status: 'settled',
+        txHash,
+        retryCount: b.retryCount,
+        totalMicroUsdc: b.totalMicroUsdc,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const { retryCount } = await store.incrementRetry({ batchId: b.id, lastError: msg });
+      const finalFailure = retryCount >= MAX_RETRIES;
+      if (finalFailure) {
+        await store.updateBatchStatus({ batchId: b.id, status: 'failed', error: msg });
+      }
+      out.push({
+        batchId: b.id,
+        tenantId: b.tenantId,
+        status: finalFailure ? 'failed' : 'retrying',
+        error: msg,
+        retryCount,
+        totalMicroUsdc: b.totalMicroUsdc,
+      });
+    }
+  }
+  return out;
 }
