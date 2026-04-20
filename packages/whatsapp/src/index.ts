@@ -1,5 +1,6 @@
 export * from './client';
 export * from './webhook';
+export * from './identity';
 export * from './normalize';
 export * from './link-token';
 export * from './media';

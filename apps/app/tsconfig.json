@@ -17,9 +17,7 @@
       "@sendero/circle/wallets": ["../../packages/sendero-circle/src/wallets.ts"],
       "@sendero/circle/app-kit": ["../../packages/sendero-circle/src/app-kit.ts"],
       "@sendero/circle/gateway": ["../../packages/sendero-circle/src/gateway.ts"],
-      "@sendero/circle/modular-wallets": [
-        "../../packages/sendero-circle/src/modular-wallets.ts"
-      ],
+      "@sendero/circle/modular-wallets": ["../../packages/sendero-circle/src/modular-wallets.ts"],
       "@sendero/nanopayments": ["../../packages/sendero-nanopayments/src/index.ts"],
       "@sendero/whatsapp": ["../../packages/whatsapp/src/index.ts"],
       "@sendero/whatsapp/*": ["../../packages/whatsapp/src/*"],

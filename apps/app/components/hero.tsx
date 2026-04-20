@@ -152,9 +152,9 @@ export function LandingHero() {
 
           <p className="hero-sub">
             Every booking spawns its own AI agent. Reachable over <strong>email</strong> and{' '}
-            <strong>WhatsApp</strong>, it issues a real PNR via Duffel, clears policy with Clerk-bound
-            org rules, and settles on Arc Testnet through an ERC-8183 escrow job. No seed phrase, no
-            native gas token — USDC is the gas.
+            <strong>WhatsApp</strong>, it issues a real PNR via Duffel, clears policy with
+            Clerk-bound org rules, and settles on Arc Testnet through an ERC-8183 escrow job. No
+            seed phrase, no native gas token — USDC is the gas.
           </p>
 
           <MarginStrip />
@@ -311,9 +311,7 @@ function MarginStrip() {
   const perCallUsdc = live
     ? (Number(summary?.totalUsdc ?? '0') / Math.max(summary?.paidCalls ?? 1, 1)).toFixed(4)
     : '0.0064';
-  const ethereumTotalUsd = live
-    ? Math.max(summary?.ethereum.totalUsd ?? 0, 0).toFixed(2)
-    : '58.40';
+  const ethereumTotalUsd = live ? Math.max(summary?.ethereum.totalUsd ?? 0, 0).toFixed(2) : '58.40';
   const marginFactor = live ? Math.max(summary?.ethereum.marginFactor ?? 0, 1) : 64;
 
   return (

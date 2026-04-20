@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./client": "./src/client.ts",
     "./webhook": "./src/webhook.ts",
+    "./identity": "./src/identity.ts",
     "./templates": "./src/templates.ts",
     "./media": "./src/media.ts",
     "./normalize": "./src/normalize.ts",
