@@ -30,10 +30,19 @@ export const env = {
   arcEurcAddress: () =>
     process.env.ARC_EURC_ADDRESS || '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a',
   arcExplorerUrl: () => process.env.ARC_EXPLORER_URL || 'https://testnet.arcscan.app',
+  // Canonical: ARC_ESCROW_ADDRESS (matches the Foundry deploy script output).
+  // Accepts SENDERO_GUEST_ESCROW / NEXT_PUBLIC_* as legacy fallbacks so
+  // pre-Phase-9 .env files keep working.
   senderoGuestEscrowAddress: () =>
-    (process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW || process.env.SENDERO_GUEST_ESCROW || null) as
-      | `0x${string}`
-      | null,
+    (process.env.ARC_ESCROW_ADDRESS ||
+      process.env.NEXT_PUBLIC_ARC_ESCROW_ADDRESS ||
+      process.env.SENDERO_GUEST_ESCROW ||
+      process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW ||
+      null) as `0x${string}` | null,
+  senderoGuestEscrowDeployBlock: () => {
+    const raw = process.env.ARC_ESCROW_DEPLOY_BLOCK;
+    return raw ? Number(raw) : null;
+  },
   senderoAgentTokenId: () =>
     process.env.SENDERO_AGENT_TOKEN_ID || process.env.SENDERO_AGENT_ID || null,
   senderoGuestLinkOrigin: () =>
@@ -66,3 +75,6 @@ export const env = {
   slackRedirectUri: () => process.env.SLACK_REDIRECT_URI || null,
   slackStateSecret: () => process.env.SLACK_STATE_SECRET || null,
 };
+
+export * from './require';
+export { validate } from './validate';

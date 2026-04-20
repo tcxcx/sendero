@@ -44,10 +44,18 @@ const hex32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/, 'hex32 (0x + 64 hex chars)
 const hex20 = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'ethereum address');
 
 function resolveEscrow(override?: string | null): Address {
+  // Canonical: ARC_ESCROW_ADDRESS (Foundry deploy script). Legacy fallbacks
+  // retained so older .env files keep working.
   const addr =
-    override ?? process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW ?? process.env.SENDERO_GUEST_ESCROW;
+    override ??
+    process.env.ARC_ESCROW_ADDRESS ??
+    process.env.NEXT_PUBLIC_ARC_ESCROW_ADDRESS ??
+    process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW ??
+    process.env.SENDERO_GUEST_ESCROW;
   if (!addr) {
-    throw new Error('SENDERO_GUEST_ESCROW env var not set — cannot build on-chain calls');
+    throw new Error(
+      'ARC_ESCROW_ADDRESS env var not set — cannot build on-chain calls. Set to the deployed SenderoGuestEscrow address.'
+    );
   }
   return addr as Address;
 }
