@@ -13,6 +13,13 @@
 import { Duffel } from '@duffel/api';
 import { env } from '@sendero/env';
 
+export {
+  verifyDuffelSignature,
+  parseDuffelWebhook,
+  type DuffelWebhookEvent,
+  type DuffelWebhookStatus,
+} from './webhook';
+
 let client: Duffel | null = null;
 
 export function getDuffel(): Duffel {
