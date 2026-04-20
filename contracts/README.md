@@ -144,10 +144,90 @@ a multi-stage travel escrow:
 - All modifier-bearing external functions keep `nonReentrant` +
   `whenNotPaused`; upgrades must preserve this.
 
+## Current deployment (Arc Testnet, chain 5042002)
+
+| | Address |
+|---|---|
+| Proxy (`ERC1967Proxy`) | `0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515` |
+| Implementation | `0x2247783E3bE97DF822cB3C100D44D5C47e050bD5` |
+| Owner + operator | `0x0646FFe11b9aBcE0054Ce6F73025F06F3E91eC69` (treasury EOA) |
+| Deploy block | 38197708 |
+| USDC | `0x3600000000000000000000000000000000000000` |
+
+Both contracts are verified on [testnet.arcscan.app](https://testnet.arcscan.app)
+(Solidity `v0.8.24+commit.e11b9ed9`, optimizer on, `via_ir`).
+
+## Next steps
+
+### Before a fresh deploy (testnet or mainnet)
+
+1. `forge install` all four deps (see [Setup](#setup)). `lib/` is gitignored.
+2. Populate `ARC_RPC_URL`, `ARC_USDC_ADDRESS`, `ARC_OPERATOR`, `ARC_OWNER`,
+   `DEPLOYER_PK`. On mainnet, `ARC_OWNER` **must** be a Safe multisig.
+3. `forge test -vvv` — must be clean (55/55 today).
+4. Run `forge script ... Deploy --broadcast --verify` (verifier flags in
+   this README). `Upgrades.deployUUPSProxy` validates the impl first.
+5. Write the new proxy + impl + deploy block to `.env.local` under the
+   `ARC_ESCROW_*` keys and push them through `turbo.json`'s
+   `globalPassThroughEnv`.
+6. Update `apps/ponder` (`PONDER_ESCROW_ADDRESS`, `PONDER_ESCROW_START_BLOCK`)
+   and restart the indexer so it backfills from the new deploy block.
+
+### Before an upgrade (V2 impl)
+
+1. Create `SenderoGuestEscrowV2.sol`. Add the custom tag
+   `oz-upgrades-from SenderoGuestEscrow` on the contract so the plugin
+   knows which predecessor to diff against.
+2. **Storage rules**: do not declare new top-level state variables — add
+   fields to the end of the existing `GuestEscrowStorage` struct only.
+   Never reorder or change the type of existing fields, and keep the
+   ERC-7201 namespace id unchanged.
+3. If V2 needs new initialization logic, add a `reinitializeV2(...)`
+   function guarded by `reinitializer(2)`. Never reuse `initializer`.
+4. Add a forge test that deploys V1, executes real state transitions,
+   upgrades to V2 via `Upgrades.upgradeProxy`, and asserts state
+   survived and new logic works.
+5. Run `ValidateUpgrade` in CI before the upgrade tx is submitted:
+   `NEW_IMPL_NAME=SenderoGuestEscrowV2.sol forge script ... ValidateUpgrade`.
+6. Execute `UpgradeImplementation` from the owner (Safe once rotated),
+   then re-run `cast call $PROXY 'version()(string)'` and Arc Scan
+   verify for the new impl address.
+
+## Known gaps
+
+Tracked so they don't slip. Not all are blockers for testnet.
+
+- **Owner = operator = treasury EOA**. Single-key control over upgrades
+  *and* operator rotation. Rotate `owner` to a Safe multisig and
+  `operator` to a dedicated backend signer EOA before mainnet.
+  Scripts: `TransferOwnership`, `SetOperator`.
+- **No upgrade timelock.** Consider wrapping the Safe in
+  `TimelockController` so upgrades require an enforced delay on
+  mainnet — gives users a window to observe + exit.
+- **No V1→V2 upgrade dry-run test.** The forge suite covers V1 logic
+  but does not yet exercise `Upgrades.upgradeProxy`. Add when V2 lands.
+- **No `.openzeppelin/` network manifest committed.** The foundry-upgrades
+  plugin validates against the `oz-upgrades-from` annotation on the
+  source, not a stored manifest. If we switch to Hardhat upgrades, we
+  must commit `.openzeppelin/arc-testnet.json` etc.
+- **`setOperator` is single-tx.** Owner swaps the operator in one
+  transaction. Consider a 2-step rotation (pending → accept) for mainnet
+  parity with `Ownable2Step`.
+- **No static analysis in CI.** Slither + Mythril aren't wired yet; add
+  before mainnet.
+- **Mainnet not deployed.** Only Arc Testnet. Chain id + USDC address
+  differ on Arc mainnet — rerun the fresh-deploy checklist.
+- **OTP preimage is visible in calldata.** The recipient-bound claim
+  signature prevents front-running of the claim itself, but the OTP
+  preimage is not rotation-proof. Rotate claim codes for any trip whose
+  link may have been observed.
+
 ## Related
 
 - `apps/ponder/` — `@sendero/indexer`, Ponder indexer publishing a
-  GraphQL read layer over escrow state.
+  GraphQL read layer over escrow state. Indexes all lifecycle +
+  admin/UUPS events (`OperatorUpdated`, `Paused`, `Unpaused`,
+  `Upgraded`).
 - `packages/sendero-guest/` — TypeScript helpers for claim keypairs, guest
   links, and client-side signing.
 - `packages/sendero-arc/` — Arc RPC + ERC-8004 + ERC-8183 client.
