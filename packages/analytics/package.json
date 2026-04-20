@@ -1,0 +1,21 @@
+{
+  "name": "@sendero/analytics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — product analytics wrapper around PostHog (server + client). Event catalog + tenant/traveler identity propagation + channel attribution (WA / Slack / Web / MCP).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts",
+    "./client": "./src/client.ts",
+    "./events": "./src/events.ts"
+  },
+  "dependencies": {
+    "posthog-node": "^4.2.0",
+    "posthog-js": "^1.186.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

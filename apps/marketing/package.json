@@ -1,0 +1,26 @@
+{
+  "name": "@sendero/marketing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero marketing site — Next.js 16 scaffold backed by basehub CMS. Four locales (en-US, es-MX, pt-BR, es-AR). Hero + features + pricing + footer. Works without BASEHUB_TOKEN via static fallback content.",
+  "scripts": {
+    "dev": "next dev -p 3011",
+    "build": "next build",
+    "start": "next start -p 3011",
+    "lint": "biome lint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sendero/locale": "workspace:*",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.8.3"
+  }
+}

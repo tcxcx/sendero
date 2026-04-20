@@ -91,11 +91,30 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Ensure every sender has a ChannelIdentity row (upsert keyed on BSUID
-  // first, phone second). No agent dispatch in Phase 2 — that's Phase 3.
+  // Ensure every sender has a ChannelIdentity row + fire agent dispatch
+  // for each text message. Dispatch is best-effort; a failure in the
+  // agent turn must not cause Meta to retry the webhook.
+  let dispatched = 0;
   for (const msg of messages) {
     try {
-      await upsertChannelIdentity(msg);
+      const identity = await upsertChannelIdentity(msg);
+      if (identity && msg.message.type === 'text' && msg.message.text?.body) {
+        void dispatchAgent({
+          tenantId: identity.tenantId,
+          userId: identity.userId ?? identity.id,
+          text: msg.message.text.body,
+          req,
+        })
+          .then(result => {
+            if (result?.reply) {
+              void sendWhatsAppReply(msg, result.reply);
+            }
+          })
+          .catch(err => {
+            console.error('[wa/webhook] dispatch failed:', err);
+          });
+        dispatched++;
+      }
     } catch (err) {
       console.error('[wa/webhook] upsert failed:', err);
     }
@@ -104,7 +123,47 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     received: messages.length,
     identityChanges: identityChanges.length,
+    dispatched,
   });
+}
+
+// ─── Agent dispatch + outbound reply ──────────────────────────────────
+
+async function dispatchAgent(args: {
+  tenantId: string;
+  userId: string;
+  text: string;
+  req: NextRequest;
+}): Promise<{ reply: string } | null> {
+  const dispatchUrl = new URL('/api/agent/dispatch', args.req.nextUrl.origin);
+  const response = await fetch(dispatchUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tenantId: args.tenantId,
+      userId: args.userId,
+      channel: 'whatsapp',
+      text: args.text,
+    }),
+  });
+  if (!response.ok) return null;
+  const json = (await response.json()) as { text?: string };
+  return json.text ? { reply: json.text } : null;
+}
+
+async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): Promise<void> {
+  const accessToken = env.whatsappAccessToken();
+  if (!accessToken) return;
+  const { WhatsAppClient, formatForWhatsApp } = await import('@sendero/whatsapp');
+  const client = new WhatsAppClient({
+    phoneNumberId: msg.tenantPhoneNumberId,
+    accessToken,
+    apiBaseUrl: env.whatsappApiBaseUrl() ?? undefined,
+  });
+  const chunks = formatForWhatsApp(reply);
+  for (const chunk of chunks) {
+    await client.sendText(msg.identity.phoneRaw ?? msg.identity.phone ?? '', chunk);
+  }
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -117,15 +176,17 @@ async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<s
   return env.whatsappDefaultTenantId();
 }
 
-async function upsertChannelIdentity(msg: NormalizedInboundMessage): Promise<void> {
+async function upsertChannelIdentity(
+  msg: NormalizedInboundMessage
+): Promise<{ id: string; tenantId: string; userId: string | null } | null> {
   const tenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
-  if (!tenantId) return;
+  if (!tenantId) return null;
 
   const bsuid = msg.identity.businessScopedUserId;
   const externalUserId = msg.identity.phone ?? msg.identity.phoneRaw ?? null;
 
   if (bsuid) {
-    await prisma.channelIdentity.upsert({
+    const row = await prisma.channelIdentity.upsert({
       where: {
         tenantId_kind_businessScopedUserId: {
           tenantId,
@@ -146,12 +207,13 @@ async function upsertChannelIdentity(msg: NormalizedInboundMessage): Promise<voi
         externalUserId: externalUserId ?? undefined,
         username: msg.identity.username,
       },
+      select: { id: true, tenantId: true, userId: true },
     });
-    return;
+    return row;
   }
 
   if (externalUserId) {
-    await prisma.channelIdentity.upsert({
+    const row = await prisma.channelIdentity.upsert({
       where: {
         tenantId_kind_externalUserId: {
           tenantId,
@@ -166,8 +228,11 @@ async function upsertChannelIdentity(msg: NormalizedInboundMessage): Promise<voi
         username: msg.identity.username,
       },
       update: { username: msg.identity.username },
+      select: { id: true, tenantId: true, userId: true },
     });
+    return row;
   }
+  return null;
 }
 
 async function applyIdentityChange(change: NormalizedIdentityChange): Promise<void> {

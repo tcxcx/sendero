@@ -19,6 +19,8 @@ export interface ToolContext {
     name?: string;
     email?: string;
     phone?: string;
+    userId?: string;
+    tenantId?: string;
   };
 }
 

@@ -4,5 +4,11 @@
   "buildCommand": "bunx prisma generate --schema=packages/database/prisma/schema.prisma && bunx turbo run build --filter=@sendero/app --cache-dir=.turbo",
   "installCommand": "bun install --frozen-lockfile",
   "ignoreCommand": "npx turbo-ignore @sendero/app",
-  "outputDirectory": "apps/app/.next"
+  "outputDirectory": "apps/app/.next",
+  "crons": [
+    {
+      "path": "/api/cron/settle-nanopay-batches",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
