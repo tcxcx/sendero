@@ -24,6 +24,7 @@ import { mountMcp } from './adapters/mcp';
 import { mountWhatsApp } from './adapters/whatsapp';
 import { mountSlack } from './adapters/slack';
 import { mountDiscord } from './adapters/discord';
+import { mountPaidTools } from './adapters/paid-tools';
 
 const app = new Hono();
 
@@ -51,7 +52,7 @@ app.get('/', (c) =>
     version: '0.1.0',
     description:
       'Sendero multi-surface edge worker. MCP + WhatsApp + Slack + Discord from one tool registry.',
-    surfaces: ['/mcp', '/whatsapp', '/slack', '/discord'],
+    surfaces: ['/mcp', '/whatsapp', '/slack', '/discord', '/tools'],
     toolCount: toolList.length,
     tools: toolList.map((t) => t.name),
   }),
@@ -68,6 +69,7 @@ mountMcp(app);
 mountWhatsApp(app);
 mountSlack(app);
 mountDiscord(app);
+mountPaidTools(app);
 
 /**
  * Default export is a Hono app. Bun auto-serves the default export on

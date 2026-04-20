@@ -33,6 +33,12 @@
       "@sendero/tools/agent": [
         "./packages/tools/src/agent.ts"
       ],
+      "@sendero/tools/meter": [
+        "./packages/tools/src/meter.ts"
+      ],
+      "@sendero/tools/pricing": [
+        "./packages/tools/src/pricing.ts"
+      ],
       "@sendero/tools/types": [
         "./packages/tools/src/types.ts"
       ]
