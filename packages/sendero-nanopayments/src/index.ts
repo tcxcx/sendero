@@ -170,3 +170,44 @@ export function canonicalSplit(params: {
     },
   ];
 }
+
+/**
+ * Single-recipient USDC transfer on Arc Testnet. Same treasury EOA and
+ * public client as `settleCommissionSplit`. Used by the nanopay batch
+ * settler to flush aggregated MeterEvent totals to Sendero's treasury.
+ *
+ * Returns the real on-chain tx hash — NOT a synthetic placeholder.
+ */
+export async function transferUSDC(params: {
+  to: Address;
+  /** Decimal USDC (6 decimals), e.g. "1.234567". */
+  amount: string;
+  /** Optional label for logging / telemetry. */
+  label?: string;
+}): Promise<{ txHash: Hex; explorerUrl: string; amountMicroUsdc: string }> {
+  const usdc = env.arcUsdcAddress() as Address;
+  const wallet = arcWalletClient();
+  const pub = arcPublicClient();
+  const acct = treasuryAccount();
+
+  const units = parseUnits(params.amount, 6);
+  if (units <= 0n) {
+    throw new Error(`transferUSDC: amount must be > 0 (got ${params.amount})`);
+  }
+
+  const hash = await wallet.writeContract({
+    address: usdc,
+    abi: erc20Abi,
+    functionName: 'transfer',
+    args: [params.to, units],
+    account: acct,
+    chain: arcTestnet,
+  });
+  await pub.waitForTransactionReceipt({ hash });
+
+  return {
+    txHash: hash,
+    explorerUrl: `${env.arcExplorerUrl()}/tx/${hash}`,
+    amountMicroUsdc: units.toString(),
+  };
+}
