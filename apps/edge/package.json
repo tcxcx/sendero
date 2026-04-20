@@ -1,0 +1,18 @@
+{
+  "name": "@sendero/edge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero edge worker — one Bun+Hono instance serving MCP + WhatsApp + Slack + Discord adapters on top of @sendero/tools. Deployable to Vercel Edge, Cloudflare Workers, Fly, Deno Deploy, or bare Bun.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sendero/tools": "workspace:*",
+    "hono": "^4.12.14"
+  },
+  "devDependencies": {}
+}

@@ -3,10 +3,12 @@
    ===================================================== */
 
 :root {
-  /* ink is Cobe's signature blue */
-  --ink: lab(36 55.64 -107.68);
-  --ink-dim: lab(93 0 -8);
-  --ink-soft: color-mix(in oklab, var(--ink) 12%, white);
+  /* Sendero vermilion — a warmer, more distinctive primary than the
+     sea-of-blue fintech default. LATAM-adjacent (Mexican pottery,
+     Peruvian textiles, Argentine leather) without being literal. */
+  --ink: #fb542b;
+  --ink-dim: color-mix(in oklab, var(--ink) 8%, white);
+  --ink-soft: color-mix(in oklab, var(--ink) 14%, white);
 
   --bg: #fafaf7;
   --bg-elev: #ffffff;
@@ -36,9 +38,11 @@
 }
 
 .dark {
-  --ink: lab(78 -12 -60);
-  --ink-dim: lab(20 0 -8);
-  --ink-soft: color-mix(in oklab, var(--ink) 18%, #0a0a0d);
+  /* Dark-mode ink: slightly lighter + more luminous so it reads on
+     near-black. Keep the same vermilion family. */
+  --ink: #ff6a45;
+  --ink-dim: color-mix(in oklab, var(--ink) 16%, #0a0a0d);
+  --ink-soft: color-mix(in oklab, var(--ink) 20%, #0a0a0d);
   --bg: #0a0b0d;
   --bg-elev: #0f1013;
   --bg-panel: #101215;
