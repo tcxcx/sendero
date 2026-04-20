@@ -20,7 +20,7 @@
  */
 
 import type { Hono } from 'hono';
-import { toolList } from '@sendero/tools';
+import { routeToAgent } from '@sendero/tools/agent';
 
 interface InboundMessage {
   from: string;
@@ -75,21 +75,17 @@ async function sendMessage(
   }
 }
 
-/**
- * Minimal "route intent to tool" stub. Replace with Anthropic Claude /
- * OpenAI gpt-4o + the AI SDK tool-calling once a WhatsApp number is
- * live — the tool set is identical to the web chat's (all of
- * toolList).
- */
-async function inferReply(text: string): Promise<string> {
-  const low = text.trim().toLowerCase();
-  if (low.includes('treasury') || low.includes('balance')) {
-    const t = toolList.find((x) => x.name === 'check_treasury');
-    if (!t) return 'Treasury tool unavailable.';
-    const r = (await t.handler({}, {})) as any;
-    return `Treasury on Arc: ${JSON.stringify(r.balances, null, 0)}`;
-  }
-  return `Sendero received: "${text}". (WhatsApp adapter stub — LLM routing lands next.)`;
+async function inferReply(text: string, senderPhone: string): Promise<string> {
+  const result = await routeToAgent(text, {
+    ctx: { traveler: { phone: senderPhone } },
+    maxSteps: 5,
+  });
+  // Log for observability — lands in the edge worker logs.
+  // eslint-disable-next-line no-console
+  console.log(
+    `[whatsapp] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`,
+  );
+  return result.text;
 }
 
 export function mountWhatsApp(app: Hono): void {
@@ -115,7 +111,7 @@ export function mountWhatsApp(app: Hono): void {
         const phoneNumberId = value.metadata?.phone_number_id ?? '';
         for (const msg of value.messages ?? []) {
           if (msg.type !== 'text' || !msg.text?.body) continue;
-          const reply = await inferReply(msg.text.body);
+          const reply = await inferReply(msg.text.body, msg.from);
           if (phoneNumberId) {
             await sendMessage(phoneNumberId, msg.from, reply);
           }

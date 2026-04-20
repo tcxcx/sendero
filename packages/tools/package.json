@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./adapters/ai-sdk": "./src/adapters/ai-sdk.ts",
     "./adapters/mcp": "./src/adapters/mcp.ts",
+    "./agent": "./src/agent.ts",
     "./types": "./src/types.ts"
   },
   "peerDependencies": {

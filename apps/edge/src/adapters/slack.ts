@@ -12,7 +12,7 @@
  */
 
 import type { Hono } from 'hono';
-import { toolList } from '@sendero/tools';
+import { routeToAgent } from '@sendero/tools/agent';
 
 interface SlashCommandPayload {
   token: string;
@@ -28,21 +28,22 @@ interface SlashCommandPayload {
   trigger_id: string;
 }
 
-async function inferReply(text: string): Promise<string> {
-  const low = text.trim().toLowerCase();
-  if (!low) {
-    return (
-      'Sendero · try /sendero <prompt>. Tools bound: ' +
-      toolList.map((t) => t.name).join(', ')
-    );
+async function inferReply(
+  text: string,
+  slackUser: { id: string; name: string },
+): Promise<string> {
+  if (!text.trim()) {
+    return 'Sendero · try `/sendero <prompt>`. E.g. `/sendero book SFO→LHR May 10 premium economy`.';
   }
-  if (low.includes('treasury') || low.includes('balance')) {
-    const t = toolList.find((x) => x.name === 'check_treasury');
-    if (!t) return 'Treasury tool unavailable.';
-    const r = (await t.handler({}, {})) as any;
-    return `Treasury on Arc: ${JSON.stringify(r.balances)}`;
-  }
-  return `Sendero received: "${text}". (Slack adapter stub — LLM routing lands next.)`;
+  const result = await routeToAgent(text, {
+    ctx: { traveler: { name: slackUser.name } },
+    maxSteps: 5,
+  });
+  // eslint-disable-next-line no-console
+  console.log(
+    `[slack] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`,
+  );
+  return result.text;
 }
 
 export function mountSlack(app: Hono): void {
@@ -60,8 +61,12 @@ export function mountSlack(app: Hono): void {
     const ack = { response_type: 'ephemeral', text: ackText };
 
     if (payload.response_url) {
+      const slackUser = {
+        id: payload.user_id ?? 'unknown',
+        name: payload.user_name ?? 'traveler',
+      };
       // Fire the real reply asynchronously — don't block the ack.
-      inferReply(payload.text ?? '').then(async (reply) => {
+      inferReply(payload.text ?? '', slackUser).then(async (reply) => {
         try {
           await fetch(payload.response_url, {
             method: 'POST',

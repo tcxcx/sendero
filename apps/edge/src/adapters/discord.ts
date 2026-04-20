@@ -12,7 +12,7 @@
  */
 
 import type { Hono } from 'hono';
-import { toolList } from '@sendero/tools';
+import { routeToAgent } from '@sendero/tools/agent';
 
 const INTERACTION_TYPE_PING = 1;
 const INTERACTION_TYPE_APPLICATION_COMMAND = 2;
@@ -28,19 +28,22 @@ interface DiscordInteraction {
   user?: { id: string; username: string };
 }
 
-async function inferReply(text: string): Promise<string> {
+async function inferReply(
+  text: string,
+  user: { id: string; name: string },
+): Promise<string> {
   if (!text.trim()) {
-    return (
-      'Sendero · tools bound: ' + toolList.map((t) => t.name).join(', ')
-    );
+    return 'Sendero · pass a prompt. E.g. `/sendero text:book SFO→LHR May 10`.';
   }
-  if (/treasury|balance/i.test(text)) {
-    const t = toolList.find((x) => x.name === 'check_treasury');
-    if (!t) return 'Treasury tool unavailable.';
-    const r = (await t.handler({}, {})) as any;
-    return `Treasury on Arc: ${JSON.stringify(r.balances)}`;
-  }
-  return `Sendero received: "${text}". (Discord adapter stub — LLM routing lands next.)`;
+  const result = await routeToAgent(text, {
+    ctx: { traveler: { name: user.name } },
+    maxSteps: 5,
+  });
+  // eslint-disable-next-line no-console
+  console.log(
+    `[discord] ${result.provider} · ${result.steps} steps · tools=[${result.toolsCalled.join(',')}]`,
+  );
+  return result.text;
 }
 
 export function mountDiscord(app: Hono): void {
@@ -54,7 +57,14 @@ export function mountDiscord(app: Hono): void {
     if (payload.type === INTERACTION_TYPE_APPLICATION_COMMAND) {
       const textOption = payload.data?.options?.find((o) => o.name === 'text');
       const text = String(textOption?.value ?? '');
-      const reply = await inferReply(text);
+      const user = payload.member?.user ?? payload.user ?? {
+        id: 'unknown',
+        username: 'traveler',
+      };
+      const reply = await inferReply(text, {
+        id: user.id,
+        name: user.username,
+      });
       return c.json({
         type: CALLBACK_TYPE_CHANNEL_MESSAGE,
         data: { content: reply },

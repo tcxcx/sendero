@@ -69,15 +69,18 @@ mountWhatsApp(app);
 mountSlack(app);
 mountDiscord(app);
 
-const port = Number(process.env.PORT ?? 3020);
+/**
+ * Default export is a Hono app. Bun auto-serves the default export on
+ * $PORT (defaults 3000, we override via env), so `bun run src/index.ts`
+ * just works. For Cloudflare Workers / Vercel Edge, this same default
+ * export is also the handler — `export default app` is the standard.
+ */
+// eslint-disable-next-line no-console
+console.log(
+  `[sendero/edge] ready · surfaces: / · /mcp · /whatsapp · /slack · /discord`,
+);
 
-// Bun-native entrypoint. When deployed to an edge runtime that doesn't
-// accept `Bun.serve`, replace with that runtime's handler (e.g.,
-// `export default app;` for Cloudflare Workers / Vercel Edge).
-if (typeof (globalThis as any).Bun !== 'undefined') {
-  (globalThis as any).Bun.serve({ port, fetch: app.fetch });
-  // eslint-disable-next-line no-console
-  console.log(`[sendero/edge] listening on :${port}`);
-}
-
-export default app;
+export default {
+  port: Number(process.env.PORT ?? 3020),
+  fetch: app.fetch,
+};
