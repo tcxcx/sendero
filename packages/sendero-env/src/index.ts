@@ -8,6 +8,7 @@ export const env = {
   anthropicApiKey: () => process.env.ANTHROPIC_API_KEY || null,
 
   duffelApiToken: () => process.env.DUFFEL_API_TOKEN || null,
+  duffelWebhookSecret: () => process.env.DUFFEL_WEBHOOK_SECRET || null,
   duffelEnv: () => (process.env.DUFFEL_ENV as 'test' | 'live') || 'test',
 
   circleApiKey: () => process.env.CIRCLE_API_KEY || null,
