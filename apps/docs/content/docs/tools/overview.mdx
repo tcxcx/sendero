@@ -1,0 +1,48 @@
+---
+title: Tool catalog
+description: Every Sendero tool, its per-call USDC price, and what it does.
+---
+
+Fourteen tools. Each one is a pure function: signed request in, JSON result out, USDC charged on success.
+
+| Tool                | Category     | Price (USDC) | Does                                      |
+| ------------------- | ------------ | ------------ | ----------------------------------------- |
+| `check_treasury`    | Read         | $0.0005      | Balance + policy limits for your wallet.  |
+| `check_policy`      | Read         | $0.0005      | Whether a proposed action is in-policy.   |
+| `rate_agent`        | Read         | $0.0005      | Reputation score for an ERC-8004 agent.   |
+| `quote_fx`          | Read         | $0.0008      | USDC <-> EURC / MXN / BRL indicative FX.  |
+| `gateway_balance`   | Read         | $0.001       | Cross-chain USDC unified balance.         |
+| `search_flights`    | External API | $0.002       | Duffel flight search by route + date.     |
+| `search_hotels`     | External API | $0.002       | Duffel-style hotel inventory.             |
+| `send_tokens`       | On-chain     | $0.003       | Transfer USDC on Arc.                     |
+| `gateway_transfer`  | On-chain     | $0.003       | Cross-chain transfer via Gateway.         |
+| `swap_tokens`       | On-chain     | $0.005       | Uniswap v4 swap on Arc.                   |
+| `bridge_to_arc`     | On-chain     | $0.005       | CCTP bridge from another chain into Arc.  |
+| `book_flight`       | Composed     | $0.008       | Full PNR issuance via Duffel.             |
+| `swap_and_bridge`   | Composed     | $0.01        | One-shot swap-then-bridge.                |
+| `settle_split`      | Composed     | $0.01        | Atomic 4-leg commission fan-out.          |
+
+## Pricing philosophy
+
+All tools stay at or below $0.01. Reads and cheap RPC are priced where it costs us — about $0.0005 for a read. External API calls carry a provider markup. Composed workflows that span multiple transactions roll up to a cent.
+
+Compared to a single Ethereum mainnet transfer (~$2.14 at 30 gwei, $3,400 ETH), a Sendero on-chain tool call is **600×–4,000× cheaper**. That's the point.
+
+## Tool envelope
+
+Every tool returns the same shape:
+
+```ts
+{
+  ok: true,
+  data: T,            // per-tool result payload
+  meter: {
+    tool: 'search_flights',
+    usdc_atomic: '2000',   // 6-decimal atomic USDC
+    usdc_display: '0.002',
+    settled_tx: '0xabc...' // Arc tx hash, if on-chain
+  }
+}
+```
+
+See the per-tool pages for exact input and output schemas.

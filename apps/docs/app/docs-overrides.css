@@ -1,0 +1,45 @@
+/* Bridge Sendero's token vocabulary into Fumadocs' design tokens.
+   Fumadocs reads `--fd-*` vars; we remap them to our vermilion set
+   so the shipped components (nav, sidebar, TOC, callouts) all adopt
+   the brand without us shipping a custom theme package. */
+:root {
+  --fd-background: var(--bg);
+  --fd-foreground: var(--text);
+  --fd-muted: var(--bg-panel);
+  --fd-muted-foreground: var(--text-dim);
+  --fd-card: var(--bg-elev);
+  --fd-card-foreground: var(--text);
+  --fd-border: var(--border);
+  --fd-primary: var(--ink);
+  --fd-primary-foreground: #fafaf7;
+  --fd-accent: var(--ink-soft);
+  --fd-accent-foreground: var(--ink);
+  --fd-ring: var(--ink);
+  --fd-radius: 4px;
+}
+
+.dark {
+  --fd-background: var(--bg);
+  --fd-foreground: var(--text);
+  --fd-muted: var(--bg-panel);
+  --fd-muted-foreground: var(--text-dim);
+  --fd-card: var(--bg-elev);
+  --fd-card-foreground: var(--text);
+  --fd-border: var(--border);
+  --fd-primary: var(--ink);
+  --fd-primary-foreground: #0a0b0d;
+  --fd-accent: var(--ink-soft);
+  --fd-accent-foreground: var(--ink);
+}
+
+/* The docs landing and sidebar should inherit the same Geist stack
+   the main app is wired to. */
+html,
+body {
+  font-family: var(--font-sans);
+}
+code,
+pre,
+kbd {
+  font-family: var(--font-mono);
+}

@@ -1,0 +1,83 @@
+---
+title: x402 nanopayments
+description: How an EIP-3009 signature becomes a paid tool response — the full protocol, end to end.
+---
+
+## One call, one sub-cent payment
+
+x402 is an HTTP-native payment protocol. Sendero uses it so every tool call is pre-paid, atomic, and settle-on-success. You never buy credits and you never get invoiced.
+
+```
+Client -->  POST /mcp/call  { tool, input }
+Server <--  402 Payment Required + X-Payment-Required
+Client -->  POST /mcp/call  { tool, input, payment: { ...signed } }
+Server <--  200 OK          { data, meter: { settled_tx } }
+```
+
+## Step 1 — Quote
+
+The server replies with `402 Payment Required` and describes the charge:
+
+```json
+{
+  "scheme": "eip3009",
+  "network": "arc",
+  "asset": "0xUSDC_ON_ARC",
+  "payTo": "0xSenderoSettlement",
+  "maxAmount": "2000",
+  "nonce": "0x...",
+  "validBefore": 1760000000
+}
+```
+
+## Step 2 — Sign (EIP-3009)
+
+Your wallet signs a `transferWithAuthorization` — a gasless permit that lets Sendero pull the exact quoted amount on your behalf:
+
+```ts
+import { signTransferAuthorization } from '@x402/evm';
+
+const authorization = await signTransferAuthorization({
+  wallet: myViemAccount,
+  token: USDC_ON_ARC,
+  to: quote.payTo,
+  value: quote.maxAmount,
+  validBefore: quote.validBefore,
+  nonce: quote.nonce,
+});
+```
+
+## Step 3 — Re-send
+
+Re-POST with the payment attached. Sendero:
+
+1. Verifies the signature and nonce.
+2. Executes the tool (flight search, on-chain settle, whatever).
+3. If and only if the tool succeeds, submits the authorization to the USDC contract on Arc — the USDC moves in the same tx window.
+4. Returns the tool data plus the settle receipt.
+
+If the tool fails, the signature is discarded and you aren't charged. No refunds to process.
+
+## Gateway deposit (optional)
+
+If your app makes thousands of calls a minute, rebroadcasting EIP-3009 on every request is expensive. Deposit once to a Circle Gateway-backed balance and Sendero will debit locally, reconciling to Arc in batched windows:
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/v1/wallet/deposit \
+  -H "Authorization: Bearer $SENDERO_API_KEY" \
+  -d '{ "amount_usdc": "100.00" }'
+```
+
+Gateway deposits unlock the same unified balance across 11 EVM chains plus Solana — you top up once and spend from anywhere.
+
+## Why Arc
+
+- USDC is the **native gas token** — no ETH sidecar, no gas estimation dance.
+- Sub-second finality means the tool returns before the user notices.
+- Per-call cost at scale: fractions of a cent, vs ~$2.14 on Ethereum mainnet.
+
+## Reference
+
+- [x402 spec](https://github.com/x402/spec)
+- [EIP-3009](https://eips.ethereum.org/EIPS/eip-3009)
+- [Circle Gateway docs](https://developers.circle.com/gateway)

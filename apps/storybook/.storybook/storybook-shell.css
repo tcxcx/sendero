@@ -1,0 +1,17 @@
+/* Small quality-of-life overrides so the Storybook canvas feels
+   like a real Sendero surface, not default Inter on white. */
+.sb-show-main,
+.sb-main-padded {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  font-family: var(--font-sans);
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}

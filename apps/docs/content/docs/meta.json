@@ -1,0 +1,15 @@
+{
+  "title": "Sendero API",
+  "pages": [
+    "index",
+    "quickstart",
+    "---Tools---",
+    "tools/overview",
+    "tools/search_flights",
+    "tools/settle_split",
+    "---Protocol---",
+    "x402-nanopayments",
+    "mcp-integration",
+    "pricing"
+  ]
+}

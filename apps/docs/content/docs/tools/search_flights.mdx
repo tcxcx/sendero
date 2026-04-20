@@ -1,0 +1,81 @@
+---
+title: search_flights
+description: Search real flight inventory via Duffel. Returns ranked offers with carrier, price, and fare rules.
+---
+
+**Category:** External API · **Price:** $0.002 · **Backed by:** Duffel Flights API
+
+## Input
+
+```ts
+{
+  origin: string;           // IATA code, e.g. "MEX"
+  destination: string;      // IATA code, e.g. "SCL"
+  departure_date: string;   // ISO, e.g. "2026-05-15"
+  return_date?: string;     // ISO, optional for one-way
+  passengers: number;       // 1–9
+  cabin_class?: 'economy' | 'premium_economy' | 'business' | 'first';
+  currency?: 'USDC' | 'EURC' | 'USD' | 'MXN';
+}
+```
+
+## Output
+
+```ts
+{
+  ok: true,
+  data: {
+    offers: Array<{
+      id: string;           // Pass to book_flight as offer_id
+      total_amount: string; // decimal USDC
+      owner: { name: string; iata_code: string };
+      slices: Array<{
+        origin: string;
+        destination: string;
+        departure: string;
+        arrival: string;
+        duration_minutes: number;
+        segments: number;
+      }>;
+      expires_at: string;   // ISO, usually ~10 minutes
+    }>;
+  },
+  meter: { tool: 'search_flights', usdc_atomic: '2000', usdc_display: '0.002' }
+}
+```
+
+## Example
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/mcp/call \
+  -H "Authorization: Bearer $SENDERO_API_KEY" \
+  -d '{
+    "tool": "search_flights",
+    "input": {
+      "origin": "MEX",
+      "destination": "SCL",
+      "departure_date": "2026-05-15",
+      "passengers": 2,
+      "cabin_class": "economy",
+      "currency": "USDC"
+    }
+  }'
+```
+
+## Payment flow
+
+1. You POST to `/mcp/call` with your bearer token.
+2. Sendero returns `402 Payment Required` with an `X-Payment-Required` header describing the $0.002 charge.
+3. Your client signs an EIP-3009 `transferWithAuthorization` for 2,000 atomic USDC to Sendero's settlement address on Arc.
+4. You re-POST with the signed payment payload. Sendero executes the Duffel search, settles the USDC, and returns both the data and the settle receipt.
+
+Most SDKs handle steps 2–4 transparently — see [x402 nanopayments](/docs/x402-nanopayments) for the raw protocol.
+
+## Errors
+
+| Code                      | Meaning                                         |
+| ------------------------- | ----------------------------------------------- |
+| `invalid_iata`            | Origin or destination isn't a known airport.    |
+| `no_offers`               | Duffel returned zero flights for the route.     |
+| `payment_underfunded`     | Signed auth amount < quoted price.              |
+| `provider_timeout`        | Duffel didn't respond in < 8 s.                 |

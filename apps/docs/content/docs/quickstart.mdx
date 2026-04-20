@@ -1,0 +1,69 @@
+---
+title: Quickstart
+description: From zero to a paid tool call in 5 minutes — get an API key, check the treasury, and settle a trip.
+---
+
+## 1. Get an API key
+
+Sign in at [app.sendero.travel](https://app.sendero.travel) and copy your publishable `sk_` key. Sandbox keys are free; production keys require KYB.
+
+```bash
+export SENDERO_API_KEY="sk_test_..."
+export SENDERO_EDGE_URL="https://edge.sendero.travel"
+```
+
+## 2. Fund a Gateway wallet
+
+Every tool call settles from a Circle Gateway-backed USDC balance. Deposit once, spend across 11 chains:
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/v1/wallet/deposit \
+  -H "Authorization: Bearer $SENDERO_API_KEY" \
+  -d '{ "amount_usdc": "10.00", "chain": "arc" }'
+```
+
+<Callout type="info">
+  $10 buys roughly 1,000 cheap reads or 1,000 on-chain settles — more than enough to exercise every tool end to end.
+</Callout>
+
+## 3. Call your first tool
+
+`check_treasury` is the cheapest read (half a tenth of a cent). It returns your USDC balance and policy limits:
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/mcp/call \
+  -H "Authorization: Bearer $SENDERO_API_KEY" \
+  -d '{ "tool": "check_treasury", "input": {} }'
+```
+
+The response includes an `X-Payment` header — the EIP-3009 signed receipt for the $0.0005 USDC you just spent.
+
+## 4. Book a real flight
+
+End-to-end: search, quote, issue, settle. Each tool charges at the moment of success:
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/mcp/call \
+  -H "Authorization: Bearer $SENDERO_API_KEY" \
+  -d '{
+    "tool": "book_flight",
+    "input": {
+      "offer_id": "off_abc123",
+      "passengers": [{ "given_name": "Ada", "family_name": "Lovelace" }]
+    }
+  }'
+```
+
+## 5. Settle the commission fan-out
+
+On issue, Sendero atomically routes commission to the airline, the agency, the TMC, and the traveler credit — one Arc tx, four deltas:
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/mcp/call \
+  -H "Authorization: Bearer $SENDERO_API_KEY" \
+  -d '{ "tool": "settle_split", "input": { "booking_id": "bkg_xyz" } }'
+```
+
+You're done. Every call was paid for the instant it succeeded. There are no invoices, no reconciliation, no retries.
+
+**Next:** read the [tool catalog](/docs/tools/overview) or wire Sendero into [Claude Desktop](/docs/mcp-integration).

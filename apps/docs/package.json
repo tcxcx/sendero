@@ -1,0 +1,30 @@
+{
+  "name": "@sendero/docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero developer docs — Fumadocs site covering the 14 MCP tools, the x402 nanopayment flow, and MCP client integration.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3020",
+    "build": "next build",
+    "start": "next start -p 3020",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "fumadocs-mdx"
+  },
+  "dependencies": {
+    "next": "^15.5.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "fumadocs-core": "^14.5.0",
+    "fumadocs-ui": "^14.5.0",
+    "fumadocs-mdx": "^11.1.0",
+    "@sendero/tools": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.8.3"
+  }
+}

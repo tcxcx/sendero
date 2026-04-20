@@ -1,0 +1,72 @@
+---
+title: MCP integration
+description: Expose Sendero's 14 tools to Claude Desktop, ChatGPT Apps, Cursor, or any MCP-compatible host.
+---
+
+Sendero ships a Model Context Protocol server at `https://edge.sendero.travel/mcp`. Any host that speaks MCP can enumerate the 14 tools, call them, and surface results inline.
+
+## Claude Desktop
+
+Edit your config at `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "sendero": {
+      "command": "npx",
+      "args": ["-y", "@sendero/mcp-client"],
+      "env": {
+        "SENDERO_API_KEY": "sk_test_...",
+        "SENDERO_EDGE_URL": "https://edge.sendero.travel"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The tools appear in the tool palette automatically — ask "search flights from Mexico City to Santiago next Friday" and Claude will call `search_flights` and render the offers inline.
+
+## ChatGPT Apps
+
+ChatGPT Apps reads an OpenAPI spec. Point it at Sendero's MCP-to-REST shim:
+
+```yaml
+servers:
+  - url: https://edge.sendero.travel/apps
+security:
+  - SenderoKey: []
+components:
+  securitySchemes:
+    SenderoKey:
+      type: http
+      scheme: bearer
+```
+
+Full OpenAPI lives at `https://edge.sendero.travel/apps/openapi.json`.
+
+## Cursor / Zed / your own agent
+
+Any client that understands MCP over SSE works out of the box. Connect to:
+
+```
+https://edge.sendero.travel/mcp/sse?api_key=sk_test_...
+```
+
+## Payments across hosts
+
+Every tool call is metered identically regardless of the host. The MCP client is responsible for signing the EIP-3009 authorization or carrying the bearer that unlocks your Gateway-backed balance. See [x402 nanopayments](/docs/x402-nanopayments) for the wire protocol.
+
+## What the host sees
+
+When the host enumerates tools, it receives this shape:
+
+```json
+{
+  "name": "search_flights",
+  "description": "Search real flight inventory via Duffel.",
+  "input_schema": { /* JSON Schema */ },
+  "pricing": { "asset": "USDC", "amount": "0.002", "network": "arc" }
+}
+```
+
+The `pricing` block is the Sendero extension — non-MCP hosts ignore it; MCP hosts that speak x402 show the price to the user before confirming the call.

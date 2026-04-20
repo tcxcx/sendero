@@ -1,0 +1,31 @@
+{
+  "name": "@sendero/storybook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero design system — Storybook 8 (Vite) showcasing the vermilion tokens, primitives, and composed UI pieces. Foundation for future packages/ui extraction.",
+  "type": "module",
+  "scripts": {
+    "dev": "storybook dev -p 3030 --no-open",
+    "build": "storybook build -o storybook-static",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "^8.4.0",
+    "@storybook/addon-essentials": "^8.4.0",
+    "@storybook/addon-a11y": "^8.4.0",
+    "@storybook/addon-interactions": "^8.4.0",
+    "@storybook/addon-themes": "^8.4.0",
+    "@storybook/test": "^8.4.0",
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "storybook": "^8.4.0",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.0"
+  }
+}

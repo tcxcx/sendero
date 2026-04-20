@@ -1,0 +1,77 @@
+---
+title: settle_split
+description: Atomically fan-out commission to airline, agency, TMC, and traveler credit in one Arc transaction.
+---
+
+**Category:** Composed · **Price:** $0.01 · **On-chain:** yes, one Arc tx, four USDC transfers
+
+`settle_split` is Sendero's headline tool. It takes a booking that has already issued, looks up the commission split policy, and pushes four USDC transfers on Arc inside a single transaction. No multisig choreography, no off-chain reconciliation.
+
+## Input
+
+```ts
+{
+  booking_id: string;       // bkg_xyz from book_flight
+  override_split?: {        // optional — defaults to the policy ledger
+    airline_bps: number;    // basis points, e.g. 9500 (95%)
+    agency_bps: number;
+    tmc_bps: number;
+    traveler_bps: number;
+  };
+  idempotency_key?: string; // your uuid; we dedupe for 24h
+}
+```
+
+`bps` values must sum to `10000`.
+
+## Output
+
+```ts
+{
+  ok: true,
+  data: {
+    booking_id: string;
+    tx_hash: string;                   // Arc tx
+    block_number: number;
+    legs: Array<{
+      recipient: 'airline' | 'agency' | 'tmc' | 'traveler';
+      address: `0x${string}`;
+      usdc_atomic: string;
+      usdc_display: string;
+    }>;
+    total_atomic: string;
+  },
+  meter: { tool: 'settle_split', usdc_atomic: '10000', usdc_display: '0.01', settled_tx: '0x...' }
+}
+```
+
+## Example
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/mcp/call \
+  -H "Authorization: Bearer $SENDERO_API_KEY" \
+  -d '{
+    "tool": "settle_split",
+    "input": {
+      "booking_id": "bkg_0192abc",
+      "idempotency_key": "0b7f8e5e-3d08-4a23-9c17-27c9f1c1a1a0"
+    }
+  }'
+```
+
+## Why it matters
+
+In the legacy ticketing world, commission settlement takes 30–90 days, passes through clearinghouses (IATA BSP), and costs 1–3% in fees. `settle_split` collapses the whole flow into one signed call that finalises in under a second on Arc.
+
+## Payment flow
+
+Identical to any other composed tool — see [x402 nanopayments](/docs/x402-nanopayments). The $0.01 fee is charged on top of the four commission transfers; the commission amounts themselves come from the booking escrow Sendero opened at issue.
+
+## Errors
+
+| Code                 | Meaning                                                           |
+| -------------------- | ----------------------------------------------------------------- |
+| `booking_not_issued` | `booking_id` hasn't reached issued state yet.                     |
+| `split_mismatch`     | `override_split` bps don't sum to 10,000.                         |
+| `escrow_underfunded` | The booking escrow doesn't hold enough USDC for the fan-out.      |
+| `policy_violation`   | `check_policy` would have refused this split — override rejected. |

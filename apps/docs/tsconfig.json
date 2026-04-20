@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "plugins": [{ "name": "next" }],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "@sendero/tools": ["../../packages/tools/src/index.ts"],
+      "@sendero/tools/pricing": ["../../packages/tools/src/pricing.ts"],
+      "@sendero/tools/types": ["../../packages/tools/src/types.ts"]
+    }
+  },
+  "include": [
+    ".next/types/**/*.ts",
+    ".source/**/*.ts",
+    "next-env.d.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "lib/**/*.ts",
+    "source.config.ts",
+    "next.config.mjs"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -18,7 +18,12 @@
     "typecheck": "tsc --noEmit || true",
     "typecheck:all": "turbo typecheck",
     "clean": "git clean -xdf .next .turbo node_modules apps/*/node_modules packages/*/node_modules",
-    "bootstrap-agent": "bun run scripts/bootstrap-agent.ts"
+    "bootstrap-agent": "bun run scripts/bootstrap-agent.ts",
+    "db:generate": "bun run --cwd packages/database db:generate",
+    "db:migrate": "bun run --cwd packages/database db:migrate",
+    "db:seed": "bun run --cwd packages/database db:seed",
+    "db:studio": "bun run --cwd packages/database db:studio",
+    "db:reset": "bun run --cwd packages/database db:reset"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",

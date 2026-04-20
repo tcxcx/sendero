@@ -1,0 +1,37 @@
+{
+  "name": "@sendero/auth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — auth layer. Bridges Clerk (tenant / org / role) with Circle Modular Wallets (passkey MSCA) via Prisma-backed 1:1 mapping. Consumed by apps/app (Next.js 15 App Router) and apps/edge (Hono).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./clerk": "./src/clerk.ts",
+    "./clerk/server": "./src/clerk.server.ts",
+    "./msca": "./src/msca.ts",
+    "./tenant": "./src/tenant.ts",
+    "./middleware": "./src/middleware.ts",
+    "./store": "./src/store.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^6.10.0",
+    "@clerk/backend": "^1.20.0"
+  },
+  "peerDependencies": {
+    "@circle-fin/modular-wallets-core": "^1.0.13",
+    "@sendero/database": "*",
+    "hono": "^4.12.14",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "viem": "^2.21.0",
+    "webauthn-p256": "0.0.5",
+    "zod": "^3.25.76",
+    "zustand": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@sendero/database": { "optional": false },
+    "hono": { "optional": true }
+  }
+}
