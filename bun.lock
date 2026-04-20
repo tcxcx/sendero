@@ -111,11 +111,29 @@
         "zod": "^3.25.76",
       },
     },
+    "apps/help": {
+      "name": "@sendero/help",
+      "version": "0.1.0",
+      "dependencies": {
+        "@sendero/locale": "workspace:*",
+        "@sendero/seo": "workspace:*",
+        "next": "^16.2.4",
+        "react": "^19.2.5",
+        "react-dom": "^19.2.5",
+      },
+      "devDependencies": {
+        "@types/node": "^22.9.0",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "typescript": "^5.8.3",
+      },
+    },
     "apps/marketing": {
       "name": "@sendero/marketing",
       "version": "0.1.0",
       "dependencies": {
         "@sendero/locale": "workspace:*",
+        "@sendero/seo": "workspace:*",
         "next": "^16.2.4",
         "react": "^19.2.5",
         "react-dom": "^19.2.5",
@@ -306,6 +324,16 @@
       },
       "peerDependencies": {
         "viem": "^2.21.0",
+      },
+    },
+    "packages/seo": {
+      "name": "@sendero/seo",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "@sendero/locale": "*",
       },
     },
     "packages/slack": {
@@ -908,6 +936,8 @@
 
     "@sendero/erc8183": ["@sendero/erc8183@workspace:packages/sendero-erc8183"],
 
+    "@sendero/help": ["@sendero/help@workspace:apps/help"],
+
     "@sendero/intelligence": ["@sendero/intelligence@workspace:packages/intelligence"],
 
     "@sendero/locale": ["@sendero/locale@workspace:packages/locale"],
@@ -915,6 +945,8 @@
     "@sendero/marketing": ["@sendero/marketing@workspace:apps/marketing"],
 
     "@sendero/nanopayments": ["@sendero/nanopayments@workspace:packages/sendero-nanopayments"],
+
+    "@sendero/seo": ["@sendero/seo@workspace:packages/seo"],
 
     "@sendero/slack": ["@sendero/slack@workspace:packages/slack"],
 

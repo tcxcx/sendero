@@ -1,13 +1,13 @@
 {
-  "name": "@sendero/marketing",
+  "name": "@sendero/help",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Sendero marketing site — Next.js 16 scaffold backed by basehub CMS. Four locales (en-US, es-MX, pt-BR, es-AR). Hero + features + pricing + footer. Works without BASEHUB_TOKEN via static fallback content.",
+  "description": "Sendero help center — basehub-backed article catalog with categories, search, and per-locale routing. Scaffold ships with a static fallback so the site renders without BASEHUB_TOKEN.",
   "scripts": {
-    "dev": "next dev -p 3011",
+    "dev": "next dev -p 3012",
     "build": "next build",
-    "start": "next start -p 3011",
+    "start": "next start -p 3012",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit"
   },

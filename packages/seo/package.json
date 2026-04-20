@@ -1,0 +1,21 @@
+{
+  "name": "@sendero/seo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — SEO primitives. Sitemap + robots builders, Open Graph / Twitter Card metadata, JSON-LD structured data (Organization, TravelAgency, SoftwareApplication, FAQ, HowTo). Multi-locale aware.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sitemap": "./src/sitemap.ts",
+    "./robots": "./src/robots.ts",
+    "./metadata": "./src/metadata.ts",
+    "./jsonld": "./src/jsonld.ts"
+  },
+  "peerDependencies": {
+    "@sendero/locale": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
