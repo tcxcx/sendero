@@ -71,12 +71,15 @@ Treasury rebalance tools (Pasillo corporate wallet on Arc):
   • bridge_to_arc          — pull USDC into Arc from Ethereum_Sepolia,
                               Base_Sepolia, Polygon_Amoy, Avalanche_Fuji,
                               Arbitrum_Sepolia, or Optimism_Sepolia
+  • swap_and_bridge        — composed workflow: CCTP-bridge USDC into Arc
+                              AND swap to EURC in one tool call
 
 Rebalance workflow (chain these when treasury liquidity is short):
   1. check_treasury — see what we have
   2. If USD-side is short but USDC total is fine →  swap_tokens
   3. If the Arc side itself is short →  bridge_to_arc from a funded chain
-  4. (Optional) send_tokens to top up the user wallet before they sign the
+  4. If both are short AND the booking needs EURC →  swap_and_bridge
+  5. (Optional) send_tokens to top up the user wallet before they sign the
      on-chain settlement
 Use these BEFORE attempting a book_flight whose totalAmount exceeds the
 Arc USDC treasury balance. Explain what you're doing in one short sentence
@@ -333,6 +336,81 @@ export async function POST(req: NextRequest) {
           txHash: summary.txHash,
           explorerUrl: summary.explorerUrl,
           stepCount: summary.steps.length,
+        };
+      },
+    }),
+
+    swap_and_bridge: tool({
+      description:
+        'Composed workflow: CCTP-bridge USDC from a source chain INTO Arc Testnet, then swap to EURC on Arc. Use when a booking needs EURC but treasury only has USDC on another chain. Returns both step receipts.',
+      inputSchema: z.object({
+        fromChain: z.enum(BRIDGE_CHAINS),
+        amount: z.string().describe('USDC amount to bridge and swap, e.g. "5.00"'),
+        targetToken: z.enum(['USDC', 'EURC']).default('EURC'),
+      }),
+      execute: async ({ fromChain, amount, targetToken }) => {
+        const treasuryAddress = getTreasuryAddress();
+        const kit = getAppKit();
+        const adapter = getTreasuryAdapter();
+
+        const bridgeParams: BridgeParams = {
+          from: {
+            adapter,
+            chain: fromChain,
+            address: treasuryAddress as `0x${string}`,
+          },
+          to: {
+            adapter,
+            chain: 'Arc_Testnet',
+            address: treasuryAddress as `0x${string}`,
+          },
+          amount,
+        };
+        const bridgeResult = await kit.bridge(bridgeParams);
+        const bridgeSummary = summarizeBridge(bridgeResult);
+
+        if (targetToken === 'USDC') {
+          return {
+            state: bridgeSummary.state,
+            fromChain,
+            toChain: 'Arc_Testnet',
+            amount,
+            targetToken,
+            bridge: bridgeSummary,
+            swap: null,
+            txHash: bridgeSummary.txHash,
+            explorerUrl: bridgeSummary.explorerUrl,
+          };
+        }
+
+        const swapParams: SwapParams = {
+          from: {
+            adapter,
+            chain: 'Arc_Testnet',
+            address: treasuryAddress as `0x${string}`,
+          },
+          tokenIn: 'USDC',
+          tokenOut: targetToken,
+          amountIn: amount,
+          config: { kitKey: getKitKey() },
+        };
+        const swapResult = await kit.swap(swapParams);
+        const swapSummary = summarizeSwap(swapResult);
+
+        return {
+          state:
+            bridgeSummary.state === 'success' && swapSummary.state === 'success'
+              ? 'success'
+              : `bridge=${bridgeSummary.state}|swap=${swapSummary.state}`,
+          fromChain,
+          toChain: 'Arc_Testnet',
+          amount,
+          targetToken,
+          bridge: bridgeSummary,
+          swap: swapSummary,
+          txHash: swapSummary.txHash || bridgeSummary.txHash,
+          explorerUrl: swapSummary.explorerUrl || bridgeSummary.explorerUrl,
+          amountOut: swapResult.amountOut,
         };
       },
     }),

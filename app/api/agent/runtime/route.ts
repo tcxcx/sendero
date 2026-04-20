@@ -12,6 +12,7 @@ const TOOL_NAMES = [
   'swap_tokens',
   'send_tokens',
   'bridge_to_arc',
+  'swap_and_bridge',
 ] as const;
 
 /**

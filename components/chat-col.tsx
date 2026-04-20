@@ -145,6 +145,13 @@ export function ChatCol() {
               text: `bridge(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc)`,
               t: clock(),
             });
+          } else if (toolName === 'swap_and_bridge') {
+            s.logEvent({
+              group: 'treasury.swap-bridge',
+              bullet: 'active',
+              text: `bridge+swap(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc → ${toolInput.targetToken ?? 'EURC'})`,
+              t: clock(),
+            });
           }
         }
 
@@ -260,6 +267,20 @@ export function ChatCol() {
               text: output.txHash
                 ? `bridge landed · <span class="v">${output.txHash.slice(0, 10)}…</span>`
                 : `bridge ${output.state}`,
+              t: clock(),
+            });
+          } else if (
+            toolName === 'swap_and_bridge' &&
+            (output.txHash || output.state)
+          ) {
+            refreshTreasury();
+            s.updateLastEvent('treasury.swap-bridge', { bullet: 'done' });
+            s.logEvent({
+              group: 'treasury.swap-bridge',
+              bullet: 'done',
+              text: output.txHash
+                ? `bridge+swap landed · <span class="v">${output.txHash.slice(0, 10)}…</span>`
+                : `bridge+swap ${output.state}`,
               t: clock(),
             });
           }
