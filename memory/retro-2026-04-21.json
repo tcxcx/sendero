@@ -1,0 +1,466 @@
+{
+  "date": "2026-04-21",
+  "window": {
+    "label": "7d",
+    "since": "2026-04-14T00:00:00",
+    "through": "2026-04-21"
+  },
+  "user": {
+    "name": "criptopoeta",
+    "email": "tomas.cordero.esp@gmail.com"
+  },
+  "metrics": {
+    "commits": 143,
+    "contributors": 1,
+    "prs": 0,
+    "insertions": 80550,
+    "deletions": 10326,
+    "net": 70224,
+    "testInsertions": 1989,
+    "testRatio": 2,
+    "activeDays": 4,
+    "sessions": 13,
+    "deepSessions": 6,
+    "mediumSessions": 2,
+    "microSessions": 5,
+    "activeMinutes": 849,
+    "avgSessionMin": 65,
+    "locPerHour": 6422,
+    "fixRatio": 3
+  },
+  "versionRange": {
+    "from": "v0.1.0",
+    "to": "v0.1.0"
+  },
+  "streak": {
+    "team": 4,
+    "personal": 4
+  },
+  "aiAssistedCommits": 121,
+  "hourly": [
+    {
+      "hour": 0,
+      "count": 7,
+      "bar": "█████"
+    },
+    {
+      "hour": 1,
+      "count": 4,
+      "bar": "███"
+    },
+    {
+      "hour": 2,
+      "count": 10,
+      "bar": "███████"
+    },
+    {
+      "hour": 3,
+      "count": 0,
+      "bar": ""
+    },
+    {
+      "hour": 4,
+      "count": 0,
+      "bar": ""
+    },
+    {
+      "hour": 5,
+      "count": 0,
+      "bar": ""
+    },
+    {
+      "hour": 6,
+      "count": 0,
+      "bar": ""
+    },
+    {
+      "hour": 7,
+      "count": 0,
+      "bar": ""
+    },
+    {
+      "hour": 8,
+      "count": 0,
+      "bar": ""
+    },
+    {
+      "hour": 9,
+      "count": 7,
+      "bar": "█████"
+    },
+    {
+      "hour": 10,
+      "count": 26,
+      "bar": "██████████████████"
+    },
+    {
+      "hour": 11,
+      "count": 21,
+      "bar": "███████████████"
+    },
+    {
+      "hour": 12,
+      "count": 9,
+      "bar": "██████"
+    },
+    {
+      "hour": 13,
+      "count": 3,
+      "bar": "██"
+    },
+    {
+      "hour": 14,
+      "count": 0,
+      "bar": ""
+    },
+    {
+      "hour": 15,
+      "count": 4,
+      "bar": "███"
+    },
+    {
+      "hour": 16,
+      "count": 3,
+      "bar": "██"
+    },
+    {
+      "hour": 17,
+      "count": 4,
+      "bar": "███"
+    },
+    {
+      "hour": 18,
+      "count": 2,
+      "bar": "█"
+    },
+    {
+      "hour": 19,
+      "count": 1,
+      "bar": "█"
+    },
+    {
+      "hour": 20,
+      "count": 17,
+      "bar": "████████████"
+    },
+    {
+      "hour": 21,
+      "count": 13,
+      "bar": "█████████"
+    },
+    {
+      "hour": 22,
+      "count": 6,
+      "bar": "████"
+    },
+    {
+      "hour": 23,
+      "count": 6,
+      "bar": "████"
+    }
+  ],
+  "sessions": [
+    {
+      "start": 1776548300,
+      "end": 1776548300,
+      "durationMin": 5,
+      "class": "micro",
+      "commits": 1,
+      "loc": 7295
+    },
+    {
+      "start": 1776632880,
+      "end": 1776632880,
+      "durationMin": 5,
+      "class": "micro",
+      "commits": 1,
+      "loc": 5124
+    },
+    {
+      "start": 1776642465,
+      "end": 1776643318,
+      "durationMin": 14,
+      "class": "micro",
+      "commits": 2,
+      "loc": 5418
+    },
+    {
+      "start": 1776648952,
+      "end": 1776650077,
+      "durationMin": 19,
+      "class": "micro",
+      "commits": 2,
+      "loc": 293
+    },
+    {
+      "start": 1776653050,
+      "end": 1776658171,
+      "durationMin": 85,
+      "class": "deep",
+      "commits": 8,
+      "loc": 4332
+    },
+    {
+      "start": 1776661210,
+      "end": 1776664119,
+      "durationMin": 48,
+      "class": "medium",
+      "commits": 5,
+      "loc": 5632
+    },
+    {
+      "start": 1776700532,
+      "end": 1776704153,
+      "durationMin": 60,
+      "class": "deep",
+      "commits": 4,
+      "loc": 12933
+    },
+    {
+      "start": 1776708533,
+      "end": 1776715112,
+      "durationMin": 110,
+      "class": "deep",
+      "commits": 7,
+      "loc": 10260
+    },
+    {
+      "start": 1776723132,
+      "end": 1776723132,
+      "durationMin": 5,
+      "class": "micro",
+      "commits": 1,
+      "loc": 1665
+    },
+    {
+      "start": 1776726832,
+      "end": 1776733995,
+      "durationMin": 119,
+      "class": "deep",
+      "commits": 32,
+      "loc": 13416
+    },
+    {
+      "start": 1776736827,
+      "end": 1776748853,
+      "durationMin": 200,
+      "class": "deep",
+      "commits": 14,
+      "loc": 10308
+    },
+    {
+      "start": 1776775124,
+      "end": 1776784346,
+      "durationMin": 154,
+      "class": "deep",
+      "commits": 62,
+      "loc": 5141
+    },
+    {
+      "start": 1776802355,
+      "end": 1776803878,
+      "durationMin": 25,
+      "class": "medium",
+      "commits": 4,
+      "loc": 9059
+    }
+  ],
+  "typeCounts": {
+    "chore": 18,
+    "docs": 14,
+    "feat": 88,
+    "fix": 5,
+    "refactor": 2,
+    "rename": 1,
+    "style": 1,
+    "test": 14
+  },
+  "hotspots": [
+    {
+      "file": "bun.lock",
+      "count": 33,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": "package.json",
+      "count": 26,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": "tsconfig.json",
+      "count": 13,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": "apps/app/package.json",
+      "count": 12,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": "apps/app/tsconfig.json",
+      "count": 10,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": "packages/tools/src/index.ts",
+      "count": 10,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": "packages/tools/package.json",
+      "count": 9,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": ".gitignore",
+      "count": 8,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": "app/api/chat/route.ts",
+      "count": 8,
+      "test": false,
+      "churn": true
+    },
+    {
+      "file": "turbo.json",
+      "count": 8,
+      "test": false,
+      "churn": true
+    }
+  ],
+  "prSizes": {
+    "small": 72,
+    "medium": 36,
+    "large": 17,
+    "xl": 18
+  },
+  "focus": {
+    "topDirectory": "packages/",
+    "commitsTouching": 76,
+    "score": 53
+  },
+  "shipOfWeek": {
+    "hash": "654467b",
+    "subject": "feat: ship Sendero MVP platform",
+    "author": "criptopoeta",
+    "loc": 8614,
+    "insertions": 7445,
+    "deletions": 1169,
+    "files": [
+      ".env.example",
+      ".gitignore",
+      ".mise.toml",
+      "apps/app/app/(app)/app/admin-retries/actions.ts",
+      "apps/app/app/(app)/app/billing/invoices/[id]/page.tsx",
+      "apps/app/app/(app)/app/billing/invoices/page.tsx",
+      "apps/app/app/(app)/app/billing/layout.tsx",
+      "apps/app/app/(app)/app/caps/actions.ts"
+    ]
+  },
+  "authors": [
+    {
+      "name": "criptopoeta",
+      "email": "criptopoeta@users.noreply.github.com",
+      "isYou": true,
+      "commits": 143,
+      "insertions": 80550,
+      "deletions": 10326,
+      "net": 70224,
+      "testInsertions": 1989,
+      "testRatio": 2,
+      "topDirs": [
+        {
+          "dir": "packages/",
+          "count": 387
+        },
+        {
+          "dir": "apps/",
+          "count": 357
+        },
+        {
+          "dir": "app/",
+          "count": 64
+        },
+        {
+          "dir": "components/",
+          "count": 57
+        },
+        {
+          "dir": "lib/",
+          "count": 55
+        }
+      ],
+      "topFiles": [
+        {
+          "file": "bun.lock",
+          "count": 33
+        },
+        {
+          "file": "package.json",
+          "count": 26
+        },
+        {
+          "file": "tsconfig.json",
+          "count": 13
+        },
+        {
+          "file": "apps/app/package.json",
+          "count": 12
+        },
+        {
+          "file": "apps/app/tsconfig.json",
+          "count": 10
+        }
+      ],
+      "typeMix": {
+        "chore": 18,
+        "docs": 14,
+        "feat": 88,
+        "fix": 5,
+        "refactor": 2,
+        "rename": 1,
+        "style": 1,
+        "test": 14
+      },
+      "peakHours": [
+        {
+          "hour": 10,
+          "count": 26
+        },
+        {
+          "hour": 11,
+          "count": 21
+        },
+        {
+          "hour": 20,
+          "count": 17
+        }
+      ],
+      "sessions": 13,
+      "sessionClasses": {
+        "deep": 6,
+        "medium": 2,
+        "micro": 5
+      },
+      "biggest": {
+        "hash": "654467b",
+        "subject": "feat: ship Sendero MVP platform",
+        "loc": 8614,
+        "insertions": 7445,
+        "deletions": 1169
+      }
+    }
+  ],
+  "prior": null,
+  "deltas": null,
+  "tweetable": "Week of Apr 14: 143 commits (1 contributor), 90,876 LOC touched, 2% tests, 0 PR refs, peak: 10:00 | Streak: 4d"
+}

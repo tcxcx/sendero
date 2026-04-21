@@ -15,6 +15,8 @@ UV_THREADPOOL_SIZE = "14"
 NODE_OPTIONS       = "--max-old-space-size=8192"
 # Skip @t3-oss/env validation for local CLI tasks; Vercel + CI inject real env.
 SKIP_ENV_VALIDATION = "1"
+# Keep task temp files in a user-writable path even after a shell recovered from sudo.
+TMPDIR = "/tmp"
 
 # --- Dev ---
 
@@ -29,6 +31,9 @@ if [ "$(id -u)" = "0" ]; then
   echo "  export TMPDIR=\"$(getconf DARWIN_USER_TEMP_DIR)\""
   exit 1
 fi
+
+mkdir -p .tmp
+export TMPDIR="$PWD/.tmp"
 
 mise run ports
 port_available() {
@@ -81,7 +86,7 @@ if [ "$(id -u)" = "0" ]; then
   echo "  export TMPDIR=\"$(getconf DARWIN_USER_TEMP_DIR)\""
   echo
   echo "If you already created root-owned files, hand ownership back to your user once:"
-  echo "  cd $root && sudo chown -R \"$repo_owner:$repo_group\" apps/*/.next apps/*/.next-user apps/*/.turbo apps/*/.cache-user apps/*/.ponder-user .turbo 2>/dev/null || true"
+  echo "  cd $root && sudo chown -R \"$repo_owner:$repo_group\" apps/*/.next apps/*/.next-user apps/*/.next-sendero apps/*/.turbo apps/*/.cache-user apps/*/.cache-storybook apps/*/node_modules/.cache apps/*/.ponder apps/*/.ponder-local apps/*/.ponder-sendero apps/*/.ponder-user .turbo 2>/dev/null || true"
   exit 1
 fi
 
@@ -155,7 +160,25 @@ fi
 root_owned="$(
   cache_dir_name="$(basename "${CACHE_DIR:-.cache-user}")"
   ponder_dir_name="$(basename "$(dirname "${PONDER_PGLITE_DIR:-.ponder-user/pglite}")")"
-  find apps . -maxdepth 3 \\( -name "${NEXT_DIST_DIR:-.next-user}" -o -name "$cache_dir_name" -o -name "$ponder_dir_name" -o -name .turbo \\) -user root -print 2>/dev/null | sort -u || true
+  {
+    find apps . -maxdepth 4 \\( -name "${NEXT_DIST_DIR:-.next-user}" -o -name "$cache_dir_name" -o -name "$ponder_dir_name" -o -name .turbo \\) -user root -print 2>/dev/null
+    find .turbo -maxdepth 4 -user root -print 2>/dev/null | awk 'NF { print ".turbo" }'
+    find apps -maxdepth 6 \\( -path "*/.next-user/*" -o -path "*/.cache-user/*" -o -path "*/.cache-storybook/*" -o -path "*/node_modules/.cache/*" \\) -user root -print 2>/dev/null | awk -F/ '{
+      out = ""
+      for (i = 1; i <= NF; i++) {
+        out = out (i == 1 ? $i : "/" $i)
+        if ($i == ".next-user" || $i == ".cache-user" || $i == ".cache-storybook") {
+          print out
+          next
+        }
+        if ($i == "node_modules" && i < NF && $(i + 1) == ".cache") {
+          print out "/.cache"
+          next
+        }
+      }
+    }'
+    find apps/ponder -maxdepth 4 -path "*/$ponder_dir_name/*" -user root -print 2>/dev/null | awk -F/ 'NF >= 3 { print $1 "/" $2 "/" $3 }'
+  } | sed 's#^\\./##' | sort -u || true
 )"
 if [ -n "$root_owned" ]; then
   echo "Root-owned Sendero build directories remain:"
@@ -181,7 +204,7 @@ EOF
     echo "$failed_moves"
     echo
     echo "Run this once, then use plain 'mise run dev':"
-    echo "  cd $root && sudo chown -R \"$repo_owner:$repo_group\" apps/*/.next apps/*/.next-user apps/*/.turbo apps/*/.cache-user apps/*/.ponder-user .turbo 2>/dev/null || true"
+    echo "  cd $root && sudo chown -R \"$repo_owner:$repo_group\" apps/*/.next apps/*/.next-user apps/*/.next-sendero apps/*/.turbo apps/*/.cache-user apps/*/.cache-storybook apps/*/node_modules/.cache apps/*/.ponder apps/*/.ponder-local apps/*/.ponder-sendero apps/*/.ponder-user .turbo 2>/dev/null || true"
     exit 1
   fi
 fi

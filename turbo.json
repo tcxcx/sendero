@@ -243,18 +243,26 @@
         "SVIX_TOKEN",
         "TREASURY_PRIVATE_KEY",
         "ARC_ESCROW_ADDRESS",
+        "APP_PORT",
+        "MARKETING_PORT",
+        "HELP_PORT",
+        "DOCS_PORT",
         "PORT",
+        "STORYBOOK_PORT",
+        "PONDER_PORT",
+        "PONDER_PGLITE_DIR",
+        "PONDER_LOG_LEVEL",
+        "NEXT_DIST_DIR",
+        "CACHE_DIR",
         "SKIP_ENV_VALIDATION"
       ],
       "cache": false,
-      "persistent": true,
-      "dependsOn": ["^build", "db:generate", "@sendero/env#validate"]
+      "persistent": true
     },
     "@sendero/edge#dev": {
       "env": ["PORT"],
       "cache": false,
-      "persistent": true,
-      "dependsOn": ["^build"]
+      "persistent": true
     },
     "@sendero/indexer#dev": {
       "env": [
