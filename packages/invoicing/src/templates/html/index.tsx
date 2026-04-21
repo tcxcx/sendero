@@ -1,0 +1,51 @@
+// packages/invoicing/src/templates/html/index.tsx
+import type { TemplateProps } from '../types';
+import { Meta } from './components/meta';
+import { LineItems } from './components/line-items';
+import { Summary } from './components/summary';
+import { Note } from './components/note';
+import { QRCode } from './components/qr-code';
+
+export function InvoiceHtml(props: TemplateProps & { qrDataUrl?: string }) {
+  return (
+    <div
+      style={{
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Arial, sans-serif',
+        color: '#0b0b0b',
+        background: '#ffffff',
+        maxWidth: 720,
+        margin: '0 auto',
+        padding: '40px 16px',
+      }}
+    >
+      <Meta {...props} />
+      <div style={{ height: 32 }} />
+      <LineItems {...props} />
+      <div style={{ height: 32 }} />
+      <Summary {...props} />
+      {props.template.include_qr && props.qrDataUrl ? (
+        <QRCode dataUrl={props.qrDataUrl} />
+      ) : null}
+      <Note {...props} />
+    </div>
+  );
+}
+
+/**
+ * Server-side render to a full HTML document string. Uses react-dom/server
+ * which is already a transitive dep via Next.js; no new dependency.
+ */
+export async function renderInvoiceHtml(
+  props: TemplateProps & { publicUrl: string }
+): Promise<string> {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const QRCodeUtil = await import('qrcode');
+  const qrDataUrl = props.template.include_qr
+    ? await QRCodeUtil.default.toDataURL(props.publicUrl, { width: 144, margin: 1 })
+    : '';
+  const body = renderToStaticMarkup(
+    <InvoiceHtml {...props} qrDataUrl={qrDataUrl} />
+  );
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${props.invoice.number}</title></head><body style="margin:0;padding:0;background:#f5f2ee;">${body}</body></html>`;
+}
