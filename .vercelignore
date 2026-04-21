@@ -1,8 +1,9 @@
-.env.local
-.env
-node_modules
-apps/edge/node_modules
-.next
+**/.cache
+**/.cache-*
+**/.clerk
+**/.next
+**/.next-*
+**/.turbo
+**/node_modules
 .turbo
-bun.lock
-docs/
+memory
