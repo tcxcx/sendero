@@ -36,6 +36,18 @@ pre-commit:
 pre-push:
   parallel: true
   commands:
+    # Branch awareness — informational only. Feature branches skip Vercel
+    # builds entirely (see per-app vercel.json ignoreCommand); only `main`
+    # and `development` trigger deploys.
+    branch-awareness:
+      run: |
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        if [ "$branch" = "main" ] || [ "$branch" = "development" ]; then
+          echo "✓ pushing to $branch — Vercel will build changed apps"
+        else
+          echo "→ pushing feature branch '$branch' — no Vercel build (merge to development to preview-deploy)"
+        fi
+
     build:
       skip:
         - ref: $SKIP_PUSH_CHECKS
