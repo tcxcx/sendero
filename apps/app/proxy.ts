@@ -8,7 +8,8 @@
  * either way (both resolve to Clerk's own server entrypoint).
  */
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -16,6 +17,7 @@ const isPublicRoute = createRouteMatcher([
   '/invoice/(.*)', // public invoice viewer (JWT-gated)
   '/sign-in(.*)',
   '/sign-up(.*)',
+  '/waitlist(.*)',
   '/api/webhooks/(.*)', // Duffel, Clerk, etc. — signature-verified per route
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
   '/api/health',
@@ -27,7 +29,7 @@ const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)', '/tasks(.*)']);
 type OrgMetadata = { onboardingComplete?: boolean } | undefined;
 
 export default clerkMiddleware(async (auth, req: NextRequest) => {
-  const { isAuthenticated, sessionClaims, orgId, redirectToSignIn } = await auth();
+  const { isAuthenticated, sessionClaims, orgId } = await auth();
 
   if (isPublicRoute(req)) {
     const res = NextResponse.next();
@@ -36,7 +38,9 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   }
 
   if (!isAuthenticated) {
-    return redirectToSignIn({ returnBackUrl: req.url });
+    const signInUrl = new URL('/sign-in', req.url);
+    signInUrl.searchParams.set('redirect_url', req.url);
+    return NextResponse.redirect(signInUrl);
   }
 
   if (isOnboardingRoute(req)) {

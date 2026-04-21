@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 export function ReactGrabLoader() {
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;
+    if (process.env.NEXT_PUBLIC_SENDERO_ENABLE_REACT_GRAB !== '1') return;
     if (document.querySelector('script[data-sendero-react-grab]')) return;
 
     const script = document.createElement('script');

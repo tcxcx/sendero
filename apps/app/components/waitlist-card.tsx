@@ -1,15 +1,12 @@
 'use client';
 
-import { SignUp } from '@clerk/nextjs';
+import { Waitlist } from '@clerk/nextjs';
 
-export function SenderoSignUp() {
+export function WaitlistCard() {
   return (
-    <SignUp
-      routing="path"
-      path="/sign-up"
+    <Waitlist
       signInUrl="/sign-in"
-      waitlistUrl="/waitlist"
-      fallbackRedirectUrl="/onboarding"
+      afterJoinWaitlistUrl="/"
       appearance={{
         elements: {
           header: 'hidden',

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
-import { ClerkFailed, ClerkLoaded, ClerkLoading, ClerkProvider } from '@clerk/nextjs';
+import { ClerkProvider } from '@clerk/nextjs';
 import { ReactGrabLoader } from '@/components/react-grab-loader';
 import '@sendero/ui/globals.css';
 import './globals.css';
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  width: 1400,
+  width: 'device-width',
   initialScale: 1,
 };
 
@@ -32,18 +32,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ReactGrabLoader />
-        <ClerkProvider>
-          <ClerkLoading>
-            <div className="p-8 text-sm text-neutral-500">Loading…</div>
-          </ClerkLoading>
-          <ClerkLoaded>
-            <NuqsAdapter>{children}</NuqsAdapter>
-          </ClerkLoaded>
-          <ClerkFailed>
-            <div className="p-8 text-sm text-red-600">
-              Sign-in service unavailable. Please try again shortly.
-            </div>
-          </ClerkFailed>
+        <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up" waitlistUrl="/waitlist">
+          <NuqsAdapter>{children}</NuqsAdapter>
         </ClerkProvider>
       </body>
     </html>
