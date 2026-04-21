@@ -49,6 +49,7 @@
     "smoke:invoice-pdf": "bun run scripts/smoke-invoice-pdf-render.ts",
     "smoke:invoice-booking": "bun run scripts/smoke-invoice-booking.ts",
     "smoke:invoice-platform-bill": "bun run scripts/smoke-invoice-platform-bill.ts",
+    "smoke:clerk-webhook": "bun run scripts/smoke-clerk-webhook.ts",
     "faucet:drip": "bun run scripts/faucet-drip.ts"
   },
   "devDependencies": {
