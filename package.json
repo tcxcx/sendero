@@ -41,6 +41,7 @@
     "gen": "bunx turbo gen",
     "env:validate": "bun run --cwd packages/sendero-env validate",
     "smoke:escrow": "bun run scripts/smoke-guest-escrow.ts",
+    "smoke:nanopay": "bun run scripts/smoke-nanopay-batch.ts",
     "faucet:drip": "bun run scripts/faucet-drip.ts"
   },
   "devDependencies": {
