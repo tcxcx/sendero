@@ -50,6 +50,7 @@
     "smoke:invoice-booking": "bun run scripts/smoke-invoice-booking.ts",
     "smoke:invoice-platform-bill": "bun run scripts/smoke-invoice-platform-bill.ts",
     "smoke:clerk-webhook": "bun run scripts/smoke-clerk-webhook.ts",
+    "smoke:auth-onboarding": "bun run scripts/smoke-auth-onboarding.ts",
     "faucet:drip": "bun run scripts/faucet-drip.ts"
   },
   "devDependencies": {
