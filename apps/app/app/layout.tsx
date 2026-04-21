@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { ClerkFailed, ClerkLoaded, ClerkLoading, ClerkProvider } from '@clerk/nextjs';
+import { ReactGrabLoader } from '@/components/react-grab-loader';
 import '@sendero/ui/globals.css';
 import './globals.css';
 
@@ -29,15 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
-        {process.env.NODE_ENV === 'development' && (
-          <Script
-            src="https://unpkg.com/react-grab/dist/index.global.js"
-            crossOrigin="anonymous"
-            strategy="beforeInteractive"
-          />
-        )}
       </head>
       <body>
+        <ReactGrabLoader />
         <ClerkProvider>
           <ClerkLoading>
             <div className="p-8 text-sm text-neutral-500">Loading…</div>
