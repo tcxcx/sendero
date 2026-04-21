@@ -368,20 +368,29 @@ function resolvePath(root: unknown, path: string): unknown {
 }
 
 function stepsAfter(steps: WorkflowStep[], afterId: string): WorkflowStep[] {
+  const found = stepsAfterInner(steps, afterId);
+  // If the pause wasn't located anywhere in the tree, fall back to the
+  // whole workflow — callers depend on this to handle unknown ids by
+  // replaying from the start. Nested calls MUST NOT hit this fallback
+  // since that would inject unrelated branch steps on resume.
+  return found ?? steps;
+}
+
+function stepsAfterInner(steps: WorkflowStep[], afterId: string): WorkflowStep[] | null {
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     if (step.id === afterId) return steps.slice(i + 1);
     // Dive into nested containers so resume works from inside a branch.
     if (step.kind === 'branch') {
-      const found = stepsAfter(step.then, afterId);
-      if (found.length) return [...found, ...steps.slice(i + 1)];
+      const found = stepsAfterInner(step.then, afterId);
+      if (found !== null) return [...found, ...steps.slice(i + 1)];
       if (step.otherwise) {
-        const elseFound = stepsAfter(step.otherwise, afterId);
-        if (elseFound.length) return [...elseFound, ...steps.slice(i + 1)];
+        const elseFound = stepsAfterInner(step.otherwise, afterId);
+        if (elseFound !== null) return [...elseFound, ...steps.slice(i + 1)];
       }
     }
   }
-  return steps;
+  return null;
 }
 
 function sleep(ms: number): Promise<void> {

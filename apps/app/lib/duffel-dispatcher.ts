@@ -13,15 +13,23 @@
 
 import { prisma } from '@sendero/database';
 import { bookFlightWorkflow, guestPrefundWorkflow } from '@sendero/workflows/catalog';
-import { resumeRun } from '@sendero/workflows';
+import { resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
 import type { DuffelWebhookEvent } from '@sendero/duffel';
 
 import { makeToolRegistry } from './tool-registry';
-import { readPausedRun } from './workflow-pause';
+import { persistPausedRun, readPausedRun } from './workflow-pause';
 
 export async function dispatchDuffelEvent(args: {
   event: DuffelWebhookEvent;
-}): Promise<{ matched: boolean; runId?: string }> {
+  /**
+   * Optional tool-registry override. Production leaves this unset so the
+   * default @sendero/tools handlers (which return encoded on-chain calls)
+   * are used — downstream infra is responsible for submission. Smoke
+   * tests inject a submitting registry so the full chain can be exercised
+   * in one run. See scripts/smoke-webhook-resume-settle.ts.
+   */
+  tools?: ToolRegistry;
+}): Promise<{ matched: boolean; runId?: string; run?: WorkflowRun }> {
   const booking = await prisma.booking.findUnique({
     where: { duffelOrderId: args.event.orderId },
     select: { id: true, tenantId: true, metadata: true },
@@ -49,12 +57,21 @@ export async function dispatchDuffelEvent(args: {
   }
 
   const status = args.event.status === 'ticketed' ? 'ticketed' : 'failed';
-  await resumeRun({
+  const resumed = await resumeRun({
     workflow,
     run: paused.snapshot,
     resolution: { status, duffelOrderId: args.event.orderId },
-    tools: makeToolRegistry(),
+    tools: args.tools ?? makeToolRegistry(),
   });
 
-  return { matched: true, runId: paused.runId };
+  // Persist the resumed snapshot so the booking metadata reflects the
+  // completed (or failed) run. Consumers can inspect the trail for the
+  // tool outputs (onchainCall encodings) without having to replay.
+  await persistPausedRun({
+    bookingId: booking.id,
+    workflow,
+    run: resumed,
+  });
+
+  return { matched: true, runId: paused.runId, run: resumed };
 }
