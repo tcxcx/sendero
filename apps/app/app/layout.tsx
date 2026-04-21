@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
+import { SenderoClerkProvider } from '@sendero/auth/clerk';
+import { ClerkLoaded, ClerkLoading, ClerkFailed } from '@clerk/nextjs';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -36,7 +38,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
       </head>
       <body>
-        <NuqsAdapter>{children}</NuqsAdapter>
+        <SenderoClerkProvider>
+          <ClerkLoading>
+            <div className="p-8 text-sm text-neutral-500">Loading…</div>
+          </ClerkLoading>
+          <ClerkLoaded>
+            <NuqsAdapter>{children}</NuqsAdapter>
+          </ClerkLoaded>
+          <ClerkFailed>
+            <div className="p-8 text-sm text-red-600">
+              Sign-in service unavailable. Please try again shortly.
+            </div>
+          </ClerkFailed>
+        </SenderoClerkProvider>
       </body>
     </html>
   );
