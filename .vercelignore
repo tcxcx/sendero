@@ -1,3 +1,9 @@
+node_modules
+apps/*/node_modules
+packages/*/node_modules
+.git
+.claude
+.tmp
 **/.cache
 **/.cache-*
 **/.clerk
@@ -7,4 +13,6 @@
 **/.turbo
 **/node_modules
 .turbo
+storybook-static
+apps/*/storybook-static
 memory
