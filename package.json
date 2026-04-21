@@ -42,6 +42,7 @@
     "env:validate": "bun run --cwd packages/sendero-env validate",
     "smoke:escrow": "bun run scripts/smoke-guest-escrow.ts",
     "smoke:nanopay": "bun run scripts/smoke-nanopay-batch.ts",
+    "deploy:fonts": "bun run scripts/deploy-invoice-fonts.ts",
     "smoke:retry": "bun run scripts/smoke-nanopay-retry.ts",
     "smoke:resume-settle": "bun run scripts/smoke-webhook-resume-settle.ts",
     "smoke:resume-cancel": "bun run scripts/smoke-webhook-resume-cancel.ts",
@@ -49,6 +50,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
+    "@vercel/blob": "^0.23.0",
     "@turbo/gen": "^2.9.6",
     "@types/node": "^22.9.0",
     "@types/react": "^19.2.14",
