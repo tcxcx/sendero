@@ -1,0 +1,33 @@
+{
+  "name": "@sendero/invoicing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./token": "./src/token.ts",
+    "./fonts-server": "./src/fonts-server.ts",
+    "./calculate": "./src/utils/calculate.ts",
+    "./number": "./src/utils/number.ts",
+    "./transform": "./src/utils/transform.ts",
+    "./public-url": "./src/utils/public-url.ts",
+    "./default": "./src/utils/default.ts",
+    "./templates/types": "./src/templates/types.ts",
+    "./templates/pdf": "./src/templates/pdf/index.tsx",
+    "./templates/html": "./src/templates/html/index.tsx",
+    "./templates/format": "./src/templates/format.tsx"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "^4.3.0",
+    "@vercel/blob": "^0.23.0",
+    "date-fns": "^4.1.0",
+    "jose": "^6.1.1",
+    "qrcode": "^1.5.4",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5"
+  }
+}
