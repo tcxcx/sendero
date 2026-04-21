@@ -36,6 +36,7 @@
     "@sendero/env": "workspace:*",
     "@sendero/erc8183": "workspace:*",
     "@sendero/nanopayments": "workspace:*",
+    "@sendero/notifications": "workspace:*",
     "@sendero/whatsapp": "workspace:*",
     "@sendero/slack": "workspace:*",
     "@sendero/locale": "workspace:*",
