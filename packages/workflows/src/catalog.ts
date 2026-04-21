@@ -22,7 +22,7 @@ export const bookFlightWorkflow: WorkflowDef = {
   version: 1,
   label: 'Book a flight',
   description:
-    'Searches Duffel inventory, validates against the active corporate policy (if any), holds the offer, confirms once the traveler replies approved, then settles the commission fan-out on Arc.',
+    'Escrow-backed booking: the trip must already be prefunded via prefund_trip. Searches Duffel inventory, validates policy, reserves escrow upper-bound, holds the offer, commits the actual vendor amount, waits for Duffel ticketing (via webhook), then releases escrow to vendor + fee legs on ticket confirmation, or refunds the buyer on failure.',
   steps: [
     {
       kind: 'tool',
@@ -50,6 +50,17 @@ export const bookFlightWorkflow: WorkflowDef = {
       args: {
         policyId: $('input.policyId'),
         offer: $('offers.topOffer'),
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'reserve',
+      tool: 'reserve_booking',
+      label: 'Reserve upper-bound from escrow',
+      as: 'reservation',
+      args: {
+        tripId: $('input.tripId'),
+        upperBoundUsdc: $('offers.topOffer.priceUsdc'),
       },
     },
     {
@@ -91,6 +102,20 @@ export const bookFlightWorkflow: WorkflowDef = {
       ],
     },
     {
+      kind: 'tool',
+      id: 'commit',
+      tool: 'commit_booking',
+      label: 'Commit vendor amount + release slack',
+      args: {
+        bookingId: $('reservation.bookingId'),
+        vendorAmountUsdc: $('hold.vendorAmountUsdc'),
+        feeAmountUsdc: $('hold.feeAmountUsdc'),
+        vendorAddress: $('hold.vendorAddress'),
+        itineraryHash: $('hold.itineraryHash'),
+        itineraryCID: $('hold.itineraryCID'),
+      },
+    },
+    {
       kind: 'pause',
       id: 'await_duffel_ticket',
       label: 'Awaiting Duffel ticketing',
@@ -111,7 +136,7 @@ export const bookFlightWorkflow: WorkflowDef = {
           tool: 'confirm_duffel',
           label: 'Confirm Duffel ticket on-chain',
           args: {
-            bookingId: $('hold.bookingId'),
+            bookingId: $('reservation.bookingId'),
             duffelOrderHash: $('hold.orderHash'),
           },
         },
@@ -120,7 +145,7 @@ export const bookFlightWorkflow: WorkflowDef = {
           id: 'settle_escrow',
           tool: 'settle_booking',
           label: 'Release escrow to vendor + fee',
-          args: { bookingId: $('hold.bookingId') },
+          args: { bookingId: $('reservation.bookingId') },
         },
       ],
       otherwise: [
@@ -130,7 +155,7 @@ export const bookFlightWorkflow: WorkflowDef = {
           tool: 'cancel_booking',
           label: 'Cancel booking + refund',
           args: {
-            bookingId: $('hold.bookingId'),
+            bookingId: $('reservation.bookingId'),
             tripId: $('input.tripId'),
             reason: 'duffel_failed',
           },
