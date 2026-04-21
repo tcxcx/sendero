@@ -246,6 +246,7 @@ model Tenant {
   spendCaps          TenantSpendCap[]
   nanopayBatches     NanopayBatch[]
   invoices           Invoice[]
+  circleWallets      CircleWallet[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -283,16 +284,17 @@ model User {
 
 /// Many-to-many User↔Tenant with a per-tenant role.
 model Membership {
-  id        String           @id @default(cuid())
-  tenantId  String
-  userId    String
-  role      Role             @default(traveler)
-  status    MembershipStatus @default(active)
-  invitedBy String?
-  invitedAt DateTime?        @db.Timestamptz(6)
-  joinedAt  DateTime?        @db.Timestamptz(6)
-  createdAt DateTime         @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime         @updatedAt @db.Timestamptz(6)
+  id                String           @id @default(cuid())
+  tenantId          String
+  userId            String
+  clerkMembershipId String?          @unique
+  role              Role             @default(traveler)
+  status            MembershipStatus @default(active)
+  invitedBy         String?
+  invitedAt         DateTime?        @db.Timestamptz(6)
+  joinedAt          DateTime?        @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -504,6 +506,27 @@ model Wallet {
   @@unique([userId, chainId, address])
   @@index([address])
   @@map("wallets")
+}
+
+/// Per-tenant Circle-backed on-chain wallet metadata. Provisioned by the
+/// Clerk webhook handler / org provisioning flow (phase-11c). Distinct
+/// from the user-scoped Wallet model above.
+model CircleWallet {
+  id                String   @id @default(cuid())
+  tenantId          String
+  clerkOrgId        String?
+  address           String   @unique
+  kind              String
+  chain             String
+  circleWalletSetId String?
+  circleWalletId    String?
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, kind])
+  @@map("circle_wallets")
 }
 
 /// Append-only nanopayment ledger. Mirrors packages/tools/src/meter.ts
