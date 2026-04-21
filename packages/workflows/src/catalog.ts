@@ -368,6 +368,53 @@ export const guestPrefundWorkflow: WorkflowDef = {
       },
     },
     {
+      kind: 'pause',
+      id: 'await_duffel_ticket',
+      label: 'Awaiting Duffel ticketing',
+      reason: 'external_event',
+      payload: { via: 'duffel_order_ticketed' },
+      timeoutMs: 48 * 60 * 60 * 1000,
+    },
+    {
+      kind: 'branch',
+      id: 'duffel_gate',
+      label: 'Duffel outcome',
+      when: $('await_duffel_ticket.status'),
+      equals: 'ticketed',
+      then: [
+        {
+          kind: 'tool',
+          id: 'confirm',
+          tool: 'confirm_duffel',
+          label: 'Confirm Duffel ticket on-chain',
+          args: {
+            bookingId: $('reservation.bookingId'),
+            duffelOrderHash: $('hold.orderHash'),
+          },
+        },
+        {
+          kind: 'tool',
+          id: 'settle_escrow',
+          tool: 'settle_booking',
+          label: 'Release escrow to vendor + fee',
+          args: { bookingId: $('reservation.bookingId') },
+        },
+      ],
+      otherwise: [
+        {
+          kind: 'tool',
+          id: 'cancel',
+          tool: 'cancel_booking',
+          label: 'Cancel booking + refund',
+          args: {
+            bookingId: $('reservation.bookingId'),
+            tripId: $('prefund.tripId'),
+            reason: 'duffel_failed',
+          },
+        },
+      ],
+    },
+    {
       kind: 'tool',
       id: 'settle',
       tool: 'settle_split',
