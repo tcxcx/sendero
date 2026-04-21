@@ -8,6 +8,7 @@
  *
  * Subsystems:
  *   agent       — LLM, tools, workflows, session store
+ *   auth        — Clerk keys + webhook signing secret
  *   billing     — meter idempotency column, caps, batch scheduler
  *   channels    — WhatsApp, Slack (+ Enterprise Grid), Email, Web, MCP
  *   onchain     — Arc RPC, treasury, guest escrow, agent token id
@@ -42,8 +43,9 @@ interface Subsystem {
 export async function GET() {
   const started = Date.now();
 
-  const [agent, billing, channels, onchain, intelligence, ops] = await Promise.all([
+  const [agent, auth, billing, channels, onchain, intelligence, ops] = await Promise.all([
     checkAgent(),
+    checkAuth(),
     checkBilling(),
     checkChannels(),
     checkOnchain(),
@@ -51,7 +53,7 @@ export async function GET() {
     checkOps(),
   ]);
 
-  const subsystems: Subsystem[] = [agent, billing, channels, onchain, intelligence, ops];
+  const subsystems: Subsystem[] = [agent, auth, billing, channels, onchain, intelligence, ops];
   const overall = subsystems.every(s => s.ok);
 
   return NextResponse.json(
@@ -105,6 +107,33 @@ async function checkAgent(): Promise<Subsystem> {
     }),
   ];
   return { name: 'agent', ok: checks.every(c => c.ok), checks };
+}
+
+async function checkAuth(): Promise<Subsystem> {
+  const checks: Check[] = [
+    {
+      name: 'clerk_secret_key',
+      ok: Boolean(process.env.CLERK_SECRET_KEY),
+      detail: process.env.CLERK_SECRET_KEY
+        ? undefined
+        : 'set CLERK_SECRET_KEY from Clerk Dashboard → API keys',
+    },
+    {
+      name: 'clerk_publishable_key',
+      ok: Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY),
+      detail: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        ? undefined
+        : 'set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY from Clerk Dashboard → API keys',
+    },
+    {
+      name: 'clerk_webhook_secret',
+      ok: Boolean(process.env.CLERK_WEBHOOK_SECRET),
+      detail: process.env.CLERK_WEBHOOK_SECRET
+        ? undefined
+        : 'set CLERK_WEBHOOK_SECRET (svix signing secret from Clerk Dashboard → Webhooks)',
+    },
+  ];
+  return { name: 'auth', ok: checks.every(c => c.ok), checks };
 }
 
 async function checkBilling(): Promise<Subsystem> {
