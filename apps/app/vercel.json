@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "buildCommand": "bunx prisma generate --schema=../../packages/database/prisma/schema.prisma && bun run build",
   "crons": [
     { "path": "/api/cron/generate-platform-bills", "schedule": "0 2 1 * *" },
     { "path": "/api/cron/retry-wallet-provision", "schedule": "0 3 * * *" }
