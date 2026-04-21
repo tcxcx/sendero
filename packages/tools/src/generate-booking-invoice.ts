@@ -69,9 +69,7 @@ export const generateBookingInvoiceTool: ToolDef = {
       },
     });
     if (!booking) {
-      throw new Error(
-        `booking_not_found: no Booking with externalId=${parsed.bookingId}`
-      );
+      throw new Error(`booking_not_found: no Booking with externalId=${parsed.bookingId}`);
     }
 
     // Idempotent: if an invoice already exists for this booking, return it.
@@ -83,10 +81,7 @@ export const generateBookingInvoiceTool: ToolDef = {
       return {
         invoiceId: existing.id,
         number: existing.number,
-        publicUrl: buildPublicInvoiceUrl(
-          existing.publicToken,
-          process.env.NEXT_PUBLIC_APP_URL
-        ),
+        publicUrl: buildPublicInvoiceUrl(existing.publicToken, process.env.NEXT_PUBLIC_APP_URL),
         pdfBlobUrl: existing.pdfBlobUrl,
         alreadyExisted: true,
       };
@@ -132,8 +127,7 @@ export const generateBookingInvoiceTool: ToolDef = {
         number,
         issuedAt: new Date(),
         paidAt: new Date(),
-        fromName:
-          booking.tenant.legalName ?? booking.tenant.displayName ?? 'Sendero Travel',
+        fromName: booking.tenant.legalName ?? booking.tenant.displayName ?? 'Sendero Travel',
         fromAddress: booking.tenant.billingAddress ?? undefined,
         fromTaxId: booking.tenant.taxId,
         fromLogoUrl: booking.tenant.brandLogoUrl,
@@ -178,10 +172,7 @@ export const generateBookingInvoiceTool: ToolDef = {
 
     // Now that the invoice row exists, sign a stable public token that
     // binds to the row id + tenant.
-    const token = await signInvoiceToken(
-      { iid: draft.id, tenantId: booking.tenantId },
-      secret
-    );
+    const token = await signInvoiceToken({ iid: draft.id, tenantId: booking.tenantId }, secret);
 
     // Build template props + render PDF.
     const props = invoiceToTemplateProps({
@@ -197,16 +188,12 @@ export const generateBookingInvoiceTool: ToolDef = {
     let pdfBlobUrl: string | null = null;
     if (blobToken) {
       try {
-        const result = await put(
-          `invoices/${draft.tenantId}/${draft.id}.pdf`,
-          buf,
-          {
-            access: 'public',
-            addRandomSuffix: false,
-            contentType: 'application/pdf',
-            token: blobToken,
-          }
-        );
+        const result = await put(`invoices/${draft.tenantId}/${draft.id}.pdf`, buf, {
+          access: 'private',
+          addRandomSuffix: false,
+          contentType: 'application/pdf',
+          token: blobToken,
+        });
         pdfBlobUrl = result.url;
       } catch (err) {
         console.warn('[generate_booking_invoice] blob upload failed:', err);
@@ -228,9 +215,7 @@ export const generateBookingInvoiceTool: ToolDef = {
 
     // Email the traveler — fire-and-forget but record the error on the
     // invoice if Resend rejects the send.
-    let emailResult:
-      | { ok: boolean; id?: string; error?: string; skipped?: boolean }
-      | null = null;
+    let emailResult: { ok: boolean; id?: string; error?: string; skipped?: boolean } | null = null;
     if (notificationsConfigured() && toEmail) {
       const notifier = createNotifier();
       emailResult = await notifier.sendInvoice(toEmail, {

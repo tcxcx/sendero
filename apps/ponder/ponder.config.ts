@@ -2,6 +2,17 @@ import { createConfig } from 'ponder';
 import { http } from 'viem';
 import { SenderoGuestEscrowAbi } from './abis/SenderoGuestEscrow.abi';
 
+const databaseUrl = process.env.DATABASE_PRIVATE_URL ?? process.env.DATABASE_URL;
+const database = databaseUrl
+  ? {
+      kind: 'postgres' as const,
+      connectionString: databaseUrl,
+    }
+  : {
+      kind: 'pglite' as const,
+      directory: process.env.PONDER_PGLITE_DIR ?? '.ponder/pglite',
+    };
+
 /**
  * Ponder indexer for SenderoGuestEscrow on Arc Testnet.
  *
@@ -13,12 +24,11 @@ import { SenderoGuestEscrowAbi } from './abis/SenderoGuestEscrow.abi';
  *   PONDER_ESCROW_START_BLOCK   — override if redeploying
  */
 export default createConfig({
+  database,
   chains: {
     arcTestnet: {
       id: 5042002,
-      rpc: http(
-        process.env.PONDER_RPC_URL_ARC_TESTNET ?? 'https://rpc.testnet.arc.network',
-      ),
+      rpc: http(process.env.PONDER_RPC_URL_ARC_TESTNET ?? 'https://rpc.testnet.arc.network'),
     },
   },
   contracts: {

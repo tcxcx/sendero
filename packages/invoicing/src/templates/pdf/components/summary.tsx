@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { TemplateProps } from '../../types';
-import { theme } from '../theme';
+import { resolvePdfColors, theme } from '../theme';
 
 const styles = StyleSheet.create({
   container: {
@@ -50,6 +50,7 @@ function money(value: string, currency: string, locale: string): string {
 }
 
 export function Summary({ invoice, template }: TemplateProps) {
+  const colors = resolvePdfColors(template.brand_colors);
   const showDiscount = template.include_discount && Number(invoice.discount) > 0;
   const showTax = template.include_tax && Number(invoice.taxAmount) > 0;
   const showVat = template.include_vat && Number(invoice.vatAmount) > 0;
@@ -59,29 +60,39 @@ export function Summary({ invoice, template }: TemplateProps) {
       <View style={styles.panel}>
         <View style={styles.row}>
           <Text style={styles.label}>{template.subtotal_label}</Text>
-          <Text style={styles.value}>{money(invoice.subtotal, invoice.currency, template.locale)}</Text>
+          <Text style={styles.value}>
+            {money(invoice.subtotal, invoice.currency, template.locale)}
+          </Text>
         </View>
         {showDiscount ? (
           <View style={styles.row}>
             <Text style={styles.label}>{template.discount_label}</Text>
-            <Text style={styles.value}>-{money(invoice.discount, invoice.currency, template.locale)}</Text>
+            <Text style={styles.value}>
+              -{money(invoice.discount, invoice.currency, template.locale)}
+            </Text>
           </View>
         ) : null}
         {showTax ? (
           <View style={styles.row}>
             <Text style={styles.label}>{template.tax_label}</Text>
-            <Text style={styles.value}>{money(invoice.taxAmount, invoice.currency, template.locale)}</Text>
+            <Text style={styles.value}>
+              {money(invoice.taxAmount, invoice.currency, template.locale)}
+            </Text>
           </View>
         ) : null}
         {showVat ? (
           <View style={styles.row}>
             <Text style={styles.label}>{template.vat_label}</Text>
-            <Text style={styles.value}>{money(invoice.vatAmount, invoice.currency, template.locale)}</Text>
+            <Text style={styles.value}>
+              {money(invoice.vatAmount, invoice.currency, template.locale)}
+            </Text>
           </View>
         ) : null}
-        <View style={styles.totalRow}>
+        <View style={[styles.totalRow, { borderTopColor: colors.primary }]}>
           <Text style={styles.totalLabel}>{template.total_summary_label}</Text>
-          <Text style={styles.totalValue}>{money(invoice.total, invoice.currency, template.locale)}</Text>
+          <Text style={[styles.totalValue, { color: colors.primary }]}>
+            {money(invoice.total, invoice.currency, template.locale)}
+          </Text>
         </View>
       </View>
     </View>

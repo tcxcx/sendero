@@ -21,6 +21,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prefundTripTool } from '@sendero/tools';
 import { capture } from '@sendero/analytics/server';
+import { prisma } from '@sendero/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -41,6 +42,9 @@ export async function POST(req: NextRequest) {
   const { userId, orgId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  if (!orgId) {
+    return NextResponse.json({ error: 'no_org' }, { status: 400 });
   }
 
   let body: z.infer<typeof BodySchema>;
@@ -76,11 +80,88 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const tenant = await prisma.tenant.findUnique({ where: { clerkOrgId: orgId } });
+  if (!tenant) {
+    return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
+  }
+  const user = await prisma.user.findUnique({
+    where: { clerkUserId: userId },
+    select: { id: true },
+  });
+  const safeResult = result as {
+    tripId: string;
+    budgetUsdc: string;
+    expiresAt?: string;
+    escrowAddress?: string;
+    claimPubKey20?: string;
+    require2fa?: boolean;
+    invite?: { ok?: boolean; skipped?: boolean; error?: string };
+    onchainCalls?: Array<unknown>;
+  };
+
+  await prisma.trip.upsert({
+    where: { id: safeResult.tripId },
+    create: {
+      id: safeResult.tripId,
+      tenantId: tenant.id,
+      createdById: user?.id ?? null,
+      status: 'awaiting_approval',
+      totalUsdc: safeResult.budgetUsdc,
+      intent: {
+        budgetUsdc: body.budgetUsdc,
+        guestEmail: body.guestEmail,
+        guestName: body.guestName ?? null,
+        tripSummary: body.tripSummary ?? null,
+        source: 'buyer_ui_prefund',
+      },
+      metadata: {
+        tripSummary: body.tripSummary ?? null,
+        invite: {
+          guestEmail: body.guestEmail,
+          guestName: body.guestName ?? null,
+          expiresAt: safeResult.expiresAt ?? null,
+          require2fa,
+          emailOk: safeResult.invite?.ok ?? false,
+          emailSkipped: safeResult.invite?.skipped ?? false,
+          emailError: safeResult.invite?.error ?? null,
+        },
+        escrow: {
+          fundingStatus: 'pending_onchain_submission',
+          address: safeResult.escrowAddress ?? null,
+          claimPubKey20: safeResult.claimPubKey20 ?? null,
+          onchainCallCount: safeResult.onchainCalls?.length ?? 0,
+        },
+      },
+    },
+    update: {
+      status: 'awaiting_approval',
+      totalUsdc: safeResult.budgetUsdc,
+      metadata: {
+        tripSummary: body.tripSummary ?? null,
+        invite: {
+          guestEmail: body.guestEmail,
+          guestName: body.guestName ?? null,
+          expiresAt: safeResult.expiresAt ?? null,
+          require2fa,
+          emailOk: safeResult.invite?.ok ?? false,
+          emailSkipped: safeResult.invite?.skipped ?? false,
+          emailError: safeResult.invite?.error ?? null,
+        },
+        escrow: {
+          fundingStatus: 'pending_onchain_submission',
+          address: safeResult.escrowAddress ?? null,
+          claimPubKey20: safeResult.claimPubKey20 ?? null,
+          onchainCallCount: safeResult.onchainCalls?.length ?? 0,
+        },
+      },
+    },
+  });
+
   capture({
     event: 'guest_invite_issued',
     distinctId: userId,
     properties: {
-      tenantId: orgId ?? null,
+      tenantId: tenant.id,
       tripId: (result as { tripId: string }).tripId,
       budgetUsdc: body.budgetUsdc,
       require2fa,

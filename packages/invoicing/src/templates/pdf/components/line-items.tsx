@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { TemplateProps } from '../../types';
-import { theme } from '../theme';
+import { resolvePdfColors, theme } from '../theme';
 
 const styles = StyleSheet.create({
   container: { flexDirection: 'column' },
@@ -41,13 +41,23 @@ function formatCurrency(value: string, currency: string, locale: string): string
 }
 
 export function LineItems({ invoice, template }: TemplateProps) {
+  const colors = resolvePdfColors(template.brand_colors);
+
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.headerCell, styles.cellDescription]}>{template.description_label}</Text>
-        <Text style={[styles.headerCell, styles.cellQuantity]}>{template.quantity_label}</Text>
-        <Text style={[styles.headerCell, styles.cellUnitPrice]}>{template.price_label}</Text>
-        <Text style={[styles.headerCell, styles.cellAmount]}>{template.total_label}</Text>
+      <View style={[styles.headerRow, { borderBottomColor: colors.primary }]}>
+        <Text style={[styles.headerCell, styles.cellDescription, { color: colors.accent }]}>
+          {template.description_label}
+        </Text>
+        <Text style={[styles.headerCell, styles.cellQuantity, { color: colors.accent }]}>
+          {template.quantity_label}
+        </Text>
+        <Text style={[styles.headerCell, styles.cellUnitPrice, { color: colors.accent }]}>
+          {template.price_label}
+        </Text>
+        <Text style={[styles.headerCell, styles.cellAmount, { color: colors.accent }]}>
+          {template.total_label}
+        </Text>
       </View>
       {invoice.lineItems.map(li => (
         <View style={styles.row} key={li.position}>

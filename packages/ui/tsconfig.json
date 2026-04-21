@@ -1,9 +1,20 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "baseUrl": ".",
     "jsx": "react-jsx",
     "rootDir": "./src",
-    "lib": ["ES2022", "DOM"]
+    "lib": ["ES2022", "DOM"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@sendero/ui/cn": ["./src/utils/cn.ts"],
+      "@sendero/ui/*": ["./src/components/*.tsx"],
+      "@sendero/ui/components": ["./src/components"],
+      "@sendero/ui/components/*": ["./src/components/*"],
+      "@sendero/ui/hooks": ["./src/hooks"],
+      "@sendero/ui/hooks/*": ["./src/hooks/*"]
+    }
   },
-  "include": ["src/**/*"]
+  "include": ["src/components/**/*", "src/hooks/**/*", "src/utils/**/*"],
+  "exclude": ["src/stories/**/*"]
 }

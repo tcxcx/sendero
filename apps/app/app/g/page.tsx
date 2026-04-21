@@ -40,7 +40,8 @@ import type { Address, Hex } from 'viem';
 
 type Phase = 'preview' | 'enroll' | 'submitting' | 'done' | 'error';
 
-const ESCROW_ADDRESS = process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW as Address | undefined;
+const ESCROW_ADDRESS = (process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW ??
+  process.env.NEXT_PUBLIC_ARC_ESCROW_ADDRESS) as Address | undefined;
 const CHAIN_ID = Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? 5042002);
 
 export default function GuestClaimPage() {
@@ -115,7 +116,9 @@ export default function GuestClaimPage() {
     // unless we submit the real preimage. Fail fast with a friendly UI
     // message instead of a gas-sunken revert.
     if (parts.claimCodeNonce && !/^\d{6}$/.test(claimCode)) {
-      setError('This invite requires a 6-digit code. Check the email from Sendero and paste it above.');
+      setError(
+        'This invite requires a 6-digit code. Check the email from Sendero and paste it above.'
+      );
       return;
     }
 

@@ -1,0 +1,7 @@
+version: "2"
+tunnels:
+  sendero-app:
+    proto: http
+    addr: 3010
+    inspect: false
+    domain: sendero-dev-bufi.ngrok.app

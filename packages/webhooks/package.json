@@ -1,0 +1,21 @@
+{
+  "name": "@sendero/webhooks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero webhook infrastructure: durable inbound ingestion helpers and Svix outbound/customer webhook delivery.",
+  "main": "./src/index.ts",
+  "scripts": {
+    "test": "bun test src",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./inbound": "./src/inbound.ts",
+    "./svix": "./src/svix.ts"
+  },
+  "dependencies": {
+    "@sendero/env": "workspace:*",
+    "svix": "^1.91.1"
+  }
+}

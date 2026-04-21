@@ -5,13 +5,15 @@
   "type": "module",
   "description": "Sendero marketing site — Next.js 16 scaffold backed by basehub CMS. Four locales (en-US, es-MX, pt-BR, es-AR). Hero + features + pricing + footer. Works without BASEHUB_TOKEN via static fallback content.",
   "scripts": {
-    "dev": "next dev -p 3011",
+    "dev": "next dev -p ${MARKETING_PORT:-3011}",
     "build": "next build",
-    "start": "next start -p 3011",
+    "start": "next start -p ${MARKETING_PORT:-3011}",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.2.3",
+    "@sendero/llms": "workspace:*",
     "@sendero/locale": "workspace:*",
     "@sendero/seo": "workspace:*",
     "next": "^16.2.4",

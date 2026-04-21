@@ -6,8 +6,8 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "dev": "bun run --watch src/server.ts",
-    "start": "bun run src/server.ts",
+    "dev": "PORT=${PORT:-3021} bun run --watch src/server.ts",
+    "start": "PORT=${PORT:-3021} bun run src/server.ts",
     "build": "true",
     "typecheck": "tsc --noEmit"
   },
@@ -26,6 +26,7 @@
     "@sendero/circle": "workspace:*",
     "@sendero/duffel": "workspace:*",
     "@sendero/guest": "workspace:*",
+    "@sendero/llms": "workspace:*",
     "@sendero/nanopayments": "workspace:*",
     "@sendero/tools": "workspace:*",
     "viem": "^2.21.0",

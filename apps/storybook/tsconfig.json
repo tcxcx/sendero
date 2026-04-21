@@ -7,15 +7,11 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
-      "@app/*": ["../../app/*"],
-      "@components/*": ["../../components/*"]
+      "@app/*": ["../app/app/*"],
+      "@components/*": ["../app/components/*"]
     },
     "types": ["node", "react", "react-dom"]
   },
   "include": [".storybook/**/*.ts", ".storybook/**/*.tsx", "stories/**/*.ts", "stories/**/*.tsx"],
-  "exclude": [
-    "node_modules",
-    "storybook-static",
-    "stories/composed/FooterRail.stories.tsx"
-  ]
+  "exclude": ["node_modules", "storybook-static", "stories/composed/FooterRail.stories.tsx"]
 }

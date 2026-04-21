@@ -75,18 +75,20 @@ body {
   letter-spacing: -0.005em;
 }
 
-button {
-  font: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-input,
-textarea {
-  font: inherit;
-  color: inherit;
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  input,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
 }
 /* Text selection — vermilion bg with cream text. Brand-carrying,
    unmistakable. Pairs the warm primary with cream pulled from the

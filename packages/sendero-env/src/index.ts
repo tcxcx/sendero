@@ -10,6 +10,8 @@ export const env = {
   duffelApiToken: () => process.env.DUFFEL_API_TOKEN || null,
   duffelWebhookSecret: () => process.env.DUFFEL_WEBHOOK_SECRET || null,
   duffelEnv: () => (process.env.DUFFEL_ENV as 'test' | 'live') || 'test',
+  svixToken: () => process.env.SVIX_TOKEN || null,
+  svixServerUrl: () => process.env.SVIX_SERVER_URL || 'https://api.us.svix.com',
 
   circleApiKey: () => process.env.CIRCLE_API_KEY || null,
   circleEntitySecret: () =>
@@ -75,6 +77,8 @@ export const env = {
   slackClientSecret: () => process.env.SLACK_CLIENT_SECRET || null,
   slackRedirectUri: () => process.env.SLACK_REDIRECT_URI || null,
   slackStateSecret: () => process.env.SLACK_STATE_SECRET || null,
+
+  resendWebhookSecret: () => process.env.RESEND_WEBHOOK_SECRET || null,
 
   // ── Concierge / in-trip companion ─────────────────────────────────
   googlePlacesApiKey: () => process.env.GOOGLE_PLACES_API_KEY || null,

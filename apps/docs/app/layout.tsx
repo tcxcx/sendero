@@ -6,7 +6,7 @@ import { GeistMono } from 'geist/font/mono';
 // Pull the exact same token vocabulary the main Sendero app uses so
 // the docs match the vermilion brand pixel-for-pixel. The relative
 // path is intentional — we do NOT duplicate the stylesheet.
-import '../../../app/globals.css';
+import '../../app/app/globals.css';
 import './docs-overrides.css';
 
 export const metadata = {

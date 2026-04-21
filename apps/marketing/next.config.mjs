@@ -6,6 +6,7 @@ const workspaceRoot = resolve(__dirname, '../..');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   turbopack: { root: workspaceRoot },
   outputFileTracingRoot: workspaceRoot,
   reactStrictMode: true,

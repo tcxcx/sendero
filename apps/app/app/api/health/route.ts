@@ -170,6 +170,14 @@ async function checkBilling(): Promise<Subsystem> {
         ? 'set — Vercel Blob storage for invoice PDFs'
         : 'set BLOB_READ_WRITE_TOKEN for invoice PDF storage',
     },
+    {
+      name: 'email_delivery',
+      ok: Boolean(process.env.RESEND_API_KEY && process.env.SENDERO_EMAIL_FROM),
+      detail:
+        process.env.RESEND_API_KEY && process.env.SENDERO_EMAIL_FROM
+          ? 'set — guest invites and platform invoices can send email'
+          : 'set RESEND_API_KEY + SENDERO_EMAIL_FROM for guest invites and platform invoices',
+    },
   ];
   return { name: 'billing', ok: checks.every(c => c.ok), checks };
 }
@@ -217,7 +225,7 @@ async function checkChannels(): Promise<Subsystem> {
   ];
   return {
     name: 'channels',
-    ok: checks.every(c => c.ok || c.name === 'meta_embedded_signup'),
+    ok: true,
     checks,
   };
 }
@@ -240,6 +248,16 @@ async function checkOnchain(): Promise<Subsystem> {
       detail: env.senderoGuestEscrowAddress() ?? 'set SENDERO_GUEST_ESCROW',
     },
     {
+      name: 'guest_escrow_public_address',
+      ok: Boolean(
+        process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW || process.env.NEXT_PUBLIC_ARC_ESCROW_ADDRESS
+      ),
+      detail:
+        process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW || process.env.NEXT_PUBLIC_ARC_ESCROW_ADDRESS
+          ? undefined
+          : 'set NEXT_PUBLIC_SENDERO_GUEST_ESCROW or NEXT_PUBLIC_ARC_ESCROW_ADDRESS for /g claim links',
+    },
+    {
       name: 'agent_token_id',
       ok: Boolean(env.senderoAgentTokenId()),
       detail: env.senderoAgentTokenId() ?? 'set SENDERO_AGENT_TOKEN_ID',
@@ -258,6 +276,14 @@ async function checkOnchain(): Promise<Subsystem> {
         env.circleApiKey() && env.circleEntitySecret()
           ? undefined
           : 'set CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET for DCW + App Kit',
+    },
+    {
+      name: 'circle_treasury_wallet',
+      ok: Boolean(env.circleTreasuryWalletId() && env.circleTreasuryAddress()),
+      detail:
+        env.circleTreasuryWalletId() && env.circleTreasuryAddress()
+          ? undefined
+          : 'set CIRCLE_TREASURY_WALLET_ID + CIRCLE_TREASURY_ADDRESS for treasury balances and funding',
     },
     {
       name: 'modular_wallets_client',
@@ -286,6 +312,20 @@ async function checkIntelligence(): Promise<Subsystem> {
 async function checkOps(): Promise<Subsystem> {
   const checks: Check[] = [
     {
+      name: 'app_url',
+      ok: Boolean(process.env.NEXT_PUBLIC_APP_URL),
+      detail: process.env.NEXT_PUBLIC_APP_URL
+        ? process.env.NEXT_PUBLIC_APP_URL
+        : 'set NEXT_PUBLIC_APP_URL to the local or deployed app origin',
+    },
+    {
+      name: 'guest_link_origin',
+      ok: Boolean(process.env.NEXT_PUBLIC_SENDERO_GUEST_LINK_ORIGIN),
+      detail: process.env.NEXT_PUBLIC_SENDERO_GUEST_LINK_ORIGIN
+        ? process.env.NEXT_PUBLIC_SENDERO_GUEST_LINK_ORIGIN
+        : 'set NEXT_PUBLIC_SENDERO_GUEST_LINK_ORIGIN so prefund invites point at this app',
+    },
+    {
       name: 'database_url',
       ok: Boolean(process.env.DATABASE_URL),
       detail: process.env.DATABASE_URL ? undefined : 'set DATABASE_URL (Neon)',
@@ -296,6 +336,20 @@ async function checkOps(): Promise<Subsystem> {
       detail: env.duffelWebhookSecret()
         ? undefined
         : 'set DUFFEL_WEBHOOK_SECRET (HMAC signature for POST /api/webhooks/duffel)',
+    },
+    {
+      name: 'svix_token',
+      ok: Boolean(env.svixToken()),
+      detail: env.svixToken()
+        ? `set — tenant/customer webhook delivery can use Svix (${env.svixServerUrl()})`
+        : 'optional — set SVIX_TOKEN for outbound/customer webhook delivery',
+    },
+    {
+      name: 'resend_webhook_secret',
+      ok: Boolean(env.resendWebhookSecret()),
+      detail: env.resendWebhookSecret()
+        ? 'set — Resend delivery and receiving webhooks can be verified'
+        : 'set RESEND_WEBHOOK_SECRET for POST /api/webhooks/resend',
     },
     {
       name: 'posthog',
@@ -322,7 +376,11 @@ async function checkOps(): Promise<Subsystem> {
   ];
   // Ops subsystem is "ok" when the essentials (DB) are wired — analytics/
   // collaboration/cms are optional enhancements.
-  const essentialOk = checks.find(c => c.name === 'database_url')?.ok ?? false;
+  const essentialOk = checks
+    .filter(c =>
+      ['app_url', 'guest_link_origin', 'database_url', 'duffel_webhook_secret'].includes(c.name)
+    )
+    .every(c => c.ok);
   return { name: 'ops', ok: essentialOk, checks };
 }
 

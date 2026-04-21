@@ -1,6 +1,6 @@
 import { Image, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { TemplateProps } from '../../types';
-import { theme } from '../theme';
+import { resolvePdfColors, theme } from '../theme';
 
 const styles = StyleSheet.create({
   container: {
@@ -40,13 +40,18 @@ const styles = StyleSheet.create({
 });
 
 export function Meta({ invoice, template }: TemplateProps) {
+  const colors = resolvePdfColors(template.brand_colors);
   const issuedFmt = new Intl.DateTimeFormat(template.locale, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   }).format(invoice.issuedAt);
   const dueFmt = invoice.dueAt
-    ? new Intl.DateTimeFormat(template.locale, { month: 'short', day: 'numeric', year: 'numeric' }).format(invoice.dueAt)
+    ? new Intl.DateTimeFormat(template.locale, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(invoice.dueAt)
     : null;
 
   return (
@@ -63,7 +68,7 @@ export function Meta({ invoice, template }: TemplateProps) {
       </View>
 
       <View style={styles.block}>
-        <Text style={styles.title}>{template.title}</Text>
+        <Text style={[styles.title, { color: colors.primary }]}>{template.title}</Text>
         <Text style={styles.label}>{template.invoice_no_label}</Text>
         <Text style={styles.number}>{invoice.number}</Text>
         <Text style={styles.label}>{template.issue_date_label}</Text>

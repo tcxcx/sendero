@@ -11,8 +11,9 @@
     "prefix": ""
   },
   "aliases": {
-    "components": "@sendero/ui/components",
+    "components": "@/components",
     "utils": "@sendero/ui/cn",
-    "ui": "@sendero/ui"
+    "ui": "@/components",
+    "hooks": "@/hooks"
   }
 }

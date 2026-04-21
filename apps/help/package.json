@@ -5,13 +5,14 @@
   "type": "module",
   "description": "Sendero help center — basehub-backed article catalog with categories, search, and per-locale routing. Scaffold ships with a static fallback so the site renders without BASEHUB_TOKEN.",
   "scripts": {
-    "dev": "next dev -p 3012",
+    "dev": "next dev -p ${HELP_PORT:-3012}",
     "build": "next build",
-    "start": "next start -p 3012",
+    "start": "next start -p ${HELP_PORT:-3012}",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@sendero/llms": "workspace:*",
     "@sendero/locale": "workspace:*",
     "@sendero/seo": "workspace:*",
     "next": "^16.2.4",

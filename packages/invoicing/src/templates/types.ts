@@ -1,5 +1,10 @@
 export interface Template {
   logo_url?: string;
+  brand_colors?: {
+    primary?: string;
+    accent?: string;
+    background?: string;
+  };
   from_label: string;
   customer_label: string;
   invoice_no_label: string;

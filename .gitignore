@@ -1,5 +1,15 @@
 # Next.js
 .next/
+.next-sendero/
+apps/*/.next-sendero/
+apps/*/.next-user/
+.cache-sendero/
+apps/*/.cache-sendero/
+apps/*/.cache-user/
+apps/*/.cache-storybook/
+apps/*/.ponder-sendero/
+apps/*/.ponder-local/
+apps/*/.ponder-user/
 out/
 *.tsbuildinfo
 
@@ -37,3 +47,8 @@ apps/docs/.source/
 
 # Turborepo
 .turbo
+.env*.local
+
+# Playwright
+apps/app/test-results/
+apps/app/playwright-report/

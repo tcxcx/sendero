@@ -1,6 +1,7 @@
 import { getMarketingContent } from '@/lib/content';
 import { detectLocale } from '@sendero/locale';
 import { headers } from 'next/headers';
+import { MarketingWaitlist } from './waitlist';
 
 export const revalidate = 300; // 5 minutes; basehub will push on-demand in Phase 4
 
@@ -42,6 +43,18 @@ export default async function MarketingHome() {
             {content.hero.secondaryCta}
           </a>
         </div>
+      </section>
+
+      <section className="mk-waitlist" aria-labelledby="mk-waitlist-title">
+        <div className="mk-waitlist-copy">
+          <div className="mk-eyebrow">Arc Testnet live</div>
+          <h2 id="mk-waitlist-title">Get notified for mainnet launch.</h2>
+          <p>
+            Sendero is available for testnet QA today. Join the waitlist and we will email you when
+            production buyer organizations can onboard on mainnet.
+          </p>
+        </div>
+        <MarketingWaitlist />
       </section>
 
       <section className="mk-features">
@@ -111,6 +124,16 @@ const inlineCss = `
   .mk-title { font-size: clamp(40px, 6vw, 72px); line-height: 1.02; letter-spacing: -0.035em; margin: 0 0 24px; font-weight: 500; }
   .mk-subtitle { font-size: 18px; color: var(--muted); max-width: 640px; margin: 0 0 32px; }
   .mk-hero-ctas { display: inline-flex; gap: 12px; flex-wrap: wrap; }
+  .mk-waitlist { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(280px, 1.05fr); gap: 24px; align-items: center; margin: 0 0 80px; padding: 28px 24px; border: 1px solid var(--border); border-left: 2px solid var(--accent); background: color-mix(in oklab, var(--accent) 4%, var(--bg)); }
+  .mk-waitlist-copy { max-width: 480px; }
+  .mk-waitlist-copy .mk-eyebrow { margin-bottom: 14px; color: var(--accent); }
+  .mk-waitlist h2 { font-size: clamp(28px, 3.5vw, 44px); line-height: 1.05; letter-spacing: 0; margin: 0 0 12px; font-weight: 500; }
+  .mk-waitlist p { color: var(--muted); max-width: 520px; margin: 0; font-size: 15px; line-height: 1.6; }
+  .mk-waitlist-clerk-root { width: 100%; }
+  .mk-waitlist-clerk-card { width: 100%; max-width: none; border: 0; box-shadow: none; background: transparent; padding: 0; }
+  .mk-waitlist-clerk-hidden { display: none; }
+  .mk-waitlist-clerk-input { border-radius: 0; border-color: var(--border); box-shadow: none; }
+  .mk-waitlist-clerk-button { border-radius: 0; background: var(--fg); color: var(--bg); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; box-shadow: none; }
   .mk-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0; margin: 0 0 80px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .mk-feature { padding: 28px 24px; border-right: 1px solid var(--border); }
   .mk-feature:last-child { border-right: none; }
@@ -131,6 +154,7 @@ const inlineCss = `
   .mk-foot { display: flex; justify-content: space-between; padding-top: 32px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
   .mk-foot nav { display: inline-flex; gap: 18px; }
   @media (max-width: 640px) {
+    .mk-waitlist { grid-template-columns: 1fr; }
     .mk-feature { border-right: none; border-bottom: 1px solid var(--border); }
     .mk-feature:last-child { border-bottom: none; }
     .mk-tier { border-right: none; border-bottom: 1px solid var(--border); }

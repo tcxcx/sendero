@@ -4,6 +4,19 @@ import { defaultTemplate } from './default';
 import { microToDecimal } from './number';
 import { buildPublicInvoiceUrl } from './public-url';
 
+function brandColorsFromJson(value: unknown): Template['brand_colors'] | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const colors = value as Record<string, unknown>;
+  const out: NonNullable<Template['brand_colors']> = {};
+  for (const key of ['primary', 'accent', 'background'] as const) {
+    const candidate = colors[key];
+    if (typeof candidate === 'string' && /^#[0-9a-fA-F]{6}$/.test(candidate)) {
+      out[key] = candidate;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function invoiceToTemplateProps(args: {
   invoice: Invoice & { lineItems: InvoiceLineItem[] };
   tenant?: Pick<Tenant, 'brandLogoUrl' | 'brandColors'> | null;
@@ -12,6 +25,9 @@ export function invoiceToTemplateProps(args: {
   const tpl: Template = {
     ...defaultTemplate(args.invoice.template as Partial<Template>),
     logo_url: args.tenant?.brandLogoUrl ?? args.invoice.fromLogoUrl ?? '',
+    brand_colors:
+      brandColorsFromJson(args.tenant?.brandColors) ??
+      (args.invoice.template as Partial<Template> | null | undefined)?.brand_colors,
   };
 
   return {

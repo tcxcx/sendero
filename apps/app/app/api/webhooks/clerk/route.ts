@@ -19,12 +19,15 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { verifyClerkWebhook } from '@sendero/auth/webhooks';
-import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
-import { prisma } from '@sendero/database';
+
 import { clerkClient } from '@clerk/nextjs/server';
+import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
+import { verifyClerkWebhook } from '@sendero/auth/webhooks';
 import { provisionTenantWallet } from '@sendero/circle';
-import { recordWebhookEvent, markWebhookEventProcessed } from '@/lib/webhook-events';
+import { prisma } from '@sendero/database';
+import { processDurableWebhook } from '@sendero/webhooks/inbound';
+
+import { webhookEventStore } from '@/lib/webhook-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -53,28 +56,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const externalId = headers['svix-id'] ?? `${event.type}-${Date.now()}`;
-  const stored = await recordWebhookEvent({
+  const result = await processDurableWebhook({
     provider: 'clerk',
-    externalId,
+    externalId: headers['svix-id'] ?? `${event.type}-${Date.now()}`,
     eventType: event.type,
     payload: event,
+    event,
+    store: webhookEventStore,
+    dispatch,
+    logger: console,
+    logPrefix: '[webhooks/clerk]',
   });
-  if (stored.alreadyProcessed) {
+  if (result.ok === false) {
+    return NextResponse.json({ error: result.error }, { status: 500 });
+  }
+  if (result.deduped) {
     return NextResponse.json({ ok: true, deduped: true });
-  }
-
-  let error: string | undefined;
-  try {
-    await dispatch(event);
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
-    console.error('[webhooks/clerk]', event.type, error);
-  }
-
-  await markWebhookEventProcessed(stored.id, error);
-  if (error) {
-    return NextResponse.json({ error }, { status: 500 });
   }
   return NextResponse.json({ ok: true });
 }
@@ -109,8 +106,7 @@ function asRecord(x: unknown): Record<string, unknown> {
 async function onUserUpsert(data: Record<string, unknown>): Promise<void> {
   const id = String(data.id);
   const emails = Array.isArray(data.email_addresses) ? data.email_addresses : [];
-  const email =
-    emails.length > 0 ? String(asRecord(emails[0]).email_address ?? '') : '';
+  const email = emails.length > 0 ? String(asRecord(emails[0]).email_address ?? '') : '';
   const displayName =
     `${String(data.first_name ?? '')} ${String(data.last_name ?? '')}`.trim() ||
     String(data.username ?? '') ||

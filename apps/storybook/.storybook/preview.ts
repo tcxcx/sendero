@@ -3,7 +3,8 @@ import { withThemeByClassName } from '@storybook/addon-themes';
 
 // Load the root Sendero stylesheet so every story inherits the
 // exact vermilion token set the shipping app uses.
-import '../../../app/globals.css';
+import '@sendero/ui/globals.css';
+import '../../app/app/globals.css';
 import './storybook-shell.css';
 
 const preview: Preview = {

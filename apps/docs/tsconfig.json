@@ -4,24 +4,32 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "jsx": "preserve",
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
+      "@sendero/llms": ["../../packages/llms/src/index.ts"],
+      "@sendero/llms/*": ["../../packages/llms/src/*"],
       "@sendero/tools": ["../../packages/tools/src/index.ts"],
       "@sendero/tools/pricing": ["../../packages/tools/src/pricing.ts"],
       "@sendero/tools/types": ["../../packages/tools/src/types.ts"]
     }
   },
   "include": [
+    ".next-sendero/types/**/*.ts",
     ".next/types/**/*.ts",
     ".source/**/*.ts",
-    "next-env.d.ts",
     "app/**/*.ts",
     "app/**/*.tsx",
     "lib/**/*.ts",
+    "next-env.d.ts",
+    "next.config.mjs",
     "source.config.ts",
-    "next.config.mjs"
+    ".next-user/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

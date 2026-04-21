@@ -6,7 +6,7 @@
 
 import app from './index';
 
-const port = Number(process.env.PORT ?? 3020);
+const port = Number(process.env.PORT ?? 3021);
 
 if (typeof (globalThis as any).Bun !== 'undefined') {
   (globalThis as any).Bun.serve({ port, fetch: app.fetch });

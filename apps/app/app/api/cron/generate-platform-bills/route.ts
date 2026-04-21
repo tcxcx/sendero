@@ -125,8 +125,7 @@ async function generateForTenant(tenantId: string, periodStart: Date, periodEnd:
   const number = `INV-${year}-${(seqRow.nextSeq - 1).toString().padStart(4, '0')}`;
 
   // Tier gate — string compat with BillingTier enum.
-  const isNet30 =
-    tenant.billingTier === 'business' || tenant.billingTier === 'enterprise';
+  const isNet30 = tenant.billingTier === 'business' || tenant.billingTier === 'enterprise';
   const issuedAt = new Date();
   const dueAt = isNet30 ? new Date(issuedAt.getTime() + 30 * 24 * 60 * 60 * 1000) : issuedAt;
 
@@ -205,16 +204,12 @@ async function generateForTenant(tenantId: string, periodStart: Date, periodEnd:
   let pdfBlobUrl: string | null = null;
   if (blobToken) {
     try {
-      const result = await put(
-        `invoices/${tenantId}/${draft.id}.pdf`,
-        buf,
-        {
-          access: 'public',
-          addRandomSuffix: false,
-          contentType: 'application/pdf',
-          token: blobToken,
-        }
-      );
+      const result = await put(`invoices/${tenantId}/${draft.id}.pdf`, buf, {
+        access: 'private',
+        addRandomSuffix: false,
+        contentType: 'application/pdf',
+        token: blobToken,
+      });
       pdfBlobUrl = result.url;
     } catch (err) {
       console.warn('[generate-platform-bills] blob upload failed:', err);
@@ -232,9 +227,7 @@ async function generateForTenant(tenantId: string, periodStart: Date, periodEnd:
 
   // Email the billing contact — fire-and-forget but record error on the
   // invoice row if Resend rejects.
-  let emailResult:
-    | { ok: boolean; id?: string; error?: string; skipped?: boolean }
-    | null = null;
+  let emailResult: { ok: boolean; id?: string; error?: string; skipped?: boolean } | null = null;
   if (notificationsConfigured() && draft.toEmail) {
     const notifier = createNotifier();
     emailResult = await notifier.sendInvoice(draft.toEmail, {

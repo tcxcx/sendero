@@ -10,6 +10,7 @@
 
 import createGlobe from 'cobe';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Waitlist } from '@clerk/nextjs';
 import {
   isPasskeyConfigured,
   loginPasskey,
@@ -257,6 +258,8 @@ export function LandingHero() {
             </button>
           </form>
 
+          <LandingWaitlist />
+
           <dl className="hero-spec">
             <div>
               <dt>Settlement</dt>
@@ -294,6 +297,32 @@ export function LandingHero() {
 
       <style jsx>{heroStyles}</style>
     </div>
+  );
+}
+
+function LandingWaitlist() {
+  return (
+    <section className="hero-waitlist" aria-labelledby="hero-waitlist-title">
+      <div className="hero-waitlist-copy">
+        <span>Arc Testnet</span>
+        <h2 id="hero-waitlist-title">Join the mainnet launch waitlist.</h2>
+        <p>Sendero is live on testnet now. Get notified when buyer orgs can move to mainnet.</p>
+      </div>
+      <Waitlist
+        afterJoinWaitlistUrl="/"
+        signInUrl="/sign-in"
+        appearance={{
+          elements: {
+            rootBox: 'hero-waitlist-clerk-root',
+            cardBox: 'hero-waitlist-clerk-card',
+            header: 'hero-waitlist-clerk-hidden',
+            footer: 'hero-waitlist-clerk-hidden',
+            formButtonPrimary: 'hero-waitlist-clerk-button',
+            formFieldInput: 'hero-waitlist-clerk-input',
+          },
+        }}
+      />
+    </section>
   );
 }
 
@@ -720,6 +749,77 @@ const heroStyles = `
   .hero-primary:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+
+  .hero-waitlist {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(240px, 1.1fr);
+    gap: 16px;
+    align-items: center;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--ink);
+    background: color-mix(in oklab, var(--bg-elev) 84%, var(--ink-soft));
+  }
+  .hero-waitlist-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .hero-waitlist-copy span {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .hero-waitlist-copy h2 {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.15;
+    letter-spacing: 0;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .hero-waitlist-copy p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-dim);
+  }
+  :global(.hero-waitlist-clerk-root) {
+    width: 100%;
+  }
+  :global(.hero-waitlist-clerk-card) {
+    width: 100%;
+    max-width: none;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+    padding: 0;
+  }
+  :global(.hero-waitlist-clerk-hidden) {
+    display: none;
+  }
+  :global(.hero-waitlist-clerk-input) {
+    border-radius: 0;
+    border-color: var(--border);
+    box-shadow: none;
+  }
+  :global(.hero-waitlist-clerk-button) {
+    border-radius: 0;
+    background: var(--ink);
+    color: var(--bg-elev);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    box-shadow: none;
+  }
+  @media (max-width: 640px) {
+    .hero-waitlist {
+      grid-template-columns: 1fr;
+    }
   }
 
   .hero-spec {

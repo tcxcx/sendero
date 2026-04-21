@@ -9,8 +9,8 @@
  *   GET       /           — health + surface manifest
  *   GET       /llms.txt   — mirrored for agents that discover edge directly
  *
- * Every surface reuses `@sendero/tools` as the single source of truth,
- * so adding a new tool lights it up on every channel automatically.
+ * Tool execution reuses `@sendero/tools`; agent discovery reuses
+ * `@sendero/llms` so web and edge manifests stay aligned.
  *
  * Run: `bun run apps/edge/src/index.ts`
  * Deploy: Fly, Cloudflare Workers (with @hono/adapter-cloudflare),
@@ -19,6 +19,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { buildLlmsTxt, buildSenderoEdgeLlms } from '@sendero/llms';
 import { toolList } from '@sendero/tools';
 import { mountMcp } from './adapters/mcp';
 import { mountWhatsApp } from './adapters/whatsapp';
@@ -60,9 +61,14 @@ app.get('/', c =>
 
 app.get('/llms.txt', c => {
   c.header('Content-Type', 'text/plain; charset=utf-8');
-  return c.body(
-    `# Sendero edge\n\n> Edge worker serving ${toolList.length} AI tools over MCP, WhatsApp, Slack, and Discord. Same registry (@sendero/tools) powers the Next.js web app.\n\n## Tools\n${toolList.map(t => `- ${t.name} — ${t.description.split('. ')[0]}`).join('\n')}\n`
-  );
+  c.header('Cache-Control', 'public, max-age=300, s-maxage=3600');
+  return c.body(buildLlmsTxt(buildSenderoEdgeLlms()));
+});
+
+app.get('/.well-known/llms.txt', c => {
+  c.header('Content-Type', 'text/plain; charset=utf-8');
+  c.header('Cache-Control', 'public, max-age=300, s-maxage=3600');
+  return c.body(buildLlmsTxt(buildSenderoEdgeLlms()));
 });
 
 mountMcp(app);

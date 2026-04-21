@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { TemplateProps } from '../../types';
-import { theme } from '../theme';
+import { resolvePdfColors, theme } from '../theme';
 
 const styles = StyleSheet.create({
   container: {
@@ -28,9 +28,11 @@ const styles = StyleSheet.create({
 export function PaymentDetails({ template }: TemplateProps) {
   const instructions = (template as { payment_instructions?: string }).payment_instructions?.trim();
   if (!instructions) return null;
+  const colors = resolvePdfColors(template.brand_colors);
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>{template.payment_label}</Text>
+    <View style={[styles.container, { borderTopColor: colors.primary }]}>
+      <Text style={[styles.label, { color: colors.accent }]}>{template.payment_label}</Text>
       <Text style={styles.body}>{instructions}</Text>
     </View>
   );

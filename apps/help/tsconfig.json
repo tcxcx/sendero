@@ -4,6 +4,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
+      "@sendero/llms": ["../../packages/llms/src/index.ts"],
+      "@sendero/llms/*": ["../../packages/llms/src/*"],
       "@sendero/locale": ["../../packages/locale/src/index.ts"],
       "@sendero/locale/*": ["../../packages/locale/src/*"],
       "@sendero/seo": ["../../packages/seo/src/index.ts"],

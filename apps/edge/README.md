@@ -17,9 +17,9 @@ Every adapter loads tools from `@sendero/tools` (the workspace package). Add a t
 
 ```bash
 bun run apps/edge/src/index.ts
-# → listening on :3020
-curl localhost:3020/
-curl -X POST localhost:3020/mcp -H 'content-type: application/json' \
+# → listening on :3021
+curl localhost:3021/
+curl -X POST localhost:3021/mcp -H 'content-type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
@@ -38,7 +38,7 @@ Routes map cleanly out of the Hono app. Free tier covers hackathon load.
 ### Local dev
 
 ```bash
-bun run dev:edge          # from repo root, listens on :3020
+bun run dev:edge          # from repo root, listens on :3021
 ```
 
 ### Vercel (experimental)

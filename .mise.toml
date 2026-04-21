@@ -2,12 +2,11 @@
 #
 # Install mise: https://mise.run  (one-liner: `curl https://mise.run | sh`)
 # Activate:     `eval "$(mise activate zsh)"` in ~/.zshrc (or bash)
-# Auto-pins bun + node + prisma on `cd` into this repo. Vercel ignores this file.
+# Auto-pins bun + node on `cd` into this repo. Vercel ignores this file.
 
 [tools]
 node   = "22.18.0"
 bun    = "1.3.10"
-prisma = "5.22.0"
 
 [env]
 # Perf: unchain libuv thread pool on M-series (matches desk-v1)
@@ -20,12 +19,178 @@ SKIP_ENV_VALIDATION = "1"
 # --- Dev ---
 
 [tasks.dev]
-description = "Everything — web (3010) + edge worker + docs"
-run         = "bun run dev:all"
+description = "Full platform — app (3010), marketing (3011), help (3012), docs (3020), edge (3021), storybook (3030), indexer"
+run         = """
+if [ "$(id -u)" = "0" ]; then
+  echo "Do not run Sendero dev with sudo."
+  echo
+  echo "The repo is already trusted by mise. If plain 'mise run dev' fails with /var/folders/zz/.../T permission errors,"
+  echo "your shell has root's TMPDIR. Run this in that terminal, then run plain 'mise run dev':"
+  echo "  export TMPDIR=\"$(getconf DARWIN_USER_TEMP_DIR)\""
+  exit 1
+fi
+
+mise run ports
+port_available() {
+  node -e "const net=require('node:net'); const port=Number(process.argv[1]); const server=net.createServer(); server.once('error',()=>process.exit(1)); server.once('listening',()=>server.close(()=>process.exit(0))); server.listen(port, '::');" "$1"
+}
+choose_port() {
+  for port in "$@"; do
+    if port_available "$port"; then
+      printf "%s" "$port"
+      return 0
+    fi
+  done
+  return 1
+}
+
+export APP_PORT="$(choose_port 3010 3110 3210)" || { echo "No free app port"; exit 1; }
+export MARKETING_PORT="$(choose_port 3011 3111 3211)" || { echo "No free marketing port"; exit 1; }
+export HELP_PORT="$(choose_port 3012 3112 3212)" || { echo "No free help port"; exit 1; }
+export DOCS_PORT="$(choose_port 3020 3120 3220)" || { echo "No free docs port"; exit 1; }
+export PORT="$(choose_port 3021 3121 3221)" || { echo "No free edge port"; exit 1; }
+export STORYBOOK_PORT="$(choose_port 3030 3130 3230)" || { echo "No free storybook port"; exit 1; }
+export PONDER_PORT="$(choose_port 42069 42169 42269)" || { echo "No free indexer port"; exit 1; }
+
+echo "Sendero dev ports:"
+echo "  app        http://localhost:$APP_PORT"
+echo "  marketing  http://localhost:$MARKETING_PORT"
+echo "  help       http://localhost:$HELP_PORT"
+echo "  docs       http://localhost:$DOCS_PORT"
+echo "  edge       http://localhost:$PORT"
+echo "  storybook  http://localhost:$STORYBOOK_PORT"
+echo "  indexer    http://localhost:$PONDER_PORT"
+
+bun run dev:all
+"""
+env         = { NEXT_DIST_DIR = ".next-user", CACHE_DIR = ".cache-user", PONDER_PGLITE_DIR = ".ponder-user/pglite" }
+
+[tasks.ports]
+description = "Kill Sendero dev processes and ports only; leaves Desk v1 ports alone"
+run         = """
+root="$(pwd)"
+repo_owner="$(stat -f %Su "$root" 2>/dev/null || id -un)"
+repo_group="$(stat -f %Sg "$root" 2>/dev/null || id -gn)"
+
+if [ "$(id -u)" = "0" ]; then
+  echo "Do not run Sendero dev with sudo."
+  echo
+  echo "Running as root creates root-owned .next/.turbo files and breaks later non-sudo dev runs."
+  echo "Use plain 'mise run dev'. If plain mise fails with /var/folders/zz/.../T permission errors,"
+  echo "repair that terminal's TMPDIR first:"
+  echo "  export TMPDIR=\"$(getconf DARWIN_USER_TEMP_DIR)\""
+  echo
+  echo "If you already created root-owned files, hand ownership back to your user once:"
+  echo "  cd $root && sudo chown -R \"$repo_owner:$repo_group\" apps/*/.next apps/*/.next-user apps/*/.turbo apps/*/.cache-user apps/*/.ponder-user .turbo 2>/dev/null || true"
+  exit 1
+fi
+
+# First kill known Sendero ports. These deliberately avoid Desk v1:
+# Desk uses 3000, 3002, 3009, 8080, 8787, 3099.
+for port in 3010 3011 3012 3020 3021 3030 42069; do
+  pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+  if [ -n "$pids" ]; then
+    echo "Killing Sendero port $port: $pids"
+    kill $pids 2>/dev/null || true
+  fi
+done
+
+# Then kill stale Sendero child processes that may no longer be listening
+# but can still make Next/Storybook/Turbo think ports or build state are busy.
+stale_pids="$(
+  ps axo pid=,command= | awk -v root="$root" '
+    index($0, root) &&
+    ($0 ~ /turbo run dev/ ||
+     $0 ~ /next dev -p 301[012]/ ||
+     $0 ~ /next dev -p 3020/ ||
+     $0 ~ /storybook dev -p 3030/ ||
+     $0 ~ /ponder dev/ ||
+     $0 ~ /bun run --watch src\\/server.ts/) { print $1 }
+  '
+)"
+if [ -n "$stale_pids" ]; then
+  echo "Killing stale Sendero dev processes: $stale_pids"
+  kill $stale_pids 2>/dev/null || true
+fi
+
+sleep 1
+
+remaining="$(
+  ps axo user=,pid=,command= | awk -v root="$root" '
+    index($0, root) &&
+    ($0 ~ /turbo run dev/ ||
+     $0 ~ /next dev -p 301[012]/ ||
+     $0 ~ /next dev -p 3020/ ||
+     $0 ~ /storybook dev -p 3030/ ||
+     $0 ~ /ponder dev/ ||
+     $0 ~ /bun run --watch src\\/server.ts/) { print }
+  '
+)"
+if [ -n "$remaining" ]; then
+  blocked_ports=""
+  blocked_pids=""
+  for port in 3010 3011 3012 3020 3021 3030 42069; do
+    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
+    if [ -n "$pids" ]; then
+      blocked_ports="$blocked_ports
+$port: $pids"
+      blocked_pids="$blocked_pids $pids"
+    fi
+  done
+
+  if [ -n "$blocked_ports" ]; then
+    echo "Root-owned or stuck Sendero dev processes still own required ports:"
+    echo "$blocked_ports"
+    echo
+    echo "Run this once, then use plain 'mise run dev':"
+    echo "  cd $root && sudo kill -9 $blocked_pids"
+    exit 1
+  fi
+
+  echo "Non-listening stale Sendero dev processes remain, but required ports are free:"
+  echo "$remaining"
+  echo "Continuing without sudo."
+fi
+
+root_owned="$(
+  cache_dir_name="$(basename "${CACHE_DIR:-.cache-user}")"
+  ponder_dir_name="$(basename "$(dirname "${PONDER_PGLITE_DIR:-.ponder-user/pglite}")")"
+  find apps . -maxdepth 3 \\( -name "${NEXT_DIST_DIR:-.next-user}" -o -name "$cache_dir_name" -o -name "$ponder_dir_name" -o -name .turbo \\) -user root -print 2>/dev/null | sort -u || true
+)"
+if [ -n "$root_owned" ]; then
+  echo "Root-owned Sendero build directories remain:"
+  echo "$root_owned"
+  echo
+  echo "Quarantining them so plain 'mise run dev' can recreate writable build directories."
+  failed_moves=""
+  while IFS= read -r dir; do
+    [ -z "$dir" ] && continue
+    target="$dir.root-owned.$(date +%Y%m%d%H%M%S).$$"
+    if mv "$dir" "$target" 2>/dev/null; then
+      echo "Moved $dir -> $target"
+    else
+      failed_moves="$failed_moves
+$dir"
+    fi
+  done <<EOF
+$root_owned
+EOF
+
+  if [ -n "$failed_moves" ]; then
+    echo "Could not quarantine these root-owned directories:"
+    echo "$failed_moves"
+    echo
+    echo "Run this once, then use plain 'mise run dev':"
+    echo "  cd $root && sudo chown -R \"$repo_owner:$repo_group\" apps/*/.next apps/*/.next-user apps/*/.turbo apps/*/.cache-user apps/*/.ponder-user .turbo 2>/dev/null || true"
+    exit 1
+  fi
+fi
+"""
 
 [tasks."dev:web"]
 description = "Next.js web only (root) — fastest cold start"
 run         = "bun run dev"
+env         = { NEXT_DIST_DIR = ".next-user" }
 
 [tasks."dev:edge"]
 description = "Hono edge worker (apps/edge)"

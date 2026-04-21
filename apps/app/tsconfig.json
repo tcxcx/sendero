@@ -25,6 +25,8 @@
       "@sendero/slack/*": ["../../packages/slack/src/*"],
       "@sendero/locale": ["../../packages/locale/src/index.ts"],
       "@sendero/locale/*": ["../../packages/locale/src/*"],
+      "@sendero/llms": ["../../packages/llms/src/index.ts"],
+      "@sendero/llms/*": ["../../packages/llms/src/*"],
       "@sendero/intelligence": ["../../packages/intelligence/src/index.ts"],
       "@sendero/intelligence/*": ["../../packages/intelligence/src/*"],
       "@sendero/billing": ["../../packages/billing/src/index.ts"],
@@ -60,7 +62,13 @@
       "@sendero/auth/store": ["../../packages/auth/src/store.ts"],
       "@sendero/auth/types": ["../../packages/auth/src/types.ts"],
       "@sendero/database": ["../../packages/database/src/index.ts"],
-      "@sendero/database/types": ["../../packages/database/src/types.ts"]
+      "@sendero/database/types": ["../../packages/database/src/types.ts"],
+      "@sendero/ui/cn": ["../../packages/ui/src/utils/cn.ts"],
+      "@sendero/ui/*": ["../../packages/ui/src/components/*.tsx"],
+      "@sendero/ui/components": ["../../packages/ui/src/components"],
+      "@sendero/ui/components/*": ["../../packages/ui/src/components/*"],
+      "@sendero/ui/hooks": ["../../packages/ui/src/hooks"],
+      "@sendero/ui/hooks/*": ["../../packages/ui/src/hooks/*"]
     },
     "plugins": [{ "name": "next" }]
   },

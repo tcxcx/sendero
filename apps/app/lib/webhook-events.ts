@@ -9,6 +9,7 @@
  */
 
 import { prisma } from '@sendero/database';
+import type { DurableWebhookStore } from '@sendero/webhooks/inbound';
 
 export interface RecordedWebhookEvent {
   id: string;
@@ -49,3 +50,19 @@ export async function markWebhookEventProcessed(id: string, error?: string): Pro
     },
   });
 }
+
+export async function markWebhookEventFailed(id: string, error: string): Promise<void> {
+  await prisma.webhookEvent.update({
+    where: { id },
+    data: {
+      processedAt: null,
+      processingError: error,
+    },
+  });
+}
+
+export const webhookEventStore: DurableWebhookStore = {
+  record: recordWebhookEvent,
+  markProcessed: markWebhookEventProcessed,
+  markFailed: markWebhookEventFailed,
+};

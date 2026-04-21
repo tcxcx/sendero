@@ -11,10 +11,17 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+
+import {
+  type DuffelWebhookEvent,
+  parseDuffelWebhook,
+  verifyDuffelSignature,
+} from '@sendero/duffel';
 import { env } from '@sendero/env';
-import { verifyDuffelSignature, parseDuffelWebhook } from '@sendero/duffel';
-import { recordWebhookEvent, markWebhookEventProcessed } from '@/lib/webhook-events';
+import { processDurableWebhook } from '@sendero/webhooks/inbound';
+
 import { dispatchDuffelEvent } from '@/lib/duffel-dispatcher';
+import { webhookEventStore } from '@/lib/webhook-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_signature' }, { status: 401 });
   }
 
-  let event;
+  let event: DuffelWebhookEvent;
   try {
     event = parseDuffelWebhook(raw);
   } catch (err) {
@@ -42,33 +49,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const stored = await recordWebhookEvent({
+  const result = await processDurableWebhook({
     provider: 'duffel',
     externalId: event.id,
     eventType: event.type,
     payload: event.raw,
+    event,
+    store: webhookEventStore,
+    dispatch: async verifiedEvent => dispatchDuffelEvent({ event: verifiedEvent }),
+    acceptedError: dispatchResult => (dispatchResult.matched ? null : 'no_booking_match'),
+    logger: console,
+    logPrefix: '[webhooks/duffel]',
   });
-  if (stored.alreadyProcessed) {
+  if (result.ok === false) {
+    return NextResponse.json({ error: 'dispatch_failed', message: result.error }, { status: 500 });
+  }
+  if (result.deduped === true) {
     return NextResponse.json({ ok: true, deduped: true });
   }
-
-  let dispatchError: string | undefined;
-  let matched = false;
-  try {
-    const result = await dispatchDuffelEvent({ event });
-    matched = result.matched;
-    if (!matched) {
-      await markWebhookEventProcessed(stored.id, 'no_booking_match');
-      return NextResponse.json({ ok: true, matched: false });
-    }
-  } catch (err) {
-    dispatchError = err instanceof Error ? err.message : String(err);
-    console.error('[webhooks/duffel] dispatch failed', dispatchError);
-  }
-
-  await markWebhookEventProcessed(stored.id, dispatchError);
-  if (dispatchError) {
-    return NextResponse.json({ error: 'dispatch_failed', message: dispatchError }, { status: 500 });
+  if (result.deduped === false && result.acceptedError === 'no_booking_match') {
+    return NextResponse.json({ ok: true, matched: false });
   }
   return NextResponse.json({ ok: true });
 }
