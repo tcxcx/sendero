@@ -76,6 +76,16 @@ const REQUIRED: Required[] = [
     scope: 'onchain',
     hint: 'Destination EOA/MSCA for nanopay batch settlements (0x... on Arc)',
   },
+  {
+    name: 'INVOICE_SIGNING_SECRET',
+    scope: 'invoicing',
+    hint: '32+ char secret for signing invoice public URL JWTs; generate: node -e "console.log(require(\'node:crypto\').randomBytes(32).toString(\'base64url\'))"',
+  },
+  {
+    name: 'BLOB_READ_WRITE_TOKEN',
+    scope: 'invoicing',
+    hint: 'Vercel Blob token — auto-provisioned by Marketplace Blob integration on sendero-arc-web',
+  },
 ];
 
 interface Gap {
