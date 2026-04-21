@@ -19,6 +19,9 @@
     "./templates/html": "./src/templates/html/index.tsx",
     "./templates/format": "./src/templates/format.tsx"
   },
+  "peerDependencies": {
+    "@sendero/database": "*"
+  },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.0",
     "@vercel/blob": "^0.23.0",

@@ -319,6 +319,9 @@
       "devDependencies": {
         "@types/qrcode": "^1.5.5",
       },
+      "peerDependencies": {
+        "@sendero/database": "*",
+      },
     },
     "packages/locale": {
       "name": "@sendero/locale",
