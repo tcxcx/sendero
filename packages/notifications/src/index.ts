@@ -15,8 +15,11 @@
 
 import { Resend } from 'resend';
 import { renderGuestInvite, type GuestInviteContent } from './templates';
+import { renderInvoiceEmail, type InvoiceEmailContent } from './invoice-email';
 
 export type { GuestInviteContent } from './templates';
+export { renderInvoiceEmail } from './invoice-email';
+export type { InvoiceEmailContent } from './invoice-email';
 
 export interface NotificationsConfig {
   /** Resend API key. Falls back to process.env.RESEND_API_KEY. */
@@ -39,11 +42,19 @@ export interface SendResult {
   skipped?: boolean;
 }
 
+export interface SendInvoiceArgs extends InvoiceEmailContent {
+  /** PDF rendered via @sendero/invoicing renderInvoicePdfBuffer. */
+  pdfBuffer: Buffer;
+  /** Override attachment filename. Defaults to `<invoice.number>.pdf`. */
+  pdfFilename?: string;
+}
+
 export interface Notifier {
   sendGuestInvite(
     to: string,
     content: Omit<GuestInviteContent, 'supportEmail'> & { supportEmail?: string }
   ): Promise<SendResult>;
+  sendInvoice(to: string, args: SendInvoiceArgs): Promise<SendResult>;
 }
 
 /**
@@ -59,13 +70,17 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
     config.supportEmail ?? process.env.SENDERO_SUPPORT_EMAIL ?? 'hello@sendero.travel';
 
   if (!apiKey || !from) {
+    const skipped: SendResult = {
+      ok: false,
+      skipped: true,
+      error: 'notifications_not_configured: set RESEND_API_KEY and SENDERO_EMAIL_FROM',
+    };
     return {
       async sendGuestInvite() {
-        return {
-          ok: false,
-          skipped: true,
-          error: 'notifications_not_configured: set RESEND_API_KEY and SENDERO_EMAIL_FROM',
-        };
+        return skipped;
+      },
+      async sendInvoice() {
+        return skipped;
       },
     };
   }
@@ -87,6 +102,37 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
             { name: 'surface', value: 'guest_invite' },
             ...(content.tripSummary ? [] : []),
           ],
+        });
+        if (result.error) {
+          return { ok: false, error: result.error.message ?? String(result.error) };
+        }
+        return { ok: true, id: result.data?.id };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+    async sendInvoice(to, args) {
+      const rendered = renderInvoiceEmail({
+        invoice: args.invoice,
+        publicUrl: args.publicUrl,
+        supportEmail: args.supportEmail ?? supportEmail,
+      });
+      try {
+        const result = await client.emails.send({
+          from,
+          to: [to],
+          replyTo: replyTo ? [replyTo] : undefined,
+          subject: rendered.subject,
+          html: rendered.html,
+          text: rendered.text,
+          attachments: [
+            {
+              filename: args.pdfFilename ?? `${args.invoice.number}.pdf`,
+              content: args.pdfBuffer,
+              contentType: 'application/pdf',
+            },
+          ],
+          tags: [{ name: 'surface', value: 'invoice' }],
         });
         if (result.error) {
           return { ok: false, error: result.error.message ?? String(result.error) };
