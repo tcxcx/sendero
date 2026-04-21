@@ -202,6 +202,13 @@ async function checkOnchain(): Promise<Subsystem> {
       detail: env.senderoAgentTokenId() ?? 'set SENDERO_AGENT_TOKEN_ID',
     },
     {
+      name: 'sendero_treasury_address',
+      ok: Boolean(process.env.SENDERO_TREASURY_ADDRESS),
+      detail:
+        process.env.SENDERO_TREASURY_ADDRESS ??
+        'set SENDERO_TREASURY_ADDRESS (nanopay batch settlement destination)',
+    },
+    {
       name: 'circle_api',
       ok: Boolean(env.circleApiKey() && env.circleEntitySecret()),
       detail:
@@ -239,6 +246,13 @@ async function checkOps(): Promise<Subsystem> {
       name: 'database_url',
       ok: Boolean(process.env.DATABASE_URL),
       detail: process.env.DATABASE_URL ? undefined : 'set DATABASE_URL (Neon)',
+    },
+    {
+      name: 'duffel_webhook_secret',
+      ok: Boolean(env.duffelWebhookSecret()),
+      detail: env.duffelWebhookSecret()
+        ? undefined
+        : 'set DUFFEL_WEBHOOK_SECRET (HMAC signature for POST /api/webhooks/duffel)',
     },
     {
       name: 'posthog',
