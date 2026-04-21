@@ -35,6 +35,8 @@ No visible UI surface ships in 11c1 beyond `/sign-in`, `/sign-up`, `/onboarding`
 - Sign-in/sign-up pages at `/sign-in/[[...sign-in]]` + `/sign-up/[[...sign-up]]` wrapping prebuilt `<SignIn/>` + `<SignUp/>` with Sendero theming
 - Header component `apps/app/components/app-header.tsx` with `<OrganizationSwitcher/>` + `<UserButton/>` + `<Show when=...>` CTAs
 - Loading/error states on the root layout via `<ClerkLoaded/>`, `<ClerkLoading/>`, `<ClerkDegraded/>`, `<ClerkFailed/>`
+- `<UserDetails/>` visualizer component (port of Clerk's demo-panel pattern) at `packages/auth/src/components/user-details.tsx` — shown on `/onboarding` during wallet provisioning + on `/app/profile` as a dev/demo surface. Uses `useUser` + `useSession` + `useOrganization` client hooks with pointer-annotated rows. Annotations (`<PointerC/>`) hidden in production via a `showPointers` prop (defaults to `process.env.NEXT_PUBLIC_CLERK_DEMO_MODE === '1'`)
+- **Tailwind adoption** pulled forward from 11c2 so `<UserDetails/>` + Clerk components render as-intended. `@tailwindcss/postcss` + minimal `tailwind.config.js` + `@tailwind` directives in `globals.css`. Existing `/g`, `/admin`, `/onboarding` inline-style pages remain untouched (mixed-mode is fine; Tailwind utilities don't collide with CSSProperties)
 - Tests: unit (role-check helpers, session-claim typings), integration (sign-up → org create → wallet provision → onboardingComplete flips)
 
 ### Out (in phase-11c2 / 11d / later)
@@ -359,11 +361,40 @@ export default async function OnboardingLayout({ children }: { children: React.R
 }
 ```
 
-`apps/app/app/onboarding/page.tsx` — main onboarding UI. Shows three states:
+`apps/app/app/onboarding/page.tsx` — main onboarding UI. Shows three states alongside the `<UserDetails/>` visualizer (user sees their live Clerk data throughout the flow, reinforcing "you are signed in"):
 
-1. **No Organization** — render `<OrganizationList hidePersonal afterCreateOrganizationUrl="/onboarding" />`
-2. **Organization exists, wallet provisioning in flight** — polling state: "Provisioning Arc wallet…" with a 2s interval `useOrganization().organization.reload()` check on `org_metadata.arcWalletAddress`
-3. **All complete** — button "Enter Sendero" → `router.push('/app')`
+1. **No Organization** — render `<OrganizationList hidePersonal afterCreateOrganizationUrl="/onboarding" />`. `<UserDetails/>` shows user + session; organization section is hidden.
+2. **Organization exists, wallet provisioning in flight** — polling state: "Provisioning Arc wallet…" with a 2s interval `useOrganization().organization.reload()` check on `org_metadata.arcWalletAddress`. `<UserDetails/>` now renders the organization section too; a pending indicator badge shows "Wallet: provisioning…".
+3. **All complete** — button "Enter Sendero" → `router.push('/app')`. `<UserDetails/>` shows full context including `organization.publicMetadata.arcWalletAddress`.
+
+### `<UserDetails/>` visualizer
+
+Ported from the canonical Clerk demo pattern (with Sendero-specific extensions):
+
+```
+packages/auth/src/components/user-details.tsx
+```
+
+Structure:
+
+- `Row` — two-column `<desc>/<value>` row; optional children render to the right
+- `PointerC` — annotated label showing the exact Clerk field name (e.g., `user.emailAddresses[0].emailAddress`). Hidden when `showPointers={false}`.
+- `<UserDetails showPointers={bool} extraSections?={...}>` — returns a panel containing:
+  - Avatar + name block (from `user.imageUrl`, `user.firstName`, `user.lastName`)
+  - User details (email, last signed in, joined on, user ID)
+  - Session details (session ID, status, last active, expiration)
+  - Organization details (org ID, name, members count, pending invitations) — rendered only when `organization` is present
+  - **Sendero extension:** Wallet details row-group — `arcWalletAddress`, `circleWalletSetId`, `onboardingComplete` status. Rendered only when `org_metadata.arcWalletAddress` is populated.
+
+`showPointers` default:
+- Development (`NODE_ENV !== 'production'`): `true` → useful for eng demo
+- Production: `false` unless `NEXT_PUBLIC_CLERK_DEMO_MODE === '1'` is set (lets us demo on prod preview URLs for the hackathon submission)
+
+Used in three places:
+
+- `/onboarding` — hero panel during provisioning (showPointers=true in dev, false in prod)
+- `/app/profile` — canonical user profile page (phase-11d will upgrade this to Clerk's `<UserProfile/>` with embedded `<APIKeys/>` tab; 11c1 ships with `<UserDetails/>` as interim)
+- `/app/debug/clerk` (dev-only route) — full visualizer for ad-hoc debugging; never renders in prod builds (`if (process.env.NODE_ENV === 'production') notFound();`)
 
 `apps/app/app/onboarding/choose-org/page.tsx` — explicit org-picker for the `choose-organization` session task; renders `<OrganizationList hidePersonal afterCreateOrganizationUrl="/onboarding" afterSelectOrganizationUrl="/onboarding" />`.
 
@@ -571,7 +602,10 @@ Wallet provisioning is **not a Clerk session task** — it's a custom server-dri
 - `apps/app/app/onboarding/choose-org/page.tsx`
 - `apps/app/app/api/webhooks/clerk/route.ts`
 - `apps/app/app/api/cron/retry-wallet-provision/route.ts`
+- `apps/app/app/app/profile/page.tsx` — uses `<UserDetails/>`, showPointers=false
+- `apps/app/app/app/debug/clerk/page.tsx` — dev-only `<UserDetails/>`, showPointers=true
 - `apps/app/components/app-header.tsx`
+- `packages/auth/src/components/user-details.tsx`
 - `packages/database/prisma/migrations/<ts>_phase_11c1_auth_infra/migration.sql`
 - `docs/clerk-setup.md` — runbook for Dashboard config
 - `scripts/smoke-clerk-webhook.ts`
@@ -581,8 +615,10 @@ Wallet provisioning is **not a Clerk session task** — it's a custom server-dri
 
 - `apps/app/app/layout.tsx` — wrap in `SenderoAuthProvider`, add `<ClerkLoaded/>` states
 - `apps/app/app/page.tsx` — landing page with `<Show when=signed-in>` CTAs to `/app`
-- `apps/app/app/globals.css` — `.app-header`, `.auth-layout`, `.boot-splash` minimal styles
-- `apps/app/package.json` — add `@clerk/nextjs`, `@clerk/themes`, `svix`, `@sendero/auth` workspace dep
+- `apps/app/app/globals.css` — add `@tailwind base/components/utilities` directives + minimal custom classes (`.app-header`, `.auth-layout`, `.boot-splash`) that cohabit with Tailwind
+- `apps/app/postcss.config.mjs` — add `@tailwindcss/postcss` plugin (new file if absent)
+- `apps/app/tailwind.config.ts` — Sendero color tokens (`#fb542b` primary, neutral scale), Geist font family mapping
+- `apps/app/package.json` — add `@clerk/nextjs`, `@clerk/themes`, `svix`, `@sendero/auth` workspace dep, `tailwindcss`, `@tailwindcss/postcss`
 - `apps/app/vercel.json` — `crons: [{ path: '/api/cron/retry-wallet-provision', schedule: '*/5 * * * *' }]` added
 - `packages/database/prisma/schema.prisma` — Wallet model, User.clerkUserId, Tenant.clerkOrgId, Membership.clerkMembershipId
 - `packages/sendero-env/src/validate.ts` — require `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SECRET`
@@ -631,8 +667,9 @@ Deploy to preview, hit the preview URL from a browser, sign up a test user, veri
 
 Phase-11d picks up UI polish + heavier Clerk component usage:
 
-- `<UserProfile/>` page at `/app/profile` (embedded, not modal)
+- Upgrade `/app/profile` from `<UserDetails/>` visualizer to Clerk's full `<UserProfile/>` embedded component (passwords, MFA, connected accounts, passkeys, API keys tab)
 - `<OrganizationProfile/>` page at `/app/settings/org` (embedded) with API keys tab (once APIKeys feature is enabled — currently deferred)
+- Evolve `<UserDetails/>` itself — richer wallet section (balance, tx history), membership matrix (all orgs user belongs to), drop the demo-pointer annotations by default in prod
 - `<AuthenticateWithRedirectCallback/>` route `/sign-in/sso-callback` for custom OAuth flows (if we add Google/GitHub/etc. as post-sign-up options)
 - `<RedirectToTasks/>` wrapper on `(app)/layout.tsx` as a belt-and-suspenders for users whose session somehow bypassed middleware redirection
 - Tailwind + shadcn adoption for all pages (coordinated with 11c2's first real screens)
@@ -650,3 +687,5 @@ Phase-11d picks up UI polish + heavier Clerk component usage:
 - 2026-04-20 — decision: Personal Accounts DISABLED (B2B only); membership required
 - 2026-04-20 — decision: `choose-organization` session task routed to `/onboarding/choose-org`; wallet provisioning is a custom server-driven step (not a Clerk session task)
 - 2026-04-20 — decision: Clerk webhooks are source-of-truth writer for User/Tenant/Membership Prisma rows; idempotent upsert by `clerk*Id`
+- 2026-04-20 — user confirmed: port the Clerk `<UserDetails/>` visualizer pattern (with `PointerC` annotations) into `@sendero/auth/components/user-details.tsx`; use on `/onboarding`, `/app/profile`, and `/app/debug/clerk` (dev-only)
+- 2026-04-20 — decision: pull Tailwind adoption from 11c2 into 11c1 so `<UserDetails/>` + future Clerk component skins render as-intended. Existing inline-style pages stay untouched (mixed-mode is fine)
