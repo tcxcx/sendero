@@ -10,7 +10,7 @@
 
 import createGlobe from 'cobe';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Waitlist } from '@clerk/nextjs';
+import { ClerkLoaded, ClerkLoading, Waitlist } from '@clerk/nextjs';
 import {
   isPasskeyConfigured,
   loginPasskey,
@@ -308,20 +308,29 @@ function LandingWaitlist() {
         <h2 id="hero-waitlist-title">Join the mainnet launch waitlist.</h2>
         <p>Sendero is live on testnet now. Get notified when buyer orgs can move to mainnet.</p>
       </div>
-      <Waitlist
-        afterJoinWaitlistUrl="/"
-        signInUrl="/sign-in"
-        appearance={{
-          elements: {
-            rootBox: 'hero-waitlist-clerk-root',
-            cardBox: 'hero-waitlist-clerk-card',
-            header: 'hero-waitlist-clerk-hidden',
-            footer: 'hero-waitlist-clerk-hidden',
-            formButtonPrimary: 'hero-waitlist-clerk-button',
-            formFieldInput: 'hero-waitlist-clerk-input',
-          },
-        }}
-      />
+      <ClerkLoading>
+        <div className="hero-waitlist-loading" aria-busy="true" aria-live="polite">
+          <span>Loading waitlist identity</span>
+          <div aria-hidden="true" />
+          <div aria-hidden="true" />
+        </div>
+      </ClerkLoading>
+      <ClerkLoaded>
+        <Waitlist
+          afterJoinWaitlistUrl="/"
+          signInUrl="/sign-in"
+          appearance={{
+            elements: {
+              rootBox: 'hero-waitlist-clerk-root',
+              cardBox: 'hero-waitlist-clerk-card',
+              header: 'hero-waitlist-clerk-hidden',
+              footer: 'hero-waitlist-clerk-hidden',
+              formButtonPrimary: 'hero-waitlist-clerk-button',
+              formFieldInput: 'hero-waitlist-clerk-input',
+            },
+          }}
+        />
+      </ClerkLoaded>
     </section>
   );
 }
@@ -344,7 +353,7 @@ function MarginStrip() {
   const marginFactor = live ? Math.max(summary?.ethereum.marginFactor ?? 0, 1) : 64;
 
   return (
-    <div className="hero-margin" aria-label="Nanopayments meter">
+    <section className="hero-margin" aria-label="Nanopayments meter">
       <div className="hero-margin-head">
         <span className="hero-margin-dot" />
         <span>nanopayments · x402 · arc</span>
@@ -371,7 +380,7 @@ function MarginStrip() {
           </dd>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -815,6 +824,39 @@ const heroStyles = `
     letter-spacing: 0.1em;
     text-transform: uppercase;
     box-shadow: none;
+  }
+  .hero-waitlist-loading {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    padding: 14px;
+  }
+  .hero-waitlist-loading span {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .hero-waitlist-loading div {
+    height: 38px;
+    border: 1px solid var(--border);
+    background: var(--bg-sunk);
+    animation: heroPulse 1.2s ease-in-out infinite alternate;
+  }
+  .hero-waitlist-loading div:last-child {
+    border-color: var(--ink);
+    background: var(--ink);
+  }
+  @keyframes heroPulse {
+    from {
+      opacity: 0.45;
+    }
+    to {
+      opacity: 1;
+    }
   }
   @media (max-width: 640px) {
     .hero-waitlist {

@@ -96,4 +96,13 @@ const inlineCss = `
   .hp-art:hover .hp-art-title { text-decoration: underline; }
   .hp-art-title { font-size: 16px; font-weight: 500; letter-spacing: -0.01em; }
   .hp-art-excerpt { font-size: 14px; color: var(--muted); }
+  @media (max-width: 640px) {
+    .hp-root { padding: 24px 22px 72px; }
+    .hp-nav { flex-direction: column; align-items: stretch; gap: 18px; padding-bottom: 34px; }
+    .hp-nav-right { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+    .hp-nav-right a { display: flex; min-height: 40px; align-items: center; justify-content: center; border: 1px solid var(--border); padding: 8px 10px; text-align: center; line-height: 1.15; text-decoration: none; }
+    .hp-nav-right a:last-child { grid-column: 1 / -1; }
+    .hp-hero { padding-top: 44px; }
+    .hp-hero p { font-size: 16px; }
+  }
 `;

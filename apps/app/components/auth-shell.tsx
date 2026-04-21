@@ -48,7 +48,7 @@ export function AuthShell({
         </div>
       </section>
 
-      <section className="flex items-start justify-center px-5 py-8 sm:px-8 lg:min-h-screen lg:items-center lg:py-10">
+      <section className="flex items-center justify-center px-5 py-8 sm:px-8 lg:min-h-screen lg:py-10">
         <div className="w-full max-w-md">{children}</div>
       </section>
     </main>
