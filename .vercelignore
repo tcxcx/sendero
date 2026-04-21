@@ -3,6 +3,7 @@
 **/.clerk
 **/.next
 **/.next-*
+**/.ponder*
 **/.turbo
 **/node_modules
 .turbo
