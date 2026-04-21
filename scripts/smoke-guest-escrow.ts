@@ -39,6 +39,7 @@ import {
   toUsdcMicro,
   USDC_ABI,
 } from '@sendero/guest';
+import { cancelBookingTool } from '@sendero/tools';
 import {
   type Address,
   createPublicClient,
@@ -311,6 +312,195 @@ async function main() {
   console.log();
   console.log('[smoke] ✔  full lifecycle succeeded against live SenderoGuestEscrow');
   console.log(`[smoke]     explorer: https://testnet.arcscan.app/address/${ESCROW}#events`);
+
+  // ─── cancel-path scenario ────────────────────────────────────────────
+  await cancelScenario();
+}
+
+// ─── helpers ──────────────────────────────────────────────────────────
+
+async function usdcBalanceOf(addr: Address): Promise<bigint> {
+  return publicClient.readContract({
+    address: USDC,
+    abi: USDC_ABI,
+    functionName: 'balanceOf',
+    args: [addr],
+  }) as Promise<bigint>;
+}
+
+/**
+ * Failure-path smoke: create → claim → reserve → commit → cancel_booking
+ * (refundBooking + sweepUnspent) with a short-expiry trip so sweep can
+ * run in the same session. Exercises the `cancel_booking` tool's encoded
+ * calls against the live escrow. We also invoke cancelTrip between the
+ * two refund+sweep calls so sweepUnspent's `!cancelled && now<=expires`
+ * guard passes without having to wait on wall-clock expiry.
+ */
+async function cancelScenario() {
+  console.log();
+  console.log('[smoke] ═══ cancel-path scenario ══════════════════════════════');
+
+  const budget = toUsdcMicro('0.20');
+  // 60s expiry — long enough for all our txs to land (createTrip, claim,
+  // reserve, commit, refund, cancelTrip, sweep is ~7 txs at 3s blocks).
+  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 120);
+
+  // Snapshot escrow balance — USDC is the gas token on Arc so the
+  // buyer EOA balance can't be used as a clean proxy (each tx burns
+  // gas). The escrow contract's USDC balance is a clean measure.
+  const escrowBefore = await usdcBalanceOf(ESCROW);
+  const balBefore = await usdcBalanceOf(operator.address);
+  console.log(`[smoke] buyer balance before  = ${balBefore} micro`);
+  console.log(`[smoke] escrow balance before = ${escrowBefore} micro`);
+
+  // 1. approve + createTrip
+  console.log('[smoke] C1/5  approve + createTrip (budget=0.20 USDC)');
+  const approveTx = await wallet.writeContract({
+    address: USDC,
+    abi: USDC_ABI,
+    functionName: 'approve',
+    args: [ESCROW, budget],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: approveTx });
+
+  const tripId = generateTripId();
+  const claimKp = generateClaimKeypair();
+  const createTx = await wallet.writeContract({
+    address: ESCROW,
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    functionName: 'createTrip',
+    args: [
+      tripId,
+      claimKp.pubKey20,
+      budget,
+      expiresAt,
+      zeroHash,
+      'ipfs://smoke-cancel',
+      BigInt(process.env.SENDERO_AGENT_TOKEN_ID ?? '2286'),
+      zeroHash,
+    ],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: createTx });
+  console.log(`             tripId = ${tripId}  createTx = ${createTx}`);
+
+  // 2. guest claims (same EOA acts as guest, matching happy-path smoke)
+  console.log('[smoke] C2/5  claimTrip');
+  const signature = await signClaim({
+    claimPrivateKey: claimKp.privateKey,
+    chainId: CHAIN_ID,
+    escrow: ESCROW,
+    tripId,
+    guestWallet: operator.address,
+  });
+  const [claimCall] = buildClaimTripCalls({
+    escrow: ESCROW,
+    tripId,
+    guestWallet: operator.address,
+    signature,
+    claimCodePreimage: '0x',
+  });
+  const claimTx = await wallet.sendTransaction({
+    to: claimCall.to,
+    data: claimCall.data,
+    value: claimCall.value,
+  });
+  await publicClient.waitForTransactionReceipt({ hash: claimTx });
+
+  // 3. reserve + commit 0.15 USDC (fits inside the 0.20 budget)
+  console.log('[smoke] C3/5  reserveForBooking + commitBooking (0.15 USDC)');
+  const bookingId = generateBookingId();
+  const upperBound = toUsdcMicro('0.18');
+  const reserveCall = encodeReserveForBooking({
+    escrow: ESCROW,
+    tripId,
+    bookingId,
+    upperBound,
+  });
+  const reserveTx = await wallet.sendTransaction({
+    to: reserveCall.to,
+    data: reserveCall.data,
+    value: reserveCall.value,
+  });
+  await publicClient.waitForTransactionReceipt({ hash: reserveTx });
+
+  const vendorAmount = toUsdcMicro('0.12');
+  const feeAmount = toUsdcMicro('0.03');
+  const commitCall = encodeCommitBooking({
+    escrow: ESCROW,
+    bookingId,
+    vendorAmount,
+    feeAmount,
+    vendor: operator.address,
+    itineraryHash: computeGuestIdHash({ email: 'cancel@sendero.test', nonce: zeroHash }),
+    itineraryCID: 'ipfs://smoke-cancel-itinerary',
+  });
+  const commitTx = await wallet.sendTransaction({
+    to: commitCall.to,
+    data: commitCall.data,
+    value: commitCall.value,
+  });
+  await publicClient.waitForTransactionReceipt({ hash: commitTx });
+  console.log(`             booking = ${bookingId}  committed=0.15 USDC`);
+
+  // 4. cancel_booking tool → refundBooking + sweepUnspent
+  //    Inject a cancelTrip between them so sweep's expiry guard clears
+  //    without having to wait on wall-clock.
+  console.log('[smoke] C4/5  cancel_booking → refundBooking (+ cancelTrip) + sweepUnspent');
+  const cancelResult = (await cancelBookingTool.handler({
+    bookingId,
+    tripId,
+    reason: 'duffel_failed',
+    escrowAddress: ESCROW,
+  })) as { onchainCalls: Array<{ to: Address; data: Hex; value: string }> };
+  const [refundCall, sweepCall] = cancelResult.onchainCalls;
+
+  const refundTx = await wallet.sendTransaction({
+    to: refundCall.to,
+    data: refundCall.data,
+    value: BigInt(refundCall.value),
+  });
+  await publicClient.waitForTransactionReceipt({ hash: refundTx });
+
+  // After refundBooking, trip.reserved == 0 so cancelTrip is callable.
+  const cancelTripTx = await wallet.writeContract({
+    address: ESCROW,
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    functionName: 'cancelTrip',
+    args: [tripId],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: cancelTripTx });
+
+  const sweepTx = await wallet.sendTransaction({
+    to: sweepCall.to,
+    data: sweepCall.data,
+    value: BigInt(sweepCall.value),
+  });
+  await publicClient.waitForTransactionReceipt({ hash: sweepTx });
+  console.log(`             refundTx   = ${refundTx}`);
+  console.log(`             cancelTrip = ${cancelTripTx}`);
+  console.log(`             sweepTx    = ${sweepTx}`);
+
+  // 5. assert escrow returned the full budget
+  console.log('[smoke] C5/5  assert buyer refunded');
+  const escrowAfter = await usdcBalanceOf(ESCROW);
+  const balAfter = await usdcBalanceOf(operator.address);
+  // Escrow's USDC balance should be unchanged net-net: the budget went
+  // in via createTrip and fully came back out via sweepUnspent.
+  const escrowDelta = escrowAfter - escrowBefore;
+  console.log(`             escrowBefore = ${escrowBefore}`);
+  console.log(`             escrowAfter  = ${escrowAfter}`);
+  console.log(`             escrowDelta  = ${escrowDelta} micro-USDC`);
+  console.log(`             balBefore    = ${balBefore}`);
+  console.log(`             balAfter     = ${balAfter}`);
+  console.log(
+    `             buyerDelta   = ${balAfter - balBefore} micro-USDC (negative expected — USDC is the gas token on Arc)`
+  );
+  if (escrowDelta !== 0n) {
+    throw new Error(
+      `cancel scenario did NOT roundtrip: escrow held ${escrowDelta} micro-USDC after refund+sweep (expected 0)`
+    );
+  }
+  console.log('[smoke] ✓ cancel refunded buyer (escrow net-zero, full budget returned)');
 }
 
 main().catch(err => {
