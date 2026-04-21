@@ -22,6 +22,7 @@ import {
 import { confirmDuffelTool } from './confirm-duffel';
 import { settleBookingTool } from './settle-booking';
 import { cancelBookingTool } from './cancel-booking';
+import { generateBookingInvoiceTool } from './generate-booking-invoice';
 import { faucetDripTool } from './faucet';
 import { recommendRestaurantsTool } from './recommend-restaurants';
 import type { ToolDef } from './types';
@@ -40,6 +41,7 @@ export {
 export { confirmDuffelTool } from './confirm-duffel';
 export { settleBookingTool } from './settle-booking';
 export { cancelBookingTool } from './cancel-booking';
+export { generateBookingInvoiceTool } from './generate-booking-invoice';
 export {
   faucetDripTool,
   requestFaucetDrip,
@@ -85,6 +87,7 @@ export const toolList: ToolDef[] = [
   confirmDuffelTool,
   settleBookingTool,
   cancelBookingTool,
+  generateBookingInvoiceTool,
   logAgentActionTool,
   // Concierge / in-trip companion
   recommendRestaurantsTool,
