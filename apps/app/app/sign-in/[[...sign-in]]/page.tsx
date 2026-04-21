@@ -5,12 +5,12 @@ export default function SignInPage() {
   return (
     <AuthShell
       title="Welcome back."
-      description="Sign in with Clerk to return to your tenant workspace, trips, invoices, spend controls, and team settings."
-      asideTitle="Buyer workspace"
+      description="Sign in with Clerk to return to your Sendero workspace for traveler sessions, policies, channel adapters, metering, billing, and settlement."
+      asideTitle="Agent workspace"
       asideItems={[
         'Protected routes stay behind Clerk session and organization checks.',
-        'Roles control access to billing, spend dashboards, and retry actions.',
-        'Wallet setup happens after sign-in, inside tenant onboarding.',
+        'Organizations map to agencies, companies, operators, and agent clients.',
+        'Traveler sessions, policies, channels, and action ledgers stay inside the app.',
       ]}
     >
       <SenderoSignIn />

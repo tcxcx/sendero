@@ -18,6 +18,8 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/waitlist(.*)',
+  '/llms.txt',
+  '/.well-known/llms.txt',
   '/api/webhooks/(.*)', // Duffel, Clerk, etc. — signature-verified per route
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
   '/api/health',

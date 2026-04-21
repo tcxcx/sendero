@@ -4,13 +4,13 @@ import { WaitlistCard } from '@/components/waitlist-card';
 export default function WaitlistPage() {
   return (
     <AuthShell
-      title="Join the Sendero testnet."
-      description="Request access to the Clerk-managed preview. We will open tenant setup, roles, wallet provisioning, and mainnet migration paths from inside the protected app."
-      asideTitle="Mainnet launch"
+      title="Join the Sendero agent network."
+      description="Request private testnet access for persistent travel agents across WhatsApp, web, Slack, Teams, and MCP. We open tenant setup, channel adapters, policies, and Arc settlement from inside the protected app."
+      asideTitle="Private testnet"
       asideItems={[
-        'One access flow: Clerk identity first, tenant setup second.',
-        'Travel operations, billing, and settlement stay behind protected routes.',
-        'You will be notified when production access is ready for your team.',
+        'One access flow: Clerk identity first, tenant setup and channels second.',
+        'Duffel search, policy checks, metering, billing, and settlement stay behind protected routes.',
+        'Mainnet launch notifications go to approved operators, agencies, companies, and agent clients.',
       ]}
     >
       <WaitlistCard />
