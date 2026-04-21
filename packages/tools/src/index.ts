@@ -21,6 +21,7 @@ import {
 } from './guest-escrow';
 import { confirmDuffelTool } from './confirm-duffel';
 import { settleBookingTool } from './settle-booking';
+import { cancelBookingTool } from './cancel-booking';
 import type { ToolDef } from './types';
 
 export type { ToolDef, ToolContext, JsonSchemaObject } from './types';
@@ -36,6 +37,7 @@ export {
 } from './guest-escrow';
 export { confirmDuffelTool } from './confirm-duffel';
 export { settleBookingTool } from './settle-booking';
+export { cancelBookingTool } from './cancel-booking';
 
 /**
  * Ordered canonical list of every tool Sendero ships. Register here
@@ -64,6 +66,7 @@ export const toolList: ToolDef[] = [
   commitBookingTool,
   confirmDuffelTool,
   settleBookingTool,
+  cancelBookingTool,
   logAgentActionTool,
 ];
 
