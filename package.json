@@ -40,7 +40,8 @@
     "db:reset": "bun run --cwd packages/database db:reset",
     "gen": "bunx turbo gen",
     "env:validate": "bun run --cwd packages/sendero-env validate",
-    "smoke:escrow": "bun run scripts/smoke-guest-escrow.ts"
+    "smoke:escrow": "bun run scripts/smoke-guest-escrow.ts",
+    "faucet:drip": "bun run scripts/faucet-drip.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",

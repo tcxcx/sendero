@@ -12,7 +12,8 @@
     "./agent": "./src/agent.ts",
     "./meter": "./src/meter.ts",
     "./pricing": "./src/pricing.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./faucet": "./src/faucet.ts"
   },
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",

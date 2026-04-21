@@ -22,6 +22,7 @@ import {
 import { confirmDuffelTool } from './confirm-duffel';
 import { settleBookingTool } from './settle-booking';
 import { cancelBookingTool } from './cancel-booking';
+import { faucetDripTool } from './faucet';
 import type { ToolDef } from './types';
 
 export type { ToolDef, ToolContext, JsonSchemaObject } from './types';
@@ -38,6 +39,14 @@ export {
 export { confirmDuffelTool } from './confirm-duffel';
 export { settleBookingTool } from './settle-booking';
 export { cancelBookingTool } from './cancel-booking';
+export {
+  faucetDripTool,
+  requestFaucetDrip,
+  type FaucetChain,
+  type FaucetToken,
+  type FaucetDripArgs,
+  type FaucetDripResult,
+} from './faucet';
 
 /**
  * Ordered canonical list of every tool Sendero ships. Register here
@@ -68,6 +77,8 @@ export const toolList: ToolDef[] = [
   settleBookingTool,
   cancelBookingTool,
   logAgentActionTool,
+  // Ops helpers
+  faucetDripTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */
