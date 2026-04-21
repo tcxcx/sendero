@@ -127,6 +127,20 @@ async function checkBilling(): Promise<Subsystem> {
         ? 'set — Vercel cron can authorize'
         : 'set CRON_SECRET for the nanopay batch scheduler',
     },
+    {
+      name: 'invoice_signing_secret',
+      ok: Boolean(process.env.INVOICE_SIGNING_SECRET),
+      detail: process.env.INVOICE_SIGNING_SECRET
+        ? 'set — platform invoice HMAC signatures'
+        : 'set INVOICE_SIGNING_SECRET for platform invoice signing',
+    },
+    {
+      name: 'vercel_blob',
+      ok: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+      detail: process.env.BLOB_READ_WRITE_TOKEN
+        ? 'set — Vercel Blob storage for invoice PDFs'
+        : 'set BLOB_READ_WRITE_TOKEN for invoice PDF storage',
+    },
   ];
   return { name: 'billing', ok: checks.every(c => c.ok), checks };
 }
