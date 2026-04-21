@@ -66,6 +66,16 @@ const REQUIRED: Required[] = [
     scope: 'onchain',
     hint: 'Chain id for the frontend (5042002 on Arc Testnet)',
   },
+  {
+    name: 'DUFFEL_WEBHOOK_SECRET',
+    scope: 'duffel',
+    hint: 'HMAC secret from the Duffel dashboard for POST /api/webhooks/duffel',
+  },
+  {
+    name: 'SENDERO_TREASURY_ADDRESS',
+    scope: 'onchain',
+    hint: 'Destination EOA/MSCA for nanopay batch settlements (0x... on Arc)',
+  },
 ];
 
 interface Gap {
