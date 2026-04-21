@@ -31,8 +31,17 @@ const REQUIRED: Required[] = [
     accepts: ['AI_GATEWAY_API_KEY', 'VERCEL_OIDC_TOKEN', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'],
     hint: 'Vercel AI Gateway (preferred) OR a direct provider key — any one satisfies the agent',
   },
-  { name: 'CLERK_SECRET_KEY', scope: 'auth' },
-  { name: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY', scope: 'auth' },
+  { name: 'CLERK_SECRET_KEY', scope: 'auth', hint: 'from Clerk Dashboard → API keys' },
+  {
+    name: 'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
+    scope: 'auth',
+    hint: 'from Clerk Dashboard → API keys',
+  },
+  {
+    name: 'CLERK_WEBHOOK_SECRET',
+    scope: 'auth',
+    hint: 'svix signing secret from Clerk Dashboard → Webhooks',
+  },
   { name: 'TREASURY_PRIVATE_KEY', scope: 'onchain', hint: 'Operator EOA for escrow' },
   {
     name: 'ARC_ESCROW_ADDRESS',
