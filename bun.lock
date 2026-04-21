@@ -368,6 +368,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@sendero/arc": "workspace:*",
+        "@sendero/database": "workspace:*",
         "@sendero/env": "workspace:*",
       },
       "peerDependencies": {

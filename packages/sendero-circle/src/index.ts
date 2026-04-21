@@ -25,3 +25,9 @@ export {
   depositToGateway,
   transferViaGateway,
 } from './gateway';
+export {
+  provisionTenantWallet,
+  type ProvisionTenantWalletArgs,
+  type ProvisionTenantWalletResult,
+  type CircleSdkLike,
+} from './provision-tenant-wallet';

@@ -10,11 +10,13 @@
     "./wallets": "./src/wallets.ts",
     "./app-kit": "./src/app-kit.ts",
     "./gateway": "./src/gateway.ts",
-    "./modular-wallets": "./src/modular-wallets.ts"
+    "./modular-wallets": "./src/modular-wallets.ts",
+    "./provision-tenant-wallet": "./src/provision-tenant-wallet.ts"
   },
   "dependencies": {
     "@sendero/env": "workspace:*",
-    "@sendero/arc": "workspace:*"
+    "@sendero/arc": "workspace:*",
+    "@sendero/database": "workspace:*"
   },
   "peerDependencies": {
     "@circle-fin/adapter-circle-wallets": "^1.2.5",
