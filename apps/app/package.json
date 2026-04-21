@@ -9,7 +9,9 @@
     "build": "next build",
     "start": "next start -p ${APP_PORT:-3010}",
     "lint": "biome lint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test e2e/public-smoke.spec.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",

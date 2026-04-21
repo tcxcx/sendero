@@ -82,3 +82,6 @@ commit-msg:
           echo "  Got:      $msg"
           echo "  (advisory — commit proceeds)"
         fi
+    ship-metadata:
+      # Advisory only — retro metadata should improve without blocking quick fixes.
+      run: bun run scripts/check-commit-metadata.ts {1}

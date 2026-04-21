@@ -64,6 +64,9 @@ jobs:
       - name: Turbo typecheck + lint + build (remote cached)
         run: bunx turbo run typecheck lint build --cache-dir=.turbo --concurrency=4
 
+      - name: Test LOC ratio report
+        run: bun run scripts/report-test-loc-ratio.ts --target=0.10
+
   edge-dry-run:
     name: Edge Worker (wrangler dry-run)
     runs-on: ubuntu-latest

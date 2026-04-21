@@ -3,6 +3,7 @@
 .next-sendero/
 apps/*/.next-sendero/
 apps/*/.next-user/
+apps/*/.next-e2e/
 .cache-sendero/
 apps/*/.cache-sendero/
 apps/*/.cache-user/
