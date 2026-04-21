@@ -1,0 +1,64 @@
+{
+  "invoice": {
+    "id": "inv_test",
+    "number": "INV-2026-001",
+    "status": "issued",
+    "issuedAt": "2026-04-20T00:00:00Z",
+    "dueAt": null,
+    "from": {
+      "name": "Sendero Travel",
+      "address": null,
+      "taxId": null,
+      "logoUrl": ""
+    },
+    "to": {
+      "name": "Acme Corp",
+      "email": "billing@acme.com",
+      "address": null,
+      "taxId": null
+    },
+    "currency": "USD",
+    "lineItems": [
+      { "position": 1, "description": "SFO to LHR · 2026-04-25", "quantity": 1, "unitPrice": "1350.500000", "amount": "1350.500000" }
+    ],
+    "subtotal": "1350.500000",
+    "discount": "0.000000",
+    "taxRate": 0,
+    "taxAmount": "0.000000",
+    "vatRate": 0,
+    "vatAmount": "0.000000",
+    "total": "1350.500000"
+  },
+  "template": {
+    "from_label": "From",
+    "customer_label": "Bill to",
+    "invoice_no_label": "Invoice",
+    "issue_date_label": "Issued",
+    "due_date_label": "Due",
+    "date_format": "MMM d, yyyy",
+    "payment_label": "Payment",
+    "note_label": "Notes",
+    "description_label": "Description",
+    "quantity_label": "Qty",
+    "price_label": "Price",
+    "total_label": "Total",
+    "total_summary_label": "Total",
+    "subtotal_label": "Subtotal",
+    "subtotal": 0,
+    "tax_label": "Tax",
+    "vat_label": "VAT",
+    "tax_rate": 0,
+    "vat_rate": 0,
+    "locale": "en-US",
+    "timezone": "UTC",
+    "include_decimals": true,
+    "include_units": false,
+    "include_qr": true,
+    "include_vat": false,
+    "include_tax": false,
+    "include_discount": false,
+    "discount_label": "Discount",
+    "title": "Invoice"
+  },
+  "publicUrl": "https://sendero.travel/invoice/test-token"
+}

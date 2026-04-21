@@ -20,7 +20,8 @@
     "./templates/format": "./src/templates/format.tsx"
   },
   "peerDependencies": {
-    "@sendero/database": "*"
+    "@sendero/database": "*",
+    "react": "^19.1.0"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.0",
@@ -31,6 +32,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/qrcode": "^1.5.5"
+    "@types/qrcode": "^1.5.5",
+    "react": "^19.1.0"
   }
 }
