@@ -13,7 +13,16 @@
     "./tenant": "./src/tenant.ts",
     "./middleware": "./src/middleware.ts",
     "./store": "./src/store.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./claims": "./src/claims.ts",
+    "./roles": "./src/roles.ts",
+    "./webhooks": "./src/webhooks.ts",
+    "./proxy": "./src/proxy.ts",
+    "./components/sign-in": "./src/components/sign-in.tsx",
+    "./components/sign-up": "./src/components/sign-up.tsx",
+    "./components/org-switcher": "./src/components/org-switcher.tsx",
+    "./components/user-button": "./src/components/user-button.tsx",
+    "./components/user-details": "./src/components/user-details.tsx"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.10.0",
