@@ -147,6 +147,16 @@ export const bookFlightWorkflow: WorkflowDef = {
           label: 'Release escrow to vendor + fee',
           args: { bookingId: $('reservation.bookingId') },
         },
+        {
+          kind: 'tool',
+          id: 'invoice',
+          tool: 'generate_booking_invoice',
+          label: 'Issue booking invoice',
+          args: {
+            bookingId: $('reservation.bookingId'),
+            settleTxHash: $('settle_escrow.txHash'),
+          },
+        },
       ],
       otherwise: [
         {
@@ -423,6 +433,16 @@ export const guestPrefundWorkflow: WorkflowDef = {
           tool: 'settle_booking',
           label: 'Release escrow to vendor + fee',
           args: { bookingId: $('reservation.bookingId') },
+        },
+        {
+          kind: 'tool',
+          id: 'invoice',
+          tool: 'generate_booking_invoice',
+          label: 'Issue booking invoice',
+          args: {
+            bookingId: $('reservation.bookingId'),
+            settleTxHash: $('settle_escrow.txHash'),
+          },
         },
       ],
       otherwise: [
