@@ -47,6 +47,7 @@
     "smoke:resume-settle": "bun run scripts/smoke-webhook-resume-settle.ts",
     "smoke:resume-cancel": "bun run scripts/smoke-webhook-resume-cancel.ts",
     "smoke:invoice-pdf": "bun run scripts/smoke-invoice-pdf-render.ts",
+    "smoke:invoice-booking": "bun run scripts/smoke-invoice-booking.ts",
     "faucet:drip": "bun run scripts/faucet-drip.ts"
   },
   "devDependencies": {
