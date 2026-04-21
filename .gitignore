@@ -31,3 +31,6 @@ apps/docs/.source/
 # Local agent scratch (per-session, not repo state)
 .agents/
 .claude/
+
+# Env backups (created by /vercel:bootstrap before destructive env changes)
+.env.local.backup-*
