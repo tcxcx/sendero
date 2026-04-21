@@ -6,10 +6,12 @@
  *        normalized via @sendero/whatsapp, then persisted against the
  *        Prisma ChannelIdentity table.
  *
- * This route is intentionally thin: it hands normalized messages to a
- * downstream agent router (TODO: wire the per-trip agent in Phase 3),
- * and applies BSUID identity changes to keep ChannelIdentity in sync.
- * No LLM call happens here — keeps p95 latency predictable.
+ * This route is intentionally thin: it hands normalized messages to
+ * the shared /api/agent/dispatch fan-in (which runs `runAgentTurn`
+ * from `@sendero/agent` — cap preflight, session lookup, workflow
+ * catalog injection, idempotent meter write), and applies BSUID
+ * identity changes to keep ChannelIdentity in sync. No LLM call
+ * happens here — keeps p95 latency predictable.
  */
 
 import { NextResponse, type NextRequest } from 'next/server';

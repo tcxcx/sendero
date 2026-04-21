@@ -3,16 +3,24 @@
  *
  * Verifies HMAC + 5-min replay window, responds to `url_verification`
  * challenge, persists a ChannelIdentity on every user event, then
- * short-circuits — actual handling (mentions, DMs) lands in Phase 3.
+ * dispatches DMs + app-mentions to the shared /api/agent/dispatch
+ * fan-in. Reply is posted back via chat.postMessage in the originating
+ * thread (thread_ts preserved for proper threading).
+ *
+ * Slack requires a <3s ack; the agent dispatch fires-and-forgets and
+ * we return 200 immediately to Slack.
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 import {
+  createSlackClient,
   deriveTenantKey,
   isUrlVerificationChallenge,
+  postMessage,
   verifySlackSignature,
+  type SlackEvent,
   type SlackEventEnvelope,
 } from '@sendero/slack';
 
@@ -90,10 +98,92 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // TODO (Phase 3): dispatch to the per-trip agent based on event.type
-  // (message.im, app_mention, assistant_thread_started).
+  // Dispatch DMs + app-mentions to /api/agent/dispatch. Fire-and-forget
+  // so Slack gets its ack inside the 3s window. Ignore bot messages to
+  // avoid infinite loops when the agent's own reply re-enters the
+  // webhook.
+  const ev = parsed.event;
+  if (ev && shouldDispatchToAgent(ev) && userId && ev.text) {
+    void dispatchAndReply({
+      req,
+      tenantId: install.tenantId,
+      botToken: install.botToken,
+      event: ev,
+      eventId: parsed.event_id ?? null,
+      userId,
+    }).catch(err => {
+      console.error('[slack/events] dispatch failed:', err);
+    });
+  }
 
   return NextResponse.json({ ok: true });
+}
+
+function shouldDispatchToAgent(event: SlackEvent): boolean {
+  // Never loop on our own replies.
+  if (event.bot_id || event.subtype === 'bot_message') return false;
+
+  // DMs to the bot.
+  if (event.type === 'message' && (event as SlackEvent).channel_type === 'im') return true;
+
+  // Explicit mentions in channels.
+  if (event.type === 'app_mention') return true;
+
+  return false;
+}
+
+async function dispatchAndReply(args: {
+  req: NextRequest;
+  tenantId: string;
+  botToken: string;
+  event: SlackEvent;
+  eventId: string | null;
+  userId: string;
+}): Promise<void> {
+  const dispatchUrl = new URL('/api/agent/dispatch', args.req.nextUrl.origin);
+
+  const body: {
+    tenantId: string;
+    userId: string;
+    channel: 'slack';
+    text: string;
+    turnId?: string;
+  } = {
+    tenantId: args.tenantId,
+    userId: args.userId,
+    channel: 'slack',
+    text: (args.event.text ?? '').slice(0, 4000),
+  };
+  if (args.eventId) body.turnId = `slack:${args.eventId}`;
+
+  const response = await fetch(dispatchUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const reason = await response.text();
+    console.error(`[slack/events] dispatch HTTP ${response.status}:`, reason);
+    return;
+  }
+
+  const json = (await response.json()) as { text?: string };
+  if (!json.text) return;
+
+  const channel = args.event.channel;
+  if (!channel) return;
+
+  const client = createSlackClient(args.botToken);
+  try {
+    await postMessage(client, {
+      channel,
+      text: json.text,
+      threadTs: args.event.thread_ts ?? args.event.ts,
+    });
+  } catch (err) {
+    console.error('[slack/events] postMessage failed:', err);
+  }
 }
 
 async function resolveInstall(

@@ -75,6 +75,9 @@ export const env = {
   slackClientSecret: () => process.env.SLACK_CLIENT_SECRET || null,
   slackRedirectUri: () => process.env.SLACK_REDIRECT_URI || null,
   slackStateSecret: () => process.env.SLACK_STATE_SECRET || null,
+
+  // ── Concierge / in-trip companion ─────────────────────────────────
+  googlePlacesApiKey: () => process.env.GOOGLE_PLACES_API_KEY || null,
 };
 
 export * from './require';

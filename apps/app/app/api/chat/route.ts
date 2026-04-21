@@ -12,19 +12,22 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
 import {
   buildProviderOptions,
+  buildSystemPrompt,
   directProviderModel,
   gatewayConfigured,
   type ModelTier,
+  renderWorkflowsBlock,
   selectModel,
 } from '@sendero/agent';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
+import { listWorkflows } from '@sendero/workflows';
 import { convertToModelMessages, type LanguageModel, stepCountIs, streamText } from 'ai';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-const SYSTEM_PROMPT = `You are Sendero, a B2B2C AI travel agent running on Circle's Arc L2.
+const SENDERO_PERSONA = `You are Sendero, a B2B2C AI travel agent running on Circle's Arc L2.
 
 You book flights for corporate travelers using Duffel, and every booking is
 settled on-chain via an ERC-8183 job backed by USDC escrow. You have an
@@ -60,17 +63,6 @@ Treasury rebalance tools (Sendero corporate wallet on Arc):
   • swap_and_bridge        — composed: CCTP into Arc then swap to EURC
   • settle_split           — atomic commission fan-out on Arc
 
-Rebalance workflow (chain these when treasury liquidity is short):
-  1. check_treasury / gateway_balance — see what we have
-  2. If Arc is short but other chains have USDC →  gateway_transfer
-  3. If USD-side is short but USDC total is fine →  swap_tokens
-  4. If both are short AND the booking needs EURC →  swap_and_bridge
-  5. (Optional) send_tokens to top up the user wallet before they sign the
-     on-chain settlement
-Use these BEFORE attempting a book_flight whose totalAmount exceeds the
-Arc USDC treasury balance. Explain what you're doing in one short sentence
-each step.
-
 Keep every response under 2 sentences unless the user asks a question. When
 you call a tool, a single clause like "Searching flights…" is enough.
 
@@ -101,16 +93,24 @@ function pickModel(tier: ModelTier = 'fast'): Picked | null {
   return null;
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const messages = body.messages;
-  const traveler = body.traveler as { name?: string; email?: string; phone?: string } | undefined;
+interface ChatBody {
+  messages: Parameters<typeof convertToModelMessages>[0];
+  traveler?: { name?: string; email?: string; phone?: string };
+  context?: Record<string, string | number | boolean | null | object>;
+  tier?: ModelTier;
+  locale?: string;
+}
 
-  const runtimeContextJson = body.context ? JSON.stringify(body.context, null, 2) : null;
+export async function POST(req: NextRequest) {
+  const body = (await req.json()) as ChatBody;
+  const messages = body.messages;
+  const traveler = body.traveler;
+
+  const runtimeContextJson = body.context ? JSON.stringify(body.context, null, 2) : undefined;
 
   // Chat tier defaults to 'fast' (sonnet-class) for responsive replies.
   // A trailing body.tier override lets power users force a smart/cheap turn.
-  const requestedTier = (body.tier as ModelTier | undefined) ?? 'fast';
+  const requestedTier: ModelTier = body.tier ?? 'fast';
   const picked = pickModel(requestedTier);
   if (!picked) {
     return NextResponse.json(
@@ -128,19 +128,21 @@ export async function POST(req: NextRequest) {
 
   console.log(`[chat] using ${picked.label}`);
 
-  const systemPrompt = runtimeContextJson
-    ? `${SYSTEM_PROMPT}
+  // Same section-based builder @sendero/agent uses for dispatch — ensures
+  // every channel sees the workflow catalog as the canonical orchestration
+  // surface, not ad-hoc tool chains.
+  const systemPrompt = buildSystemPrompt({
+    persona: SENDERO_PERSONA,
+    locale: body.locale,
+    runtimeContext: runtimeContextJson,
+    workflowCatalog: renderWorkflowsBlock(
+      listWorkflows().map(w => ({ id: w.id, label: w.label, description: w.description }))
+    ),
+  });
 
-— Live runtime context (auto-injected every turn; reflect on it before
-  responding; if it contains a recent error, address it directly and
-  offer a concrete next step) —
-\`\`\`json
-${runtimeContextJson}
-\`\`\``
-    : SYSTEM_PROMPT;
-
-  const onError = ({ error }: { error: unknown }) => {
-    const msg = error instanceof Error ? error.message : String(error);
+  const onError: Parameters<typeof streamText>[0]['onError'] = event => {
+    const err = event?.error;
+    const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : 'unknown';
     console.error(`[chat] ${picked.label} error:`, msg);
   };
 

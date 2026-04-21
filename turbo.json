@@ -49,6 +49,7 @@
     "PONDER_ESCROW_START_BLOCK",
     "PONDER_LOG_LEVEL",
     "NEXT_PUBLIC_INDEXER_URL",
+    "GOOGLE_PLACES_API_KEY",
     "NEXT_PUBLIC_ARC_CHAIN_ID",
     "NEXT_PUBLIC_ARC_ESCROW_ADDRESS",
     "SENDERO_GUEST_ESCROW",
@@ -282,12 +283,7 @@
     },
     "@sendero/indexer#typecheck": {
       "dependsOn": ["@sendero/indexer#codegen"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "tsconfig.json",
-        "generated/**",
-        "!node_modules/**"
-      ],
+      "inputs": ["$TURBO_DEFAULT$", "tsconfig.json", "generated/**", "!node_modules/**"],
       "outputs": ["*.tsbuildinfo", ".tsbuildinfo"]
     },
     "start": {

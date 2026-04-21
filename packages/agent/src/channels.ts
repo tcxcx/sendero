@@ -74,11 +74,29 @@ export interface AgentOutput {
 }
 
 /**
+ * Shape of the raw request an adapter sees at the webhook edge — the
+ * body and any headers it needs to verify. Stays framework-agnostic
+ * (no NextRequest / Hono) so tests and edge workers share the same
+ * adapter.
+ */
+export interface SignVerifyInput {
+  rawBody: string;
+  headers: Record<string, string | null | undefined>;
+}
+
+export type SignVerifyResult = { ok: true } | { ok: false; reason: string };
+
+/**
  * A ChannelAdapter only needs to translate.
  * Inbound: native envelope → AgentInput[]
  * Outbound: AgentOutput + context → native API call (send WA / post Slack / return JSON)
  *
  * Everything else (auth, memory, meter, policy) lives in the engine.
+ *
+ * `signVerify` and `resolveSession` are optional — adapters that don't
+ * need them (e.g. an internal test harness) can omit. Channels with a
+ * custom subject-key derivation override `resolveSession`; the engine
+ * falls back to `subjectKeyForChannel` from ./session when absent.
  */
 export interface ChannelAdapter<In = unknown, OutArgs = unknown> {
   readonly channel: Channel;
@@ -86,4 +104,12 @@ export interface ChannelAdapter<In = unknown, OutArgs = unknown> {
   parseInbound: (rawBody: In, ctx: { tenantId: string }) => Promise<AgentInput[]>;
   /** Ship an AgentOutput back to the traveler. */
   sendOutbound: (output: AgentOutput, args: OutArgs) => Promise<void>;
+  /** Verify signature / replay window on the raw webhook request. */
+  signVerify?: (args: SignVerifyInput) => SignVerifyResult | Promise<SignVerifyResult>;
+  /**
+   * Compute the channel-agnostic subject key for this actor. Defaults
+   * to `${channel}:${userId}` via the engine. Adapters override for
+   * richer keys (e.g. Slack `${enterpriseId}:${teamId}:${userId}`).
+   */
+  resolveSession?: (input: AgentInput) => string | null | Promise<string | null>;
 }

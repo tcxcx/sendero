@@ -39,6 +39,7 @@ import {
   type ModelTier,
   selectModel,
 } from './models';
+import { renderWorkflowsBlock } from './prompt';
 import { appendTurn, type ConversationState, type SessionStore } from './session';
 
 export interface TripSnapshot {
@@ -132,7 +133,9 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
       ? await args.loadTrip({ tripId: input.actor.tripId, tenantId: input.actor.tenantId })
       : null;
 
-  const workflowsBlock = renderWorkflowsBlock();
+  const workflowsBlock = renderWorkflowsBlock(
+    listWorkflows().map(w => ({ id: w.id, label: w.label, description: w.description }))
+  );
   const recentTurnsBlock = renderRecentTurns(state);
   const systemPrompt = [
     buildAgentContext({ localeSlice, trip }),
@@ -241,17 +244,6 @@ function subjectKeyFromActor(input: AgentInput): string {
   // Simple default: channel:userId. Consumers can override via meta.subjectKey.
   const metaKey = (input.meta?.subjectKey as string | undefined) ?? null;
   return metaKey ?? `${input.channel}:${input.actor.userId}`;
-}
-
-function renderWorkflowsBlock(): string {
-  const workflows = listWorkflows();
-  if (workflows.length === 0) return '';
-  return [
-    '## Workflows available (prefer over free-form tool chains)',
-    ...workflows.map(
-      w => `- \`${w.id}\` — ${w.label}${w.description ? `\n    ${w.description}` : ''}`
-    ),
-  ].join('\n');
 }
 
 function renderRecentTurns(state: ConversationState): string {

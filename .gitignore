@@ -34,3 +34,6 @@ apps/docs/.source/
 
 # Env backups (created by /vercel:bootstrap before destructive env changes)
 .env.local.backup-*
+
+# Turborepo
+.turbo
