@@ -78,6 +78,9 @@ export const env = {
 
   // ── Concierge / in-trip companion ─────────────────────────────────
   googlePlacesApiKey: () => process.env.GOOGLE_PLACES_API_KEY || null,
+
+  // ── Invoicing (Phase 11b) ─────────────────────────────────────────
+  invoiceSigningSecret: () => process.env.INVOICE_SIGNING_SECRET || null,
 };
 
 export * from './require';
