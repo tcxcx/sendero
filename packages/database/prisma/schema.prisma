@@ -181,6 +181,22 @@ enum CapPeriod {
   monthly
 }
 
+enum InvoiceKind {
+  booking
+  platform_bill
+  credit_note
+}
+
+enum InvoiceStatus {
+  draft
+  issued
+  sent
+  viewed
+  paid
+  overdue
+  void
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TENANCY
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,8 +214,16 @@ model Tenant {
   arcAddress     String? // treasury MSCA on Arc (0x…)
   parentTenantId String?
   metadata       Json? // free-form; logo, phone, custom branding
-  createdAt      DateTime    @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime    @updatedAt @db.Timestamptz(6)
+
+  legalName           String?
+  billingContactEmail String?
+  billingAddress      Json?
+  taxId               String?
+  brandLogoUrl        String?
+  brandColors         Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   parent   Tenant?  @relation("TenantHierarchy", fields: [parentTenantId], references: [id], onDelete: SetNull)
   children Tenant[] @relation("TenantHierarchy")
@@ -221,6 +245,7 @@ model Tenant {
   whatsappLinkTokens WhatsAppLinkToken[]
   spendCaps          TenantSpendCap[]
   nanopayBatches     NanopayBatch[]
+  invoices           Invoice[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -411,6 +436,7 @@ model Booking {
   createdBy User?     @relation("BookingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   settlements Settlement[]
+  invoice     Invoice?
 
   @@unique([tenantId, externalId])
   @@index([tenantId, createdAt])
@@ -498,6 +524,7 @@ model MeterEvent {
   /// Idempotency key — unique per (tenantId, key). Duplicate writes
   /// from retried webhook deliveries no-op at the DB layer.
   idempotencyKey String?
+  invoiceRef     String?
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -507,6 +534,7 @@ model MeterEvent {
   @@index([userId, at])
   @@index([toolName, at])
   @@index([status, at])
+  @@index([tenantId, status, invoiceRef])
   @@map("meter_events")
 }
 
@@ -800,6 +828,107 @@ model WebhookEvent {
   @@unique([provider, externalId])
   @@index([provider, processedAt])
   @@map("webhook_events")
+}
+
+model Invoice {
+  id       String        @id @default(cuid())
+  tenantId String
+  kind     InvoiceKind
+  status   InvoiceStatus @default(draft)
+
+  number   String
+  issuedAt DateTime? @db.Timestamptz(6)
+  dueAt    DateTime? @db.Timestamptz(6)
+  paidAt   DateTime? @db.Timestamptz(6)
+
+  fromName    String
+  fromAddress Json?
+  fromTaxId   String?
+  fromLogoUrl String?
+
+  toName    String
+  toEmail   String
+  toAddress Json?
+  toTaxId   String?
+
+  currency       String  @default("USD") @db.Char(3)
+  subtotalMicro  BigInt  @default(0)
+  discountMicro  BigInt  @default(0)
+  taxRate        Decimal @default(0) @db.Decimal(7, 4)
+  taxAmountMicro BigInt  @default(0)
+  vatRate        Decimal @default(0) @db.Decimal(7, 4)
+  vatAmountMicro BigInt  @default(0)
+  totalMicro     BigInt  @default(0)
+
+  template Json
+
+  bookingId String? @unique
+
+  periodStart DateTime? @db.Timestamptz(6)
+  periodEnd   DateTime? @db.Timestamptz(6)
+
+  cfdiRef String?
+
+  pdfBlobUrl    String?
+  pdfRenderedAt DateTime? @db.Timestamptz(6)
+
+  publicToken String @unique
+
+  metadata Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  booking   Booking?          @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  lineItems InvoiceLineItem[]
+  payments  InvoicePayment[]
+
+  @@unique([tenantId, number])
+  @@index([tenantId, status, createdAt])
+  @@index([kind, periodStart])
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id             String  @id @default(cuid())
+  invoiceId      String
+  position       Int
+  description    String
+  quantity       Decimal @default(1) @db.Decimal(12, 4)
+  unitPriceMicro BigInt
+  amountMicro    BigInt
+  sourceKind     String?
+  sourceRef      String?
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, position])
+  @@map("invoice_line_items")
+}
+
+model InvoicePayment {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  paidAt      DateTime @default(now()) @db.Timestamptz(6)
+  amountMicro BigInt
+  method      String
+  txHash      String?
+  reference   String?
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, paidAt])
+  @@map("invoice_payments")
+}
+
+model InvoiceSequence {
+  tenantId String
+  year     Int
+  nextSeq  Int    @default(1)
+
+  @@id([tenantId, year])
+  @@map("invoice_sequences")
 }
 
 /// A batched USDC settlement of many MeterEvents. One on-chain transfer
