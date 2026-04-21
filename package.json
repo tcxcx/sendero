@@ -42,6 +42,9 @@
     "env:validate": "bun run --cwd packages/sendero-env validate",
     "smoke:escrow": "bun run scripts/smoke-guest-escrow.ts",
     "smoke:nanopay": "bun run scripts/smoke-nanopay-batch.ts",
+    "smoke:retry": "bun run scripts/smoke-nanopay-retry.ts",
+    "smoke:resume-settle": "bun run scripts/smoke-webhook-resume-settle.ts",
+    "smoke:resume-cancel": "bun run scripts/smoke-webhook-resume-cancel.ts",
     "faucet:drip": "bun run scripts/faucet-drip.ts"
   },
   "devDependencies": {
