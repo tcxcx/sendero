@@ -119,6 +119,10 @@ export const faucetDripTool: ToolDef = {
   },
   async handler(input) {
     const parsed = faucetInput.parse(input);
-    return await requestFaucetDrip(parsed);
+    return await requestFaucetDrip({
+      address: parsed.address,
+      blockchain: parsed.blockchain,
+      token: parsed.token,
+    });
   },
 };

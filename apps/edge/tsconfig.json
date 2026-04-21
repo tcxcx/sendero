@@ -13,5 +13,10 @@
       "@sendero/tools/types": ["../../packages/tools/src/types.ts"]
     }
   },
-  "include": ["src/**/*.ts", "api/**/*.ts", "../../packages/tools/src/**/*.ts"]
+  "include": ["src/**/*.ts", "api/**/*.ts", "../../packages/tools/src/**/*.ts"],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "../../packages/tools/src/**/*.test.ts"
+  ]
 }

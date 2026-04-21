@@ -22,6 +22,7 @@
     "@sendero/arc": "*",
     "@sendero/circle": "*",
     "@sendero/duffel": "*",
+    "@sendero/env": "*",
     "@sendero/guest": "*",
     "@sendero/nanopayments": "*",
     "@sendero/notifications": "*",
