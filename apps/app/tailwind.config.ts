@@ -1,0 +1,20 @@
+import type { Config } from 'tailwindcss';
+
+export default {
+  content: [
+    './app/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+    '../../packages/auth/src/**/*.{ts,tsx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: '#fb542b',
+      },
+      fontFamily: {
+        sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-geist-mono)', 'ui-monospace', 'monospace'],
+      },
+    },
+  },
+} satisfies Config;
