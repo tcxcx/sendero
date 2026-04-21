@@ -19,6 +19,7 @@ import {
   prefundTripTool,
   reserveBookingTool,
 } from './guest-escrow';
+import { confirmDuffelTool } from './confirm-duffel';
 import type { ToolDef } from './types';
 
 export type { ToolDef, ToolContext, JsonSchemaObject } from './types';
@@ -32,6 +33,7 @@ export {
   prefundTripTool,
   reserveBookingTool,
 } from './guest-escrow';
+export { confirmDuffelTool } from './confirm-duffel';
 
 /**
  * Ordered canonical list of every tool Sendero ships. Register here
@@ -58,6 +60,7 @@ export const toolList: ToolDef[] = [
   guestClaimLinkTool,
   reserveBookingTool,
   commitBookingTool,
+  confirmDuffelTool,
   logAgentActionTool,
 ];
 
