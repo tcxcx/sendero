@@ -1,13 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "bun install",
-  "buildCommand": "echo 'no build step — Hono handler'",
+  "installCommand": "bun install --frozen-lockfile",
+  "buildCommand": "bun run build",
   "ignoreCommand": "bash -c '[[ \"$VERCEL_GIT_COMMIT_REF\" == \"main\" || \"$VERCEL_GIT_COMMIT_REF\" == \"development\" ]] && exec npx turbo-ignore @sendero/edge; exit 0'",
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "functions": {
     "api/[[...route]].ts": {
       "maxDuration": 60,
-      "includeFiles": "packages/tools/src/**"
+      "includeFiles": "../../packages/**"
     }
   }
 }

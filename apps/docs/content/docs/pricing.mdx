@@ -1,59 +1,79 @@
 ---
 title: Pricing
-description: Per-call USDC pricing, included quotas, and how to read the meter.
+description: Per-call USDC pricing, included quotas, spend caps, and how to read the meter.
 ---
 
-Sendero charges per tool call in USDC — no subscription, no seat license, no minimum. Pay for what your agent actually does.
+Sendero charges when the agent acts. There are no seat licenses and no SaaS minimums.
 
 ## Tier comparison
 
-| Tier          | Who it's for                           | Price per call | Included per month | Support    |
-| ------------- | -------------------------------------- | -------------- | ------------------ | ---------- |
-| **Sandbox**   | Hackers, demos, prototyping            | Free (mock)    | 10,000 mock calls  | Community  |
-| **Pay-go**    | Indie agents, side projects            | List price     | 0                  | Community  |
-| **Studio**    | Startups shipping customer-facing bots | List price × 0.9 | $20 credit         | Slack      |
-| **Partner**   | OTAs, TMCs, airlines                   | Negotiated      | Bespoke            | Dedicated  |
+| Tier | Who it is for | Price per call | Included per month | Support |
+| ---- | ------------- | -------------- | ------------------ | ------- |
+| **Sandbox** | Hackers, demos, prototyping | Free or testnet priced | 10,000 mock calls | Community |
+| **Pay-go** | Indie agents and small operators | List price | 0 | Community |
+| **Studio** | Startups shipping customer-facing travel agents | List price x 0.9 | $20 credit | Slack |
+| **Partner** | OTAs, TMCs, agencies, airlines | Negotiated | Bespoke | Dedicated |
 
 ## Per-tool list price
 
-Prices below are the base USDC charged per successful call. See the [tool catalog](/docs/tools/overview) for what each one does.
+Prices below are the base USDC charged per successful direct HTTP tool call. See the [tool catalog](/docs/tools/overview) for descriptions and workflow guidance.
 
-| Tool                | Price (USDC) |
-| ------------------- | ------------ |
-| `check_treasury`    | $0.0005      |
-| `check_policy`      | $0.0005      |
-| `rate_agent`        | $0.0005      |
-| `quote_fx`          | $0.0008      |
-| `gateway_balance`   | $0.001       |
-| `search_flights`    | $0.002       |
-| `search_hotels`     | $0.002       |
-| `send_tokens`       | $0.003       |
-| `gateway_transfer`  | $0.003       |
-| `swap_tokens`       | $0.005       |
-| `bridge_to_arc`     | $0.005       |
-| `book_flight`       | $0.008       |
-| `swap_and_bridge`   | $0.01        |
-| `settle_split`      | $0.01        |
+| Tool | Price (USDC) |
+| ---- | ------------ |
+| `check_treasury` | $0.0005 |
+| `check_policy` | $0.0005 |
+| `rate_agent` | $0.0005 |
+| `log_agent_action` | $0.0005 |
+| `faucet_drip` | $0.0005 |
+| `quote_fx` | $0.0008 |
+| `gateway_balance` | $0.001 |
+| `guest_claim_link` | $0.001 |
+| `search_flights` | $0.002 |
+| `search_hotels` | $0.002 |
+| `recommend_restaurants` | $0.002 |
+| `send_tokens` | $0.003 |
+| `gateway_transfer` | $0.003 |
+| `prefund_trip` | $0.003 |
+| `reserve_booking` | $0.003 |
+| `commit_booking` | $0.003 |
+| `confirm_duffel` | $0.003 |
+| `settle_booking` | $0.003 |
+| `cancel_booking` | $0.003 |
+| `swap_tokens` | $0.005 |
+| `bridge_to_arc` | $0.005 |
+| `generate_booking_invoice` | $0.005 |
+| `book_flight` | $0.008 |
+| `swap_and_bridge` | $0.01 |
+| `settle_split` | $0.01 |
+
+## Production billing
+
+Production tenants can use a segment-aware catalog. A corporate or AI-agent booking can carry a fixed confirmation fee plus a GMV take rate, while low-risk reads stay cheap. The billing layer also supports tenant spend caps and idempotent meter events so retries do not double-charge.
 
 ## Reading the meter
 
-Every response carries a `meter` object. For on-chain tools it includes the Arc tx hash so you can reconcile against an independent block explorer:
+The direct HTTP tool surface returns payment metadata:
 
 ```json
 {
-  "meter": {
-    "tool": "settle_split",
-    "usdc_atomic": "10000",
-    "usdc_display": "0.01",
-    "settled_tx": "0xabc..."
-  }
+  "tool": "search_flights",
+  "paid": true,
+  "priceUsdc": "0.002",
+  "payment": {
+    "payer": "0x...",
+    "amountUsdc": "0.002",
+    "settlementTx": "0x..."
+  },
+  "result": {}
 }
 ```
 
+For tenant-level billing, meter events roll up by tenant, action, channel, and idempotency key.
+
 ## Failures are free
 
-If a tool errors before producing a result, no payment is captured. The EIP-3009 authorization you signed is discarded server-side; no refund is needed.
+If a tool errors before producing a result, no payment is captured. The EIP-3009 authorization is discarded server-side; no refund is needed.
 
-## Ethereum mainnet comparison
+## Why Arc
 
-For reference, a single USDC transfer on Ethereum mainnet (30 gwei, ETH at $3,400) costs roughly **$2.14**. A Sendero on-chain tool call at $0.003 is **~700× cheaper** — and carries the Duffel call, the policy check, and the meter receipt at the same time.
+For reference, a single USDC transfer on Ethereum mainnet can cost dollars in gas. Sendero's Arc-native tool calls can stay below a cent while still producing an auditable payment trail.

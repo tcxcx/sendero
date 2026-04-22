@@ -1,72 +1,113 @@
 ---
 title: MCP integration
-description: Expose Sendero's 14 tools to Claude Desktop, ChatGPT Apps, Cursor, or any MCP-compatible host.
+description: Connect Sendero tools to Claude Desktop, Cursor, Zed, or your own MCP-compatible agent host.
 ---
 
-Sendero ships a Model Context Protocol server at `https://edge.sendero.travel/mcp`. Any host that speaks MCP can enumerate the 14 tools, call them, and surface results inline.
+Sendero exposes a Streamable HTTP MCP server at:
+
+```text
+https://edge.sendero.travel/mcp
+```
+
+The Next.js app also serves the same protocol at:
+
+```text
+https://app.sendero.travel/api/mcp
+```
+
+Both endpoints derive tools from `@sendero/tools`, so web chat, WhatsApp, Slack, and MCP share one registry.
+
+## Protocol
+
+The MCP surface speaks JSON-RPC 2.0. Start with `initialize`, then `tools/list`, then `tools/call`.
+
+```bash
+curl -X POST https://edge.sendero.travel/mcp \
+  -H "content-type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {}
+  }'
+```
+
+```bash
+curl -X POST https://edge.sendero.travel/mcp \
+  -H "content-type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list"
+  }'
+```
+
+Call a tool:
+
+```bash
+curl -X POST https://edge.sendero.travel/mcp \
+  -H "content-type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "search_flights",
+      "arguments": {
+        "origin": "MEX",
+        "destination": "SCL",
+        "departureDate": "2026-05-15",
+        "passengers": 2,
+        "cabinClass": "economy"
+      }
+    }
+  }'
+```
+
+MCP tool results are returned as text content containing formatted JSON. Parse that JSON before threading values such as offer ids, trip ids, or booking ids into later calls.
 
 ## Claude Desktop
 
-Edit your config at `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+If your MCP host can connect to remote Streamable HTTP servers directly, point it at `https://edge.sendero.travel/mcp`.
+
+If your host expects a local command, wrap the remote endpoint with your preferred MCP proxy. Keep these environment variables available to the proxy:
 
 ```json
 {
-  "mcpServers": {
-    "sendero": {
-      "command": "npx",
-      "args": ["-y", "@sendero/mcp-client"],
-      "env": {
-        "SENDERO_API_KEY": "sk_test_...",
-        "SENDERO_EDGE_URL": "https://edge.sendero.travel"
-      }
-    }
-  }
+  "SENDERO_EDGE_URL": "https://edge.sendero.travel",
+  "SENDERO_API_KEY": "sk_test_..."
 }
 ```
 
-Restart Claude Desktop. The tools appear in the tool palette automatically — ask "search flights from Mexico City to Santiago next Friday" and Claude will call `search_flights` and render the offers inline.
+After restart, ask the host to list Sendero tools. Then ask for a scoped action such as:
 
-## ChatGPT Apps
+> Search flights from Mexico City to Santiago next Friday for two passengers.
 
-ChatGPT Apps reads an OpenAPI spec. Point it at Sendero's MCP-to-REST shim:
+For production booking, have the host follow [agent-to-agent booking](/docs/agent-to-agent-booking) and prefer the named `sendero.book_flight` workflow where available.
 
-```yaml
-servers:
-  - url: https://edge.sendero.travel/apps
-security:
-  - SenderoKey: []
-components:
-  securitySchemes:
-    SenderoKey:
-      type: http
-      scheme: bearer
+## Cursor, Zed, and custom agents
+
+Custom agents should:
+
+1. Read `https://edge.sendero.travel/.well-known/llms.txt`.
+2. Initialize MCP at `https://edge.sendero.travel/mcp`.
+3. Call `tools/list`.
+4. Select tools by schema, not by prompt text.
+5. Use workflow APIs for multi-step booking, approvals, ticketing waits, settlement, and invoices.
+
+## Direct HTTP fallback
+
+Some agent platforms do not speak MCP. Use the x402-gated HTTP surface instead:
+
+```text
+GET  https://edge.sendero.travel/tools
+POST https://edge.sendero.travel/tools/search_flights
 ```
 
-Full OpenAPI lives at `https://edge.sendero.travel/apps/openapi.json`.
+Those endpoints use the `PAYMENT-REQUIRED` and `Payment-Signature` headers described in [x402 nanopayments](/docs/x402-nanopayments).
 
-## Cursor / Zed / your own agent
+## Payment notes
 
-Any client that understands MCP over SSE works out of the box. Connect to:
+MCP is the schema and tool-call interface. Direct paid HTTP endpoints are the x402 interface. Public deployments can enforce API keys or x402 at the edge, so clients should always send an `Authorization: Bearer ...` header even when local development routes do not inspect it.
 
-```
-https://edge.sendero.travel/mcp/sse?api_key=sk_test_...
-```
-
-## Payments across hosts
-
-Every tool call is metered identically regardless of the host. The MCP client is responsible for signing the EIP-3009 authorization or carrying the bearer that unlocks your Gateway-backed balance. See [x402 nanopayments](/docs/x402-nanopayments) for the wire protocol.
-
-## What the host sees
-
-When the host enumerates tools, it receives this shape:
-
-```json
-{
-  "name": "search_flights",
-  "description": "Search real flight inventory via Duffel.",
-  "input_schema": { /* JSON Schema */ },
-  "pricing": { "asset": "USDC", "amount": "0.002", "network": "arc" }
-}
-```
-
-The `pricing` block is the Sendero extension — non-MCP hosts ignore it; MCP hosts that speak x402 show the price to the user before confirming the call.
+For irreversible actions, the calling agent must get user or operator approval before booking, paying, cancelling, or changing travel.

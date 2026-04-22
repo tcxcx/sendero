@@ -1,0 +1,194 @@
+---
+title: Agent-to-agent booking
+description: How another AI agent can delegate travel work to Sendero over MCP, x402 tools, and workflow APIs.
+---
+
+Use Sendero as a travel sub-agent. Your agent keeps the customer relationship; Sendero handles live inventory, policy, escrow, ticketing, settlement, invoices, and trip-state memory.
+
+There are two integration modes:
+
+| Mode | Best for | Entry point |
+| ---- | -------- | ----------- |
+| MCP tool calls | Agent hosts such as Claude Desktop, Cursor, Zed, or custom LLM runtimes that want schema discovery. | `POST https://edge.sendero.travel/mcp` |
+| Workflow delegation | Production agents that want Sendero to run the whole booking lifecycle with pauses, webhooks, and invoices. | `POST https://app.sendero.travel/api/workflows/run` |
+
+Read `/.well-known/llms.txt` first. It points agents at the current docs, tool catalog, safety rules, and canonical endpoints.
+
+## Delegated flight booking
+
+A full flight booking is not one tool call. It is an escrow-backed workflow:
+
+1. Resolve the traveler and tenant.
+2. Prefund a trip budget with `prefund_trip`.
+3. Send the traveler the claim link, or let the traveler claim from WhatsApp, Slack, email, or web.
+4. Run `sendero.book_flight` with the claimed `tripId`, route, dates, passenger count, cabin, and optional policy id.
+5. Sendero searches Duffel inventory with `search_flights`.
+6. Sendero checks policy with `check_policy`.
+7. Sendero reserves upper-bound escrow with `reserve_booking`.
+8. Sendero holds the Duffel offer with `book_flight`.
+9. Sendero commits the actual vendor amount with `commit_booking`.
+10. The workflow pauses until the Duffel ticketing webhook arrives.
+11. If ticketed, Sendero calls `confirm_duffel`, `settle_booking`, and `generate_booking_invoice`.
+12. If ticketing fails, Sendero calls `cancel_booking` and refunds unspent escrow.
+
+The same workflow can pause for Slack approvals, traveler OTP, Duffel ticketing, or other external events. Do not reimplement those waits in your own agent unless you need custom orchestration.
+
+## Discover capabilities
+
+MCP clients should initialize, then list tools:
+
+```bash
+curl -X POST https://edge.sendero.travel/mcp \
+  -H "content-type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {}
+  }'
+```
+
+```bash
+curl -X POST https://edge.sendero.travel/mcp \
+  -H "content-type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list"
+  }'
+```
+
+Workflow clients should list named plans:
+
+```bash
+curl https://app.sendero.travel/api/workflows/list
+```
+
+Use named workflows when an intent matches. Use raw tools only for low-level operations or custom flows.
+
+## Start a booking workflow
+
+Call `/api/workflows/run` from your backend. Pass stable tenant and user identifiers from your system; Sendero uses them for metering, policy, session memory, and audit logs.
+
+```bash
+curl -X POST https://app.sendero.travel/api/workflows/run \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $SENDERO_INTERNAL_TOKEN" \
+  -d '{
+    "workflowId": "sendero.book_flight",
+    "tenantId": "tenant_acme",
+    "userId": "traveler_ada",
+    "input": {
+      "tripId": "0x...",
+      "origin": "SFO",
+      "destination": "LHR",
+      "departureDate": "2026-06-11",
+      "returnDate": "2026-06-18",
+      "passengers": 1,
+      "cabinClass": "economy",
+      "policyId": "policy_default"
+    }
+  }'
+```
+
+If the response is `status: "paused"`, persist the returned `runId`, `nextStepId`, and pause reason. Sendero also persists pause state in its session store for first-party channels.
+
+## Resume a paused workflow
+
+Approvals, guest claims, and ticketing are event-driven. When your system receives the required resolution, resume the run:
+
+```bash
+curl -X POST https://app.sendero.travel/api/workflows/resume \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $SENDERO_INTERNAL_TOKEN" \
+  -d '{
+    "sessionId": "ses_...",
+    "resolution": {
+      "status": "approved",
+      "approvedBy": "manager@example.com"
+    }
+  }'
+```
+
+Duffel ticketing usually resumes through Sendero's Duffel webhook automatically. Slack approval buttons and WhatsApp claim links also resume the same workflow runner.
+
+## Call raw tools over MCP
+
+For agent hosts that only support MCP, call one tool at a time:
+
+```bash
+curl -X POST https://edge.sendero.travel/mcp \
+  -H "content-type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "search_flights",
+      "arguments": {
+        "origin": "SFO",
+        "destination": "LHR",
+        "departureDate": "2026-06-11",
+        "passengers": 1,
+        "cabinClass": "economy"
+      }
+    }
+  }'
+```
+
+MCP responses return a `content` array with JSON text. Parse the text before passing IDs to later tools.
+
+## Pay for direct HTTP tools
+
+If your agent does not speak MCP, call the x402-gated HTTP surface:
+
+```bash
+curl -X POST https://edge.sendero.travel/tools/search_flights \
+  -H "content-type: application/json" \
+  -H "Payment-Signature: $BASE64_X402_PAYMENT" \
+  -d '{
+    "origin": "SFO",
+    "destination": "LHR",
+    "departureDate": "2026-06-11",
+    "passengers": 1,
+    "cabinClass": "economy"
+  }'
+```
+
+The first request without `Payment-Signature` returns `402 Payment Required` plus a `PAYMENT-REQUIRED` header. Sign the described EIP-3009 authorization, retry the same request, and Sendero captures payment only if the tool succeeds.
+
+## What to persist
+
+Persist only safe identifiers:
+
+- `tenantId`, `userId`, `tripId`, `bookingId`, `workflowId`, `runId`, `sessionId`
+- offer ids and booking refs returned by Sendero
+- public invoice URLs and receipt tx hashes
+- caller idempotency keys
+
+Do not persist guest private-link fragments, plaintext claim codes, seed phrases, raw card data, Circle secrets, Clerk secrets, or webhook signing secrets.
+
+## Locale and channel context
+
+When another agent calls Sendero, include locale and channel context whenever possible:
+
+```json
+{
+  "channel": "mcp",
+  "locale": "es-AR",
+  "tenantId": "tenant_acme",
+  "userId": "traveler_ada",
+  "text": "Buscale un vuelo a Londres para junio, pero que no sea red-eye."
+}
+```
+
+Sendero uses locale for language, date style, currency assumptions, policy copy, airport slang, and traveler support tone. The same traveler session can continue later in WhatsApp or Slack.
+
+## Safety contract
+
+- Get explicit traveler or operator approval before booking, charging, cancelling, or changing an itinerary.
+- Reuse idempotency keys across retries.
+- Treat prices and availability as volatile until a hold or order is confirmed.
+- Use `check_policy` before committing corporate spend.
+- Prefer `sendero.book_flight` over manual tool chains for real bookings.
+- Keep an audit trail from action to payment receipt to invoice.

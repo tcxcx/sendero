@@ -37,6 +37,23 @@ export const TOOL_PRICING: Record<string, string> = {
 
   // Atomic 4-leg commission fan-out
   settle_split: '0.01',
+
+  // Escrow-backed delegated booking
+  prefund_trip: '0.003',
+  guest_claim_link: '0.001',
+  reserve_booking: '0.003',
+  commit_booking: '0.003',
+  confirm_duffel: '0.003',
+  settle_booking: '0.003',
+  cancel_booking: '0.003',
+  generate_booking_invoice: '0.005',
+  log_agent_action: '0.0005',
+
+  // Concierge / in-trip companion
+  recommend_restaurants: '0.002',
+
+  // Dev/test helper
+  faucet_drip: '0.0005',
 };
 
 /** USDC has 6 decimals on every chain. */

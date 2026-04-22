@@ -7,6 +7,8 @@
     "paths": {
       "@sendero/llms": ["../../packages/llms/src/index.ts"],
       "@sendero/llms/*": ["../../packages/llms/src/*"],
+      "@sendero/seo": ["../../packages/seo/src/index.ts"],
+      "@sendero/seo/*": ["../../packages/seo/src/*"],
       "@sendero/tools": ["../../packages/tools/src/index.ts"],
       "@sendero/tools/adapters/ai-sdk": ["../../packages/tools/src/adapters/ai-sdk.ts"],
       "@sendero/tools/adapters/mcp": ["../../packages/tools/src/adapters/mcp.ts"],
@@ -20,12 +22,14 @@
     "src/**/*.ts",
     "api/**/*.ts",
     "../../packages/llms/src/**/*.ts",
+    "../../packages/seo/src/**/*.ts",
     "../../packages/tools/src/**/*.ts"
   ],
   "exclude": [
     "**/*.test.ts",
     "**/*.test.tsx",
     "../../packages/llms/src/**/*.test.ts",
+    "../../packages/seo/src/**/*.test.ts",
     "../../packages/tools/src/**/*.test.ts"
   ]
 }

@@ -146,12 +146,33 @@ traveler sees the resolved decision in WhatsApp within seconds.`,
   {
     slug: 'mcp-tool-catalog',
     title: 'Sendero MCP tool catalog',
-    excerpt: 'Call search_flights, hold_booking, confirm_booking from any LLM.',
-    body: `Sendero exposes 14 tools over MCP plus a capability manifest at
-/.well-known/llms.txt. Authenticate with a prepaid USDC balance; every
-tool call is metered per the public pricing table.`,
+    excerpt: 'Call search_flights, prefund_trip, reserve_booking, and settle_booking from any LLM.',
+    body: `Sendero exposes a shared tool registry over MCP plus a capability
+manifest at /.well-known/llms.txt. Other agents can discover tools with
+tools/list, call individual tools with tools/call, or use Sendero's workflow
+API for complete booking flows that include escrow, policy, Duffel ticketing,
+settlement, and invoice generation.`,
     category: 'for-ai-agents',
-    updatedAt: '2026-04-20',
+    updatedAt: '2026-04-21',
+    locale: 'en-US',
+  },
+  {
+    slug: 'connect-another-agent',
+    title: 'Connect another AI agent to Sendero',
+    excerpt: 'Let your LLM delegate flight search, booking, escrow, and invoices to Sendero.',
+    body: `Start by reading /llms.txt. Then connect to the MCP endpoint at
+https://edge.sendero.travel/mcp and call initialize followed by tools/list.
+For a real booking, prefer the sendero.book_flight workflow instead of
+manually chaining tools. The workflow searches Duffel, checks policy, reserves
+prepaid escrow, holds the offer, waits for ticketing, settles the booking, and
+generates the invoice.
+
+Direct HTTP clients can call /tools/:name with x402 Payment-Signature headers.
+Use safe identifiers such as tenantId, userId, tripId, bookingId, and runId.
+Never persist guest private-link fragments, plaintext claim codes, raw card
+data, seed phrases, or API secrets.`,
+    category: 'for-ai-agents',
+    updatedAt: '2026-04-21',
     locale: 'en-US',
   },
   {

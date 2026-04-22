@@ -32,7 +32,14 @@ export function PrefundForm({ onSuccess }: { onSuccess: (result: PrefundResult) 
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(prefundFormSchema),
-    defaultValues: { budgetUsdc: '', guestEmail: '', expiresInDays: 30, require2fa: true },
+    defaultValues: {
+      budgetUsdc: '',
+      guestEmail: '',
+      guestName: '',
+      tripSummary: '',
+      expiresInDays: 30,
+      require2fa: true,
+    },
   });
 
   async function onSubmit(values: FormValues) {

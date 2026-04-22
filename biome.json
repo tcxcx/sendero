@@ -12,6 +12,8 @@
       "**",
       "!**/node_modules",
       "!**/.next",
+      "!**/.next.root-owned.*",
+      "!**/.next-sendero.root-owned.*",
       "!**/.turbo",
       "!**/.wrangler",
       "!**/dist",

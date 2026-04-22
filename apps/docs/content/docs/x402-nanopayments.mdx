@@ -1,83 +1,108 @@
 ---
 title: x402 nanopayments
-description: How an EIP-3009 signature becomes a paid tool response — the full protocol, end to end.
+description: How an EIP-3009 signature becomes a paid tool response.
 ---
 
-## One call, one sub-cent payment
+Sendero uses x402 for direct HTTP tool calls. Each call is quoted, signed, settled, and executed independently.
 
-x402 is an HTTP-native payment protocol. Sendero uses it so every tool call is pre-paid, atomic, and settle-on-success. You never buy credits and you never get invoiced.
-
-```
-Client -->  POST /mcp/call  { tool, input }
-Server <--  402 Payment Required + X-Payment-Required
-Client -->  POST /mcp/call  { tool, input, payment: { ...signed } }
-Server <--  200 OK          { data, meter: { settled_tx } }
+```text
+Client -->  POST /tools/search_flights       { input }
+Server <--  402 Payment Required             PAYMENT-REQUIRED: <base64 quote>
+Client -->  POST /tools/search_flights       Payment-Signature: <base64 signed payment>
+Server <--  200 OK                           { payment, result }
 ```
 
-## Step 1 — Quote
+## Step 1 - Quote
 
-The server replies with `402 Payment Required` and describes the charge:
+Call a paid tool without `Payment-Signature`:
+
+```bash
+curl -i -X POST https://edge.sendero.travel/tools/search_flights \
+  -H "content-type: application/json" \
+  -d '{
+    "origin": "SFO",
+    "destination": "LHR",
+    "departureDate": "2026-06-11",
+    "passengers": 1
+  }'
+```
+
+The response is `402 Payment Required` and includes a `PAYMENT-REQUIRED` header. Decode the base64 header to get the payment requirements:
 
 ```json
 {
-  "scheme": "eip3009",
-  "network": "arc",
-  "asset": "0xUSDC_ON_ARC",
-  "payTo": "0xSenderoSettlement",
-  "maxAmount": "2000",
-  "nonce": "0x...",
-  "validBefore": 1760000000
+  "x402Version": 2,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:5042002",
+      "asset": "0x3600000000000000000000000000000000000000",
+      "amount": "2000",
+      "payTo": "0x...",
+      "description": "Sendero tool call: search_flights",
+      "extra": {
+        "name": "GatewayWalletBatched",
+        "version": "1",
+        "verifyingContract": "0x0077777d7EBA4688BDeF3E311b846F25870A19B9"
+      }
+    }
+  ]
 }
 ```
 
-## Step 2 — Sign (EIP-3009)
+## Step 2 - Sign
 
-Your wallet signs a `transferWithAuthorization` — a gasless permit that lets Sendero pull the exact quoted amount on your behalf:
-
-```ts
-import { signTransferAuthorization } from '@x402/evm';
-
-const authorization = await signTransferAuthorization({
-  wallet: myViemAccount,
-  token: USDC_ON_ARC,
-  to: quote.payTo,
-  value: quote.maxAmount,
-  validBefore: quote.validBefore,
-  nonce: quote.nonce,
-});
-```
-
-## Step 3 — Re-send
-
-Re-POST with the payment attached. Sendero:
-
-1. Verifies the signature and nonce.
-2. Executes the tool (flight search, on-chain settle, whatever).
-3. If and only if the tool succeeds, submits the authorization to the USDC contract on Arc — the USDC moves in the same tx window.
-4. Returns the tool data plus the settle receipt.
-
-If the tool fails, the signature is discarded and you aren't charged. No refunds to process.
-
-## Gateway deposit (optional)
-
-If your app makes thousands of calls a minute, rebroadcasting EIP-3009 on every request is expensive. Deposit once to a Circle Gateway-backed balance and Sendero will debit locally, reconciling to Arc in batched windows:
+Your wallet signs an EIP-3009 `transferWithAuthorization` payload for the quoted amount. Sendero's edge worker expects that signed payload as base64 JSON in the `Payment-Signature` header.
 
 ```bash
-curl -X POST $SENDERO_EDGE_URL/v1/wallet/deposit \
-  -H "Authorization: Bearer $SENDERO_API_KEY" \
-  -d '{ "amount_usdc": "100.00" }'
+export BASE64_X402_PAYMENT="eyJ4NDAyVmVyc2lvbiI6Miwi..."
 ```
 
-Gateway deposits unlock the same unified balance across 11 EVM chains plus Solana — you top up once and spend from anywhere.
+## Step 3 - Retry
+
+Retry the same tool call:
+
+```bash
+curl -X POST https://edge.sendero.travel/tools/search_flights \
+  -H "content-type: application/json" \
+  -H "Payment-Signature: $BASE64_X402_PAYMENT" \
+  -d '{
+    "origin": "SFO",
+    "destination": "LHR",
+    "departureDate": "2026-06-11",
+    "passengers": 1
+  }'
+```
+
+Sendero verifies and settles the payment with the Circle x402 batching facilitator, then runs the tool. If settlement fails, the tool does not run. If the tool throws before producing a result, the response is an error and the meter records the failed attempt separately.
+
+## Response
+
+```json
+{
+  "tool": "search_flights",
+  "paid": true,
+  "priceUsdc": "0.002",
+  "payment": {
+    "payer": "0x...",
+    "amountUsdc": "0.002",
+    "settlementTx": "0x..."
+  },
+  "result": {
+    "offers": []
+  }
+}
+```
+
+## MCP versus x402
+
+MCP is for schema discovery and tool invocation by agent hosts. x402 is the direct HTTP payment interface. Production deployments can combine them at the gateway, but the current edge worker exposes them as separate surfaces:
+
+- `POST /mcp` for MCP JSON-RPC.
+- `POST /tools/:name` for x402-gated HTTP tool calls.
 
 ## Why Arc
 
-- USDC is the **native gas token** — no ETH sidecar, no gas estimation dance.
-- Sub-second finality means the tool returns before the user notices.
-- Per-call cost at scale: fractions of a cent, vs ~$2.14 on Ethereum mainnet.
-
-## Reference
-
-- [x402 spec](https://github.com/x402/spec)
-- [EIP-3009](https://eips.ethereum.org/EIPS/eip-3009)
-- [Circle Gateway docs](https://developers.circle.com/gateway)
+- USDC is the settlement asset.
+- Testnet calls are cheap enough for high-frequency agent loops.
+- Each paid call leaves an auditable receipt that can be reconciled to tenant invoices.

@@ -1,9 +1,14 @@
 # Next.js
 .next/
+.next-turbo/
 .next-sendero/
+apps/*/.next-turbo/
 apps/*/.next-sendero/
+apps/*/.next.root-owned.*/
+apps/*/.next-sendero.root-owned.*/
 apps/*/.next-user/
 apps/*/.next-e2e/
+apps/*/tmp/
 .cache-sendero/
 apps/*/.cache-sendero/
 apps/*/.cache-user/
@@ -35,6 +40,9 @@ apps/docs/.source/
 *.log
 .gstack/
 .vercel
+
+# Build output
+apps/storybook/storybook-static/
 
 # Turbo cache
 .turbo/

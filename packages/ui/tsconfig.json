@@ -15,6 +15,6 @@
       "@sendero/ui/hooks/*": ["./src/hooks/*"]
     }
   },
-  "include": ["src/components/**/*", "src/hooks/**/*", "src/utils/**/*"],
+  "include": ["src/brand/**/*", "src/components/**/*", "src/hooks/**/*", "src/utils/**/*"],
   "exclude": ["src/stories/**/*"]
 }

@@ -9,7 +9,9 @@
     "dev": "PORT=${PORT:-3021} bun run --watch src/server.ts",
     "start": "PORT=${PORT:-3021} bun run src/server.ts",
     "build": "true",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vercel:build": "vercel build --prod --cwd . --scope tcxcxs-projects --non-interactive",
+    "vercel:deploy": "vercel deploy --prebuilt --prod --cwd . --scope tcxcxs-projects --non-interactive"
   },
   "dependencies": {
     "hono": "^4.12.14",
@@ -28,6 +30,7 @@
     "@sendero/guest": "workspace:*",
     "@sendero/llms": "workspace:*",
     "@sendero/nanopayments": "workspace:*",
+    "@sendero/seo": "workspace:*",
     "@sendero/tools": "workspace:*",
     "viem": "^2.21.0",
     "zod": "^3.25.76"

@@ -4,6 +4,15 @@ import { OrganizationList, useOrganization } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+type OrganizationMetadata = {
+  onboardingComplete?: boolean;
+  arcWalletAddress?: string;
+};
+
+function hasCompletedOnboarding(metadata: unknown) {
+  return (metadata as OrganizationMetadata | undefined)?.onboardingComplete === true;
+}
+
 export default function OnboardingPage() {
   const { organization, isLoaded } = useOrganization();
   const router = useRouter();
@@ -11,17 +20,22 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!organization) return;
-    const publicMetadata = (organization.publicMetadata ?? {}) as {
-      onboardingComplete?: boolean;
-      arcWalletAddress?: string;
-    };
-    if (publicMetadata.onboardingComplete === true) {
+
+    if (hasCompletedOnboarding(organization.publicMetadata)) {
       router.push('/app');
       return;
     }
+
     setPolling(true);
     const interval = setInterval(() => {
-      organization.reload();
+      void organization
+        .reload()
+        .then(reloaded => {
+          if (hasCompletedOnboarding(reloaded.publicMetadata)) {
+            router.push('/app');
+          }
+        })
+        .catch(() => {});
     }, 2000);
     return () => clearInterval(interval);
   }, [organization, router]);
@@ -34,9 +48,7 @@ export default function OnboardingPage() {
     return (
       <main className="mx-auto max-w-xl p-8">
         <h1 className="text-2xl font-semibold mb-4">Welcome to Sendero</h1>
-        <p className="text-neutral-600 mb-6">
-          Create or select an organization to continue.
-        </p>
+        <p className="text-neutral-600 mb-6">Create or select an organization to continue.</p>
         <OrganizationList
           hidePersonal
           afterCreateOrganizationUrl="/onboarding"

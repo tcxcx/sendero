@@ -12,16 +12,56 @@ export const defaultOrigins: Record<SenderoSurface, string> = {
 
 export const AGENT_TOOL_CATALOG: LlmsItem[] = [
   {
+    label: 'check_treasury',
+    description: 'Read treasury balance and policy limits.',
+  },
+  {
+    label: 'check_policy',
+    description: 'Evaluate a proposed trip or payment against tenant travel policy.',
+  },
+  {
+    label: 'rate_agent',
+    description: 'Read ERC-8004-style reputation and agent identity signals.',
+  },
+  {
+    label: 'log_agent_action',
+    description: 'Emit an on-chain breadcrumb for an agent action against a claimed trip.',
+  },
+  {
+    label: 'faucet_drip',
+    description: 'Request test assets for local or testnet demos.',
+  },
+  {
+    label: 'quote_fx',
+    description: 'Quote indicative FX for travel spend and settlement reporting.',
+  },
+  {
+    label: 'gateway_balance',
+    description: 'Read Circle Gateway unified USDC liquidity across supported chains.',
+  },
+  {
+    label: 'guest_claim_link',
+    description: 'Convert a guest claim link into claim calldata for a traveler wallet.',
+  },
+  {
     label: 'search_flights',
     description: 'Search real Duffel flight inventory by route, date, cabin, and passenger count.',
   },
   {
-    label: 'book_flight',
-    description: 'Issue a booked itinerary and return the PNR plus metered settlement receipt.',
-  },
-  {
     label: 'search_hotels',
     description: 'Search lodging inventory for the trip context.',
+  },
+  {
+    label: 'recommend_restaurants',
+    description: 'Recommend in-trip restaurants from traveler context and location.',
+  },
+  {
+    label: 'send_tokens',
+    description: 'Transfer USDC on Arc.',
+  },
+  {
+    label: 'gateway_transfer',
+    description: 'Move USDC across Gateway chains with server-side treasury controls.',
   },
   {
     label: 'prefund_trip',
@@ -29,12 +69,12 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
       'Create a prepaid guest escrow without storing private link fragments or claim codes.',
   },
   {
-    label: 'guest_claim_link',
-    description: 'Generate a traveler-safe claim link from an already prefunded escrow.',
-  },
-  {
     label: 'reserve_booking',
     description: 'Reserve a proposed booking against a prefunded trip budget.',
+  },
+  {
+    label: 'commit_booking',
+    description: 'Commit the actual vendor amount and release unused escrow reserve.',
   },
   {
     label: 'confirm_duffel',
@@ -53,36 +93,57 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
     description: 'Render invoice data and PDF output for a tenant-scoped booking.',
   },
   {
-    label: 'check_policy',
-    description: 'Evaluate a proposed trip or payment against tenant travel policy.',
+    label: 'swap_tokens',
+    description: 'Swap tokens on Arc.',
   },
   {
-    label: 'check_treasury',
-    description: 'Read the Sendero treasury balance on Arc testnet.',
+    label: 'bridge_to_arc',
+    description: 'Bridge USDC into Arc with CCTP.',
   },
   {
-    label: 'gateway_balance',
-    description: 'Read Circle Gateway unified USDC liquidity across supported chains.',
+    label: 'book_flight',
+    description: 'Hold and pay a Duffel order from prefunded balance.',
   },
   {
-    label: 'gateway_transfer',
-    description: 'Move USDC across Gateway chains with server-side treasury controls.',
+    label: 'swap_and_bridge',
+    description: 'Bridge into Arc and swap in one composed action.',
   },
   {
     label: 'settle_split',
     description: 'Atomically fan out commission across supplier, agency, rail, and validator legs.',
   },
+];
+
+export const AGENT_WORKFLOW_CATALOG: LlmsItem[] = [
   {
-    label: 'quote_fx',
-    description: 'Quote indicative FX for travel spend and settlement reporting.',
+    label: 'sendero.book_flight',
+    description:
+      'Escrow-backed flight booking workflow: search, policy, reserve, hold, ticketing pause, settle, and invoice.',
   },
   {
-    label: 'rate_agent',
-    description: 'Read ERC-8004-style reputation and agent identity signals.',
+    label: 'sendero.guest_prefund',
+    description:
+      'Create a prepaid traveler budget, send a claim link, wait for claim, then book against escrow.',
   },
   {
-    label: 'recommend_restaurants',
-    description: 'Recommend in-trip restaurants from traveler context and location.',
+    label: 'sendero.agency_cohort',
+    description:
+      'Fund a cohort of prepaid traveler links for agencies, events, bootcamps, or team travel.',
+  },
+  {
+    label: 'sendero.group_trip',
+    description:
+      'Coordinate multi-traveler search, approvals, holds, and settlement for a shared itinerary.',
+  },
+  {
+    label: 'sendero.refund_booking',
+    description:
+      'Cancel or refund a booked trip while preserving policy, escrow, ledger, and invoice state.',
+  },
+  {
+    label: 'sendero.check_in_reminder',
+    description:
+      'Schedule trip assistance and reminders around check-in, alerts, and in-trip support.',
   },
 ];
 
@@ -139,7 +200,7 @@ function crossSurfaceLinks(o: Record<SenderoSurface, string>, current: SenderoSu
       href: absoluteUrl(o.edge, '/llms.txt'),
       description: 'Direct edge worker discovery for MCP and non-UI agent surfaces.',
     },
-  ].filter(item => !item.href?.startsWith(o[current] + '/llms.txt'));
+  ].filter(item => !item.href?.startsWith(`${o[current]}/llms.txt`));
 }
 
 const securityNotes = [
@@ -179,7 +240,7 @@ function agentGuidanceSection(): LlmsSection {
       {
         label: 'Best first read',
         description:
-          'Start with `/docs/quickstart`, then inspect `/docs/tools/overview` before calling paid tools.',
+          'Start with `/docs/quickstart`, then `/docs/agent-to-agent-booking`, then inspect `/docs/tools/overview` before calling paid tools.',
       },
       {
         label: 'Payment model',
@@ -195,6 +256,57 @@ function agentGuidanceSection(): LlmsSection {
         label: 'Data minimization',
         description:
           'Persist itinerary metadata and receipts, not private invite fragments or plaintext secrets.',
+      },
+    ],
+  };
+}
+
+function seoDiscoverySection(
+  o: Record<SenderoSurface, string>,
+  current: SenderoSurface
+): LlmsSection {
+  const currentOrigin = o[current];
+  const publicAssetOrigin = current === 'edge' ? o.marketing : currentOrigin;
+  const crawlOrigin = current === 'edge' ? o.marketing : currentOrigin;
+
+  return {
+    heading: 'SEO And AI Discovery',
+    body: 'Crawler-safe discovery files and social preview assets for search engines, AI answer engines, and agent hosts.',
+    items: [
+      {
+        label: 'Canonical llms.txt',
+        href: absoluteUrl(currentOrigin, '/llms.txt'),
+        description: 'Primary machine-readable summary for this Sendero surface.',
+      },
+      {
+        label: 'Well-known llms.txt',
+        href: absoluteUrl(currentOrigin, '/.well-known/llms.txt'),
+        description: 'Standards-friendly alias for agent discovery.',
+      },
+      {
+        label: current === 'edge' ? 'Website robots.txt' : 'Robots.txt',
+        href: absoluteUrl(crawlOrigin, '/robots.txt'),
+        description: 'Crawler policy with explicit LLM crawler allowances.',
+      },
+      {
+        label: current === 'edge' ? 'Website sitemap.xml' : 'Sitemap.xml',
+        href: absoluteUrl(crawlOrigin, '/sitemap.xml'),
+        description: 'Canonical URLs, locale alternates, and public agent-discovery routes.',
+      },
+      {
+        label: 'Open Graph image',
+        href: absoluteUrl(publicAssetOrigin, '/brand/seo/open-graph-1200x630.png'),
+        description: '1200x630 Sendero preview canvas for social sharing and link unfurls.',
+      },
+      {
+        label: 'Google Discover image',
+        href: absoluteUrl(publicAssetOrigin, '/brand/seo/google-discover-1600x900.png'),
+        description: 'Large image asset eligible for rich search previews.',
+      },
+      {
+        label: 'Schema logo',
+        href: absoluteUrl(publicAssetOrigin, '/brand/seo/schema-logo-512.png'),
+        description: '512x512 organization logo referenced by structured data.',
       },
     ],
   };
@@ -306,7 +418,13 @@ export function buildSenderoAppLlms(options: SurfaceOptions = {}): LlmsTxtConfig
         body: 'The current tool registry is larger than the original hackathon list. Prefer `tools/list` from the MCP endpoint when exact JSON schemas are required.',
         items: AGENT_TOOL_CATALOG,
       },
+      {
+        heading: 'Managed Workflow Catalog',
+        body: 'Workflows are named plans for agents that want Sendero to orchestrate multiple tool calls, external pauses, escrow transitions, and invoice generation.',
+        items: AGENT_WORKFLOW_CATALOG,
+      },
       agentGuidanceSection(),
+      seoDiscoverySection(o, 'app'),
       {
         heading: 'Related Surfaces',
         items: crossSurfaceLinks(o, 'app'),
@@ -402,6 +520,7 @@ export function buildSenderoMarketingLlms(options: SurfaceOptions = {}): LlmsTxt
         ],
       },
       agentGuidanceSection(),
+      seoDiscoverySection(o, 'marketing'),
       {
         heading: 'Related llms.txt Files',
         items: crossSurfaceLinks(o, 'marketing'),
@@ -444,6 +563,11 @@ export function buildSenderoHelpLlms(options: SurfaceOptions = {}): LlmsTxtConfi
             description: 'Agent-facing tool catalog explainer.',
           },
           {
+            label: 'Connect another AI agent',
+            href: '/article/connect-another-agent',
+            description: 'Delegated booking, escrow, MCP, workflow, and invoice guidance.',
+          },
+          {
             label: 'Nanopayment pricing',
             href: '/article/nanopayment-pricing',
             description: 'USDC metering, caps, and settlement explanation.',
@@ -471,6 +595,7 @@ export function buildSenderoHelpLlms(options: SurfaceOptions = {}): LlmsTxtConfi
         ],
       },
       agentGuidanceSection(),
+      seoDiscoverySection(o, 'help'),
       {
         heading: 'Related llms.txt Files',
         items: crossSurfaceLinks(o, 'help'),
@@ -503,6 +628,12 @@ export function buildSenderoDocsLlms(options: SurfaceOptions = {}): LlmsTxtConfi
             description: 'Get an API key, fund a wallet, and call the first tool.',
           },
           {
+            label: 'Agent-to-agent booking',
+            href: '/docs/agent-to-agent-booking',
+            description:
+              'How another AI agent delegates search, escrow, booking, settlement, and invoices to Sendero.',
+          },
+          {
             label: 'Tool catalog',
             href: '/docs/tools/overview',
             description: 'Every tool, per-call USDC price, and tool envelope.',
@@ -516,8 +647,7 @@ export function buildSenderoDocsLlms(options: SurfaceOptions = {}): LlmsTxtConfi
           {
             label: 'MCP integration',
             href: '/docs/mcp-integration',
-            description:
-              'Connect Sendero to Claude Desktop, ChatGPT Apps, Cursor, Zed, or custom MCP hosts.',
+            description: 'Connect Sendero to Claude Desktop, Cursor, Zed, or custom MCP hosts.',
           },
         ]),
       },
@@ -535,9 +665,9 @@ export function buildSenderoDocsLlms(options: SurfaceOptions = {}): LlmsTxtConfi
             description: 'Next.js app-hosted MCP endpoint for local and buyer-console flows.',
           },
           {
-            label: 'Edge OpenAPI',
-            href: absoluteUrl(o.edge, '/apps/openapi.json'),
-            description: 'OpenAPI shim for app hosts that do not speak MCP directly.',
+            label: 'Paid HTTP tools',
+            href: absoluteUrl(o.edge, '/tools'),
+            description: 'x402-gated direct HTTP tool catalog for hosts that do not speak MCP.',
           },
         ],
       },
@@ -545,7 +675,12 @@ export function buildSenderoDocsLlms(options: SurfaceOptions = {}): LlmsTxtConfi
         heading: 'Managed Tool Catalog',
         items: AGENT_TOOL_CATALOG,
       },
+      {
+        heading: 'Managed Workflow Catalog',
+        items: AGENT_WORKFLOW_CATALOG,
+      },
       agentGuidanceSection(),
+      seoDiscoverySection(o, 'docs'),
       {
         heading: 'Related llms.txt Files',
         items: crossSurfaceLinks(o, 'docs'),
@@ -583,7 +718,12 @@ export function buildSenderoEdgeLlms(options: SurfaceOptions = {}): LlmsTxtConfi
         heading: 'Managed Tool Catalog',
         items: AGENT_TOOL_CATALOG,
       },
+      {
+        heading: 'Managed Workflow Catalog',
+        items: AGENT_WORKFLOW_CATALOG,
+      },
       agentGuidanceSection(),
+      seoDiscoverySection(o, 'edge'),
       {
         heading: 'Related llms.txt Files',
         items: crossSurfaceLinks(o, 'edge'),

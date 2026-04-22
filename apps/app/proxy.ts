@@ -28,6 +28,10 @@ const isPublicRoute = createRouteMatcher([
   '/waitlist(.*)',
   '/llms.txt',
   '/.well-known/llms.txt',
+  '/api/mcp(.*)', // public MCP discovery + tool invocation surface
+  '/api/workflows/list', // public workflow discovery for other agents
+  '/api/agent/runtime', // public model/tool runtime metadata; no tenant data
+  '/api/agent/identity', // public agent identity and reputation metadata
   '/api/webhooks/(.*)', // Duffel, Clerk, etc. — signature-verified per route
   '/api/agent/dispatch', // internal fan-in — protected by AGENT_DISPATCH_SECRET / CRON_SECRET in-route
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
@@ -117,16 +121,16 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     return applyLocaleCookie(res, locale);
   }
 
-  const orgMetadata = sessionClaims?.org_metadata as OrgMetadata;
-  if (!orgMetadata?.onboardingComplete) {
-    return applyLocaleCookie(NextResponse.redirect(new URL('/onboarding', req.url)), locale);
-  }
-
   if (!orgId) {
     return applyLocaleCookie(
       NextResponse.redirect(new URL('/onboarding/choose-org', req.url)),
       locale
     );
+  }
+
+  const orgMetadata = sessionClaims?.org_metadata as OrgMetadata;
+  if (orgMetadata && orgMetadata.onboardingComplete !== true) {
+    return applyLocaleCookie(NextResponse.redirect(new URL('/onboarding', req.url)), locale);
   }
 
   return passThrough(req, locale);

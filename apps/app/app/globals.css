@@ -11,20 +11,20 @@
      sea-of-blue fintech default. LATAM-adjacent (Mexican pottery,
      Peruvian textiles, Argentine leather) without being literal. */
   --ink: #fb542b;
-  --ink-dim: color-mix(in oklab, var(--ink) 8%, white);
-  --ink-soft: color-mix(in oklab, var(--ink) 14%, white);
+  --ink-dim: color-mix(in oklab, var(--ink) 8%, var(--bg));
+  --ink-soft: color-mix(in oklab, var(--ink) 14%, var(--bg));
 
-  --bg: #fafaf7;
-  --bg-elev: #ffffff;
-  --bg-panel: oklch(0.975 0.004 80);
-  --bg-sunk: oklch(0.96 0.004 80);
+  --bg: #eedcc7;
+  --bg-elev: #f5e7d6;
+  --bg-panel: color-mix(in oklab, var(--bg) 82%, #fff7ec);
+  --bg-sunk: color-mix(in oklab, var(--bg) 88%, var(--accent-amber));
 
   --text: oklch(0.22 0.015 250);
   --text-dim: oklch(0.48 0.015 250);
   --text-faint: oklch(0.65 0.01 250);
 
-  --border: oklch(0.89 0.005 80);
-  --border-strong: oklch(0.78 0.008 80);
+  --border: #d8c1a7;
+  --border-strong: #b99c7d;
 
   --accent-green: oklch(0.62 0.13 155);
   --accent-amber: oklch(0.72 0.14 75);
@@ -90,17 +90,17 @@ body {
     color: inherit;
   }
 }
-/* Text selection — vermilion bg with cream text. Brand-carrying,
-   unmistakable. Pairs the warm primary with cream pulled from the
+/* Text selection — vermilion bg with parchment text. Brand-carrying,
+   unmistakable. Pairs the warm primary with a warm light pulled from the
    page background (var(--bg) at full opacity) for maximum contrast. */
 ::selection {
   background: var(--ink);
-  color: #fafaf7;
+  color: #fff7ec;
   text-shadow: none;
 }
 ::-moz-selection {
   background: var(--ink);
-  color: #fafaf7;
+  color: #fff7ec;
   text-shadow: none;
 }
 .dark ::selection,
@@ -945,11 +945,11 @@ body {
 }
 .approver.done .check {
   background: var(--accent-green);
-  color: #fff;
+  color: #fff7ec;
 }
 .approver.active .check {
   background: var(--ink);
-  color: #fff;
+  color: #fff7ec;
 }
 .approver .name {
   color: var(--text);

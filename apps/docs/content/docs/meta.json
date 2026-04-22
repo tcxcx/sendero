@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "quickstart",
+    "agent-to-agent-booking",
     "---Tools---",
     "tools/overview",
     "tools/search_flights",

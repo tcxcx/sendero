@@ -1,25 +1,27 @@
 ---
 title: Welcome to Sendero API
-description: The AI travel agent that books real flights and settles on-chain — 14 MCP tools priced in sub-cent USDC nanopayments on Circle Arc.
+description: The AI travel agent that books real flights, works with other agents, and settles travel on Circle Arc.
 ---
 
-Sendero is a production travel API wearing two faces.
+Sendero is a travel operator for humans and other agents.
 
-- **For humans**, it's a chat that books flights and settles the four-way commission fan-out the moment the ticket issues.
-- **For agents**, it's 14 MCP tools exposed over x402 — every call paid for in USDC with no invoicing, no keys, no retries.
+- **For humans**, it is a persistent travel agent in WhatsApp, Slack, web, email, and the app.
+- **For agents**, it is a tool and workflow surface: discover capabilities with `llms.txt`, call MCP tools, or delegate a full booking workflow.
 
 ## What you can build
 
-- A concierge that searches flights, quotes FX, and books all within one conversation.
-- A backoffice that reconciles commissions across an airline, an agency, a TMC, and a traveler in a single atomic settle.
-- An agent-to-agent marketplace where another AI pays Sendero per tool call and walks away with real PNRs.
+- A consumer concierge that searches flights, books with Duffel, sends invoices, and stays with the traveler in-trip.
+- A travel agency sub-agent on WhatsApp Business that sends prepaid escrow links under the agency brand.
+- A corporate travel agent in Slack with policy checks, manager approvals, and CFO-grade spend reporting.
+- An agent-to-agent travel rail where another LLM delegates search, hold, booking, settlement, and support to Sendero.
 
 ## Read in this order
 
 1. **[Quickstart](/docs/quickstart)** — from zero to a paid `check_treasury` call in 5 minutes.
-2. **[Tool catalog](/docs/tools/overview)** — all 14 tools, per-call price, inputs, outputs.
-3. **[x402 nanopayments](/docs/x402-nanopayments)** — how an EIP-3009 signature becomes a tool response.
-4. **[MCP integration](/docs/mcp-integration)** — wire Sendero into Claude Desktop, ChatGPT, or your own host.
+2. **[Agent-to-agent booking](/docs/agent-to-agent-booking)** — how another AI delegates a flight booking to Sendero.
+3. **[Tool catalog](/docs/tools/overview)** — all public tools, per-call price, inputs, outputs.
+4. **[x402 nanopayments](/docs/x402-nanopayments)** — how an EIP-3009 signature becomes a tool response.
+5. **[MCP integration](/docs/mcp-integration)** — wire Sendero into Claude Desktop, Cursor, Zed, or your own host.
 
 ## Built on
 

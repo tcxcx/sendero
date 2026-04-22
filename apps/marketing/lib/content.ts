@@ -26,6 +26,12 @@ export interface MarketingContent {
     title: string;
     body: string;
   }>;
+  assetPlaceholders: Array<{
+    id: string;
+    type: 'image' | 'icon-set' | 'lottie';
+    title: string;
+    brief: string;
+  }>;
   pricing: {
     heading: string;
     subheading: string;
@@ -50,9 +56,9 @@ const EN_US: MarketingContent = {
   locale: 'en-US',
   hero: {
     eyebrow: 'Sendero × Circle Arc',
-    title: 'AI travel agents that live where your customers already are.',
+    title: 'Travel AI that knows the way.',
     subtitle:
-      'One agent per trip, reachable over WhatsApp, Slack, email, and MCP. Real PNRs via Duffel. Settled in USDC on Arc.',
+      'A traveler messages. An agency sends a link. A company prefunds a trip. Sendero turns each path into real inventory, real bookings, USDC settlement, and one persistent agent.',
     primaryCta: 'Start a trip',
     primaryCtaHref: 'https://sendero-arc-web.vercel.app',
     secondaryCta: 'For AI agents · llms.txt',
@@ -62,22 +68,45 @@ const EN_US: MarketingContent = {
     {
       id: 'consumer',
       title: 'Consumer · WhatsApp',
-      body: 'A persistent travel companion that knows your preferences, dates, and budget. No app install — just a conversation that picks up where it left off.',
+      body: 'A personal travel agent that remembers preferences, dates, budget, receipts, and changes. No app install. Just the thread the traveler already has open.',
     },
     {
       id: 'agency',
       title: 'Travel agencies · white-label',
-      body: 'A branded AI agent on your own WhatsApp Business number. Quote in <60s, 24/7. Keeps your margin + optional markup. Deploys in under 24 hours.',
+      body: 'A branded agent on your WhatsApp Business number. Quote fast, keep your margin, send prepaid links, and let Sendero handle repetitive travel operations.',
     },
     {
       id: 'corporate',
       title: 'Corporate · Slack · Teams',
-      body: 'Policy-first booking, manager approvals via Slack buttons, CFO spend dashboard. 91% cheaper than a traditional TMC in Year 1.',
+      body: 'Policy-first booking, manager approvals, prepaid budgets, auditable spend, and settlement records without forcing employees into another portal.',
     },
     {
       id: 'agents',
       title: 'AI agents · MCP',
-      body: 'Every travel operation exposed as an MCP tool. Your LLM calls search_flights, hold_booking, confirm_booking. We handle Duffel, compliance, and settlement.',
+      body: 'MCP tools and named workflows for LLMs that need to search, prefund, hold, book, settle, refund, or reconcile travel safely.',
+    },
+  ],
+  assetPlaceholders: [
+    {
+      id: 'agent-route-map',
+      type: 'image',
+      title: 'One route map',
+      brief:
+        'One session can begin in WhatsApp, Slack, web, or MCP, then pass through inventory, policy, escrow, invoice, and support.',
+    },
+    {
+      id: 'escrow-lifecycle',
+      type: 'lottie',
+      title: 'Escrow lifecycle',
+      brief:
+        'Buyer prefunds, traveler claims, Sendero reserves, ticket confirms, escrow settles, invoice appears.',
+    },
+    {
+      id: 'channel-symbols',
+      type: 'icon-set',
+      title: 'Channel and trust symbols',
+      brief:
+        'A custom stamp kit for messages, routes, approvals, tickets, travelers, policy, payments, and agent calls.',
     },
   ],
   pricing: {
@@ -125,7 +154,7 @@ const EN_US: MarketingContent = {
     copyright: `© ${new Date().getFullYear()} Sendero. All rights reserved.`,
     links: [
       { label: 'Docs', href: 'https://docs.sendero.travel' },
-      { label: 'Help', href: '/help' },
+      { label: 'Help', href: 'https://help.sendero.travel' },
       { label: 'Arc explorer', href: 'https://testnet.arcscan.app' },
       { label: 'Twitter', href: 'https://x.com/sendero_travel' },
     ],
@@ -138,9 +167,9 @@ const ES_MX: MarketingContent = {
   hero: {
     ...EN_US.hero,
     eyebrow: 'Sendero × Circle Arc',
-    title: 'Agentes de viaje con IA, donde tus clientes ya están.',
+    title: 'IA de viajes que conoce el camino.',
     subtitle:
-      'Un agente por viaje, accesible por WhatsApp, Slack, email y MCP. PNRs reales vía Duffel. Liquidación en USDC sobre Arc.',
+      'Un viajero escribe. Una agencia envía un link. Una empresa prefunde el viaje. Sendero convierte cada camino en inventario real, reservas reales y liquidación en USDC.',
     primaryCta: 'Iniciar viaje',
     secondaryCta: 'Para agentes IA · llms.txt',
   },
@@ -163,9 +192,9 @@ const PT_BR: MarketingContent = {
   locale: 'pt-BR',
   hero: {
     ...EN_US.hero,
-    title: 'Agentes de viagem com IA onde seus clientes já estão.',
+    title: 'IA de viagem que conhece o caminho.',
     subtitle:
-      'Um agente por viagem, acessível via WhatsApp, Slack, e-mail e MCP. PNRs reais via Duffel. Liquidação em USDC na Arc.',
+      'Um viajante escreve. Uma agência envia um link. Uma empresa pré-financia a viagem. Sendero transforma cada caminho em inventário real, reservas reais e liquidação em USDC.',
     primaryCta: 'Iniciar viagem',
     secondaryCta: 'Para agentes de IA · llms.txt',
   },
@@ -177,9 +206,9 @@ const ES_AR: MarketingContent = {
   locale: 'es-AR',
   hero: {
     ...EN_US.hero,
-    title: 'Agentes de viaje con IA, donde tus clientes ya están.',
+    title: 'IA de viajes que conoce el camino.',
     subtitle:
-      'Un agente por viaje. Accesible por WhatsApp, Slack, mail y MCP. PNR reales vía Duffel. Se liquida en USDC sobre Arc.',
+      'Un viajero escribe. Una agencia manda un link. Una empresa prefunde el viaje. Sendero convierte cada camino en inventario real, reservas reales y liquidación en USDC.',
     primaryCta: 'Empezar un viaje',
   },
 };

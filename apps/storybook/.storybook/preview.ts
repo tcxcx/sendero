@@ -11,9 +11,9 @@ const preview: Preview = {
   parameters: {
     layout: 'padded',
     backgrounds: {
-      default: 'cream',
+      default: 'parchment',
       values: [
-        { name: 'cream', value: '#fafaf7' },
+        { name: 'parchment', value: '#eedcc7' },
         { name: 'ink', value: '#fb542b' },
         { name: 'dark', value: '#0a0b0d' },
       ],

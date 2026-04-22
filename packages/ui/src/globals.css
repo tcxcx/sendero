@@ -3,25 +3,35 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --sendero-vermillion: #d65438;
+    --sendero-midnight: #1f2a44;
+    --sendero-sea: #0f7c82;
+    --sendero-sand: #b6844e;
+    --sendero-parchment: #eedcc7;
+    --sendero-paper: #eedcc7;
+    --sendero-cream: #eedcc7;
+    --sendero-paper-elevated: #f5e7d6;
+    --sendero-charcoal: #111111;
+
+    --background: 32 53% 86%;
     --foreground: 0 0% 4%;
-    --primary: 14 95% 58%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
+    --primary: 11 66% 53%;
+    --primary-foreground: 33 100% 96%;
+    --secondary: 34 61% 90%;
     --secondary-foreground: 0 0% 4%;
-    --muted: 0 0% 96%;
+    --muted: 34 51% 88%;
     --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
+    --accent: 34 51% 88%;
     --accent-foreground: 0 0% 4%;
     --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 91%;
-    --input: 0 0% 91%;
-    --ring: 14 95% 58%;
+    --destructive-foreground: 33 100% 96%;
+    --border: 33 35% 76%;
+    --input: 33 35% 76%;
+    --ring: 11 66% 53%;
     --radius: 0.25rem;
-    --card: 0 0% 100%;
+    --card: 34 61% 90%;
     --card-foreground: 0 0% 4%;
-    --popover: 0 0% 100%;
+    --popover: 34 61% 90%;
     --popover-foreground: 0 0% 4%;
   }
 }

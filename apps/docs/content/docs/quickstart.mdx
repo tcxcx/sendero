@@ -1,67 +1,103 @@
 ---
 title: Quickstart
-description: From zero to a paid tool call in 5 minutes — get an API key, check the treasury, and settle a trip.
+description: From discovery to a paid tool call in 5 minutes.
 ---
 
-## 1. Get an API key
+This quickstart uses the public edge surface. MCP clients use `/mcp`; direct HTTP clients use `/tools/:name` with x402 payment.
 
-Sign in at [app.sendero.travel](https://app.sendero.travel) and copy your publishable `sk_` key. Sandbox keys are free; production keys require KYB.
+## 1. Set your endpoints
 
 ```bash
-export SENDERO_API_KEY="sk_test_..."
 export SENDERO_EDGE_URL="https://edge.sendero.travel"
+export SENDERO_APP_URL="https://app.sendero.travel"
+export SENDERO_API_KEY="sk_test_..."
 ```
 
-## 2. Fund a Gateway wallet
+## 2. Read the agent manifest
 
-Every tool call settles from a Circle Gateway-backed USDC balance. Deposit once, spend across 11 chains:
+Agents should start with `llms.txt` before calling tools:
 
 ```bash
-curl -X POST $SENDERO_EDGE_URL/v1/wallet/deposit \
-  -H "Authorization: Bearer $SENDERO_API_KEY" \
-  -d '{ "amount_usdc": "10.00", "chain": "arc" }'
+curl $SENDERO_EDGE_URL/.well-known/llms.txt
 ```
 
-> $10 buys roughly 1,000 cheap reads or 1,000 on-chain settles — more than enough to exercise every tool end to end.
+The manifest points to the current docs, tool catalog, MCP endpoint, paid HTTP tool surface, and safety rules.
 
-## 3. Call your first tool
-
-`check_treasury` is the cheapest read (half a tenth of a cent). It returns your USDC balance and policy limits:
+## 3. List MCP tools
 
 ```bash
-curl -X POST $SENDERO_EDGE_URL/mcp/call \
-  -H "Authorization: Bearer $SENDERO_API_KEY" \
-  -d '{ "tool": "check_treasury", "input": {} }'
-```
-
-The response includes an `X-Payment` header — the EIP-3009 signed receipt for the $0.0005 USDC you just spent.
-
-## 4. Book a real flight
-
-End-to-end: search, quote, issue, settle. Each tool charges at the moment of success:
-
-```bash
-curl -X POST $SENDERO_EDGE_URL/mcp/call \
-  -H "Authorization: Bearer $SENDERO_API_KEY" \
+curl -X POST $SENDERO_EDGE_URL/mcp \
+  -H "content-type: application/json" \
   -d '{
-    "tool": "book_flight",
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list"
+  }'
+```
+
+Use MCP when your host wants JSON schemas before selecting tools.
+
+## 4. Get an x402 quote
+
+Direct HTTP tools are paid per successful call. First call without a `Payment-Signature` header:
+
+```bash
+curl -i -X POST $SENDERO_EDGE_URL/tools/check_treasury \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $SENDERO_API_KEY" \
+  -d '{}'
+```
+
+Sendero returns `402 Payment Required` with a `PAYMENT-REQUIRED` header. Decode that header, sign the EIP-3009 authorization with your wallet, then retry with:
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/tools/check_treasury \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $SENDERO_API_KEY" \
+  -H "Payment-Signature: $BASE64_X402_PAYMENT" \
+  -d '{}'
+```
+
+The response includes the tool result plus payment metadata.
+
+## 5. Search flights
+
+```bash
+curl -X POST $SENDERO_EDGE_URL/tools/search_flights \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $SENDERO_API_KEY" \
+  -H "Payment-Signature: $BASE64_X402_PAYMENT" \
+  -d '{
+    "origin": "SFO",
+    "destination": "LHR",
+    "departureDate": "2026-06-11",
+    "passengers": 1,
+    "cabinClass": "economy"
+  }'
+```
+
+## 6. Delegate the full booking
+
+For production bookings, prefer the workflow API instead of chaining tools manually:
+
+```bash
+curl -X POST $SENDERO_APP_URL/api/workflows/run \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $SENDERO_INTERNAL_TOKEN" \
+  -d '{
+    "workflowId": "sendero.book_flight",
+    "tenantId": "tenant_acme",
+    "userId": "traveler_ada",
     "input": {
-      "offer_id": "off_abc123",
-      "passengers": [{ "given_name": "Ada", "family_name": "Lovelace" }]
+      "tripId": "0x...",
+      "origin": "SFO",
+      "destination": "LHR",
+      "departureDate": "2026-06-11",
+      "passengers": 1,
+      "cabinClass": "economy",
+      "policyId": "policy_default"
     }
   }'
 ```
 
-## 5. Settle the commission fan-out
-
-On issue, Sendero atomically routes commission to the airline, the agency, the TMC, and the traveler credit — one Arc tx, four deltas:
-
-```bash
-curl -X POST $SENDERO_EDGE_URL/mcp/call \
-  -H "Authorization: Bearer $SENDERO_API_KEY" \
-  -d '{ "tool": "settle_split", "input": { "booking_id": "bkg_xyz" } }'
-```
-
-You're done. Every call was paid for the instant it succeeded. There are no invoices, no reconciliation, no retries.
-
-**Next:** read the [tool catalog](/docs/tools/overview) or wire Sendero into [Claude Desktop](/docs/mcp-integration).
+The workflow handles search, policy, escrow reservation, Duffel hold, ticketing pause, settlement, and invoice generation. Continue with [agent-to-agent booking](/docs/agent-to-agent-booking).

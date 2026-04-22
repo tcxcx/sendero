@@ -14,6 +14,7 @@ const config: StorybookConfig = {
     '../stories/**/*.stories.@(ts|tsx|mdx)',
     '../../../packages/ui/src/stories/**/*.stories.@(ts|tsx|mdx)',
   ],
+  staticDirs: ['../public'],
   addons: [
     '@storybook/addon-essentials',
     '@storybook/addon-a11y',

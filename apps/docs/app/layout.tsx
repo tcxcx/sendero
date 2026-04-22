@@ -1,7 +1,14 @@
+import type { Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { RootProvider } from 'fumadocs-ui/provider';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
+import {
+  buildMetadata,
+  organizationJsonLd,
+  softwareApplicationJsonLd,
+  travelAgencyJsonLd,
+} from '@sendero/seo';
 
 // Pull the exact same token vocabulary the main Sendero app uses so
 // the docs match the vermilion brand pixel-for-pixel. The relative
@@ -9,15 +16,59 @@ import { GeistMono } from 'geist/font/mono';
 import '../../app/app/globals.css';
 import './docs-overrides.css';
 
-export const metadata = {
-  title: {
-    default: 'Sendero API',
-    template: '%s — Sendero API',
-  },
-  description:
-    'Developer docs for Sendero — the AI travel agent that books real flights and settles on-chain via 14 MCP tools on Circle Arc, priced in sub-cent USDC nanopayments.',
-  metadataBase: new URL('https://docs.sendero.travel'),
+const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.sendero.travel';
+const MARKETING_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sendero.travel';
+const SEO_LOCALES = ['en-US'] as const;
+const DESCRIPTION =
+  'Developer docs for Sendero: MCP travel tools, x402 nanopayments, Arc settlement, Duffel booking flows, and agent-to-agent travel orchestration.';
+
+export const metadata = buildMetadata({
+  title: 'Sendero Developer Docs',
+  titleSuffix: 'MCP travel tools and x402 nanopayments',
+  description: DESCRIPTION,
+  path: '/',
+  locale: 'en-US',
+  locales: SEO_LOCALES,
+  defaultLocale: 'en-US',
+  siteUrl: DOCS_URL,
+  siteName: 'Sendero Developer Docs',
+  ogImageAlt: 'Sendero developer docs social preview for MCP travel tools.',
+  keywords: [
+    'Sendero API',
+    'travel MCP server',
+    'MCP tool catalog',
+    'x402 nanopayments',
+    'agent-to-agent booking',
+    'Arc settlement',
+    'Duffel API docs',
+  ],
+  category: 'Developer Documentation',
+});
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#cc4b37',
 };
+
+const structuredData = [
+  {
+    id: 'organization',
+    data: organizationJsonLd({
+      siteUrl: MARKETING_URL,
+      logoUrl: `${DOCS_URL}/brand/seo/schema-logo-512.png`,
+      supportedLanguages: ['en', 'es', 'pt'],
+    }),
+  },
+  {
+    id: 'travel-agency',
+    data: travelAgencyJsonLd({
+      siteUrl: MARKETING_URL,
+      description: DESCRIPTION,
+    }),
+  },
+  { id: 'software-application', data: softwareApplicationJsonLd({}) },
+];
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -26,9 +77,35 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${GeistSans.variable} ${GeistMono.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        <link
+          rel="alternate"
+          type="text/plain"
+          title="Sendero Developer Docs llms.txt"
+          href="/llms.txt"
+        />
+        <link
+          rel="alternate"
+          type="text/plain"
+          title="Sendero Developer Docs well-known llms.txt"
+          href="/.well-known/llms.txt"
+        />
+        {structuredData.map(schema => (
+          <JsonLd key={schema.id} data={schema.data} />
+        ))}
+      </head>
       <body>
         <RootProvider>{children}</RootProvider>
       </body>
     </html>
+  );
+}
+
+function JsonLd({ data }: { data: unknown }) {
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, '\\u003c') }}
+    />
   );
 }

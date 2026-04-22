@@ -92,6 +92,17 @@ Every scenario shows a per-invoice breakdown settled via **Circle CCTP v2 on Arc
 - Sub-6s finality target
 - Treasury balance in both tokens
 
+## Agent-to-agent integration
+
+Sendero can be called by another AI agent as a travel sub-agent:
+
+- `/.well-known/llms.txt` and `/llms.txt` describe the current product, docs, tools, and safety rules.
+- `/mcp` on the edge worker and `/api/mcp` on the app expose the shared `@sendero/tools` registry over MCP JSON-RPC.
+- `/tools/:name` exposes the same tools as x402-gated direct HTTP endpoints.
+- `/api/workflows/run` and `/api/workflows/resume` run named plans such as `sendero.book_flight`, which handles search, policy, escrow reservation, Duffel ticketing pauses, settlement, and invoice generation.
+
+Start with `apps/docs/content/docs/agent-to-agent-booking.mdx` for the complete delegated booking flow.
+
 ## File structure
 
 ```
