@@ -124,7 +124,7 @@ const inlineCss = `
   .mk-title { font-size: clamp(40px, 6vw, 72px); line-height: 1.02; letter-spacing: -0.035em; margin: 0 0 24px; font-weight: 500; }
   .mk-subtitle { font-size: 18px; color: var(--muted); max-width: 640px; margin: 0 0 32px; }
   .mk-hero-ctas { display: inline-flex; gap: 12px; flex-wrap: wrap; }
-  .mk-waitlist { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(280px, 1.05fr); gap: 24px; align-items: center; margin: 0 0 80px; padding: 28px 24px; border: 1px solid var(--border); border-left: 2px solid var(--accent); background: color-mix(in oklab, var(--accent) 4%, var(--bg)); }
+  .mk-waitlist { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(280px, 1.05fr); gap: 24px; align-items: center; margin: 0 0 80px; padding: 28px 24px; border: 1px solid var(--border); background: color-mix(in oklab, var(--accent) 4%, var(--bg)); box-shadow: inset 0 1px 0 var(--accent); }
   .mk-waitlist-copy { max-width: 480px; }
   .mk-waitlist-copy .mk-eyebrow { margin-bottom: 14px; color: var(--accent); }
   .mk-waitlist h2 { font-size: clamp(28px, 3.5vw, 44px); line-height: 1.05; letter-spacing: 0; margin: 0 0 12px; font-weight: 500; }
@@ -138,6 +138,10 @@ const inlineCss = `
   .mk-waitlist-loading span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
   .mk-waitlist-loading div { height: 42px; border: 1px solid var(--border); background: color-mix(in oklab, var(--accent) 4%, var(--bg)); animation: mkPulse 1.2s ease-in-out infinite alternate; }
   .mk-waitlist-loading div:last-child { border-color: var(--fg); background: var(--fg); }
+  .mk-waitlist-loading .mk-waitlist-recovery { height: auto; display: grid; gap: 10px; border: 1px solid var(--border); background: var(--bg); padding: 14px; animation: none; }
+  .mk-waitlist-recovery strong { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+  .mk-waitlist-recovery p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .mk-waitlist-recovery button { height: 40px; border: 1px solid var(--fg); background: var(--fg); color: var(--bg); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
   @keyframes mkPulse { from { opacity: 0.45; } to { opacity: 1; } }
   .mk-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0; margin: 0 0 80px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .mk-feature { padding: 28px 24px; border-right: 1px solid var(--border); }

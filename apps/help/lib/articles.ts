@@ -102,6 +102,37 @@ future message arrives with your preferences pre-loaded.`,
     locale: 'en-US',
   },
   {
+    slug: 'prepaid-escrow-links',
+    title: 'Prepaid escrow links for travelers',
+    excerpt: 'Send one secure link that lets a traveler claim a funded trip budget.',
+    body: `A Sendero buyer can prefund a trip before the traveler starts chatting.
+The buyer creates a USDC budget, Sendero returns a claim link, and the traveler
+opens that link from WhatsApp, Slack, email, or the web.
+
+The private claim key stays in the URL fragment, so it never reaches Sendero
+servers. If 2FA is enabled, the traveler also needs the 6-digit claim code from
+the invite. After claim, the same agent can search, reserve, book, settle, or
+refund against the prepaid escrow.`,
+    category: 'for-consumers',
+    updatedAt: '2026-04-21',
+    locale: 'en-US',
+  },
+  {
+    slug: 'agency-whatsapp-prepaid-trips',
+    title: 'Agency WhatsApp prepaid trips',
+    excerpt: 'White-label Sendero on your WhatsApp Business number and send funded trips.',
+    body: `Agencies connect a WhatsApp Business number, then use Sendero to issue
+prepaid traveler links under their own customer relationship. Each inbound
+WhatsApp message resolves to the same traveler session, so preferences, active
+trips, policy, and budget state follow the conversation.
+
+The agency keeps its markup and operating workflow. Sendero handles the agent
+tool calls, Duffel inventory, escrow lifecycle, and metered settlement.`,
+    category: 'for-agencies',
+    updatedAt: '2026-04-21',
+    locale: 'en-US',
+  },
+  {
     slug: 'corporate-slack-approvals',
     title: 'Slack approvals for corporate travel',
     excerpt: 'Managers approve bookings in-thread. No dashboards, no email.',

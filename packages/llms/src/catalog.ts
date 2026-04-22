@@ -120,7 +120,7 @@ function crossSurfaceLinks(o: Record<SenderoSurface, string>, current: SenderoSu
         'Authenticated buyer console, MCP endpoint, webhooks, billing, and trip operations.',
     },
     {
-      label: 'Marketing llms.txt',
+      label: 'Website llms.txt',
       href: absoluteUrl(o.marketing, '/llms.txt'),
       description: 'Public positioning, pricing, audiences, and launch-state guidance.',
     },

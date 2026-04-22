@@ -17,6 +17,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
+import { detectLocale, localeForPhone } from '@sendero/locale';
 import {
   handleVerifyHandshake,
   identityKey,
@@ -105,6 +106,8 @@ export async function POST(req: NextRequest) {
           tenantId: identity.tenantId,
           userId: identity.userId ?? identity.id,
           text: msg.message.text.body,
+          locale: identity.locale,
+          turnId: `whatsapp:${msg.messageId}`,
           req,
         })
           .then(result => {
@@ -135,22 +138,34 @@ async function dispatchAgent(args: {
   tenantId: string;
   userId: string;
   text: string;
+  locale: string;
+  turnId: string;
   req: NextRequest;
 }): Promise<{ reply: string } | null> {
   const dispatchUrl = new URL('/api/agent/dispatch', args.req.nextUrl.origin);
   const response = await fetch(dispatchUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: agentDispatchHeaders(),
     body: JSON.stringify({
       tenantId: args.tenantId,
       userId: args.userId,
       channel: 'whatsapp',
       text: args.text,
+      locale: args.locale,
+      turnId: args.turnId,
     }),
   });
   if (!response.ok) return null;
   const json = (await response.json()) as { text?: string };
   return json.text ? { reply: json.text } : null;
+}
+
+function agentDispatchHeaders() {
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  return {
+    'Content-Type': 'application/json',
+    'x-sendero-dispatch-secret': secret,
+  };
 }
 
 async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): Promise<void> {
@@ -180,12 +195,22 @@ async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<s
 
 async function upsertChannelIdentity(
   msg: NormalizedInboundMessage
-): Promise<{ id: string; tenantId: string; userId: string | null } | null> {
+): Promise<{ id: string; tenantId: string; userId: string | null; locale: string } | null> {
   const tenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
   if (!tenantId) return null;
 
   const bsuid = msg.identity.businessScopedUserId;
   const externalUserId = msg.identity.phone ?? msg.identity.phoneRaw ?? null;
+  const inferredLocale =
+    localeForPhone(msg.identity.phone ?? msg.identity.phoneRaw) ??
+    detectLocale({ country: env.whatsappDefaultCountry() });
+  const metadata = {
+    locale: inferredLocale,
+    localeSource: localeForPhone(msg.identity.phone ?? msg.identity.phoneRaw)
+      ? 'phone_prefix'
+      : 'tenant_default_country',
+    phoneRaw: msg.identity.phoneRaw,
+  };
 
   if (bsuid) {
     const row = await prisma.channelIdentity.upsert({
@@ -203,15 +228,22 @@ async function upsertChannelIdentity(
         parentBusinessScopedUserId: msg.identity.parentBusinessScopedUserId,
         externalUserId,
         username: msg.identity.username,
+        metadata,
       },
       update: {
         parentBusinessScopedUserId: msg.identity.parentBusinessScopedUserId,
         externalUserId: externalUserId ?? undefined,
         username: msg.identity.username,
+        metadata,
       },
-      select: { id: true, tenantId: true, userId: true },
+      select: { id: true, tenantId: true, userId: true, metadata: true },
     });
-    return row;
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      userId: row.userId,
+      locale: localeFromMetadata(row.metadata, inferredLocale),
+    };
   }
 
   if (externalUserId) {
@@ -228,13 +260,27 @@ async function upsertChannelIdentity(
         kind: 'whatsapp',
         externalUserId,
         username: msg.identity.username,
+        metadata,
       },
-      update: { username: msg.identity.username },
-      select: { id: true, tenantId: true, userId: true },
+      update: { username: msg.identity.username, metadata },
+      select: { id: true, tenantId: true, userId: true, metadata: true },
     });
-    return row;
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      userId: row.userId,
+      locale: localeFromMetadata(row.metadata, inferredLocale),
+    };
   }
   return null;
+}
+
+function localeFromMetadata(metadata: unknown, fallback: string): string {
+  if (metadata && typeof metadata === 'object' && 'locale' in metadata) {
+    const locale = (metadata as Record<string, unknown>).locale;
+    if (typeof locale === 'string' && locale) return locale;
+  }
+  return fallback;
 }
 
 async function applyIdentityChange(change: NormalizedIdentityChange): Promise<void> {

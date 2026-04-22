@@ -1,11 +1,12 @@
-import { Show } from '@clerk/nextjs';
 import {
   ArrowRight,
   Blocks,
   Bot,
   BriefcaseBusiness,
   CircleDollarSign,
+  KeyRound,
   Landmark,
+  Link2,
   MessageCircle,
   Plane,
   ReceiptText,
@@ -54,6 +55,59 @@ const agentLoop = [
 ];
 
 const channels = ['WhatsApp', 'Web', 'Slack', 'Teams', 'MCP', 'API'];
+
+const escrowJourney = [
+  {
+    label: 'Buyer prefunds the trip',
+    detail:
+      'A company, agency, or calling agent creates a USDC budget and receives a traveler-safe claim link.',
+  },
+  {
+    label: 'Traveler claims once',
+    detail:
+      'The private claim key stays in the URL fragment. The optional 6-digit code travels out-of-band.',
+  },
+  {
+    label: 'Agent books against budget',
+    detail:
+      'Sendero reserves, commits, confirms, settles, or refunds from the same prepaid escrow.',
+  },
+];
+
+const channelJourneys = [
+  {
+    label: 'WhatsApp traveler',
+    detail:
+      'The traveler opens the prepaid link, claims the budget, then keeps booking and in-trip help in WhatsApp.',
+    href: '/onboarding/consumer',
+    cta: 'Pair WhatsApp',
+    icon: MessageCircle,
+  },
+  {
+    label: 'Agency WhatsApp',
+    detail:
+      'An agency installs Sendero on its WhatsApp Business number and sends prepaid links under its brand.',
+    href: '/onboarding/agency',
+    cta: 'Wire agency',
+    icon: Landmark,
+  },
+  {
+    label: 'Corporate Slack',
+    detail:
+      'Employees request travel in Slack, managers approve in-thread, and trips draw from policy-bound escrow.',
+    href: '/onboarding/corporate',
+    cta: 'Install Slack',
+    icon: BriefcaseBusiness,
+  },
+  {
+    label: 'MCP and API',
+    detail:
+      'Other agents call prefund_trip, guest_claim_link, reserve_booking, and settle_booking directly.',
+    href: '/llms.txt',
+    cta: 'Read llms.txt',
+    icon: Blocks,
+  },
+];
 
 const segments = [
   {
@@ -129,19 +183,12 @@ export default function Page() {
           >
             llms.txt
           </Link>
-          <Show when="signed-out">
-            <Button asChild variant="ghost" className="rounded-none">
-              <Link href="/sign-in">Sign in</Link>
-            </Button>
-            <Button asChild className="rounded-none bg-[var(--ink)] hover:bg-[var(--ink)]/90">
-              <Link href="/waitlist">Request access</Link>
-            </Button>
-          </Show>
-          <Show when="signed-in">
-            <Button asChild className="rounded-none bg-[var(--ink)] hover:bg-[var(--ink)]/90">
-              <Link href="/app">Open app</Link>
-            </Button>
-          </Show>
+          <Button asChild variant="ghost" className="rounded-none">
+            <Link href="/sign-in">Sign in</Link>
+          </Button>
+          <Button asChild className="rounded-none bg-[var(--ink)] hover:bg-[var(--ink)]/90">
+            <Link href="/waitlist">Request access</Link>
+          </Button>
         </div>
       </nav>
 
@@ -174,34 +221,18 @@ export default function Page() {
           </div>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Show when="signed-out">
-              <Button
-                asChild
-                size="lg"
-                className="h-12 rounded-none bg-[var(--ink)] px-6 hover:bg-[var(--ink)]/90"
-              >
-                <Link href="/waitlist">
-                  Request access <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="h-12 rounded-none px-6">
-                <Link href="/llms.txt">Read llms.txt</Link>
-              </Button>
-            </Show>
-            <Show when="signed-in">
-              <Button
-                asChild
-                size="lg"
-                className="h-12 rounded-none bg-[var(--ink)] px-6 hover:bg-[var(--ink)]/90"
-              >
-                <Link href="/app">
-                  Open your workspace <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="h-12 rounded-none px-6">
-                <Link href="/llms.txt">Read llms.txt</Link>
-              </Button>
-            </Show>
+            <Button
+              asChild
+              size="lg"
+              className="h-12 rounded-none bg-[var(--ink)] px-6 hover:bg-[var(--ink)]/90"
+            >
+              <Link href="/waitlist">
+                Request access <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="h-12 rounded-none px-6">
+              <Link href="/llms.txt">Read llms.txt</Link>
+            </Button>
           </div>
         </div>
 
@@ -237,6 +268,55 @@ export default function Page() {
         </div>
       </section>
 
+      <section className="border-t border-[var(--border)]">
+        <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:px-8 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
+          <div>
+            <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink)]">
+              <Link2 className="size-4" />
+              Prepaid traveler links
+            </div>
+            <h2 className="m-0 text-3xl font-medium leading-tight tracking-normal text-[var(--text)] sm:text-4xl">
+              Connect operators and travelers with one escrow-backed claim link.
+            </h2>
+            <p className="m-0 mt-4 max-w-xl text-sm leading-6 text-[var(--text-dim)]">
+              A buyer can prefund a trip before the traveler ever talks to Sendero. The traveler
+              claims the budget once, then the agent books, changes, settles, and refunds against
+              that escrow across WhatsApp, Slack, web, or MCP.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Button
+                asChild
+                className="h-11 rounded-none bg-[var(--ink)] hover:bg-[var(--ink)]/90"
+              >
+                <Link href="/waitlist">
+                  Request escrow access <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="h-11 rounded-none">
+                <Link href="/llms.txt">Agent tool manifest</Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="border border-[var(--border)] bg-[var(--bg-elev)]">
+            {escrowJourney.map((item, index) => (
+              <div
+                className="grid gap-4 border-b border-[var(--border)] px-5 py-5 last:border-b-0 sm:grid-cols-[44px_1fr]"
+                key={item.label}
+              >
+                <div className="flex size-11 items-center justify-center border border-[var(--border)] font-mono text-[12px] text-[var(--ink)]">
+                  {String(index + 1).padStart(2, '0')}
+                </div>
+                <div>
+                  <h3 className="m-0 text-base font-medium text-[var(--text)]">{item.label}</h3>
+                  <p className="m-0 mt-2 text-sm leading-6 text-[var(--text-dim)]">{item.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="border-t border-[var(--border)] bg-[var(--bg-elev)]">
         <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:px-8 lg:grid-cols-[260px_1fr]">
           <div>
@@ -258,6 +338,44 @@ export default function Page() {
                   <h2 className="m-0 text-base font-medium text-[var(--text)]">{item.label}</h2>
                   <p className="m-0 mt-2 text-sm leading-6 text-[var(--text-dim)]">{item.detail}</p>
                 </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-[var(--border)]">
+        <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:px-8 lg:grid-cols-[260px_1fr]">
+          <div>
+            <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink)]">
+              <KeyRound className="size-4" />
+              User journeys
+            </div>
+            <p className="m-0 text-sm leading-6 text-[var(--text-dim)]">
+              Each channel is an adapter into the same session, policy, escrow, and metering engine.
+              No duplicated travel logic.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {channelJourneys.map(item => {
+              const Icon = item.icon;
+              return (
+                <article
+                  className="border border-[var(--border)] bg-[var(--bg-elev)] p-5"
+                  key={item.label}
+                >
+                  <div className="mb-5 flex items-center justify-between gap-4">
+                    <Icon className="size-5 text-[var(--ink)]" />
+                    <Link
+                      href={item.href}
+                      className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--text-dim)] no-underline hover:text-[var(--ink)]"
+                    >
+                      {item.cta}
+                    </Link>
+                  </div>
+                  <h3 className="m-0 text-lg font-medium text-[var(--text)]">{item.label}</h3>
+                  <p className="m-0 mt-2 text-sm leading-6 text-[var(--text-dim)]">{item.detail}</p>
+                </article>
               );
             })}
           </div>

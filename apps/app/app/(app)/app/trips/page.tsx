@@ -61,18 +61,18 @@ export default async function TripsPage({
     <>
       <PageHeader
         title="Trips"
-        description="Create and monitor prefunded traveler trips."
+        description="Create prepaid escrow links, send them to travelers, and monitor booking drawdown."
         actions={
           <Button asChild>
-            <Link href="/app/trips?sheet=new">New trip</Link>
+            <Link href="/app/trips?sheet=new">Create prepaid trip</Link>
           </Button>
         }
       />
       {trips.length === 0 ? (
         <EmptyState
           title="No trips yet"
-          description="Create a prefunded trip to send a secure claim link to a traveler."
-          cta={{ label: 'New trip', href: '/app/trips?sheet=new' }}
+          description="Create a prepaid trip, copy the claim link into WhatsApp or Slack, and let the traveler claim their Arc escrow budget."
+          cta={{ label: 'Create prepaid trip', href: '/app/trips?sheet=new' }}
         />
       ) : (
         <div className="flex flex-col gap-4">

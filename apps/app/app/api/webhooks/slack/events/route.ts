@@ -14,6 +14,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
+import { detectLocale } from '@sendero/locale';
 import {
   createSlackClient,
   deriveTenantKey,
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
 
   // Persist sender ChannelIdentity for downstream agent routing.
   const userId = parsed.event?.user;
+  const locale = requestLocale(req);
   if (userId) {
     try {
       await prisma.channelIdentity.upsert({
@@ -89,9 +91,9 @@ export async function POST(req: NextRequest) {
           tenantId: install.tenantId,
           kind: 'slack',
           externalUserId: userId,
-          metadata: { teamId, enterpriseId },
+          metadata: { teamId, enterpriseId, locale, localeSource: 'request_headers' },
         },
-        update: { metadata: { teamId, enterpriseId } },
+        update: { metadata: { teamId, enterpriseId, locale, localeSource: 'request_headers' } },
       });
     } catch (err) {
       console.error('[slack/events] identity upsert failed:', err);
@@ -111,6 +113,7 @@ export async function POST(req: NextRequest) {
       event: ev,
       eventId: parsed.event_id ?? null,
       userId,
+      locale,
     }).catch(err => {
       console.error('[slack/events] dispatch failed:', err);
     });
@@ -139,6 +142,7 @@ async function dispatchAndReply(args: {
   event: SlackEvent;
   eventId: string | null;
   userId: string;
+  locale: string;
 }): Promise<void> {
   const dispatchUrl = new URL('/api/agent/dispatch', args.req.nextUrl.origin);
 
@@ -147,18 +151,20 @@ async function dispatchAndReply(args: {
     userId: string;
     channel: 'slack';
     text: string;
+    locale: string;
     turnId?: string;
   } = {
     tenantId: args.tenantId,
     userId: args.userId,
     channel: 'slack',
     text: (args.event.text ?? '').slice(0, 4000),
+    locale: args.locale,
   };
   if (args.eventId) body.turnId = `slack:${args.eventId}`;
 
   const response = await fetch(dispatchUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: agentDispatchHeaders(),
     body: JSON.stringify(body),
   });
 
@@ -184,6 +190,21 @@ async function dispatchAndReply(args: {
   } catch (err) {
     console.error('[slack/events] postMessage failed:', err);
   }
+}
+
+function agentDispatchHeaders() {
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  return {
+    'Content-Type': 'application/json',
+    'x-sendero-dispatch-secret': secret,
+  };
+}
+
+function requestLocale(req: NextRequest): string {
+  return detectLocale({
+    acceptLanguage: req.headers.get('x-sendero-locale') ?? req.headers.get('accept-language'),
+    country: req.headers.get('x-vercel-ip-country') ?? req.headers.get('cf-ipcountry'),
+  });
 }
 
 async function resolveInstall(

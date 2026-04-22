@@ -1,17 +1,19 @@
 import { SenderoSignIn } from '@sendero/auth/components/sign-in';
 import { AuthShell } from '@/components/auth-shell';
+import { getAuthCopy } from '@/lib/auth-copy';
+import { getRequestLocale } from '@/lib/request-locale';
 
-export default function SignInPage() {
+export default async function SignInPage() {
+  const locale = await getRequestLocale();
+  const copy = getAuthCopy(locale).signIn;
+
   return (
     <AuthShell
-      title="Welcome back."
-      description="Sign in with Clerk to return to your Sendero workspace for traveler sessions, policies, channel adapters, metering, billing, and settlement."
-      asideTitle="Agent workspace"
-      asideItems={[
-        'Protected routes stay behind Clerk session and organization checks.',
-        'Organizations map to agencies, companies, operators, and agent clients.',
-        'Traveler sessions, policies, channels, and action ledgers stay inside the app.',
-      ]}
+      title={copy.title}
+      description={copy.description}
+      asideTitle={copy.asideTitle}
+      asideItems={copy.asideItems}
+      locale={locale}
     >
       <SenderoSignIn />
     </AuthShell>

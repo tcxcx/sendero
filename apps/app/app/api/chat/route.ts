@@ -18,7 +18,9 @@ import {
   type ModelTier,
   renderWorkflowsBlock,
   selectModel,
+  SENDERO_SOUL,
 } from '@sendero/agent';
+import { detectLocale, getLocaleSlice, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 import { listWorkflows } from '@sendero/workflows';
@@ -27,7 +29,7 @@ import { convertToModelMessages, type LanguageModel, stepCountIs, streamText } f
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-const SENDERO_PERSONA = `You are Sendero, a B2B2C AI travel agent running on Circle's Arc L2.
+const WEB_CHAT_RULES = `## Web console rules
 
 You book flights for corporate travelers using Duffel, and every booking is
 settled on-chain via an ERC-8183 job backed by USDC escrow. You have an
@@ -105,6 +107,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as ChatBody;
   const messages = body.messages;
   const traveler = body.traveler;
+  const locale = body.locale ?? requestLocale(req);
 
   const runtimeContextJson = body.context ? JSON.stringify(body.context, null, 2) : undefined;
 
@@ -132,8 +135,11 @@ export async function POST(req: NextRequest) {
   // every channel sees the workflow catalog as the canonical orchestration
   // surface, not ad-hoc tool chains.
   const systemPrompt = buildSystemPrompt({
-    persona: SENDERO_PERSONA,
-    locale: body.locale,
+    persona: `${SENDERO_SOUL}\n\n${WEB_CHAT_RULES}`,
+    locale,
+    localeSlice: getLocaleSlice(locale),
+    channelHint:
+      'Web console. The right-side Stage renders offer cards, hold cards, and settlement panels, so keep chat replies concise and do not duplicate visible UI.',
     runtimeContext: runtimeContextJson,
     workflowCatalog: renderWorkflowsBlock(
       listWorkflows().map(w => ({ id: w.id, label: w.label, description: w.description }))
@@ -163,4 +169,12 @@ export async function POST(req: NextRequest) {
   return result.toUIMessageStreamResponse({
     headers: { 'X-AI-Provider': picked.label },
   } as any);
+}
+
+function requestLocale(req: NextRequest): string {
+  return detectLocale({
+    cookie: req.cookies.get(LOCALE_COOKIE_NAME)?.value,
+    acceptLanguage: req.headers.get('x-sendero-locale') ?? req.headers.get('accept-language'),
+    country: req.headers.get('x-vercel-ip-country') ?? req.headers.get('cf-ipcountry'),
+  });
 }

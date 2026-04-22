@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@sendero/ui/card';
+import { Button } from '@sendero/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@sendero/ui/table';
 import Link from 'next/link';
 import { PageHeader } from '@/components/app-shell/page-header';
@@ -48,6 +49,39 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Home" description={`Buyer workspace for ${tenant.displayName}`} />
+
+      <section className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-normal">Launch a traveler journey</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Start with a prepaid escrow link, then route the traveler through WhatsApp, Slack, web,
+            or MCP without changing the booking engine.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-4">
+          <JourneyShortcut
+            href="/app/trips?sheet=new"
+            label="Prepaid trip"
+            description="Create a USDC budget and a traveler claim link."
+          />
+          <JourneyShortcut
+            href="/onboarding/agency"
+            label="WhatsApp agency"
+            description="Connect a Business number for white-label travel."
+          />
+          <JourneyShortcut
+            href="/onboarding/corporate"
+            label="Slack workplace"
+            description="Install approvals and employee travel DMs."
+          />
+          <JourneyShortcut
+            href="/llms.txt"
+            label="MCP agents"
+            description="Expose the same journey to other LLMs."
+          />
+        </div>
+      </section>
+
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard title="Active trips" value={String(activeTrips)} href="/app/trips" />
         <StatCard
@@ -105,6 +139,28 @@ export default async function DashboardPage() {
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function JourneyShortcut({
+  href,
+  label,
+  description,
+}: {
+  href: string;
+  label: string;
+  description: string;
+}) {
+  return (
+    <div className="flex min-h-40 flex-col justify-between rounded-md border border-border bg-background p-4">
+      <div>
+        <h2 className="text-base font-medium">{label}</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+      </div>
+      <Button asChild variant="outline" size="sm" className="mt-4 justify-start">
+        <Link href={href}>Open</Link>
+      </Button>
     </div>
   );
 }

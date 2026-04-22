@@ -10,6 +10,13 @@ export function MarketingWaitlist() {
           <span>Loading secure waitlist</span>
           <div aria-hidden="true" />
           <div aria-hidden="true" />
+          <div className="mk-waitlist-recovery">
+            <strong>Clerk connection delayed</strong>
+            <p>The secure waitlist is still negotiating the local development session.</p>
+            <button onClick={() => window.location.reload()} type="button">
+              Reload waitlist
+            </button>
+          </div>
         </div>
       </ClerkLoading>
       <ClerkLoaded>

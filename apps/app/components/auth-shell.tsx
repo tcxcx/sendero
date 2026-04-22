@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { LanguageSelector } from './language-selector';
 
 type AuthShellProps = {
   title: string;
   description: string;
   asideTitle: string;
   asideItems: string[];
+  locale: string;
   children: ReactNode;
 };
 
@@ -14,17 +16,21 @@ export function AuthShell({
   description,
   asideTitle,
   asideItems,
+  locale,
   children,
 }: AuthShellProps) {
   return (
     <main className="grid min-h-screen bg-[var(--bg)] text-[var(--text)] lg:grid-cols-[minmax(360px,0.92fr)_minmax(420px,1.08fr)]">
       <section className="flex flex-col justify-between border-b border-[var(--border)] px-5 py-6 sm:px-8 lg:min-h-screen lg:border-b-0 lg:border-r">
-        <Link href="/" className="flex items-center gap-3 no-underline">
-          <span className="size-3 bg-[var(--ink)]" aria-hidden="true" />
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--text)]">
-            Sendero
-          </span>
-        </Link>
+        <div className="flex items-start justify-between gap-4">
+          <Link href="/" className="flex items-center gap-3 pt-3 no-underline">
+            <span className="size-3 bg-[var(--ink)]" aria-hidden="true" />
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--text)]">
+              Sendero
+            </span>
+          </Link>
+          <LanguageSelector currentLocale={locale} />
+        </div>
 
         <div className="max-w-xl py-12 lg:py-0">
           <div className="mb-5 inline-flex border border-[var(--border)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-dim)]">

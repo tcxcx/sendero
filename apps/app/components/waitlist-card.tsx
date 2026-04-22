@@ -18,6 +18,21 @@ export function WaitlistCard() {
             <div className="h-11 animate-pulse border border-[var(--border)] bg-[var(--bg-sunk)]" />
             <div className="h-11 animate-pulse bg-[var(--ink)]" />
           </div>
+          <div className="mt-5 border border-[var(--border)] bg-[var(--bg-sunk)] p-4">
+            <p className="m-0 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink)]">
+              Clerk connection delayed
+            </p>
+            <p className="m-0 mt-2 text-sm leading-6 text-[var(--text-dim)]">
+              The secure waitlist is still negotiating the local development session.
+            </p>
+            <button
+              className="mt-4 h-10 border border-[var(--ink)] bg-[var(--ink)] px-4 font-mono text-[11px] uppercase tracking-[0.12em] text-white"
+              onClick={() => window.location.reload()}
+              type="button"
+            >
+              Reload waitlist
+            </button>
+          </div>
         </div>
       </ClerkLoading>
       <ClerkLoaded>

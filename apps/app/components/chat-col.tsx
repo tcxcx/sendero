@@ -9,6 +9,7 @@
  */
 
 import { useChat } from '@ai-sdk/react';
+import { detectLocale, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { DefaultChatTransport } from 'ai';
 import { useEffect, useRef, useState } from 'react';
 import { useSendero, runtimeContext } from './store';
@@ -21,6 +22,11 @@ function clock() {
 export function ChatCol() {
   const traveler = useSendero(s => s.traveler);
   const userAuth = useSendero(s => s.userAuth);
+  const [locale, setLocale] = useState('en-US');
+
+  useEffect(() => {
+    setLocale(readClientLocale());
+  }, []);
 
   // Send the signed-in traveler alongside every chat request so server-side
   // tools (book_flight) can authoritatively fill passenger name + email +
@@ -36,7 +42,8 @@ export function ChatCol() {
         },
         // Live snapshot of the booking state + last errors so the agent can
         // see what's happening in the UI and respond to failures.
-        context: runtimeContext(),
+        context: { ...runtimeContext(), locale },
+        locale,
       }),
     }) as any,
   });
@@ -381,6 +388,26 @@ export function ChatCol() {
       </div>
     </div>
   );
+}
+
+function readClientLocale(): string {
+  const cookieLocale =
+    typeof document === 'undefined'
+      ? null
+      : document.cookie
+          .split(';')
+          .map(part => part.trim())
+          .find(part => part.startsWith(`${LOCALE_COOKIE_NAME}=`))
+          ?.split('=')[1];
+
+  return detectLocale({
+    cookie: cookieLocale ? decodeURIComponent(cookieLocale) : null,
+    acceptLanguage:
+      typeof navigator === 'undefined'
+        ? null
+        : navigator.languages?.join(',') || navigator.language,
+    country: null,
+  });
 }
 
 function AgentWelcome({

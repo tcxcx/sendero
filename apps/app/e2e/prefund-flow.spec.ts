@@ -8,12 +8,12 @@ test.describe('authenticated prefund flows', () => {
 
   test('prefund a new trip via the sheet', async ({ page }) => {
     await page.goto('/app/trips');
-    await page.getByRole('link', { name: 'New trip' }).click();
+    await page.getByRole('link', { name: 'Create prepaid trip' }).click();
     await expect(page).toHaveURL(/\?sheet=new/);
     await page.getByLabel('Budget (USDC)').fill('100');
-    await page.getByLabel('Guest email').fill('test@example.com');
-    await page.getByLabel('Guest name').fill('Test Traveler');
-    await page.getByRole('button', { name: 'Send invite' }).click();
+    await page.getByLabel('Traveler email').fill('test@example.com');
+    await page.getByLabel('Traveler name').fill('Test Traveler');
+    await page.getByRole('button', { name: 'Create claim link' }).click();
     await expect(page.getByText('Invite created')).toBeVisible();
   });
 });

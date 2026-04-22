@@ -22,6 +22,11 @@ test.describe('public product smoke', () => {
       'href',
       '/llms.txt'
     );
+    await expect(
+      page.getByRole('heading', { name: /Connect operators and travelers/i })
+    ).toBeVisible();
+    await expect(page.getByText(/WhatsApp traveler/i)).toBeVisible();
+    await expect(page.getByText(/Corporate Slack/i)).toBeVisible();
   });
 
   test('llms.txt stays public and agent-readable', async ({ page }) => {
@@ -40,6 +45,22 @@ test.describe('public product smoke', () => {
     await expect(page).toHaveURL(/\/sign-in\?redirect_url=/);
     await expect(page.getByRole('heading', { name: /Welcome back/i })).toBeVisible();
     await expect(page.getByText(/Protected routes stay behind Clerk/i)).toBeVisible();
+    await expect(
+      page
+        .getByPlaceholder(/email/i)
+        .or(page.getByText(/Clerk connection delayed/i))
+        .first()
+    ).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('login shell persists selected locale through proxy middleware', async ({ page }) => {
+    await page.goto('/sign-in?sendero_locale=es-AR');
+
+    await expectNoFrameworkOverlay(page);
+    await expect(page).toHaveURL(/\/sign-in(?:$|\?)/);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es-AR');
+    await expect(page.getByRole('heading', { name: /Volvé a entrar/i })).toBeVisible();
+    await expect(page.getByLabel(/Language/i)).toHaveValue('es-AR');
   });
 
   test('waitlist route never renders a blank Clerk panel', async ({ page }) => {
@@ -51,8 +72,10 @@ test.describe('public product smoke', () => {
     ).toBeVisible();
 
     const clerkEmail = page.getByPlaceholder(/email/i);
-    const senderoLoadingState = page.getByText(/Waitlist identity/i);
+    const clerkRecoveryState = page.getByText(/Clerk connection delayed/i);
 
-    await expect(clerkEmail.or(senderoLoadingState).first()).toBeVisible({ timeout: 15_000 });
+    await expect(clerkEmail.or(clerkRecoveryState).first()).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });

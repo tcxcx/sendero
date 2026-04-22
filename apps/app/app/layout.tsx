@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { ClerkProvider } from '@clerk/nextjs';
 import { ReactGrabLoader } from '@/components/react-grab-loader';
+import { getRequestLocale } from '@/lib/request-locale';
 import '@sendero/ui/globals.css';
 import './globals.css';
 
@@ -19,9 +20,19 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+const clerkDevelopmentScriptPins =
+  process.env.NODE_ENV === 'development'
+    ? {
+        __internal_clerkJSVersion: process.env.NEXT_PUBLIC_CLERK_JS_VERSION ?? '6.7.4',
+        __internal_clerkUIVersion: process.env.NEXT_PUBLIC_CLERK_UI_VERSION ?? '1.6.2',
+      }
+    : {};
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getRequestLocale();
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -32,7 +43,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ReactGrabLoader />
-        <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up" waitlistUrl="/waitlist">
+        <ClerkProvider
+          signInUrl="/sign-in"
+          signUpUrl="/sign-up"
+          waitlistUrl="/waitlist"
+          {...clerkDevelopmentScriptPins}
+        >
           <NuqsAdapter>{children}</NuqsAdapter>
         </ClerkProvider>
       </body>

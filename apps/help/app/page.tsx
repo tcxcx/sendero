@@ -22,7 +22,7 @@ export default async function HelpHome() {
           <span>HELP</span>
         </div>
         <nav className="hp-nav-right">
-          <a href="https://sendero.travel">Marketing</a>
+          <a href="https://sendero.travel">Website</a>
           <a href="https://sendero-arc-web.vercel.app">App</a>
           <a href="/llms.txt">For AI agents</a>
         </nav>

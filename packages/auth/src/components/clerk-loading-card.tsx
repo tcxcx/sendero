@@ -27,6 +27,29 @@ export function ClerkLoadingCard({ label, detail }: ClerkLoadingCardProps) {
         <div className="h-11 animate-pulse border border-[var(--border)] bg-[var(--bg-sunk)]" />
         <div className="h-11 animate-pulse bg-[var(--ink)]" />
       </div>
+      <div className="mt-6 border border-[var(--border)] bg-[var(--bg-sunk)] p-4">
+        <p className="m-0 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink)]">
+          Clerk connection delayed
+        </p>
+        <p className="m-0 mt-2 text-sm leading-6 text-[var(--text-dim)]">
+          The secure identity service is still negotiating the local development session.
+        </p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <button
+            className="h-10 border border-[var(--ink)] bg-[var(--ink)] px-4 font-mono text-[11px] uppercase tracking-[0.12em] text-white"
+            onClick={() => window.location.reload()}
+            type="button"
+          >
+            Reload identity
+          </button>
+          <a
+            className="flex h-10 items-center justify-center border border-[var(--border)] px-4 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--text)] no-underline"
+            href="/waitlist"
+          >
+            Request access
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

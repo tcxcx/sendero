@@ -25,7 +25,6 @@ import type { CapStore } from '@sendero/billing/caps';
 import { type MeterStore, preflight } from '@sendero/billing/meter';
 import type { BillingSegment } from '@sendero/billing/pricing';
 import type { MeterStatus } from '@sendero/database';
-import { buildAgentContext } from '@sendero/intelligence';
 import { getLocaleSlice } from '@sendero/locale';
 import { listWorkflows } from '@sendero/workflows';
 import type { LanguageModel, ToolSet } from 'ai';
@@ -39,7 +38,7 @@ import {
   type ModelTier,
   selectModel,
 } from './models';
-import { renderWorkflowsBlock } from './prompt';
+import { buildSystemPrompt, renderWorkflowsBlock } from './prompt';
 import { appendTurn, type ConversationState, type SessionStore } from './session';
 
 export interface TripSnapshot {
@@ -137,14 +136,17 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     listWorkflows().map(w => ({ id: w.id, label: w.label, description: w.description }))
   );
   const recentTurnsBlock = renderRecentTurns(state);
-  const systemPrompt = [
-    buildAgentContext({ localeSlice, trip }),
-    recentTurnsBlock,
-    workflowsBlock,
-    args.persona,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  const systemPrompt = buildSystemPrompt({
+    persona: args.persona,
+    locale: input.actor.locale,
+    localeSlice: localeSliceMatchesRequestedLanguage(localeSlice.locale, input.actor.locale)
+      ? localeSlice
+      : null,
+    channelHint: renderChannelHint(input),
+    tripContext: renderTripContext(trip),
+    workflowCatalog: workflowsBlock,
+    recentTurns: recentTurnsBlock,
+  });
 
   // 5. LLM turn — when `model` is a gateway string AND AI_GATEWAY_API_KEY
   //    (or VERCEL_OIDC_TOKEN) is set, AI SDK auto-routes through the
@@ -253,4 +255,49 @@ function renderRecentTurns(state: ConversationState): string {
     '## Recent conversation',
     ...recent.map(t => `- ${t.role}: ${t.text.slice(0, 200)}`),
   ].join('\n');
+}
+
+function renderChannelHint(input: AgentInput): string {
+  const subject = input.meta?.subjectKey ? `\n- Subject key: ${input.meta.subjectKey}` : '';
+  const displayName = input.actor.displayName
+    ? `\n- Traveler name: ${input.actor.displayName}`
+    : '';
+
+  const instruction =
+    input.channel === 'whatsapp'
+      ? 'Plain text only. Keep messages compact for mobile, one clear next action per reply.'
+      : input.channel === 'slack'
+        ? 'Use concise Slack mrkdwn. Preserve thread context and make approval states explicit.'
+        : input.channel === 'mcp'
+          ? 'Return schema-literal, auditable responses. Prefer machine-readable next actions.'
+          : input.channel === 'email'
+            ? 'Write clear email prose with a subject-worthy first sentence and exact trip/payment details.'
+            : 'Coordinate with the web UI; do not duplicate cards already visible on screen.';
+
+  return `- Channel: ${input.channel}
+- Locale: ${input.actor.locale ?? 'unknown'}${displayName}${subject}
+- Instruction: ${instruction}`;
+}
+
+function renderTripContext(trip: TripSnapshot | null): string {
+  if (!trip) return '';
+  return [
+    `- Trip: \`${trip.tripId}\` (${trip.status})`,
+    `- Route: ${trip.route}`,
+    `- Departs: ${trip.departAt}`,
+    trip.pnr ? `- PNR: \`${trip.pnr}\`` : '',
+    trip.bookingRef ? `- Booking: \`${trip.bookingRef}\`` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function localeSliceMatchesRequestedLanguage(
+  sliceLocale: string,
+  requested: string | null
+): boolean {
+  if (!requested) return true;
+  const sliceLanguage = sliceLocale.toLowerCase().split('-')[0];
+  const requestedLanguage = requested.toLowerCase().split('-')[0];
+  return sliceLanguage === requestedLanguage;
 }
