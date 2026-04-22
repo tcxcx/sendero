@@ -28,6 +28,8 @@ const isPublicRoute = createRouteMatcher([
   '/waitlist(.*)',
   '/llms.txt',
   '/.well-known/llms.txt',
+  '/robots.txt',
+  '/sitemap.xml',
   '/api/mcp(.*)', // public MCP discovery + tool invocation surface
   '/api/workflows/list', // public workflow discovery for other agents
   '/api/agent/runtime', // public model/tool runtime metadata; no tenant data

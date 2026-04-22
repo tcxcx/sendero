@@ -12,7 +12,7 @@ test.describe('public product smoke', () => {
 
     await expectNoFrameworkOverlay(page);
     await expect(
-      page.getByRole('heading', { name: /AI travel agents that live where your customers/i })
+      page.getByRole('heading', { name: /A travel agent that knows the way/i })
     ).toBeVisible();
     await expect(page.getByRole('link', { name: /Request access/i }).first()).toHaveAttribute(
       'href',
@@ -36,6 +36,24 @@ test.describe('public product smoke', () => {
     await expect(page.locator('body')).toContainText('# Sendero App');
     await expect(page.locator('body')).toContainText('MCP tools');
     await expect(page.locator('body')).toContainText('Arc testnet settlement');
+  });
+
+  test('robots and sitemap stay public for crawlers', async ({ request }) => {
+    const robots = await request.get('/robots.txt');
+    expect(robots.ok()).toBe(true);
+
+    const robotsText = await robots.text();
+    expect(robotsText).toContain('Sitemap: https://app.sendero.travel/sitemap.xml');
+    expect(robotsText).toContain('User-Agent: GPTBot');
+    expect(robotsText).not.toContain('/sign-in');
+
+    const sitemap = await request.get('/sitemap.xml');
+    expect(sitemap.ok()).toBe(true);
+
+    const sitemapText = await sitemap.text();
+    expect(sitemapText).toContain('<loc>https://app.sendero.travel/</loc>');
+    expect(sitemapText).toContain('<loc>https://app.sendero.travel/.well-known/llms.txt</loc>');
+    expect(sitemapText).not.toContain('/sign-in');
   });
 
   test('protected workspace redirects into the Clerk-managed sign-in shell', async ({ page }) => {
