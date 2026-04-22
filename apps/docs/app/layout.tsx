@@ -6,6 +6,7 @@ import { GeistMono } from 'geist/font/mono';
 import {
   buildMetadata,
   organizationJsonLd,
+  resolvePublicOrigin,
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
@@ -16,8 +17,14 @@ import {
 import '../../app/app/globals.css';
 import './docs-overrides.css';
 
-const DOCS_URL = process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.sendero.travel';
-const MARKETING_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sendero.travel';
+const DOCS_URL = resolvePublicOrigin(
+  process.env.NEXT_PUBLIC_DOCS_URL,
+  'https://docs.sendero.travel'
+);
+const MARKETING_URL = resolvePublicOrigin(
+  process.env.NEXT_PUBLIC_SITE_URL,
+  'https://sendero.travel'
+);
 const SEO_LOCALES = ['en-US'] as const;
 const DESCRIPTION =
   'Developer docs for Sendero: MCP travel tools, x402 nanopayments, Arc settlement, Duffel booking flows, and agent-to-agent travel orchestration.';

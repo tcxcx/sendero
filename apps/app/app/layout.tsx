@@ -5,6 +5,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import {
   buildMetadata,
   organizationJsonLd,
+  resolvePublicOrigin,
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
@@ -13,8 +14,11 @@ import { getRequestLocale } from '@/lib/request-locale';
 import '@sendero/ui/globals.css';
 import './globals.css';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.sendero.travel';
-const MARKETING_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sendero.travel';
+const APP_URL = resolvePublicOrigin(process.env.NEXT_PUBLIC_APP_URL, 'https://app.sendero.travel');
+const MARKETING_URL = resolvePublicOrigin(
+  process.env.NEXT_PUBLIC_SITE_URL,
+  'https://sendero.travel'
+);
 const SEO_LOCALES = ['en-US'] as const;
 const DESCRIPTION =
   'Sendero app is the tenant console for agent-native travel operations: trips, invoices, MCP tools, billing, policy caps, webhooks, and Arc USDC settlement.';

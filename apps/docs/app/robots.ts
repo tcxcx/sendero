@@ -1,6 +1,9 @@
-import { buildRobots } from '@sendero/seo';
+import { buildRobots, resolvePublicOrigin } from '@sendero/seo';
 
-const SITE_URL = process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.sendero.travel';
+const SITE_URL = resolvePublicOrigin(
+  process.env.NEXT_PUBLIC_DOCS_URL,
+  'https://docs.sendero.travel'
+);
 
 export default function robots() {
   return buildRobots({

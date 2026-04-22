@@ -3,13 +3,20 @@ import type { ReactNode } from 'react';
 import {
   buildMetadata,
   organizationJsonLd,
+  resolvePublicOrigin,
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
 import './globals.css';
 
-const HELP_URL = process.env.NEXT_PUBLIC_HELP_URL || 'https://help.sendero.travel';
-const MARKETING_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sendero.travel';
+const HELP_URL = resolvePublicOrigin(
+  process.env.NEXT_PUBLIC_HELP_URL,
+  'https://help.sendero.travel'
+);
+const MARKETING_URL = resolvePublicOrigin(
+  process.env.NEXT_PUBLIC_SITE_URL,
+  'https://sendero.travel'
+);
 const SEO_LOCALES = ['en-US'] as const;
 const DESCRIPTION =
   'Help and troubleshooting for Sendero: traveler booking support, agency deployment, corporate travel operations, MCP tools, and AI-agent handoffs.';

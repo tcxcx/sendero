@@ -109,7 +109,7 @@ export interface SenderoMetadata {
 }
 
 export function buildMetadata(args: MetadataArgs): SenderoMetadata {
-  const origin = trimTrailingSlash(args.siteUrl);
+  const origin = resolvePublicOrigin(args.siteUrl, 'https://sendero.travel');
   const localizedPath =
     args.locale === args.defaultLocale
       ? args.path
@@ -193,6 +193,29 @@ export function buildMetadata(args: MetadataArgs): SenderoMetadata {
       'google-discover-image': `${origin}${SENDERO_SEO_ASSETS.googleDiscover}`,
     },
   };
+}
+
+export function resolvePublicOrigin(value: string | null | undefined, fallback: string): string {
+  const fallbackOrigin = trimTrailingSlash(fallback);
+  const raw = value?.trim();
+
+  if (!raw) {
+    return fallbackOrigin;
+  }
+
+  try {
+    const url = new URL(raw);
+    const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(url.hostname);
+    const isProduction = typeof process === 'undefined' || process.env.NODE_ENV === 'production';
+
+    if (isProduction && isLocalHost) {
+      return fallbackOrigin;
+    }
+
+    return url.origin;
+  } catch {
+    return fallbackOrigin;
+  }
 }
 
 function trimTrailingSlash(s: string): string {

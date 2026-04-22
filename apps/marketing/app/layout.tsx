@@ -4,13 +4,14 @@ import { Agentation } from 'agentation';
 import {
   buildMetadata,
   organizationJsonLd,
+  resolvePublicOrigin,
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
 import { Providers } from './providers';
 import './globals.css';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sendero.travel';
+const SITE_URL = resolvePublicOrigin(process.env.NEXT_PUBLIC_SITE_URL, 'https://sendero.travel');
 const SEO_LOCALES = ['en-US'] as const;
 const DESCRIPTION =
   'AI travel agents that live where your customers already are. One agent per trip, reachable over WhatsApp, Slack, email, and MCP. Real PNRs via Duffel. Settled in USDC on Arc.';

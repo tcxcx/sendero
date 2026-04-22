@@ -1,6 +1,11 @@
-import { buildSitemap, SENDERO_APP_PUBLIC_ROUTES, type SitemapEntry } from '@sendero/seo';
+import {
+  buildSitemap,
+  resolvePublicOrigin,
+  SENDERO_APP_PUBLIC_ROUTES,
+  type SitemapEntry,
+} from '@sendero/seo';
 
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.sendero.travel';
+const SITE_URL = resolvePublicOrigin(process.env.NEXT_PUBLIC_APP_URL, 'https://app.sendero.travel');
 const SEO_LOCALES = ['en-US'] as const;
 
 export default function sitemap(): SitemapEntry[] {
