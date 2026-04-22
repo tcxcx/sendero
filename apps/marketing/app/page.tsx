@@ -108,6 +108,37 @@ const POSTCARD_SERIES = [
   },
 ];
 
+const ROUTE_MURALS = [
+  {
+    label: 'Handoff map',
+    title: 'One request becomes coordinated travel work.',
+    body: 'Traveler intent, operator review, channel updates, approvals, and route state stay connected instead of splintering across tools.',
+    image: '/brand/generated/agent-handoff-map.jpg',
+    alt: 'Sendero illustrated handoff map with traveler, agent operators, approvals, and a destination route.',
+  },
+  {
+    label: 'Trust sequence',
+    title: 'Locked, checked, cleared, and settled.',
+    body: 'Every irreversible step has a proof point: secure intake, route context, approval, delivery, and supplier settlement.',
+    image: '/brand/generated/trust-stamp-flow.jpg',
+    alt: 'Sendero illustrated trust sequence of route documents, approval stamps, and settlement handoff.',
+  },
+  {
+    label: 'Operations network',
+    title: 'A graph for travel actions, not just messages.',
+    body: 'Bookings, policies, receipts, finance, support, and agent calls are modeled as connected events that can be inspected later.',
+    image: '/brand/generated/operations-network-map.jpg',
+    alt: 'Sendero illustrated operations network with travel, finance, policy, and support nodes.',
+  },
+  {
+    label: 'Open route',
+    title: 'The journey remains visible after the ticket is issued.',
+    body: 'The agent continues through changes, reminders, receipts, support, and reconciliation until the trip is complete.',
+    image: '/brand/generated/traveler-world-panorama.jpg',
+    alt: 'Sendero illustrated world map panorama with traveler, route marks, envelopes, and destinations.',
+  },
+];
+
 const SYMBOL_ATLAS = [
   '01-mail-circle.png',
   '01-sendero-s.png',
@@ -208,6 +239,29 @@ export default async function MarketingHome() {
           </p>
         </div>
         <MarketingWaitlist />
+      </section>
+
+      <section className="mk-murals" aria-labelledby="mk-murals-title">
+        <div className="mk-murals-copy">
+          <div className="mk-eyebrow">Route intelligence</div>
+          <h2 id="mk-murals-title">The agent keeps the whole journey on one map.</h2>
+          <p>
+            The new Sendero art system shows the hidden work behind every trip: intake, policy,
+            approval, payment, supplier handoff, traveler support, and the final audit trail.
+          </p>
+        </div>
+        <div className="mk-mural-gallery">
+          {ROUTE_MURALS.map((mural, index) => (
+            <figure className={`mk-mural mk-mural-${index + 1}`} key={mural.label}>
+              <img alt={mural.alt} decoding="async" src={mural.image} />
+              <figcaption>
+                <span>{mural.label}</span>
+                <strong>{mural.title}</strong>
+                <p>{mural.body}</p>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
       </section>
 
       <section className="mk-story" aria-labelledby="mk-story-title">
@@ -410,6 +464,19 @@ const inlineCss = `
   .mk-waitlist-recovery p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
   .mk-waitlist-recovery button { height: 40px; border: 1px solid var(--fg); background: var(--fg); color: var(--bg); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
   @keyframes mkPulse { from { opacity: 0.45; } to { opacity: 1; } }
+  .mk-murals { display: grid; grid-template-columns: minmax(240px, 0.5fr) minmax(0, 1.5fr); gap: clamp(24px, 4vw, 48px); align-items: start; margin: 0 calc(clamp(16px, 3vw, 48px) * -1) 80px; padding: clamp(42px, 6vw, 70px) clamp(16px, 3vw, 48px); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: color-mix(in oklab, #eedcc7 72%, var(--bg)); }
+  .mk-murals-copy { position: sticky; top: 24px; }
+  .mk-murals-copy h2 { font-size: clamp(30px, 4vw, 50px); line-height: 1.03; letter-spacing: 0; margin: 0 0 16px; font-weight: 500; text-wrap: balance; }
+  .mk-murals-copy p { color: var(--muted); margin: 0; font-size: 15px; line-height: 1.65; max-width: 480px; }
+  .mk-mural-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; }
+  .mk-mural { display: grid; align-content: start; gap: 14px; min-width: 0; margin: 0; }
+  .mk-mural-1 { grid-column: 1 / -1; }
+  .mk-mural img { display: block; width: 100%; aspect-ratio: 1.74; object-fit: cover; object-position: center; border: 1px solid var(--border); background: #eedcc7; filter: saturate(0.98) contrast(0.98); }
+  .mk-mural-1 img { aspect-ratio: 1.6; object-position: center; }
+  .mk-mural figcaption { display: grid; gap: 7px; padding: 0 2px 10px; }
+  .mk-mural figcaption span { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+  .mk-mural figcaption strong { font-size: 16px; line-height: 1.2; font-weight: 500; color: var(--fg); text-wrap: balance; }
+  .mk-mural figcaption p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
   .mk-story { margin: 0 0 80px; }
   .mk-story-intro { display: grid; grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr); gap: 28px; align-items: end; margin-bottom: 24px; }
   .mk-story-intro h2,
@@ -497,8 +564,15 @@ const inlineCss = `
     .mk-hero-ctas .mk-cta { display: flex; min-height: 46px; align-items: center; justify-content: center; text-align: center; }
     .mk-waitlist { grid-template-columns: 1fr; }
     .mk-story-intro,
+    .mk-murals,
     .mk-passport,
     .mk-symbols { grid-template-columns: 1fr; }
+    .mk-murals { margin-left: -14px; margin-right: -14px; }
+    .mk-murals-copy { position: static; }
+    .mk-mural-gallery { grid-template-columns: 1fr; }
+    .mk-mural-1 { grid-column: auto; }
+    .mk-mural img,
+    .mk-mural-1 img { aspect-ratio: 1.45; }
     .mk-story-grid { grid-template-columns: 1fr; }
     .mk-story-card { border-right: none; border-bottom: 1px solid var(--border); }
     .mk-story-card:last-child { border-bottom: none; }
