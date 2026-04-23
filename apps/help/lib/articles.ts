@@ -189,17 +189,20 @@ The same journey record keeps the traveler request, policy decision, supplier ac
     },
     {
       slug: 'clerk-legal-express-consent',
-      title: 'Legal documents: express consent (Clerk Core 2)',
-      excerpt: 'Require users to accept your Terms of Service and Privacy Policy during sign-up.',
-      body: `Clerk can require users to explicitly accept your legal documents during sign-up. This setting is called “Require express consent to legal documents”, and it is only available in Core 2.
-
-If you are using Clerk’s hosted Account Portal, you must upgrade your instance to Core 2 and upgrade your Account Portal configuration to Core 2 before this setting will appear.
-
-Set the legal document URLs to Sendero’s canonical pages:
+      title: 'Legal documents and express consent across Sendero',
+      excerpt:
+        'Canonical Terms and Privacy URLs, and how explicit consent fits web sign-up, travelers, and operators.',
+      body: `Sendero’s application logic treats legal clarity as a first-class concern: bookings, escrow, settlement, traveler sessions, and operator workspaces all assume people can read the same canonical legal documents. Use Sendero’s public Terms of Service and Privacy Policy everywhere you surface policy to humans or configure integrations:
 https://sendero.travel/terms
 https://sendero.travel/privacy
 
-Clerk docs:
+Express consent means a deliberate action—typically a checkbox or equivalent—before someone is bound to those documents. Product and compliance expectations apply across channels (web app, linked messaging surfaces, buyer-funded trips, and API/MCP callers acting on behalf of a tenant), not only on a single vendor screen.
+
+Whenever you add or operate a Sendero surface—linked messaging, buyer-funded trip invites, API/MCP integrations, or tenant dashboards—the same Terms and Privacy links should appear wherever a person or integration can be bound to policy, and consent should match the channel (inline link, deep link, or recorded acceptance in your tenant flow). Clerk’s “express consent to legal documents” setting below only wires that pattern into browser sign-up and Clerk’s hosted Account Portal; it does not replace aligning other entry points with Sendero’s legal baseline.
+
+For browser-based sign-up and Clerk’s hosted Account Portal, identity and organizations are powered by Clerk. In the Clerk Dashboard → Legal, you can require “express consent to legal documents” so sign-up and the hosted Account Portal collect that acceptance against the same Sendero URLs above. That control exists only on Clerk Core 2; hosted Account Portal must be upgraded to Core 2 before it appears.
+
+Operator reference (Clerk):
 https://clerk.com/docs/guides/secure/legal-compliance
 https://clerk.com/docs/guides/development/upgrading/upgrade-guides/core-2
 https://clerk.com/docs/guides/development/upgrading/upgrade-guides/core-2/nextjs
@@ -390,18 +393,20 @@ El mismo registro de viaje conserva la solicitud, la decisión de política, la 
     },
     {
       slug: 'clerk-legal-express-consent',
-      title: 'Documentos legales: consentimiento expreso (Clerk Core 2)',
+      title: 'Documentos legales y consentimiento expreso en Sendero',
       excerpt:
-        'Requiere que los usuarios acepten tus Términos de servicio y Política de privacidad durante el registro.',
-      body: `Clerk puede requerir que los usuarios acepten explícitamente tus documentos legales durante el registro. Esta opción se llama “Require express consent to legal documents” y solo está disponible en Core 2.
-
-Si usas el Account Portal hospedado de Clerk, necesitas actualizar tu instancia a Core 2 y actualizar la configuración del Account Portal a Core 2 para que esta opción aparezca.
-
-Configura las URLs de documentos legales con las páginas canónicas de Sendero:
+        'URLs canónicas de Términos y Privacidad, y cómo encaja el consentimiento explícito en web, viajeros y operadores.',
+      body: `La lógica de aplicación de Sendero trata la claridad legal como parte del producto: reservas, escrow, liquidación, sesiones de viaje y workspaces de operador suponen que las personas pueden leer los mismos documentos legales canónicos. Usa los Términos de servicio y la Política de privacidad públicos de Sendero donde muestres política a personas o configures integraciones:
 https://sendero.travel/terms
 https://sendero.travel/privacy
 
-Documentación de Clerk:
+El consentimiento expreso es una acción deliberada—típicamente una casilla o equivalente—antes de quedar sujeto a esos documentos. Las expectativas de producto y cumplimiento aplican a todos los canales (app web, mensajería vinculada, viajes fondeados por un comprador y llamadas API/MCP en nombre de un tenant), no solo a una pantalla de un proveedor.
+
+Cada vez que agregues u operes una superficie de Sendero—mensajería vinculada, invitaciones de viaje fondeadas por un comprador, integraciones API/MCP o tableros de tenant—deben aparecer los mismos enlaces de Términos y Privacidad donde una persona o integración quede sujeta a política, y el consentimiento debe adecuarse al canal (enlace en línea, enlace profundo o aceptación registrada en tu flujo de tenant). La opción de consentimiento expreso a documentos legales de Clerk que se describe abajo solo integra ese patrón en el registro por navegador y en el Account Portal hospedado de Clerk; no sustituye alinear otros puntos de entrada con la línea base legal de Sendero.
+
+Para el registro en navegador y el Account Portal hospedado de Clerk, la identidad y las organizaciones usan Clerk. En Clerk Dashboard → Legal puedes activar “Require express consent to legal documents” para que el registro y el Account Portal hospedado recojan esa aceptación contra las mismas URLs de Sendero anteriores. Esa opción existe solo en Clerk Core 2; el Account Portal hospedado debe estar en Core 2 para que aparezca.
+
+Referencia para operadores (Clerk):
 https://clerk.com/docs/guides/secure/legal-compliance
 https://clerk.com/docs/guides/development/upgrading/upgrade-guides/core-2
 https://clerk.com/docs/guides/development/upgrading/upgrade-guides/core-2/nextjs
@@ -635,18 +640,20 @@ O mesmo registro de jornada mantém juntos o pedido do viajante, a decisão de p
     },
     {
       slug: 'clerk-legal-express-consent',
-      title: 'Documentos legais: consentimento expresso (Clerk Core 2)',
+      title: 'Documentos legais e consentimento expresso na Sendero',
       excerpt:
-        'Exija que os usuários aceitem seus Termos de Serviço e Política de Privacidade durante o cadastro.',
-      body: `A Clerk pode exigir que os usuários aceitem explicitamente seus documentos legais durante o cadastro. Essa opção se chama “Require express consent to legal documents” e só está disponível no Core 2.
-
-Se você usa o Account Portal hospedado da Clerk, é necessário atualizar sua instância para Core 2 e atualizar a configuração do Account Portal para Core 2 para que essa opção apareça.
-
-Defina as URLs dos documentos legais nas páginas canônicas da Sendero:
+        'URLs canônicas de Termos e Privacidade, e como o consentimento explícito se encaixa na web, viajantes e operadores.',
+      body: `A lógica da aplicação Sendero trata clareza jurídica como parte do produto: reservas, escrow, liquidação, sessões de viajante e workspaces de operador pressupõem que as pessoas leem os mesmos documentos legais canônicos. Use os Termos de Serviço e a Política de Privacidade públicos da Sendero onde política for mostrada a pessoas ou em integrações:
 https://sendero.travel/terms
 https://sendero.travel/privacy
 
-Docs da Clerk:
+Consentimento expresso é uma ação deliberada—normalmente uma caixa de seleção ou equivalente—antes de ficar vinculado a esses documentos. Expectativas de produto e conformidade valem em todos os canais (app web, chat vinculado, viagens financiadas por comprador e chamadas API/MCP em nome de um tenant), não só em uma tela de um fornecedor.
+
+Sempre que você adicionar ou operar uma superfície Sendero—chat vinculado, convites de viagem financiados por comprador, integrações API/MCP ou painéis do tenant—os mesmos links de Termos e Privacidade devem aparecer onde pessoa ou integração fique vinculada à política, e o consentimento deve combinar com o canal (link embutido, deep link ou aceite registrado no fluxo do tenant). O controle “Require express consent to legal documents” da Clerk abaixo só aplica esse padrão ao cadastro no navegador e ao Account Portal hospedado da Clerk; não substitui alinhar outras entradas com a base legal da Sendero.
+
+Para cadastro no navegador e o Account Portal hospedado da Clerk, identidade e organizações usam a Clerk. No Clerk Dashboard → Legal você pode exigir “Require express consent to legal documents” para que cadastro e Account Portal hospedado registrem essa aceitação nas mesmas URLs Sendero acima. Esse controle existe apenas no Clerk Core 2; o Account Portal hospedado precisa estar em Core 2 para aparecer.
+
+Referência para operadores (Clerk):
 https://clerk.com/docs/guides/secure/legal-compliance
 https://clerk.com/docs/guides/development/upgrading/upgrade-guides/core-2
 https://clerk.com/docs/guides/development/upgrading/upgrade-guides/core-2/nextjs

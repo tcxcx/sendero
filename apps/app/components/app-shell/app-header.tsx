@@ -26,7 +26,7 @@ export function AppHeader({
   startSlot?: ReactNode;
 }) {
   return (
-    <header className="flex h-16 min-w-0 items-center justify-between border-b border-border bg-background px-4 sm:px-6">
+    <header className="flex h-16 min-w-0 items-center justify-between border-b border-[color:var(--ink)] bg-background px-4 sm:px-6">
       <div className="flex min-w-0 items-center gap-2">
         {startSlot}
         <Link href="/app" className="flex min-w-0 items-center gap-2">

@@ -62,7 +62,9 @@ test.describe('public product smoke', () => {
     await expectNoFrameworkOverlay(page);
     await expect(page).toHaveURL(/\/sign-in\?redirect_url=/);
     await expect(page.getByRole('heading', { name: /Welcome back/i })).toBeVisible();
-    await expect(page.getByText(/Protected routes stay behind Clerk/i)).toBeVisible();
+    await expect(
+      page.getByText(/Protected routes stay behind Sendero access checks/i)
+    ).toBeVisible();
     await expect(
       page
         .getByPlaceholder(/email/i)

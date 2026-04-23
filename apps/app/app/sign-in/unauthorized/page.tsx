@@ -35,7 +35,7 @@ export default async function UnauthorizedSignInPage() {
           {copy.ctaSignIn}
         </Link>
         <p className="m-0 text-center font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
-          Sendero · Clerk security
+          {copy.footerNote}
         </p>
       </div>
     </AuthShell>

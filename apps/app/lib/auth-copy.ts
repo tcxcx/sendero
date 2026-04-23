@@ -8,6 +8,8 @@ export type AuthCopy = {
     asideTitle: string;
     asideItems: string[];
     ctaSignIn: string;
+    /** Short footer under the primary CTA (Sendero-wide messaging, not vendor-only). */
+    footerNote: string;
   };
   signIn: {
     title: string;
@@ -53,6 +55,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'If this was not you, sign in and update your password or security settings in Clerk.',
       ],
       ctaSignIn: 'Sign in again',
+      footerNote: 'Sendero · Secure access',
     },
     signIn: {
       title: 'Welcome back.',
@@ -60,7 +63,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Sign in with Clerk to return to your Sendero workspace for traveler sessions, policies, channel adapters, metering, billing, and settlement.',
       asideTitle: 'Agentic workspace',
       asideItems: [
-        'Protected routes stay behind Clerk session and organization checks.',
+        'Protected routes stay behind Sendero access checks on the web (session and organization through Clerk).',
         'Organizations map to agencies, companies, operators, and agent clients.',
         'Traveler sessions, policies, channels, and action ledgers stay inside the app.',
       ],
@@ -112,6 +115,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Si no fuiste vos, iniciá sesión y actualizá contraseña o seguridad en Clerk.',
       ],
       ctaSignIn: 'Iniciar sesión de nuevo',
+      footerNote: 'Sendero · Acceso seguro',
     },
     signIn: {
       title: 'Volvé a entrar.',
@@ -119,7 +123,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Ingresá con Clerk para volver a tu workspace de Sendero: sesiones de viaje, políticas, canales, medición, facturación y settlement.',
       asideTitle: 'Workspace del agente',
       asideItems: [
-        'Las rutas protegidas quedan detrás de la sesión de Clerk y los controles de organización.',
+        'Las rutas protegidas quedan detrás de los controles de acceso de Sendero en la web (sesión y organización vía Clerk).',
         'Las organizaciones representan agencias, empresas, operadores y clientes agente.',
         'Sesiones, políticas, canales y ledger de acciones viven dentro de la app.',
       ],
@@ -171,6 +175,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Si no fuiste tú, inicia sesión y actualiza tu contraseña o seguridad en Clerk.',
       ],
       ctaSignIn: 'Iniciar sesión de nuevo',
+      footerNote: 'Sendero · Acceso seguro',
     },
     signIn: {
       title: 'Bienvenido de vuelta.',
@@ -178,7 +183,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Inicia sesión con Clerk para volver a tu workspace de Sendero: viajeros, políticas, canales, medición, facturación y liquidación.',
       asideTitle: 'Workspace del agente',
       asideItems: [
-        'Las rutas protegidas pasan por sesión Clerk y controles de organización.',
+        'Las rutas protegidas pasan por los controles de acceso de Sendero en la web (sesión y organización con Clerk).',
         'Las organizaciones representan agencias, empresas, operadores y clientes agente.',
         'Sesiones, políticas, canales y ledger de acciones se quedan dentro de la app.',
       ],
@@ -230,6 +235,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Se não foi você, entre e atualize a senha ou as configurações de segurança na Clerk.',
       ],
       ctaSignIn: 'Entrar novamente',
+      footerNote: 'Sendero · Acesso seguro',
     },
     signIn: {
       title: 'Bem-vindo de volta.',
@@ -237,7 +243,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Entre com Clerk para voltar ao workspace Sendero: viajantes, políticas, canais, medição, billing e liquidação.',
       asideTitle: 'Workspace do agente',
       asideItems: [
-        'Rotas protegidas ficam atrás da sessão Clerk e dos controles de organização.',
+        'Rotas protegidas ficam atrás dos controles de acesso Sendero na web (sessão e organização via Clerk).',
         'Organizações representam agências, empresas, operadores e clientes agente.',
         'Sessões, políticas, canais e ledger de ações ficam dentro do app.',
       ],
