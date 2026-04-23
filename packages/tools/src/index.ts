@@ -2,17 +2,23 @@ import { airQualityBriefTool } from './air-quality-brief';
 import { airportArrivalPlaybookTool } from './airport-arrival-playbook';
 import { airportTransferCoordinatorTool } from './airport-transfer-coordinator';
 import { bookFlightTool } from './book-flight';
+import { bookStayTool } from './book-stay';
 import { bridgeToArcTool } from './bridge-to-arc';
 import { cancelBookingTool } from './cancel-booking';
+import { cancelOrderQuoteTool, confirmCancelOrderTool } from './cancel-order-quote';
 import { checkPolicyTool } from './check-policy';
 import { checkTreasuryTool } from './check-treasury';
 import { confirmDuffelTool } from './confirm-duffel';
+import { displayOfferConditionsTool } from './display-offer-conditions';
 import { elevationRiskBriefTool } from './elevation-risk-brief';
 import { ensureDuffelCustomerTool } from './ensure-duffel-customer';
 import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
+import { findAirportsNearbyTool } from './find-airports-nearby';
+import { listAirlineCreditsTool } from './list-airline-credits';
 import { listFlightAncillariesTool } from './list-flight-ancillaries';
 import { gatewayBalanceTool } from './gateway-balance';
+import { quoteStayTool } from './quote-stay';
 import { gatewayTransferTool } from './gateway-transfer';
 import { generateBookingInvoiceTool } from './generate-booking-invoice';
 import { geocodeTripStopTool } from './geocode-trip-stop';
@@ -215,6 +221,14 @@ export const toolList: ToolDef[] = [
   // Duffel identity + ancillaries (trip-lifecycle extras)
   ensureDuffelCustomerTool,
   listFlightAncillariesTool,
+  // Duffel advanced flows (air + stays + credits + conditions + places)
+  findAirportsNearbyTool,
+  displayOfferConditionsTool,
+  quoteStayTool,
+  bookStayTool,
+  cancelOrderQuoteTool,
+  confirmCancelOrderTool,
+  listAirlineCreditsTool,
   // Ops helpers
   faucetDripTool,
 ];

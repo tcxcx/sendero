@@ -239,3 +239,315 @@ export type DuffelLifecycleStatus =
   | 'schedule_changed'
   | 'refunded'
   | 'ping';
+
+// ─── Places suggestions (airport / city radius search) ─────────────────
+
+export interface DuffelPlaceSuggestionWire {
+  /** 'airport' | 'city' | other — Duffel adds kinds over time. */
+  type: 'airport' | 'city' | string;
+  id: string;
+  name: string;
+  time_zone: string;
+  latitude: number;
+  longitude: number;
+  icao_code?: string;
+  iata_code?: string;
+  iata_city_code?: string;
+  iata_country_code?: string;
+  city_name?: string;
+  city?: {
+    id: string;
+    name: string;
+    iata_code?: string;
+    iata_country_code?: string;
+  };
+}
+
+// ─── Offer / Order conditions (change + refund before departure) ───────
+//
+// Per Duffel: either field can be `null` (we don't know), or present with
+// `allowed: boolean` + optional `penalty_amount` / `penalty_currency`.
+
+export interface DuffelConditionBeforeDepartureWire {
+  allowed: boolean;
+  penalty_amount: string | null;
+  penalty_currency: DuffelCurrencyCode | null;
+}
+
+export interface DuffelConditionsWire {
+  change_before_departure: DuffelConditionBeforeDepartureWire | null;
+  refund_before_departure: DuffelConditionBeforeDepartureWire | null;
+  priority_boarding?: string | null;
+  priority_check_in?: string | null;
+  advance_seat_selection?: string | null;
+}
+
+// Slice conditions never include refund_before_departure (refunds are
+// always at the order level — can't refund one slice).
+export interface DuffelSliceConditionsWire {
+  change_before_departure: DuffelConditionBeforeDepartureWire | null;
+}
+
+// ─── Private fares (corporate + leisure + loyalty) ─────────────────────
+//
+// `private_fares` is a map keyed by IATA airline code. Each entry is an
+// array of credentials. Different airlines require different fields — we
+// accept the superset and let the airline validate.
+
+export interface DuffelPrivateFareCredentialWire {
+  corporate_code?: string;
+  tour_code?: string;
+  /** Corporate loyalty programmes (AA AAdvantage Business etc.). */
+  tracking_reference?: string;
+  /** Account identifier for loyalty programmes that need one explicitly. */
+  account_number?: string;
+}
+
+/** Map keyed by IATA airline code (e.g. "AA", "UA", "WN"). */
+export type DuffelPrivateFaresMap = Record<string, DuffelPrivateFareCredentialWire[]>;
+
+export interface DuffelPrivateFareAppliedWire {
+  type: 'corporate' | 'leisure' | 'negotiated' | string;
+  corporate_code?: string;
+  tour_code?: string;
+  tracking_reference?: string;
+}
+
+export type DuffelLeisureFareType =
+  | 'student'
+  | 'senior'
+  | 'contract_bulk'
+  | 'contract_bulk_child'
+  | 'contract_bulk_infant_with_seat'
+  | 'contract_bulk_infant_without_seat'
+  | 'tour'
+  | 'air_crew'
+  | 'visiting_friends_and_family'
+  | (string & {});
+
+export interface DuffelOfferRequestPassengerWire {
+  type?: 'adult' | 'child' | 'infant_without_seat';
+  age?: number;
+  fare_type?: DuffelLeisureFareType;
+  user_id?: DuffelCustomerUserId;
+  loyalty_programme_accounts?: Array<{
+    airline_iata_code: string;
+    account_number: string;
+  }>;
+}
+
+export interface DuffelOfferRequestSliceWire {
+  origin: string;
+  destination: string;
+  departure_date: string;
+}
+
+export interface DuffelOfferRequestCreateWire {
+  slices: DuffelOfferRequestSliceWire[];
+  passengers: DuffelOfferRequestPassengerWire[];
+  cabin_class?: 'economy' | 'premium_economy' | 'business' | 'first';
+  return_offers?: boolean;
+  max_connections?: number;
+  private_fares?: DuffelPrivateFaresMap;
+  /** Duffel-managed airline-credit pool to try against this search. */
+  airline_credit_ids?: string[];
+}
+
+// ─── Airline credits ───────────────────────────────────────────────────
+
+export type DuffelAirlineCreditId = `acd_${string}`;
+
+export interface DuffelAirlineCreditWire {
+  id: DuffelAirlineCreditId;
+  code: string;
+  amount: string;
+  amount_currency: DuffelCurrencyCode;
+  type: 'eticket' | 'mco' | (string & {});
+  airline_iata_code: string;
+  issued_on: string;
+  live_mode: boolean;
+  expires_at: string | null;
+  spent_at: string | null;
+  invalidated_at: string | null;
+  given_name: string | null;
+  family_name: string | null;
+  passenger_id: DuffelPassengerId | null;
+  order_id: DuffelOrderId | null;
+  user_id: DuffelCustomerUserId | null;
+  created_at: string;
+}
+
+export interface DuffelAirlineCreditCreateWire {
+  airline_iata_code: string;
+  code: string;
+  amount: string;
+  amount_currency: DuffelCurrencyCode;
+  issued_on: string;
+  expires_at: string;
+  type: 'eticket' | 'mco';
+  given_name?: string;
+  family_name?: string;
+  user_id?: DuffelCustomerUserId;
+}
+
+// ─── Order cancellations ───────────────────────────────────────────────
+
+export type DuffelOrderCancellationId = `ore_${string}`;
+export type DuffelRefundDestination =
+  | 'original_form_of_payment'
+  | 'airline_credits'
+  | 'arc_bsp_cash'
+  | 'voucher'
+  | (string & {});
+
+export interface DuffelCancellationAirlineCreditWire {
+  passenger_id: DuffelPassengerId;
+  credit_name: string;
+  credit_currency: DuffelCurrencyCode;
+  credit_amount: string;
+  credit_code: string | null;
+  issued_on?: string;
+  expires_at?: string | null;
+}
+
+export interface DuffelOrderCancellationWire {
+  id: DuffelOrderCancellationId;
+  order_id: DuffelOrderId;
+  refund_currency: DuffelCurrencyCode | null;
+  refund_amount: string | null;
+  refund_to: DuffelRefundDestination;
+  expires_at: string | null;
+  confirmed_at: string | null;
+  created_at: string;
+  live_mode: boolean;
+  airline_credits?: DuffelCancellationAirlineCreditWire[];
+}
+
+// ─── Stays (hotels): quotes, bookings, loyalty, cancellation timeline ─
+
+export type DuffelStaysSearchResultId = `res_${string}`;
+export type DuffelStaysRateId = `rat_${string}`;
+export type DuffelStaysQuoteId = `quo_${string}`;
+export type DuffelStaysBookingId = `boo_${string}`;
+export type DuffelStaysAccommodationId = `acc_${string}`;
+export type DuffelStaysNegotiatedRateId = `nre_${string}`;
+
+export type DuffelStaysPaymentType = 'pay_now' | 'deposit' | 'guarantee' | (string & {});
+
+export interface DuffelStaysCancellationTimelineEntryWire {
+  /** Amount refundable up until `before`. */
+  refund_amount: string;
+  before: string;
+  currency: DuffelCurrencyCode;
+}
+
+export interface DuffelStaysSupportedLoyaltyProgrammeWire {
+  reference: string;
+  name?: string;
+  logo_url?: string;
+}
+
+export interface DuffelStaysRateConditionWire {
+  title: string;
+  description?: string;
+}
+
+export interface DuffelStaysRateWire {
+  id: DuffelStaysRateId;
+  total_amount: string;
+  total_currency: DuffelCurrencyCode;
+  due_at_accommodation_amount?: string | null;
+  due_at_accommodation_currency?: DuffelCurrencyCode | null;
+  payment_type?: DuffelStaysPaymentType;
+  cancellation_timeline?: DuffelStaysCancellationTimelineEntryWire[];
+  supported_loyalty_programme?: DuffelStaysSupportedLoyaltyProgrammeWire | null;
+  rate_code?: string | null;
+  negotiated_rate_id?: DuffelStaysNegotiatedRateId | null;
+  conditions?: DuffelStaysRateConditionWire[];
+  board_type?:
+    | 'room_only'
+    | 'breakfast'
+    | 'half_board'
+    | 'full_board'
+    | 'all_inclusive'
+    | (string & {});
+  available_rooms?: number;
+}
+
+export interface DuffelStaysQuotePayloadWire {
+  rate_id: DuffelStaysRateId;
+}
+
+export interface DuffelStaysQuoteWire {
+  id: DuffelStaysQuoteId;
+  total_amount: string;
+  total_currency: DuffelCurrencyCode;
+  due_at_accommodation_amount?: string | null;
+  due_at_accommodation_currency?: DuffelCurrencyCode | null;
+  check_in_date: string;
+  check_out_date: string;
+  expires_at?: string;
+  cancellation_timeline?: DuffelStaysCancellationTimelineEntryWire[];
+  payment_type?: DuffelStaysPaymentType;
+  supported_loyalty_programme?: DuffelStaysSupportedLoyaltyProgrammeWire | null;
+  conditions?: DuffelStaysRateConditionWire[];
+}
+
+export interface DuffelStaysGuestPayloadWire {
+  given_name: string;
+  family_name: string;
+  born_on?: string;
+  user_id?: DuffelCustomerUserId;
+}
+
+export interface DuffelStaysBookingPayloadWire {
+  quote_id: DuffelStaysQuoteId;
+  phone_number?: string;
+  email: string;
+  guests: DuffelStaysGuestPayloadWire[];
+  accommodation_special_requests?: string;
+  loyalty_programme_account_number?: string;
+  metadata?: Record<string, string>;
+  users?: DuffelCustomerUserId[];
+  payment?: {
+    three_d_secure_session_id?: string;
+  };
+}
+
+export interface DuffelStaysBookingWire {
+  id: DuffelStaysBookingId;
+  reference: string;
+  status: 'confirmed' | 'cancelled' | 'failed' | (string & {});
+  total_amount: string;
+  total_currency: DuffelCurrencyCode;
+  check_in_date: string;
+  check_out_date: string;
+  cancellation_timeline?: DuffelStaysCancellationTimelineEntryWire[];
+  created_at: string;
+  accommodation?: {
+    id: DuffelStaysAccommodationId;
+    name: string;
+    rating?: number | null;
+    address?: {
+      city_name?: string;
+      country_code?: string;
+      line_one?: string;
+      postal_code?: string;
+    };
+  };
+  supported_loyalty_programme?: DuffelStaysSupportedLoyaltyProgrammeWire | null;
+}
+
+export interface DuffelStaysNegotiatedRatePayloadWire {
+  display_name: string;
+  rate_access_code: string;
+  accommodation_ids: DuffelStaysAccommodationId[];
+}
+
+export interface DuffelStaysNegotiatedRateWire {
+  id: DuffelStaysNegotiatedRateId;
+  display_name: string;
+  rate_access_code: string;
+  accommodation_ids: DuffelStaysAccommodationId[];
+  live_mode: boolean;
+}

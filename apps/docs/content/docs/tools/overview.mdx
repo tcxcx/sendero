@@ -24,6 +24,13 @@ Sendero exposes a shared tool registry across MCP, web chat, WhatsApp, Slack, an
 | `trip_checkin_reminder` | Concierge | $0.003 | Canonical check-in nudge: window, transit note, leave-by, and next action. |
 | `list_flight_ancillaries` | Concierge | $0.002 | Read bags, cancel-for-any-reason, and seat map on a Duffel offer — feeds book_flight `services[]`. |
 | `ensure_duffel_customer` | Identity | $0.003 | Idempotent Duffel CustomerUser + CustomerUserGroup sync. Unlocks Travel Support Assistant for the traveler. |
+| `find_airports_nearby` | Read | $0.001 | Duffel places-suggestions wrapper: airports + cities within a radius of a lat/lng or matching a free-form query. |
+| `display_offer_conditions` | Read | $0.001 | Canonical change/refund conditions (free · penalty · allowed-unknown-fee · not allowed · unknown), slice-level + private fares + credit applicability. |
+| `quote_stay` | External API | $0.003 | Turn a Duffel Stays rate into a quote — surfaces cancellation timeline, payment type, and supported loyalty programme. |
+| `book_stay` | Composed | $0.008 | Book a Duffel Stays quote with loyalty_programme_account_number + Customer User linkage. |
+| `cancel_order_quote` | External API | $0.002 | Unconfirmed Duffel cancellation quote — refund destination + any airline credits to be issued. |
+| `confirm_cancel_order` | Composed | $0.003 | Confirm a cancellation quote (must run within expiry). Returns final airline-credit codes. |
+| `list_airline_credits` | Read | $0.001 | Traveler's Duffel airline credits (unused tickets, MCOs, vouchers) with state + totals. |
 | `restaurant_route_card` | Composed | $0.005 | Shortlist restaurants and export a route from the traveler to the top pick. |
 | `airport_transfer_coordinator` | Composed | $0.008 | Pickup plan with meeting point, primary transport, backup options, and airport→destination route. |
 | `airport_arrival_playbook` | Composed | $0.008 | One-screen arrival briefing: 5-step playbook, transport, timezone, and route. |
@@ -58,6 +65,8 @@ Tools are low-level capabilities. Real travel operations should use named workfl
 | `sendero.trip_delay_replanner` | Build a rebook plan after disruption; on approval, hold the chosen flight via `book_flight`. |
 | `sendero.book_with_ancillaries` | Search → list ancillaries → pause for selection → hold with bags/seats/CFAR attached. |
 | `sendero.cancellation_recovery` | Post-ticket recovery on `order.cancelled` / airline change webhooks: rebook or refund. |
+| `sendero.book_stay_with_loyalty` | Stays: search → pause → quote → pause for loyalty → book. |
+| `sendero.cancel_order_with_credits` | Flight cancellation: quote → approve → confirm → log credits. |
 
 Discover workflows at `/api/workflows/list` and run them at `/api/workflows/run`.
 

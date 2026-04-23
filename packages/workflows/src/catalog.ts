@@ -1264,6 +1264,154 @@ export const cancellationRecoveryWorkflow: WorkflowDef = {
   ],
 };
 
+// ─── book-stay-with-loyalty: Stays search → quote → book (with loyalty)
+//
+// Canonical hotel booking path that threads Duffel CustomerUser identity
+// + optional loyalty programme account number through to the booking.
+// Surfaces the cancellation timeline on the pause payload so every
+// channel sees the same artifact.
+
+export const bookStayWithLoyaltyWorkflow: WorkflowDef = {
+  id: 'sendero.book_stay_with_loyalty',
+  version: 1,
+  label: 'Book a stay with loyalty',
+  description:
+    'Stays happy path: ensure Duffel customer, search hotels, pause for rate selection, create a quote (exposes cancellation timeline + payment type), pause for final confirmation + loyalty account entry, then book with loyalty_programme_account_number attached.',
+  steps: [
+    {
+      kind: 'tool',
+      id: 'ensure_customer',
+      tool: 'ensure_duffel_customer',
+      label: 'Ensure Duffel CustomerUser',
+      as: 'customer',
+      args: {
+        clerkUserId: $('input.clerkUserId'),
+        tenantId: $('input.tenantId'),
+      },
+      retries: 1,
+      timeoutMs: 10_000,
+    },
+    {
+      kind: 'tool',
+      id: 'search_stays',
+      tool: 'search_hotels',
+      label: 'Search stays inventory',
+      as: 'stays',
+      args: {
+        location: $('input.location'),
+        checkInDate: $('input.checkInDate'),
+        checkOutDate: $('input.checkOutDate'),
+        guests: $('input.guests'),
+        rooms: $('input.rooms'),
+      },
+      retries: 1,
+      timeoutMs: 20_000,
+    },
+    {
+      kind: 'pause',
+      id: 'await_rate_pick',
+      label: 'Traveler / operator picks a rate',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'stay-rate-pick',
+        share: $('stays.share'),
+      },
+      timeoutMs: 24 * 60 * 60 * 1000,
+    },
+    {
+      kind: 'tool',
+      id: 'quote',
+      tool: 'quote_stay',
+      label: 'Create quote (shows cancellation timeline + loyalty)',
+      as: 'quote',
+      args: { rateId: $('await_rate_pick.rateId') },
+      timeoutMs: 15_000,
+    },
+    {
+      kind: 'pause',
+      id: 'await_quote_confirm',
+      label: 'Confirm quote + attach loyalty account',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'stay-quote-confirm',
+        share: $('quote.share'),
+        cancellationTimeline: $('quote.cancellationTimeline'),
+        supportedLoyaltyProgramme: $('quote.supportedLoyaltyProgramme'),
+      },
+      timeoutMs: 60 * 60 * 1000,
+    },
+    {
+      kind: 'tool',
+      id: 'book',
+      tool: 'book_stay',
+      label: 'Book the stay',
+      as: 'booking',
+      args: {
+        quoteId: $('quote.quoteId'),
+        email: $('input.email'),
+        phoneNumber: $('input.phoneNumber'),
+        guests: $('input.guests'),
+        loyaltyProgrammeAccountNumber: $('await_quote_confirm.loyaltyAccountNumber'),
+        accommodationSpecialRequests: $('await_quote_confirm.specialRequests'),
+      },
+      timeoutMs: 30_000,
+    },
+  ],
+};
+
+// ─── cancel-order-with-credits: quote → approve → confirm → log
+//
+// Post-ticket flight cancellation flow. Create the Duffel cancellation
+// quote, pause for operator/traveler approval (they see refund
+// destination + any airline credits that will issue), confirm within
+// the expiry window, then log the final credits for future
+// list_airline_credits lookups.
+
+export const cancelOrderWithCreditsWorkflow: WorkflowDef = {
+  id: 'sendero.cancel_order_with_credits',
+  version: 1,
+  label: 'Cancel order with credits',
+  description:
+    'Flight cancellation: create a quote, pause for approval (operator sees refund destination + any airline credits), then confirm. The confirmation step returns the final credit_code on each airline credit.',
+  steps: [
+    {
+      kind: 'tool',
+      id: 'quote',
+      tool: 'cancel_order_quote',
+      label: 'Build cancellation quote',
+      as: 'quote',
+      args: { orderId: $('input.orderId') },
+      retries: 1,
+      timeoutMs: 15_000,
+    },
+    {
+      kind: 'pause',
+      id: 'await_approval',
+      label: 'Approve cancellation',
+      reason: 'approval',
+      payload: {
+        promptId: 'cancel-order-approval',
+        share: $('quote.share'),
+        refundAmount: $('quote.refundAmount'),
+        refundCurrency: $('quote.refundCurrency'),
+        refundTo: $('quote.refundTo'),
+        expiresAt: $('quote.expiresAt'),
+        airlineCredits: $('quote.airlineCredits'),
+      },
+      timeoutMs: 2 * 60 * 60 * 1000,
+    },
+    {
+      kind: 'tool',
+      id: 'confirm',
+      tool: 'confirm_cancel_order',
+      label: 'Confirm cancellation',
+      as: 'confirmation',
+      args: { cancellationId: $('quote.cancellationId') },
+      timeoutMs: 20_000,
+    },
+  ],
+};
+
 export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [bookFlightWorkflow.id]: bookFlightWorkflow,
   [groupTripWorkflow.id]: groupTripWorkflow,
@@ -1279,6 +1427,8 @@ export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [tripDelayReplannerWorkflow.id]: tripDelayReplannerWorkflow,
   [bookWithAncillariesWorkflow.id]: bookWithAncillariesWorkflow,
   [cancellationRecoveryWorkflow.id]: cancellationRecoveryWorkflow,
+  [bookStayWithLoyaltyWorkflow.id]: bookStayWithLoyaltyWorkflow,
+  [cancelOrderWithCreditsWorkflow.id]: cancelOrderWithCreditsWorkflow,
 };
 
 /** Resolve a workflow by id; returns null if unknown. */

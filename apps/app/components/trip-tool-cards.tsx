@@ -29,10 +29,14 @@ import {
   UtensilsCrossedIcon,
 } from 'lucide-react';
 
+import { AirportListCard } from '@/components/ai-elements/airport-list-card';
 import {
   AncillaryPickerCard,
   type AncillaryPickerResult,
 } from '@/components/ai-elements/ancillary-picker-card';
+import { CancellationQuoteCard } from '@/components/ai-elements/cancellation-quote-card';
+import { OfferConditionsCard } from '@/components/ai-elements/offer-conditions-card';
+import { StayQuoteCard } from '@/components/ai-elements/stay-quote-card';
 
 const cardShell =
   'rounded-2xl border border-[color:var(--border)] bg-[color:var(--panel)] px-4 py-3 transition-[background-color,border-color] duration-150 ease-out';
@@ -679,6 +683,20 @@ export function TripToolCard({
   }
   if (toolName === 'list_flight_ancillaries') {
     return <AncillaryPickerCard data={data as AncillaryPickerResult} />;
+  }
+  if (toolName === 'find_airports_nearby') {
+    return <AirportListCard data={data as Parameters<typeof AirportListCard>[0]['data']} />;
+  }
+  if (toolName === 'display_offer_conditions') {
+    return <OfferConditionsCard data={data as Parameters<typeof OfferConditionsCard>[0]['data']} />;
+  }
+  if (toolName === 'quote_stay') {
+    return <StayQuoteCard data={data as Parameters<typeof StayQuoteCard>[0]['data']} />;
+  }
+  if (toolName === 'cancel_order_quote' || toolName === 'confirm_cancel_order') {
+    return (
+      <CancellationQuoteCard data={data as Parameters<typeof CancellationQuoteCard>[0]['data']} />
+    );
   }
   return null;
 }

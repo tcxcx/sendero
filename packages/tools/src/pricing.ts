@@ -71,6 +71,15 @@ export const TOOL_PRICING: Record<string, string> = {
   ensure_duffel_customer: '0.003',
   list_flight_ancillaries: '0.002',
 
+  // Duffel advanced flows (air + stays + credits + conditions + places)
+  find_airports_nearby: '0.001',
+  display_offer_conditions: '0.001',
+  quote_stay: '0.003',
+  book_stay: '0.008',
+  cancel_order_quote: '0.002',
+  confirm_cancel_order: '0.003',
+  list_airline_credits: '0.001',
+
   // Dev/test helper
   faucet_drip: '0.0005',
 };

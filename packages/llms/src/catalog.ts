@@ -125,6 +125,41 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
       'Return ancillary options on a Duffel offer — bags, cancel-for-any-reason, and seat map — ready to feed back into book_flight as services[].',
   },
   {
+    label: 'find_airports_nearby',
+    description:
+      'Find Duffel-bookable airports within a radius of a lat/lng or matching a query. Useful when the traveler names a city that has no direct airport.',
+  },
+  {
+    label: 'display_offer_conditions',
+    description:
+      'Canonical render of change/refund conditions for a Duffel offer: free / penalty / allowed-unknown-fee / not allowed / unknown, plus slice-level + private_fares + airline-credit applicability.',
+  },
+  {
+    label: 'quote_stay',
+    description:
+      'Turn a Duffel Stays rate into a confirmed quote. Exposes cancellation timeline, payment type (pay_now/deposit/guarantee), and supported loyalty programme.',
+  },
+  {
+    label: 'book_stay',
+    description:
+      'Book a Duffel Stays quote. Supports loyalty_programme_account_number + Customer User linkage to unlock Travel Support Assistant for the guest.',
+  },
+  {
+    label: 'cancel_order_quote',
+    description:
+      'Create an unconfirmed Duffel order cancellation quote. Returns refund destination (original form of payment / airline_credits / voucher) + any credits to be issued.',
+  },
+  {
+    label: 'confirm_cancel_order',
+    description:
+      'Confirm a previously created Duffel cancellation quote. Must run within the quote expiry. Returns final credit_code on each airline credit issued.',
+  },
+  {
+    label: 'list_airline_credits',
+    description:
+      "List a traveler's Duffel airline credits (unused tickets, MCOs, vouchers) with availability state and totals by currency.",
+  },
+  {
     label: 'send_tokens',
     description: 'Transfer USDC on Arc.',
   },
@@ -233,6 +268,16 @@ export const AGENT_WORKFLOW_CATALOG: LlmsItem[] = [
     label: 'sendero.cancellation_recovery',
     description:
       'Post-ticket recovery on order.cancelled / airline-initiated change webhooks. Rebook via trip_delay_replanner or cancel + refund.',
+  },
+  {
+    label: 'sendero.book_stay_with_loyalty',
+    description:
+      'Stays: search → pause for pick → quote (with cancellation timeline) → pause for loyalty input → book with loyalty_programme_account_number.',
+  },
+  {
+    label: 'sendero.cancel_order_with_credits',
+    description:
+      'Flight cancellation: quote → pause for approval (operator sees refund destination + credits) → confirm within expiry.',
   },
 ];
 

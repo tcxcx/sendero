@@ -676,6 +676,11 @@ const TRIP_TOOL_NAMES = new Set([
   'trip_checkin_reminder',
   'trip_delay_replanner',
   'list_flight_ancillaries',
+  'find_airports_nearby',
+  'display_offer_conditions',
+  'quote_stay',
+  'cancel_order_quote',
+  'confirm_cancel_order',
 ]);
 
 function ToolPreview({ toolName, result }: { toolName: string; result: unknown }) {
