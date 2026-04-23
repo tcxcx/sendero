@@ -1,8 +1,8 @@
-import type { Viewport } from 'next';
 import type { ReactNode } from 'react';
-import { RootProvider } from 'fumadocs-ui/provider';
-import { GeistSans } from 'geist/font/sans';
-import { GeistMono } from 'geist/font/mono';
+
+import type { Viewport } from 'next';
+import Script from 'next/script';
+
 import {
   buildMetadata,
   organizationJsonLd,
@@ -10,6 +10,11 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { GeistMono } from 'geist/font/mono';
+import { GeistSans } from 'geist/font/sans';
+import 'fumadocs-ui/style.css';
+
+import { DocsRootProvider } from '@/app/docs-root-provider';
 
 // Pull the exact same token vocabulary the main Sendero app uses so
 // the docs match the vermilion brand pixel-for-pixel. The relative
@@ -85,6 +90,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       suppressHydrationWarning
     >
       <head>
+        {process.env.NODE_ENV === 'development' && (
+          <Script
+            src="//unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="beforeInteractive"
+          />
+        )}
         <link
           rel="alternate"
           type="text/plain"
@@ -102,7 +114,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         ))}
       </head>
       <body>
-        <RootProvider>{children}</RootProvider>
+        <DocsRootProvider>{children}</DocsRootProvider>
       </body>
     </html>
   );

@@ -1,7 +1,10 @@
+@import "@sendero/ui/motion.css";
+
 :root {
   --bg: #eedcc7;
   --fg: #111111;
   --muted: #6b6b6b;
+  --ink: #fb542b;
   --accent: #fb542b;
   --accent-alt: #ff6a45;
   --border: #d8c1a7;
@@ -16,6 +19,7 @@
     --bg: #eedcc7;
     --fg: #111111;
     --muted: #6b6b6b;
+    --ink: #fb542b;
     --accent: #fb542b;
     --accent-alt: #ff6a45;
     --border: #d8c1a7;
@@ -37,6 +41,17 @@ body {
   font-feature-settings:
     "cv11" on,
     "ss01" on;
+}
+
+::selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
+}
+::-moz-selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
 }
 
 code {

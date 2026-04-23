@@ -25,7 +25,7 @@ The brand should feel:
 - guided
 - premium but approachable
 
-It should not feel like a generic travel app, a chat product, or a cold corporate SaaS tool. The visual identity should suggest **discovery, planning, route intelligence, and travel perspective**.
+It should not feel like a generic travel app, a chat product, or a cold corporate SaaS tool. The visual identity should suggest **discovery, planning, route intelligence, and travel perspective**. Sendero is a vertical AI travel agent travel.
 
 ### 2. Core Brand Idea
 
@@ -105,6 +105,32 @@ Slight imperfection, texture, and warmth matter.
 - minimalist forms
 - calm spacing
 - light warm backgrounds
+
+#### Motion
+
+Motion should feel like paper, ink, route tracing, and quiet operational state changes.
+
+Use motion for:
+
+- first-load orientation on public editorial pages
+- route-line or map-image reveals
+- state feedback on pressable controls
+- small image focus changes on hover
+- docs/help content entering without layout shift
+
+Avoid motion for:
+
+- repeated operator actions
+- keyboard-driven flows
+- dense table scanning
+- anything that delays a travel agent from acting
+
+Default curves:
+
+- `cubic-bezier(0.23, 1, 0.32, 1)` for entrances and feedback
+- `cubic-bezier(0.77, 0, 0.175, 1)` for visible movement already on screen
+
+All motion must respect `prefers-reduced-motion`.
 
 #### Avoid
 

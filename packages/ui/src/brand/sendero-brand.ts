@@ -90,12 +90,33 @@ export const senderoBrand = {
       'generic tech blue as default',
     ],
   },
+  motion: {
+    metaphor: 'paper, ink, route tracing, and quiet operational state changes',
+    easeOut: 'cubic-bezier(0.23, 1, 0.32, 1)',
+    easeInOut: 'cubic-bezier(0.77, 0, 0.175, 1)',
+    timings: {
+      pressMs: '100-160',
+      smallFeedbackMs: '140-220',
+      pageEntranceMs: '360-760',
+      heroImageMs: '700-1100',
+    },
+    principles: [
+      'animate rare orientation moments, not repeated operator actions',
+      'use opacity plus small translate or scale, never scale from zero',
+      'buttons and pressable cards should respond immediately on active press',
+      'route-line motion should feel drawn in ink, not neon or futuristic',
+      'honor prefers-reduced-motion on every app',
+    ],
+  },
   assets: {
     brandBookPdf: '/brand/sendero_brand_book.pdf',
     logo: '/brand/sendero-logo.png',
     banner: '/brand/sendero-banner.png',
+    wordmarkBanner: '/brand/sendero-banner.png',
     heroBanner: '/brand/hero-banner.png',
+    wideTravelMap: '/brand/hero-banner.png',
     heroTransparent: '/brand/hero-transparent.png',
+    transparentMapFrame: '/brand/sendero-map-frame-transparent.png',
     stampSheet: '/brand/aspect-ratio-asset-stamps.png',
   },
 } as const;

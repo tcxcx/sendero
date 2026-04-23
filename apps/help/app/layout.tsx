@@ -1,5 +1,8 @@
-import type { Viewport } from 'next';
 import type { ReactNode } from 'react';
+
+import type { Viewport } from 'next';
+import Script from 'next/script';
+
 import {
   buildMetadata,
   organizationJsonLd,
@@ -17,7 +20,7 @@ const MARKETING_URL = resolvePublicOrigin(
   process.env.NEXT_PUBLIC_SITE_URL,
   'https://sendero.travel'
 );
-const SEO_LOCALES = ['en-US'] as const;
+const SEO_LOCALES = ['en-US', 'es-MX', 'pt-BR', 'es-AR'] as const;
 const DESCRIPTION =
   'Help and troubleshooting for Sendero: traveler booking support, agency deployment, corporate travel operations, MCP tools, and AI-agent handoffs.';
 
@@ -73,6 +76,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        {process.env.NODE_ENV === 'development' && (
+          <Script
+            src="//unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="beforeInteractive"
+          />
+        )}
         <link rel="alternate" type="text/plain" title="Sendero Help llms.txt" href="/llms.txt" />
         <link
           rel="alternate"

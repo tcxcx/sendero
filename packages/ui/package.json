@@ -11,6 +11,7 @@
   ],
   "exports": {
     "./globals.css": "./src/globals.css",
+    "./motion.css": "./src/motion.css",
     "./tailwind.config": "./tailwind.config.ts",
     "./brand": "./src/brand/sendero-brand.ts",
     "./cn": "./src/utils/cn.ts",
@@ -24,6 +25,7 @@
     "./form": "./src/components/form.tsx",
     "./input": "./src/components/input.tsx",
     "./label": "./src/components/label.tsx",
+    "./language-selector": "./src/components/language-selector.tsx",
     "./popover": "./src/components/popover.tsx",
     "./select": "./src/components/select.tsx",
     "./separator": "./src/components/separator.tsx",
@@ -51,6 +53,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@sendero/locale": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.8.0",

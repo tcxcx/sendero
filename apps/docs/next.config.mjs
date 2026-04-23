@@ -1,4 +1,5 @@
 import { createMDX } from 'fumadocs-mdx/next';
+
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,7 +15,13 @@ const config = {
   reactStrictMode: true,
   // We pull the shared globals.css out of the root Next app so the
   // docs site speaks the exact same vermilion token vocabulary.
-  transpilePackages: ['@sendero/tools', '@sendero/llms', '@sendero/seo'],
+  transpilePackages: [
+    '@sendero/tools',
+    '@sendero/llms',
+    '@sendero/seo',
+    '@sendero/locale',
+    '@sendero/ui',
+  ],
   // MDX is heavy; let Next inline server components where possible.
   serverExternalPackages: ['shiki'],
 };

@@ -1,4 +1,6 @@
 @tailwind base;
+
+@custom-variant dark (&:is(.dark *));
 @tailwind components;
 @tailwind utilities;
 
@@ -36,9 +38,20 @@
   --radius: 2px;
   --radius-md: 4px;
 
+  --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-pixel: "Departure Mono", ui-monospace, monospace;
   --font-sans: "Geist", ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --sidebar: hsl(0 0% 98%);
+  --sidebar-foreground: hsl(240 5.3% 26.1%);
+  --sidebar-primary: hsl(240 5.9% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 98%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
 .dark {
@@ -56,6 +69,14 @@
   --text-faint: oklch(0.48 0.01 250);
   --border: oklch(0.22 0.01 250);
   --border-strong: oklch(0.32 0.01 250);
+  --sidebar: hsl(240 5.9% 10%);
+  --sidebar-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 3.7% 15.9%);
+  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-border: hsl(240 3.7% 15.9%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
 * {
@@ -90,23 +111,56 @@ body {
     color: inherit;
   }
 }
-/* Text selection — vermilion bg with parchment text. Brand-carrying,
-   unmistakable. Pairs the warm primary with a warm light pulled from the
-   page background (var(--bg) at full opacity) for maximum contrast. */
+/* Text selection — vermilion highlight with cream glyphs. Brand-carrying,
+   unmistakable, and inherited by docs, code blocks, and transcripts. */
 ::selection {
   background: var(--ink);
-  color: #fff7ec;
+  color: #fafaf7;
   text-shadow: none;
 }
 ::-moz-selection {
   background: var(--ink);
-  color: #fff7ec;
+  color: #fafaf7;
   text-shadow: none;
 }
-.dark ::selection,
-.dark ::-moz-selection {
-  background: var(--ink);
-  color: #0a0b0d;
+
+button,
+a[role="button"],
+.app-shell-main a,
+.app-shell-main button {
+  transition-timing-function: var(--motion-ease-out);
+}
+
+button:active,
+a[role="button"]:active,
+.app-shell-main a:active,
+.app-shell-main button:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell-main > * {
+    animation: app-surface-in 420ms var(--motion-ease-out) both;
+  }
+
+  .app-shell-main > *:nth-child(2) {
+    animation-delay: 45ms;
+  }
+
+  .app-shell-main > *:nth-child(3) {
+    animation-delay: 75ms;
+  }
+}
+
+@keyframes app-surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* =====================================================
@@ -1671,4 +1725,15 @@ hr.rule {
   .workspace {
     grid-template-columns: 320px 1fr 300px;
   }
+}
+
+@theme inline {
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }

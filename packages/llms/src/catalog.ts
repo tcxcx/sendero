@@ -558,6 +558,12 @@ export function buildSenderoHelpLlms(options: SurfaceOptions = {}): LlmsTxtConfi
             description: 'Intent to PNR to settlement overview.',
           },
           {
+            label: 'Clerk legal URLs and express consent',
+            href: '/article/clerk-legal-express-consent',
+            description:
+              'Terms and Privacy URLs for Clerk, express consent (Core 2), and Account Portal upgrade links.',
+          },
+          {
             label: 'Sendero MCP tool catalog',
             href: '/article/mcp-tool-catalog',
             description: 'Agent-facing tool catalog explainer.',

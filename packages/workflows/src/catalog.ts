@@ -515,6 +515,305 @@ export const agencyCohortWorkflow: WorkflowDef = {
   ],
 };
 
+// ─── ops-quote-to-book: intake → inventory → quote review → booking ────
+
+export const opsQuoteToBookWorkflow: WorkflowDef = {
+  id: 'sendero.ops_quote_to_book',
+  version: 1,
+  label: 'Ops quote-to-book chain',
+  description:
+    'Agency/TMC desk flow: normalize an inbound request, search bookable inventory, check policy, pause for operator quote review, then reserve/hold against escrow when the operator marks the quote ready to book.',
+  steps: [
+    {
+      kind: 'pause',
+      id: 'operator_intake_review',
+      label: 'Operator reviews inbound request',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'operator-workspace',
+        expected:
+          'Confirm traveler, route, dates, budget, policy, client tone, missing fields, and source channel.',
+      },
+    },
+    {
+      kind: 'parallel',
+      id: 'inventory_search',
+      label: 'Search flight and hotel inventory',
+      failFast: false,
+      branches: [
+        {
+          id: 'flights',
+          steps: [
+            {
+              kind: 'tool',
+              id: 'search_flights',
+              tool: 'search_flights',
+              label: 'Search flights for quote matrix',
+              as: 'flightOffers',
+              args: $('input.flightSearch'),
+              retries: 1,
+              timeoutMs: 15_000,
+            },
+          ],
+        },
+        {
+          id: 'hotels',
+          steps: [
+            {
+              kind: 'tool',
+              id: 'search_hotels',
+              tool: 'search_hotels',
+              label: 'Search hotels for quote matrix',
+              as: 'hotelOffers',
+              args: $('input.hotelSearch'),
+              retries: 1,
+              timeoutMs: 15_000,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      kind: 'tool',
+      id: 'policy',
+      tool: 'check_policy',
+      label: 'Check selected quote candidate against policy',
+      as: 'policy',
+      args: {
+        policyId: $('input.policyId'),
+        offer: $('input.policyOffer'),
+      },
+    },
+    {
+      kind: 'pause',
+      id: 'operator_quote_review',
+      label: 'Operator edits quote and client-ready message',
+      reason: 'approval',
+      payload: {
+        promptId: 'quote-builder',
+        expected:
+          'Return readyToBook, selectedOfferId, quoteText, policyExceptionMemo, and clientApprovalChannel.',
+      },
+    },
+    {
+      kind: 'branch',
+      id: 'quote_gate',
+      label: 'Quote ready to book',
+      when: $('operator_quote_review.readyToBook'),
+      equals: true,
+      // biome-ignore lint/suspicious/noThenProperty: BranchStep uses "then" as its workflow-domain field.
+      then: [
+        {
+          kind: 'tool',
+          id: 'reserve',
+          tool: 'reserve_booking',
+          label: 'Reserve upper-bound USDC from escrow',
+          as: 'reservation',
+          args: {
+            tripId: $('input.tripId'),
+            upperBoundUsdc: $('input.upperBoundUsdc'),
+          },
+        },
+        {
+          kind: 'tool',
+          id: 'hold',
+          tool: 'book_flight',
+          label: 'Hold selected supplier offer',
+          as: 'hold',
+          args: { offerId: $('operator_quote_review.selectedOfferId') },
+        },
+      ],
+      otherwise: [
+        {
+          kind: 'pause',
+          id: 'await_client_decision',
+          label: 'Await client decision or quote revision',
+          reason: 'user_reply',
+          payload: { via: 'originating_channel', promptId: 'quote-builder' },
+        },
+      ],
+    },
+  ],
+};
+
+// ─── ops-rebook-refund: evidence → options → approval → service action ──
+
+export const opsRebookRefundWorkflow: WorkflowDef = {
+  id: 'sendero.ops_rebook_refund',
+  version: 1,
+  label: 'Ops rebook/refund desk',
+  description:
+    'Post-ticket servicing flow: gather booking evidence, evaluate rebook/refund options, pause for approval, then cancel/refund or search replacement inventory with an audit memo payload.',
+  steps: [
+    {
+      kind: 'pause',
+      id: 'service_evidence_review',
+      label: 'Operator reviews booking evidence',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'rebooking-refunds',
+        expected:
+          'Attach supplier order, PNR, traveler urgency, fare rule summary, refundability, and requested action.',
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'treasury',
+      tool: 'check_treasury',
+      label: 'Check treasury coverage for refund or fare difference',
+      as: 'treasury',
+      args: {},
+    },
+    {
+      kind: 'pause',
+      id: 'service_action_approval',
+      label: 'Approve rebook, cancel, refund, or credit',
+      reason: 'approval',
+      payload: {
+        promptId: 'rebooking-refunds',
+        expected:
+          'Return action=refund|rebook|credit|keep, approvedBy, customerMessage, and internalMemo.',
+      },
+    },
+    {
+      kind: 'branch',
+      id: 'service_action_gate',
+      label: 'Service action',
+      when: $('service_action_approval.action'),
+      equals: 'refund',
+      // biome-ignore lint/suspicious/noThenProperty: BranchStep uses "then" as its workflow-domain field.
+      then: [
+        {
+          kind: 'tool',
+          id: 'cancel',
+          tool: 'cancel_booking',
+          label: 'Cancel booking with supplier and release escrow',
+          args: {
+            bookingId: $('input.bookingId'),
+            tripId: $('input.tripId'),
+            reason: $('service_action_approval.internalMemo'),
+          },
+        },
+        {
+          kind: 'tool',
+          id: 'refund_settle',
+          tool: 'send_tokens',
+          label: 'Refund traveler wallet',
+          args: {
+            to: $('input.travelerAddress'),
+            amount: $('input.refundAmount'),
+            token: 'USDC',
+          },
+        },
+      ],
+      otherwise: [
+        {
+          kind: 'tool',
+          id: 'replacement_search',
+          tool: 'search_flights',
+          label: 'Search replacement flights',
+          as: 'replacementOffers',
+          args: $('input.rebookSearch'),
+        },
+        {
+          kind: 'pause',
+          id: 'replacement_quote_review',
+          label: 'Operator reviews replacement options',
+          reason: 'approval',
+          payload: { promptId: 'rebooking-refunds', via: 'service_desk' },
+        },
+      ],
+    },
+  ],
+};
+
+// ─── ops-channel-intake: channel → identity → route next action ─────────
+
+export const opsChannelIntakeWorkflow: WorkflowDef = {
+  id: 'sendero.ops_channel_intake',
+  version: 1,
+  label: 'Ops channel intake',
+  description:
+    'Existing-tool embedding chain: normalize a request from WhatsApp, Slack, email, web, MCP, CRM, or GDS/NDC into one tenant/traveler/trip/session and return the next action to the originating channel.',
+  steps: [
+    {
+      kind: 'pause',
+      id: 'inbound_channel_received',
+      label: 'Inbound request captured',
+      reason: 'external_event',
+      payload: {
+        promptId: 'embedded-tools',
+        expected: 'Provide channel, external user id, raw text, attachments, and tenant hint.',
+      },
+    },
+    {
+      kind: 'pause',
+      id: 'identity_resolution_review',
+      label: 'Resolve traveler, tenant, policy, and open trip',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'embedded-tools',
+        expected:
+          'Confirm matched user, tenant, policy, trip, confidence, and missing identity proof.',
+      },
+    },
+    {
+      kind: 'pause',
+      id: 'route_next_action',
+      label: 'Route next best action to channel',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'embedded-tools',
+        expected: 'Return nextAction, workflowId, channelReply, operatorOwner, and SLA.',
+      },
+    },
+  ],
+};
+
+// ─── ops-artifact-pack: evidence → invoice/artifact → operator review ───
+
+export const opsArtifactPackWorkflow: WorkflowDef = {
+  id: 'sendero.ops_artifact_pack',
+  version: 1,
+  label: 'Ops artifact pack',
+  description:
+    'Professional artifact chain: gather trip, policy, supplier, settlement, and invoice evidence, generate a booking invoice where available, then pause for operator review of quote, itinerary, exception, refund, or reconciliation copy.',
+  steps: [
+    {
+      kind: 'pause',
+      id: 'artifact_evidence_review',
+      label: 'Collect source evidence',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'professional-artifacts',
+        expected:
+          'Attach traveler request, selected offers, policy result, approvals, supplier refs, settlement txs, and invoice ids.',
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'invoice',
+      tool: 'generate_booking_invoice',
+      label: 'Generate booking invoice when a booking is present',
+      args: {
+        bookingId: $('input.bookingId'),
+        settleTxHash: $('input.settleTxHash'),
+      },
+    },
+    {
+      kind: 'pause',
+      id: 'operator_artifact_review',
+      label: 'Operator reviews artifact pack',
+      reason: 'approval',
+      payload: {
+        promptId: 'professional-artifacts',
+        expected:
+          'Return sentVersion, quoteText, itineraryText, exceptionMemo, refundMemo, and reconciliationSummary.',
+      },
+    },
+  ],
+};
+
 export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [bookFlightWorkflow.id]: bookFlightWorkflow,
   [groupTripWorkflow.id]: groupTripWorkflow,
@@ -522,6 +821,10 @@ export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [checkInReminderWorkflow.id]: checkInReminderWorkflow,
   [guestPrefundWorkflow.id]: guestPrefundWorkflow,
   [agencyCohortWorkflow.id]: agencyCohortWorkflow,
+  [opsQuoteToBookWorkflow.id]: opsQuoteToBookWorkflow,
+  [opsRebookRefundWorkflow.id]: opsRebookRefundWorkflow,
+  [opsChannelIntakeWorkflow.id]: opsChannelIntakeWorkflow,
+  [opsArtifactPackWorkflow.id]: opsArtifactPackWorkflow,
 };
 
 /** Resolve a workflow by id; returns null if unknown. */

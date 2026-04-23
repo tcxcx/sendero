@@ -9,12 +9,15 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { anthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import {
   buildProviderOptions,
   buildSystemPrompt,
   directProviderModel,
   gatewayConfigured,
+  geminiDirectModelId,
+  googleGenerativeAiKey,
   type ModelTier,
   renderWorkflowsBlock,
   selectModel,
@@ -74,9 +77,9 @@ type Picked = { model: LanguageModel | string; label: string; tier: ModelTier };
 
 /**
  * Route selection: prefer Vercel AI Gateway string form so providerOptions
- * kicks in fallback chains and we keep unified observability. Only fall
- * back to a direct `@ai-sdk/anthropic` or `@ai-sdk/openai` model when no
- * gateway credential is present — matches the pattern in /api/agent/dispatch.
+ * kicks in fallback chains and we keep unified observability. Without the
+ * gateway, use the same **Gemini → OpenAI → Anthropic** cascade as
+ * `/api/agent/dispatch` (`directProviderModel` in `@sendero/agent`).
  */
 function pickModel(tier: ModelTier = 'fast'): Picked | null {
   if (gatewayConfigured()) {
@@ -86,6 +89,16 @@ function pickModel(tier: ModelTier = 'fast'): Picked | null {
   const direct = directProviderModel(tier);
   if (!direct) return null;
   const [provider, modelId] = direct.split('/') as [string, string];
+  if (provider === 'google') {
+    const key = googleGenerativeAiKey();
+    if (!key) return null;
+    const google = createGoogleGenerativeAI({ apiKey: key });
+    return {
+      model: google(geminiDirectModelId(direct)),
+      label: `direct:${direct}`,
+      tier,
+    };
+  }
   if (provider === 'anthropic') {
     return { model: anthropic(modelId), label: `direct:${direct}`, tier };
   }
@@ -120,7 +133,7 @@ export async function POST(req: NextRequest) {
       {
         error: 'ai_not_configured',
         message:
-          'Set AI_GATEWAY_API_KEY (preferred), or provision Vercel OIDC, or fall back to ANTHROPIC_API_KEY / OPENAI_API_KEY in .env.local.',
+          'Set AI_GATEWAY_API_KEY (preferred), or provision Vercel OIDC, or fall back to GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY in .env.local.',
       },
       { status: 503 }
     );

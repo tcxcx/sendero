@@ -12,7 +12,7 @@ test.describe('public product smoke', () => {
 
     await expectNoFrameworkOverlay(page);
     await expect(
-      page.getByRole('heading', { name: /A travel agent that knows the way/i })
+      page.getByRole('heading', { name: /Run every trip from one Agentic workspace/i })
     ).toBeVisible();
     await expect(page.getByRole('link', { name: /Request access/i }).first()).toHaveAttribute(
       'href',
@@ -23,7 +23,7 @@ test.describe('public product smoke', () => {
       '/llms.txt'
     );
     await expect(
-      page.getByRole('heading', { name: /Connect operators and travelers/i })
+      page.getByRole('heading', { name: /Connect buyers and travelers/i })
     ).toBeVisible();
     await expect(page.getByText(/WhatsApp traveler/i)).toBeVisible();
     await expect(page.getByText(/Corporate Slack/i)).toBeVisible();
@@ -88,6 +88,23 @@ test.describe('public product smoke', () => {
     await expect(
       page.getByRole('heading', { name: /Join the Sendero agent network/i })
     ).toBeVisible();
+
+    const clerkEmail = page.getByPlaceholder(/email/i);
+    const clerkRecoveryState = page.getByText(/Clerk connection delayed/i);
+
+    await expect(clerkEmail.or(clerkRecoveryState).first()).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  test('sign-up route exposes the live hackathon access form', async ({ page }) => {
+    await page.goto('/sign-up');
+
+    await expectNoFrameworkOverlay(page);
+    await expect(
+      page.getByRole('heading', { name: /Sign up for hackathon access/i })
+    ).toBeVisible();
+    await expect(page.getByText(/Sign-ups are currently unavailable/i)).toHaveCount(0);
 
     const clerkEmail = page.getByPlaceholder(/email/i);
     const clerkRecoveryState = page.getByText(/Clerk connection delayed/i);

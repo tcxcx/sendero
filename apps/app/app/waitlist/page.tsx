@@ -5,7 +5,8 @@ import { getRequestLocale } from '@/lib/request-locale';
 
 export default async function WaitlistPage() {
   const locale = await getRequestLocale();
-  const copy = getAuthCopy(locale).waitlist;
+  const auth = getAuthCopy(locale);
+  const copy = auth.waitlist;
 
   return (
     <AuthShell
@@ -13,9 +14,10 @@ export default async function WaitlistPage() {
       description={copy.description}
       asideTitle={copy.asideTitle}
       asideItems={copy.asideItems}
+      canonicalPath="/waitlist"
       locale={locale}
     >
-      <WaitlistCard />
+      <WaitlistCard precheck={auth.waitlistPrecheck} />
     </AuthShell>
   );
 }

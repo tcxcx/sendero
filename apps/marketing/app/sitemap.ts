@@ -6,7 +6,7 @@ import {
 } from '@sendero/seo';
 
 const SITE_URL = resolvePublicOrigin(process.env.NEXT_PUBLIC_SITE_URL, 'https://sendero.travel');
-const SEO_LOCALES = ['en-US'] as const;
+const SEO_LOCALES = ['en-US', 'es-MX', 'pt-BR', 'es-AR'] as const;
 
 export default function sitemap(): SitemapEntry[] {
   return buildSitemap({

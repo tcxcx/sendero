@@ -25,6 +25,7 @@ const isPublicRoute = createRouteMatcher([
   '/invoice/(.*)', // public invoice viewer (JWT-gated)
   '/sign-in(.*)',
   '/sign-up(.*)',
+  '/sso-callback(.*)',
   '/waitlist(.*)',
   '/llms.txt',
   '/.well-known/llms.txt',
@@ -39,6 +40,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
   '/api/health',
   '/api/guest/claimed', // guest submits post-claim; no session yet
+  '/api/waitlist/precheck', // email lookup for waitlist toast + redirect (no session)
 ]);
 
 const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)', '/tasks(.*)']);

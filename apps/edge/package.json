@@ -20,6 +20,7 @@
     "@circle-fin/adapter-viem-v2": "^1.8.2",
     "@circle-fin/developer-controlled-wallets": "^8.0.0",
     "@ai-sdk/anthropic": "^2.0.0",
+    "@ai-sdk/google": "^2.0.0",
     "@ai-sdk/openai": "^2.0.0",
     "ai": "^6.0.0",
     "@duffel/api": "^4.0.0",

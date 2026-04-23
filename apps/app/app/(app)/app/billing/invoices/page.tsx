@@ -3,9 +3,22 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
 import { InvoiceFilters } from '@/components/invoices/invoice-filters';
 import { InvoicesTable } from '@/components/invoices/invoices-table';
+import { getAppCopy } from '@/lib/app-copy';
 import { parseListQuery } from '@/lib/parse-list-query';
+import { getRequestLocale } from '@/lib/request-locale';
 import { requireCurrentTenant } from '@/lib/tenant-context';
-import { prisma, type Prisma } from '@sendero/database';
+import { prisma, type InvoiceKind, type InvoiceStatus, type Prisma } from '@sendero/database';
+
+const INVOICE_STATUSES = ['draft', 'issued', 'sent', 'viewed', 'paid', 'overdue', 'void'] as const;
+const INVOICE_KINDS = ['booking', 'platform_bill', 'credit_note'] as const;
+
+function parseInvoiceStatus(value: string | undefined): InvoiceStatus | undefined {
+  return INVOICE_STATUSES.find(status => status === value);
+}
+
+function parseInvoiceKind(value: string | undefined): InvoiceKind | undefined {
+  return INVOICE_KINDS.find(kind => kind === value);
+}
 
 function periodFilter(period?: string): Prisma.InvoiceWhereInput {
   const now = new Date();
@@ -31,17 +44,24 @@ export default async function InvoicesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { tenant } = await requireCurrentTenant();
+  const locale = await getRequestLocale();
+  const copy = getAppCopy(locale).invoices;
   const params = await searchParams;
   const query = parseListQuery(params, { knownFilters: ['status', 'kind', 'period'] });
   const status =
-    query.filters.status && query.filters.status !== 'all' ? query.filters.status : undefined;
-  const kind = query.filters.kind && query.filters.kind !== 'all' ? query.filters.kind : undefined;
+    query.filters.status && query.filters.status !== 'all'
+      ? parseInvoiceStatus(query.filters.status)
+      : undefined;
+  const kind =
+    query.filters.kind && query.filters.kind !== 'all'
+      ? parseInvoiceKind(query.filters.kind)
+      : undefined;
   const period =
     query.filters.period && query.filters.period !== 'all' ? query.filters.period : undefined;
   const where: Prisma.InvoiceWhereInput = {
     tenantId: tenant.id,
-    ...(status ? { status: status as any } : {}),
-    ...(kind ? { kind: kind as any } : {}),
+    ...(status ? { status } : {}),
+    ...(kind ? { kind } : {}),
     ...periodFilter(period),
   };
 
@@ -68,13 +88,10 @@ export default async function InvoicesPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Invoices" description="Review issued, unpaid, and paid invoices." />
+      <PageHeader title={copy.title} description={copy.description} />
       <InvoiceFilters status={status} kind={kind} period={period} />
       {invoices.length === 0 ? (
-        <EmptyState
-          title="No invoices found"
-          description="Invoices will appear here after bookings or platform bills are issued."
-        />
+        <EmptyState title={copy.emptyTitle} description={copy.emptyDescription} />
       ) : (
         <>
           <InvoicesTable invoices={invoices} />

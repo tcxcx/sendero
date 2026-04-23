@@ -1,5 +1,7 @@
 # Next.js
 .next/
+.next-beta-test/
+apps/*/.next-beta-test/
 .next-turbo/
 .next-sendero/
 apps/*/.next-turbo/

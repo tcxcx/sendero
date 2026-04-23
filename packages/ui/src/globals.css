@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @config "../tailwind.config.ts";
+@import "./motion.css";
 
 @layer base {
   :root {
@@ -12,6 +13,7 @@
     --sendero-cream: #eedcc7;
     --sendero-paper-elevated: #f5e7d6;
     --sendero-charcoal: #111111;
+    --ink: #fb542b;
 
     --background: 32 53% 86%;
     --foreground: 0 0% 4%;
@@ -33,5 +35,16 @@
     --card-foreground: 0 0% 4%;
     --popover: 34 61% 90%;
     --popover-foreground: 0 0% 4%;
+  }
+
+  ::selection {
+    background: var(--ink);
+    color: #fafaf7;
+    text-shadow: none;
+  }
+  ::-moz-selection {
+    background: var(--ink);
+    color: #fafaf7;
+    text-shadow: none;
   }
 }

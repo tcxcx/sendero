@@ -4,9 +4,10 @@ import {
   SENDERO_APP_PUBLIC_ROUTES,
   type SitemapEntry,
 } from '@sendero/seo';
+import { SUPPORTED_LOCALES } from '@sendero/locale';
 
 const SITE_URL = resolvePublicOrigin(process.env.NEXT_PUBLIC_APP_URL, 'https://app.sendero.travel');
-const SEO_LOCALES = ['en-US'] as const;
+const SEO_LOCALES = SUPPORTED_LOCALES;
 
 export default function sitemap(): SitemapEntry[] {
   return buildSitemap({

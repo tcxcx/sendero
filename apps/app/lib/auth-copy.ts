@@ -1,6 +1,14 @@
 import { normalizeLocale } from '@sendero/locale';
 
-type AuthCopy = {
+export type AuthCopy = {
+  /** Shown after Clerk redirects from “unrecognized device” session revoke (Dashboard → Unauthorized sign-in URL). */
+  unauthorizedSignIn: {
+    title: string;
+    description: string;
+    asideTitle: string;
+    asideItems: string[];
+    ctaSignIn: string;
+  };
   signIn: {
     title: string;
     description: string;
@@ -19,15 +27,38 @@ type AuthCopy = {
     asideTitle: string;
     asideItems: string[];
   };
+  /** Toasts + redirect when the user already has access or is on the list */
+  waitlistPrecheck: {
+    alreadySignedIn: string;
+    alreadyOnWaitlist: string;
+    invited: string;
+    invitedCheckEmail: string;
+    grantedAccess: string;
+    allowlistAccess: string;
+    alreadyJoinedSession: string;
+    requestNotApproved: string;
+  };
 };
 
 const AUTH_COPY: Record<string, AuthCopy> = {
   'en-US': {
+    unauthorizedSignIn: {
+      title: 'This sign-in was revoked.',
+      description:
+        'You removed a session from a device Clerk did not recognize. That session is finished—continue here when you are ready to sign in again on this device.',
+      asideTitle: 'Security',
+      asideItems: [
+        'Clerk sends this flow when you revoke an unrecognized-device session from email or security alerts.',
+        'Your account stays intact; only the suspicious session ends.',
+        'If this was not you, sign in and update your password or security settings in Clerk.',
+      ],
+      ctaSignIn: 'Sign in again',
+    },
     signIn: {
       title: 'Welcome back.',
       description:
         'Sign in with Clerk to return to your Sendero workspace for traveler sessions, policies, channel adapters, metering, billing, and settlement.',
-      asideTitle: 'Agent workspace',
+      asideTitle: 'Agentic workspace',
       asideItems: [
         'Protected routes stay behind Clerk session and organization checks.',
         'Organizations map to agencies, companies, operators, and agent clients.',
@@ -35,14 +66,14 @@ const AUTH_COPY: Record<string, AuthCopy> = {
       ],
     },
     signUp: {
-      title: 'Request agent access.',
+      title: 'Sign up for hackathon access.',
       description:
-        'Join the Sendero testnet waitlist. Access opens with Clerk identity, then organization setup, channel adapters, policy configuration, metering, and Arc settlement.',
-      asideTitle: 'Private testnet',
+        'Submit the live Sendero access form for the hackathon. Clerk captures the request now, then approved workspaces continue into organization setup, channel adapters, policy configuration, metering, and Arc settlement.',
+      asideTitle: 'Hackathon access',
       asideItems: [
-        'No wallet or passkey setup before Clerk grants access.',
-        'Channels, policies, sessions, and billing are configured after the organization exists.',
-        'Mainnet access stays gated while production webhooks and settlement mature.',
+        'The access form is active inside the app site.',
+        'Organization, channels, policies, and billing are configured after identity.',
+        'Operators, agencies, companies, and agent clients all enter through the same Clerk flow.',
       ],
     },
     waitlist: {
@@ -56,8 +87,32 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Mainnet launch notifications go to approved operators, agencies, companies, and agent clients.',
       ],
     },
+    waitlistPrecheck: {
+      alreadySignedIn: "You're already signed in. Taking you to the app.",
+      alreadyOnWaitlist: "You're already on the waitlist. Taking you to sign in.",
+      invited: "You've been invited. Continue at sign in.",
+      invitedCheckEmail:
+        "You've been invited. If you have not finished setup, check your email for the link, then sign in.",
+      grantedAccess: 'Your access is approved. Taking you to sign in.',
+      allowlistAccess: "You're on the approved access list. Taking you to sign in.",
+      alreadyJoinedSession: "You're already on the waitlist. Taking you to sign in.",
+      requestNotApproved:
+        'This access request is not approved. Contact us if you think this is a mistake.',
+    },
   },
   'es-AR': {
+    unauthorizedSignIn: {
+      title: 'Este inicio de sesión fue revocado.',
+      description:
+        'Eliminaste una sesión desde un dispositivo que Clerk no reconoció. Esa sesión terminó: seguí acá cuando quieras volver a iniciar sesión en este dispositivo.',
+      asideTitle: 'Seguridad',
+      asideItems: [
+        'Clerk te envía a este flujo cuando revocás una sesión de dispositivo no reconocido desde el mail o alertas de seguridad.',
+        'Tu cuenta sigue intacta; solo termina la sesión sospechosa.',
+        'Si no fuiste vos, iniciá sesión y actualizá contraseña o seguridad en Clerk.',
+      ],
+      ctaSignIn: 'Iniciar sesión de nuevo',
+    },
     signIn: {
       title: 'Volvé a entrar.',
       description:
@@ -70,14 +125,14 @@ const AUTH_COPY: Record<string, AuthCopy> = {
       ],
     },
     signUp: {
-      title: 'Pedí acceso al agente.',
+      title: 'Registrate para el hackathon.',
       description:
-        'Sumate a la waitlist de testnet. El acceso empieza con identidad Clerk y sigue con organización, canales, políticas, medición y settlement en Arc.',
-      asideTitle: 'Testnet privada',
+        'Enviá el formulario activo de acceso a Sendero para el hackathon. Clerk toma la solicitud ahora; los workspaces aprobados siguen con organización, canales, políticas, medición y settlement en Arc.',
+      asideTitle: 'Acceso hackathon',
       asideItems: [
-        'No hay wallet ni passkey antes de que Clerk habilite el acceso.',
-        'Canales, políticas, sesiones y billing se configuran después de crear la organización.',
-        'El acceso a mainnet queda cerrado hasta madurar webhooks y settlement productivos.',
+        'El formulario de acceso está activo dentro de la app.',
+        'Organización, canales, políticas y billing se configuran después de la identidad.',
+        'Operadores, agencias, empresas y clientes agente entran por el mismo flujo de Clerk.',
       ],
     },
     waitlist: {
@@ -91,8 +146,32 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'El aviso de mainnet va a operadores, agencias, empresas y clientes agente aprobados.',
       ],
     },
+    waitlistPrecheck: {
+      alreadySignedIn: 'Ya iniciaste sesión. Te llevamos a la app.',
+      alreadyOnWaitlist: 'Ya estás en la lista de espera. Te llevamos a iniciar sesión.',
+      invited: 'Ya tenés una invitación. Continuá en iniciar sesión.',
+      invitedCheckEmail:
+        'Ya tenés una invitación. Si no terminaste el registro, revisá el email con el enlace y luego iniciá sesión.',
+      grantedAccess: 'Tu acceso está aprobado. Te llevamos a iniciar sesión.',
+      allowlistAccess: 'Estás en la lista de acceso aprobada. Te llevamos a iniciar sesión.',
+      alreadyJoinedSession: 'Ya estás en la lista de espera. Te llevamos a iniciar sesión.',
+      requestNotApproved:
+        'Esta solicitud de acceso no fue aprobada. Escribinos si creés que es un error.',
+    },
   },
   'es-MX': {
+    unauthorizedSignIn: {
+      title: 'Este inicio de sesión fue revocado.',
+      description:
+        'Eliminaste una sesión desde un dispositivo que Clerk no reconoció. Esa sesión terminó: continúa aquí cuando quieras iniciar sesión de nuevo en este dispositivo.',
+      asideTitle: 'Seguridad',
+      asideItems: [
+        'Clerk te envía a este flujo cuando revocas una sesión de dispositivo no reconocido desde el correo o alertas de seguridad.',
+        'Tu cuenta sigue intacta; solo termina la sesión sospechosa.',
+        'Si no fuiste tú, inicia sesión y actualiza tu contraseña o seguridad en Clerk.',
+      ],
+      ctaSignIn: 'Iniciar sesión de nuevo',
+    },
     signIn: {
       title: 'Bienvenido de vuelta.',
       description:
@@ -105,14 +184,14 @@ const AUTH_COPY: Record<string, AuthCopy> = {
       ],
     },
     signUp: {
-      title: 'Solicita acceso al agente.',
+      title: 'Regístrate para el hackathon.',
       description:
-        'Únete a la waitlist de testnet. El acceso empieza con Clerk y sigue con organización, canales, políticas, medición y liquidación en Arc.',
-      asideTitle: 'Testnet privada',
+        'Envía el formulario activo de acceso a Sendero para el hackathon. Clerk toma la solicitud ahora; los workspaces aprobados siguen con organización, canales, políticas, medición y liquidación en Arc.',
+      asideTitle: 'Acceso hackathon',
       asideItems: [
-        'No hay wallet ni passkey antes de que Clerk habilite el acceso.',
-        'Canales, políticas, sesiones y billing se configuran después de crear la organización.',
-        'Mainnet queda cerrado mientras maduran webhooks y liquidación productiva.',
+        'El formulario de acceso está activo dentro de la app.',
+        'Organización, canales, políticas y billing se configuran después de la identidad.',
+        'Operadores, agencias, empresas y clientes agente entran por el mismo flujo de Clerk.',
       ],
     },
     waitlist: {
@@ -126,8 +205,32 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'El aviso de mainnet llega a operadores, agencias, empresas y clientes agente aprobados.',
       ],
     },
+    waitlistPrecheck: {
+      alreadySignedIn: 'Ya iniciaste sesión. Te llevamos a la app.',
+      alreadyOnWaitlist: 'Ya estás en la lista de espera. Te llevamos a iniciar sesión.',
+      invited: 'Ya tienes una invitación. Continúa en iniciar sesión.',
+      invitedCheckEmail:
+        'Ya tienes una invitación. Si no terminaste el registro, revisa tu correo con el enlace y luego inicia sesión.',
+      grantedAccess: 'Tu acceso está aprobado. Te llevamos a iniciar sesión.',
+      allowlistAccess: 'Estás en la lista de acceso aprobada. Te llevamos a iniciar sesión.',
+      alreadyJoinedSession: 'Ya estás en la lista de espera. Te llevamos a iniciar sesión.',
+      requestNotApproved:
+        'Esta solicitud de acceso no fue aprobada. Escríbenos si crees que es un error.',
+    },
   },
   'pt-BR': {
+    unauthorizedSignIn: {
+      title: 'Este acesso foi revogado.',
+      description:
+        'Você encerrou uma sessão de um dispositivo que a Clerk não reconheceu. Essa sessão acabou—continue aqui quando quiser entrar de novo neste dispositivo.',
+      asideTitle: 'Segurança',
+      asideItems: [
+        'A Clerk envia este fluxo quando você revoga uma sessão de dispositivo não reconhecido pelo e-mail ou alertas de segurança.',
+        'Sua conta permanece; apenas a sessão suspeita termina.',
+        'Se não foi você, entre e atualize a senha ou as configurações de segurança na Clerk.',
+      ],
+      ctaSignIn: 'Entrar novamente',
+    },
     signIn: {
       title: 'Bem-vindo de volta.',
       description:
@@ -140,14 +243,14 @@ const AUTH_COPY: Record<string, AuthCopy> = {
       ],
     },
     signUp: {
-      title: 'Solicite acesso ao agente.',
+      title: 'Cadastre-se para o hackathon.',
       description:
-        'Entre na waitlist da testnet. O acesso começa com Clerk e segue para organização, canais, políticas, medição e liquidação na Arc.',
-      asideTitle: 'Testnet privada',
+        'Envie o formulário ativo de acesso ao Sendero para o hackathon. O Clerk captura a solicitação agora; workspaces aprovados seguem para organização, canais, políticas, medição e liquidação na Arc.',
+      asideTitle: 'Acesso hackathon',
       asideItems: [
-        'Sem wallet nem passkey antes do acesso via Clerk.',
-        'Canais, políticas, sessões e billing são configurados depois da organização.',
-        'Mainnet fica fechada enquanto webhooks e liquidação de produção amadurecem.',
+        'O formulário de acesso está ativo dentro do app.',
+        'Organização, canais, políticas e billing são configurados depois da identidade.',
+        'Operadores, agências, empresas e clientes agente entram pelo mesmo fluxo Clerk.',
       ],
     },
     waitlist: {
@@ -160,6 +263,18 @@ const AUTH_COPY: Record<string, AuthCopy> = {
         'Duffel, políticas, medição, billing e settlement ficam atrás de rotas protegidas.',
         'Avisos de mainnet vão para operadores, agências, empresas e clientes agente aprovados.',
       ],
+    },
+    waitlistPrecheck: {
+      alreadySignedIn: 'Você já está logado. Redirecionando para o app.',
+      alreadyOnWaitlist: 'Você já está na lista de espera. Redirecionando para entrar.',
+      invited: 'Você já foi convidado. Continue em entrar.',
+      invitedCheckEmail:
+        'Você já foi convidado. Se ainda não concluiu, verifique o email com o link e entre em seguida.',
+      grantedAccess: 'Seu acesso foi aprovado. Redirecionando para entrar.',
+      allowlistAccess: 'Você está na lista de acesso aprovada. Redirecionando para entrar.',
+      alreadyJoinedSession: 'Você já está na lista de espera. Redirecionando para entrar.',
+      requestNotApproved:
+        'Este pedido de acesso não foi aprovado. Fale conosco se achar que é um engano.',
     },
   },
 };

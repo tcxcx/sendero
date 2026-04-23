@@ -9,7 +9,7 @@ const SITE_URL = resolvePublicOrigin(
   process.env.NEXT_PUBLIC_HELP_URL,
   'https://help.sendero.travel'
 );
-const SEO_LOCALES = ['en-US'] as const;
+const SEO_LOCALES = ['en-US', 'es-MX', 'pt-BR', 'es-AR'] as const;
 
 export default function sitemap(): SitemapEntry[] {
   return buildSitemap({

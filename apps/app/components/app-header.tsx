@@ -5,7 +5,12 @@ export function AppHeader() {
   return (
     <header className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
       <Link href="/" className="flex items-center gap-2">
-        <span className="block h-3 w-3 bg-[#fb542b]" />
+        <img
+          alt=""
+          className="h-7 w-7 shrink-0 object-contain"
+          decoding="async"
+          src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
+        />
         <span className="font-mono text-sm uppercase tracking-wide">Sendero</span>
       </Link>
       <div className="flex items-center gap-3">

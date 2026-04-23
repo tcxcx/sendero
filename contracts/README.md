@@ -148,8 +148,8 @@ a multi-stage travel escrow:
 
 | | Address |
 |---|---|
-| Proxy (`ERC1967Proxy`) | `0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515` |
-| Implementation | `0x2247783E3bE97DF822cB3C100D44D5C47e050bD5` |
+| Proxy (`ERC1967Proxy`) | [`0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515` on Arc Scan](https://testnet.arcscan.app/address/0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515) |
+| Implementation | [`0x2247783E3bE97DF822cB3C100D44D5C47e050bD5` on Arc Scan](https://testnet.arcscan.app/address/0x2247783E3bE97DF822cB3C100D44D5C47e050bD5) |
 | Owner + operator | `0x0646FFe11b9aBcE0054Ce6F73025F06F3E91eC69` (treasury EOA) |
 | Deploy block | 38197708 |
 | USDC | `0x3600000000000000000000000000000000000000` |

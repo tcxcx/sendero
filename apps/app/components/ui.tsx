@@ -34,7 +34,13 @@ export function ConsoleBar() {
       {/* LEFT: brand + breadcrumb nav */}
       <div className="cbar-left">
         <Link href="/" className="cbar-brand" aria-label="Sendero home">
-          <span className="cbar-mark" aria-hidden="true" />
+          <img
+            alt=""
+            aria-hidden="true"
+            className="cbar-mark"
+            decoding="async"
+            src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
+          />
           <span className="cbar-word">SENDERO</span>
         </Link>
         <span className="cbar-sep">/</span>
@@ -113,10 +119,11 @@ export function ConsoleBar() {
           opacity: 0.7;
         }
         .cbar-mark {
-          width: 10px;
-          height: 10px;
-          background: var(--ink);
+          width: 22px;
+          height: 22px;
+          object-fit: contain;
           display: inline-block;
+          flex-shrink: 0;
         }
         .cbar-word {
           transition: opacity 120ms;

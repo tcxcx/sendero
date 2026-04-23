@@ -1,6 +1,8 @@
-import type { Viewport } from 'next';
 import type { ReactNode } from 'react';
-import { Agentation } from 'agentation';
+
+import type { Viewport } from 'next';
+import Script from 'next/script';
+
 import {
   buildMetadata,
   organizationJsonLd,
@@ -8,13 +10,15 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { Agentation } from 'agentation';
+
 import { Providers } from './providers';
 import './globals.css';
 
 const SITE_URL = resolvePublicOrigin(process.env.NEXT_PUBLIC_SITE_URL, 'https://sendero.travel');
-const SEO_LOCALES = ['en-US'] as const;
+const SEO_LOCALES = ['en-US', 'es-MX', 'pt-BR', 'es-AR'] as const;
 const DESCRIPTION =
-  'AI travel agents that live where your customers already are. One agent per trip, reachable over WhatsApp, Slack, email, and MCP. Real PNRs via Duffel. Settled in USDC on Arc.';
+  'Sendero turns travel requests into coordinated agent workflows: real inventory, policy checks, prepaid guest escrow, PNR issuance, USDC settlement on Arc, invoices, and trip support.';
 
 export const metadata = buildMetadata({
   title: 'Sendero',
@@ -35,6 +39,8 @@ export const metadata = buildMetadata({
     'WhatsApp travel agent',
     'MCP travel server',
     'x402 travel tools',
+    'USDC travel payments',
+    'Circle Arc travel',
   ],
   category: 'Travel Technology',
 });
@@ -68,6 +74,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
+        {process.env.NODE_ENV === 'development' && (
+          <Script
+            src="//unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="beforeInteractive"
+          />
+        )}
         <link rel="alternate" type="text/plain" title="Sendero llms.txt" href="/llms.txt" />
         <link
           rel="alternate"

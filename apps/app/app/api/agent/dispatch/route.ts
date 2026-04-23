@@ -19,14 +19,17 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { anthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import {
   type AgentInput,
   type Channel,
   type ConversationState,
+  directProviderCascade,
   directProviderModel,
   gatewayConfigured,
-  MODEL_TIERS,
+  geminiDirectModelId,
+  googleGenerativeAiKey,
   type ModelTier,
   runAgentTurn,
   type SessionStore,
@@ -124,7 +127,7 @@ export async function POST(req: NextRequest) {
       {
         error: 'no_llm_configured',
         message:
-          'Set AI_GATEWAY_API_KEY (preferred) or ANTHROPIC_API_KEY or OPENAI_API_KEY before running the agent.',
+          'Set AI_GATEWAY_API_KEY (preferred), or GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY, or OPENAI_API_KEY, or ANTHROPIC_API_KEY before running the agent.',
       },
       { status: 503 }
     );
@@ -347,8 +350,8 @@ function makeSessionStore(): SessionStore {
  *   1. If Vercel AI Gateway is configured → pass the gateway string
  *      form (`'anthropic/claude-opus-4.6'`); AI SDK auto-routes and
  *      providerOptions.gateway.order drives fallback.
- *   2. Else fall back to a direct provider SDK when that provider's
- *      key is present (Anthropic, then OpenAI).
+ *   2. Else fall back to direct SDKs in cascade order **Gemini → OpenAI →
+ *      Anthropic** (see `directProviderCascade` in `@sendero/agent`).
  *   3. Else return null and the route 503s with a clear error.
  */
 function resolveModel(tier: ModelTier): LanguageModel | string | null {
@@ -366,9 +369,8 @@ function resolveDirectModel(tier: ModelTier): LanguageModel | null {
 
 function resolveDirectModels(tier: ModelTier): Array<{ label: string; model: LanguageModel }> {
   const seen = new Set<string>();
-  const candidates = [MODEL_TIERS[tier].primary, ...MODEL_TIERS[tier].fallbacks];
   const models: Array<{ label: string; model: LanguageModel }> = [];
-  for (const candidate of candidates) {
+  for (const candidate of directProviderCascade(tier)) {
     if (seen.has(candidate)) continue;
     seen.add(candidate);
     const model = directModelFromString(candidate);
@@ -378,11 +380,17 @@ function resolveDirectModels(tier: ModelTier): Array<{ label: string; model: Lan
 }
 
 function directModelFromString(direct: string): LanguageModel | null {
-  const [provider, model] = direct.split('/') as [string, string];
+  const [provider, modelId] = direct.split('/') as [string, string];
+  if (provider === 'google') {
+    const key = googleGenerativeAiKey();
+    if (!key) return null;
+    const google = createGoogleGenerativeAI({ apiKey: key });
+    return google(geminiDirectModelId(direct));
+  }
   if (provider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) return null;
   if (provider === 'openai' && !process.env.OPENAI_API_KEY) return null;
-  if (provider === 'anthropic') return anthropic(model);
-  if (provider === 'openai') return openai(model);
+  if (provider === 'anthropic') return anthropic(modelId);
+  if (provider === 'openai') return openai(modelId);
   return null;
 }
 

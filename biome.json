@@ -12,6 +12,7 @@
       "**",
       "!**/node_modules",
       "!**/.next",
+      "!**/.next-beta-test",
       "!**/.next.root-owned.*",
       "!**/.next-sendero.root-owned.*",
       "!**/.turbo",

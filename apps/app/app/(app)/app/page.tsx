@@ -1,16 +1,22 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@sendero/ui/card';
-import { Button } from '@sendero/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@sendero/ui/table';
 import Link from 'next/link';
+
+import { prisma } from '@sendero/database';
+import { Button } from '@sendero/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@sendero/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@sendero/ui/table';
+
 import { PageHeader } from '@/components/app-shell/page-header';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { TripStatusBadge } from '@/components/trips/trip-status-badge';
+import { getAppCopy } from '@/lib/app-copy';
 import { formatDate, formatDecimalUsd, formatMicroUsd, stringFromJson } from '@/lib/format';
+import { getRequestLocale } from '@/lib/request-locale';
 import { requireCurrentTenant } from '@/lib/tenant-context';
-import { prisma } from '@sendero/database';
 
 export default async function DashboardPage() {
   const { tenant } = await requireCurrentTenant();
+  const locale = await getRequestLocale();
+  const copy = getAppCopy(locale).dashboard;
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
@@ -48,50 +54,48 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Home" description={`Buyer workspace for ${tenant.displayName}`} />
+      <PageHeader title={copy.pageTitle} description={copy.pageDescription(tenant.displayName)} />
+
+      <section className="rounded-md border border-border bg-muted/30 p-4 md:flex md:items-center md:justify-between md:gap-6">
+        <div>
+          <h2 className="text-base font-semibold">{copy.agentConsole.title}</h2>
+          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+            {copy.agentConsole.description}
+          </p>
+        </div>
+        <Button asChild className="mt-4 w-full shrink-0 md:mt-0 md:w-auto">
+          <Link href="/app/console">{copy.agentConsole.cta}</Link>
+        </Button>
+      </section>
 
       <section className="flex flex-col gap-4">
         <div>
-          <h2 className="text-lg font-semibold tracking-normal">Launch a traveler journey</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Start with a prepaid escrow link, then route the traveler through WhatsApp, Slack, web,
-            or MCP without changing the booking engine.
-          </p>
+          <h2 className="text-lg font-semibold tracking-normal">{copy.journeyTitle}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{copy.journeyDescription}</p>
         </div>
-        <div className="grid gap-3 md:grid-cols-4">
-          <JourneyShortcut
-            href="/app/trips?sheet=new"
-            label="Prepaid trip"
-            description="Create a USDC budget and a traveler claim link."
-          />
-          <JourneyShortcut
-            href="/onboarding/agency"
-            label="WhatsApp agency"
-            description="Connect a Business number for white-label travel."
-          />
-          <JourneyShortcut
-            href="/onboarding/corporate"
-            label="Slack workplace"
-            description="Install approvals and employee travel DMs."
-          />
-          <JourneyShortcut
-            href="/llms.txt"
-            label="MCP agents"
-            description="Expose the same journey to other LLMs."
-          />
+        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+          {copy.shortcuts.map(shortcut => (
+            <JourneyShortcut
+              key={shortcut.href}
+              href={shortcut.href}
+              label={shortcut.label}
+              description={shortcut.description}
+              openLabel={copy.shortcutOpen}
+            />
+          ))}
         </div>
       </section>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Active trips" value={String(activeTrips)} href="/app/trips" />
+        <StatCard title={copy.stats.activeTrips} value={String(activeTrips)} href="/app/trips" />
         <StatCard
-          title="Unpaid invoices"
+          title={copy.stats.unpaidInvoices}
           value={formatMicroUsd(unpaidInvoices._sum.totalMicro ?? 0n)}
-          description={`${unpaidInvoices._count} open`}
+          description={copy.stats.openInvoices(unpaidInvoices._count)}
           href="/app/billing/invoices?status=issued"
         />
         <StatCard
-          title="Month-to-date spend"
+          title={copy.stats.monthToDateSpend}
           value={formatMicroUsd(mtdSpend._sum.priceMicroUsdc ?? 0n)}
           href="/app/spend"
         />
@@ -99,16 +103,16 @@ export default async function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent trips</CardTitle>
+          <CardTitle>{copy.recentTrips.title}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Trip</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Budget</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead>{copy.recentTrips.trip}</TableHead>
+                <TableHead>{copy.recentTrips.status}</TableHead>
+                <TableHead>{copy.recentTrips.budget}</TableHead>
+                <TableHead>{copy.recentTrips.created}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -131,7 +135,7 @@ export default async function DashboardPage() {
               {recentTrips.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-muted-foreground">
-                    No trips yet.
+                    {copy.recentTrips.empty}
                   </TableCell>
                 </TableRow>
               ) : null}
@@ -147,10 +151,12 @@ function JourneyShortcut({
   href,
   label,
   description,
+  openLabel,
 }: {
   href: string;
   label: string;
   description: string;
+  openLabel: string;
 }) {
   return (
     <div className="flex min-h-40 flex-col justify-between rounded-md border border-border bg-background p-4">
@@ -159,7 +165,7 @@ function JourneyShortcut({
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
       </div>
       <Button asChild variant="outline" size="sm" className="mt-4 justify-start">
-        <Link href={href}>Open</Link>
+        <Link href={href}>{openLabel}</Link>
       </Button>
     </div>
   );

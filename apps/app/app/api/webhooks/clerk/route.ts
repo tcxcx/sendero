@@ -135,6 +135,8 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
   const name = String(data.name ?? id);
   const slug = String(data.slug ?? id.toLowerCase());
 
+  console.log('[webhooks/clerk] organization.created start', { id, name, slug });
+
   const tenant = await prisma.tenant.upsert({
     where: { clerkOrgId: id },
     create: {
@@ -163,6 +165,11 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
       arcWalletAddress: result.address,
       onboardingComplete: true,
     },
+  });
+  console.log('[webhooks/clerk] organization.created done', {
+    id,
+    tenantId: tenant.id,
+    arcWalletAddress: result.address,
   });
 }
 

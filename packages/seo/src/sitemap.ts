@@ -134,6 +134,7 @@ export const SENDERO_APP_PUBLIC_ROUTES: SitemapRoute[] = [
   { path: '/', changeFrequency: 'daily', priority: 1.0 },
   { path: '/llms.txt', changeFrequency: 'daily', priority: 0.95 },
   { path: '/.well-known/llms.txt', changeFrequency: 'daily', priority: 0.95 },
+  { path: '/sign-in/unauthorized', changeFrequency: 'monthly', priority: 0.45 },
   { path: '/waitlist', changeFrequency: 'weekly', priority: 0.7 },
   { path: '/onboarding', changeFrequency: 'weekly', priority: 0.65 },
 ];
@@ -144,6 +145,7 @@ export const SENDERO_HELP_ROUTES: SitemapRoute[] = [
   { path: '/.well-known/llms.txt', changeFrequency: 'daily', priority: 0.8 },
   { path: '/article/what-is-sendero', changeFrequency: 'monthly', priority: 0.75 },
   { path: '/article/how-booking-works', changeFrequency: 'monthly', priority: 0.75 },
+  { path: '/article/clerk-legal-express-consent', changeFrequency: 'monthly', priority: 0.72 },
   { path: '/article/whatsapp-link-token', changeFrequency: 'monthly', priority: 0.72 },
   { path: '/article/prepaid-escrow-links', changeFrequency: 'monthly', priority: 0.72 },
   { path: '/article/agency-whatsapp-prepaid-trips', changeFrequency: 'monthly', priority: 0.72 },
