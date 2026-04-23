@@ -115,6 +115,16 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
       'Rebuild a disrupted itinerary: replacement flights, overnight hotel fallback, airport-to-hotel route, and a traveler-ready share card.',
   },
   {
+    label: 'ensure_duffel_customer',
+    description:
+      'Idempotently sync the traveler with Duffel identity (CustomerUser + CustomerUserGroup) and return the icu_… id. Unlocks Travel Support Assistant for future orders.',
+  },
+  {
+    label: 'list_flight_ancillaries',
+    description:
+      'Return ancillary options on a Duffel offer — bags, cancel-for-any-reason, and seat map — ready to feed back into book_flight as services[].',
+  },
+  {
     label: 'send_tokens',
     description: 'Transfer USDC on Arc.',
   },
@@ -213,6 +223,16 @@ export const AGENT_WORKFLOW_CATALOG: LlmsItem[] = [
     label: 'sendero.trip_delay_replanner',
     description:
       'Disruption recovery: build a rebook plan with replacement flights, optional overnight hotel, and airport route. On approval, hold the chosen flight via book_flight.',
+  },
+  {
+    label: 'sendero.book_with_ancillaries',
+    description:
+      'Sell-up flow: search flights, list ancillaries, pause for selection, then hold with bags/seats/CFAR attached. Unlocks Travel Support Assistant via ensure_duffel_customer.',
+  },
+  {
+    label: 'sendero.cancellation_recovery',
+    description:
+      'Post-ticket recovery on order.cancelled / airline-initiated change webhooks. Rebook via trip_delay_replanner or cancel + refund.',
   },
 ];
 

@@ -1046,6 +1046,224 @@ export const tripDelayReplannerWorkflow: WorkflowDef = {
   ],
 };
 
+// ─── book-with-ancillaries: search → list ancillaries → select → book
+//
+// The canonical "sell-up" flow inside a trip. Searches inventory,
+// exposes the airline's ancillary menu (bags, CFAR, seats) via
+// `list_flight_ancillaries`, pauses for traveler/operator selection,
+// then holds the order with the chosen services attached. Works across
+// channels: the pause payload carries the share shape that WhatsApp /
+// Slack / web all render.
+
+export const bookWithAncillariesWorkflow: WorkflowDef = {
+  id: 'sendero.book_with_ancillaries',
+  version: 1,
+  label: 'Book a flight with ancillaries',
+  description:
+    'Canonical sell-up flow: search flights, list the airline ancillary menu (bags, seats, cancel-for-any-reason), pause for traveler selection, then hold the order with selected services attached. Unlocks Travel Support Assistant via ensure_duffel_customer.',
+  steps: [
+    {
+      kind: 'tool',
+      id: 'ensure_customer',
+      tool: 'ensure_duffel_customer',
+      label: 'Ensure Duffel CustomerUser exists',
+      as: 'customer',
+      args: {
+        clerkUserId: $('input.clerkUserId'),
+        tenantId: $('input.tenantId'),
+        preferredLanguage: $('input.preferredLanguage'),
+      },
+      retries: 1,
+      timeoutMs: 10_000,
+    },
+    {
+      kind: 'tool',
+      id: 'search',
+      tool: 'search_flights',
+      label: 'Search flights',
+      as: 'offers',
+      args: {
+        origin: $('input.origin'),
+        destination: $('input.destination'),
+        departureDate: $('input.departureDate'),
+        returnDate: $('input.returnDate'),
+        passengers: $('input.passengers'),
+        cabinClass: $('input.cabinClass'),
+      },
+      retries: 1,
+      timeoutMs: 15_000,
+    },
+    {
+      kind: 'tool',
+      id: 'ancillaries',
+      tool: 'list_flight_ancillaries',
+      label: 'List ancillary services',
+      as: 'ancillaries',
+      args: {
+        offerId: $('offers.topOffer.id'),
+        maxSeats: $('input.maxSeats'),
+      },
+      retries: 1,
+      timeoutMs: 15_000,
+    },
+    {
+      kind: 'pause',
+      id: 'await_selection',
+      label: 'Traveler selects extras',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'sell-ancillaries',
+        offerId: $('offers.topOffer.id'),
+        share: $('ancillaries.share'),
+      },
+      timeoutMs: 24 * 60 * 60 * 1000,
+    },
+    {
+      kind: 'tool',
+      id: 'hold',
+      tool: 'book_flight',
+      label: 'Hold flight + attach services',
+      as: 'hold',
+      args: {
+        offerId: $('offers.topOffer.id'),
+        services: $('await_selection.services'),
+        additionalCustomerUserIds: $('input.additionalCustomerUserIds'),
+      },
+      timeoutMs: 30_000,
+    },
+    {
+      kind: 'pause',
+      id: 'await_duffel_ticket',
+      label: 'Awaiting Duffel ticketing',
+      reason: 'external_event',
+      payload: { via: 'duffel_order_ticketed' },
+      timeoutMs: 48 * 60 * 60 * 1000,
+    },
+    {
+      kind: 'branch',
+      id: 'duffel_gate',
+      label: 'Duffel outcome',
+      when: $('await_duffel_ticket.status'),
+      equals: 'ticketed',
+      // biome-ignore lint/suspicious/noThenProperty: BranchStep uses "then" as its workflow-domain field.
+      then: [
+        {
+          kind: 'tool',
+          id: 'invoice',
+          tool: 'generate_booking_invoice',
+          label: 'Issue booking invoice',
+          args: {
+            bookingId: $('hold.orderId'),
+          },
+        },
+      ],
+      otherwise: [
+        {
+          kind: 'tool',
+          id: 'cancel',
+          tool: 'cancel_booking',
+          label: 'Cancel and refund',
+          args: {
+            bookingId: $('hold.orderId'),
+            tripId: $('input.tripId'),
+            reason: 'duffel_failed',
+          },
+        },
+      ],
+    },
+  ],
+};
+
+// ─── cancellation-recovery: order.cancelled / airline-initiated change → rebook or refund
+//
+// Targets the post-ticket lifecycle: a booked order that Duffel marks
+// cancelled (airline pull, schedule change). Triggered by the webhook
+// dispatcher when the order has no paused book-flight run (because it
+// already completed). Steps: pause for operator/traveler decision →
+// branch into rebook via trip_delay_replanner OR refund via
+// send_tokens / cancel_booking. The pause payload carries the share
+// shape so WhatsApp / Slack / web render the same actionable card.
+
+export const cancellationRecoveryWorkflow: WorkflowDef = {
+  id: 'sendero.cancellation_recovery',
+  version: 1,
+  label: 'Airline cancellation recovery',
+  description:
+    'Post-ticket recovery triggered by Duffel order.cancelled / airline-initiated change webhooks. Pauses for a traveler/operator decision, then routes into trip_delay_replanner (rebook) or cancel_booking + refund. Canonical across channels.',
+  steps: [
+    {
+      kind: 'pause',
+      id: 'await_recovery_decision',
+      label: 'Traveler picks rebook vs refund',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'cancellation-recovery',
+        via: 'originating_channel',
+      },
+      timeoutMs: 6 * 60 * 60 * 1000,
+    },
+    {
+      kind: 'branch',
+      id: 'recovery_gate',
+      label: 'Rebook or refund',
+      when: $('await_recovery_decision.action'),
+      equals: 'rebook',
+      // biome-ignore lint/suspicious/noThenProperty: BranchStep uses "then" as its workflow-domain field.
+      then: [
+        {
+          kind: 'tool',
+          id: 'replan',
+          tool: 'trip_delay_replanner',
+          label: 'Build rebook plan',
+          as: 'plan',
+          args: {
+            originalLeg: $('input.originalLeg'),
+            disruption: { kind: 'cancellation', reason: $('input.cancellationReason') },
+            rebookSearch: $('input.rebookSearch'),
+            needsHotelFallback: $('input.needsHotelFallback'),
+            travelerLabel: $('input.travelerLabel'),
+            notifyChannels: $('input.notifyChannels'),
+          },
+          retries: 1,
+          timeoutMs: 20_000,
+        },
+        {
+          kind: 'tool',
+          id: 'rebook_hold',
+          tool: 'book_flight',
+          label: 'Hold rebook offer',
+          args: { offerId: $('plan.recommendedRebook.offerId') },
+          timeoutMs: 30_000,
+        },
+      ],
+      otherwise: [
+        {
+          kind: 'tool',
+          id: 'cancel',
+          tool: 'cancel_booking',
+          label: 'Cancel booking on-chain',
+          args: {
+            bookingId: $('input.bookingId'),
+            tripId: $('input.tripId'),
+            reason: 'airline_cancelled',
+          },
+        },
+        {
+          kind: 'tool',
+          id: 'refund',
+          tool: 'send_tokens',
+          label: 'Refund traveler wallet',
+          args: {
+            to: $('input.travelerAddress'),
+            amount: $('input.refundAmount'),
+            token: 'USDC',
+          },
+        },
+      ],
+    },
+  ],
+};
+
 export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [bookFlightWorkflow.id]: bookFlightWorkflow,
   [groupTripWorkflow.id]: groupTripWorkflow,
@@ -1059,6 +1277,8 @@ export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [opsChannelIntakeWorkflow.id]: opsChannelIntakeWorkflow,
   [opsArtifactPackWorkflow.id]: opsArtifactPackWorkflow,
   [tripDelayReplannerWorkflow.id]: tripDelayReplannerWorkflow,
+  [bookWithAncillariesWorkflow.id]: bookWithAncillariesWorkflow,
+  [cancellationRecoveryWorkflow.id]: cancellationRecoveryWorkflow,
 };
 
 /** Resolve a workflow by id; returns null if unknown. */

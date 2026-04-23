@@ -67,6 +67,10 @@ export const TOOL_PRICING: Record<string, string> = {
   trip_checkin_reminder: '0.003',
   trip_delay_replanner: '0.01',
 
+  // Duffel identity + ancillaries (trip-lifecycle extras)
+  ensure_duffel_customer: '0.003',
+  list_flight_ancillaries: '0.002',
+
   // Dev/test helper
   faucet_drip: '0.0005',
 };

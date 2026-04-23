@@ -8,8 +8,10 @@ import { checkPolicyTool } from './check-policy';
 import { checkTreasuryTool } from './check-treasury';
 import { confirmDuffelTool } from './confirm-duffel';
 import { elevationRiskBriefTool } from './elevation-risk-brief';
+import { ensureDuffelCustomerTool } from './ensure-duffel-customer';
 import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
+import { listFlightAncillariesTool } from './list-flight-ancillaries';
 import { gatewayBalanceTool } from './gateway-balance';
 import { gatewayTransferTool } from './gateway-transfer';
 import { generateBookingInvoiceTool } from './generate-booking-invoice';
@@ -122,6 +124,21 @@ export {
   tripDelayReplanner,
   tripDelayReplannerTool,
 } from './trip-delay-replanner';
+export {
+  type EnsureDuffelCustomerInput,
+  type EnsureDuffelCustomerResult,
+  ensureDuffelCustomer,
+  ensureDuffelCustomerTool,
+} from './ensure-duffel-customer';
+export {
+  type ListFlightAncillariesInput,
+  type ListFlightAncillariesResult,
+  type AncillaryBagOption,
+  type AncillaryCfarOption,
+  type AncillarySeatOption,
+  listFlightAncillaries,
+  listFlightAncillariesTool,
+} from './list-flight-ancillaries';
 export { settleBookingTool } from './settle-booking';
 export {
   type TimezoneBriefInput,
@@ -195,6 +212,9 @@ export const toolList: ToolDef[] = [
   airportArrivalPlaybookTool,
   tripCheckinReminderTool,
   tripDelayReplannerTool,
+  // Duffel identity + ancillaries (trip-lifecycle extras)
+  ensureDuffelCustomerTool,
+  listFlightAncillariesTool,
   // Ops helpers
   faucetDripTool,
 ];

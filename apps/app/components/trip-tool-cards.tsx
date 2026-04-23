@@ -29,6 +29,11 @@ import {
   UtensilsCrossedIcon,
 } from 'lucide-react';
 
+import {
+  AncillaryPickerCard,
+  type AncillaryPickerResult,
+} from '@/components/ai-elements/ancillary-picker-card';
+
 const cardShell =
   'rounded-2xl border border-[color:var(--border)] bg-[color:var(--panel)] px-4 py-3 transition-[background-color,border-color] duration-150 ease-out';
 
@@ -671,6 +676,9 @@ export function TripToolCard({
   }
   if (toolName === 'trip_delay_replanner') {
     return <DelayReplannerView data={data as DelayReplannerResult} />;
+  }
+  if (toolName === 'list_flight_ancillaries') {
+    return <AncillaryPickerCard data={data as AncillaryPickerResult} />;
   }
   return null;
 }

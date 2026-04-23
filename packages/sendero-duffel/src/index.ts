@@ -13,12 +13,29 @@
 import { Duffel } from '@duffel/api';
 import { env } from '@sendero/env';
 
+import type {
+  DuffelAvailableServiceBaggageWire,
+  DuffelAvailableServiceCFARWire,
+  DuffelAvailableServiceWire,
+  DuffelCreateOrderWire,
+  DuffelCustomerUserGroupPayloadWire,
+  DuffelCustomerUserGroupWire,
+  DuffelCustomerUserId,
+  DuffelCustomerUserPayloadWire,
+  DuffelCustomerUserWire,
+  DuffelOfferWireMinimal,
+  DuffelSeatMapWire,
+  DuffelServiceId,
+} from './types';
+
 export {
   verifyDuffelSignature,
   parseDuffelWebhook,
   type DuffelWebhookEvent,
   type DuffelWebhookStatus,
+  type DuffelWebhookEventType,
 } from './webhook';
+export * from './types';
 
 let client: Duffel | null = null;
 
@@ -144,6 +161,22 @@ export interface HoldOrderParams {
   passengerDob?: string;
   passengerGender?: 'male' | 'female';
   idempotencyKey: string;
+  /**
+   * Optional Duffel Customer Users to attach to the order. The first
+   * element is also bound to the passenger via `user_id`. Additional
+   * entries are added to the order-level `users` array so they unlock
+   * Travel Support Assistant access (e.g. personal assistant, team lead).
+   * See https://duffel.com/docs/guides/modelling-customers
+   */
+  customerUserIds?: string[];
+  /**
+   * Optional ancillary services to attach at order creation time — e.g.
+   * baggage, cancel-for-any-reason, or seats. Each entry is a Duffel
+   * available-service `id` plus `quantity`. Seat services come from
+   * `getSeatMap(offerId)`; bag / CFAR services come from the offer's
+   * `available_services` via `getOfferWithServices(offerId)`.
+   */
+  services?: Array<{ id: string; quantity: number }>;
 }
 
 export interface HoldOrderResult {
@@ -152,20 +185,25 @@ export interface HoldOrderResult {
   totalAmount: string;
   totalCurrency: string;
   paymentRequiredBy: string;
+  /** Snapshot of the services that were attached at creation time. */
+  services: Array<{ id: string; quantity: number }>;
 }
 
 export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrderResult> {
   const duffel = getDuffel();
 
   // Duffel requires a passenger ID that matches the offer's passenger ID.
-  const offer = await duffel.offers.get(params.offerId);
-  const passengerId = (offer.data as any).passengers?.[0]?.id || 'pax_0001';
+  const offerResp = await duffel.offers.get(params.offerId);
+  const offer = offerResp.data as unknown as DuffelOfferWireMinimal;
+  const passengerId = offer.passengers?.[0]?.id || 'pax_0001';
 
   const [givenName, ...rest] = params.passengerName.split(' ');
   const familyName = rest.join(' ') || 'Traveler';
 
-  const response = await duffel.orders.create({
-    selected_offers: [params.offerId],
+  const primaryCustomerUserId = params.customerUserIds?.[0] as DuffelCustomerUserId | undefined;
+
+  const order: DuffelCreateOrderWire = {
+    selected_offers: [params.offerId as DuffelCreateOrderWire['selected_offers'][number]],
     type: 'hold',
     passengers: [
       {
@@ -177,18 +215,40 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
         born_on: params.passengerDob || '1990-01-01',
         gender: params.passengerGender === 'female' ? 'f' : 'm',
         title: 'mr',
-        type: 'adult' as const,
+        type: 'adult',
+        ...(primaryCustomerUserId ? { user_id: primaryCustomerUserId } : {}),
       },
     ],
     metadata: { idempotency_key: params.idempotencyKey },
-  } as any);
+  };
+  if (params.customerUserIds?.length) {
+    order.users = params.customerUserIds as DuffelCustomerUserId[];
+  }
+  if (params.services?.length) {
+    order.services = params.services.map(s => ({
+      id: s.id as DuffelServiceId,
+      quantity: s.quantity,
+    }));
+  }
+
+  const response = await duffel.orders.create(
+    order as unknown as Parameters<typeof duffel.orders.create>[0]
+  );
+  const orderData = response.data as unknown as {
+    id: string;
+    booking_reference: string;
+    total_amount: string;
+    total_currency: string;
+    payment_status?: { payment_required_by?: string };
+  };
 
   return {
-    orderId: response.data.id,
-    bookingReference: response.data.booking_reference,
-    totalAmount: response.data.total_amount,
-    totalCurrency: response.data.total_currency,
-    paymentRequiredBy: (response.data as any).payment_status?.payment_required_by || '',
+    orderId: orderData.id,
+    bookingReference: orderData.booking_reference,
+    totalAmount: orderData.total_amount,
+    totalCurrency: orderData.total_currency,
+    paymentRequiredBy: orderData.payment_status?.payment_required_by || '',
+    services: params.services ?? [],
   };
 }
 
@@ -415,4 +475,278 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOffe
         .slice(0, 5),
     };
   });
+}
+
+// ============================================================================
+// Customer Users + Customer User Groups (Duffel identity)
+//
+// See https://duffel.com/docs/guides/modelling-customers — attaching a
+// CustomerUser to an order unlocks the Travel Support Assistant and
+// lets Duffel send confirmation + support emails.
+// ============================================================================
+
+/** Wrapper payload (camelCase-ish) that the tool layer uses. */
+export interface DuffelCustomerUserPayload {
+  email: string;
+  given_name: string;
+  family_name: string;
+  phone_number?: string;
+  group_id?: DuffelCustomerUserId | string;
+  /** Accepted by REST; not in SDK type as of @duffel/api v4.24. */
+  preferred_language?: string;
+}
+
+export type DuffelCustomerUser = DuffelCustomerUserWire;
+export type DuffelCustomerUserGroup = DuffelCustomerUserGroupWire;
+
+function toWireCustomerUserPayload(p: DuffelCustomerUserPayload): DuffelCustomerUserPayloadWire {
+  return {
+    email: p.email,
+    given_name: p.given_name,
+    family_name: p.family_name,
+    phone_number: p.phone_number ?? null,
+    group_id: (p.group_id as DuffelCustomerUserPayloadWire['group_id']) ?? null,
+    preferred_language: p.preferred_language ?? null,
+  };
+}
+
+/**
+ * The @duffel/api SDK's TS signatures for `identity.customerUsers.*` don't
+ * include `preferred_language` and typecast payloads narrowly. We bridge
+ * through `unknown` + our wire type so callers stay strictly typed.
+ */
+export async function createCustomerUser(
+  payload: DuffelCustomerUserPayload
+): Promise<DuffelCustomerUser> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUsers.create(
+    toWireCustomerUserPayload(payload) as unknown as Parameters<
+      typeof duffel.identity.customerUsers.create
+    >[0]
+  );
+  return r.data as unknown as DuffelCustomerUser;
+}
+
+export async function getCustomerUser(
+  id: DuffelCustomerUserId | string
+): Promise<DuffelCustomerUser> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUsers.get(id);
+  return r.data as unknown as DuffelCustomerUser;
+}
+
+export async function updateCustomerUser(
+  id: DuffelCustomerUserId | string,
+  payload: DuffelCustomerUserPayload
+): Promise<DuffelCustomerUser> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUsers.update(
+    id,
+    toWireCustomerUserPayload(payload) as unknown as Parameters<
+      typeof duffel.identity.customerUsers.update
+    >[1]
+  );
+  return r.data as unknown as DuffelCustomerUser;
+}
+
+export async function findCustomerUserByEmail(email: string): Promise<DuffelCustomerUser | null> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUsers.list({ email } as unknown as Parameters<
+    typeof duffel.identity.customerUsers.list
+  >[0]);
+  const list = r.data as unknown as DuffelCustomerUserWire[];
+  return list[0] ?? null;
+}
+
+export async function createCustomerUserGroup(args: {
+  name: string;
+  userIds?: DuffelCustomerUserId[];
+}): Promise<DuffelCustomerUserGroup> {
+  const duffel = getDuffel();
+  const wire: DuffelCustomerUserGroupPayloadWire = {
+    name: args.name,
+    user_ids: args.userIds ?? [],
+  };
+  const r = await duffel.identity.customerUserGroups.create(
+    wire as unknown as Parameters<typeof duffel.identity.customerUserGroups.create>[0]
+  );
+  return r.data as unknown as DuffelCustomerUserGroup;
+}
+
+export async function getCustomerUserGroup(id: string): Promise<DuffelCustomerUserGroup> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUserGroups.get(id);
+  return r.data as unknown as DuffelCustomerUserGroup;
+}
+
+// ============================================================================
+// Ancillary services — baggage, CFAR, seats
+// ============================================================================
+
+export type DuffelAncillaryType = 'baggage' | 'cancel_for_any_reason';
+
+export interface DuffelAvailableServiceBaggage {
+  id: string;
+  type: 'baggage';
+  maximumQuantity: number;
+  passengerIds: string[];
+  segmentIds: string[];
+  totalAmount: string;
+  totalCurrency: string;
+  metadata: {
+    kind?: 'carry_on' | 'checked';
+    maxWeightKg?: number | null;
+    maxHeightCm?: number | null;
+    maxLengthCm?: number | null;
+    maxDepthCm?: number | null;
+  };
+}
+
+export interface DuffelAvailableServiceCFAR {
+  id: string;
+  type: 'cancel_for_any_reason';
+  maximumQuantity: number;
+  passengerIds: string[];
+  segmentIds: string[];
+  totalAmount: string;
+  totalCurrency: string;
+  metadata: {
+    refundAmount?: string;
+    merchantCopy?: string;
+    termsAndConditionsUrl?: string;
+  };
+}
+
+export type DuffelAvailableService = DuffelAvailableServiceBaggage | DuffelAvailableServiceCFAR;
+
+function mapAvailableService(
+  raw: DuffelAvailableServiceWire | null | undefined
+): DuffelAvailableService | null {
+  if (!raw || typeof raw !== 'object' || !raw.id || !raw.type) return null;
+  const base = {
+    id: String(raw.id),
+    maximumQuantity: Number(raw.maximum_quantity ?? 1),
+    passengerIds: Array.isArray(raw.passenger_ids) ? raw.passenger_ids.map(String) : [],
+    segmentIds: Array.isArray(raw.segment_ids) ? raw.segment_ids.map(String) : [],
+    totalAmount: String(raw.total_amount ?? '0'),
+    totalCurrency: String(raw.total_currency ?? 'USD'),
+  };
+  if (raw.type === 'baggage') {
+    const meta = (raw as DuffelAvailableServiceBaggageWire).metadata;
+    return {
+      ...base,
+      type: 'baggage',
+      metadata: {
+        kind: meta?.type,
+        maxWeightKg: meta?.maximum_weight_kg ?? null,
+        maxHeightCm: meta?.maximum_height_cm ?? null,
+        maxLengthCm: meta?.maximum_length_cm ?? null,
+        maxDepthCm: meta?.maximum_depth_cm ?? null,
+      },
+    };
+  }
+  if (raw.type === 'cancel_for_any_reason') {
+    const meta = (raw as DuffelAvailableServiceCFARWire).metadata;
+    return {
+      ...base,
+      type: 'cancel_for_any_reason',
+      metadata: {
+        refundAmount: meta?.refund_amount,
+        merchantCopy: meta?.merchant_copy,
+        termsAndConditionsUrl: meta?.terms_and_conditions_url,
+      },
+    };
+  }
+  return null;
+}
+
+export interface DuffelSeatOption {
+  serviceId: string;
+  designator: string;
+  name?: string;
+  cabinClass?: string;
+  passengerId: string;
+  totalAmount: string;
+  totalCurrency: string;
+  disclosures: string[];
+}
+
+export interface DuffelOfferAncillaries {
+  offerId: string;
+  available: DuffelAvailableService[];
+  seats: DuffelSeatOption[];
+  currency: string;
+}
+
+export async function getOfferWithAncillaries(offerId: string): Promise<DuffelOfferAncillaries> {
+  const duffel = getDuffel();
+  const offer = (await duffel.offers.get(offerId)).data as unknown as DuffelOfferWireMinimal;
+  const services = Array.isArray(offer.available_services) ? offer.available_services : [];
+  const available = services
+    .map(raw => mapAvailableService(raw as DuffelAvailableServiceWire))
+    .filter((s): s is DuffelAvailableService => Boolean(s));
+
+  let seats: DuffelSeatOption[] = [];
+  try {
+    const maps = (
+      await duffel.seatMaps.get({ offer_id: offerId } as unknown as Parameters<
+        typeof duffel.seatMaps.get
+      >[0])
+    ).data as unknown as DuffelSeatMapWire[];
+    for (const map of maps ?? []) {
+      for (const cabin of map?.cabins ?? []) {
+        const cabinClass = cabin?.cabin_class;
+        for (const row of cabin?.rows ?? []) {
+          for (const section of row?.sections ?? []) {
+            for (const el of section?.elements ?? []) {
+              if (el?.type !== 'seat') continue;
+              for (const svc of el?.available_services ?? []) {
+                seats.push({
+                  serviceId: String(svc.id),
+                  designator: String(el.designator ?? ''),
+                  name: el.name,
+                  cabinClass,
+                  passengerId: String(svc.passenger_id ?? ''),
+                  totalAmount: String(svc.total_amount ?? '0'),
+                  totalCurrency: String(svc.total_currency ?? 'USD'),
+                  disclosures: Array.isArray(el.disclosures) ? el.disclosures : [],
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // Some offer types don't expose seat maps — swallow + return empty.
+    seats = [];
+  }
+
+  return {
+    offerId,
+    available,
+    seats,
+    currency: offer.total_currency ?? 'USD',
+  };
+}
+
+export interface AddServicesParams {
+  orderId: string;
+  services: Array<{ id: DuffelServiceId | string; quantity: number }>;
+  payment: { type: 'balance'; currency: string; amount: string };
+}
+
+export async function addServicesToOrder(params: AddServicesParams): Promise<unknown> {
+  const duffel = getDuffel();
+  const ordersWithAddServices = duffel.orders as unknown as {
+    addServices: (
+      orderId: string,
+      body: { add_services: AddServicesParams['services']; payment: AddServicesParams['payment'] }
+    ) => Promise<{ data: unknown }>;
+  };
+  const r = await ordersWithAddServices.addServices(params.orderId, {
+    add_services: params.services,
+    payment: params.payment,
+  });
+  return r.data;
 }

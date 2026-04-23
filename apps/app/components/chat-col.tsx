@@ -675,6 +675,7 @@ const TRIP_TOOL_NAMES = new Set([
   'airport_arrival_playbook',
   'trip_checkin_reminder',
   'trip_delay_replanner',
+  'list_flight_ancillaries',
 ]);
 
 function ToolPreview({ toolName, result }: { toolName: string; result: unknown }) {
