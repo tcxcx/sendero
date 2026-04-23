@@ -1,31 +1,35 @@
 'use client';
 
-import {
-  TripInboxDualSidebar,
-  type InboxTripRow,
-} from '@/components/inbox/trip-inbox-dual-sidebar';
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+/**
+ * InboxWithSidebars — tenant inbox layout with a fixed-width trip list
+ * column on the left and the selected trip thread on the right.
+ *
+ * Design note: the previous shadcn Sidebar pattern nested a second
+ * SidebarProvider inside the app shell's SidebarProvider, which collapsed
+ * the trip list column to 0 × 0 px in production (QA pass-2 P0 #1).
+ * This version avoids that by rendering a plain flex layout with a
+ * dedicated TripListColumn — the global app sidebar keeps its
+ * SidebarProvider / SidebarInset chrome, and this layout lives entirely
+ * inside the `<main>` content area without its own provider.
+ */
+
+import type { ReactNode } from 'react';
+
+import { TripListColumn, type InboxTripRow } from '@/components/inbox/trip-list-column';
+
+export type { InboxTripRow } from '@/components/inbox/trip-list-column';
 
 export function InboxWithSidebars({
   trips,
   children,
 }: {
   trips: InboxTripRow[];
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <SidebarProvider
-      className="flex min-h-[min(28rem,70vh)] w-full flex-1 !flex-row rounded-md border border-border bg-muted/20"
-      style={
-        {
-          '--sidebar-width': '22rem',
-        } as React.CSSProperties
-      }
-    >
-      <TripInboxDualSidebar trips={trips} />
-      <SidebarInset className="min-h-0 min-w-0 flex-1 overflow-auto bg-background">
-        {children}
-      </SidebarInset>
-    </SidebarProvider>
+    <div className="flex min-h-[calc(100dvh-3.5rem)] w-full flex-1 flex-row overflow-hidden">
+      <TripListColumn trips={trips} />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">{children}</div>
+    </div>
   );
 }

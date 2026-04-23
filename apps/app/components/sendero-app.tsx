@@ -23,7 +23,19 @@ import { DepositDialog } from './deposit-dialog';
 import { hydrateFromStorage, subscribePersist, useSendero } from './store';
 import { refreshTreasury } from './actions';
 
-export function SenderoApp() {
+export interface SenderoAppProps {
+  /**
+   * 'passkey' (default) — public root flow: LandingHero pre-auth,
+   * ProfileGate post-auth.
+   * 'bypass' — authenticated product shell (e.g. /app/console) where a
+   * Clerk-authed operator is the user. Skip LandingHero + ProfileGate
+   * because the operator isn't the traveler for Duffel bookings; those
+   * use the trip's traveler data.
+   */
+  gate?: 'passkey' | 'bypass';
+}
+
+export function SenderoApp({ gate = 'passkey' }: SenderoAppProps = {}) {
   const showWorkflow = useSendero(s => s.showWorkflow);
   const userAuth = useSendero(s => s.userAuth);
 
@@ -50,7 +62,7 @@ export function SenderoApp() {
     return () => clearInterval(iv);
   }, [userAuth]);
 
-  if (!userAuth) {
+  if (gate === 'passkey' && !userAuth) {
     return (
       <>
         <LandingHero />
@@ -59,8 +71,8 @@ export function SenderoApp() {
     );
   }
 
-  return (
-    <ProfileGate>
+  const workspace = (
+    <>
       <div className="app" data-screen-label="Agent Console">
         <ConsoleBar />
 
@@ -82,8 +94,12 @@ export function SenderoApp() {
       <SendDialog />
       <BridgeDialog />
       <DepositDialog />
-    </ProfileGate>
+    </>
   );
+
+  if (gate === 'bypass') return workspace;
+
+  return <ProfileGate>{workspace}</ProfileGate>;
 }
 
 function SettleCelebration() {

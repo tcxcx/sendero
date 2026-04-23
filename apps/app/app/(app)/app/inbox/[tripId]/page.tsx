@@ -1,68 +1,132 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { prisma } from '@sendero/database';
 import type { Prisma } from '@sendero/database';
-import { Button } from '@sendero/ui/button';
 
-import { PageHeader } from '@/components/app-shell/page-header';
+import type { ChannelKindSlug } from '@/components/inbox/channel-badge';
+import {
+  TripThreadWorkspace,
+  type TripThreadContext,
+} from '@/components/inbox/trip-thread-workspace';
 import { stringFromJson } from '@/lib/format';
 import { requireCurrentTenant } from '@/lib/tenant-context';
-import { TripStatusBadge } from '@/components/trips/trip-status-badge';
 
 export const dynamic = 'force-dynamic';
 
 type Props = { params: Promise<{ tripId: string }> };
 
-function titleFromRow(metadata: Prisma.JsonValue | null, intent: Prisma.JsonValue, id: string) {
-  const s = stringFromJson(metadata, 'tripSummary', '');
-  if (s) return s;
-  if (intent && typeof intent === 'object' && intent !== null) {
+function tripTitle(
+  metadata: Prisma.JsonValue | null,
+  intent: Prisma.JsonValue,
+  id: string
+): string {
+  const fromMeta = stringFromJson(metadata, 'tripSummary', '');
+  if (fromMeta) return fromMeta;
+  if (intent && typeof intent === 'object' && intent !== null && 'origin' in intent) {
     const o = intent as { origin?: string; destination?: string };
     if (o.origin && o.destination) return `${o.origin} → ${o.destination}`;
   }
-  return id.slice(0, 12);
+  return id.slice(0, 10);
+}
+
+const CHANNEL_KIND_MAP: Record<string, ChannelKindSlug> = {
+  whatsapp: 'whatsapp',
+  slack: 'slack',
+  email: 'email',
+  web: 'web',
+};
+
+function asIntent(value: Prisma.JsonValue): TripThreadContext['intent'] | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const v = value as Record<string, unknown>;
+  const origin = typeof v.origin === 'string' ? v.origin : undefined;
+  const destination = typeof v.destination === 'string' ? v.destination : undefined;
+  const purpose = typeof v.purpose === 'string' ? v.purpose : undefined;
+  let dates: string | undefined;
+  const dep = typeof v.departureDate === 'string' ? v.departureDate : undefined;
+  const ret = typeof v.returnDate === 'string' ? v.returnDate : undefined;
+  if (dep && ret) dates = `${dep} → ${ret}`;
+  else if (dep) dates = dep;
+  return { origin, destination, purpose, dates };
 }
 
 export default async function InboxTripPage({ params }: Props) {
   const { tripId } = await params;
   const { tenant } = await requireCurrentTenant();
+
   const trip = await prisma.trip.findFirst({
     where: { id: tripId, tenantId: tenant.id },
-    select: { id: true, status: true, metadata: true, intent: true },
+    select: {
+      id: true,
+      status: true,
+      metadata: true,
+      intent: true,
+      travelerId: true,
+      traveler: {
+        select: {
+          displayName: true,
+          email: true,
+          phone: true,
+        },
+      },
+      bookings: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          pnr: true,
+          totalUsd: true,
+          currency: true,
+        },
+      },
+    },
   });
-  if (!trip) {
-    notFound();
-  }
 
-  return (
-    <div className="flex flex-col gap-6 p-6">
-      <PageHeader
-        title={titleFromRow(trip.metadata, trip.intent, trip.id)}
-        description="Customer support and thread actions for this trip. Deep links to ops and the agent console are below."
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        <TripStatusBadge status={trip.status} />
-        <span className="text-xs text-muted-foreground">Trip ID · {trip.id}</span>
-      </div>
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        Inbox is backed by the same trip record as{' '}
-        <Link className="underline underline-offset-2" href={`/app/trips/${trip.id}`}>
-          Trips
-        </Link>
-        . Use the agent console for full booking, policy, and treasury control.
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <Button asChild size="sm">
-          <Link href="/app/console">Open agent console</Link>
-        </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/app/trips/${trip.id}`}>Trip details</Link>
-        </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/app/ops">Ops workspace</Link>
-        </Button>
-      </div>
-    </div>
+  if (!trip) notFound();
+
+  const identities = trip.travelerId
+    ? await prisma.channelIdentity.findMany({
+        where: { tenantId: tenant.id, userId: trip.travelerId },
+        select: { kind: true },
+      })
+    : [];
+
+  const channels = Array.from(
+    new Set(
+      identities
+        .map(i => CHANNEL_KIND_MAP[i.kind as keyof typeof CHANNEL_KIND_MAP])
+        .filter((v): v is ChannelKindSlug => Boolean(v))
+    )
   );
+
+  const defaultChannel: ChannelKindSlug = channels[0] ?? 'web';
+
+  const travelerName = trip.traveler?.displayName ?? '';
+  const lastBooking = trip.bookings[0];
+
+  const ctx: TripThreadContext = {
+    tripId: trip.id,
+    tenantId: tenant.id,
+    tenantName: tenant.displayName ?? undefined,
+    title: tripTitle(trip.metadata, trip.intent, trip.id),
+    status: trip.status,
+    intent: asIntent(trip.intent) ?? null,
+    traveler: trip.traveler
+      ? {
+          name: travelerName || undefined,
+          email: trip.traveler.email ?? undefined,
+          phone: trip.traveler.phone ?? undefined,
+        }
+      : null,
+    channels,
+    defaultChannel,
+    booking: lastBooking
+      ? {
+          pnr: lastBooking.pnr ?? undefined,
+          totalAmount: lastBooking.totalUsd ? lastBooking.totalUsd.toString() : undefined,
+          totalCurrency: lastBooking.currency ?? undefined,
+        }
+      : null,
+  };
+
+  return <TripThreadWorkspace trip={ctx} />;
 }

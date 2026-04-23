@@ -2,7 +2,8 @@ import { prisma } from '@sendero/database';
 import type { Prisma } from '@sendero/database';
 
 import { InboxWithSidebars } from '@/components/inbox/inbox-with-sidebars';
-import type { InboxTripRow } from '@/components/inbox/trip-inbox-dual-sidebar';
+import type { ChannelKindSlug } from '@/components/inbox/channel-badge';
+import type { InboxTripRow } from '@/components/inbox/trip-list-column';
 import { formatDate, stringFromJson } from '@/lib/format';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -26,6 +27,13 @@ function tripTitle(
   return id.slice(0, 10);
 }
 
+const CHANNEL_KINDS: Record<string, ChannelKindSlug> = {
+  whatsapp: 'whatsapp',
+  slack: 'slack',
+  email: 'email',
+  web: 'web',
+};
+
 export default async function InboxLayout({ children }: { children: React.ReactNode }) {
   const { tenant } = await requireCurrentTenant();
   const rows = await prisma.trip.findMany({
@@ -38,18 +46,44 @@ export default async function InboxLayout({ children }: { children: React.ReactN
       metadata: true,
       intent: true,
       updatedAt: true,
+      travelerId: true,
     },
   });
 
-  const trips: InboxTripRow[] = rows.map(row => ({
-    id: row.id,
-    status: row.status,
-    title: tripTitle(row.metadata, row.intent, row.id),
-    teaser:
-      stringFromJson(row.metadata, 'lastMessage', '') ||
-      'Support this traveler from WhatsApp, Slack, or the agent console — one trip state.',
-    updatedLabel: formatDate(row.updatedAt),
-  }));
+  // Derive the preferred channel for each traveler in one round-trip.
+  const travelerIds = Array.from(
+    new Set(rows.map(r => r.travelerId).filter((v): v is string => Boolean(v)))
+  );
+  const identities = travelerIds.length
+    ? await prisma.channelIdentity.findMany({
+        where: { tenantId: tenant.id, userId: { in: travelerIds } },
+        select: { userId: true, kind: true },
+      })
+    : [];
+  const channelByTraveler = new Map<string, ChannelKindSlug>();
+  for (const ident of identities) {
+    if (!ident.userId) continue;
+    const slug = CHANNEL_KINDS[ident.kind as keyof typeof CHANNEL_KINDS];
+    if (slug && !channelByTraveler.has(ident.userId)) {
+      channelByTraveler.set(ident.userId, slug);
+    }
+  }
+
+  const trips: InboxTripRow[] = rows.map(row => {
+    const channel = (row.travelerId ? channelByTraveler.get(row.travelerId) : undefined) ?? 'web';
+    return {
+      id: row.id,
+      status: row.status,
+      title: tripTitle(row.metadata, row.intent, row.id),
+      teaser:
+        stringFromJson(row.metadata, 'lastMessage', '') ||
+        stringFromJson(row.intent, 'purpose', '') ||
+        'Support this traveler from WhatsApp, Slack, or the agent console — one trip state.',
+      updatedLabel: formatDate(row.updatedAt),
+      channel,
+      unread: stringFromJson(row.metadata, 'unread', '') === 'true',
+    };
+  });
 
   return <InboxWithSidebars trips={trips}>{children}</InboxWithSidebars>;
 }

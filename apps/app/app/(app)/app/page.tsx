@@ -56,14 +56,14 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-6">
       <PageHeader title={copy.pageTitle} description={copy.pageDescription(tenant.displayName)} />
 
-      <section className="rounded-md border border-border bg-muted/30 p-4 md:flex md:items-center md:justify-between md:gap-6">
-        <div>
+      <section className="grid gap-4 rounded-md border border-border bg-muted/30 p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold">{copy.agentConsole.title}</h2>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+          <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
             {copy.agentConsole.description}
           </p>
         </div>
-        <Button asChild className="mt-4 w-full shrink-0 md:mt-0 md:w-auto">
+        <Button asChild size="lg" className="w-full justify-center md:w-auto">
           <Link href="/app/console">{copy.agentConsole.cta}</Link>
         </Button>
       </section>
