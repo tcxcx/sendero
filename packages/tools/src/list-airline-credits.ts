@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 
+import { prisma } from '@sendero/database';
 import { listAirlineCredits } from '@sendero/duffel';
 
 import { ensureDuffelCustomer } from './ensure-duffel-customer';
@@ -17,6 +18,8 @@ const inputSchema = z.object({
   tenantId: z.string().optional(),
   customerUserId: z.string().optional(),
   limit: z.number().int().min(1).max(50).default(20),
+  /** Skip the Prisma cache and re-pull from Duffel. */
+  forceRefresh: z.boolean().default(false),
 });
 
 export type ListAirlineCreditsInput = z.infer<typeof inputSchema>;
@@ -59,6 +62,7 @@ export async function listAirlineCreditsForUser(
   ctx?: ToolContext
 ): Promise<ListAirlineCreditsResult> {
   let customerUserId = input.customerUserId;
+  let userId: string | undefined;
   if (!customerUserId && (input.clerkUserId || ctx?.traveler?.userId)) {
     try {
       const identity = await ensureDuffelCustomer(
@@ -69,10 +73,37 @@ export async function listAirlineCreditsForUser(
         ctx
       );
       customerUserId = identity.duffelCustomerUserId;
+      userId = identity.userId;
     } catch {
       customerUserId = undefined;
     }
   }
+
+  // Fast path: the Prisma cache fronts Duffel so repeated UI polls are
+  // cheap. Webhooks + the ensure path keep it warm; `forceRefresh`
+  // bypasses it for cache-sceptic flows.
+  if (!input.forceRefresh && (userId || customerUserId)) {
+    const cached = await prisma.airlineCredit.findMany({
+      where: userId ? { userId } : { duffelUserId: customerUserId },
+      orderBy: [{ state: 'asc' }, { expiresAt: 'asc' }],
+      take: input.limit,
+    });
+    if (cached.length > 0) {
+      const credits = cached.map(c => ({
+        id: c.id,
+        airline: c.airlineIataCode,
+        code: c.code,
+        amount: c.amount.toString(),
+        currency: c.currency,
+        expiresAt: c.expiresAt?.toISOString() ?? null,
+        state: c.state as 'available' | 'spent' | 'invalidated' | 'expired',
+        issuedOn: c.issuedOn?.toISOString().slice(0, 10) ?? '',
+        orderId: c.orderId ?? null,
+      }));
+      return buildResult(customerUserId ?? null, credits);
+    }
+  }
+
   const listed = await listAirlineCredits({
     userId: customerUserId as `icu_${string}` | undefined,
     limit: input.limit,
@@ -89,6 +120,56 @@ export async function listAirlineCreditsForUser(
     orderId: c.order_id,
   }));
 
+  // Write-through cache — best effort; never fails the caller.
+  if (userId || customerUserId) {
+    await Promise.all(
+      listed.data.map(async wire => {
+        try {
+          await prisma.airlineCredit.upsert({
+            where: { id: wire.id },
+            create: {
+              id: wire.id,
+              tenantId: ctx?.traveler?.tenantId,
+              userId,
+              duffelUserId: wire.user_id ?? undefined,
+              airlineIataCode: wire.airline_iata_code.slice(0, 2),
+              type: wire.type,
+              code: wire.code,
+              amount: wire.amount,
+              currency: wire.amount_currency.slice(0, 3),
+              issuedOn: wire.issued_on ? new Date(wire.issued_on) : null,
+              expiresAt: wire.expires_at ? new Date(wire.expires_at) : null,
+              spentAt: wire.spent_at ? new Date(wire.spent_at) : null,
+              invalidatedAt: wire.invalidated_at ? new Date(wire.invalidated_at) : null,
+              givenName: wire.given_name,
+              familyName: wire.family_name,
+              passengerId: wire.passenger_id ?? undefined,
+              orderId: wire.order_id ?? undefined,
+              state: creditState(wire.expires_at, wire.spent_at, wire.invalidated_at),
+              liveMode: wire.live_mode,
+            },
+            update: {
+              state: creditState(wire.expires_at, wire.spent_at, wire.invalidated_at),
+              expiresAt: wire.expires_at ? new Date(wire.expires_at) : null,
+              spentAt: wire.spent_at ? new Date(wire.spent_at) : null,
+              invalidatedAt: wire.invalidated_at ? new Date(wire.invalidated_at) : null,
+              userId: userId ?? undefined,
+            },
+          });
+        } catch (err) {
+          console.warn('[list_airline_credits] cache write failed', err);
+        }
+      })
+    );
+  }
+
+  return buildResult(customerUserId ?? null, credits);
+}
+
+function buildResult(
+  customerUserId: string | null,
+  credits: ListAirlineCreditsResult['credits']
+): ListAirlineCreditsResult {
   const totalValueByCurrency: Record<string, number> = {};
   let totalAvailable = 0;
   for (const c of credits) {
@@ -106,7 +187,7 @@ export async function listAirlineCreditsForUser(
         );
 
   return {
-    customerUserId: customerUserId ?? null,
+    customerUserId,
     credits,
     totalAvailable,
     totalValueByCurrency,

@@ -157,7 +157,12 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
   {
     label: 'list_airline_credits',
     description:
-      "List a traveler's Duffel airline credits (unused tickets, MCOs, vouchers) with availability state and totals by currency.",
+      "List a traveler's Duffel airline credits (unused tickets, MCOs, vouchers) with availability state and totals by currency. Reads a Prisma cache (hydrated by webhooks) before hitting Duffel.",
+  },
+  {
+    label: 'manage_stays_negotiated_rate',
+    description:
+      'CRUD for Duffel Stays negotiated rates (corporate RACs). action: create | update | delete.',
   },
   {
     label: 'send_tokens',

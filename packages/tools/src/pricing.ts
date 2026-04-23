@@ -79,6 +79,7 @@ export const TOOL_PRICING: Record<string, string> = {
   cancel_order_quote: '0.002',
   confirm_cancel_order: '0.003',
   list_airline_credits: '0.001',
+  manage_stays_negotiated_rate: '0.003',
 
   // Dev/test helper
   faucet_drip: '0.0005',

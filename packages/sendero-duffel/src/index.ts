@@ -22,6 +22,7 @@ import type {
   DuffelAvailableServiceWire,
   DuffelConditionsWire,
   DuffelCreateOrderWire,
+  DuffelCurrencyCode,
   DuffelCustomerUserGroupPayloadWire,
   DuffelCustomerUserGroupWire,
   DuffelCustomerUserId,
@@ -1115,4 +1116,158 @@ export async function getStayQuote(id: DuffelStaysQuoteId | string): Promise<Duf
   };
   const r = await stays.quotes.get(String(id));
   return r.data;
+}
+
+// ============================================================================
+// Air payments — mixed balance/card/airline-credit splits on hold orders
+// ============================================================================
+
+export type DuffelPaymentType = 'balance' | 'card' | 'airline_credit' | 'arc_bsp_cash';
+
+export interface DuffelPaymentInput {
+  type: DuffelPaymentType;
+  amount: string;
+  currency: DuffelCurrencyCode;
+  /** Required when type === 'airline_credit'. */
+  airline_credit_id?: DuffelAirlineCreditId;
+  /** Required when type === 'card'. */
+  card_id?: string;
+  three_d_secure_session_id?: string;
+}
+
+export interface DuffelPaymentWire {
+  id: string;
+  type: DuffelPaymentType | (string & {});
+  amount: string;
+  currency: DuffelCurrencyCode;
+  order_id: DuffelOrderId;
+  status: 'succeeded' | 'failed' | 'pending' | 'cancelled' | (string & {});
+  created_at: string;
+  card_id?: string;
+  airline_credit_id?: DuffelAirlineCreditId;
+  failure_reason?: string;
+}
+
+export async function payOrder(args: {
+  orderId: DuffelOrderId | string;
+  payments: DuffelPaymentInput[];
+}): Promise<DuffelPaymentWire[]> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch('https://api.duffel.com/air/payments', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      data: { order_id: args.orderId, payments: args.payments },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.payments.create ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelPaymentWire[] };
+  return json.data;
+}
+
+// ============================================================================
+// Stays — negotiated rates CRUD
+// ============================================================================
+
+export interface DuffelStaysNegotiatedRatePayload {
+  displayName: string;
+  rateAccessCode: string;
+  accommodationIds: string[];
+}
+
+export async function createStaysNegotiatedRate(p: DuffelStaysNegotiatedRatePayload): Promise<{
+  id: string;
+  display_name: string;
+  rate_access_code: string;
+  accommodation_ids: string[];
+  live_mode: boolean;
+}> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch('https://api.duffel.com/stays/negotiated_rates', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      data: {
+        display_name: p.displayName,
+        rate_access_code: p.rateAccessCode,
+        accommodation_ids: p.accommodationIds,
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.stays.negotiated_rates.create ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as {
+    data: Awaited<ReturnType<typeof createStaysNegotiatedRate>>;
+  };
+  return json.data;
+}
+
+export async function updateStaysNegotiatedRate(
+  id: string,
+  patch: Partial<DuffelStaysNegotiatedRatePayload>
+): Promise<Awaited<ReturnType<typeof createStaysNegotiatedRate>>> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const body: Record<string, unknown> = {};
+  if (patch.displayName) body.display_name = patch.displayName;
+  if (patch.rateAccessCode) body.rate_access_code = patch.rateAccessCode;
+  if (patch.accommodationIds) body.accommodation_ids = patch.accommodationIds;
+  const res = await fetch(
+    `https://api.duffel.com/stays/negotiated_rates/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Duffel-Version': 'v2',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ data: body }),
+    }
+  );
+  if (!res.ok) {
+    const b = await res.text();
+    throw new Error(`duffel.stays.negotiated_rates.update ${res.status}: ${b.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as {
+    data: Awaited<ReturnType<typeof createStaysNegotiatedRate>>;
+  };
+  return json.data;
+}
+
+export async function deleteStaysNegotiatedRate(id: string): Promise<void> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch(
+    `https://api.duffel.com/stays/negotiated_rates/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        'Duffel-Version': 'v2',
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  if (!res.ok && res.status !== 204) {
+    const body = await res.text();
+    throw new Error(`duffel.stays.negotiated_rates.delete ${res.status}: ${body.slice(0, 400)}`);
+  }
 }

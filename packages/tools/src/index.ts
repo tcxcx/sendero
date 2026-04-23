@@ -18,6 +18,7 @@ import { findAirportsNearbyTool } from './find-airports-nearby';
 import { listAirlineCreditsTool } from './list-airline-credits';
 import { listFlightAncillariesTool } from './list-flight-ancillaries';
 import { gatewayBalanceTool } from './gateway-balance';
+import { manageStaysNegotiatedRateTool } from './manage-stays-negotiated-rate';
 import { quoteStayTool } from './quote-stay';
 import { gatewayTransferTool } from './gateway-transfer';
 import { generateBookingInvoiceTool } from './generate-booking-invoice';
@@ -229,6 +230,7 @@ export const toolList: ToolDef[] = [
   cancelOrderQuoteTool,
   confirmCancelOrderTool,
   listAirlineCreditsTool,
+  manageStaysNegotiatedRateTool,
   // Ops helpers
   faucetDripTool,
 ];

@@ -284,9 +284,48 @@ model User {
   sessions           Session[]
   channelIdentities  ChannelIdentity[]
   whatsappLinkTokens WhatsAppLinkToken[]
+  airlineCredits     AirlineCredit[]
 
   @@index([createdAt])
   @@map("users")
+}
+
+/// Cached Duffel airline credit (unused ticket, MCO, voucher, etc.).
+/// Mirrors the wire type in @sendero/duffel. Webhooks (or the ensure
+/// path) keep `state` in sync with Duffel. `state` is derived from
+/// spent_at / invalidated_at / expires_at so indexes on it work
+/// directly for "available credits" lookups.
+model AirlineCredit {
+  id                String    @id // Duffel id, e.g. acd_…
+  tenantId          String?
+  userId            String? // Sendero User.id
+  duffelUserId      String? // icu_… denormalized for list scans
+  airlineIataCode   String    @db.Char(2)
+  /// eticket | mco | other
+  type              String
+  code              String
+  amount            Decimal   @db.Decimal(18, 6)
+  currency          String    @db.Char(3)
+  issuedOn          DateTime? @db.Date
+  expiresAt         DateTime? @db.Timestamptz(6)
+  spentAt           DateTime? @db.Timestamptz(6)
+  invalidatedAt     DateTime? @db.Timestamptz(6)
+  givenName         String?
+  familyName        String?
+  passengerId       String? // pas_…
+  orderId           String? // ord_…
+  /// available | spent | invalidated | expired — precomputed for fast filters.
+  state             String    @default("available")
+  liveMode          Boolean   @default(false)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, state, expiresAt])
+  @@index([tenantId, state])
+  @@index([duffelUserId, state])
+  @@map("airline_credits")
 }
 
 /// Many-to-many User↔Tenant with a per-tenant role.
