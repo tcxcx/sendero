@@ -34,7 +34,7 @@ describe('@sendero/llms', () => {
   test('renders edge tool-discovery context without leaking private endpoints', () => {
     const config = buildSenderoEdgeLlms({
       edgeOrigin: 'https://sendero-dev-bufi.ngrok.app',
-      appOrigin: 'https://app.sendero.travel',
+      appOrigin: 'https://www.sendero.travel',
       docsOrigin: 'https://docs.sendero.travel',
     });
     const text = buildLlmsTxt(config);

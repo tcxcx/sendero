@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 async function expectNoFrameworkOverlay(page: Page) {
   await expect(
@@ -43,7 +43,7 @@ test.describe('public product smoke', () => {
     expect(robots.ok()).toBe(true);
 
     const robotsText = await robots.text();
-    expect(robotsText).toContain('Sitemap: https://app.sendero.travel/sitemap.xml');
+    expect(robotsText).toContain('Sitemap: https://www.sendero.travel/sitemap.xml');
     expect(robotsText).toContain('User-Agent: GPTBot');
     expect(robotsText).not.toContain('/sign-in');
 
@@ -51,8 +51,8 @@ test.describe('public product smoke', () => {
     expect(sitemap.ok()).toBe(true);
 
     const sitemapText = await sitemap.text();
-    expect(sitemapText).toContain('<loc>https://app.sendero.travel/</loc>');
-    expect(sitemapText).toContain('<loc>https://app.sendero.travel/.well-known/llms.txt</loc>');
+    expect(sitemapText).toContain('<loc>https://www.sendero.travel/</loc>');
+    expect(sitemapText).toContain('<loc>https://www.sendero.travel/.well-known/llms.txt</loc>');
     expect(sitemapText).not.toContain('/sign-in');
   });
 

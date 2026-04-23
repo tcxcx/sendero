@@ -312,6 +312,122 @@ export const checkInReminderWorkflow: WorkflowDef = {
   ],
 };
 
+// ─── travel-safety-brief: geocode → parallel risk checks ─────────────
+
+export const travelSafetyBriefWorkflow: WorkflowDef = {
+  id: 'sendero.travel_safety_brief',
+  version: 1,
+  label: 'Generate a travel safety brief',
+  description:
+    'Travel-risk workflow for destination readiness. Geocodes the stop, then runs weather, air quality, timezone, elevation, and composed safety checks in parallel so agents can brief the traveler before departure or reroute decisions.',
+  steps: [
+    {
+      kind: 'tool',
+      id: 'geocode_stop',
+      tool: 'geocode_trip_stop',
+      label: 'Normalize the requested stop',
+      as: 'stop',
+      args: {
+        address: $('input.locationText'),
+        languageCode: $('input.languageCode'),
+        regionCode: $('input.regionCode'),
+      },
+    },
+    {
+      kind: 'parallel',
+      id: 'risk_checks',
+      label: 'Run weather, air quality, timezone, elevation, and safety checks',
+      failFast: false,
+      branches: [
+        {
+          id: 'weather',
+          steps: [
+            {
+              kind: 'tool',
+              id: 'weather',
+              tool: 'trip_weather_brief',
+              label: 'Read current weather conditions',
+              as: 'weather',
+              args: {
+                latitude: $('stop.latitude'),
+                longitude: $('stop.longitude'),
+                languageCode: $('input.languageCode'),
+              },
+            },
+          ],
+        },
+        {
+          id: 'air_quality',
+          steps: [
+            {
+              kind: 'tool',
+              id: 'air_quality',
+              tool: 'air_quality_brief',
+              label: 'Read current air quality',
+              as: 'airQuality',
+              args: {
+                latitude: $('stop.latitude'),
+                longitude: $('stop.longitude'),
+                languageCode: $('input.languageCode'),
+              },
+            },
+          ],
+        },
+        {
+          id: 'timezone',
+          steps: [
+            {
+              kind: 'tool',
+              id: 'timezone',
+              tool: 'timezone_brief',
+              label: 'Read local timezone context',
+              as: 'timezone',
+              args: {
+                latitude: $('stop.latitude'),
+                longitude: $('stop.longitude'),
+              },
+            },
+          ],
+        },
+        {
+          id: 'elevation',
+          steps: [
+            {
+              kind: 'tool',
+              id: 'elevation',
+              tool: 'elevation_risk_brief',
+              label: 'Read elevation and altitude risk',
+              as: 'elevation',
+              args: {
+                latitude: $('stop.latitude'),
+                longitude: $('stop.longitude'),
+              },
+            },
+          ],
+        },
+        {
+          id: 'safety_aid',
+          steps: [
+            {
+              kind: 'tool',
+              id: 'safety_aid',
+              tool: 'travel_safety_aid',
+              label: 'Generate the composed safety brief',
+              as: 'safetyAid',
+              args: {
+                latitude: $('stop.latitude'),
+                longitude: $('stop.longitude'),
+                travelerNotes: $('input.travelerNotes'),
+                languageCode: $('input.languageCode'),
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 // ─── guest-prefund: Navan-style but WA-native + AI-native ─────────────
 //
 // Corporate buyer funds a trip on-chain (prefund_trip) → Sendero DMs
@@ -819,6 +935,7 @@ export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [groupTripWorkflow.id]: groupTripWorkflow,
   [refundWorkflow.id]: refundWorkflow,
   [checkInReminderWorkflow.id]: checkInReminderWorkflow,
+  [travelSafetyBriefWorkflow.id]: travelSafetyBriefWorkflow,
   [guestPrefundWorkflow.id]: guestPrefundWorkflow,
   [agencyCohortWorkflow.id]: agencyCohortWorkflow,
   [opsQuoteToBookWorkflow.id]: opsQuoteToBookWorkflow,

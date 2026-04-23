@@ -67,7 +67,7 @@ Every deployed app exposes the same **shape** of manifest at **`/llms.txt`** and
 
 | Surface | Role | `llms.txt` | `/.well-known/llms.txt` |
 | --- | --- | --- | --- |
-| **Product app** | Authenticated console, MCP, webhooks, billing, trips | [app.sendero.travel/llms.txt](https://app.sendero.travel/llms.txt) | [app.sendero.travel/.well-known/llms.txt](https://app.sendero.travel/.well-known/llms.txt) |
+| **Product app** | Authenticated console, MCP, webhooks, billing, trips | [www.sendero.travel/llms.txt](https://www.sendero.travel/llms.txt) | [www.sendero.travel/.well-known/llms.txt](https://www.sendero.travel/.well-known/llms.txt) |
 | **Marketing** | Public positioning, pricing, audiences | [sendero.travel/llms.txt](https://sendero.travel/llms.txt) | [sendero.travel/.well-known/llms.txt](https://sendero.travel/.well-known/llms.txt) |
 | **Help** | Support articles and troubleshooting | [help.sendero.travel/llms.txt](https://help.sendero.travel/llms.txt) | [help.sendero.travel/.well-known/llms.txt](https://help.sendero.travel/.well-known/llms.txt) |
 | **Docs** | MCP integration, tool catalog, x402, API shapes | [docs.sendero.travel/llms.txt](https://docs.sendero.travel/llms.txt) | [docs.sendero.travel/.well-known/llms.txt](https://docs.sendero.travel/.well-known/llms.txt) |
@@ -87,9 +87,50 @@ Direct HTTP clients can call **`/tools/:name`** on the edge origin with **x402 `
 
 Sendero’s tools are meant to support the **whole trip**, not just the flight lifecycle and accommodation booking. That is why we integrated the **Google Places API**—to help with restaurants, local context, and practical guidance so **tourists and business travelers** are supported from first quote through **getting home safely**.
 
+The next 20 trip-assistance tools and workflows are tracked canonically in [`TODO_TOOLS.md`](./TODO_TOOLS.md). That backlog defines MCP shape, web AI Elements expectations, WhatsApp/Slack output rules, and which integrations should be extended before adding new APIs.
+
 Further tools we can add include **eSIM sales** (QR install in chat), **travel insurance** quotes and bind, travel information based on profile (traveler visa requiremnts, passport expiration, memory notifications) and deeper ground services. Partnership directions worth exploring include **LoungePass** and **Mastercard-style international card programs** with spend funded or settled from **USDC**, to lower cost and friction for travelers abroad via providers such as **Rain.xyz** which do support Visa Signature card programs funded by USDC.
 
 MOAT: The more Sendero can absorb “my flight changed, now what?” the more defensible it becomes.
+
+## Google Maps Platform travel intelligence
+
+Sendero uses Google Maps Platform as travel operations infrastructure, not just a visual layer. The new canonical travel tools live in `@sendero/tools` and are available to the AI SDK surfaces, MCP, and workflow runner:
+
+- `geocode_trip_stop`
+- `trip_weather_brief`
+- `air_quality_brief`
+- `validate_travel_address`
+- `timezone_brief`
+- `elevation_risk_brief`
+- `travel_safety_aid`
+- `recommend_restaurants`
+
+These tools are part of the normal business logic for destination readiness, traveler safety, arrival confidence, and in-trip support.
+
+### How we use each Google service
+
+- **Weather API**: departure readiness, live destination risk, and disruption-aware recommendations.
+- **Air Quality API**: respiratory-risk guidance and outdoor-activity advisories.
+- **Geocoding API**: canonical coordinates for itinerary stops before routing and safety checks.
+- **Address Validation API**: validate hotels, pickups, embassies, clinics, and other travel-critical addresses before arrival.
+- **Time Zone API**: local-time and DST context for meetings, transfers, and support.
+- **Elevation API**: altitude-sensitive warnings for mountain and high-elevation destinations.
+- **Street View Static API**: arrival previews for pickup points and property entrances inside the composed safety brief.
+- **Places API (New)**: place discovery for restaurants and nearby services during the trip.
+- **Places UI Kit**: rich place presentation in user-facing surfaces where we want trusted, familiar place detail UX.
+- **Maps JavaScript API / Maps Embed API / Maps Static API**: interactive, embedded, and static trip map surfaces.
+- **Maps Grounding Lite**: roadmap grounding layer for place-aware travel answers and future MCP-backed geospatial reasoning.
+- **Routes API / Distance Matrix API / Directions API**: route computation and compatibility paths for routing-heavy workflows.
+- **Geolocation API**: fallback traveler location estimation for recovery and support scenarios.
+
+### Canonical safety workflow
+
+The workflow runner now includes `sendero.travel_safety_brief`, which:
+
+1. geocodes the stop,
+2. runs weather, air quality, timezone, elevation, and safety checks in parallel,
+3. returns a compact, traveler-facing risk brief for departure or reroute decisions.
 
 ### On-ramps, off-ramps, and abstracting USDC
 
@@ -321,5 +362,3 @@ sendero-arc/
 - [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) — tool-aware LLM integration.
 - [Ponder](https://ponder.sh/) — Arc Testnet smart contract indexer for escrow and trip state.
 - [Next Forge 6](https://www.next-forge.com/) — monorepo starter template .
-
-

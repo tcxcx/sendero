@@ -51,6 +51,7 @@ export const TOOL_PRICING: Record<string, string> = {
 
   // Concierge / in-trip companion
   recommend_restaurants: '0.002',
+  export_route_map: '0.002',
 
   // Dev/test helper
   faucet_drip: '0.0005',

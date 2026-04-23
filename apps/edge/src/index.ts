@@ -17,8 +17,6 @@
  * Vercel Edge, Deno Deploy, or plain Bun on a VM.
  */
 
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import { buildLlmsTxt, buildSenderoEdgeLlms } from '@sendero/llms';
 import {
   buildRobots,
@@ -28,11 +26,14 @@ import {
   serializeSitemap,
 } from '@sendero/seo';
 import { toolList } from '@sendero/tools';
-import { mountMcp } from './adapters/mcp';
-import { mountWhatsApp } from './adapters/whatsapp';
-import { mountSlack } from './adapters/slack';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+
 import { mountDiscord } from './adapters/discord';
+import { mountMcp } from './adapters/mcp';
 import { mountPaidTools } from './adapters/paid-tools';
+import { mountSlack } from './adapters/slack';
+import { mountWhatsApp } from './adapters/whatsapp';
 
 const app = new Hono();
 const edgeOrigin =
@@ -42,7 +43,7 @@ const edgeOrigin =
 
 function surfaceOrigins() {
   return {
-    appOrigin: process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.sendero.travel',
+    appOrigin: process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.sendero.travel',
     marketingOrigin: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sendero.travel',
     helpOrigin: process.env.NEXT_PUBLIC_HELP_URL ?? 'https://help.sendero.travel',
     docsOrigin: process.env.NEXT_PUBLIC_DOCS_URL ?? 'https://docs.sendero.travel',

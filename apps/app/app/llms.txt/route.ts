@@ -5,7 +5,7 @@ export const dynamic = 'force-static';
 
 const appOrigin = resolvePublicOrigin(
   process.env.NEXT_PUBLIC_APP_URL,
-  'https://app.sendero.travel'
+  'https://www.sendero.travel'
 );
 const marketingOrigin = resolvePublicOrigin(
   process.env.NEXT_PUBLIC_SITE_URL,

@@ -9,7 +9,7 @@ const marketingOrigin = resolvePublicOrigin(
 );
 const appOrigin = resolvePublicOrigin(
   process.env.NEXT_PUBLIC_APP_URL,
-  'https://app.sendero.travel'
+  'https://www.sendero.travel'
 );
 const helpOrigin = resolvePublicOrigin(
   process.env.NEXT_PUBLIC_HELP_URL,

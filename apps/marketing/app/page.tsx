@@ -71,7 +71,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
   );
   const appOrigin = resolvePublicOrigin(
     process.env.NEXT_PUBLIC_APP_URL,
-    'https://app.sendero.travel'
+    'https://www.sendero.travel'
   );
   const websiteHref = `${websiteOrigin.replace(/\/$/, '')}/`;
 

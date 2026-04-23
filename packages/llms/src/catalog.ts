@@ -3,7 +3,7 @@ import { absoluteUrl, type LlmsItem, type LlmsSection, type LlmsTxtConfig } from
 export type SenderoSurface = 'app' | 'marketing' | 'help' | 'docs' | 'edge';
 
 export const defaultOrigins: Record<SenderoSurface, string> = {
-  app: 'https://app.sendero.travel',
+  app: 'https://www.sendero.travel',
   marketing: 'https://sendero.travel',
   help: 'https://help.sendero.travel',
   docs: 'https://docs.sendero.travel',
@@ -52,8 +52,42 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
     description: 'Search lodging inventory for the trip context.',
   },
   {
+    label: 'geocode_trip_stop',
+    description: 'Normalize an itinerary stop into a canonical address and coordinates.',
+  },
+  {
+    label: 'trip_weather_brief',
+    description: 'Read current weather conditions for a destination or trip stop.',
+  },
+  {
+    label: 'air_quality_brief',
+    description: 'Read AQI and health recommendations for a destination or route.',
+  },
+  {
+    label: 'validate_travel_address',
+    description: 'Validate and geocode travel-critical addresses such as hotels and pickups.',
+  },
+  {
+    label: 'timezone_brief',
+    description: 'Explain time zone, offsets, and local-time context for a trip stop.',
+  },
+  {
+    label: 'elevation_risk_brief',
+    description: 'Assess elevation and altitude sensitivity for a location.',
+  },
+  {
+    label: 'travel_safety_aid',
+    description:
+      'Produce a single travel safety brief that combines weather, air quality, address confidence, timezone, and elevation.',
+  },
+  {
     label: 'recommend_restaurants',
     description: 'Recommend in-trip restaurants from traveler context and location.',
+  },
+  {
+    label: 'export_route_map',
+    description:
+      'Export routes and itineraries into Google Maps and Apple Maps links with a shareable preview card.',
   },
   {
     label: 'send_tokens',
@@ -119,6 +153,11 @@ export const AGENT_WORKFLOW_CATALOG: LlmsItem[] = [
     label: 'sendero.book_flight',
     description:
       'Escrow-backed flight booking workflow: search, policy, reserve, hold, ticketing pause, settle, and invoice.',
+  },
+  {
+    label: 'sendero.travel_safety_brief',
+    description:
+      'Parallel travel-safety workflow: geocode, weather, air quality, timezone, elevation, and optional address validation.',
   },
   {
     label: 'sendero.guest_prefund',

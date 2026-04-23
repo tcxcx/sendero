@@ -222,6 +222,7 @@ export const TIER_BY_ACTION: Record<string, ModelTier> = {
   search_flights: 'cheap',
   search_hotels: 'cheap',
   recommend_restaurants: 'cheap',
+  export_route_map: 'cheap',
   check_treasury: 'cheap',
   gateway_balance: 'cheap',
 };
