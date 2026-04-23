@@ -4,6 +4,7 @@ import type { Viewport } from 'next';
 import Script from 'next/script';
 
 import {
+  buildClerkAllowedRedirectOrigins,
   buildMetadata,
   organizationJsonLd,
   resolvePublicOrigin,
@@ -16,6 +17,7 @@ import { Providers } from './providers';
 import './globals.css';
 
 const SITE_URL = resolvePublicOrigin(process.env.NEXT_PUBLIC_SITE_URL, 'https://sendero.travel');
+const CLERK_ALLOWED_REDIRECT_ORIGINS = buildClerkAllowedRedirectOrigins();
 const SEO_LOCALES = ['en-US', 'es-MX', 'pt-BR', 'es-AR'] as const;
 const DESCRIPTION =
   'Sendero turns travel requests into coordinated agent workflows: real inventory, policy checks, prepaid guest escrow, PNR issuance, USDC settlement on Arc, invoices, and trip support.';
@@ -76,7 +78,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         {process.env.NODE_ENV === 'development' && (
           <Script
-            src="//unpkg.com/react-grab/dist/index.global.js"
+            src="https://unpkg.com/react-grab/dist/index.global.js"
             crossOrigin="anonymous"
             strategy="beforeInteractive"
           />
@@ -93,7 +95,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         ))}
       </head>
       <body>
-        <Providers>{children}</Providers>
+        <Providers allowedRedirectOrigins={CLERK_ALLOWED_REDIRECT_ORIGINS}>{children}</Providers>
         {process.env.NODE_ENV === 'development' && <Agentation />}
       </body>
     </html>

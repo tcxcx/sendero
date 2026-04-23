@@ -4,17 +4,18 @@ import Script from 'next/script';
 import { ClerkProvider } from '@clerk/nextjs';
 import { SUPPORTED_LOCALES } from '@sendero/locale';
 import {
+  buildClerkAllowedRedirectOrigins,
   buildMetadata,
   organizationJsonLd,
   resolvePublicOrigin,
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { Toaster } from '@sendero/ui/sonner';
 import { Agentation } from 'agentation';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 import { getRequestLocale } from '@/lib/request-locale';
-import { Toaster } from '@sendero/ui/sonner';
 import '@sendero/ui/globals.css';
 import './globals.css';
 
@@ -23,18 +24,7 @@ const MARKETING_URL = resolvePublicOrigin(
   process.env.NEXT_PUBLIC_SITE_URL,
   'https://sendero.travel'
 );
-const VERCEL_DEPLOY_URL = process.env.VERCEL_URL
-  ? resolvePublicOrigin(`https://${process.env.VERCEL_URL}`, APP_URL)
-  : null;
-/** Local dev must be allowed so OAuth / invite return URLs are not dropped. */
-const CLERK_DEV_LOCAL = process.env.NODE_ENV === 'development' ? 'http://localhost:3010' : null;
-const CLERK_ALLOWED_REDIRECT_ORIGINS = Array.from(
-  new Set(
-    [APP_URL, VERCEL_DEPLOY_URL, CLERK_DEV_LOCAL].filter((origin): origin is string =>
-      Boolean(origin)
-    )
-  )
-);
+const CLERK_ALLOWED_REDIRECT_ORIGINS = buildClerkAllowedRedirectOrigins();
 const CLERK_SIGN_IN_FALLBACK =
   process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL ??
   process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL ??
