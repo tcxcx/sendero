@@ -1,4 +1,6 @@
 import { airQualityBriefTool } from './air-quality-brief';
+import { airportArrivalPlaybookTool } from './airport-arrival-playbook';
+import { airportTransferCoordinatorTool } from './airport-transfer-coordinator';
 import { bookFlightTool } from './book-flight';
 import { bridgeToArcTool } from './bridge-to-arc';
 import { cancelBookingTool } from './cancel-booking';
@@ -22,6 +24,7 @@ import {
 import { quoteFxTool } from './quote-fx';
 import { rateAgentTool } from './rate-agent';
 import { recommendRestaurantsTool } from './recommend-restaurants';
+import { restaurantRouteCardTool } from './restaurant-route-card';
 import { searchFlightsTool } from './search-flights';
 import { searchHotelsTool } from './search-hotels';
 import { sendTokensTool } from './send-tokens';
@@ -31,6 +34,8 @@ import { swapAndBridgeTool } from './swap-and-bridge';
 import { swapTokensTool } from './swap-tokens';
 import { timezoneBriefTool } from './timezone-brief';
 import { travelSafetyAidTool } from './travel-safety-aid';
+import { tripCheckinReminderTool } from './trip-checkin-reminder';
+import { tripDelayReplannerTool } from './trip-delay-replanner';
 import { tripWeatherBriefTool } from './trip-weather-brief';
 import type { ToolDef } from './types';
 import { validateTravelAddressTool } from './validate-travel-address';
@@ -87,6 +92,36 @@ export {
   recommendRestaurants,
   recommendRestaurantsTool,
 } from './recommend-restaurants';
+export {
+  type AirportArrivalPlaybookInput,
+  type AirportArrivalPlaybookResult,
+  airportArrivalPlaybook,
+  airportArrivalPlaybookTool,
+} from './airport-arrival-playbook';
+export {
+  type AirportTransferCoordinatorInput,
+  type AirportTransferCoordinatorResult,
+  airportTransferCoordinator,
+  airportTransferCoordinatorTool,
+} from './airport-transfer-coordinator';
+export {
+  type RestaurantRouteCardInput,
+  type RestaurantRouteCardResult,
+  restaurantRouteCard,
+  restaurantRouteCardTool,
+} from './restaurant-route-card';
+export {
+  type TripCheckinReminderInput,
+  type TripCheckinReminderResult,
+  tripCheckinReminder,
+  tripCheckinReminderTool,
+} from './trip-checkin-reminder';
+export {
+  type TripDelayReplannerInput,
+  type TripDelayReplannerResult,
+  tripDelayReplanner,
+  tripDelayReplannerTool,
+} from './trip-delay-replanner';
 export { settleBookingTool } from './settle-booking';
 export {
   type TimezoneBriefInput,
@@ -154,6 +189,12 @@ export const toolList: ToolDef[] = [
   travelSafetyAidTool,
   recommendRestaurantsTool,
   exportRouteMapTool,
+  // Composed concierge + ops artifacts
+  restaurantRouteCardTool,
+  airportTransferCoordinatorTool,
+  airportArrivalPlaybookTool,
+  tripCheckinReminderTool,
+  tripDelayReplannerTool,
   // Ops helpers
   faucetDripTool,
 ];

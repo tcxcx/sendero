@@ -11,7 +11,7 @@ export function requireGoogleMapsApiKey(toolName: string): string {
   const apiKey = env.googleMapsApiKey();
   if (!apiKey) {
     throw new Error(
-      `${toolName} unavailable: set GOOGLE_MAPS_API_KEY (preferred) or GOOGLE_PLACES_API_KEY in .env.local.`
+      `${toolName} unavailable: set GOOGLE_MAPS_API_KEY (preferred) or GOOGLE_API_KEY in .env.local.`
     );
   }
   return apiKey;

@@ -21,6 +21,11 @@ Sendero exposes a shared tool registry across MCP, web chat, WhatsApp, Slack, an
 | `search_hotels` | External API | $0.002 | Search lodging inventory for the trip context. |
 | `recommend_restaurants` | Concierge | $0.002 | Recommend restaurants from traveler context and location. |
 | `export_route_map` | Concierge | $0.002 | Export a route or itinerary into Google Maps and Apple Maps links with a static preview card. |
+| `trip_checkin_reminder` | Concierge | $0.003 | Canonical check-in nudge: window, transit note, leave-by, and next action. |
+| `restaurant_route_card` | Composed | $0.005 | Shortlist restaurants and export a route from the traveler to the top pick. |
+| `airport_transfer_coordinator` | Composed | $0.008 | Pickup plan with meeting point, primary transport, backup options, and airport→destination route. |
+| `airport_arrival_playbook` | Composed | $0.008 | One-screen arrival briefing: 5-step playbook, transport, timezone, and route. |
+| `trip_delay_replanner` | Composed | $0.01 | Rebuild a disrupted itinerary: replacement flights, overnight hotel, and route. |
 | `send_tokens` | On-chain | $0.003 | Transfer USDC on Arc. |
 | `gateway_transfer` | On-chain | $0.003 | Move USDC through Circle Gateway. |
 | `prefund_trip` | Escrow | $0.003 | Create a prepaid guest escrow and return a shareable claim link. |
@@ -47,7 +52,8 @@ Tools are low-level capabilities. Real travel operations should use named workfl
 | `sendero.agency_cohort` | Prefund many traveler links for agency cohorts or group travel. |
 | `sendero.group_trip` | Coordinate multiple travelers before confirming. |
 | `sendero.refund` | Cancel and refund a booking. |
-| `sendero.check_in_reminder` | Re-open the traveler session before departure. |
+| `sendero.check_in_reminder` | Geocode, read local timezone, and deliver the canonical check-in nudge before awaiting traveler reply. |
+| `sendero.trip_delay_replanner` | Build a rebook plan after disruption; on approval, hold the chosen flight via `book_flight`. |
 
 Discover workflows at `/api/workflows/list` and run them at `/api/workflows/run`.
 

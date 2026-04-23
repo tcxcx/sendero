@@ -290,23 +290,63 @@ export const refundWorkflow: WorkflowDef = {
 
 export const checkInReminderWorkflow: WorkflowDef = {
   id: 'sendero.check_in_reminder',
-  version: 1,
+  version: 2,
   label: 'Check-in reminder',
   description:
-    'Fires 24 hours before departure. Sends a WhatsApp (or email fallback) nudge with the PNR + a "need anything?" prompt that becomes the start of an in-trip chat.',
+    'Fires before departure. Geocodes the origin airport, reads its timezone, builds the canonical check-in nudge (check-in window + airport transit note + leave-by), then pauses awaiting the traveler reply so the in-trip chat can open with one tap.',
   steps: [
     {
       kind: 'tool',
       id: 'fetch_booking',
       tool: 'check_treasury', // placeholder — swap for `get_booking_status` when added
-      label: 'Fetch booking',
+      label: 'Fetch booking context',
       args: {},
+    },
+    {
+      kind: 'tool',
+      id: 'geocode_origin',
+      tool: 'geocode_trip_stop',
+      label: 'Geocode departure airport',
+      as: 'origin',
+      args: {
+        address: $('input.origin'),
+        languageCode: $('input.language'),
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'reminder',
+      tool: 'trip_checkin_reminder',
+      label: 'Build canonical check-in reminder',
+      as: 'reminder',
+      args: {
+        pnr: $('input.pnr'),
+        flightNumber: $('input.flightNumber'),
+        carrier: $('input.carrier'),
+        origin: $('input.origin'),
+        destination: $('input.destination'),
+        departureDateTimeIso: $('input.departureDateTimeIso'),
+        airportLatitude: $('origin.latitude'),
+        airportLongitude: $('origin.longitude'),
+        stayLabel: $('input.stayLabel'),
+        stayAddress: $('input.stayAddress'),
+        stayLatitude: $('input.stayLatitude'),
+        stayLongitude: $('input.stayLongitude'),
+        transferMode: $('input.transferMode'),
+        travelerName: $('input.travelerName'),
+        checkInWindowHours: $('input.checkInWindowHours'),
+      },
     },
     {
       kind: 'pause',
       id: 'await_traveler_reply',
       label: 'Traveler replies',
       reason: 'user_reply',
+      payload: {
+        via: $('input.channel'),
+        promptId: 'check-in-reminder',
+        share: $('reminder.share'),
+      },
       timeoutMs: 12 * 60 * 60 * 1000, // 12h
     },
   ],
@@ -930,6 +970,82 @@ export const opsArtifactPackWorkflow: WorkflowDef = {
   ],
 };
 
+// ─── trip-delay-replanner: disruption → rebook options → optional hold
+//
+// Uses the canonical `trip_delay_replanner` tool to build the plan, then
+// branches on whether a self-serve rebook was found. If yes, pause for
+// traveler approval, then feed the chosen offerId into `book_flight`.
+// Otherwise pause for agent handoff.
+
+export const tripDelayReplannerWorkflow: WorkflowDef = {
+  id: 'sendero.trip_delay_replanner',
+  version: 1,
+  label: 'Rebuild a disrupted trip',
+  description:
+    'Disruption recovery: searches replacement flights, optionally an overnight hotel, and packages a canonical rebook plan. On traveler approval, holds the chosen flight via book_flight.',
+  steps: [
+    {
+      kind: 'tool',
+      id: 'plan',
+      tool: 'trip_delay_replanner',
+      label: 'Build rebook plan',
+      as: 'plan',
+      args: {
+        originalLeg: $('input.originalLeg'),
+        disruption: $('input.disruption'),
+        rebookSearch: $('input.rebookSearch'),
+        needsHotelFallback: $('input.needsHotelFallback'),
+        stayLocation: $('input.stayLocation'),
+        stayCheckInDate: $('input.stayCheckInDate'),
+        stayCheckOutDate: $('input.stayCheckOutDate'),
+        travelerLabel: $('input.travelerLabel'),
+        notifyChannels: $('input.notifyChannels'),
+        transferMode: $('input.transferMode'),
+      },
+      retries: 1,
+      timeoutMs: 20_000,
+    },
+    {
+      kind: 'branch',
+      id: 'has_rebook',
+      label: 'Self-serve rebook available',
+      when: $('plan.recommendedRebook.selectable'),
+      equals: true,
+      // biome-ignore lint/suspicious/noThenProperty: BranchStep uses "then" as its workflow-domain field.
+      then: [
+        {
+          kind: 'pause',
+          id: 'await_traveler_approval',
+          label: 'Traveler approves rebook',
+          reason: 'user_reply',
+          payload: {
+            promptId: 'delay-rebook',
+            share: $('plan.share'),
+          },
+          timeoutMs: 2 * 60 * 60 * 1000,
+        },
+        {
+          kind: 'tool',
+          id: 'rebook',
+          tool: 'book_flight',
+          label: 'Hold the approved rebook',
+          args: { offerId: $('await_traveler_approval.offerId') },
+          timeoutMs: 30_000,
+        },
+      ],
+      otherwise: [
+        {
+          kind: 'pause',
+          id: 'await_agent_handoff',
+          label: 'Hand off to Sendero agent',
+          reason: 'approval',
+          payload: { promptId: 'delay-handoff', share: $('plan.share') },
+        },
+      ],
+    },
+  ],
+};
+
 export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [bookFlightWorkflow.id]: bookFlightWorkflow,
   [groupTripWorkflow.id]: groupTripWorkflow,
@@ -942,6 +1058,7 @@ export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [opsRebookRefundWorkflow.id]: opsRebookRefundWorkflow,
   [opsChannelIntakeWorkflow.id]: opsChannelIntakeWorkflow,
   [opsArtifactPackWorkflow.id]: opsArtifactPackWorkflow,
+  [tripDelayReplannerWorkflow.id]: tripDelayReplannerWorkflow,
 };
 
 /** Resolve a workflow by id; returns null if unknown. */

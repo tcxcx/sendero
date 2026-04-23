@@ -49,9 +49,23 @@ export const TOOL_PRICING: Record<string, string> = {
   generate_booking_invoice: '0.005',
   log_agent_action: '0.0005',
 
-  // Concierge / in-trip companion
+  // Concierge / in-trip companion — destination and safety primitives
+  geocode_trip_stop: '0.002',
+  trip_weather_brief: '0.002',
+  air_quality_brief: '0.002',
+  validate_travel_address: '0.002',
+  timezone_brief: '0.002',
+  elevation_risk_brief: '0.002',
+  travel_safety_aid: '0.005',
   recommend_restaurants: '0.002',
   export_route_map: '0.002',
+
+  // Composed concierge + ops artifacts
+  restaurant_route_card: '0.005',
+  airport_transfer_coordinator: '0.008',
+  airport_arrival_playbook: '0.008',
+  trip_checkin_reminder: '0.003',
+  trip_delay_replanner: '0.01',
 
   // Dev/test helper
   faucet_drip: '0.0005',

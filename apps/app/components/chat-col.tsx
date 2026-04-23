@@ -40,6 +40,7 @@ import {
 
 import { refreshTreasury } from './actions';
 import { runtimeContext, useSendero } from './store';
+import { TripToolCard } from './trip-tool-cards';
 
 function clock() {
   return new Date().toTimeString().slice(0, 8);
@@ -202,6 +203,42 @@ export function ChatCol() {
               text: `bridge+swap(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc → ${toolInput.targetToken ?? 'EURC'})`,
               t: clock(),
             });
+          } else if (toolName === 'restaurant_route_card') {
+            s.logEvent({
+              group: 'concierge.restaurants',
+              bullet: 'active',
+              text: `shortlist(<span class="v">${toolInput.cuisine ?? 'restaurants'} · ${toolInput.location ?? '—'}</span>)`,
+              t: clock(),
+            });
+          } else if (toolName === 'airport_transfer_coordinator') {
+            s.logEvent({
+              group: 'arrival.transfer',
+              bullet: 'active',
+              text: `plan(<span class="v">${toolInput.airport ?? '—'} → ${toolInput.destinationLabel ?? toolInput.destinationAddress ?? 'dest'}</span>)`,
+              t: clock(),
+            });
+          } else if (toolName === 'airport_arrival_playbook') {
+            s.logEvent({
+              group: 'arrival.playbook',
+              bullet: 'active',
+              text: `playbook(<span class="v">${toolInput.airport ?? '—'}</span>)`,
+              t: clock(),
+            });
+          } else if (toolName === 'trip_checkin_reminder') {
+            s.logEvent({
+              group: 'trip.checkin',
+              bullet: 'active',
+              text: `reminder(<span class="v">${toolInput.origin ?? '—'}${toolInput.destination ? ` → ${toolInput.destination}` : ''}</span>)`,
+              t: clock(),
+            });
+          } else if (toolName === 'trip_delay_replanner') {
+            const leg = toolInput.originalLeg ?? {};
+            s.logEvent({
+              group: 'trip.delay',
+              bullet: 'active',
+              text: `replan(<span class="v">${leg.origin ?? '—'} → ${leg.destination ?? '—'}</span> · ${toolInput.disruption?.kind ?? 'disruption'})`,
+              t: clock(),
+            });
           }
         }
 
@@ -313,6 +350,51 @@ export function ChatCol() {
               text: output.txHash
                 ? `bridge+swap landed · <span class="v">${output.txHash.slice(0, 10)}…</span>`
                 : `bridge+swap ${output.state}`,
+              t: clock(),
+            });
+          } else if (toolName === 'restaurant_route_card' && output.topPick) {
+            s.updateLastEvent('concierge.restaurants', { bullet: 'done' });
+            s.logEvent({
+              group: 'concierge.restaurants',
+              bullet: 'done',
+              text: `pick <span class="v">${output.topPick.name}</span>${output.routeLinks ? ' · route ready' : ''}`,
+              t: clock(),
+            });
+          } else if (toolName === 'airport_transfer_coordinator' && output.pickupPlan) {
+            s.updateLastEvent('arrival.transfer', { bullet: 'done' });
+            s.logEvent({
+              group: 'arrival.transfer',
+              bullet: 'done',
+              text: `meet <span class="v">${output.pickupPlan.meetingPoint}</span>${output.safety?.riskLevel ? ` · risk ${output.safety.riskLevel}` : ''}`,
+              t: clock(),
+            });
+          } else if (
+            toolName === 'airport_arrival_playbook' &&
+            Array.isArray(output.arrivalSteps)
+          ) {
+            s.updateLastEvent('arrival.playbook', { bullet: 'done' });
+            s.logEvent({
+              group: 'arrival.playbook',
+              bullet: 'done',
+              text: `<span class="v">${output.arrivalSteps.length} steps</span> ready`,
+              t: clock(),
+            });
+          } else if (toolName === 'trip_checkin_reminder' && output.nextAction) {
+            s.updateLastEvent('trip.checkin', { bullet: 'done' });
+            s.logEvent({
+              group: 'trip.checkin',
+              bullet: 'done',
+              text: `next · <span class="v">${output.nextAction.label}</span>`,
+              t: clock(),
+            });
+          } else if (toolName === 'trip_delay_replanner' && output.rebookOptions) {
+            s.updateLastEvent('trip.delay', { bullet: output.recommendedRebook ? 'done' : 'fail' });
+            s.logEvent({
+              group: 'trip.delay',
+              bullet: output.recommendedRebook ? 'done' : 'fail',
+              text: output.recommendedRebook
+                ? `rebook · <span class="v">${output.recommendedRebook.segmentsSummary}</span>`
+                : 'no self-serve rebook · agent handoff',
               t: clock(),
             });
           }
@@ -587,8 +669,19 @@ function ToolCallCard({ part }: { part: SenderoToolPart }) {
   );
 }
 
+const TRIP_TOOL_NAMES = new Set([
+  'restaurant_route_card',
+  'airport_transfer_coordinator',
+  'airport_arrival_playbook',
+  'trip_checkin_reminder',
+  'trip_delay_replanner',
+]);
+
 function ToolPreview({ toolName, result }: { toolName: string; result: unknown }) {
   if (!result || typeof result !== 'object') return null;
+  if (TRIP_TOOL_NAMES.has(toolName)) {
+    return <TripToolCard result={result} toolName={toolName} />;
+  }
   const data = result as any;
 
   if (data.staticMapUrl || data.googleMapsUrl || data.appleMapsUrl) {

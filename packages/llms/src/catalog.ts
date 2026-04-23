@@ -90,6 +90,31 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
       'Export routes and itineraries into Google Maps and Apple Maps links with a shareable preview card.',
   },
   {
+    label: 'restaurant_route_card',
+    description:
+      'Shortlist restaurants and export a route from the traveler to the top pick. One canonical concierge card for web, WhatsApp, and Slack.',
+  },
+  {
+    label: 'airport_transfer_coordinator',
+    description:
+      'Plan an airport-to-destination ground leg with meeting point, primary transport, backup options, and route links.',
+  },
+  {
+    label: 'airport_arrival_playbook',
+    description:
+      'Produce a one-screen arrival briefing: deplane to check-in steps, primary + backup transport, local timezone, and route.',
+  },
+  {
+    label: 'trip_checkin_reminder',
+    description:
+      'Build the canonical check-in nudge: check-in window, airport transit note, leave-by time, and next action. Backs the sendero.check_in_reminder workflow.',
+  },
+  {
+    label: 'trip_delay_replanner',
+    description:
+      'Rebuild a disrupted itinerary: replacement flights, overnight hotel fallback, airport-to-hotel route, and a traveler-ready share card.',
+  },
+  {
     label: 'send_tokens',
     description: 'Transfer USDC on Arc.',
   },
@@ -182,7 +207,12 @@ export const AGENT_WORKFLOW_CATALOG: LlmsItem[] = [
   {
     label: 'sendero.check_in_reminder',
     description:
-      'Schedule trip assistance and reminders around check-in, alerts, and in-trip support.',
+      'Geocode origin airport, read timezone, and deliver the canonical trip check-in reminder (check-in window, transit note, leave-by) before awaiting traveler reply.',
+  },
+  {
+    label: 'sendero.trip_delay_replanner',
+    description:
+      'Disruption recovery: build a rebook plan with replacement flights, optional overnight hotel, and airport route. On approval, hold the chosen flight via book_flight.',
   },
 ];
 
@@ -597,10 +627,10 @@ export function buildSenderoHelpLlms(options: SurfaceOptions = {}): LlmsTxtConfi
             description: 'Intent to PNR to settlement overview.',
           },
           {
-            label: 'Clerk legal URLs and express consent',
+            label: 'Legal documents and express consent',
             href: '/article/clerk-legal-express-consent',
             description:
-              'Terms and Privacy URLs for Clerk, express consent (Core 2), and Account Portal upgrade links.',
+              'Sendero-wide Terms/Privacy and consent on every surface; Clerk Dashboard only configures browser sign-up and hosted Account Portal (Core 2).',
           },
           {
             label: 'Sendero MCP tool catalog',

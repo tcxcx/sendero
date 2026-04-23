@@ -89,9 +89,8 @@ export const env = {
   resendWebhookSecret: () => process.env.RESEND_WEBHOOK_SECRET || null,
 
   // ── Concierge / in-trip companion ─────────────────────────────────
-  googleMapsApiKey: () =>
-    process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY || null,
-  googlePlacesApiKey: () => process.env.GOOGLE_PLACES_API_KEY || null,
+  googleMapsApiKey: () => process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY || null,
+  googlePlacesApiKey: () => process.env.GOOGLE_API_KEY || null,
 
   // ── Invoicing (Phase 11b) ─────────────────────────────────────────
   invoiceSigningSecret: () => process.env.INVOICE_SIGNING_SECRET || null,
