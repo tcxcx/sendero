@@ -109,4 +109,3 @@ export const env = {
 };
 
 export * from './require';
-export { validate } from './validate';
