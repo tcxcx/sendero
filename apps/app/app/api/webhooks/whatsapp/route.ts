@@ -284,10 +284,17 @@ async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
 async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<string | null> {
-  // TODO (Phase 3): query an `app_connections` table keyed on phoneNumberId.
-  // For Phase 2 we fall back to the single-tenant env var so the demo works
-  // without a full multi-tenant config UI.
-  void phoneNumberId;
+  // Phase 11h: BYO WhatsApp — every tenant installs their own Meta number
+  // through the Kapso setup link, so the phoneNumberId → tenant mapping
+  // lives on the `whatsapp_installs` table.
+  if (phoneNumberId) {
+    const install = await prisma.whatsAppInstall.findUnique({
+      where: { phoneNumberId },
+      select: { tenantId: true, status: true },
+    });
+    if (install && install.status !== 'disabled') return install.tenantId;
+  }
+  // Dev-mode last-resort fallback — leave unset in production.
   return env.whatsappDefaultTenantId();
 }
 
