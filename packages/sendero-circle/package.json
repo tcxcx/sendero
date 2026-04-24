@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./wallets": "./src/wallets.ts",
+    "./balance-sync": "./src/balance-sync.ts",
     "./app-kit": "./src/app-kit.ts",
     "./gateway": "./src/gateway.ts",
     "./modular-wallets": "./src/modular-wallets.ts",

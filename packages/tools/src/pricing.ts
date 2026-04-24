@@ -43,7 +43,7 @@ export const TOOL_PRICING: Record<string, string> = {
   guest_claim_link: '0.001',
   reserve_booking: '0.003',
   commit_booking: '0.003',
-  confirm_duffel: '0.003',
+  confirm_flight: '0.003',
   settle_booking: '0.003',
   cancel_booking: '0.003',
   generate_booking_invoice: '0.005',
@@ -67,11 +67,11 @@ export const TOOL_PRICING: Record<string, string> = {
   trip_checkin_reminder: '0.003',
   trip_delay_replanner: '0.01',
 
-  // Duffel identity + ancillaries (trip-lifecycle extras)
-  ensure_duffel_customer: '0.003',
+  // Supplier identity + ancillaries (trip-lifecycle extras)
+  ensure_flight_customer: '0.003',
   list_flight_ancillaries: '0.002',
 
-  // Duffel advanced flows (air + stays + credits + conditions + places)
+  // Advanced flight flows (air + stays + credits + conditions + places)
   find_airports_nearby: '0.001',
   display_offer_conditions: '0.001',
   quote_stay: '0.003',

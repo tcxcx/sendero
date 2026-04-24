@@ -16,10 +16,10 @@ export function AppHeader() {
       <div className="flex items-center gap-3">
         <Show when="signed-in">
           <OrganizationSwitcher
-            afterSelectOrganizationUrl="/app"
+            afterSelectOrganizationUrl="/dashboard"
             afterCreateOrganizationUrl="/onboarding"
           />
-          <UserButton userProfileUrl="/app/profile" />
+          <UserButton userProfileUrl="/dashboard/profile" />
         </Show>
         <Show when="signed-out">
           <Link href="/sign-in" className="text-sm text-neutral-700 hover:text-black">

@@ -2,7 +2,7 @@
 
 /**
  * TripConsoleShell — wraps a single trip's workspace in the same
- * ConsoleBar chrome that `/app/console` uses, so managing a trip feels
+ * ConsoleBar chrome that `/dashboard/console` uses, so managing a trip feels
  * like one console scoped to that trip.
  *
  * Minimalism + DESIGN.md §19:
@@ -85,7 +85,7 @@ export function TripConsoleShell({
     >
       <ConsoleBar
         crumb="Trip inbox"
-        crumbHref="/app/inbox"
+        crumbHref="/dashboard/inbox"
         subCrumb={tripTitle}
         trailingSlot={
           <WorkflowToggle open={showWorkflow} onToggle={() => setShowWorkflow(v => !v)} />

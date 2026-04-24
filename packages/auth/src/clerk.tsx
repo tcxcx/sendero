@@ -8,8 +8,8 @@
  *   CLERK_SECRET_KEY                 (server-only, see clerk.server.ts)
  *   NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
  *   NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
- *   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/app
- *   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/app/onboarding/passkey
+ *   NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
+ *   NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard/onboarding/passkey
  *
  * The Clerk org → Sendero tenant mapping is 1:1. Clerk `organization` is
  * the authoritative tenant; we mirror it into Prisma (`Tenant`) on first

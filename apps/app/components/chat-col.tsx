@@ -454,9 +454,9 @@ export function ChatCol() {
         </Conversation>
       </div>
 
-      <div className="composer">
+      <div className="composer rounded-lg border border-[color:var(--border)]">
         <PromptInput
-          className="composer-input border-[color:var(--border)] bg-[color:var(--panel)]"
+          className="composer-input rounded-lg border-[color:var(--border)] bg-[color:var(--panel)]"
           onSubmit={(message, event) => {
             event.preventDefault();
             const next = message.text.trim();
@@ -539,8 +539,8 @@ function AgentWelcome({
           <span style={{ color: 'var(--ink)' }}>agent</span>
         </div>
         <div className="msg-text">
-          Hi {traveler.split(' ')[0]}. I can search flights, hold a seat on Duffel, and settle in
-          USDC or EURC on Arc L2. Where to?
+          Hi {traveler.split(' ')[0]}. I can search flights, hold the seat, and settle in USDC or
+          EURC on Arc L2. Where to?
         </div>
         <div className="msg-suggestions">
           <button

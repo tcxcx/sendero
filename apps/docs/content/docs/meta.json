@@ -4,6 +4,7 @@
     "index",
     "quickstart",
     "agent-to-agent-booking",
+    "clerk-auth-setup",
     "---Tools---",
     "tools/overview",
     "tools/search_flights",

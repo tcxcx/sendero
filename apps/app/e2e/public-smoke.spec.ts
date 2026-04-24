@@ -57,7 +57,7 @@ test.describe('public product smoke', () => {
   });
 
   test('protected workspace redirects into the Clerk-managed sign-in shell', async ({ page }) => {
-    await page.goto('/app');
+    await page.goto('/dashboard');
 
     await expectNoFrameworkOverlay(page);
     await expect(page).toHaveURL(/\/sign-in\?redirect_url=/);

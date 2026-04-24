@@ -133,7 +133,7 @@ export const bookFlightWorkflow: WorkflowDef = {
         {
           kind: 'tool',
           id: 'confirm',
-          tool: 'confirm_duffel',
+          tool: 'confirm_flight',
           label: 'Confirm Duffel ticket on-chain',
           args: {
             bookingId: $('reservation.bookingId'),
@@ -576,7 +576,7 @@ export const guestPrefundWorkflow: WorkflowDef = {
         {
           kind: 'tool',
           id: 'confirm',
-          tool: 'confirm_duffel',
+          tool: 'confirm_flight',
           label: 'Confirm Duffel ticket on-chain',
           args: {
             bookingId: $('reservation.bookingId'),
@@ -1060,12 +1060,12 @@ export const bookWithAncillariesWorkflow: WorkflowDef = {
   version: 1,
   label: 'Book a flight with ancillaries',
   description:
-    'Canonical sell-up flow: search flights, list the airline ancillary menu (bags, seats, cancel-for-any-reason), pause for traveler selection, then hold the order with selected services attached. Unlocks Travel Support Assistant via ensure_duffel_customer.',
+    'Canonical sell-up flow: search flights, list the airline ancillary menu (bags, seats, cancel-for-any-reason), pause for traveler selection, then hold the order with selected services attached. Unlocks Travel Support Assistant via ensure_flight_customer.',
   steps: [
     {
       kind: 'tool',
       id: 'ensure_customer',
-      tool: 'ensure_duffel_customer',
+      tool: 'ensure_flight_customer',
       label: 'Ensure Duffel CustomerUser exists',
       as: 'customer',
       args: {
@@ -1281,7 +1281,7 @@ export const bookStayWithLoyaltyWorkflow: WorkflowDef = {
     {
       kind: 'tool',
       id: 'ensure_customer',
-      tool: 'ensure_duffel_customer',
+      tool: 'ensure_flight_customer',
       label: 'Ensure Duffel CustomerUser',
       as: 'customer',
       args: {

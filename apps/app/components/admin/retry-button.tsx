@@ -7,7 +7,7 @@ import {
   retryFailedBatchesAction,
   retryInvoicePdfAction,
   retryWalletProvisionAction,
-} from '@/app/(app)/app/admin-retries/actions';
+} from '@/app/(app)/dashboard/admin-retries/actions';
 
 type RetryKind = 'invoice-pdf' | 'failed-batches' | 'wallet-provision';
 

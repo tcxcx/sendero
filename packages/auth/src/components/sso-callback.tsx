@@ -13,7 +13,7 @@ export function SenderoSSOCallback() {
       continueSignUpUrl="/sign-up/continue"
       verifyEmailAddressUrl="/sign-up/verify-email-address"
       verifyPhoneNumberUrl="/sign-up/verify-phone-number"
-      signInFallbackRedirectUrl="/app"
+      signInFallbackRedirectUrl="/dashboard"
       signUpFallbackRedirectUrl="/onboarding"
     />
   );

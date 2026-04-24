@@ -22,7 +22,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH = '16rem';
+// Design spec (Claude Design handoff): floating pill at left:16px,
+// width:232px, right gutter:16px. Peer gap-div reserves 264px = 16+232+16
+// so the main card's left edge lines up with a 16px visual gap.
+const SIDEBAR_WIDTH = '16.5rem';
 const SIDEBAR_WIDTH_MOBILE = '18rem';
 const SIDEBAR_WIDTH_ICON = '3rem';
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b';

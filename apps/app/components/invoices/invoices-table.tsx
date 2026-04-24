@@ -31,7 +31,7 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceRow[] }) {
           <TableRow key={invoice.id}>
             <TableCell>
               <Link
-                href={`/app/billing/invoices/${invoice.id}`}
+                href={`/dashboard/billing/invoices/${invoice.id}`}
                 className="font-medium hover:underline"
               >
                 {invoice.number}

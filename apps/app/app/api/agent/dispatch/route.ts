@@ -40,7 +40,10 @@ import {
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
 import type { CapStore } from '@sendero/billing/caps';
 import type { MeterEventInput, MeterStore } from '@sendero/billing/meter';
-import type { BillingSegment } from '@sendero/billing/pricing';
+import { DEFAULT_PRICING, type BillingSegment, type PricedAction } from '@sendero/billing/pricing';
+import { planPriceFor, resolvePlan, type PlanTier } from '@sendero/billing/plans';
+
+import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { prisma } from '@sendero/database';
 import { detectLocale, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
@@ -110,8 +113,16 @@ const DISPATCH_PERSONA = `${SENDERO_SOUL}
 `;
 
 export async function POST(req: NextRequest) {
-  const authError = authorizeDispatch(req);
-  if (authError) return authError;
+  // Two valid auth modes:
+  //   1. Shared-secret (legacy) — internal webhooks, cron, etc. Set via
+  //      AGENT_DISPATCH_SECRET/CRON_SECRET; tenant + user ids come from body.
+  //   2. User-minted Clerk API key — external agents / MCP / x402. Tenant
+  //      is derived from the key; body.tenantId must match if provided.
+  const apiKey = await resolveTenantFromApiKey(req);
+  if (!apiKey) {
+    const authError = authorizeDispatch(req);
+    if (authError) return authError;
+  }
 
   let body: z.infer<typeof BodySchema>;
   try {
@@ -121,6 +132,33 @@ export async function POST(req: NextRequest) {
       { error: 'invalid_input', issues: err instanceof z.ZodError ? err.issues : [] },
       { status: 400 }
     );
+  }
+
+  // When an API key authed the request, it pins the tenant. Reject any
+  // attempt to bill against a different tenant via the body.
+  if (apiKey && body.tenantId && body.tenantId !== apiKey.tenantId) {
+    return NextResponse.json(
+      {
+        error: 'tenant_mismatch',
+        message:
+          'API key does not belong to the tenant in the request body. Drop body.tenantId or use a key for the target tenant.',
+      },
+      { status: 403 }
+    );
+  }
+  if (apiKey) {
+    // B2B service-account semantics. Clerk Organization API keys are not
+    // per-user — they represent a workspace. Synthesize a deterministic
+    // service-account userId from the key id so analytics + session keys
+    // are stable and cross-user impersonation via body.userId is blocked.
+    // Any tool that needs a specific traveler must take them as explicit
+    // input; ctx.traveler from a `svc:` caller is a service account, not
+    // a human.
+    body = {
+      ...body,
+      tenantId: apiKey.tenantId,
+      userId: `svc:${apiKey.keyId}`,
+    };
   }
 
   const hasText = body.text.trim().length > 0;
@@ -194,6 +232,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const planTier = await resolveTenantPlan(body.tenantId);
+  const pricingOverrides = buildPlanOverrides(planTier);
+  // If the caller authed with an API key whose effective type is
+  // sandbox (either it's a sandbox key, or it's a production key
+  // downgraded during testnet-beta), write MeterEvents as 'sandbox'
+  // so NanopayBatch skips them.
+  const meterStoreOpts =
+    apiKey?.effectiveKeyType === 'sandbox' ? ({ forceStatus: 'sandbox' } as const) : undefined;
+
   let result: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
     result = await runAgentTurn({
@@ -202,9 +249,10 @@ export async function POST(req: NextRequest) {
       tier,
       tools,
       capStore: makeCapStore(),
-      meterStore: makeMeterStore(),
+      meterStore: makeMeterStore(meterStoreOpts),
       sessionStore: makeSessionStore(),
       resolveSegment,
+      pricingOverrides,
       loadTrip,
       persona: DISPATCH_PERSONA,
     });
@@ -222,9 +270,10 @@ export async function POST(req: NextRequest) {
           tier,
           tools,
           capStore: makeCapStore(),
-          meterStore: makeMeterStore(),
+          meterStore: makeMeterStore(meterStoreOpts),
           sessionStore: makeSessionStore(),
           resolveSegment,
+          pricingOverrides,
           loadTrip,
           persona: DISPATCH_PERSONA,
         });
@@ -342,7 +391,7 @@ function makeCapStore(): CapStore {
   };
 }
 
-function makeMeterStore(): MeterStore {
+function makeMeterStore(opts?: { forceStatus?: 'sandbox' }): MeterStore {
   return {
     create: async (input: MeterEventInput) => {
       const idempotencyKey =
@@ -352,6 +401,10 @@ function makeMeterStore(): MeterStore {
         typeof (input.metadata as Record<string, unknown>).idempotencyKey === 'string'
           ? ((input.metadata as Record<string, unknown>).idempotencyKey as string)
           : null;
+      // Sandbox keys (or production-downgraded-in-testnet) still record
+      // meter events for analytics, but NanopayBatch ignores them so no
+      // real USDC moves. Overriding status here is the single chokepoint.
+      const status = opts?.forceStatus ?? input.status;
       const row = await prisma.meterEvent.create({
         data: {
           tenantId: input.tenantId,
@@ -359,7 +412,7 @@ function makeMeterStore(): MeterStore {
           payerAddress: input.payerAddress ?? null,
           toolName: input.toolName,
           priceMicroUsdc: input.priceMicroUsdc,
-          status: input.status,
+          status,
           settlementRef: input.settlementRef ?? null,
           note: input.note ?? null,
           metadata: (input.metadata as object | undefined) ?? undefined,
@@ -471,6 +524,53 @@ async function resolveSegment(tenantId: string): Promise<BillingSegment> {
     default:
       return 'consumer';
   }
+}
+
+/**
+ * Resolve the Clerk-billed plan tier for a tenant.
+ *
+ * The tenant's `planTier` column is the source of truth once wired up
+ * via Clerk webhooks (`organization.updated`). Until then we read the
+ * legacy `billingTier` as a best-effort proxy so paying orgs don't
+ * pay list price during rollout.
+ */
+async function resolveTenantPlan(tenantId: string): Promise<PlanTier> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { billingTier: true },
+  });
+  if (!tenant) return 'free';
+  const legacy = tenant.billingTier?.toLowerCase();
+  if (legacy === 'enterprise') return 'enterprise';
+  if (legacy === 'pro') return 'pro';
+  if (legacy === 'business' || legacy === 'basic') return 'basic';
+  return 'free';
+}
+
+/**
+ * Materialize pricing overrides for a plan. Applies the plan's
+ * nanopayment + booking take-rate discounts to every action × segment
+ * cell. The result feeds `runAgentTurn` → `preflight` → MeterEvent,
+ * so paid plans bill at the discounted rate without the agent code
+ * having to know about plans.
+ */
+function buildPlanOverrides(tier: PlanTier) {
+  const plan = resolvePlan(tier);
+  if (plan.nanopaymentDiscountBps === 0 && plan.bookingTakeRateDiscountBps === 0) {
+    return undefined;
+  }
+  const segments: BillingSegment[] = ['consumer', 'agency', 'corporate', 'ai_agent'];
+  const overrides: Partial<
+    Record<PricedAction, Partial<Record<BillingSegment, ReturnType<typeof planPriceFor>>>>
+  > = {};
+  for (const action of Object.keys(DEFAULT_PRICING) as PricedAction[]) {
+    const cells: Partial<Record<BillingSegment, ReturnType<typeof planPriceFor>>> = {};
+    for (const segment of segments) {
+      cells[segment] = planPriceFor({ action, segment, plan });
+    }
+    overrides[action] = cells;
+  }
+  return overrides;
 }
 
 async function loadTrip(args: { tripId: string; tenantId: string }) {

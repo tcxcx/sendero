@@ -3,7 +3,7 @@
  *
  * Sendero exposes two public agent surfaces (/.well-known/llms.txt +
  * /api/mcp) that LLM crawlers should be allowed to index, while the
- * product console (/app, /admin) + the webhook routes must stay out
+ * product console (/dashboard, /admin) + the webhook routes must stay out
  * of SERPs.
  */
 
@@ -68,7 +68,7 @@ export function buildRobots(config: RobotsConfig): RobotsOutput {
             '/api/webhooks/',
             '/api/liveblocks-auth',
             '/admin/',
-            '/app/',
+            '/dashboard/',
             '/settings/',
             '/billing/',
           ],

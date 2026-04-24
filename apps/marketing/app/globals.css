@@ -65,3 +65,26 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+/* Vermillion ink scrollbar. */
+* {
+  scrollbar-color: var(--ink) transparent;
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--ink) 85%, black);
+  background-clip: padding-box;
+}

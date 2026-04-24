@@ -28,6 +28,28 @@ export const env = {
   arcRpcUrl: () => process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network',
   // Arc Testnet canonical chain id per https://docs.arc.network
   arcChainId: () => Number(process.env.ARC_CHAIN_ID || 5042002),
+  /**
+   * Network mode. Arc is currently testnet-only (chain id 5042002).
+   * `testnet-beta` means: paid plans + production API keys can be
+   * created for UX plumbing, but no real USDC flows and no Clerk
+   * Billing money collection (Clerk must be in development mode).
+   * Flip to `production` the day Arc mainnet ships — we swap Clerk
+   * to production keys in the same deploy.
+   */
+  networkMode: (): 'testnet-beta' | 'production' => {
+    const override = process.env.SENDERO_NETWORK_MODE;
+    if (override === 'production' || override === 'testnet-beta') return override;
+    // Derive from chain id so a prod deploy pointed at Arc mainnet
+    // flips automatically without an extra env knob.
+    const chainId = Number(process.env.ARC_CHAIN_ID || 5042002);
+    return chainId === 5042002 ? 'testnet-beta' : 'production';
+  },
+  isTestnetBeta: (): boolean => {
+    const override = process.env.SENDERO_NETWORK_MODE;
+    if (override === 'production') return false;
+    if (override === 'testnet-beta') return true;
+    return Number(process.env.ARC_CHAIN_ID || 5042002) === 5042002;
+  },
   arcUsdcAddress: () =>
     process.env.ARC_USDC_ADDRESS || '0x3600000000000000000000000000000000000000',
   arcEurcAddress: () =>

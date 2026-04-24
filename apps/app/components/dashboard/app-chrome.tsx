@@ -9,7 +9,12 @@ import { cn } from '@sendero/ui/cn';
 import { AppHeader } from '@/components/app-shell/app-header';
 import { AppShellFooter } from '@/components/app-shell/app-shell-footer';
 import { AppSidebar } from '@/components/app-sidebar';
+import { BridgeDialog } from '@/components/bridge-dialog';
+import { ClerkWalletBridge } from '@/components/clerk-wallet-bridge';
+import { DepositDialog } from '@/components/deposit-dialog';
+import { SendDialog } from '@/components/send-dialog';
 import { hydrateFromStorage } from '@/components/store';
+import { SwapDialog } from '@/components/swap-dialog';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 
 type ShellHeaderCopy = {
@@ -33,31 +38,43 @@ export function AppChrome({
   }, []);
 
   const mainPad =
-    pathname === '/app/inbox' ||
-    pathname.startsWith('/app/inbox/') ||
-    pathname.startsWith('/app/console')
+    pathname === '/dashboard/inbox' ||
+    pathname.startsWith('/dashboard/inbox/') ||
+    pathname.startsWith('/dashboard/console')
       ? 'p-0'
       : 'p-6';
 
-  const mainFlex = pathname.startsWith('/app/console') ? 'flex min-h-0 flex-1 flex-col' : '';
+  const mainFlex = pathname.startsWith('/dashboard/console') ? 'flex min-h-0 flex-1 flex-col' : '';
 
   return (
-    <div className="app-shell-root flex min-h-svh w-full flex-col">
+    <div className="app-shell-root flex h-svh w-full flex-col">
+      <ClerkWalletBridge />
       <SidebarProvider className="min-h-0 flex-1">
         <AppSidebar />
         {/* DESIGN.md §12 — the main content surface floats as a single
             raised card on the grainy gradient. Margin on ≥lg, rounded
             `--radius-xl`, `--shadow-xl`, and `--surface-raised` fill. */}
-        <SidebarInset className="md:my-3 md:mr-3 md:rounded-[var(--radius-xl)] md:bg-[color:var(--surface-raised)] md:shadow-[var(--shadow-xl)]">
+        <SidebarInset
+          className="min-h-0 md:my-3 md:mr-3 md:rounded-tl-[36px] md:rounded-tr-[20px] md:rounded-bl-[20px] md:rounded-br-[20px] md:bg-[color:var(--surface-raised)] md:shadow-[var(--shadow-xl)] md:border-2"
+          style={{ borderColor: 'color-mix(in oklab, var(--ink) 55%, transparent)' }}
+        >
           <AppHeader
             copy={headerCopy}
             locale={locale}
             startSlot={<SidebarTrigger className="-ml-1 shrink-0" aria-label="Toggle sidebar" />}
           />
-          <main className={cn('app-shell-main flex-1', mainPad, mainFlex)}>{children}</main>
+          <main
+            className={cn('app-shell-main min-h-0 flex-1 overflow-auto my-2', mainPad, mainFlex)}
+          >
+            {children}
+          </main>
         </SidebarInset>
       </SidebarProvider>
       <AppShellFooter />
+      <SwapDialog />
+      <SendDialog />
+      <BridgeDialog />
+      <DepositDialog />
     </div>
   );
 }

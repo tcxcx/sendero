@@ -7,7 +7,7 @@ test.describe('authenticated prefund flows', () => {
   );
 
   test('prefund a new trip via the sheet', async ({ page }) => {
-    await page.goto('/app/trips');
+    await page.goto('/dashboard/trips');
     await page.getByRole('link', { name: 'Create prepaid trip' }).click();
     await expect(page).toHaveURL(/\?sheet=new/);
     await page.getByLabel('Budget (USDC)').fill('100');

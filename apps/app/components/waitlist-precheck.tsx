@@ -45,7 +45,7 @@ export function WaitlistPrecheck({ copy, children }: Props) {
     if (isSignedIn) {
       ranRef.current = true;
       toast.info(copy.alreadySignedIn, { duration: 4500 });
-      redirectAfterToast(router, '/app');
+      redirectAfterToast(router, '/dashboard');
       return;
     }
 

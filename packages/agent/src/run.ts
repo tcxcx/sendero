@@ -22,7 +22,7 @@
  */
 
 import type { CapStore } from '@sendero/billing/caps';
-import { type MeterStore, preflight } from '@sendero/billing/meter';
+import { type MeterStore, type PreflightArgs, preflight } from '@sendero/billing/meter';
 import type { BillingSegment } from '@sendero/billing/pricing';
 import type { MeterStatus } from '@sendero/database';
 import { getLocaleSlice } from '@sendero/locale';
@@ -69,6 +69,13 @@ export interface RunAgentTurnArgs {
   sessionStore: SessionStore;
   /** Resolve the tenant's billing segment (consumer / agency / corporate / ai_agent). */
   resolveSegment: (tenantId: string) => Promise<BillingSegment>;
+  /**
+   * Optional pricing overrides, applied on top of `DEFAULT_PRICING`.
+   * Dispatch passes plan-tier-discounted cells computed via
+   * `@sendero/billing/plans` so the resulting MeterEvent rows bill at
+   * the discounted rate.
+   */
+  pricingOverrides?: PreflightArgs['overrides'];
   /** Optional trip lookup. */
   loadTrip?: (args: { tripId: string; tenantId: string }) => Promise<TripSnapshot | null>;
   /** Persona string appended after the context block. */
@@ -97,6 +104,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     tenantId: input.actor.tenantId,
     action: 'chat_reply',
     segment,
+    overrides: args.pricingOverrides,
   });
   if (pre.blocked) {
     return {

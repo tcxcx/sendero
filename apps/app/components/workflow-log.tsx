@@ -47,7 +47,7 @@ export function WorkflowLog() {
   const toolLabel = runtime ? `${runtime.toolCount} bound` : '—';
 
   return (
-    <div className="col sunk">
+    <div className="col">
       <div className="col-head">
         <span className="title">Workflow</span>
         <span className="tag faint mono">▣ run · stream</span>

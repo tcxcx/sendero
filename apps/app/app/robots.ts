@@ -15,7 +15,7 @@ export default function robots() {
       '/onboarding',
     ],
     disallow: [
-      '/app/',
+      '/dashboard/',
       '/admin/',
       '/settings/',
       '/billing/',
@@ -25,7 +25,7 @@ export default function robots() {
     ],
     agentAllow: ['/', '/llms.txt', '/.well-known/llms.txt', '/api/mcp', '/api/health'],
     agentDisallow: [
-      '/app/',
+      '/dashboard/',
       '/admin/',
       '/settings/',
       '/billing/',

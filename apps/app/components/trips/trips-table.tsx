@@ -33,7 +33,7 @@ export function TripsTable({ trips }: { trips: TripRow[] }) {
           return (
             <TableRow key={trip.id}>
               <TableCell>
-                <Link href={`/app/trips/${trip.id}`} className="font-medium hover:underline">
+                <Link href={`/dashboard/trips/${trip.id}`} className="font-medium hover:underline">
                   {summary}
                 </Link>
                 <div className="font-mono text-xs text-muted-foreground">

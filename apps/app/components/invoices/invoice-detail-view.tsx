@@ -125,7 +125,7 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
+    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]">
       <h3 className="text-[15px] font-semibold tracking-normal text-foreground">{title}</h3>
       {children}
     </section>
@@ -144,7 +144,7 @@ function Party({
   taxId: string | null;
 }) {
   return (
-    <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-5 shadow-[var(--shadow-md)]">
+    <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-white p-5 shadow-[var(--shadow-md)]">
       <div
         className="font-mono uppercase text-muted-foreground"
         style={{

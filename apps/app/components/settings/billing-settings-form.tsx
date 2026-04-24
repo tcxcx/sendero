@@ -1,7 +1,7 @@
 import { Button } from '@sendero/ui/button';
 import { Input } from '@sendero/ui/input';
 import { Label } from '@sendero/ui/label';
-import { updateTenantBillingAction } from '@/app/(app)/app/settings/actions';
+import { updateTenantBillingAction } from '@/app/(app)/dashboard/settings/actions';
 import type { Tenant } from '@sendero/database';
 
 export function BillingSettingsForm({ tenant }: { tenant: Tenant }) {

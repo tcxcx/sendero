@@ -7,7 +7,7 @@ test.describe('authenticated invoice flows', () => {
   );
 
   test('invoice detail exposes a PDF download action', async ({ page }) => {
-    await page.goto('/app/billing/invoices');
+    await page.goto('/dashboard/billing/invoices');
     const firstInvoice = page
       .getByRole('link')
       .filter({ hasText: /INV|SND|PLAT/i })

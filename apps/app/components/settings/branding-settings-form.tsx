@@ -3,7 +3,7 @@
 import { Button } from '@sendero/ui/button';
 import { Input } from '@sendero/ui/input';
 import { Label } from '@sendero/ui/label';
-import { updateTenantBrandingAction } from '@/app/(app)/app/settings/actions';
+import { updateTenantBrandingAction } from '@/app/(app)/dashboard/settings/actions';
 import { useState, useTransition } from 'react';
 
 export function BrandingSettingsForm({

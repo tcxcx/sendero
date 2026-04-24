@@ -93,6 +93,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           <nav className="mk-nav-apps" aria-label="Sendero product navigation">
             <a href={websiteHref}>{content.nav.website}</a>
             <a href={appOrigin}>{content.nav.app}</a>
+            <a href="#pricing">{content.nav.pricing ?? 'Pricing'}</a>
             <a href="/llms.txt">{content.nav.agents}</a>
           </nav>
           <nav className="mk-nav-right" aria-label="Marketing actions">
@@ -255,7 +256,16 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
         </div>
       </section>
 
-      <section className="mk-pricing">
+      <section className="mk-pricing" id="pricing">
+        <div className="mk-pricing-banner">
+          <span className="mk-pricing-banner-dot" aria-hidden="true" />
+          <strong>Testnet beta</strong>
+          <span>
+            Arc is on testnet until Circle promotes mainnet. You can subscribe now to lock in plan
+            access, but no card is charged and nanopayments settle in test USDC. We&apos;ll flip
+            billing to live the day Arc mainnet ships.
+          </span>
+        </div>
         <h2>{content.pricing.heading}</h2>
         <p className="mk-pricing-sub">{content.pricing.subheading}</p>
         <div className="mk-tiers">
@@ -527,6 +537,40 @@ const inlineCss = `
   .mk-pricing { margin: 0 0 80px; }
   .mk-pricing h2 { font-size: clamp(28px, 3.5vw, 44px); letter-spacing: 0; margin: 0 0 12px; font-weight: 500; }
   .mk-pricing-sub { color: var(--muted); max-width: 620px; margin: 0 0 32px; }
+  .mk-pricing-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    margin: 0 0 24px;
+    border: 1px solid color-mix(in oklab, var(--ink) 45%, transparent);
+    background: color-mix(in oklab, var(--ink) 6%, var(--bg));
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--fg);
+    flex-wrap: wrap;
+  }
+  .mk-pricing-banner strong {
+    color: var(--ink);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 600;
+  }
+  .mk-pricing-banner span:last-child {
+    color: var(--muted);
+    letter-spacing: 0;
+    font-family: var(--sans);
+    font-size: 13px;
+  }
+  .mk-pricing-banner-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ink);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 24%, transparent);
+  }
   .mk-tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0; border: 1px solid var(--border); }
   .mk-tier { padding: 28px 24px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
   .mk-tier:last-child { border-right: none; }

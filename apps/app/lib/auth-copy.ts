@@ -86,7 +86,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
       asideTitle: 'Private testnet',
       asideItems: [
         'One access flow: Clerk identity first, tenant setup and channels second.',
-        'Duffel search, policy checks, metering, billing, and settlement stay behind protected routes.',
+        'Flight search, policy checks, metering, billing, and settlement stay behind protected routes.',
         'Mainnet launch notifications go to approved operators, agencies, companies, and agent clients.',
       ],
     },
@@ -146,7 +146,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
       asideTitle: 'Testnet privada',
       asideItems: [
         'Un flujo de acceso: identidad Clerk primero, tenant y canales después.',
-        'Duffel, políticas, medición, billing y settlement quedan detrás de rutas protegidas.',
+        'Búsqueda de vuelos, políticas, medición, billing y settlement quedan detrás de rutas protegidas.',
         'El aviso de mainnet va a operadores, agencias, empresas y clientes agente aprobados.',
       ],
     },
@@ -206,7 +206,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
       asideTitle: 'Testnet privada',
       asideItems: [
         'Un solo acceso: identidad Clerk primero, tenant y canales después.',
-        'Duffel, políticas, medición, billing y settlement quedan detrás de rutas protegidas.',
+        'Búsqueda de vuelos, políticas, medición, billing y settlement quedan detrás de rutas protegidas.',
         'El aviso de mainnet llega a operadores, agencias, empresas y clientes agente aprobados.',
       ],
     },
@@ -266,7 +266,7 @@ const AUTH_COPY: Record<string, AuthCopy> = {
       asideTitle: 'Testnet privada',
       asideItems: [
         'Um fluxo de acesso: identidade Clerk primeiro, tenant e canais depois.',
-        'Duffel, políticas, medição, billing e settlement ficam atrás de rotas protegidas.',
+        'Busca de voos, políticas, medição, billing e settlement ficam atrás de rotas protegidas.',
         'Avisos de mainnet vão para operadores, agências, empresas e clientes agente aprovados.',
       ],
     },

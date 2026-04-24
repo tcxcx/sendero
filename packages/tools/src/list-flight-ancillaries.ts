@@ -171,13 +171,13 @@ export const listFlightAncillariesTool: ToolDef<
 > = {
   name: 'list_flight_ancillaries',
   description:
-    'Return the bags, cancel-for-any-reason, and seat options available on a Duffel flight offer. Use right after search_flights to show the traveler which extras the airline will sell. The canonical service ids can be passed straight into book_flight as `services: [{ id, quantity }]`.',
+    'Return the bags, cancel-for-any-reason, and seat options available on a flight offer. Use right after search_flights to show the traveler which extras the airline will sell. The canonical service ids can be passed straight into book_flight as `services: [{ id, quantity }]`.',
   inputSchema,
   jsonSchema: {
     type: 'object',
     required: ['offerId'],
     properties: {
-      offerId: { type: 'string', description: 'Duffel offer id (off_…).' },
+      offerId: { type: 'string', description: 'Flight offer id (off_…).' },
       maxSeats: { type: 'integer', default: 24, minimum: 1, maximum: 48 },
     },
   },

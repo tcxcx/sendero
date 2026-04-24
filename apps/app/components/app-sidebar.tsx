@@ -6,11 +6,12 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { OrganizationSwitcher } from '@clerk/nextjs';
+
 import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
   Bot,
-  Briefcase,
   FileText,
   Home,
   Inbox,
@@ -19,7 +20,6 @@ import {
   Minus,
   Plane,
   Plus,
-  Settings,
   ShieldAlert,
   Sparkles,
   Waypoints,
@@ -50,32 +50,27 @@ const sections: NavSection[] = [
   {
     title: 'Workspace',
     items: [
-      { title: 'Home', url: '/app', icon: Home },
-      { title: 'Agent console', url: '/app/console', icon: Bot },
-      { title: 'Trip inboxes', url: '/app/inbox', icon: Inbox },
-      { title: 'Ops workspace', url: '/app/ops', icon: Briefcase },
-      { title: 'Trips', url: '/app/trips', icon: Plane },
+      { title: 'Home', url: '/dashboard', icon: Home },
+      { title: 'Agent console', url: '/dashboard/console', icon: Bot },
+      { title: 'Trip inboxes', url: '/dashboard/inbox', icon: Inbox },
+      { title: 'Trips', url: '/dashboard/trips', icon: Plane },
     ],
   },
   {
     title: 'Money & policy',
     items: [
-      { title: 'Invoices', url: '/app/billing/invoices', icon: FileText },
-      { title: 'Spend', url: '/app/spend', icon: BarChart3 },
-      { title: 'Caps', url: '/app/caps', icon: ShieldAlert },
+      { title: 'Invoices', url: '/dashboard/billing/invoices', icon: FileText },
+      { title: 'Spend', url: '/dashboard/spend', icon: BarChart3 },
+      { title: 'Caps', url: '/dashboard/caps', icon: ShieldAlert },
     ],
   },
   {
     title: 'Channels',
     items: [
-      { title: 'WhatsApp', url: '/app/channels/whatsapp', icon: MessageCircle },
-      { title: 'Slack', url: '/app/channels/slack', icon: Landmark },
-      { title: 'MCP / LLM tools', url: '/app/integrations/mcp', icon: Sparkles },
+      { title: 'WhatsApp', url: '/dashboard/channels/whatsapp', icon: MessageCircle },
+      { title: 'Slack', url: '/dashboard/channels/slack', icon: Landmark },
+      { title: 'MCP / LLM tools', url: '/dashboard/integrations/mcp', icon: Sparkles },
     ],
-  },
-  {
-    title: 'Settings',
-    items: [{ title: 'Org settings', url: '/app/settings/billing', icon: Settings }],
   },
 ];
 
@@ -83,8 +78,8 @@ function isActivePath(pathname: string, href: string, exact?: boolean) {
   if (exact) {
     return pathname === href;
   }
-  if (href === '/app') {
-    return pathname === '/app' || pathname === '/app/';
+  if (href === '/dashboard') {
+    return pathname === '/dashboard' || pathname === '/dashboard/';
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -94,40 +89,34 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/app">
-                <div className="flex aspect-square size-8 items-center justify-center">
-                  <Image
-                    src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
-                    alt=""
-                    width={28}
-                    height={28}
-                    className="object-contain"
-                  />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Sendero</span>
-                  <span className="truncate text-xs text-muted-foreground">Workspace</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+      <SidebarHeader className="group-data-[collapsible=icon]:hidden">
+        <div className="px-2 pt-1 pb-2">
+          <OrganizationSwitcher
+            hidePersonal={false}
+            afterSelectOrganizationUrl="/dashboard"
+            afterCreateOrganizationUrl="/onboarding"
+            appearance={{
+              elements: {
+                rootBox: 'w-full',
+                organizationSwitcherTrigger:
+                  'w-full justify-between rounded-md px-2 py-1.5 hover:bg-[color:var(--tint-vermillion-soft)]',
+              },
+            }}
+          />
+        </div>
         <SearchForm className="px-0" placeholder="Search trips, invoices…" />
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
+        {/* Expanded state: collapsible sections with category headers */}
+        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
           <SidebarMenu>
             {sections.map((section, index) => (
               <Collapsible
                 key={section.title}
                 defaultOpen={
                   section.items.some(item =>
-                    isActivePath(pathname, item.url, item.url === '/app')
+                    isActivePath(pathname, item.url, item.url === '/dashboard')
                   ) || index === 0
                 }
                 className="group/collapsible"
@@ -143,7 +132,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   <CollapsibleContent>
                     <SidebarMenuSub>
                       {section.items.map(item => {
-                        const active = isActivePath(pathname, item.url, item.url === '/app');
+                        const active = isActivePath(pathname, item.url, item.url === '/dashboard');
                         return (
                           <SidebarMenuSubItem key={item.url}>
                             <SidebarMenuSubButton asChild isActive={active}>
@@ -162,12 +151,38 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             ))}
           </SidebarMenu>
         </SidebarGroup>
+
+        {/* Collapsed state: flat icon list, no category headers. Tooltip
+            surfaces the full label on hover. */}
+        <SidebarGroup className="hidden group-data-[collapsible=icon]:block">
+          <SidebarMenu>
+            {sections
+              .flatMap(s => s.items)
+              .map(item => {
+                const active = isActivePath(pathname, item.url, item.url === '/dashboard');
+                return (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
+                      <Link href={item.url}>
+                        <item.icon className="size-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+          </SidebarMenu>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild size="sm">
+            <SidebarMenuButton
+              asChild
+              size="sm"
+              className="flex w-full justify-center gap-2 rounded-none border-t border-[color:var(--border)] px-3.5 py-3 font-mono text-[11px] uppercase tracking-[0.12em] text-foreground transition-[background-color,color] duration-120 hover:bg-[color:color-mix(in_oklab,var(--ink)_6%,transparent)] hover:text-[color:var(--ink)]"
+            >
               <Link href="/llms.txt" target="_blank" rel="noreferrer">
                 <Waypoints className="size-4" />
                 <span>llms.txt</span>
@@ -175,6 +190,19 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <Link
+          href="/dashboard"
+          aria-label="Sendero home"
+          className="mx-auto flex items-center justify-center py-3 group-data-[collapsible=icon]:py-1"
+        >
+          <Image
+            src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
+            alt=""
+            width={112}
+            height={112}
+            className="h-28 w-28 object-contain transition-[width,height] duration-200 group-data-[collapsible=icon]:h-5 group-data-[collapsible=icon]:w-5"
+          />
+        </Link>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

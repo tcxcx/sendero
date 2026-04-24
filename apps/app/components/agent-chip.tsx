@@ -91,6 +91,9 @@ export function AgentChip() {
         <span className="ac-avatar">PS</span>
         <span className="ac-stars">★ {data.stars.toFixed(2)}</span>
         <span className="ac-id">#{data.agentId}</span>
+        <span className={`ac-chev ${open ? 'open' : ''}`} aria-hidden="true">
+          ▾
+        </span>
       </button>
 
       {open && (
@@ -148,19 +151,17 @@ const chipStyles = `
   .ac-chip {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    /* Match WalletDropdown trigger height so both ConsoleBar chips
-       align on one visual baseline. Avatar is 22px; the extra room
-       lets the WalletDropdown's 2-line label (name + address)
-       share the same outer box without this one looking squat. */
-    min-height: 48px;
-    padding: 6px 10px 6px 6px;
+    gap: 6px;
+    /* Header baseline — all right-side chips lock to 28px so the
+       top and bottom lines cleanly tangent all controls. */
+    height: 28px;
+    padding: 0 8px 0 4px;
     border: 1px solid var(--border);
     background: var(--bg);
     color: var(--text);
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: 0.06em;
     transition: border-color 120ms;
   }
@@ -173,12 +174,12 @@ const chipStyles = `
     border-color: var(--border);
   }
   .ac-avatar {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     background: var(--ink);
     color: var(--bg-elev);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 9px;
     display: grid;
     place-items: center;
   }
@@ -194,6 +195,16 @@ const chipStyles = `
     color: var(--text-dim);
     padding: 0 4px;
     border-left: 1px solid var(--border);
+  }
+  .ac-chev {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink);
+    transition: transform 160ms ease;
+    margin-left: 2px;
+  }
+  .ac-chev.open {
+    transform: rotate(-180deg);
   }
   .ac-skel {
     height: 8px;

@@ -9,63 +9,23 @@
  * in the URL, so deep-links and hotkeys work).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  createPublicClient,
-  encodeFunctionData,
-  http,
-  formatUnits,
-  parseAbi,
-  type Hex,
-  type PublicClient,
-} from 'viem';
-import { arcTestnet } from 'viem/chains';
-
-/**
- * Thin balanceOf wrapper that dodges viem 2.48's readContract generic
- * narrowing quirk (it treats authorizationList as required) without
- * sprinkling `as any`. We call the RPC directly and decode the uint256.
- */
-const BALANCE_OF_ABI = parseAbi(['function balanceOf(address account) view returns (uint256)']);
-
-type ArcPublicClient = ReturnType<typeof createPublicClient>;
-
-async function readBalanceOf(client: ArcPublicClient, token: Hex, account: Hex): Promise<bigint> {
-  const data = encodeFunctionData({
-    abi: BALANCE_OF_ABI,
-    functionName: 'balanceOf',
-    args: [account],
-  });
-  const hex = await client.request({
-    method: 'eth_call',
-    params: [{ to: token, data }, 'latest'],
-  });
-  return BigInt(hex as string);
-}
+import { useEffect, useRef, useState } from 'react';
+import { formatUnits } from 'viem';
 import { useQueryState } from 'nuqs';
+import { useClerk, useUser } from '@clerk/nextjs';
 import { useSendero } from './store';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { logout } from '@sendero/circle/modular-wallets';
 
-const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;
-const EURC_ADDRESS = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a' as const;
 const ARCSCAN = 'https://testnet.arcscan.app';
-
-const ERC20_ABI = [
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ type: 'uint256' }],
-  },
-] as const;
 
 type Token = 'USDC' | 'EURC';
 
 export function WalletDropdown() {
   const userAuth = useSendero(s => s.userAuth);
   const setUserAuth = useSendero(s => s.setUserAuth);
+  const { user: clerkUser } = useUser();
+  const { openUserProfile } = useClerk();
 
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -82,28 +42,53 @@ export function WalletDropdown() {
   const [, setBridge] = useQueryState('bridge');
   const [, setDeposit] = useQueryState('deposit');
 
-  const client = useMemo(() => createPublicClient({ chain: arcTestnet, transport: http() }), []);
+  // Zero-address means `organization.publicMetadata.arcWalletAddress`
+  // hasn't been stamped yet (Clerk webhook pending or Circle provision
+  // failed). The trigger renders a "provisioning" state below; we skip
+  // balance fetching entirely to avoid 404s.
+  const isZeroAddress = !!userAuth && /^0x0+$/i.test(userAuth.address);
 
-  const refresh = useCallback(async () => {
-    if (!userAuth) return;
-    try {
-      const [u, e] = await Promise.all([
-        readBalanceOf(client, USDC_ADDRESS, userAuth.address),
-        readBalanceOf(client, EURC_ADDRESS, userAuth.address),
-      ]);
-      setUsdc(u);
-      setEurc(e);
-    } catch {
-      /* swallow transient RPC errors */
-    }
-  }, [userAuth, client]);
-
+  // Balance authority is the Circle webhook → CircleWallet cached
+  // columns. One-shot GET primes the panel, then SSE keeps it live.
+  // No viem polling — the browser never reads RPC directly.
   useEffect(() => {
-    if (!userAuth) return;
-    refresh();
-    const iv = setInterval(refresh, 15_000);
-    return () => clearInterval(iv);
-  }, [userAuth, refresh]);
+    if (!userAuth || isZeroAddress) return;
+    const address = userAuth.address.toLowerCase();
+    const encoded = encodeURIComponent(address);
+
+    let cancelled = false;
+    fetch(`/api/wallet/balance?address=${encoded}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => {
+        if (cancelled || !json) return;
+        setUsdc(BigInt(json.usdc ?? '0'));
+        setEurc(BigInt(json.eurc ?? '0'));
+      })
+      .catch(() => {
+        /* stream will deliver first value anyway */
+      });
+
+    const es = new EventSource(`/api/wallet/balance/stream?address=${encoded}`);
+    const onBalance = (ev: MessageEvent) => {
+      try {
+        const { usdc, eurc } = JSON.parse(ev.data) as { usdc: string; eurc: string };
+        setUsdc(BigInt(usdc));
+        setEurc(BigInt(eurc));
+      } catch {
+        /* malformed event */
+      }
+    };
+    const onBye = () => es.close();
+    es.addEventListener('balance', onBalance);
+    es.addEventListener('bye', onBye);
+
+    return () => {
+      cancelled = true;
+      es.removeEventListener('balance', onBalance);
+      es.removeEventListener('bye', onBye);
+      es.close();
+    };
+  }, [userAuth]);
 
   useEffect(() => {
     if (!open) return;
@@ -122,17 +107,16 @@ export function WalletDropdown() {
     };
   }, [open]);
 
-  if (!userAuth) return null;
-
-  const short = `${userAuth.address.slice(0, 6)}…${userAuth.address.slice(-4)}`;
-  const initials =
-    userAuth.displayName
-      .split(/\s+/)
-      .map(w => w[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || userAuth.address.slice(2, 4).toUpperCase();
+  const short = userAuth ? `${userAuth.address.slice(0, 6)}…${userAuth.address.slice(-4)}` : '';
+  const initials = userAuth
+    ? userAuth.displayName
+        .split(/\s+/)
+        .map(w => w[0])
+        .filter(Boolean)
+        .slice(0, 2)
+        .join('')
+        .toUpperCase() || userAuth.address.slice(2, 4).toUpperCase()
+    : '';
 
   const copy = async () => {
     try {
@@ -170,84 +154,72 @@ export function WalletDropdown() {
 
   return (
     <div className="wd-wrap" ref={wrapRef}>
-      <button
-        type="button"
-        className={`wd-trigger ${open ? 'open' : ''}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen(v => !v)}
-      >
-        <span className="wd-avatar">{initials}</span>
-        <span className="wd-trigger-body">
-          <span className="wd-name">{userAuth.displayName}</span>
-          <span className="wd-addr">{short}</span>
-        </span>
-        <span className={`wd-chev ${open ? 'open' : ''}`} aria-hidden="true">
-          ▾
-        </span>
-      </button>
+      {!userAuth ? (
+        <div className="wd-trigger wd-skeleton" aria-busy="true">
+          <span className="wd-avatar wd-skel-avatar" />
+          <span className="wd-trigger-body">
+            <span className="wd-skel-line" style={{ width: 92 }} />
+            <span className="wd-skel-line" style={{ width: 64 }} />
+          </span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className={`wd-trigger ${open ? 'open' : ''}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen(v => !v)}
+        >
+          {clerkUser?.imageUrl ? (
+            <img className="wd-avatar wd-avatar-img" src={clerkUser.imageUrl} alt="" />
+          ) : (
+            <span className="wd-avatar">{initials}</span>
+          )}
+          <span className="wd-trigger-body">
+            <span className="wd-name">{userAuth.displayName}</span>
+            <span className="wd-addr">{isZeroAddress ? 'provisioning wallet…' : short}</span>
+          </span>
+          <span className={`wd-chev ${open ? 'open' : ''}`} aria-hidden="true">
+            ▾
+          </span>
+        </button>
+      )}
 
-      {open && (
+      {userAuth && open && (
         <div className="wd-panel" role="menu">
           {/* Identity strip */}
           <div className="wd-id">
-            <span className="wd-avatar lg">{initials}</span>
+            {clerkUser?.imageUrl ? (
+              <img className="wd-avatar lg wd-avatar-img" src={clerkUser.imageUrl} alt="" />
+            ) : (
+              <span className="wd-avatar lg">{initials}</span>
+            )}
             <div className="wd-id-body">
               <span className="wd-id-name">{userAuth.displayName}</span>
-              <span className="wd-id-role">Passkey · {userAuth.email || 'no email'}</span>
-            </div>
-            <div className="wd-id-actions">
-              <Tooltip open={copied ? true : undefined}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="wd-chip"
-                    onClick={copy}
-                    aria-label={`copy address ${userAuth.address}`}
-                  >
-                    <span className="wd-chip-icon" aria-hidden="true">
-                      {copied ? (
-                        <svg viewBox="0 0 24 24" width="12" height="12">
-                          <path
-                            d="M5 12l5 5 9-11"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.4"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" width="12" height="12">
-                          <rect
-                            x="8"
-                            y="8"
-                            width="12"
-                            height="12"
-                            rx="2"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                          />
-                          <path
-                            d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      )}
-                    </span>
-                    <span className="wd-chip-label">{copied ? 'copied' : short}</span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="font-mono text-[10px] tracking-wider">
-                  {copied ? 'copied to clipboard' : 'click to copy address'}
-                </TooltipContent>
-              </Tooltip>
+              <span className="wd-id-role">
+                {isZeroAddress
+                  ? 'Provisioning Arc wallet…'
+                  : `Passkey · ${userAuth.email || 'no email'}`}
+              </span>
             </div>
           </div>
+
+          {isZeroAddress && (
+            <div
+              style={{
+                padding: '12px 14px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-dim)',
+                lineHeight: 1.6,
+                borderTop: '1px solid var(--border)',
+              }}
+            >
+              Your Arc wallet is still being provisioned. This normally completes within a few
+              seconds of org creation. Balances will load automatically once the Circle webhook
+              lands.
+            </div>
+          )}
 
           {/* Token switcher */}
           <div className="wd-tabs">
@@ -334,21 +306,51 @@ export function WalletDropdown() {
                 <button
                   type="button"
                   className="wd-meta-refresh"
-                  onClick={refresh}
+                  onClick={async () => {
+                    if (!userAuth) return;
+                    const r = await fetch(
+                      `/api/wallet/balance?address=${encodeURIComponent(
+                        userAuth.address.toLowerCase()
+                      )}`,
+                      { cache: 'no-store' }
+                    );
+                    if (!r.ok) return;
+                    const json = (await r.json()) as { usdc?: string; eurc?: string };
+                    if (json.usdc) setUsdc(BigInt(json.usdc));
+                    if (json.eurc) setEurc(BigInt(json.eurc));
+                  }}
                   aria-label="refresh balance"
                 >
                   ↻ refresh
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" className="font-mono text-[10px] tracking-wider">
-                re-read on-chain balance (auto-refreshes every 15s)
+                re-read cached balance (Circle webhook pushes updates live)
               </TooltipContent>
             </Tooltip>
             <span className="wd-meta-sep">·</span>
             <span className="wd-meta-ver">v0.9.4-alpha</span>
           </div>
 
-          <button type="button" className="wd-signout" onClick={signOut}>
+          <button
+            type="button"
+            className="wd-action"
+            onClick={copy}
+            aria-label={`copy address ${userAuth.address}`}
+          >
+            {copied ? 'Copied' : short}
+          </button>
+          <button
+            type="button"
+            className="wd-action"
+            onClick={() => {
+              setOpen(false);
+              openUserProfile();
+            }}
+          >
+            Manage account
+          </button>
+          <button type="button" className="wd-action wd-action-danger" onClick={signOut}>
             Sign out
           </button>
         </div>
@@ -362,19 +364,17 @@ export function WalletDropdown() {
         .wd-trigger {
           display: inline-flex;
           align-items: center;
-          gap: 10px;
-          /* Shared vertical rhythm with AgentChip — both ConsoleBar
-             trigger buttons sit on one 48px baseline so the name +
-             address stack here doesn't overshoot the rating chip. */
-          min-height: 48px;
-          padding: 6px 10px 6px 6px;
+          gap: 6px;
+          /* Header baseline — all right-side chips lock to 28px. */
+          height: 28px;
+          padding: 0 8px 0 4px;
           border: 1px solid var(--border);
           background: var(--bg-elev);
           color: var(--text);
           cursor: pointer;
           font-family: var(--font-sans);
           transition: border-color 120ms;
-          max-width: 280px;
+          max-width: 220px;
         }
         .wd-trigger:hover,
         .wd-trigger.open {
@@ -384,32 +384,35 @@ export function WalletDropdown() {
           display: flex;
           flex-direction: column;
           align-items: flex-start;
-          gap: 1px;
+          gap: 0;
+          line-height: 1;
           min-width: 0;
         }
         .wd-name {
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 500;
           letter-spacing: -0.005em;
           color: var(--text);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          max-width: 160px;
+          max-width: 120px;
+          line-height: 1.1;
         }
         .wd-addr {
           font-family: var(--font-mono);
-          font-size: 10px;
+          font-size: 8px;
           color: var(--ink);
           letter-spacing: 0.02em;
+          line-height: 1.1;
         }
         .wd-avatar {
-          width: 24px;
-          height: 24px;
+          width: 18px;
+          height: 18px;
           background: var(--ink);
           color: var(--bg-elev);
           font-family: var(--font-mono);
-          font-size: 10px;
+          font-size: 9px;
           display: grid;
           place-items: center;
           flex-shrink: 0;
@@ -419,10 +422,33 @@ export function WalletDropdown() {
           height: 36px;
           font-size: 13px;
         }
+        .wd-avatar-img {
+          object-fit: cover;
+          border-radius: 50%;
+        }
+        .wd-skeleton {
+          cursor: default;
+          border-color: var(--border);
+        }
+        .wd-skel-avatar {
+          background: color-mix(in oklab, var(--ink) 22%, var(--border));
+          animation: wd-pulse 1.4s ease-in-out infinite;
+        }
+        .wd-skel-line {
+          display: inline-block;
+          height: 8px;
+          background: var(--border);
+          border-radius: 2px;
+          animation: wd-pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes wd-pulse {
+          0%, 100% { opacity: 0.5; }
+          50%      { opacity: 0.85; }
+        }
         .wd-chev {
           font-family: var(--font-mono);
           font-size: 10px;
-          color: var(--text-dim);
+          color: var(--ink);
           transition: transform 160ms ease;
           margin-left: 2px;
         }
@@ -645,7 +671,7 @@ export function WalletDropdown() {
           color: var(--text-faint);
         }
 
-        .wd-signout {
+        .wd-action {
           display: block;
           width: 100%;
           padding: 12px 14px;
@@ -653,21 +679,26 @@ export function WalletDropdown() {
           background: none;
           border: none;
           border-top: 1px solid var(--border);
-          color: var(--accent-rose, #e34);
+          color: var(--text);
           font-family: var(--font-mono);
           font-size: 11px;
           letter-spacing: 0.12em;
           text-transform: uppercase;
           text-align: center;
           cursor: pointer;
-          transition: background 120ms;
+          text-decoration: none;
+          transition: background 120ms, color 120ms;
         }
-        .wd-signout:hover {
-          background: color-mix(
-            in oklab,
-            var(--accent-rose, #e34) 6%,
-            transparent
-          );
+        .wd-action:hover {
+          background: color-mix(in oklab, var(--ink) 6%, transparent);
+          color: var(--ink);
+        }
+        .wd-action.wd-action-danger {
+          color: var(--accent-rose, #e34);
+        }
+        .wd-action.wd-action-danger:hover {
+          background: color-mix(in oklab, var(--accent-rose, #e34) 6%, transparent);
+          color: var(--accent-rose, #e34);
         }
       `}</style>
     </div>

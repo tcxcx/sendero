@@ -12,7 +12,7 @@ export function PrefundSheet({ open }: { open: boolean }) {
 
   function close() {
     setResult(null);
-    router.push('/app/trips');
+    router.push('/dashboard/trips');
     router.refresh();
   }
 

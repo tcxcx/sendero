@@ -15,7 +15,7 @@ import type {
   DuffelStaysCancellationTimelineEntryWire,
 } from '@sendero/duffel';
 
-import { ensureDuffelCustomer } from './ensure-duffel-customer';
+import { ensureFlightCustomer } from './ensure-flight-customer';
 import type { ToolContext, ToolDef } from './types';
 
 const guestSchema = z.object({
@@ -59,11 +59,11 @@ export async function bookStay(input: BookStayInput, ctx?: ToolContext): Promise
   const customerUserIds: DuffelCustomerUserId[] = [];
   if (ctx?.traveler?.userId) {
     try {
-      const identity = await ensureDuffelCustomer(
+      const identity = await ensureFlightCustomer(
         { clerkUserId: ctx.traveler.userId, tenantId: ctx.traveler.tenantId },
         ctx
       );
-      customerUserIds.push(identity.duffelCustomerUserId as DuffelCustomerUserId);
+      customerUserIds.push(identity.supplierTravelerId as DuffelCustomerUserId);
     } catch {
       // best effort; continue without link
     }
@@ -128,7 +128,7 @@ export async function bookStay(input: BookStayInput, ctx?: ToolContext): Promise
 export const bookStayTool: ToolDef<BookStayInput, BookStayResult> = {
   name: 'book_stay',
   description:
-    'Complete a Duffel Stays booking from a confirmed quoteId. Supports loyalty programme account numbers, special requests, and Customer User linkage (unlocks Travel Support Assistant for the guest). The session traveler is auto-linked via ensure_duffel_customer.',
+    'Complete a Duffel Stays booking from a confirmed quoteId. Supports loyalty programme account numbers, special requests, and Customer User linkage (unlocks Travel Support Assistant for the guest). The session traveler is auto-linked via ensure_flight_customer.',
   inputSchema,
   jsonSchema: {
     type: 'object',

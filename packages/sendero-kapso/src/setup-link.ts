@@ -22,7 +22,7 @@ export interface StartOnboardingInput {
   tenantId: string;
   /** Tenant display name (shown in Kapso dashboards). */
   tenantName: string;
-  /** Post-onboarding redirect, e.g. /app/settings/channels?onboarding=whatsapp. */
+  /** Post-onboarding redirect, e.g. /dashboard/settings/channels?onboarding=whatsapp. */
   redirectUrl: string;
   /** ISO-3166-1 alpha-2 hints, e.g. ["US","BR","MX"]. */
   countryIsos?: string[];

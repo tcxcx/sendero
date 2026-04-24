@@ -34,7 +34,7 @@ export function StatCard({
   return (
     <div
       className={
-        'group flex flex-col gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] px-5 py-5 ' +
+        'group flex flex-col gap-2 rounded-[var(--radius-lg)] bg-white px-5 py-4 ' +
         'shadow-[var(--shadow-md)] transition-[box-shadow] duration-[240ms] ease-[cubic-bezier(0.23,1,0.32,1)] ' +
         'hover:shadow-[var(--shadow-lg)]'
       }
@@ -45,37 +45,33 @@ export function StatCard({
       >
         {title}
       </div>
-      <StatValue raw={value} numeric={numeric} />
-      {description ? (
-        <p className="text-sm text-muted-foreground">{description}</p>
-      ) : null}
-      <Link
-        href={href}
-        className={
-          'mt-auto inline-flex w-fit items-center gap-1 rounded-full ' +
-          'bg-[color:var(--tint-midnight-soft)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ' +
-          'text-[color:var(--text)] transition-[background-color,box-shadow] duration-[160ms] ' +
-          'hover:bg-[color:var(--tint-midnight-medium)]'
-        }
-      >
-        View
-        <svg
-          viewBox="0 0 24 24"
-          width="12"
-          height="12"
-          aria-hidden="true"
-          className="-mr-0.5"
+      <div className="flex items-end justify-between gap-3">
+        <StatValue raw={value} numeric={numeric} />
+        <Link
+          href={href}
+          className={
+            'inline-flex shrink-0 items-center gap-1 rounded-full ' +
+            'border border-[color:color-mix(in_oklab,var(--ink)_72%,black)] ' +
+            'bg-[color:var(--ink)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ' +
+            'text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] ' +
+            'transition-[background-color,box-shadow] duration-[160ms] ' +
+            'hover:bg-[color:color-mix(in_oklab,var(--ink)_92%,black)]'
+          }
         >
-          <path
-            d="M5 12h14m0 0l-5-5m5 5l-5 5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </Link>
+          View
+          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" className="-mr-0.5">
+            <path
+              d="M5 12h14m0 0l-5-5m5 5l-5 5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </Link>
+      </div>
+      {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
     </div>
   );
 }

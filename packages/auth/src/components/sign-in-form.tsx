@@ -18,7 +18,7 @@ export default function SignInForm() {
             oauthFlow="redirect"
             signUpUrl="/sign-up"
             waitlistUrl="/waitlist"
-            fallbackRedirectUrl="/app"
+            fallbackRedirectUrl="/dashboard"
             signUpFallbackRedirectUrl="/onboarding"
             appearance={{
               elements: {

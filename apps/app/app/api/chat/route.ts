@@ -44,7 +44,7 @@ export const maxDuration = 300;
 
 const WEB_CHAT_RULES = `## Web console rules
 
-You book flights for corporate travelers using Duffel, and every booking is
+You book flights for corporate travelers through first-party supplier integrations, and every booking is
 settled on-chain via an ERC-8183 job backed by USDC escrow. You have an
 ERC-8004 agent identity and an accumulating reputation score.
 

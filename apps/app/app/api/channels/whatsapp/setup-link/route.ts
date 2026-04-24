@@ -51,7 +51,7 @@ export async function POST(): Promise<Response> {
       { status: 503 }
     );
   }
-  const redirectUrl = `${webhookBase.replace(/\/$/, '')}/app/settings/channels?onboarding=whatsapp`;
+  const redirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/settings/channels?onboarding=whatsapp`;
 
   const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
 

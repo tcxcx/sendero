@@ -9,7 +9,7 @@ export async function requireAnyRole(
 ): Promise<void> {
   const { has } = await auth();
   if (!roles.some(role => has({ role }))) {
-    redirect(opts.fallback ?? '/app');
+    redirect(opts.fallback ?? '/dashboard');
   }
 }
 

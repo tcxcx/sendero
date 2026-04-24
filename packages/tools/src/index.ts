@@ -8,10 +8,10 @@ import { cancelBookingTool } from './cancel-booking';
 import { cancelOrderQuoteTool, confirmCancelOrderTool } from './cancel-order-quote';
 import { checkPolicyTool } from './check-policy';
 import { checkTreasuryTool } from './check-treasury';
-import { confirmDuffelTool } from './confirm-duffel';
+import { confirmFlightTool } from './confirm-flight';
 import { displayOfferConditionsTool } from './display-offer-conditions';
 import { elevationRiskBriefTool } from './elevation-risk-brief';
-import { ensureDuffelCustomerTool } from './ensure-duffel-customer';
+import { ensureFlightCustomerTool } from './ensure-flight-customer';
 import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
 import { findAirportsNearbyTool } from './find-airports-nearby';
@@ -57,7 +57,7 @@ export {
   airQualityBriefTool,
 } from './air-quality-brief';
 export { cancelBookingTool } from './cancel-booking';
-export { confirmDuffelTool } from './confirm-duffel';
+export { confirmFlightTool } from './confirm-flight';
 export {
   type ElevationRiskBriefInput,
   type ElevationRiskBriefResult,
@@ -134,11 +134,11 @@ export {
   tripDelayReplannerTool,
 } from './trip-delay-replanner';
 export {
-  type EnsureDuffelCustomerInput,
-  type EnsureDuffelCustomerResult,
-  ensureDuffelCustomer,
-  ensureDuffelCustomerTool,
-} from './ensure-duffel-customer';
+  type EnsureFlightCustomerInput,
+  type EnsureFlightCustomerResult,
+  ensureFlightCustomer,
+  ensureFlightCustomerTool,
+} from './ensure-flight-customer';
 export {
   type ListFlightAncillariesInput,
   type ListFlightAncillariesResult,
@@ -200,7 +200,7 @@ export const toolList: ToolDef[] = [
   guestClaimLinkTool,
   reserveBookingTool,
   commitBookingTool,
-  confirmDuffelTool,
+  confirmFlightTool,
   settleBookingTool,
   cancelBookingTool,
   generateBookingInvoiceTool,
@@ -221,10 +221,10 @@ export const toolList: ToolDef[] = [
   airportArrivalPlaybookTool,
   tripCheckinReminderTool,
   tripDelayReplannerTool,
-  // Duffel identity + ancillaries (trip-lifecycle extras)
-  ensureDuffelCustomerTool,
+  // Supplier identity + ancillaries (trip-lifecycle extras)
+  ensureFlightCustomerTool,
   listFlightAncillariesTool,
-  // Duffel advanced flows (air + stays + credits + conditions + places)
+  // Advanced flight flows (air + stays + credits + conditions + places)
   findAirportsNearbyTool,
   displayOfferConditionsTool,
   quoteStayTool,

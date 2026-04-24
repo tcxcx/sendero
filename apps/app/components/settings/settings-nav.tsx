@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const links = [
-  { href: '/app/settings/billing', label: 'Billing' },
-  { href: '/app/settings/branding', label: 'Branding' },
-  { href: '/app/settings/org', label: 'Organization' },
-  { href: '/app/settings/profile', label: 'Profile' },
+  { href: '/dashboard/settings/billing', label: 'Billing' },
+  { href: '/dashboard/settings/api-keys', label: 'API keys' },
+  { href: '/dashboard/settings/branding', label: 'Branding' },
+  { href: '/dashboard/settings/org', label: 'Organization' },
+  { href: '/dashboard/settings/profile', label: 'Profile' },
 ] as const;
 
 export function SettingsNav() {

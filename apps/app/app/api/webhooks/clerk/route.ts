@@ -99,6 +99,8 @@ async function dispatch(event: { type: string; data: Record<string, unknown> }):
       return onMembershipUpsert(event.data);
     case 'organizationMembership.deleted':
       return onMembershipDeleted(event.data);
+    case 'apiKey.created':
+      return onApiKeyCreated(event.data);
     default:
       console.log('[webhooks/clerk] unhandled event.type:', event.type);
   }
@@ -232,7 +234,7 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
 
   // Best-effort Duffel CustomerUserGroup creation on org provision.
   // Non-blocking; if Duffel is down the first booking path fills it in
-  // via ensure_duffel_customer. We log but don't fail the Clerk
+  // via ensure_flight_customer. We log but don't fail the Clerk
   // webhook — Duffel identity is additive, not load-bearing.
   if (!tenant.duffelCustomerUserGroupId) {
     try {
@@ -267,6 +269,38 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
       onboardingComplete: true,
     },
   });
+
+  // Mint a sandbox API key so the org can call /api/mcp and /api/agent/dispatch
+  // immediately without a manual mint step. Production keys are user-minted
+  // via <APIKeys /> in settings, gated by plan tier; sandbox is always-on
+  // and tagged via `claims.type` so the resolver can downgrade settlement.
+  try {
+    const apiKeysClient = (
+      client as unknown as {
+        apiKeys?: {
+          create: (args: {
+            subject: string;
+            name?: string;
+            claims?: Record<string, unknown>;
+          }) => Promise<unknown>;
+        };
+      }
+    ).apiKeys;
+    if (apiKeysClient?.create) {
+      await apiKeysClient.create({
+        subject: id,
+        name: 'Sandbox key',
+        claims: { type: 'sandbox' },
+      });
+      console.log('[webhooks/clerk] organization.created sandbox key minted', { id });
+    }
+  } catch (err) {
+    console.warn('[webhooks/clerk] sandbox key mint failed (non-fatal)', {
+      id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   console.log('[webhooks/clerk] organization.created done', {
     id,
     tenantId: tenant.id,
@@ -339,4 +373,99 @@ async function onMembershipDeleted(data: Record<string, unknown>): Promise<void>
     .catch((e: { code?: string }) => {
       if (e?.code !== 'P2025') throw e;
     });
+}
+
+/**
+ * Enforce `PLANS[tier].productionApiKeyLimit` at mint time.
+ *
+ * Clerk's `<APIKeys />` UI doesn't expose per-org quotas, so a free-tier
+ * user could otherwise mint unlimited production keys and bypass the
+ * commercial gate. This handler listens to `apiKey.created`, counts the
+ * org's active production keys, and revokes the offender if it breaks
+ * the plan's limit.
+ *
+ * Intentionally skips:
+ *   - Keys whose subject isn't `org_*` (we don't wire user-level keys).
+ *   - Keys with `claims.type === 'sandbox'` — these are the auto-minted
+ *     sandbox key we create in `organization.created`, not user-minted.
+ *   - Plans with null `productionApiKeyLimit` (Enterprise / unlimited).
+ */
+async function onApiKeyCreated(data: Record<string, unknown>): Promise<void> {
+  const id = typeof data.id === 'string' ? data.id : null;
+  const subject = typeof data.subject === 'string' ? data.subject : null;
+  const claims = (data.claims ?? {}) as Record<string, unknown>;
+  if (!id || !subject || !subject.startsWith('org_')) return;
+  if (claims.type === 'sandbox') return;
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { clerkOrgId: subject },
+    select: { id: true, billingTier: true },
+  });
+  if (!tenant) {
+    console.warn('[webhooks/clerk] apiKey.created for unknown org, no action', { subject });
+    return;
+  }
+
+  // Map tenant.billingTier (legacy enum) to the Clerk-billed plan tier.
+  // Mirrors `resolveTenantPlan()` in api/agent/dispatch/route.ts — keep
+  // the two in sync (or extract to @sendero/billing when it earns a
+  // second caller).
+  const { resolvePlan } = await import('@sendero/billing/plans');
+  const legacy = tenant.billingTier?.toLowerCase();
+  const tier =
+    legacy === 'enterprise'
+      ? 'enterprise'
+      : legacy === 'pro'
+        ? 'pro'
+        : legacy === 'business' || legacy === 'basic'
+          ? 'basic'
+          : 'free';
+  const plan = resolvePlan(tier);
+  if (plan.productionApiKeyLimit === null) return; // unlimited
+
+  const client = await clerkClient();
+  const api = (
+    client as unknown as {
+      apiKeys?: {
+        list?: (args: { subject: string }) => Promise<{
+          data?: Array<{ id: string; claims?: Record<string, unknown>; revoked?: boolean }>;
+        }>;
+        revoke?: (args: { apiKeyId: string; revocationReason?: string }) => Promise<unknown>;
+      };
+    }
+  ).apiKeys;
+  if (!api?.list || !api?.revoke) {
+    console.warn(
+      '[webhooks/clerk] clerkClient.apiKeys list/revoke unavailable; skipping enforcement'
+    );
+    return;
+  }
+
+  const resp = await api.list({ subject }).catch(err => {
+    console.warn('[webhooks/clerk] apiKey list failed', { subject, err });
+    return null;
+  });
+  const keys = resp?.data ?? [];
+  const productionActive = keys.filter(k => !k.revoked && (k.claims?.type ?? null) !== 'sandbox');
+
+  if (productionActive.length <= plan.productionApiKeyLimit) return;
+
+  // Over limit — revoke the key that just minted (it's the most recent
+  // event; revoking it is the least-surprising UX — "you tried to mint
+  // one more than your plan allows, so we blocked this one").
+  try {
+    await api.revoke({
+      apiKeyId: id,
+      revocationReason: `Revoked: ${tier} plan allows ${plan.productionApiKeyLimit} production API keys. Upgrade at /dashboard/billing/plans.`,
+    });
+    console.log('[webhooks/clerk] apiKey.created over limit, revoked', {
+      subject,
+      keyId: id,
+      tier,
+      limit: plan.productionApiKeyLimit,
+      activeBefore: productionActive.length,
+    });
+  } catch (err) {
+    console.error('[webhooks/clerk] apiKey revoke failed', { keyId: id, err });
+  }
 }

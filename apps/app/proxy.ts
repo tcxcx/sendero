@@ -22,6 +22,7 @@ import { NextResponse } from 'next/server';
 const isPublicRoute = createRouteMatcher([
   '/',
   '/g(.*)', // guest claim (self-auth via URL fragment)
+  '/glass-debug',
   '/invoice/(.*)', // public invoice viewer (JWT-gated)
   '/sign-in(.*)',
   '/sign-up(.*)',
