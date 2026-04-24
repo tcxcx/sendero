@@ -245,6 +245,7 @@ model Tenant {
   preferenceLogs      PreferenceLog[]
   channelIdentities   ChannelIdentity[]
   slackInstalls       SlackInstall[]
+  whatsappInstall     WhatsAppInstall?
   whatsappLinkTokens  WhatsAppLinkToken[]
   spendCaps           TenantSpendCap[]
   nanopayBatches      NanopayBatch[]
@@ -430,6 +431,14 @@ model Trip {
   reputationScore Int? // 0-100, mirrored from Attestation
   totalUsdc       Decimal?   @db.Decimal(18, 6) // denormalized from bookings
   metadata        Json?
+  /// Per-trip channel routing override. Shape (see TripChannelBindings
+  /// in `apps/app/lib/channel-routing.ts`):
+  ///   { primary: 'whatsapp'|'slack'|'email'|'web',
+  ///     whatsapp?: { identityId },
+  ///     slack?: { channelId, threadTs? },
+  ///     notifyChannels?: Array<...> }
+  /// Nudge emitters read this before each share; null = use tenant default.
+  channelBindings Json?
   createdAt       DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime   @updatedAt @db.Timestamptz(6)
 
@@ -860,6 +869,52 @@ model WhatsAppLinkToken {
   @@index([tenantId, userId])
   @@index([expiresAt])
   @@map("whatsapp_link_tokens")
+}
+
+/// Per-tenant WhatsApp Business install, mediated by Kapso.
+///
+/// Created once the tenant admin completes the embedded signup flow
+/// (see `@sendero/kapso` setup-link). Kapso fires
+/// `whatsapp.phone_number.created` to our project-scope webhook, the
+/// handler resolves the customer back to the Sendero tenant (via
+/// `kapsoCustomerId` external-id mapping) and inserts this row.
+///
+/// One install per tenant for v1. Multi-install is tracked in the v1
+/// deferred list. Re-onboarding overwrites the row with a new
+/// `kapsoConnectionId`.
+model WhatsAppInstall {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @unique
+  /// Kapso's customer id (scoped to Sendero's Kapso project). Used for
+  /// setup-link re-issue and health pings.
+  kapsoCustomerId     String   @unique
+  /// Kapso's internal connection id for the WhatsApp number. Distinct
+  /// from Meta's `phone_number_id` — Kapso exposes both.
+  kapsoConnectionId   String?  @unique
+  businessDisplayName String?
+  /// Meta Graph API id — used for outbound sends + webhook routing.
+  phoneNumberId       String?  @unique
+  /// Meta WABA id — used when creating / submitting templates.
+  businessAccountId   String?
+  displayPhoneNumber  String?
+  /// Per-install webhook secret, Kapso-issued on registration. Stored
+  /// plaintext pending `@sendero/crypto` — see v1 deferred list.
+  webhookSecret       String
+  status              String   @default("pending") // pending | active | disabled | error
+  /// Last `status: error` cause, for ops surface debugging.
+  lastErrorMessage    String?
+  connectedByUserId   String?
+  /// Last time the cron health ping succeeded.
+  lastHealthyAt       DateTime? @db.Timestamptz(6)
+  metadata            Json?
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([phoneNumberId])
+  @@map("whatsapp_installs")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
