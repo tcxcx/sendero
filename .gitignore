@@ -66,3 +66,4 @@ apps/app/playwright-report/
 
 # Local dev credentials (do not commit)
 qa-logins.local.json
+.env.local.bak

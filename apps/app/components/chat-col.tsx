@@ -460,8 +460,13 @@ export function ChatCol() {
           onSubmit={(message, event) => {
             event.preventDefault();
             const next = message.text.trim();
-            if (!next || isStreaming) return;
-            sendMessage({ text: next });
+            const files = message.files ?? [];
+            if (!next && files.length === 0) return;
+            if (isStreaming) return;
+            // `files` flows through @ai-sdk/react's useChat into the chat
+            // route, where convertToModelMessages() maps FileUIParts to
+            // the multimodal content array Gemini expects.
+            sendMessage({ text: next, files });
           }}
         >
           <PromptInputBody>

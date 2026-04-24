@@ -14,6 +14,34 @@
 
 export type Channel = 'whatsapp' | 'slack' | 'web' | 'mcp' | 'email';
 
+/**
+ * Media-bearing attachment forwarded to the multimodal LLM. Either `url`
+ * OR (`data` + `mediaType`) must be populated. `data` is base64-encoded
+ * (no `data:` URI prefix). `size` is set when the adapter knows it so the
+ * engine can enforce the 20 MB cap without decoding the payload.
+ */
+export interface AgentMediaAttachment {
+  kind: 'image' | 'document';
+  mediaType: string;
+  url?: string;
+  data?: string;
+  size?: number;
+  filename?: string;
+}
+
+/** Structured hint attachment — never carries binary data. */
+export interface AgentStructuredAttachment {
+  kind: 'location' | 'itinerary' | 'booking_ref';
+  url?: string;
+  data?: Record<string, unknown>;
+}
+
+export type AgentAttachment = AgentMediaAttachment | AgentStructuredAttachment;
+
+export function isMediaAttachment(a: AgentAttachment): a is AgentMediaAttachment {
+  return a.kind === 'image' || a.kind === 'document';
+}
+
 export interface AgentActor {
   /** Tenant the traveler belongs to. */
   tenantId: string;
@@ -32,12 +60,16 @@ export interface AgentInput {
   channel: Channel;
   /** Freeform traveler text. Media / structured inputs surface in `attachments`. */
   text: string;
-  /** Optional structured attachments — images, itinerary fragments, booking ids. */
-  attachments?: Array<{
-    kind: 'image' | 'document' | 'location' | 'itinerary' | 'booking_ref';
-    url?: string;
-    data?: Record<string, unknown>;
-  }>;
+  /**
+   * Optional structured attachments. Two shapes coexist:
+   *   - Media inputs (`image` / `document`) — carry either a `url` OR a
+   *     base64 `data` string with `mediaType` set. Consumed by the OCR
+   *     / multimodal path and forwarded to Gemini as file parts.
+   *   - Structured hints (`location` / `itinerary` / `booking_ref`) —
+   *     carry a free-form `data` object the engine surfaces to prompt
+   *     builders. Keep these narrow, per-kind maps.
+   */
+  attachments?: AgentAttachment[];
   /**
    * Stable identifier for THIS turn — used to key idempotent meter
    * writes. Adapters derive it from the channel's native message id

@@ -21,12 +21,16 @@ import { detectLocale, localeForPhone } from '@sendero/locale';
 import {
   handleVerifyHandshake,
   identityKey,
+  isAllowedMimeType,
+  MAX_MEDIA_BYTES,
   mergeIdentity,
   normalizeWebhookPayload,
   verifyWebhookSignature,
+  WhatsAppClient,
   type NormalizedIdentityChange,
   type NormalizedInboundMessage,
   type WhatsAppIdentity,
+  type WhatsAppMedia,
 } from '@sendero/whatsapp';
 
 export const runtime = 'nodejs';
@@ -95,29 +99,50 @@ export async function POST(req: NextRequest) {
   }
 
   // Ensure every sender has a ChannelIdentity row + fire agent dispatch
-  // for each text message. Dispatch is best-effort; a failure in the
-  // agent turn must not cause Meta to retry the webhook.
+  // for each text-or-media message. Dispatch is best-effort; a failure in
+  // the agent turn must not cause Meta to retry the webhook.
   let dispatched = 0;
   for (const msg of messages) {
     try {
       const identity = await upsertChannelIdentity(msg);
-      if (identity && msg.message.type === 'text' && msg.message.text?.body) {
+      if (!identity) continue;
+
+      const kind = msg.message.type;
+      const text = kind === 'text' ? (msg.message.text?.body ?? '') : mediaCaption(msg.message);
+
+      if (kind === 'text' && text) {
         void dispatchAgent({
           tenantId: identity.tenantId,
           userId: identity.userId ?? identity.id,
-          text: msg.message.text.body,
+          text,
           locale: identity.locale,
           turnId: `whatsapp:${msg.messageId}`,
           req,
         })
           .then(result => {
-            if (result?.reply) {
-              void sendWhatsAppReply(msg, result.reply);
-            }
+            if (result?.reply) void sendWhatsAppReply(msg, result.reply);
           })
-          .catch(err => {
-            console.error('[wa/webhook] dispatch failed:', err);
-          });
+          .catch(err => console.error('[wa/webhook] dispatch failed:', err));
+        dispatched++;
+      } else if ((kind === 'image' || kind === 'document') && msg.message[kind]) {
+        // Process media turns async — downloading can be slow, Meta
+        // only gives us a 30s ack window and we must respond BEFORE
+        // the download finishes.
+        void dispatchMediaTurn({
+          tenantId: identity.tenantId,
+          userId: identity.userId ?? identity.id,
+          locale: identity.locale,
+          turnId: `whatsapp:${msg.messageId}`,
+          phoneNumberId: msg.tenantPhoneNumberId,
+          media: msg.message[kind] as WhatsAppMedia,
+          caption: text,
+          attachmentKind: kind,
+          req,
+        })
+          .then(result => {
+            if (result?.reply) void sendWhatsAppReply(msg, result.reply);
+          })
+          .catch(err => console.error('[wa/webhook] media dispatch failed:', err));
         dispatched++;
       }
     } catch (err) {
@@ -142,22 +167,95 @@ async function dispatchAgent(args: {
   turnId: string;
   req: NextRequest;
 }): Promise<{ reply: string } | null> {
-  const dispatchUrl = new URL('/api/agent/dispatch', args.req.nextUrl.origin);
+  return postToDispatch(args.req, {
+    tenantId: args.tenantId,
+    userId: args.userId,
+    channel: 'whatsapp',
+    text: args.text,
+    locale: args.locale,
+    turnId: args.turnId,
+  });
+}
+
+async function dispatchMediaTurn(args: {
+  tenantId: string;
+  userId: string;
+  locale: string;
+  turnId: string;
+  phoneNumberId: string;
+  media: WhatsAppMedia;
+  caption: string;
+  attachmentKind: 'image' | 'document';
+  req: NextRequest;
+}): Promise<{ reply: string } | null> {
+  if (!isAllowedMimeType(args.media.mime_type)) {
+    console.warn('[wa/webhook] disallowed media mime-type:', args.media.mime_type);
+    return null;
+  }
+
+  const accessToken = env.whatsappAccessToken();
+  if (!accessToken) {
+    console.warn('[wa/webhook] cannot download media without WHATSAPP_ACCESS_TOKEN');
+    return null;
+  }
+  const client = new WhatsAppClient({
+    phoneNumberId: args.phoneNumberId,
+    accessToken,
+    apiBaseUrl: env.whatsappApiBaseUrl() ?? undefined,
+  });
+  let buf: ArrayBuffer;
+  try {
+    buf = await client.downloadMedia(args.media.id);
+  } catch (err) {
+    console.error('[wa/webhook] downloadMedia failed:', err);
+    return null;
+  }
+  if (buf.byteLength > MAX_MEDIA_BYTES) {
+    console.warn(
+      `[wa/webhook] media ${args.media.id} (${buf.byteLength} bytes) exceeds ${MAX_MEDIA_BYTES} cap`
+    );
+    return null;
+  }
+  const base64 = Buffer.from(buf).toString('base64');
+
+  return postToDispatch(args.req, {
+    tenantId: args.tenantId,
+    userId: args.userId,
+    channel: 'whatsapp',
+    text: args.caption,
+    locale: args.locale,
+    turnId: args.turnId,
+    attachments: [
+      {
+        kind: args.attachmentKind,
+        mediaType: args.media.mime_type,
+        data: base64,
+        size: buf.byteLength,
+        ...(args.media.filename ? { filename: args.media.filename } : {}),
+      },
+    ],
+  });
+}
+
+async function postToDispatch(
+  req: NextRequest,
+  body: Record<string, unknown>
+): Promise<{ reply: string } | null> {
+  const dispatchUrl = new URL('/api/agent/dispatch', req.nextUrl.origin);
   const response = await fetch(dispatchUrl, {
     method: 'POST',
     headers: agentDispatchHeaders(),
-    body: JSON.stringify({
-      tenantId: args.tenantId,
-      userId: args.userId,
-      channel: 'whatsapp',
-      text: args.text,
-      locale: args.locale,
-      turnId: args.turnId,
-    }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) return null;
   const json = (await response.json()) as { text?: string };
   return json.text ? { reply: json.text } : null;
+}
+
+function mediaCaption(msg: NormalizedInboundMessage['message']): string {
+  if (msg.type === 'image' && msg.image?.caption) return msg.image.caption;
+  if (msg.type === 'document' && msg.document?.caption) return msg.document.caption;
+  return '';
 }
 
 function agentDispatchHeaders() {
@@ -171,7 +269,7 @@ function agentDispatchHeaders() {
 async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): Promise<void> {
   const accessToken = env.whatsappAccessToken();
   if (!accessToken) return;
-  const { WhatsAppClient, formatForWhatsApp } = await import('@sendero/whatsapp');
+  const { formatForWhatsApp } = await import('@sendero/whatsapp');
   const client = new WhatsAppClient({
     phoneNumberId: msg.tenantPhoneNumberId,
     accessToken,

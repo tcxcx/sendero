@@ -29,6 +29,7 @@
     "@sendero/invoicing": "*",
     "@sendero/nanopayments": "*",
     "@sendero/notifications": "*",
+    "@sendero/ocr": "*",
     "@vercel/blob": "^2.3.3",
     "ai": "*",
     "viem": "*",

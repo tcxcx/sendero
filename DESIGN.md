@@ -9,6 +9,7 @@ This file is the source of truth for Sendero's product and marketing design dire
 - Storybook brand book: `apps/storybook/stories/brand/BrandBook.stories.tsx`
 - Storybook static assets: `apps/storybook/public/brand`
 - Design-system brand assets: `packages/ui/brand`
+- Dot-grid micro-illustrations: `packages/ui/src/illustrations/dot-grid/`
 
 ## Sendero Brand Book
 
@@ -31,67 +32,23 @@ It should not feel like a generic travel app, a chat product, or a cold corporat
 
 **Brand metaphor:** Sendero is a smart travel guide with taste.
 
-The identity combines:
-
-- travel exploration
-- wayfinding
-- editorial charm
-- AI-assisted guidance
-
-The system should feel like a modern travel companion with a slightly literary, observant, map-room sensibility.
+The identity combines travel exploration, wayfinding, editorial charm, and AI-assisted guidance. The system should feel like a modern travel companion with a slightly literary, observant, map-room sensibility.
 
 ### 3. Logo System
 
 #### Primary Platform Icon
 
-**Binocular mark**
+**Binocular mark** — a binocular silhouette for discovery/planning/search, a star in the left lens for direction/navigation/intelligence, and a mountain line in the right lens for destination/horizon/travel context.
 
-This is the core platform icon.
-
-It combines:
-
-- a **binocular silhouette** for discovery, planning, and search
-- a **star** in the left lens for direction, navigation, and intelligence
-- a **mountain line** in the right lens for destination, horizon, and travel context
-
-#### What The Icon Communicates
-
-- seeing ahead
-- curated discovery
-- travel intelligence
-- perspective
-- movement toward a destination
-
-#### Why It Works
-
-The binocular shape is:
-
-- travel-native without being generic
-- distinct from messaging or aviation icons
-- flexible across product, app, deck, and editorial surfaces
-- simple enough to scale well
+Communicates: seeing ahead, curated discovery, travel intelligence, perspective, movement toward a destination. The binocular shape is travel-native without being generic, distinct from messaging or aviation icons, flexible across product and editorial surfaces.
 
 ### 4. Brand Personality
 
-**Thoughtful**
-
-Not loud, not gimmicky, not trend-chasing.
-
-**Elegant**
-
-A refined editorial taste, not luxury-for-luxury's-sake.
-
-**Adventurous**
-
-There is movement, curiosity, and a sense of horizon.
-
-**Intelligent**
-
-The AI layer should feel useful and subtle, not robotic.
-
-**Human**
-
-Slight imperfection, texture, and warmth matter.
+**Thoughtful** — Not loud, not gimmicky, not trend-chasing.
+**Elegant** — Refined editorial taste, not luxury-for-luxury's-sake.
+**Adventurous** — Movement, curiosity, a sense of horizon.
+**Intelligent** — The AI layer should feel useful and subtle, not robotic.
+**Human** — Slight imperfection, texture, and warmth matter.
 
 ### 5. Visual Style Principles
 
@@ -105,7 +62,9 @@ Slight imperfection, texture, and warmth matter.
 - minimalist forms
 - calm spacing
 - light warm backgrounds
-- **borderless layered surfaces** — depth via shadow, not dividers
+- **layered surfaces on parchment** — depth via shadow, punctuated by editorial hairlines
+
+The authenticated product should read like the marketing root (`/`): warm parchment fields, floating cards with soft shadow, active states as tinted fills, punctuated by hairline rules for editorial rhythm. The console should not feel like a different universe — it should feel like the same map-room, turned toward operations.
 
 #### Motion
 
@@ -116,29 +75,25 @@ Use motion for:
 - first-load orientation on public editorial pages
 - route-line or map-image reveals
 - state feedback on pressable controls
-- small image focus changes on hover
-- docs/help content entering without layout shift
-- **surface elevation changes** (card hover, panel focus)
+- numeral count-up on stat blocks (once on mount)
+- dot-grid illustration stroke-draw reveals (on scroll in)
+- surface elevation changes (card hover, panel focus)
+- tab pill slides (active-state position transitions)
 
-Avoid motion for:
+Avoid motion for repeated operator actions, keyboard-driven flows, dense table scanning, or anything that delays a travel agent from acting.
 
-- repeated operator actions
-- keyboard-driven flows
-- dense table scanning
-- anything that delays a travel agent from acting
-
-Default curves:
-
-- `cubic-bezier(0.23, 1, 0.32, 1)` for entrances, feedback, and shadow depth transitions
+**Default curves:**
+- `cubic-bezier(0.23, 1, 0.32, 1)` for entrances, feedback, shadow depth, and pill slides
 - `cubic-bezier(0.77, 0, 0.175, 1)` for visible movement already on screen
 
-Default durations:
+**Default durations:**
+- 160ms — micro-feedback (button press, tint change, sidebar active fill)
+- 240ms — surface elevation, tab pill slides
+- 320ms — entrances
+- 400ms — image reveals inside hovered cards
+- 600ms — numeral count-ups, stroke-draw illustration reveals
 
-- 160ms for micro-feedback (button press, tint change)
-- 240ms for surface elevation (shadow depth)
-- 320ms for entrances
-
-All motion must respect `prefers-reduced-motion` and collapse to 0ms for shadow transitions.
+All motion must respect `prefers-reduced-motion` and collapse transitions to 0ms.
 
 #### Avoid
 
@@ -148,116 +103,53 @@ All motion must respect `prefers-reduced-motion` and collapse to 0ms for shadow 
 - overly sterile geometric perfection
 - icons that resemble Telegram, paper planes, or chat apps
 - overly literal airplane or travel cliches
-- **hard 1px borders as layout separators** — use whitespace and shadow instead
+- **hard 1px borders as layout separators** — use whitespace and shadow
 - **boxed panels stacked edge-to-edge** — panels should breathe and float
+- **black frames inside the authenticated app** — terminal surfaces use Midnight Veil, not pure black
 
 ### 6. Color System
 
 #### Primary Color
 
-**Vermillion**
-`#D65438`
+**Vermillion** — `#D65438`
 
-Use for:
-
-- primary icon
-- hero branding
-- headline brand moments
-- editorial brand surfaces
-- key product identity moments
-- active-state tinted fills (at 10–18% alpha)
-
-This is the main emotional color of the brand. It carries warmth, visibility, and distinction.
+Use for: primary icon, hero branding, headline brand moments, editorial brand surfaces, sidebar-nav active state, primary CTAs, active-state tinted fills (at 10–18% alpha). The main emotional color. Never diluted by using it for tab-active on every tab bar — reserve its presence.
 
 #### Supporting Icon Colors
 
-**Midnight**
-`#1F2A44`
+**Midnight** — `#1F2A44` — trust, console surfaces, body type, shadow tint (at 4–35% alpha), tab-pill active fills, primary dark buttons. Grounded, reliable, intelligent.
 
-Use for:
+**Sea** — `#0F7C82` — travel operations, map features, system accents, informational chips. Calm, navigational, capable.
 
-- dark mode
-- formal presentations
-- trust-heavy surfaces
-- documentation
-- neutral product contexts
-- shadow tinting (at 4–35% alpha)
-
-Tone: grounded, reliable, intelligent.
-
-**Sea**
-`#0F7C82`
-
-Use for:
-
-- travel operations
-- map-related features
-- system accents
-- product moments needing freshness or utility
-- informational chips and tags
-
-Tone: calm, navigational, capable.
-
-**Sand**
-`#B6844E`
-
-Use for:
-
-- editorial moments
-- hospitality contexts
-- warm supporting applications
-- softer secondary branding
-- pending/awaiting status chips
-
-Tone: warm, cultured, understated.
+**Sand** — `#B6844E` — editorial moments, hospitality contexts, pending/awaiting status chips. Warm, cultured, understated.
 
 #### Surface Palette
 
-Sendero uses a **three-tier surface system** to create elevation without borders.
+Sendero uses a **three-tier surface system** with elevation, not borders.
 
-**Parchment — base field**
-`#EEDCC7`
+**Parchment — base field** `#EEDCC7` — default page backgrounds, the canvas everything floats on.
 
-- default page backgrounds
-- old-paper editorial surfaces
-- map and illustration fields
-- the canvas everything else floats on
+**Parchment Light — raised** `#F7EFE4` — primary content cards (trip lists, threads, context panels). The layer where most reading happens.
 
-**Parchment Light — raised**
-`#F7EFE4`
+**Warm White — floating** `#FDFBF7` — popovers, menus, modals, active/selected cards. The topmost interactive surface. Also the text color used on solid-midnight active tab pills.
 
-- primary content cards (trip lists, threads, context panels)
-- default product surface
-- the layer where most reading happens
+**Midnight Veil — terminal** `rgba(31, 42, 68, 0.97)` — workflow / console panels. Never pure black.
 
-**Warm White — floating**
-`#FDFBF7`
-
-- popovers, menus, modals
-- the active/selected card in a list
-- the topmost interactive surface
-
-**Midnight Veil — terminal**
-`rgba(31, 42, 68, 0.97)`
-
-- workflow / console panels
-- developer-facing surfaces
-- the console voice, but with a whisper of parchment bleeding through at the edges
-
-**Decision:** keep `#EEDCC7` as the dominant page field. Raised cards use the slightly lighter `#F7EFE4` so elevation reads without white-chrome feel. The new postcard assets add enough blue water, olive land, black linework, and vermillion route marks to keep the palette from becoming monotone cream.
+**Page wash (outermost frame):** radial gradient blending parchment at center with sea at 3% and sand at 4% at the corners, plus a baked grain overlay at 4% opacity. The authenticated app sits on top as a single raised card.
 
 ### 7. Surface and Shadow System
 
-This is the core structural rule of Sendero's product UI: **hierarchy comes from elevation, not outlines.**
+**Hierarchy comes from elevation and editorial rhythm, not outlines.**
 
-#### Three Elevation Tiers
+#### Elevation Tiers
 
 | Tier | Token | Use | Shadow |
 |---|---|---|---|
 | Base | `--surface-base` | Page field | none |
 | Raised | `--surface-raised` | Content cards | `--shadow-md` |
-| Floating | `--surface-floating` | Active/selected, popovers, modals | `--shadow-lg` |
+| Floating | `--surface-floating` | Active/selected, popovers | `--shadow-lg` |
 | Terminal | `--surface-terminal` | Console, workflow panels | `--shadow-terminal` |
+| Frame | `--surface-raised` + `--shadow-xl` | Outermost authenticated app card | `--shadow-xl` |
 
 #### Shadow Tokens
 
@@ -275,16 +167,13 @@ This is the core structural rule of Sendero's product UI: **hierarchy comes from
                    0 24px 48px -20px rgba(31, 42, 68, 0.35);
 ```
 
-#### Rules
-
-- Shadows are always **midnight-tinted**, never pure black. This keeps the warmth of the parchment field.
-- Never stack shadows with borders. Pick one — in Sendero, pick shadow.
-- Hover raises one tier (md → lg). Selected stays at floating (lg).
-- Do not use shadows on inline elements, text, or icons.
+Rules:
+- Shadows are **midnight-tinted**, never pure black.
+- No panel has both a shadow and a border. Pick one.
+- Hover raises one tier (md → lg). Selected stays at lg.
+- No shadows on inline elements, text, or icons.
 
 #### Tint Tokens
-
-Used for active-state fills, chip backgrounds, and hover states. Never as primary fills.
 
 ```css
 --tint-vermillion-soft: rgba(214, 84, 56, 0.10);
@@ -301,340 +190,293 @@ Used for active-state fills, chip backgrounds, and hover states. Never as primar
 --radius-sm: 8px;    /* chips, pills, small buttons */
 --radius-md: 12px;   /* list items, inputs */
 --radius-lg: 16px;   /* panels, cards */
---radius-xl: 20px;   /* hero surfaces, modals */
+--radius-xl: 20px;   /* hero surfaces, modals, outer app frame */
 ```
 
-### 8. Color Usage Guidance
+### 8. Hairlines, Dot Grid, and Editorial Rhythm
 
-#### Default Hierarchy
+Borders exist. But they're **editorial rhythm**, never structural glue.
 
-1. **Vermillion** = main brand expression, primary actions, active states
-2. **Midnight** = trust, console surfaces, body type, shadow tint
-3. **Sea** = functional travel accents, web/channel tags
-4. **Sand** = warm editorial, awaiting/pending status
+#### Hairline Tokens
 
-#### Rule
+```css
+--hairline-color: #D8C1A7;                        /* warm parchment beige */
+--hairline-color-soft: rgba(31, 42, 68, 0.08);   /* midnight whisper */
+--hairline-color-strong: rgba(31, 42, 68, 0.14); /* midnight readable */
+--hairline: 1px solid var(--hairline-color);
+--hairline-soft: 1px solid var(--hairline-color-soft);
+--hairline-strong: 1px solid var(--hairline-color-strong);
+```
 
-The alternate colors support the system. They do **not** replace the primacy of vermillion. Use tinted fills (10–18% alpha) for backgrounds; reserve full saturation for text, icons, and key accents.
+#### Hairlines Are Allowed In
 
-### 9. Borders — When Allowed
+- Between stat cells in `<MetricRow>` (vertical).
+- Between feature columns in marketing editorial grids.
+- Between table rows when row height < 44px (`--hairline-color-soft`).
+- Around `<CaseStudyCard>` and `<AgentCard>` outer containers (`--hairline-color`).
+- Under a tab bar as baseline for the vermillion active line in `<UnderlineTabs>`.
+- Above footers and below page headers on marketing surfaces as rhythm breaks.
+- Composer on focus: 1px vermillion at 40% — the one focus-border in the app.
 
-Borders are **not** a structural tool. They are allowed only in these cases:
+#### Hairlines Are Forbidden In
 
-- Form inputs on focus (1px vermillion at 40% opacity)
-- Text inputs and textareas at rest (1px midnight at 8% opacity — the lightest whisper)
-- Table rows in dense data views, if density exceeds readable spacing
-- Inset indicators inside selected cards (e.g., a 2px vermillion line on the left edge *inside* a card, not a border)
+- App shell panel separators (sidebar-to-content, list-to-detail, header-to-body).
+- Empty states (dashed or otherwise).
+- Inside cards as internal dividers when whitespace would do the work.
 
-Never use borders to separate:
+**Load-bearing test:** if removing the hairline breaks layout comprehension, the layout is wrong. Hairlines are rhythm, not glue.
 
-- Sidebar from main content
-- List from detail panel
-- Header from body
-- Top bar from content
-- Status bar from content
-- Sections of the same panel
+#### Dot-Grid Tokens
 
-Use whitespace, shadow, or a surface-tier change instead.
+```css
+--dot-grid-color: rgba(31, 42, 68, 0.18);
+--dot-grid-size: 8px;
+--dot-grid-pattern:
+  radial-gradient(circle, var(--dot-grid-color) 1px, transparent 1px)
+  0 0 / var(--dot-grid-size) var(--dot-grid-size);
+```
 
-### 10. Icon Usage
+The dot grid is the graticule behind micro-illustrations and an ambient texture in empty states. It references map graticules and graph paper — travel planning lives on grids.
 
-#### Use The Icon When
+### 9. Color Usage Guidance
 
-- space is limited
-- the full wordmark is unnecessary
-- the platform needs a recognizable shorthand
-- app/product surfaces need a compact identity mark
+**Default Hierarchy:**
+1. **Vermillion** — sidebar nav active, primary CTAs, editorial brand moments. Used sparingly.
+2. **Midnight** — body type, console, tab-pill active fills, shadow tint.
+3. **Sea** — travel ops, web/channel tags, system accents.
+4. **Sand** — awaiting/pending status, warm editorial.
 
-#### Use The Wordmark + Icon When
+Use tinted fills (10–18% alpha) for backgrounds; reserve full saturation for text, icons, and key accents. **Solid midnight is the default for tab-active pills**, so vermillion stays precious.
 
-- presenting the full brand
-- landing pages
-- pitch decks
-- brand introductions
-- external-facing communications
+### 10. Typography Direction
 
-### 11. Clear Space
+Editorial, elegant, legible, slightly literary, premium but not ornate.
 
-Always leave breathing room around the icon.
+- Serif for the wordmark, headlines, and oversized metric numerals.
+- Restrained sans or simple serif for product/body.
+- Monospace only for workflow/terminal surfaces and data tables.
 
-**Minimum clear space:** at least **25% of the icon's width** on all sides.
-
-Do not crowd it with:
-
-- text
-- buttons
-- borders
-- other logos
-- busy illustrations
-
-The icon works best when it has room to sit calmly.
-
-### 12. Minimum Size
-
-#### Digital
-
-- minimum: **24 px height**
-- preferred: **64 px and above**
-
-#### Print
-
-- minimum: **12 mm height**
-
-Below these sizes, texture may be reduced if necessary, but the shape must stay intact.
-
-### 13. Construction Principles
-
-The icon should preserve these elements:
-
-- rounded binocular body
-- balanced two-lens structure
-- star in left lens
-- mountain line in right lens
-- single-color outline logic
-- simple internal detail
-
-Do not alter the internal symbols casually.
-
-### 14. Do / Don't
-
-#### Do
-
-- use a single solid color
-- keep proportions intact
-- place on calm, high-contrast backgrounds
-- preserve the mark exactly
-- use it with restraint and confidence
-
-#### Don't
-
-- stretch or squash the icon
-- add drop shadows on the icon itself (the icon is flat; elevation lives on surfaces, not marks)
-- add gradients
-- put it on noisy backgrounds
-- over-outline it
-- rotate it arbitrarily
-- replace the star or mountain with random symbols
-
-### 15. Background Applications
-
-#### Best Background Types
-
-- warm off-white
-- soft cream
-- old parchment `#EEDCC7`
-- muted neutrals
-- deep midnight fields
-- calm pale map tones
-- lightly textured editorial surfaces
-
-#### Avoid Backgrounds That Are
-
-- too busy
-- low contrast
-- hyper-saturated
-- glossy or synthetic
-- visually competitive with the mark
-
-### 16. Typography Direction
-
-The typography should feel:
-
-- editorial
-- elegant
-- legible
-- slightly literary
-- premium but not ornate
-
-#### Best Fit
-
-- serif for the main wordmark/headlines
-- restrained supporting sans or simple serif for product/body use
-- monospace (JetBrains Mono or similar) only for the workflow/terminal surfaces and data tables
-
-The overall balance should feel like **travel magazine meets intelligent product company**.
+Travel magazine meets intelligent product company.
 
 #### Opacity Scale for Type
 
 Use midnight at varying alpha instead of grey ramps:
 
-- 100% — primary headlines and body
-- 70% — secondary body, sidebar items at rest
+- 100% — primary headlines, body, display numerals
+- 70% — secondary body, sidebar items at rest, illustration linework
 - 60% — meta info (timestamps, labels, status bar)
 - 50% — ambient/comment text in console surfaces
 - 40% — placeholder, disabled
 
-### 17. Illustration Direction
+#### Numeral Scale
+
+```css
+--numeral-xl: clamp(3.5rem, 6vw, 5.5rem);    /* stat headliners (100%, +150, 3331) */
+--numeral-lg: clamp(2.75rem, 4.5vw, 4rem);   /* dashboard kpis */
+--numeral-md: clamp(2rem, 3vw, 2.75rem);     /* card kpis */
+```
+
+All numerals use `font-variant-numeric: tabular-nums`. Currency symbols scale to 0.8em and baseline-align, or use `font-feature-settings: "sups"` where the face supports it.
+
+#### Small-Caps Label
+
+```css
+--label-meta: 0.6875rem;  /* 11px */
+--label-meta-tracking: 0.12em;
+```
+
+Use `font-feature-settings: "c2sc", "smcp"` if the typeface supports it; else synthesize with uppercase + 0.12em tracking.
+
+#### Body Rhythm
+
+- UI line-height: 1.5
+- Marketing line-height: 1.6
+- Long-form editorial line-height: 1.7
+- Paragraph max width: `max-inline-size: 72ch`
+
+### 11. Illustration Direction
 
 Illustration should support the brand, not overpower it.
 
-#### Preferred Traits
+**Preferred traits** — hand-drawn linework, path motifs, stamp/seal references, route logic, subtle explorer cues, horizon imagery, print texture, limited palette, dot-grid graticule framing.
 
-- hand-drawn linework
-- path motifs
-- stamp/seal references
-- route logic
-- subtle explorer cues
-- horizon imagery
-- print texture
-- limited palette
+**Avoid** — cartoon overload, literal AI robots, overly futuristic UI, excessive detail at small sizes.
 
-#### Avoid
+#### Dot-Grid Micro-Illustrations (Canonical Set)
 
-- cartoon overload
-- literal AI robots
-- overly futuristic UI imagery
-- excessive detail at small sizes
+Seven illustrations, each an SVG component with a `tone` prop. Anchor linework to the 8px dot grid.
 
-### 18. Postcard Storytelling System
+1. **Route curve** — S-curve with endpoint dots. Trip/itinerary stages.
+2. **Bar cluster** — 6–7 vertical bars, one elevated with downward chevron. Distribution views.
+3. **Peaked line** — jagged line graph with dots. Monitoring, latency.
+4. **Fanout** — point fanning to 5–6 targets. Commission, one-to-many.
+5. **Bouncing path** — two arcs meeting the baseline. Claims, retries, handoffs.
+6. **Connected nodes** — 3 rectangles with connecting paths. Integrations, custom flows.
+7. **Binocular field** — two concentric circles with a horizon line. Sendero-native. Discovery, intake, search.
 
-The landing page should use the `sendero-3` postcard series as the strongest storytelling asset.
+On scroll into view, strokes draw left-to-right over 600ms via `useStrokeDraw()`. Reduced-motion safe.
 
-Use the postcards for:
+### 12. Postcard Storytelling System
 
-- route custody and chain-of-action moments
-- escrow, approval, and settlement explanations
-- handoff states between traveler, agency, company, and AI agent
-- above-the-fold or mid-page editorial proof that Sendero is not generic AI SaaS
+The landing page uses the `sendero-3` postcard series: Seal → Tag → Bind → Clear → Settle → Deliver. Put postcards on parchment, not white cards. Let the art sit large enough to inspect grain, borders, and route marks. Postcards are also used inside `<CaseStudyCard>` right-column hero imagery — the vermillion grain reads as a premium editorial photograph.
 
-The postcard sequence should read as:
-
-1. **Seal** — secure the request.
-2. **Tag** — attach traveler and policy context.
-3. **Bind** — bundle proofs, holds, and claims.
-4. **Clear** — approve the itinerary before irreversible action.
-5. **Settle** — reconcile money, rails, and invoices.
-6. **Deliver** — send the final record back to the right parties.
-
-Layout guidance:
-
-- Put postcards on parchment fields, not white cards.
-- Let the art sit large enough to inspect grain, borders, and route marks.
-- Use simple captions under the art; do not over-explain the image inside a framed card.
-- A light asymmetric rotation is acceptable for individual postcards, but do not rotate the binocular mark.
-- Avoid displaying contact sheets with checkerboard backgrounds in production UI; store them as source/reference assets.
-
-### 19. Product UI Patterns
-
-These patterns apply to the authenticated app (workspace, trip inboxes, agent console, ops workspace, trips, money & policy, channels, settings).
+### 13. Product UI Patterns
 
 #### App Shell
 
-- Sidebar, top bar, and status bar sit directly on the parchment field. No borders between them.
-- The three-column layout (list / thread / context) uses whitespace and surface tiers for separation.
-- The workflow/terminal panel floats as its own dark card with rounded corners and the terminal shadow.
+- Outermost frame: body has a radial gradient blending parchment with whispers of sea and sand, plus a 4%-opacity grain overlay.
+- On top: the authenticated app is a single raised card with `--shadow-xl`, rounded `--radius-xl`, `--surface-raised` fill, 24px viewport margin on large screens. The product feels like *a document on a desk*.
+- Inside the card: the three-column layout (sidebar / list / detail) uses whitespace and surface tiers, no borders between regions.
+- The workflow/terminal panel floats as its own dark card with `--shadow-terminal`, rounded `--radius-lg`.
 
 #### Sidebar Items
 
-- Inactive: transparent background, midnight text at 70% opacity.
+- Inactive: transparent, midnight text at 70%.
 - Hover: `--tint-midnight-soft` fill, rounded-md.
-- Active: `--tint-vermillion-soft` fill, vermillion text, rounded-md. No left bar, no border.
+- Active: `--tint-vermillion-soft` fill, vermillion text, rounded-md. Fade in over 160ms on transition. No left bar, no border.
 - Section headers get a subtle `+` expander on the right.
 
 #### List Items (Trip Inbox)
 
-- Each item is a raised card with 12px padding, `--surface-raised`, no border.
+- Each item: raised card, 12px padding, `--surface-raised`, no border.
 - Hover: elevate to `--shadow-lg`.
 - Selected: `--surface-floating`, `--shadow-lg`, plus a 2px vermillion inset on the left edge (pseudo-element, not border).
-- Status chips are pill-shaped, no border, tinted fill:
+- Status chips: pill-shaped, no border, tinted fill:
   - `WEB` → `--tint-sea-soft`, sea text
   - `AWAITING_APPROVAL` → `--tint-sand-soft`, sand text
   - `AI ON` → `--tint-vermillion-soft`, vermillion text
-  - Active/urgent → solid vermillion at full saturation
+  - Urgent → solid vermillion
+
+#### Metric Rows
+
+Use `<MetricRow>` for dashboard KPIs:
+
+- Horizontal row of 4 cells, equal width, 48px vertical / 24px horizontal padding.
+- Oversized numeral (`--numeral-xl`, serif, midnight 100%, tabular-nums).
+- Small-caps label below (`--label-meta`, midnight 60%, tracking-wide).
+- `border-right: var(--hairline)` between cells; last cell none.
+- No card background, no shadow, no outer border. Sits directly on parchment (or inside the app-frame card at section level).
+- Count-up animation on mount via `useCountUp()`, 600ms. Currency fades in instead.
+- Responsive: 2×2 grid below 768px, hairlines both axes.
+
+#### Tabs
+
+**Pill Tabs** (`<PillTabs>`) — horizontal row of label pills, active pill fills solid midnight with warm-white text, slides between positions via Framer Motion `layoutId`, 240ms. No container border.
+
+**Underline Tabs** (`<UnderlineTabs>`) — for editorial surfaces. Plain text labels, active gets a 2px vermillion line beneath, sliding via `layoutId`. Baseline hairline under the row.
+
+**Agent / Human toggle stays a tinted segmented control** — it's a binary operator toggle; sliding pills would be overkill.
 
 #### Steppers
 
-- `Intake → Search → Review → Hold → Pay → Settle` — each step is a small pill.
+`Intake → Search → Review → Hold → Pay → Settle` — each step a small pill.
+
 - Active: vermillion tinted fill with a micro vermillion dot, `--shadow-xs`.
 - Completed: sea tinted fill with a checkmark.
-- Upcoming: transparent, midnight at 60% opacity.
-- Connector lines between steps are midnight at 20% opacity, 1px, dashed only where the path is speculative.
+- Upcoming: transparent, midnight at 60%.
 
 #### Composer
 
-- No top border separating composer from thread. 24px gap instead.
-- Composer is a raised card with `--shadow-sm`, focus raises to `--shadow-md`.
-- Send button is a vermillion pill, solid fill, no border.
+- No top border between composer and thread. 24px gap.
+- Raised card, `--shadow-sm` at rest, `--shadow-md` on focus.
+- On focus, a 1px vermillion-at-40% border fades in over 160ms (the one focus-border in the app).
+- Send button: vermillion pill, solid fill, no border.
 
-#### Segmented Controls
+#### Filter Pill Group
 
-- `Agent | Human`, `EN MX BR AR`, channel switcher: all use the same pattern.
-- Container has `--surface-raised` fill and `--shadow-xs`.
-- Active segment has `--tint-vermillion-soft` fill.
-- No borders anywhere.
+`<FilterPillGroup>` — search input + dropdown pills + action pill, all rounded-full with `--hairline-soft` border on `--surface-raised`. 12px gap. Hover raises pills to `--shadow-xs`.
 
 #### Empty States
 
-- No dashed borders on empty states. Ever.
-- Use `--surface-base` (parchment) inside a raised card, with 32px padding.
-- Center-align a small binocular mark at 20% opacity above the headline.
-- Editorial copy tone: observational, not instructional. E.g., "Start a thread on this trip" > "Click here to start a thread."
+- No dashed borders. Ever.
+- `--surface-base` (parchment) inside a raised card with 32px padding.
+- Small binocular mark at 20% opacity, centered above the headline.
+- Dot grid behind the mark breathes between 30% and 40% opacity over a 4s cycle (pauses under reduced-motion).
+- Editorial copy tone: observational, not instructional.
 
 #### Workflow / Terminal Panel
 
-- Background: `--surface-terminal` (midnight at 97% opacity — parchment whispers through).
-- Rounded 16px, `--shadow-terminal`.
-- Headers (WORKFLOW, NANOPAYMENTS, etc.) in monospace, warm off-white.
-- `RUN` / `STREAM` buttons: pill-shaped, no border. `RUN` uses vermillion tinted fill; `STREAM` uses sea tinted fill.
-- Table rows (`run_id`, `model`, `tools`): no horizontal rules. 8px vertical rhythm, labels at 50% opacity.
-- Comment lines (`// no runs yet`) at 50% opacity, 12px left inset.
+- Background: `--surface-terminal` (midnight at 97%, parchment whispers through). **Never pure black.**
+- Rounded `--radius-lg`, `--shadow-terminal`.
+- Headers in monospace, warm off-white.
+- `RUN` / `STREAM` buttons: pill-shaped, no border. `RUN` vermillion tint, `STREAM` sea tint.
+- Table rows: no horizontal rules, 8px vertical rhythm, labels at 50% opacity.
+- Comment lines at 50% opacity, 12px left inset.
+- Toggleable per trip — operators can show or hide without losing other chrome.
 
 #### Status Bar
 
-- Floats on parchment, no top border.
-- Inline text, dots-separated, monospace, midnight at 60% opacity.
-- Floating pills (`2 Issues`, round action button) use `--shadow-lg` and no border.
+- Floats on the app-frame card, no top border.
+- Inline text, dots-separated, monospace, midnight at 60%.
+- Floating pills (`2 Issues`, round action button) use `--shadow-lg`, no border.
 
-### 20. Brand Tone In Product
+### 14. Marketing Patterns
 
-Sendero should look like it:
+#### Marketing Stat Row
 
-- understands travel deeply
-- reduces chaos
-- guides you with taste
-- sees possibilities before you do
+The hero stat row: no card, no shadow, no background. 4 oversized numerals on parchment, vertical hairlines between cells. 120px vertical padding, 96px whitespace before next section.
 
-It should feel more like a **trusted editorial travel guide with intelligence** than a generic booking engine.
+#### Case Study Card
 
-### 21. Positioning Summary
+`<CaseStudyCard>` — 1fr/1fr grid, columns meeting at a hairline, outer `--hairline` border, rounded `--radius-lg`, overflow hidden. Left column: editorial text with a "CASE STUDY" small-caps pill, large serif headline, "View full case study →" at bottom. Right column: `sendero-3` postcard imagery. Hover elevates the card to `--shadow-md` and scales the image to 1.02 over 400ms.
 
-**Sendero is an intelligent travel brand built around guidance, perspective, and discovery.**
+#### Feature Grid
 
-Its identity should feel warm, distinctive, editorial, and quietly capable.
+`<FeatureGrid variant="hairline">` — 4-column grid, vertical `--hairline-soft` between columns, no card wrappers. Each cell has a dot-grid micro-illustration on top and headline + paragraph below. Scroll-in staggers the stroke-draw animation with 80ms delay between cells.
 
-The binocular icon is the clearest expression of this idea because it represents:
+#### Agent Card
 
-- looking ahead
-- seeing clearly
-- choosing better routes
-- finding meaningful destinations
+`<AgentCard>` — rounded `--radius-lg`, `--hairline` border, no shadow at rest. Top: dot-grid illustration area (`--surface-raised`, dot pattern at 40%, 56px padding). Bottom: 32px content padding, headline with a status pill (BETA, ENTERPRISE, COMING SOON), 2-line description, footer action (plain "Coming soon" at 60% OR a solid midnight rounded-full button with arrow). Vermillion reserved for primary sign-up actions only. Hover elevates to `--shadow-md`, illustration strokes draw.
 
-### 22. Quick Usage Cheat Sheet
+### 15. Borders — The Full Rule Set
 
-**Primary icon color:** Vermillion `#D65438`
-**Alt 1:** Midnight `#1F2A44`
-**Alt 2:** Sea `#0F7C82`
-**Alt 3:** Sand `#B6844E`
+**Allowed:**
+- Form inputs on focus (1px vermillion at 40%)
+- Text inputs and textareas at rest (`--hairline-soft`)
+- Hairlines between cells in `<MetricRow>`, columns in `<FeatureGrid>`, rows in dense tables
+- Outer containers for `<CaseStudyCard>` and `<AgentCard>` (`--hairline`)
+- 2px vermillion inset on selected list items (pseudo-element, not true border)
+- 2px vermillion active-tab underline in `<UnderlineTabs>`
+- Marketing editorial rhythm rules (section transitions)
 
-**Surface tiers:** Parchment base → Parchment Light raised → Warm White floating → Midnight Veil terminal
+**Forbidden:**
+- Sidebar-to-content separators
+- List-to-detail separators
+- Header-to-body separators
+- Top-bar-to-content separators
+- Status-bar-to-content separators
+- Empty-state borders (dashed or otherwise)
+- Panel-internal dividers where whitespace suffices
+- Any pure-black border anywhere
 
-**Shadow scale:** xs → sm → md → lg → xl → terminal
+### 16. Brand Tone In Product
 
-**Primary icon meaning:** discovery + wayfinding + destination intelligence
+Sendero should look like it: understands travel deeply, reduces chaos, guides you with taste, sees possibilities before you do. A trusted editorial travel guide with intelligence.
 
-**Best use cases for the binocular icon:**
+### 17. Positioning Summary
 
-- app icon
-- favicon
-- nav bar mark
-- social avatar
-- onboarding screens
-- product surfaces
-- travel ops views
-- deck cover accent
+**Sendero is an intelligent travel brand built around guidance, perspective, and discovery.** Its identity should feel warm, distinctive, editorial, and quietly capable.
 
-### 23. Two-Line Internal Brand Rule
+### 18. Quick Usage Cheat Sheet
+
+**Colors** — Vermillion `#D65438` · Midnight `#1F2A44` · Sea `#0F7C82` · Sand `#B6844E`
+
+**Surfaces** — Parchment base → Parchment Light raised → Warm White floating → Midnight Veil terminal
+
+**Shadows** — xs → sm → md → lg → xl → terminal
+
+**Hairlines** — warm parchment beige or midnight at 8%, never pure black
+
+**Numerals** — serif display, tabular-nums, paired with small-caps labels
+
+**Active states** — sidebar uses vermillion tint; tab pills use solid midnight; vermillion stays precious
+
+**Primary icon meaning** — discovery + wayfinding + destination intelligence
+
+### 19. Three-Line Internal Brand Rule
 
 **Sendero should feel like an intelligent explorer's mark, not a generic travel app logo.**
 
-**Sendero's product should feel like a calm map-room of floating cards, not a grid of bordered boxes.**
+**Sendero's product should feel like a calm map-room of floating cards on parchment, not a grid of bordered boxes.**
+
+**Hairlines are editorial rhythm; shadows are structure; vermillion is precious.**

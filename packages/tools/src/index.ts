@@ -34,6 +34,7 @@ import { quoteFxTool } from './quote-fx';
 import { rateAgentTool } from './rate-agent';
 import { recommendRestaurantsTool } from './recommend-restaurants';
 import { restaurantRouteCardTool } from './restaurant-route-card';
+import { scanDocumentTool } from './scan-document';
 import { searchFlightsTool } from './search-flights';
 import { searchHotelsTool } from './search-hotels';
 import { sendTokensTool } from './send-tokens';
@@ -78,6 +79,7 @@ export {
   requestFaucetDrip,
 } from './faucet';
 export { generateBookingInvoiceTool } from './generate-booking-invoice';
+export { scanDocumentTool } from './scan-document';
 export {
   type GeocodeTripStopInput,
   type GeocodeTripStopResult,
@@ -233,6 +235,8 @@ export const toolList: ToolDef[] = [
   manageStaysNegotiatedRateTool,
   // Ops helpers
   faucetDripTool,
+  // Multimodal OCR / document extraction
+  scanDocumentTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */

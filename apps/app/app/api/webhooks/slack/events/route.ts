@@ -105,7 +105,8 @@ export async function POST(req: NextRequest) {
   // avoid infinite loops when the agent's own reply re-enters the
   // webhook.
   const ev = parsed.event;
-  if (ev && shouldDispatchToAgent(ev) && userId && ev.text) {
+  const hasContent = Boolean(ev?.text) || Boolean((ev as unknown as { files?: unknown[] })?.files?.length);
+  if (ev && shouldDispatchToAgent(ev) && userId && hasContent) {
     void dispatchAndReply({
       req,
       tenantId: install.tenantId,
@@ -146,6 +147,8 @@ async function dispatchAndReply(args: {
 }): Promise<void> {
   const dispatchUrl = new URL('/api/agent/dispatch', args.req.nextUrl.origin);
 
+  const attachments = await downloadSlackFiles(args.event, args.botToken);
+
   const body: {
     tenantId: string;
     userId: string;
@@ -153,6 +156,13 @@ async function dispatchAndReply(args: {
     text: string;
     locale: string;
     turnId?: string;
+    attachments?: Array<{
+      kind: 'image' | 'document';
+      mediaType: string;
+      data: string;
+      size: number;
+      filename?: string;
+    }>;
   } = {
     tenantId: args.tenantId,
     userId: args.userId,
@@ -161,6 +171,7 @@ async function dispatchAndReply(args: {
     locale: args.locale,
   };
   if (args.eventId) body.turnId = `slack:${args.eventId}`;
+  if (attachments.length > 0) body.attachments = attachments;
 
   const response = await fetch(dispatchUrl, {
     method: 'POST',
@@ -198,6 +209,99 @@ function agentDispatchHeaders() {
     'Content-Type': 'application/json',
     'x-sendero-dispatch-secret': secret,
   };
+}
+
+// ─── Slack file download ───────────────────────────────────────────────
+//
+// Slack files are NOT public — `url_private_download` requires a bearer
+// token. We fetch each file with the install's bot token (same token used
+// for chat.postMessage), enforce the shared 20 MB cap, and forward as
+// base64. Skipped files are logged but never error the dispatch.
+
+const SLACK_ALLOWED_MIME = new Set<string>([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+]);
+const SLACK_MAX_ATTACHMENTS = 4;
+const SLACK_MAX_BYTES = 20 * 1024 * 1024;
+
+interface SlackFile {
+  id?: string;
+  mimetype?: string;
+  url_private_download?: string;
+  url_private?: string;
+  name?: string;
+  size?: number;
+}
+
+async function downloadSlackFiles(
+  event: SlackEvent,
+  botToken: string
+): Promise<
+  Array<{
+    kind: 'image' | 'document';
+    mediaType: string;
+    data: string;
+    size: number;
+    filename?: string;
+  }>
+> {
+  const files = (event as unknown as { files?: SlackFile[] }).files;
+  if (!files?.length) return [];
+
+  const picked = files.slice(0, SLACK_MAX_ATTACHMENTS);
+  const out: Array<{
+    kind: 'image' | 'document';
+    mediaType: string;
+    data: string;
+    size: number;
+    filename?: string;
+  }> = [];
+
+  for (const file of picked) {
+    const mediaType = (file.mimetype ?? '').toLowerCase();
+    const url = file.url_private_download ?? file.url_private;
+    if (!mediaType || !url) continue;
+    if (!SLACK_ALLOWED_MIME.has(mediaType)) {
+      console.warn(`[slack/events] skipping disallowed mime ${mediaType}`);
+      continue;
+    }
+    if (file.size && file.size > SLACK_MAX_BYTES) {
+      console.warn(
+        `[slack/events] skipping file ${file.id ?? ''} — ${file.size} bytes > ${SLACK_MAX_BYTES}`
+      );
+      continue;
+    }
+    try {
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${botToken}` },
+      });
+      if (!response.ok) {
+        console.warn(`[slack/events] file download ${response.status} for ${file.id ?? ''}`);
+        continue;
+      }
+      const buf = await response.arrayBuffer();
+      if (buf.byteLength > SLACK_MAX_BYTES) {
+        console.warn(`[slack/events] downloaded file exceeds cap: ${buf.byteLength}`);
+        continue;
+      }
+      out.push({
+        kind: mediaType.startsWith('image/') ? 'image' : 'document',
+        mediaType,
+        data: Buffer.from(buf).toString('base64'),
+        size: buf.byteLength,
+        ...(file.name ? { filename: file.name } : {}),
+      });
+    } catch (err) {
+      console.error('[slack/events] file download failed:', err);
+    }
+  }
+  return out;
 }
 
 function requestLocale(req: NextRequest): string {

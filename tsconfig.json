@@ -67,6 +67,13 @@
       "@sendero/webhooks": ["./packages/webhooks/src/index.ts"],
       "@sendero/webhooks/*": ["./packages/webhooks/src/*"],
       "@sendero/guest": ["./packages/sendero-guest/src/index.ts"],
+      "@sendero/ocr": ["./packages/sendero-ocr/src/index.ts"],
+      "@sendero/ocr/extract": ["./packages/sendero-ocr/src/extract.ts"],
+      "@sendero/ocr/normalize": ["./packages/sendero-ocr/src/normalize.ts"],
+      "@sendero/ocr/schemas": ["./packages/sendero-ocr/src/schemas/index.ts"],
+      "@sendero/ocr/providers/gemini-multimodal": [
+        "./packages/sendero-ocr/src/providers/gemini-multimodal.ts"
+      ],
       "@sendero/agent": ["./packages/agent/src/index.ts"],
       "@sendero/agent/*": ["./packages/agent/src/*"],
       "@sendero/tools": ["./packages/tools/src/index.ts"],

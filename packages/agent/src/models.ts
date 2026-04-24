@@ -274,6 +274,7 @@ export const TIER_BY_ACTION: Record<string, ModelTier> = {
   modify_booking: 'smart',
   cancel_booking: 'smart',
   settle_split: 'smart',
+  scan_document: 'smart',
 
   confirm_booking: 'fast',
   quote_fx: 'fast',

@@ -54,15 +54,47 @@ export const maxDuration = 60;
 
 const DISPATCH_SECRET_HEADER = 'x-sendero-dispatch-secret';
 
+/** Universal upload cap — mirrors @sendero/whatsapp MAX_MEDIA_BYTES. */
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENTS = 4;
+
+const MediaAttachmentSchema = z
+  .object({
+    kind: z.enum(['image', 'document']),
+    mediaType: z.string().min(1),
+    url: z.string().url().optional(),
+    data: z.string().optional(),
+    filename: z.string().optional(),
+    size: z.number().int().nonnegative().optional(),
+  })
+  .superRefine((a, ctx) => {
+    if (!a.url && !a.data) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Attachment must carry either url or base64 data.',
+      });
+    }
+    if (a.size && a.size > MAX_ATTACHMENT_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Attachment exceeds ${MAX_ATTACHMENT_BYTES} byte cap.`,
+      });
+    }
+  });
+
 const BodySchema = z.object({
   tenantId: z.string().min(1),
   userId: z.string().min(1),
   channel: z.enum(['whatsapp', 'slack', 'web', 'mcp', 'email']),
   tripId: z.string().optional(),
-  text: z.string().min(1).max(4000),
+  // Text may be empty when the traveler only shared an attachment (e.g. a
+  // WhatsApp image with no caption). We require at least one of
+  // (text, attachments) further down.
+  text: z.string().max(4000).default(''),
   locale: z.string().optional(),
   /** Optional — adapters pass their native message id for idempotency. */
   turnId: z.string().optional(),
+  attachments: z.array(MediaAttachmentSchema).max(MAX_ATTACHMENTS).optional(),
 });
 
 const DISPATCH_PERSONA = `${SENDERO_SOUL}
@@ -91,11 +123,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const hasText = body.text.trim().length > 0;
+  const hasAttachments = (body.attachments?.length ?? 0) > 0;
+  if (!hasText && !hasAttachments) {
+    return NextResponse.json(
+      { error: 'empty_turn', message: 'Supply `text` or at least one attachment.' },
+      { status: 400 }
+    );
+  }
+
   const distinctId = hashDistinctId(body.userId);
   const locale = body.locale ?? requestLocale(req);
   const tools = buildAiSdkTools(toolList, {
     traveler: { userId: body.userId, tenantId: body.tenantId },
   });
+
+  // Narrow the zod-inferred shape to the AgentMediaAttachment contract —
+  // the superRefine above already guarantees every entry has kind + mediaType
+  // and at least one of (url, data). Casting keeps the compiler honest at
+  // the call site without a second round of explicit if/else pruning.
+  const normalizedAttachments = (body.attachments ?? []).map(a => ({
+    kind: a.kind as 'image' | 'document',
+    mediaType: a.mediaType as string,
+    ...(a.url ? { url: a.url } : {}),
+    ...(a.data ? { data: a.data } : {}),
+    ...(typeof a.size === 'number' ? { size: a.size } : {}),
+    ...(a.filename ? { filename: a.filename } : {}),
+  }));
 
   const agentInput: AgentInput = {
     actor: {
@@ -107,6 +161,9 @@ export async function POST(req: NextRequest) {
     channel: body.channel as Channel,
     text: body.text,
     turnId: body.turnId ?? `${body.channel}:${body.userId}:${Date.now()}`,
+    // Payload bytes are NEVER logged. Analytics capture is already below
+    // and only touches non-sensitive dimensions.
+    ...(normalizedAttachments.length ? { attachments: normalizedAttachments } : {}),
   };
 
   capture({
@@ -117,7 +174,10 @@ export async function POST(req: NextRequest) {
       channel: body.channel,
       locale,
       tripId: body.tripId ?? null,
-      messageType: 'text',
+      messageType: hasAttachments ? 'multimodal' : 'text',
+      attachmentCount: body.attachments?.length ?? 0,
+      // Log only shape metadata — never the bytes.
+      attachmentMimeTypes: body.attachments?.map(a => a.mediaType).join(',') ?? null,
     },
   });
 

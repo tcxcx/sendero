@@ -83,6 +83,9 @@ export const TOOL_PRICING: Record<string, string> = {
 
   // Dev/test helper
   faucet_drip: '0.0005',
+
+  // Multimodal OCR — one Gemini Pro multimodal call per invocation
+  scan_document: '0.01',
 };
 
 /** USDC has 6 decimals on every chain. */

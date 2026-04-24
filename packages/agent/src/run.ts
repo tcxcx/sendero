@@ -30,7 +30,8 @@ import { listWorkflows } from '@sendero/workflows';
 import type { LanguageModel, ToolSet } from 'ai';
 import { generateText, stepCountIs } from 'ai';
 
-import type { AgentInput, AgentOutput } from './channels';
+import type { AgentInput, AgentOutput, AgentMediaAttachment } from './channels';
+import { isMediaAttachment } from './channels';
 import { buildIdempotencyKey, isDuplicateKeyError } from './idempotency';
 import {
   type AgentProviderOptions,
@@ -152,18 +153,44 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
   //    (or VERCEL_OIDC_TOKEN) is set, AI SDK auto-routes through the
   //    Vercel AI Gateway and honors providerOptions.gateway.order for
   //    automatic fallback across providers.
-  const tier: ModelTier = args.tier ?? 'smart';
+  //
+  //    Multimodal turns: when the user message carries attachments, we
+  //    construct a multi-part user message so Gemini (or any multimodal
+  //    provider) sees both the image/document and the text. We also
+  //    automatically promote to the `smart` tier — OCR benefits from
+  //    Pro-class reasoning on ambiguous layouts.
+  const mediaAttachments = (input.attachments ?? []).filter(isMediaAttachment);
+  const hasMedia = mediaAttachments.length > 0;
+  const tier: ModelTier = hasMedia ? 'smart' : (args.tier ?? 'smart');
   const providerOptions: AgentProviderOptions | undefined =
     typeof args.model === 'string' ? buildProviderOptions(tier) : undefined;
-  const result = await generateText({
-    model: args.model,
-    system: systemPrompt,
-    prompt: input.text,
-    tools: args.tools,
-    stopWhen: stepCountIs(4),
-    maxRetries: 2,
-    providerOptions,
-  });
+  const result = hasMedia
+    ? await generateText({
+        model: args.model,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              ...mediaAttachments.map(toFilePart),
+              ...(input.text ? [{ type: 'text' as const, text: input.text }] : []),
+            ],
+          },
+        ],
+        tools: args.tools,
+        stopWhen: stepCountIs(4),
+        maxRetries: 2,
+        providerOptions,
+      })
+    : await generateText({
+        model: args.model,
+        system: systemPrompt,
+        prompt: input.text,
+        tools: args.tools,
+        stopWhen: stepCountIs(4),
+        maxRetries: 2,
+        providerOptions,
+      });
 
   const latencyMs = Date.now() - startedAt;
   const trail = (result.toolCalls ?? []).map(tc => ({
@@ -241,6 +268,33 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Turn an AgentMediaAttachment into an AI SDK v6 file content part.
+ * Prefers the raw URL (cheaper — Gemini fetches it server-side) and
+ * falls back to inline base64 data when the adapter downloaded the
+ * payload itself (e.g. WhatsApp media must be pulled with a bearer
+ * token, so the URL isn't publicly fetchable).
+ */
+function toFilePart(attachment: AgentMediaAttachment): {
+  type: 'file';
+  data: string;
+  mediaType: string;
+  filename?: string;
+} {
+  const payload = attachment.url ?? attachment.data ?? '';
+  if (!payload) {
+    throw new Error(
+      `Attachment (${attachment.kind}/${attachment.mediaType}) has neither url nor data`
+    );
+  }
+  return {
+    type: 'file',
+    data: payload,
+    mediaType: attachment.mediaType,
+    ...(attachment.filename ? { filename: attachment.filename } : {}),
+  };
+}
 
 function subjectKeyFromActor(input: AgentInput): string {
   // Simple default: channel:userId. Consumers can override via meta.subjectKey.
