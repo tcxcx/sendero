@@ -12,9 +12,10 @@
 import { useEffect, useState } from 'react';
 import { LandingHero } from './hero';
 import { ProfileGate } from './profile-gate';
-import { ConsoleBar, FooterRail } from './ui';
+import { ConsoleBar } from './ui';
 import { ChatCol } from './chat-col';
 import { Stage } from './stage';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { WorkflowLog } from './workflow-log';
 import { SwapDialog } from './swap-dialog';
 import { SendDialog } from './send-dialog';
@@ -23,7 +24,19 @@ import { DepositDialog } from './deposit-dialog';
 import { hydrateFromStorage, subscribePersist, useSendero } from './store';
 import { refreshTreasury } from './actions';
 
-export function SenderoApp() {
+export interface SenderoAppProps {
+  /**
+   * 'passkey' (default) — public root flow: LandingHero pre-auth,
+   * ProfileGate post-auth.
+   * 'bypass' — authenticated product shell (e.g. /app/console) where a
+   * Clerk-authed operator is the user. Skip LandingHero + ProfileGate
+   * because the operator isn't the traveler for Duffel bookings; those
+   * use the trip's traveler data.
+   */
+  gate?: 'passkey' | 'bypass';
+}
+
+export function SenderoApp({ gate = 'passkey' }: SenderoAppProps = {}) {
   const showWorkflow = useSendero(s => s.showWorkflow);
   const userAuth = useSendero(s => s.userAuth);
 
@@ -50,7 +63,7 @@ export function SenderoApp() {
     return () => clearInterval(iv);
   }, [userAuth]);
 
-  if (!userAuth) {
+  if (gate === 'passkey' && !userAuth) {
     return (
       <>
         <LandingHero />
@@ -59,8 +72,12 @@ export function SenderoApp() {
     );
   }
 
-  return (
-    <ProfileGate>
+  // TooltipProvider wraps the whole workspace so any descendant can drop
+  // in a <Tooltip> without re-establishing a provider. delayDuration: 200
+  // = tight enough to feel responsive on hover, slow enough that drive-by
+  // pointer passes don't flash tooltips.
+  const workspace = (
+    <TooltipProvider delayDuration={200} skipDelayDuration={300}>
       <div className="app" data-screen-label="Agent Console">
         <ConsoleBar />
 
@@ -72,8 +89,6 @@ export function SenderoApp() {
           <Stage />
           {showWorkflow && <WorkflowLog />}
         </div>
-
-        <FooterRail />
       </div>
 
       <TweaksToggle />
@@ -82,8 +97,12 @@ export function SenderoApp() {
       <SendDialog />
       <BridgeDialog />
       <DepositDialog />
-    </ProfileGate>
+    </TooltipProvider>
   );
+
+  if (gate === 'bypass') return workspace;
+
+  return <ProfileGate>{workspace}</ProfileGate>;
 }
 
 function SettleCelebration() {
@@ -231,26 +250,34 @@ function TweaksToggle() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(!open)}
-        aria-label="Tweaks"
-        style={{
-          position: 'fixed',
-          right: 16,
-          bottom: 44,
-          zIndex: 99,
-          padding: '8px 12px',
-          border: '1.5px solid var(--ink)',
-          background: 'var(--bg-elev)',
-          color: 'var(--ink)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-        }}
-      >
-        ◇ Tweaks
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={() => setOpen(!open)}
+            aria-label="Tweaks"
+            style={{
+              position: 'fixed',
+              right: 16,
+              bottom: 44,
+              zIndex: 99,
+              padding: '8px 12px',
+              border: '1.5px solid var(--ink)',
+              background: 'var(--bg-elev)',
+              color: 'var(--ink)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              cursor: 'pointer',
+            }}
+          >
+            ◇ Tweaks
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="font-mono text-[10px] tracking-wider">
+          toggle theme + workflow terminal
+        </TooltipContent>
+      </Tooltip>
 
       {open && (
         <div className="tweaks-panel">

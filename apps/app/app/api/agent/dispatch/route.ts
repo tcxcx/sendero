@@ -9,28 +9,40 @@
  *
  * This route is intentionally thin: parse → build stores → runTurn →
  * capture analytics → return AgentOutput. No channel-specific logic.
+ *
+ * Auth is intentionally not Clerk session auth. Channel webhooks are already
+ * signature-verified before they fan in, then forward a shared internal
+ * secret here so unauthenticated travelers can still message from WhatsApp,
+ * Slack, email, or MCP without exposing an open LLM billing endpoint.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { anthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import {
   type AgentInput,
   type Channel,
   type ConversationState,
+  directProviderCascade,
   directProviderModel,
   gatewayConfigured,
+  gatewayErrorAllowsDirectRetry,
+  geminiDirectModelId,
+  googleGenerativeAiKey,
   type ModelTier,
   runAgentTurn,
   type SessionStore,
   selectModel,
+  SENDERO_SOUL,
 } from '@sendero/agent';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
 import type { CapStore } from '@sendero/billing/caps';
 import type { MeterEventInput, MeterStore } from '@sendero/billing/meter';
 import type { BillingSegment } from '@sendero/billing/pricing';
 import { prisma } from '@sendero/database';
+import { detectLocale, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 import type { LanguageModel } from 'ai';
@@ -40,23 +52,54 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+const DISPATCH_SECRET_HEADER = 'x-sendero-dispatch-secret';
+
+/** Universal upload cap — mirrors @sendero/whatsapp MAX_MEDIA_BYTES. */
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENTS = 4;
+
+const MediaAttachmentSchema = z
+  .object({
+    kind: z.enum(['image', 'document']),
+    mediaType: z.string().min(1),
+    url: z.string().url().optional(),
+    data: z.string().optional(),
+    filename: z.string().optional(),
+    size: z.number().int().nonnegative().optional(),
+  })
+  .superRefine((a, ctx) => {
+    if (!a.url && !a.data) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Attachment must carry either url or base64 data.',
+      });
+    }
+    if (a.size && a.size > MAX_ATTACHMENT_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Attachment exceeds ${MAX_ATTACHMENT_BYTES} byte cap.`,
+      });
+    }
+  });
+
 const BodySchema = z.object({
   tenantId: z.string().min(1),
   userId: z.string().min(1),
   channel: z.enum(['whatsapp', 'slack', 'web', 'mcp', 'email']),
   tripId: z.string().optional(),
-  text: z.string().min(1).max(4000),
+  // Text may be empty when the traveler only shared an attachment (e.g. a
+  // WhatsApp image with no caption). We require at least one of
+  // (text, attachments) further down.
+  text: z.string().max(4000).default(''),
   locale: z.string().optional(),
   /** Optional — adapters pass their native message id for idempotency. */
   turnId: z.string().optional(),
+  attachments: z.array(MediaAttachmentSchema).max(MAX_ATTACHMENTS).optional(),
 });
 
-const SENDERO_PERSONA = `
-You are Sendero, a concise AI travel agent. Prefer concrete next actions over long
-explanations. When you call a tool, say one sentence about why. Respond in the traveler's locale.
-Never ask for seed phrases or passwords.
+const DISPATCH_PERSONA = `${SENDERO_SOUL}
 
-Routing rules:
+## Routing rules
 - Corporate buyers saying "fund a trip", "give my employee a budget", or "prefund this contractor"
   → sendero.guest_prefund.
 - Agencies saying "set up a cohort", "fund these 50 people" → sendero.agency_cohort.
@@ -67,6 +110,9 @@ Routing rules:
 `;
 
 export async function POST(req: NextRequest) {
+  const authError = authorizeDispatch(req);
+  if (authError) return authError;
+
   let body: z.infer<typeof BodySchema>;
   try {
     body = BodySchema.parse(await req.json());
@@ -77,21 +123,47 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const hasText = body.text.trim().length > 0;
+  const hasAttachments = (body.attachments?.length ?? 0) > 0;
+  if (!hasText && !hasAttachments) {
+    return NextResponse.json(
+      { error: 'empty_turn', message: 'Supply `text` or at least one attachment.' },
+      { status: 400 }
+    );
+  }
+
   const distinctId = hashDistinctId(body.userId);
+  const locale = body.locale ?? requestLocale(req);
   const tools = buildAiSdkTools(toolList, {
     traveler: { userId: body.userId, tenantId: body.tenantId },
   });
+
+  // Narrow the zod-inferred shape to the AgentMediaAttachment contract —
+  // the superRefine above already guarantees every entry has kind + mediaType
+  // and at least one of (url, data). Casting keeps the compiler honest at
+  // the call site without a second round of explicit if/else pruning.
+  const normalizedAttachments = (body.attachments ?? []).map(a => ({
+    kind: a.kind as 'image' | 'document',
+    mediaType: a.mediaType as string,
+    ...(a.url ? { url: a.url } : {}),
+    ...(a.data ? { data: a.data } : {}),
+    ...(typeof a.size === 'number' ? { size: a.size } : {}),
+    ...(a.filename ? { filename: a.filename } : {}),
+  }));
 
   const agentInput: AgentInput = {
     actor: {
       tenantId: body.tenantId,
       userId: body.userId,
       tripId: body.tripId ?? null,
-      locale: body.locale,
+      locale,
     },
     channel: body.channel as Channel,
     text: body.text,
     turnId: body.turnId ?? `${body.channel}:${body.userId}:${Date.now()}`,
+    // Payload bytes are NEVER logged. Analytics capture is already below
+    // and only touches non-sensitive dimensions.
+    ...(normalizedAttachments.length ? { attachments: normalizedAttachments } : {}),
   };
 
   capture({
@@ -100,9 +172,12 @@ export async function POST(req: NextRequest) {
     properties: {
       tenantId: body.tenantId,
       channel: body.channel,
-      locale: body.locale,
+      locale,
       tripId: body.tripId ?? null,
-      messageType: 'text',
+      messageType: hasAttachments ? 'multimodal' : 'text',
+      attachmentCount: body.attachments?.length ?? 0,
+      // Log only shape metadata — never the bytes.
+      attachmentMimeTypes: body.attachments?.map(a => a.mediaType).join(',') ?? null,
     },
   });
 
@@ -113,24 +188,65 @@ export async function POST(req: NextRequest) {
       {
         error: 'no_llm_configured',
         message:
-          'Set AI_GATEWAY_API_KEY (preferred) or ANTHROPIC_API_KEY or OPENAI_API_KEY before running the agent.',
+          'Set AI_GATEWAY_API_KEY (preferred), or GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY, or OPENAI_API_KEY, or ANTHROPIC_API_KEY before running the agent.',
       },
       { status: 503 }
     );
   }
 
-  const result = await runAgentTurn({
-    input: agentInput,
-    model: modelHandle,
-    tier,
-    tools,
-    capStore: makeCapStore(),
-    meterStore: makeMeterStore(),
-    sessionStore: makeSessionStore(),
-    resolveSegment,
-    loadTrip,
-    persona: SENDERO_PERSONA,
-  });
+  let result: Awaited<ReturnType<typeof runAgentTurn>>;
+  try {
+    result = await runAgentTurn({
+      input: agentInput,
+      model: modelHandle,
+      tier,
+      tools,
+      capStore: makeCapStore(),
+      meterStore: makeMeterStore(),
+      sessionStore: makeSessionStore(),
+      resolveSegment,
+      loadTrip,
+      persona: DISPATCH_PERSONA,
+    });
+  } catch (err) {
+    const retryModels = gatewayErrorAllowsDirectRetry(err) ? resolveDirectModels(tier) : [];
+    let retryError: unknown = null;
+    for (const retryModel of retryModels) {
+      try {
+        console.warn(
+          `[agent/dispatch] gateway failed; retrying direct provider ${retryModel.label}.`
+        );
+        result = await runAgentTurn({
+          input: agentInput,
+          model: retryModel.model,
+          tier,
+          tools,
+          capStore: makeCapStore(),
+          meterStore: makeMeterStore(),
+          sessionStore: makeSessionStore(),
+          resolveSegment,
+          loadTrip,
+          persona: DISPATCH_PERSONA,
+        });
+        retryError = null;
+        break;
+      } catch (directErr) {
+        retryError = directErr;
+        console.error(`[agent/dispatch] direct retry failed (${retryModel.label}):`, directErr);
+      }
+    }
+
+    if (retryError) {
+      const message = retryError instanceof Error ? retryError.message : String(retryError);
+      return NextResponse.json({ error: 'agent_turn_failed', message }, { status: 500 });
+    }
+
+    if (!result) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[agent/dispatch] runAgentTurn failed:', err);
+      return NextResponse.json({ error: 'agent_turn_failed', message }, { status: 500 });
+    }
+  }
 
   if (!result.blocked) {
     capture({
@@ -139,7 +255,7 @@ export async function POST(req: NextRequest) {
       properties: {
         tenantId: body.tenantId,
         channel: body.channel,
-        locale: body.locale,
+        locale,
         tripId: body.tripId ?? null,
         latencyMs: result.latencyMs,
       },
@@ -170,6 +286,33 @@ export async function POST(req: NextRequest) {
     latencyMs: result.latencyMs,
     billed: result.billed,
   });
+}
+
+function requestLocale(req: NextRequest): string {
+  return detectLocale({
+    cookie: req.cookies.get(LOCALE_COOKIE_NAME)?.value,
+    acceptLanguage: req.headers.get('x-sendero-locale') ?? req.headers.get('accept-language'),
+    country: req.headers.get('x-vercel-ip-country') ?? req.headers.get('cf-ipcountry'),
+  });
+}
+
+function authorizeDispatch(req: NextRequest): NextResponse | null {
+  const expected = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET;
+  if (!expected) {
+    return NextResponse.json(
+      {
+        error: 'dispatch_secret_missing',
+        message: 'Set AGENT_DISPATCH_SECRET or CRON_SECRET before using /api/agent/dispatch.',
+      },
+      { status: 503 }
+    );
+  }
+
+  const bearer = req.headers.get('authorization');
+  const header = req.headers.get(DISPATCH_SECRET_HEADER);
+  if (header === expected || bearer === `Bearer ${expected}`) return null;
+
+  return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 }
 
 // ─── store adapters — thin Prisma bindings ───────────────────────────
@@ -268,19 +411,47 @@ function makeSessionStore(): SessionStore {
  *   1. If Vercel AI Gateway is configured → pass the gateway string
  *      form (`'anthropic/claude-opus-4.6'`); AI SDK auto-routes and
  *      providerOptions.gateway.order drives fallback.
- *   2. Else fall back to a direct provider SDK when that provider's
- *      key is present (Anthropic, then OpenAI).
+ *   2. Else fall back to direct SDKs in cascade order **Gemini → OpenAI →
+ *      Anthropic** (see `directProviderCascade` in `@sendero/agent`).
  *   3. Else return null and the route 503s with a clear error.
  */
 function resolveModel(tier: ModelTier): LanguageModel | string | null {
   if (gatewayConfigured()) {
     return selectModel({ tier }).model;
   }
+  return resolveDirectModel(tier);
+}
+
+function resolveDirectModel(tier: ModelTier): LanguageModel | null {
   const direct = directProviderModel(tier);
   if (!direct) return null;
-  const [provider, model] = direct.split('/') as [string, string];
-  if (provider === 'anthropic') return anthropic(model);
-  if (provider === 'openai') return openai(model);
+  return directModelFromString(direct);
+}
+
+function resolveDirectModels(tier: ModelTier): Array<{ label: string; model: LanguageModel }> {
+  const seen = new Set<string>();
+  const models: Array<{ label: string; model: LanguageModel }> = [];
+  for (const candidate of directProviderCascade(tier)) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    const model = directModelFromString(candidate);
+    if (model) models.push({ label: candidate, model });
+  }
+  return models;
+}
+
+function directModelFromString(direct: string): LanguageModel | null {
+  const [provider, modelId] = direct.split('/') as [string, string];
+  if (provider === 'google') {
+    const key = googleGenerativeAiKey();
+    if (!key) return null;
+    const google = createGoogleGenerativeAI({ apiKey: key });
+    return google(geminiDirectModelId(direct));
+  }
+  if (provider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) return null;
+  if (provider === 'openai' && !process.env.OPENAI_API_KEY) return null;
+  if (provider === 'anthropic') return anthropic(modelId);
+  if (provider === 'openai') return openai(modelId);
   return null;
 }
 

@@ -10,7 +10,8 @@
     "./sitemap": "./src/sitemap.ts",
     "./robots": "./src/robots.ts",
     "./metadata": "./src/metadata.ts",
-    "./jsonld": "./src/jsonld.ts"
+    "./jsonld": "./src/jsonld.ts",
+    "./clerk-allowed-origins": "./src/clerk-allowed-origins.ts"
   },
   "peerDependencies": {
     "@sendero/locale": "*"

@@ -12,8 +12,8 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 interface Required {
   /** Env var name. */
@@ -186,6 +186,20 @@ interface Gap {
   tried?: string[];
 }
 
+function assertProductionClerkLiveKeys(): void {
+  if (process.env.SKIP_ENV_VALIDATION === '1') return;
+  if (process.env.VERCEL_ENV !== 'production') return;
+  const sk = process.env.CLERK_SECRET_KEY ?? '';
+  const pk = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
+  if (!sk && !pk) return;
+  if (sk.startsWith('sk_test_') || pk.startsWith('pk_test_')) {
+    console.error(
+      '[sendero/env] ✖  Vercel Production (VERCEL_ENV=production) must use Clerk live API keys (sk_live_…, pk_live_…). In Clerk Dashboard → API Keys, switch to Production and copy those keys into the Production environment on Vercel.'
+    );
+    process.exit(1);
+  }
+}
+
 export function validate(): { ok: true } | { ok: false; gaps: Gap[] } {
   if (process.env.SKIP_ENV_VALIDATION === '1') {
     return { ok: true };
@@ -204,6 +218,7 @@ export function validate(): { ok: true } | { ok: false; gaps: Gap[] } {
 function main() {
   const result = validate();
   if (result.ok === true) {
+    assertProductionClerkLiveKeys();
     // eslint-disable-next-line no-console
     console.log('[sendero/env] ✔  all required variables present');
     return;

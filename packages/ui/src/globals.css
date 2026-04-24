@@ -1,27 +1,119 @@
 @import "tailwindcss";
 @config "../tailwind.config.ts";
+@import "./motion.css";
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --sendero-vermillion: #d65438;
+    --sendero-midnight: #1f2a44;
+    --sendero-sea: #0f7c82;
+    --sendero-sand: #b6844e;
+    --sendero-parchment: #eedcc7;
+    --sendero-paper: #eedcc7;
+    --sendero-cream: #eedcc7;
+    --sendero-paper-elevated: #f5e7d6;
+    --sendero-charcoal: #111111;
+    --ink: #fb542b;
+
+    --background: 32 53% 86%;
     --foreground: 0 0% 4%;
-    --primary: 14 95% 58%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
+    --primary: 11 66% 53%;
+    --primary-foreground: 33 100% 96%;
+    --secondary: 34 61% 90%;
     --secondary-foreground: 0 0% 4%;
-    --muted: 0 0% 96%;
+    --muted: 34 51% 88%;
     --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
+    --accent: 34 51% 88%;
     --accent-foreground: 0 0% 4%;
     --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 91%;
-    --input: 0 0% 91%;
-    --ring: 14 95% 58%;
+    --destructive-foreground: 33 100% 96%;
+    --border: 33 35% 76%;
+    --input: 33 35% 76%;
+    --ring: 11 66% 53%;
     --radius: 0.25rem;
-    --card: 0 0% 100%;
+    --card: 34 61% 90%;
     --card-foreground: 0 0% 4%;
-    --popover: 0 0% 100%;
+    --popover: 34 61% 90%;
     --popover-foreground: 0 0% 4%;
+
+    /* =====================================================
+       Sendero surface + shadow system (see DESIGN.md §7).
+       Hierarchy comes from elevation, not outlines.
+       ===================================================== */
+
+    /* Three-tier surface palette on parchment field. */
+    --surface-base: #eedcc7;
+    --surface-raised: #f7efe4;
+    --surface-floating: #fdfbf7;
+    --surface-terminal: rgba(31, 42, 68, 0.97);
+
+    /* Midnight-tinted shadows — never pure black. */
+    --shadow-xs: 0 1px 2px rgba(31, 42, 68, 0.04);
+    --shadow-sm: 0 1px 2px rgba(31, 42, 68, 0.04), 0 4px 12px -6px rgba(31, 42, 68, 0.06);
+    --shadow-md: 0 1px 2px rgba(31, 42, 68, 0.04), 0 8px 24px -12px rgba(31, 42, 68, 0.08);
+    --shadow-lg: 0 2px 4px rgba(31, 42, 68, 0.06), 0 16px 40px -16px rgba(31, 42, 68, 0.14);
+    --shadow-xl: 0 2px 4px rgba(31, 42, 68, 0.06), 0 24px 48px -20px rgba(31, 42, 68, 0.18);
+    --shadow-terminal: 0 2px 4px rgba(31, 42, 68, 0.12), 0 24px 48px -20px rgba(31, 42, 68, 0.35);
+
+    /* Tints — only for active-state fills, chip backgrounds, hover.
+       Never for primary surfaces. */
+    --tint-vermillion-soft: rgba(214, 84, 56, 0.1);
+    --tint-vermillion-medium: rgba(214, 84, 56, 0.18);
+    --tint-sea-soft: rgba(15, 124, 130, 0.1);
+    --tint-sand-soft: rgba(182, 132, 78, 0.12);
+    --tint-midnight-soft: rgba(31, 42, 68, 0.04);
+    --tint-midnight-medium: rgba(31, 42, 68, 0.08);
+
+    /* Named radius scale used across product surfaces. */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+
+    /* Hairlines — editorial rhythm, never structural (DESIGN.md §9). */
+    --hairline-color: #d8c1a7;
+    --hairline-color-soft: rgba(31, 42, 68, 0.08);
+    --hairline-color-strong: rgba(31, 42, 68, 0.14);
+    --hairline: 1px solid var(--hairline-color);
+    --hairline-soft: 1px solid var(--hairline-color-soft);
+    --hairline-strong: 1px solid var(--hairline-color-strong);
+
+    /* Dotted grid — micro-illustration graticule. */
+    --dot-grid-color: rgba(31, 42, 68, 0.18);
+    --dot-grid-size: 8px;
+    --dot-grid-pattern:
+      radial-gradient(circle, var(--dot-grid-color) 1px, transparent 1px) 0 0 / var(--dot-grid-size)
+      var(--dot-grid-size);
+
+    /* Editorial numeral scale — Handle-inspired, adapted to Sendero. */
+    --numeral-xl: clamp(3.5rem, 6vw, 5.5rem);
+    --numeral-lg: clamp(2.75rem, 4.5vw, 4rem);
+    --numeral-md: clamp(2rem, 3vw, 2.75rem);
+
+    /* Small-caps label — 11px, tracking-wide. */
+    --label-meta: 0.6875rem;
+    --label-meta-tracking: 0.12em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --surface-transition: none;
+    }
+  }
+  :root {
+    --surface-transition:
+      box-shadow 240ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms
+      cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  ::selection {
+    background: var(--ink);
+    color: #fafaf7;
+    text-shadow: none;
+  }
+  ::-moz-selection {
+    background: var(--ink);
+    color: #fafaf7;
+    text-shadow: none;
   }
 }

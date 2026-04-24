@@ -17,17 +17,39 @@
  * Vercel Edge, Deno Deploy, or plain Bun on a VM.
  */
 
+import { buildLlmsTxt, buildSenderoEdgeLlms } from '@sendero/llms';
+import {
+  buildRobots,
+  buildSitemap,
+  SENDERO_EDGE_ROUTES,
+  serializeRobots,
+  serializeSitemap,
+} from '@sendero/seo';
+import { toolList } from '@sendero/tools';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { buildLlmsTxt, buildSenderoEdgeLlms } from '@sendero/llms';
-import { toolList } from '@sendero/tools';
-import { mountMcp } from './adapters/mcp';
-import { mountWhatsApp } from './adapters/whatsapp';
-import { mountSlack } from './adapters/slack';
+
 import { mountDiscord } from './adapters/discord';
+import { mountMcp } from './adapters/mcp';
 import { mountPaidTools } from './adapters/paid-tools';
+import { mountSlack } from './adapters/slack';
+import { mountWhatsApp } from './adapters/whatsapp';
 
 const app = new Hono();
+const edgeOrigin =
+  process.env.NEXT_PUBLIC_SENDERO_EDGE_URL ??
+  process.env.SENDERO_EDGE_URL ??
+  'https://edge.sendero.travel';
+
+function surfaceOrigins() {
+  return {
+    appOrigin: process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.sendero.travel',
+    marketingOrigin: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://sendero.travel',
+    helpOrigin: process.env.NEXT_PUBLIC_HELP_URL ?? 'https://help.sendero.travel',
+    docsOrigin: process.env.NEXT_PUBLIC_DOCS_URL ?? 'https://docs.sendero.travel',
+    edgeOrigin,
+  };
+}
 
 app.use(
   '*',
@@ -62,13 +84,46 @@ app.get('/', c =>
 app.get('/llms.txt', c => {
   c.header('Content-Type', 'text/plain; charset=utf-8');
   c.header('Cache-Control', 'public, max-age=300, s-maxage=3600');
-  return c.body(buildLlmsTxt(buildSenderoEdgeLlms()));
+  return c.body(buildLlmsTxt(buildSenderoEdgeLlms(surfaceOrigins())));
 });
 
 app.get('/.well-known/llms.txt', c => {
   c.header('Content-Type', 'text/plain; charset=utf-8');
   c.header('Cache-Control', 'public, max-age=300, s-maxage=3600');
-  return c.body(buildLlmsTxt(buildSenderoEdgeLlms()));
+  return c.body(buildLlmsTxt(buildSenderoEdgeLlms(surfaceOrigins())));
+});
+
+app.get('/robots.txt', c => {
+  c.header('Content-Type', 'text/plain; charset=utf-8');
+  c.header('Cache-Control', 'public, max-age=300, s-maxage=3600');
+
+  return c.body(
+    serializeRobots(
+      buildRobots({
+        siteUrl: edgeOrigin,
+        allow: ['/', '/llms.txt', '/.well-known/llms.txt', '/mcp', '/tools'],
+        disallow: ['/whatsapp', '/slack', '/discord', '/api/webhooks/', '/admin/'],
+        agentAllow: ['/', '/llms.txt', '/.well-known/llms.txt', '/mcp', '/tools'],
+        agentDisallow: ['/whatsapp', '/slack', '/discord', '/api/webhooks/', '/admin/'],
+      })
+    )
+  );
+});
+
+app.get('/sitemap.xml', c => {
+  c.header('Content-Type', 'application/xml; charset=utf-8');
+  c.header('Cache-Control', 'public, max-age=300, s-maxage=3600');
+
+  return c.body(
+    serializeSitemap(
+      buildSitemap({
+        siteUrl: edgeOrigin,
+        routes: SENDERO_EDGE_ROUTES,
+        locales: ['en-US'],
+        defaultLocale: 'en-US',
+      })
+    )
+  );
 });
 
 mountMcp(app);

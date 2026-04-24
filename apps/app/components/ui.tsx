@@ -7,14 +7,33 @@
  * row. StepRail, ErrorBanner, FooterRail unchanged.
  */
 
+import type { ReactNode } from 'react';
+
 import Link from 'next/link';
 import { useSendero, deriveStep } from './store';
 import { AgentChip } from './agent-chip';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { WalletDropdown } from './wallet-dropdown';
 
 /* ─── ConsoleBar ────────────────────────────────────────────────────────── */
 
-export function ConsoleBar() {
+export interface ConsoleBarProps {
+  /** Breadcrumb label. Defaults to "Agent console". */
+  crumb?: string;
+  /** Breadcrumb link target. Defaults to "/". */
+  crumbHref?: string;
+  /** Optional secondary crumb (e.g. trip title) rendered after the primary. */
+  subCrumb?: string;
+  /** Optional slot rendered in the middle area (e.g. a panel toggle). */
+  trailingSlot?: ReactNode;
+}
+
+export function ConsoleBar({
+  crumb = 'Agent console',
+  crumbHref = '/',
+  subCrumb,
+  trailingSlot,
+}: ConsoleBarProps = {}) {
   const traveler = useSendero(s => s.traveler);
   const status = useSendero(s => s.status);
   const search = useSendero(s => s.search);
@@ -34,18 +53,41 @@ export function ConsoleBar() {
       {/* LEFT: brand + breadcrumb nav */}
       <div className="cbar-left">
         <Link href="/" className="cbar-brand" aria-label="Sendero home">
-          <span className="cbar-mark" aria-hidden="true" />
+          <img
+            alt=""
+            aria-hidden="true"
+            className="cbar-mark"
+            decoding="async"
+            src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
+          />
           <span className="cbar-word">SENDERO</span>
         </Link>
         <span className="cbar-sep">/</span>
-        <Link href="/" className="cbar-crumb">
-          Agent console
+        <Link href={crumbHref} className="cbar-crumb">
+          {crumb}
         </Link>
-        <span className="cbar-pulse" aria-hidden="true" />
-        <span className="cbar-active">agent · active</span>
+        {subCrumb ? (
+          <>
+            <span className="cbar-sep">/</span>
+            <span className="cbar-crumb cbar-crumb-sub" title={subCrumb}>
+              {subCrumb}
+            </span>
+          </>
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cbar-pulse-wrap" tabIndex={0}>
+              <span className="cbar-pulse" aria-hidden="true" />
+              <span className="cbar-active">agent · active</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="font-mono text-[10px] tracking-wider">
+            agent is online and ready to take a turn
+          </TooltipContent>
+        </Tooltip>
       </div>
 
-      {/* MIDDLE: contextual status chip */}
+      {/* MIDDLE: contextual status chip + optional trailing slot */}
       <div className="cbar-mid">
         <div className="cbar-chip">
           <span>{label}</span>
@@ -69,6 +111,7 @@ export function ConsoleBar() {
             </>
           )}
         </div>
+        {trailingSlot}
       </div>
 
       {/* RIGHT: agent chip + user dropdown */}
@@ -84,19 +127,22 @@ export function ConsoleBar() {
           align-items: center;
           gap: 18px;
           padding: 10px 16px;
-          border-bottom: 1px solid var(--border);
-          background: var(--bg-elev);
+          /* Borderless on parchment (DESIGN.md §19). */
+          background: var(--surface-base);
           min-height: 54px;
         }
         .cbar-left {
           display: flex;
           align-items: center;
           gap: 10px;
+          flex-wrap: nowrap;
+          min-width: 0;
           font-family: var(--font-mono);
           font-size: 11px;
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: var(--text-dim);
+          white-space: nowrap;
         }
         .cbar-brand {
           display: inline-flex;
@@ -113,10 +159,11 @@ export function ConsoleBar() {
           opacity: 0.7;
         }
         .cbar-mark {
-          width: 10px;
-          height: 10px;
-          background: var(--ink);
+          width: 22px;
+          height: 22px;
+          object-fit: contain;
           display: inline-block;
+          flex-shrink: 0;
         }
         .cbar-word {
           transition: opacity 120ms;
@@ -134,12 +181,34 @@ export function ConsoleBar() {
         .cbar-crumb:hover {
           color: var(--ink);
         }
+        /* Secondary crumb — used to carry scoped context (e.g. a trip
+           title) without stealing visual weight from the primary. */
+        .cbar-crumb-sub {
+          color: var(--ink);
+          max-width: 24ch;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: inline-block;
+          vertical-align: middle;
+        }
+        .cbar-pulse-wrap {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          margin-left: 8px;
+          cursor: default;
+          outline: none;
+        }
+        .cbar-pulse-wrap:focus-visible {
+          outline: 1px solid var(--ink);
+          outline-offset: 2px;
+        }
         .cbar-pulse {
           width: 6px;
           height: 6px;
           border-radius: 50%;
           background: var(--accent-green, #0cc67a);
-          margin-left: 8px;
           animation: cbar-pulse 1.6s ease-in-out infinite;
           flex-shrink: 0;
         }
@@ -161,8 +230,11 @@ export function ConsoleBar() {
           align-items: center;
           gap: 8px;
           padding: 5px 10px;
-          border: 1px solid var(--ink);
+          /* Tinted vermillion pill, no outline — DESIGN.md §19. */
+          background: var(--tint-vermillion-soft);
           color: var(--ink);
+          border-radius: 999px;
+          box-shadow: var(--shadow-xs);
           font-family: var(--font-mono);
           font-size: 10px;
           letter-spacing: 0.1em;

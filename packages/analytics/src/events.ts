@@ -26,7 +26,13 @@ export interface SenderoEventMap {
   wa_linked: BaseContext & { phoneNormalized: string };
 
   // ── Agent turns ───────────────────────────────────────────
-  agent_message_received: BaseContext & { messageType: string };
+  agent_message_received: BaseContext & {
+    messageType: string;
+    /** How many attachments the traveler included. 0 for plain-text turns. */
+    attachmentCount?: number;
+    /** Comma-separated list of MIME types (shape only — never the bytes). */
+    attachmentMimeTypes?: string | null;
+  };
   agent_reply_sent: BaseContext & { latencyMs: number };
   tool_call_started: BaseContext & { toolName: string };
   tool_call_finished: BaseContext & {

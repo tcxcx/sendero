@@ -31,25 +31,34 @@ export interface MeterEvent {
   note?: string;
 }
 
-function edgeUrl(): string {
+function edgeUrl(): string | null {
   if (typeof window !== 'undefined') {
     const fromEnv = (window as any).__SENDERO_EDGE_URL__;
     if (fromEnv) return String(fromEnv);
   }
-  return process.env.NEXT_PUBLIC_SENDERO_EDGE_URL || 'http://localhost:3020';
+  const fromEnv = process.env.NEXT_PUBLIC_SENDERO_EDGE_URL;
+  if (fromEnv) return fromEnv;
+  // Dev convenience only. In prod, surfaces return null → callers show
+  // a degraded state instead of firing cross-origin requests at a host
+  // the browser can't reach (and that CORS will block).
+  if (process.env.NODE_ENV === 'development') return 'http://localhost:3020';
+  return null;
 }
 
 export function useMeterSummary(pollMs = 1500): {
   summary: MeterSummary | null;
   error: string | null;
+  degraded: boolean;
 } {
   const [summary, setSummary] = useState<MeterSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const base = edgeUrl();
   useEffect(() => {
+    if (!base) return;
     let alive = true;
     const tick = async () => {
       try {
-        const r = await fetch(`${edgeUrl()}/tools/summary`, {
+        const r = await fetch(`${base}/tools/summary`, {
           cache: 'no-store',
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -68,20 +77,23 @@ export function useMeterSummary(pollMs = 1500): {
       alive = false;
       clearInterval(iv);
     };
-  }, [pollMs]);
-  return { summary, error };
+  }, [pollMs, base]);
+  return { summary, error, degraded: base === null };
 }
 
 export function useMeterStream(max = 40): {
   events: MeterEvent[];
   connected: boolean;
+  degraded: boolean;
 } {
   const [events, setEvents] = useState<MeterEvent[]>([]);
   const [connected, setConnected] = useState(false);
+  const base = edgeUrl();
   useEffect(() => {
+    if (!base) return;
     let src: EventSource | null = null;
     try {
-      src = new EventSource(`${edgeUrl()}/tools/stream`);
+      src = new EventSource(`${base}/tools/stream`);
       src.addEventListener('meter', ev => {
         try {
           const e = JSON.parse((ev as MessageEvent).data) as MeterEvent;
@@ -99,6 +111,6 @@ export function useMeterStream(max = 40): {
       src?.close();
       setConnected(false);
     };
-  }, [max]);
-  return { events, connected };
+  }, [max, base]);
+  return { events, connected, degraded: base === null };
 }

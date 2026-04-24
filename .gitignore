@@ -1,9 +1,16 @@
 # Next.js
 .next/
+.next-beta-test/
+apps/*/.next-beta-test/
+.next-turbo/
 .next-sendero/
+apps/*/.next-turbo/
 apps/*/.next-sendero/
+apps/*/.next.root-owned.*/
+apps/*/.next-sendero.root-owned.*/
 apps/*/.next-user/
 apps/*/.next-e2e/
+apps/*/tmp/
 .cache-sendero/
 apps/*/.cache-sendero/
 apps/*/.cache-user/
@@ -36,6 +43,9 @@ apps/docs/.source/
 .gstack/
 .vercel
 
+# Build output
+apps/storybook/storybook-static/
+
 # Turbo cache
 .turbo/
 
@@ -53,3 +63,7 @@ apps/docs/.source/
 # Playwright
 apps/app/test-results/
 apps/app/playwright-report/
+
+# Local dev credentials (do not commit)
+qa-logins.local.json
+.env.local.bak

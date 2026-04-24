@@ -149,7 +149,12 @@ const chipStyles = `
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 8px 4px 4px;
+    /* Match WalletDropdown trigger height so both ConsoleBar chips
+       align on one visual baseline. Avatar is 22px; the extra room
+       lets the WalletDropdown's 2-line label (name + address)
+       share the same outer box without this one looking squat. */
+    min-height: 48px;
+    padding: 6px 10px 6px 6px;
     border: 1px solid var(--border);
     background: var(--bg);
     color: var(--text);

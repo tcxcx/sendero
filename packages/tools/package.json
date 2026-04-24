@@ -17,6 +17,7 @@
   },
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",
+    "@ai-sdk/google": "*",
     "@ai-sdk/openai": "*",
     "@circle-fin/app-kit": "*",
     "@sendero/arc": "*",
@@ -28,6 +29,7 @@
     "@sendero/invoicing": "*",
     "@sendero/nanopayments": "*",
     "@sendero/notifications": "*",
+    "@sendero/ocr": "*",
     "@vercel/blob": "^2.3.3",
     "ai": "*",
     "viem": "*",

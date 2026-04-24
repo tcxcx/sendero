@@ -1,8 +1,15 @@
 'use client';
 
-import { ClerkProvider } from '@clerk/nextjs';
 import type { ReactNode } from 'react';
 
-export function Providers({ children }: { children: ReactNode }) {
-  return <ClerkProvider>{children}</ClerkProvider>;
+import { ClerkProvider } from '@clerk/nextjs';
+
+export function Providers({
+  children,
+  allowedRedirectOrigins,
+}: {
+  children: ReactNode;
+  allowedRedirectOrigins?: string[];
+}) {
+  return <ClerkProvider allowedRedirectOrigins={allowedRedirectOrigins}>{children}</ClerkProvider>;
 }

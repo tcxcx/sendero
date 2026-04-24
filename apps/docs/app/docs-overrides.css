@@ -9,13 +9,26 @@
   --fd-muted-foreground: var(--text-dim);
   --fd-card: var(--bg-elev);
   --fd-card-foreground: var(--text);
-  --fd-border: var(--border);
+  /* Fumadocs passes --fd-border into hsl(var(--fd-border) / α); must be space-separated HSL. */
+  --fd-border: 11.83 96.3% 57.65%;
   --fd-primary: var(--ink);
   --fd-primary-foreground: #fafaf7;
   --fd-accent: var(--ink-soft);
   --fd-accent-foreground: var(--ink);
   --fd-ring: var(--ink);
   --fd-radius: 4px;
+  --docs-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+::selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
+}
+::-moz-selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
 }
 
 .dark {
@@ -25,11 +38,32 @@
   --fd-muted-foreground: var(--text-dim);
   --fd-card: var(--bg-elev);
   --fd-card-foreground: var(--text);
-  --fd-border: var(--border);
+  --fd-border: 11.94 100% 63.53%;
   --fd-primary: var(--ink);
   --fd-primary-foreground: #0a0b0d;
   --fd-accent: var(--ink-soft);
   --fd-accent-foreground: var(--ink);
+}
+
+/* Hairlines that use border-fd-foreground/10: --fd-foreground is oklch here, so hsl() is invalid.
+   Force ink-tinted rules for subnav, TOC rail, etc. */
+.border-fd-foreground\/10 {
+  border-color: color-mix(in oklab, var(--ink) 32%, transparent);
+}
+
+/* Sidebar search control — explicit vermilion frame (Fumadocs preset forces bg only). */
+button[data-search-full] {
+  border-color: var(--ink);
+  border-style: solid;
+  border-width: 1px;
+}
+
+button[data-search-full]:hover {
+  border-color: var(--ink);
+}
+
+button[data-search-full] kbd {
+  border-color: color-mix(in oklab, var(--ink) 38%, var(--border));
 }
 
 /* The docs landing and sidebar should inherit the same Geist stack
@@ -42,4 +76,108 @@ code,
 pre,
 kbd {
   font-family: var(--font-mono);
+}
+
+.prose {
+  --tw-prose-body: var(--text);
+  --tw-prose-headings: var(--text);
+  --tw-prose-links: var(--ink);
+  --tw-prose-bold: var(--text);
+  --tw-prose-counters: var(--text-dim);
+  --tw-prose-bullets: var(--text-dim);
+  --tw-prose-hr: color-mix(in oklab, var(--ink) 45%, var(--border));
+  --tw-prose-quotes: var(--text);
+  --tw-prose-quote-borders: color-mix(in oklab, var(--ink) 55%, var(--border-strong));
+  --tw-prose-captions: var(--text-dim);
+  --tw-prose-code: var(--text);
+  --tw-prose-pre-code: var(--text);
+  --tw-prose-pre-bg: color-mix(in oklab, var(--bg-elev) 82%, var(--bg));
+  --tw-prose-th-borders: color-mix(in oklab, var(--ink) 50%, var(--border-strong));
+  --tw-prose-td-borders: color-mix(in oklab, var(--ink) 40%, var(--border));
+}
+
+.prose a {
+  color: var(--ink);
+  text-decoration-color: color-mix(in oklab, var(--ink) 48%, transparent);
+  text-underline-offset: 0.22em;
+}
+
+.prose a:hover {
+  text-decoration-color: var(--ink);
+}
+
+.prose :not(pre) > code {
+  border: 1px solid color-mix(in oklab, var(--ink) 35%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--bg-elev) 70%, var(--bg));
+  color: var(--text);
+  padding: 0.12rem 0.36rem;
+  font-size: 0.92em;
+}
+
+.prose pre.shiki {
+  overflow-x: auto;
+  border: 1px solid color-mix(in oklab, var(--ink) 42%, var(--border-strong));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--bg-elev) 88%, var(--bg)) !important;
+  padding: 16px 18px;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.7;
+  box-shadow: none;
+}
+
+.prose pre.shiki code {
+  display: block;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  white-space: pre;
+}
+
+.prose pre.shiki .line {
+  min-height: 1.55em;
+}
+
+.prose pre.shiki:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .prose > h1,
+  .prose > h2,
+  .prose > h3,
+  .prose > p,
+  .prose > ul,
+  .prose > ol,
+  .prose > pre,
+  .prose > table,
+  .prose > blockquote {
+    animation: docs-content-in 360ms var(--docs-ease-out) both;
+  }
+
+  .prose > :nth-child(2) {
+    animation-delay: 35ms;
+  }
+
+  .prose > :nth-child(3) {
+    animation-delay: 60ms;
+  }
+
+  .prose > :nth-child(n + 4) {
+    animation-delay: 85ms;
+  }
+}
+
+@keyframes docs-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

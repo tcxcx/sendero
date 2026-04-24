@@ -15,14 +15,15 @@ export function SettingsNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex gap-2 border-b border-border pb-4 md:w-48 md:flex-col md:border-b-0 md:pb-0">
+    <nav className="flex gap-2 border-b border-[color:var(--hairline-color-soft)] pb-4 md:w-48 md:flex-col md:border-b-0 md:pb-0">
       {links.map(link => (
         <Link
           key={link.href}
           href={link.href}
           className={cn(
-            'rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-            pathname === link.href && 'bg-accent font-medium text-accent-foreground'
+            'rounded-[var(--radius-sm)] px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-[color:var(--tint-midnight-soft)] hover:text-foreground',
+            pathname === link.href &&
+              'bg-[color:var(--tint-vermillion-soft)] font-medium text-foreground'
           )}
         >
           {link.label}

@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@sendero/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@sendero/ui/table';
 import { formatDateTime, formatDecimalUsd, objectFromJson, stringFromJson } from '@/lib/format';
 import { TripStatusBadge } from './trip-status-badge';
@@ -17,72 +16,83 @@ export function TripDetailCard({ trip }: { trip: TripWithBookings }) {
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
+      <section className="rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
+        <header className="flex flex-row items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <CardTitle>{stringFromJson(trip.metadata, 'tripSummary', 'Trip detail')}</CardTitle>
+            <h2 className="text-[15px] font-semibold tracking-normal text-foreground">
+              {stringFromJson(trip.metadata, 'tripSummary', 'Trip detail')}
+            </h2>
             <div className="font-mono text-xs text-muted-foreground">{trip.id}</div>
           </div>
           <TripStatusBadge status={trip.status} />
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <Detail label="Budget" value={formatDecimalUsd(trip.totalUsdc)} />
+        </header>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <Detail label="Budget" value={formatDecimalUsd(trip.totalUsdc)} tabular />
           <Detail label="Created" value={formatDateTime(trip.createdAt)} />
           <Detail label="Traveler email" value={guestEmail} />
           <Detail label="Funding status" value={fundingStatus.replaceAll('_', ' ')} />
           <Detail label="Settlement ref" value={trip.settlementRef ?? '—'} />
           <Detail label="CFDI ref" value={trip.cfdiRef ?? '—'} />
-          <Detail label="Reputation" value={trip.reputationScore?.toString() ?? '—'} />
-        </CardContent>
-      </Card>
+          <Detail label="Reputation" value={trip.reputationScore?.toString() ?? '—'} tabular />
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Bookings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kind</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>External ref</TableHead>
+      <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
+        <h3 className="text-[15px] font-semibold tracking-normal text-foreground">Bookings</h3>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Kind</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Total</TableHead>
+              <TableHead>External ref</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {trip.bookings.map(booking => (
+              <TableRow key={booking.id}>
+                <TableCell>{booking.kind}</TableCell>
+                <TableCell>{booking.status}</TableCell>
+                <TableCell style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatDecimalUsd(booking.totalUsd)}
+                </TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {booking.duffelOrderId ?? booking.externalId ?? booking.pnr ?? '—'}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {trip.bookings.map(booking => (
-                <TableRow key={booking.id}>
-                  <TableCell>{booking.kind}</TableCell>
-                  <TableCell>{booking.status}</TableCell>
-                  <TableCell>{formatDecimalUsd(booking.totalUsd)}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {booking.duffelOrderId ?? booking.externalId ?? booking.pnr ?? '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {trip.bookings.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    No bookings yet.
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            ))}
+            {trip.bookings.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-muted-foreground">
+                  No bookings yet.
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </section>
     </div>
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function Detail({ label, value, tabular }: { label: string; value: string; tabular?: boolean }) {
   return (
     <div>
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div
+        className="font-mono uppercase text-muted-foreground"
+        style={{
+          fontSize: 'var(--label-meta, 0.6875rem)',
+          letterSpacing: 'var(--label-meta-tracking, 0.12em)',
+        }}
+      >
         {label}
       </div>
-      <div className="mt-1 text-sm">{value}</div>
+      <div
+        className="mt-1 text-sm"
+        style={tabular ? { fontVariantNumeric: 'tabular-nums' } : undefined}
+      >
+        {value}
+      </div>
     </div>
   );
 }

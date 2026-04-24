@@ -10,14 +10,17 @@
  * token-by-token streaming for the chat UI). Everything else routes
  * here.
  *
- * Provider selection mirrors the web chat exactly:
- *   1. AI_PROVIDER env (explicit override)
- *   2. ANTHROPIC_API_KEY → Claude 3.5 Sonnet
- *   3. OPENAI_API_KEY → GPT-4o
+ * Provider selection mirrors the web stack:
+ *   1. AI_PROVIDER env (explicit override: google | anthropic | openai)
+ *   2. Vercel AI Gateway when `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` →
+ *      `google/gemini-3-flash` (Gemini-first; see root README)
+ *   3. Else direct cascade: **Gemini** (GOOGLE_GENERATIVE_AI_API_KEY or
+ *      GEMINI_API_KEY) → **OpenAI** → **Anthropic**
  */
 
 import { generateText, stepCountIs } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { toolList } from './index';
 import { buildAiSdkTools } from './adapters/ai-sdk';
@@ -28,8 +31,17 @@ export interface PickedModel {
   label: string;
 }
 
+function googleGenerativeAiKey(): string | undefined {
+  return process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
+}
+
+function gatewayConfigured(): boolean {
+  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN);
+}
+
 export function pickModel(): PickedModel | null {
   const forced = process.env.AI_PROVIDER?.toLowerCase();
+  const gKey = googleGenerativeAiKey();
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
@@ -39,12 +51,25 @@ export function pickModel(): PickedModel | null {
       model: anthropic('claude-3-5-sonnet-latest'),
       label: 'anthropic:claude-3-5-sonnet',
     };
+  if (forced === 'google' && gKey) {
+    const google = createGoogleGenerativeAI({ apiKey: gKey });
+    return { model: google('gemini-2.5-flash'), label: 'google:gemini-2.5-flash' };
+  }
+
+  if (gatewayConfigured()) {
+    return { model: 'google/gemini-3-flash', label: 'gateway:google/gemini-3-flash' };
+  }
+
+  if (gKey) {
+    const google = createGoogleGenerativeAI({ apiKey: gKey });
+    return { model: google('gemini-2.5-flash'), label: 'google:gemini-2.5-flash' };
+  }
+  if (hasOpenAI) return { model: openai('gpt-4o'), label: 'openai:gpt-4o' };
   if (hasAnthropic)
     return {
       model: anthropic('claude-3-5-sonnet-latest'),
       label: 'anthropic:claude-3-5-sonnet',
     };
-  if (hasOpenAI) return { model: openai('gpt-4o'), label: 'openai:gpt-4o' };
   return null;
 }
 
@@ -103,7 +128,7 @@ export async function routeToAgent(
   const picked = pickModel();
   if (!picked) {
     return {
-      text: 'AI is not configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY on the edge worker.',
+      text: 'AI is not configured. Set AI_GATEWAY_API_KEY, or GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY, or OPENAI_API_KEY, or ANTHROPIC_API_KEY on the edge worker.',
       steps: 0,
       provider: 'none',
       toolsCalled: [],
@@ -112,14 +137,24 @@ export async function routeToAgent(
 
   const tools = buildAiSdkTools(opts.tools ?? toolList, opts.ctx ?? {});
 
-  const result = await generateText({
+  const baseArgs = {
     model: picked.model,
     system: opts.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
     prompt: text,
     tools,
     stopWhen: stepCountIs(opts.maxSteps ?? 6),
     maxRetries: 2,
-  });
+  };
+
+  const result =
+    typeof picked.model === 'string' && gatewayConfigured()
+      ? await generateText({
+          ...baseArgs,
+          providerOptions: {
+            gateway: { order: ['google', 'anthropic', 'openai'] },
+          },
+        })
+      : await generateText(baseArgs);
 
   // AI SDK v6: `steps` is an array of individual generation steps, each
   // may include toolCalls. Collect every tool name that was invoked so

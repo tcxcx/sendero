@@ -21,6 +21,7 @@ import type { SenderoAuth } from './types';
 export * from './types';
 export { useMscaStore } from './store';
 export * as Clerk from './clerk';
+export { ClerkFormSkeleton } from './components/clerk-form-skeleton';
 
 // ──────────────────────────────────────────────────────────────────────
 // Client hook

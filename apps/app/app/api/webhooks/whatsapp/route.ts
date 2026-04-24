@@ -17,15 +17,20 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
+import { detectLocale, localeForPhone } from '@sendero/locale';
 import {
   handleVerifyHandshake,
   identityKey,
+  isAllowedMimeType,
+  MAX_MEDIA_BYTES,
   mergeIdentity,
   normalizeWebhookPayload,
   verifyWebhookSignature,
+  WhatsAppClient,
   type NormalizedIdentityChange,
   type NormalizedInboundMessage,
   type WhatsAppIdentity,
+  type WhatsAppMedia,
 } from '@sendero/whatsapp';
 
 export const runtime = 'nodejs';
@@ -94,27 +99,50 @@ export async function POST(req: NextRequest) {
   }
 
   // Ensure every sender has a ChannelIdentity row + fire agent dispatch
-  // for each text message. Dispatch is best-effort; a failure in the
-  // agent turn must not cause Meta to retry the webhook.
+  // for each text-or-media message. Dispatch is best-effort; a failure in
+  // the agent turn must not cause Meta to retry the webhook.
   let dispatched = 0;
   for (const msg of messages) {
     try {
       const identity = await upsertChannelIdentity(msg);
-      if (identity && msg.message.type === 'text' && msg.message.text?.body) {
+      if (!identity) continue;
+
+      const kind = msg.message.type;
+      const text = kind === 'text' ? (msg.message.text?.body ?? '') : mediaCaption(msg.message);
+
+      if (kind === 'text' && text) {
         void dispatchAgent({
           tenantId: identity.tenantId,
           userId: identity.userId ?? identity.id,
-          text: msg.message.text.body,
+          text,
+          locale: identity.locale,
+          turnId: `whatsapp:${msg.messageId}`,
           req,
         })
           .then(result => {
-            if (result?.reply) {
-              void sendWhatsAppReply(msg, result.reply);
-            }
+            if (result?.reply) void sendWhatsAppReply(msg, result.reply);
           })
-          .catch(err => {
-            console.error('[wa/webhook] dispatch failed:', err);
-          });
+          .catch(err => console.error('[wa/webhook] dispatch failed:', err));
+        dispatched++;
+      } else if ((kind === 'image' || kind === 'document') && msg.message[kind]) {
+        // Process media turns async — downloading can be slow, Meta
+        // only gives us a 30s ack window and we must respond BEFORE
+        // the download finishes.
+        void dispatchMediaTurn({
+          tenantId: identity.tenantId,
+          userId: identity.userId ?? identity.id,
+          locale: identity.locale,
+          turnId: `whatsapp:${msg.messageId}`,
+          phoneNumberId: msg.tenantPhoneNumberId,
+          media: msg.message[kind] as WhatsAppMedia,
+          caption: text,
+          attachmentKind: kind,
+          req,
+        })
+          .then(result => {
+            if (result?.reply) void sendWhatsAppReply(msg, result.reply);
+          })
+          .catch(err => console.error('[wa/webhook] media dispatch failed:', err));
         dispatched++;
       }
     } catch (err) {
@@ -135,28 +163,113 @@ async function dispatchAgent(args: {
   tenantId: string;
   userId: string;
   text: string;
+  locale: string;
+  turnId: string;
   req: NextRequest;
 }): Promise<{ reply: string } | null> {
-  const dispatchUrl = new URL('/api/agent/dispatch', args.req.nextUrl.origin);
+  return postToDispatch(args.req, {
+    tenantId: args.tenantId,
+    userId: args.userId,
+    channel: 'whatsapp',
+    text: args.text,
+    locale: args.locale,
+    turnId: args.turnId,
+  });
+}
+
+async function dispatchMediaTurn(args: {
+  tenantId: string;
+  userId: string;
+  locale: string;
+  turnId: string;
+  phoneNumberId: string;
+  media: WhatsAppMedia;
+  caption: string;
+  attachmentKind: 'image' | 'document';
+  req: NextRequest;
+}): Promise<{ reply: string } | null> {
+  if (!isAllowedMimeType(args.media.mime_type)) {
+    console.warn('[wa/webhook] disallowed media mime-type:', args.media.mime_type);
+    return null;
+  }
+
+  const accessToken = env.whatsappAccessToken();
+  if (!accessToken) {
+    console.warn('[wa/webhook] cannot download media without WHATSAPP_ACCESS_TOKEN');
+    return null;
+  }
+  const client = new WhatsAppClient({
+    phoneNumberId: args.phoneNumberId,
+    accessToken,
+    apiBaseUrl: env.whatsappApiBaseUrl() ?? undefined,
+  });
+  let buf: ArrayBuffer;
+  try {
+    buf = await client.downloadMedia(args.media.id);
+  } catch (err) {
+    console.error('[wa/webhook] downloadMedia failed:', err);
+    return null;
+  }
+  if (buf.byteLength > MAX_MEDIA_BYTES) {
+    console.warn(
+      `[wa/webhook] media ${args.media.id} (${buf.byteLength} bytes) exceeds ${MAX_MEDIA_BYTES} cap`
+    );
+    return null;
+  }
+  const base64 = Buffer.from(buf).toString('base64');
+
+  return postToDispatch(args.req, {
+    tenantId: args.tenantId,
+    userId: args.userId,
+    channel: 'whatsapp',
+    text: args.caption,
+    locale: args.locale,
+    turnId: args.turnId,
+    attachments: [
+      {
+        kind: args.attachmentKind,
+        mediaType: args.media.mime_type,
+        data: base64,
+        size: buf.byteLength,
+        ...(args.media.filename ? { filename: args.media.filename } : {}),
+      },
+    ],
+  });
+}
+
+async function postToDispatch(
+  req: NextRequest,
+  body: Record<string, unknown>
+): Promise<{ reply: string } | null> {
+  const dispatchUrl = new URL('/api/agent/dispatch', req.nextUrl.origin);
   const response = await fetch(dispatchUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tenantId: args.tenantId,
-      userId: args.userId,
-      channel: 'whatsapp',
-      text: args.text,
-    }),
+    headers: agentDispatchHeaders(),
+    body: JSON.stringify(body),
   });
   if (!response.ok) return null;
   const json = (await response.json()) as { text?: string };
   return json.text ? { reply: json.text } : null;
 }
 
+function mediaCaption(msg: NormalizedInboundMessage['message']): string {
+  if (msg.type === 'image' && msg.image?.caption) return msg.image.caption;
+  if (msg.type === 'document' && msg.document?.caption) return msg.document.caption;
+  return '';
+}
+
+function agentDispatchHeaders() {
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  return {
+    'Content-Type': 'application/json',
+    'x-sendero-dispatch-secret': secret,
+  };
+}
+
 async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): Promise<void> {
   const accessToken = env.whatsappAccessToken();
   if (!accessToken) return;
-  const { WhatsAppClient, formatForWhatsApp } = await import('@sendero/whatsapp');
+  const { formatForWhatsApp } = await import('@sendero/whatsapp');
   const client = new WhatsAppClient({
     phoneNumberId: msg.tenantPhoneNumberId,
     accessToken,
@@ -180,12 +293,22 @@ async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<s
 
 async function upsertChannelIdentity(
   msg: NormalizedInboundMessage
-): Promise<{ id: string; tenantId: string; userId: string | null } | null> {
+): Promise<{ id: string; tenantId: string; userId: string | null; locale: string } | null> {
   const tenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
   if (!tenantId) return null;
 
   const bsuid = msg.identity.businessScopedUserId;
   const externalUserId = msg.identity.phone ?? msg.identity.phoneRaw ?? null;
+  const inferredLocale =
+    localeForPhone(msg.identity.phone ?? msg.identity.phoneRaw) ??
+    detectLocale({ country: env.whatsappDefaultCountry() });
+  const metadata = {
+    locale: inferredLocale,
+    localeSource: localeForPhone(msg.identity.phone ?? msg.identity.phoneRaw)
+      ? 'phone_prefix'
+      : 'tenant_default_country',
+    phoneRaw: msg.identity.phoneRaw,
+  };
 
   if (bsuid) {
     const row = await prisma.channelIdentity.upsert({
@@ -203,15 +326,22 @@ async function upsertChannelIdentity(
         parentBusinessScopedUserId: msg.identity.parentBusinessScopedUserId,
         externalUserId,
         username: msg.identity.username,
+        metadata,
       },
       update: {
         parentBusinessScopedUserId: msg.identity.parentBusinessScopedUserId,
         externalUserId: externalUserId ?? undefined,
         username: msg.identity.username,
+        metadata,
       },
-      select: { id: true, tenantId: true, userId: true },
+      select: { id: true, tenantId: true, userId: true, metadata: true },
     });
-    return row;
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      userId: row.userId,
+      locale: localeFromMetadata(row.metadata, inferredLocale),
+    };
   }
 
   if (externalUserId) {
@@ -228,13 +358,27 @@ async function upsertChannelIdentity(
         kind: 'whatsapp',
         externalUserId,
         username: msg.identity.username,
+        metadata,
       },
-      update: { username: msg.identity.username },
-      select: { id: true, tenantId: true, userId: true },
+      update: { username: msg.identity.username, metadata },
+      select: { id: true, tenantId: true, userId: true, metadata: true },
     });
-    return row;
+    return {
+      id: row.id,
+      tenantId: row.tenantId,
+      userId: row.userId,
+      locale: localeFromMetadata(row.metadata, inferredLocale),
+    };
   }
   return null;
+}
+
+function localeFromMetadata(metadata: unknown, fallback: string): string {
+  if (metadata && typeof metadata === 'object' && 'locale' in metadata) {
+    const locale = (metadata as Record<string, unknown>).locale;
+    if (typeof locale === 'string' && locale) return locale;
+  }
+  return fallback;
 }
 
 async function applyIdentityChange(change: NormalizedIdentityChange): Promise<void> {

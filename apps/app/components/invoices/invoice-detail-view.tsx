@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@sendero/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@sendero/ui/table';
 import { formatDate, formatMicroUsd } from '@/lib/format';
 import { InvoiceStatusBadge } from './invoice-status-badge';
@@ -15,7 +14,15 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-normal">{invoice.number}</h1>
-          <p className="text-sm text-muted-foreground">{invoice.kind.replaceAll('_', ' ')}</p>
+          <p
+            className="font-mono uppercase text-muted-foreground"
+            style={{
+              fontSize: 'var(--label-meta, 0.6875rem)',
+              letterSpacing: 'var(--label-meta-tracking, 0.12em)',
+            }}
+          >
+            {invoice.kind.replaceAll('_', ' ')}
+          </p>
         </div>
         <InvoiceStatusBadge status={invoice.status} />
       </div>
@@ -30,35 +37,34 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Line items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Unit</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
+      <Panel title="Line items">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Description</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead className="text-right">Unit</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {invoice.lineItems.map(item => (
+              <TableRow key={item.id}>
+                <TableCell>{item.description}</TableCell>
+                <TableCell className="text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {Number(item.quantity)}
+                </TableCell>
+                <TableCell className="text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatMicroUsd(item.unitPriceMicro)}
+                </TableCell>
+                <TableCell className="text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatMicroUsd(item.amountMicro)}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoice.lineItems.map(item => (
-                <TableRow key={item.id}>
-                  <TableCell>{item.description}</TableCell>
-                  <TableCell className="text-right">{Number(item.quantity)}</TableCell>
-                  <TableCell className="text-right">
-                    {formatMicroUsd(item.unitPriceMicro)}
-                  </TableCell>
-                  <TableCell className="text-right">{formatMicroUsd(item.amountMicro)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            ))}
+          </TableBody>
+        </Table>
+      </Panel>
 
       <div className="flex justify-end">
         <div className="flex w-full max-w-sm flex-col gap-2 text-sm">
@@ -72,24 +78,30 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
           {invoice.vatAmountMicro > 0n ? (
             <Amount label="VAT" value={invoice.vatAmountMicro} />
           ) : null}
-          <div className="flex justify-between border-t border-border pt-2 font-semibold">
+          <div
+            className="mt-1 flex justify-between pt-3 font-semibold"
+            style={{ borderTop: 'var(--hairline)' }}
+          >
             <span>Total</span>
-            <span>{formatMicroUsd(invoice.totalMicro)}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {formatMicroUsd(invoice.totalMicro)}
+            </span>
           </div>
           <div className="text-xs text-muted-foreground">Due {formatDate(invoice.dueAt)}</div>
         </div>
       </div>
 
       {invoice.payments.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Payments</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {invoice.payments.map(payment => (
+        <Panel title="Payments">
+          <div className="flex flex-col">
+            {invoice.payments.map((payment, index) => (
               <div
                 key={payment.id}
-                className="flex justify-between border-b border-border py-2 text-sm"
+                className="flex justify-between py-3 text-sm"
+                style={{
+                  borderBottom:
+                    index < invoice.payments.length - 1 ? 'var(--hairline-soft)' : undefined,
+                }}
               >
                 <span>
                   {payment.method}
@@ -99,13 +111,24 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
                     </span>
                   ) : null}
                 </span>
-                <span>{formatMicroUsd(payment.amountMicro)}</span>
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatMicroUsd(payment.amountMicro)}
+                </span>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </Panel>
       ) : null}
     </div>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
+      <h3 className="text-[15px] font-semibold tracking-normal text-foreground">{title}</h3>
+      {children}
+    </section>
   );
 }
 
@@ -121,16 +144,20 @@ function Party({
   taxId: string | null;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-1">
-        <div className="font-medium">{name}</div>
-        {email ? <div className="text-sm text-muted-foreground">{email}</div> : null}
-        {taxId ? <div className="text-sm text-muted-foreground">Tax ID: {taxId}</div> : null}
-      </CardContent>
-    </Card>
+    <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-5 shadow-[var(--shadow-md)]">
+      <div
+        className="font-mono uppercase text-muted-foreground"
+        style={{
+          fontSize: 'var(--label-meta, 0.6875rem)',
+          letterSpacing: 'var(--label-meta-tracking, 0.12em)',
+        }}
+      >
+        {title}
+      </div>
+      <div className="font-medium">{name}</div>
+      {email ? <div className="text-sm text-muted-foreground">{email}</div> : null}
+      {taxId ? <div className="text-sm text-muted-foreground">Tax ID: {taxId}</div> : null}
+    </section>
   );
 }
 
@@ -138,7 +165,7 @@ function Amount({ label, value }: { label: string; value: bigint }) {
   return (
     <div className="flex justify-between">
       <span>{label}</span>
-      <span>{formatMicroUsd(value)}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMicroUsd(value)}</span>
     </div>
   );
 }

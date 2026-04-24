@@ -1,48 +1,99 @@
 ---
 title: Tool catalog
-description: Every Sendero tool, its per-call USDC price, and what it does.
+description: Every public Sendero tool, its per-call USDC price, and what it does.
 ---
 
-Fourteen tools. Each one is a pure function: signed request in, JSON result out, USDC charged on success.
+Sendero exposes a shared tool registry across MCP, web chat, WhatsApp, Slack, and the edge `/tools/:name` HTTP surface. Each paid HTTP tool is priced in USDC and charged only when execution succeeds.
 
-| Tool                | Category     | Price (USDC) | Does                                      |
-| ------------------- | ------------ | ------------ | ----------------------------------------- |
-| `check_treasury`    | Read         | $0.0005      | Balance + policy limits for your wallet.  |
-| `check_policy`      | Read         | $0.0005      | Whether a proposed action is in-policy.   |
-| `rate_agent`        | Read         | $0.0005      | Reputation score for an ERC-8004 agent.   |
-| `quote_fx`          | Read         | $0.0008      | USDC &lt;-&gt; EURC / MXN / BRL indicative FX. |
-| `gateway_balance`   | Read         | $0.001       | Cross-chain USDC unified balance.         |
-| `search_flights`    | External API | $0.002       | Duffel flight search by route + date.     |
-| `search_hotels`     | External API | $0.002       | Duffel-style hotel inventory.             |
-| `send_tokens`       | On-chain     | $0.003       | Transfer USDC on Arc.                     |
-| `gateway_transfer`  | On-chain     | $0.003       | Cross-chain transfer via Gateway.         |
-| `swap_tokens`       | On-chain     | $0.005       | Uniswap v4 swap on Arc.                   |
-| `bridge_to_arc`     | On-chain     | $0.005       | CCTP bridge from another chain into Arc.  |
-| `book_flight`       | Composed     | $0.008       | Full PNR issuance via Duffel.             |
-| `swap_and_bridge`   | Composed     | $0.01        | One-shot swap-then-bridge.                |
-| `settle_split`      | Composed     | $0.01        | Atomic 4-leg commission fan-out.          |
+## Public tools
 
-## Pricing philosophy
+| Tool | Category | Price (USDC) | Does |
+| ---- | -------- | ------------ | ---- |
+| `check_treasury` | Read | $0.0005 | Read treasury balance and policy limits. |
+| `check_policy` | Read | $0.0005 | Evaluate a proposed trip or payment against tenant policy. |
+| `rate_agent` | Read | $0.0005 | Read Sendero agent identity and reputation signals. |
+| `log_agent_action` | Audit | $0.0005 | Emit an on-chain breadcrumb for an agent action. |
+| `faucet_drip` | Dev/test | $0.0005 | Request test assets for local or testnet demos. |
+| `quote_fx` | Read | $0.0008 | Quote indicative travel FX. |
+| `gateway_balance` | Read | $0.001 | Read Circle Gateway unified USDC liquidity. |
+| `guest_claim_link` | Escrow | $0.001 | Turn a guest claim link into claim calldata for a traveler wallet. |
+| `search_flights` | External API | $0.002 | Search Duffel flight inventory by route and date. |
+| `search_hotels` | External API | $0.002 | Search lodging inventory for the trip context. |
+| `recommend_restaurants` | Concierge | $0.002 | Recommend restaurants from traveler context and location. |
+| `export_route_map` | Concierge | $0.002 | Export a route or itinerary into Google Maps and Apple Maps links with a static preview card. |
+| `trip_checkin_reminder` | Concierge | $0.003 | Canonical check-in nudge: window, transit note, leave-by, and next action. |
+| `list_flight_ancillaries` | Concierge | $0.002 | Read bags, cancel-for-any-reason, and seat map on a Duffel offer — feeds book_flight `services[]`. |
+| `ensure_duffel_customer` | Identity | $0.003 | Idempotent Duffel CustomerUser + CustomerUserGroup sync. Unlocks Travel Support Assistant for the traveler. |
+| `find_airports_nearby` | Read | $0.001 | Duffel places-suggestions wrapper: airports + cities within a radius of a lat/lng or matching a free-form query. |
+| `display_offer_conditions` | Read | $0.001 | Canonical change/refund conditions (free · penalty · allowed-unknown-fee · not allowed · unknown), slice-level + private fares + credit applicability. |
+| `quote_stay` | External API | $0.003 | Turn a Duffel Stays rate into a quote — surfaces cancellation timeline, payment type, and supported loyalty programme. |
+| `book_stay` | Composed | $0.008 | Book a Duffel Stays quote with loyalty_programme_account_number + Customer User linkage. |
+| `cancel_order_quote` | External API | $0.002 | Unconfirmed Duffel cancellation quote — refund destination + any airline credits to be issued. |
+| `confirm_cancel_order` | Composed | $0.003 | Confirm a cancellation quote (must run within expiry). Returns final airline-credit codes. |
+| `list_airline_credits` | Read | $0.001 | Traveler's Duffel airline credits (unused tickets, MCOs, vouchers) with state + totals. |
+| `restaurant_route_card` | Composed | $0.005 | Shortlist restaurants and export a route from the traveler to the top pick. |
+| `airport_transfer_coordinator` | Composed | $0.008 | Pickup plan with meeting point, primary transport, backup options, and airport→destination route. |
+| `airport_arrival_playbook` | Composed | $0.008 | One-screen arrival briefing: 5-step playbook, transport, timezone, and route. |
+| `trip_delay_replanner` | Composed | $0.01 | Rebuild a disrupted itinerary: replacement flights, overnight hotel, and route. |
+| `send_tokens` | On-chain | $0.003 | Transfer USDC on Arc. |
+| `gateway_transfer` | On-chain | $0.003 | Move USDC through Circle Gateway. |
+| `prefund_trip` | Escrow | $0.003 | Create a prepaid guest escrow and return a shareable claim link. |
+| `reserve_booking` | Escrow | $0.003 | Reserve an upper-bound amount from a claimed trip budget. |
+| `commit_booking` | Escrow | $0.003 | Commit the actual vendor amount and release unused reserve. |
+| `confirm_duffel` | Escrow | $0.003 | Attach Duffel ticketing proof to the on-chain booking. |
+| `settle_booking` | Escrow | $0.003 | Release escrow to the vendor and fee legs. |
+| `cancel_booking` | Escrow | $0.003 | Cancel and sweep unspent escrow back to the buyer. |
+| `swap_tokens` | On-chain | $0.005 | Swap tokens on Arc. |
+| `bridge_to_arc` | On-chain | $0.005 | Bridge USDC into Arc with CCTP. |
+| `generate_booking_invoice` | Invoice | $0.005 | Create invoice records, render PDF, and email the traveler. |
+| `book_flight` | Composed | $0.008 | Hold and pay a Duffel order from prefunded balance. |
+| `swap_and_bridge` | Composed | $0.01 | One-shot bridge into Arc and swap. |
+| `settle_split` | Composed | $0.01 | Atomically fan out supplier, agency, rail, and validator payments. |
 
-All tools stay at or below $0.01. Reads and cheap RPC are priced where it costs us — about $0.0005 for a read. External API calls carry a provider markup. Composed workflows that span multiple transactions roll up to a cent.
+## Workflows
 
-Compared to a single Ethereum mainnet transfer (~$2.14 at 30 gwei, $3,400 ETH), a Sendero on-chain tool call is **600×–4,000× cheaper**. That's the point.
+Tools are low-level capabilities. Real travel operations should use named workflows:
+
+| Workflow | Does |
+| -------- | ---- |
+| `sendero.book_flight` | Search, policy-check, reserve escrow, hold Duffel, wait for ticketing, settle, and invoice. |
+| `sendero.guest_prefund` | Create a prepaid traveler budget, wait for claim, then book against the claimed escrow. |
+| `sendero.agency_cohort` | Prefund many traveler links for agency cohorts or group travel. |
+| `sendero.group_trip` | Coordinate multiple travelers before confirming. |
+| `sendero.refund` | Cancel and refund a booking. |
+| `sendero.check_in_reminder` | Geocode, read local timezone, and deliver the canonical check-in nudge before awaiting traveler reply. |
+| `sendero.trip_delay_replanner` | Build a rebook plan after disruption; on approval, hold the chosen flight via `book_flight`. |
+| `sendero.book_with_ancillaries` | Search → list ancillaries → pause for selection → hold with bags/seats/CFAR attached. |
+| `sendero.cancellation_recovery` | Post-ticket recovery on `order.cancelled` / airline change webhooks: rebook or refund. |
+| `sendero.book_stay_with_loyalty` | Stays: search → pause → quote → pause for loyalty → book. |
+| `sendero.cancel_order_with_credits` | Flight cancellation: quote → approve → confirm → log credits. |
+
+Discover workflows at `/api/workflows/list` and run them at `/api/workflows/run`.
 
 ## Tool envelope
 
-Every tool returns the same shape:
+The direct HTTP surface wraps every successful result like this:
 
 ```ts
 {
-  ok: true,
-  data: T,            // per-tool result payload
-  meter: {
-    tool: 'search_flights',
-    usdc_atomic: '2000',   // 6-decimal atomic USDC
-    usdc_display: '0.002',
-    settled_tx: '0xabc...' // Arc tx hash, if on-chain
+  tool: 'search_flights',
+  paid: true,
+  priceUsdc: '0.002',
+  payment: {
+    payer: '0x...',
+    amountUsdc: '0.002',
+    settlementTx: '0x...'
+  },
+  result: {
+    offers: []
   }
 }
 ```
 
-See the per-tool pages for exact input and output schemas.
+The MCP surface returns the same `result` payload inside MCP `content` text. Use `tools/list` for exact JSON schemas.
+
+## Pricing philosophy
+
+The edge tool surface keeps calls at or below $0.01 for testnet and agentic-commerce demos. Production billing can still apply tenant-specific spend caps, bulk discounts, or GMV take rates through the billing catalog.
+
+Compared with a single Ethereum mainnet transfer, Arc lets Sendero price high-frequency agent loops in fractions of a cent while keeping an auditable payment trail.

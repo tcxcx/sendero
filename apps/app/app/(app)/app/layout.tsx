@@ -1,23 +1,25 @@
 import { RedirectToTasks } from '@clerk/nextjs';
-import { Toaster } from '@sendero/ui/sonner';
-import { AppHeader } from '@/components/app-shell/app-header';
-import { Sidebar } from '@/components/app-shell/sidebar';
+
+import { AppChrome } from '@/components/dashboard/app-chrome';
+import { getAppCopy } from '@/lib/app-copy';
+import { getRequestLocale } from '@/lib/request-locale';
+import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ProtectedAppLayout({ children }: { children: React.ReactNode }) {
   await requireCurrentTenant();
+  await requireRole('org:admin', { fallback: '/' });
+  const locale = await getRequestLocale();
+  const copy = getAppCopy(locale).shell;
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <RedirectToTasks />
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <AppHeader />
-        <main className="flex-1 p-6">{children}</main>
-      </div>
-      <Toaster />
+      <AppChrome headerCopy={copy.header} locale={locale}>
+        {children}
+      </AppChrome>
     </div>
   );
 }

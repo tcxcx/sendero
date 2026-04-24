@@ -20,6 +20,8 @@
     "./proxy": "./src/proxy.ts",
     "./components/sign-in": "./src/components/sign-in.tsx",
     "./components/sign-up": "./src/components/sign-up.tsx",
+    "./components/clerk-form-skeleton": "./src/components/clerk-form-skeleton.tsx",
+    "./components/sso-callback": "./src/components/sso-callback.tsx",
     "./components/org-switcher": "./src/components/org-switcher.tsx",
     "./components/user-button": "./src/components/user-button.tsx",
     "./components/user-details": "./src/components/user-details.tsx"

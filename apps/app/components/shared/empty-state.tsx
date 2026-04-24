@@ -11,9 +11,12 @@ export function EmptyState({
   cta?: { label: string; href: string };
 }) {
   return (
-    <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border p-12 text-center">
+    <div
+      className="flex flex-col items-center gap-4 rounded-[var(--radius-lg)] p-12 text-center"
+      style={{ border: '1px dashed var(--hairline-color)' }}
+    >
       <div className="flex max-w-md flex-col gap-2">
-        <h3 className="text-lg font-semibold">{title}</h3>
+        <h3 className="text-[15px] font-semibold tracking-normal text-foreground">{title}</h3>
         {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
       </div>
       {cta ? (
