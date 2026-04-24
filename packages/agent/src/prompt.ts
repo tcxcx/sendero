@@ -40,6 +40,13 @@ export interface SystemPromptSections {
    * `scan_document` tool rather than describing the file in prose.
    */
   attachmentsHint?: string;
+  /**
+   * Standing travel-document policy — always on.  Tells the agent when
+   * to call `check_travel_eligibility` and, crucially, how to ask for
+   * nationality conversationally instead of forcing a passport upload
+   * every time.
+   */
+  travelDocumentHint?: string;
   /** Extra guidelines (confidence caveats, follow-up handling, etc.). */
   responseGuidelines?: string;
 }
@@ -139,6 +146,10 @@ export function buildSystemPrompt(sections: SystemPromptSections): string {
 
   if (sections.attachmentsHint?.trim()) {
     parts.push(`## Attachments\n\n${sections.attachmentsHint.trim()}`);
+  }
+
+  if (sections.travelDocumentHint?.trim()) {
+    parts.push(sections.travelDocumentHint.trim());
   }
 
   if (sections.workflowCatalog?.trim()) {

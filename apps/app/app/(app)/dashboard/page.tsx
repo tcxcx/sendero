@@ -8,6 +8,7 @@ import { ArrowRight } from 'lucide-react';
 
 import { PageHeader } from '@/components/app-shell/page-header';
 import { StatCard } from '@/components/dashboard/stat-card';
+import { TravelerOnboardingCard } from '@/components/traveler/traveler-onboarding-card';
 import { TripStatusBadge } from '@/components/trips/trip-status-badge';
 import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { getAppCopy } from '@/lib/app-copy';
@@ -69,6 +70,8 @@ export default async function DashboardPage() {
           </Button>
         }
       />
+
+      <TravelerOnboardingCard />
 
       <section className="grid gap-3 rounded-[var(--radius-lg)] bg-white px-5 py-4 shadow-[var(--shadow-md)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6">
         <div className="min-w-0">
