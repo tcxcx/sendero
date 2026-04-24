@@ -222,6 +222,7 @@ interface SenderoState {
   resetBooking: () => void;
 
   setTreasury: (t: TreasuryState) => void;
+  setArcStatus: (a: Partial<ArcStatus>) => void;
 
   logEvent: (e: Omit<WorkflowEvent, 'id'>) => void;
   updateLastEvent: (group: string, patch: Partial<Omit<WorkflowEvent, 'id'>>) => void;
@@ -358,6 +359,11 @@ export const useSendero = create<SenderoState>(set => ({
     }),
 
   setTreasury: treasury => set({ treasury }),
+  setArcStatus: patch =>
+    set(state => {
+      if (!state.treasury) return {};
+      return { treasury: { ...state.treasury, arc: { ...state.treasury.arc, ...patch } } };
+    }),
 
   logEvent: e =>
     set(state => ({

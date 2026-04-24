@@ -22,6 +22,8 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.duffel.com' },
       { protocol: 'https', hostname: 'duffel-assets.duffel.com' },
       { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'img.clerk.com' },
+      { protocol: 'https', hostname: 'images.clerk.dev' },
     ],
   },
   // Legacy /app/* routes were renamed to /dashboard/* (see app/(app)/dashboard).
