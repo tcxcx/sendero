@@ -9,7 +9,7 @@ export function CapsForm() {
   return (
     <form
       action={upsertCapAction}
-      className="grid gap-4 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]"
+      className="grid gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]"
     >
       <div className="grid gap-4 md:grid-cols-2">
         <div className="flex flex-col gap-2">

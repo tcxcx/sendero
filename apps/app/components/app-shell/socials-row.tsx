@@ -88,6 +88,7 @@ export function SocialsRow() {
             </TooltipTrigger>
             <TooltipContent
               side="top"
+              data-variant="ink"
               className="font-mono text-[10px] uppercase tracking-[0.12em]"
             >
               {s.label}

@@ -34,7 +34,7 @@ export default function ApiKeysPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]">
+      <section className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-6">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-normal text-foreground">API keys</h2>
@@ -65,7 +65,7 @@ export default function ApiKeysPage() {
         ) : null}
       </section>
 
-      <section className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]">
+      <section className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
         <h3 className="text-[15px] font-semibold tracking-normal text-foreground">
           How to use your key
         </h3>

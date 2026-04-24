@@ -105,7 +105,7 @@ export default function ScanPage() {
         description="Extract structured fields from receipts, invoices, and boarding passes. Powered by Google Gemini 2.5 Flash + Zod schemas."
       />
 
-      <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]">
+      <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             Document kind
@@ -139,7 +139,7 @@ export default function ScanPage() {
           'flex flex-col items-center justify-center gap-3 rounded-[var(--radius-lg)] border-2 border-dashed p-10 text-center transition-colors ' +
           (status === 'extracting' || status === 'uploading'
             ? 'border-[color:var(--ink)] bg-[color:color-mix(in_oklab,var(--ink)_4%,white)]'
-            : 'border-[color:color-mix(in_oklab,var(--ink)_25%,transparent)] bg-white hover:border-[color:var(--ink)]')
+            : 'border-[color:color-mix(in_oklab,var(--ink)_25%,transparent)] bg-[color:var(--surface-floating)] hover:border-[color:var(--ink)]')
         }
       >
         {status === 'idle' && (
@@ -212,7 +212,7 @@ export default function ScanPage() {
         )}
       </section>
 
-      <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]">
+      <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
         <h3 className="text-[15px] font-semibold tracking-normal text-foreground">How it works</h3>
         <ol className="flex flex-col gap-1 text-sm text-muted-foreground">
           <li>

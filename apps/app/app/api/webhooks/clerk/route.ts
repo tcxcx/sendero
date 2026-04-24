@@ -511,7 +511,7 @@ async function onApiKeyCreated(data: Record<string, unknown>): Promise<void> {
   try {
     await api.revoke({
       apiKeyId: id,
-      revocationReason: `Revoked: ${tier} plan allows ${plan.productionApiKeyLimit} production API keys. Upgrade at /dashboard/billing/plans.`,
+      revocationReason: `Revoked: ${tier} plan allows ${plan.productionApiKeyLimit} production API keys. Upgrade from the dashboard (Manage plan).`,
     });
     console.log('[webhooks/clerk] apiKey.created over limit, revoked', {
       subject,

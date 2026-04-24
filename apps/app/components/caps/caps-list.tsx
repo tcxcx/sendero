@@ -13,7 +13,7 @@ type CapRow = {
 
 export function CapsList({ caps }: { caps: CapRow[] }) {
   return (
-    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]">
+    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
       <h3 className="text-[15px] font-semibold tracking-normal text-foreground">Active caps</h3>
       <Table>
         <TableHeader>

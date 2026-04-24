@@ -1,14 +1,23 @@
 import Link from 'next/link';
 
-import { PLANS, type PlanTier } from '@sendero/billing/plans';
 import { prisma } from '@sendero/database';
 import { Button } from '@sendero/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@sendero/ui/table';
-import { ArrowRight } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@sendero/ui/tooltip';
+import { ArrowRight, type LucideIcon, Sparkles } from 'lucide-react';
+
+const CHANNEL_HREFS = {
+  whatsapp: '/dashboard/channels/whatsapp',
+  slack: '/dashboard/channels/slack',
+} as const;
+
+const NEUTRAL_SHORTCUT_ICONS: Record<string, LucideIcon> = {
+  '/dashboard/integrations/mcp': Sparkles,
+};
 
 import { PageHeader } from '@/components/app-shell/page-header';
+import { PlanTeaser } from '@/components/dashboard/plan-teaser';
 import { StatCard } from '@/components/dashboard/stat-card';
-import { TravelerOnboardingCard } from '@/components/traveler/traveler-onboarding-card';
 import { TripStatusBadge } from '@/components/trips/trip-status-badge';
 import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { getAppCopy } from '@/lib/app-copy';
@@ -25,7 +34,7 @@ export default async function DashboardPage() {
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
 
-  const [activeTrips, recentTrips, unpaidInvoices, mtdSpend] = await Promise.all([
+  const [activeTrips, recentTrips, unpaidInvoices, mtdSpend, channelStatus] = await Promise.all([
     prisma.trip.count({
       where: {
         tenantId: tenant.id,
@@ -54,56 +63,99 @@ export default async function DashboardPage() {
       where: { tenantId: tenant.id, status: 'paid', at: { gte: monthStart } },
       _sum: { priceMicroUsdc: true },
     }),
+    // WhatsApp install is 1:1 with tenant; Slack allows multiple
+    // workspaces (Enterprise Grid), so we only care if >=1 exists.
+    prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: {
+        whatsappInstall: { select: { status: true } },
+        slackInstalls: { take: 1, select: { id: true } },
+      },
+    }),
   ]);
+
+  const whatsappConnected = channelStatus?.whatsappInstall?.status === 'active';
+  const slackConnected = (channelStatus?.slackInstalls.length ?? 0) > 0;
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        title={copy.pageTitle}
-        description={copy.pageDescription(tenant.displayName)}
-        actions={
-          <Button asChild>
-            <Link href="/dashboard/trips?sheet=new">
-              Create prepaid trip
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
-          </Button>
-        }
-      />
-
-      <TravelerOnboardingCard />
-
-      <section className="grid gap-3 rounded-[var(--radius-lg)] bg-white px-5 py-4 shadow-[var(--shadow-md)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-normal text-foreground">
-            {copy.agentConsole.title}
-          </h2>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-            {copy.agentConsole.description}
-          </p>
-        </div>
-        <Button asChild size="lg" className="w-full justify-center md:w-auto">
-          <Link href="/dashboard/console">{copy.agentConsole.cta}</Link>
-        </Button>
-      </section>
-
-      <section className="flex flex-col gap-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-normal">{copy.journeyTitle}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{copy.journeyDescription}</p>
-        </div>
-        <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
-          {copy.shortcuts.map(shortcut => (
-            <JourneyShortcut
-              key={shortcut.href}
-              href={shortcut.href}
-              label={shortcut.label}
-              description={shortcut.description}
-              openLabel={copy.shortcutOpen}
-            />
-          ))}
-        </div>
-      </section>
+      <TooltipProvider delayDuration={120} skipDelayDuration={300}>
+        <PageHeader
+          title={copy.pageTitle}
+          description={copy.pageDescription(tenant.displayName)}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              {copy.shortcuts.map(s => {
+                if (s.href === CHANNEL_HREFS.whatsapp) {
+                  return (
+                    <ChannelPill
+                      key={s.href}
+                      href={s.href}
+                      brand="whatsapp"
+                      connected={whatsappConnected}
+                      description={s.description}
+                    />
+                  );
+                }
+                if (s.href === CHANNEL_HREFS.slack) {
+                  return (
+                    <ChannelPill
+                      key={s.href}
+                      href={s.href}
+                      brand="slack"
+                      connected={slackConnected}
+                      description={s.description}
+                    />
+                  );
+                }
+                const Icon = NEUTRAL_SHORTCUT_ICONS[s.href] ?? Sparkles;
+                return (
+                  <Tooltip key={s.href}>
+                    <TooltipTrigger asChild>
+                      <Link
+                        href={s.href}
+                        aria-label={s.label}
+                        className="group/qa inline-flex h-9 w-9 items-center justify-center rounded-md border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] bg-white text-[color:var(--text-dim)] shadow-[var(--shadow-xs)] transition-colors duration-150 hover:border-[color:var(--ink)] hover:bg-[color:var(--tint-vermillion-soft)] hover:text-[color:var(--ink)]"
+                      >
+                        <Icon className="size-4" aria-hidden="true" />
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" data-variant="ink" className="max-w-xs text-xs">
+                      <div className="font-medium">{s.label}</div>
+                      <div className="mt-0.5 text-[11px] opacity-85">{s.description}</div>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button asChild variant="topography">
+                    <Link href="/dashboard/console">
+                      <span className="agent-console-cta__bg" aria-hidden="true" />
+                      <span className="agent-console-cta__label">
+                        {copy.agentConsole.cta}
+                        <ArrowRight className="size-4" aria-hidden="true" />
+                      </span>
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" data-variant="ink" className="max-w-xs text-xs">
+                  <div className="font-medium">{copy.agentConsole.title}</div>
+                  <div className="mt-0.5 text-[11px] opacity-85">
+                    {copy.agentConsole.description}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+              <Button asChild>
+                <Link href="/dashboard/trips?sheet=new">
+                  Create prepaid trip
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            </div>
+          }
+        />
+      </TooltipProvider>
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
@@ -126,7 +178,7 @@ export default async function DashboardPage() {
 
       <PlanTeaser tier={planTier} />
 
-      <section className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-white px-5 py-4 shadow-[var(--shadow-md)]">
+      <section className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] px-5 py-4 shadow-[var(--shadow-md)]">
         <h3 className="text-[15px] font-semibold tracking-normal text-foreground">
           {copy.recentTrips.title}
         </h3>
@@ -175,6 +227,70 @@ export default async function DashboardPage() {
   );
 }
 
+/**
+ * Channel action chip. Geometry matches the neutral MCP chip
+ * (`h-9 w-9` square) so the three header actions form a visually
+ * consistent row; brand color lives on hover + tooltip only so the
+ * dashboard's vermillion vocabulary keeps priority at rest.
+ *
+ * Logo SVGs live under /public/brand/app-store — trademark-locked,
+ * rendered through plain `<img>` to bypass next/image SVG transcoding.
+ *
+ * Tooltip copy flips `Connect` → `Manage` based on the live install
+ * status; chip chrome stays neutral either way. Hover fills with the
+ * brand color (Mountain Meadow for WA, Honey Flower for Slack).
+ */
+function ChannelPill({
+  href,
+  brand,
+  connected,
+  description,
+}: {
+  href: string;
+  brand: 'whatsapp' | 'slack';
+  connected: boolean;
+  description: string;
+}) {
+  const isWa = brand === 'whatsapp';
+  const label = (connected ? 'Manage ' : 'Connect ') + (isWa ? 'WhatsApp' : 'Slack');
+  const logoSrc = isWa ? '/brand/app-store/whatsapp.svg' : '/brand/app-store/slack.svg';
+  const hoverChrome = isWa
+    ? 'hover:border-[color:#25D366] hover:bg-[color:#E6FFDA]'
+    : 'hover:border-[color:#611F69] hover:bg-[color:#F3E7F5]';
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          href={href}
+          aria-label={label}
+          className={
+            'group/qa inline-flex h-9 w-9 items-center justify-center rounded-md ' +
+            'border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] ' +
+            'bg-white text-[color:var(--text-dim)] shadow-[var(--shadow-xs)] ' +
+            'transition-colors duration-150 ' +
+            hoverChrome
+          }
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- trademark-locked brand SVG, no next/image transcoding */}
+          <img
+            src={logoSrc}
+            alt=""
+            width={28}
+            height={28}
+            className="size-7 shrink-0"
+            aria-hidden="true"
+          />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" data-variant={brand} className="max-w-xs text-xs">
+        <div className="font-medium">{label}</div>
+        <div className="mt-0.5 text-[11px] opacity-90">{description}</div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function JourneyShortcut({
   href,
   label,
@@ -187,7 +303,7 @@ function JourneyShortcut({
   openLabel: string;
 }) {
   return (
-    <div className="flex min-h-40 flex-col justify-between rounded-[var(--radius-lg)] bg-white p-5 shadow-[var(--shadow-sm)] transition-shadow duration-200 hover:shadow-[var(--shadow-md)]">
+    <div className="flex min-h-40 flex-col justify-between rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-5 shadow-[var(--shadow-sm)] transition-shadow duration-200 hover:shadow-[var(--shadow-md)]">
       <div>
         <h2 className="text-base font-medium tracking-normal text-foreground">{label}</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
@@ -200,83 +316,5 @@ function JourneyShortcut({
         <Link href={href}>{openLabel}</Link>
       </Button>
     </div>
-  );
-}
-
-function PlanTeaser({ tier }: { tier: PlanTier }) {
-  const plan = PLANS[tier];
-  const order: PlanTier[] = ['free', 'basic', 'pro', 'enterprise'];
-  const nextTier =
-    tier === 'free' ? 'basic' : tier === 'basic' ? 'pro' : tier === 'pro' ? 'enterprise' : null;
-  const nextPlan = nextTier ? PLANS[nextTier] : null;
-
-  return (
-    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-            Current plan
-          </div>
-          <h3 className="mt-1 text-lg font-semibold tracking-normal capitalize text-foreground">
-            {plan.tier}
-            <span className="ml-2 text-sm font-normal text-muted-foreground">
-              {plan.workspaceLimit === null
-                ? 'unlimited workspaces'
-                : `${plan.workspaceLimit} workspace${plan.workspaceLimit === 1 ? '' : 's'}`}
-              {plan.nanopaymentDiscountBps > 0
-                ? ` · ${plan.nanopaymentDiscountBps / 100}% off nanopayments`
-                : ''}
-            </span>
-          </h3>
-        </div>
-        <Button asChild variant="outline" size="sm" className="!rounded-md">
-          <Link href="/dashboard/billing/plans">Manage plan</Link>
-        </Button>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-4">
-        {order.map(t => {
-          const p = PLANS[t];
-          const active = t === tier;
-          return (
-            <Link
-              key={t}
-              href="/dashboard/billing/plans"
-              className={
-                'flex flex-col gap-1 rounded-[var(--radius-md)] border p-4 transition-colors ' +
-                (active
-                  ? 'border-[color:var(--ink)] bg-[color:color-mix(in_oklab,var(--ink)_6%,white)]'
-                  : 'border-[color:var(--border)] bg-white hover:border-[color:var(--ink)]')
-              }
-            >
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                {p.tier}
-              </div>
-              <div className="text-lg font-semibold text-foreground">
-                {p.monthlyUsd === null
-                  ? 'Custom'
-                  : p.monthlyUsd === 0
-                    ? 'Free'
-                    : `$${p.monthlyUsd}/mo`}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {p.workspaceLimit === null
-                  ? 'Unlimited workspaces'
-                  : `${p.workspaceLimit} workspace${p.workspaceLimit === 1 ? '' : 's'}`}
-              </div>
-              {active ? (
-                <div className="mt-auto pt-1 text-[11px] font-mono uppercase tracking-[0.12em] text-[color:var(--ink)]">
-                  Current
-                </div>
-              ) : nextPlan && t === nextPlan.tier ? (
-                <div className="mt-auto pt-1 text-[11px] font-mono uppercase tracking-[0.12em] text-[color:var(--ink)]">
-                  Upgrade →
-                </div>
-              ) : null}
-            </Link>
-          );
-        })}
-      </div>
-    </section>
   );
 }
