@@ -33,6 +33,16 @@ pre-commit:
     typecheck-affected:
       run: bunx turbo run typecheck --filter=...[HEAD^1] --cache-dir=.turbo
 
+    # Static lint for Prisma migrations. Blocks the one-shot footgun
+    # we hit in review: `ALTER TYPE ADD VALUE` combined with a same-file
+    # reference to the new value. Also warns on CREATE INDEX without
+    # CONCURRENTLY and ADD COLUMN NOT NULL without DEFAULT. Full rules
+    # in scripts/check-prisma-migrations.ts. Bypass once with
+    # SKIP_MIGRATION_CHECK=1.
+    migration-lint:
+      glob: "packages/database/prisma/migrations/*/migration.sql"
+      run: bun run scripts/check-prisma-migrations.ts
+
 pre-push:
   parallel: true
   commands:
