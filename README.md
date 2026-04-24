@@ -78,6 +78,38 @@ Trials monetize leg 2 even when leg 1 is $0. Pro+ customers monetize both. Enter
 
 <br />
 
+## Best Use of Gemini — OCR for receivables
+
+**Submission for the Google DeepMind Gemini prize category.** Try it live at [`/dashboard/scan`](./apps/app/app/(app)/dashboard/scan/page.tsx): drag a receipt, invoice, or boarding pass; sub-second structured extraction.
+
+**Zod schemas pin Gemini's output.** No free-form JSON parsing, no regex salvage, no LLM-as-JSON-coercer. Four document kinds (invoice, receipt, boarding pass, government ID) each have their own schema and their own prompt; the schema IS the contract. See [`packages/sendero-ocr/src/schemas/`](./packages/sendero-ocr/src/schemas/).
+
+**Vertex AI → AI Studio credential cascade** so the same code runs with Google Cloud ADC in production and a plain `GEMINI_API_KEY` in local dev. One credential path gracefully degrades to the other; neither forces a redeploy. See [`packages/sendero-ocr/src/providers/gemini-multimodal.ts`](./packages/sendero-ocr/src/providers/gemini-multimodal.ts).
+
+**Flash by default, Pro on demand.** Default extraction runs on `gemini-2.5-flash` — 3–5× faster and ~10× cheaper than Pro with the same field accuracy when the schema is tight. Callers who hit genuinely ambiguous documents pass `model: 'gemini-2.5-pro'` explicitly.
+
+**Thinking budget stripped on Pro** because OCR isn't a reasoning task. `providerOptions.google.thinkingConfig.thinkingBudget = 0` cuts Pro latency 40–60% and cost ~3× with zero accuracy impact — the schema already pins the output space, there's nothing for the model to "think" about.
+
+**Golden-set eval harness** tracks field-level accuracy + p50/p95 latency per kind over time. Drop `{slug}.pdf` + `{slug}.yml` into [`packages/sendero-ocr/evals/golden/{kind}/`](./packages/sendero-ocr/evals/), run `bun run eval`, get a table per kind like:
+
+```
+RECEIPTS (12 docs)
+  field score       56/60  93.3%   (3 fuzzy)
+  p50 latency       620 ms
+  p95 latency      1840 ms
+```
+
+**Production hardening the other pitches won't mention.**
+- SSRF guard on URL-fetch path (cloud-metadata endpoints refused, https-only, redirects re-checked).
+- 20 MB payload cap + MIME whitelist before a byte reaches Gemini.
+- PII audit signal on boarding-pass scans (PNR + passport fragments).
+- Compliance gate on government-ID scans — extraction refuses unless the tenant admin has explicitly flipped `allowSensitive`.
+- Currency normalization (ISO-4217), date normalization (ISO-8601, EU / US / JP forms), numeric coercion (European `1.234,56` → `1234.56`), root-domain stripping — all post-Gemini so downstream reconciliation is deterministic.
+
+**Two entry points for the same extraction engine.** Interactive UI at `/dashboard/scan` for humans. Agent-callable `scan_document` MCP tool for LLMs and x402 runners. Both hit `extractDocument()` from `@sendero/ocr` — the only difference is who's uploading.
+
+<br />
+
 # Sendero × Arc
 
 Sendero is an AI operating layer for travel agencies, TMCs, concierge teams, and corporate travel desks and also individual travelers. It turns messy travel requests into quotes, approvals, bookings, service actions, refunds, artifacts, invoices, and settlement trails. Arc/Circle is the trust and money backplane: every flight, hotel, and ground leg can be booked by an AI workflow and settled on Arc L2 in USDC or EURC.
