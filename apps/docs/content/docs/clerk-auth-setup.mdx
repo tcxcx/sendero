@@ -1,0 +1,221 @@
+---
+title: Clerk auth + billing + API keys setup
+description: The exact environment-variable + dashboard-config pathway Sendero uses to wire Clerk for B2B auth, Clerk Billing for plan tiers, and Clerk API keys for agent authentication.
+---
+
+This is the canonical setup we run in production. Copy/paste, fill the
+placeholders, and you’ll match the Sendero wiring bit-for-bit.
+
+Sendero ships **two** Clerk instances on every account: a **development**
+one for local + preview, a **production** one for live traffic. The
+dashboard settings below apply to both; secrets differ per instance.
+
+## 1. Create two Clerk instances
+
+In the Clerk dashboard:
+
+1. Create a new application (or use an existing one).
+2. Under **Instances**, you’ll see **Development** already provisioned.
+3. Click **Create production instance** → pick **"Clone settings from
+   development"** in the modal that appears. This copies: plan + feature
+   config, org settings, API-keys toggles, roles and permissions, JWT
+   templates. It does **not** copy: SSO connections, third-party
+   integrations, routing paths, webhook secrets, OAuth credentials, or
+   domain config — you re-enter those per-instance.
+
+> **Dev → prod migration gotcha.** Billing plans + features appear to
+> clone, but **verify every plan + feature slug matches `@sendero/billing/plans`
+> once the production instance is up**. A mismatched slug means
+> `has({ plan: 'pro' })` silently returns false in prod and nobody gets
+> their discount.
+
+## 2. Environment variables (copy/paste)
+
+Both instances share the same variable names — only the values differ.
+
+**Development (`.env.local`):**
+
+```bash
+# Clerk
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...        # dashboard → API keys
+CLERK_SECRET_KEY=sk_test_...                         # dashboard → API keys
+CLERK_WEBHOOK_SECRET=whsec_...                       # created when you add the webhook endpoint
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/onboarding
+```
+
+**Production (Vercel / hosting env vars):**
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
+CLERK_SECRET_KEY=sk_live_...
+CLERK_WEBHOOK_SECRET=whsec_... # different from dev — new secret per endpoint
+# same NEXT_PUBLIC_CLERK_*_URL values
+```
+
+**Secret management rules:**
+
+- `CLERK_SECRET_KEY` and `CLERK_WEBHOOK_SECRET` are server-only. Never
+  prefix with `NEXT_PUBLIC_` and never log them.
+- Store in your hosting provider's secret manager (Vercel
+  environment variables with the **Production** / **Preview** /
+  **Development** scoping).
+- Rotate secrets on employee off-boarding via Clerk dashboard →
+  **API keys** → **Rotate**.
+
+## 3. Enable Organizations + roles
+
+Clerk dashboard → **Organizations** → **Settings**:
+
+1. **Enable Organizations** → ON.
+2. Under **Default roles**, ensure `org:admin` and `org:member` exist. Add
+   `org:finance` if you want a separate billing-access role (Sendero uses
+   this for `/dashboard/billing/*`).
+3. **Allow personal workspaces** — ON if you want the personal-account
+   switcher; OFF if you want to force org selection (we default ON).
+
+## 4. Enable Billing
+
+Clerk dashboard → **Billing** → **Settings**:
+
+1. **Enable Organization billing** → ON.
+2. **Enable User billing** → ON *(optional — only if you want user-level
+   subscriptions alongside org ones. Sendero leaves this OFF; we monetize
+   individual travelers via x402 nanopayments, not user SaaS.)*
+3. **Require payment method for free trials** → **OFF**. Trials work
+   zero-card this way (Clerk shipped this Oct 2025).
+4. **Payment gateway** → start with **Clerk payment gateway**
+   (recommended, zero-config). Swap to Stripe when you need ACH,
+   tax-exempt invoicing, or custom terms.
+
+### Organization plans
+
+For each tier in `@sendero/billing/plans`, create a plan with the slug
+exactly matching `PLANS[tier].slug`:
+
+| Key | Price | Trial | Publicly available |
+|---|---|---|---|
+| `free` | $0/mo | — | ✓ |
+| `basic` | $19/mo · $15/mo annual | — | ✓ |
+| `pro` | $60/mo · $50/mo annual | **14 days** | ✓ |
+| `enterprise` | $1,500/mo · $1,250/mo annual | — | ✗ *(sales assigns via API)* |
+
+### Features (attach to plans)
+
+13 features. Slugs must match `BILLING_FEATURES` in `@sendero/billing/plans`:
+
+```
+additional_workspaces, production_api_keys, nanopayment_discount,
+booking_take_rate_discount, channel_whatsapp, channel_slack,
+mcp_server_public, custom_webhooks, audit_log_export, priority_support,
+sso_saml, white_label, custom_sla
+```
+
+See the [README](https://github.com/criptopoeta/sendero-arc#business-model)
+for the per-plan attachment matrix.
+
+## 5. Enable API keys
+
+Clerk dashboard → **API keys** → **Settings**:
+
+1. **Enable Organization API keys** → ON.
+2. **Enable User API keys** → OFF *(Sendero is org-scoped; user-level keys aren’t wired).*
+
+Once enabled, the `<APIKeys />` component renders inside
+`<OrganizationProfile />` as a "API keys" tab automatically. Your users
+access it via **Manage organization** (from `<OrganizationSwitcher />`)
+or you can launch the modal programmatically:
+
+```typescript
+'use client';
+
+import { useClerk } from '@clerk/nextjs';
+
+export function OpenApiKeysButton() {
+  const { openOrganizationProfile } = useClerk();
+  return (
+    <button onClick={() => openOrganizationProfile()}>
+      Manage API keys
+    </button>
+  );
+}
+```
+
+### Verifying a key server-side
+
+```typescript
+import { clerkClient } from '@clerk/nextjs/server';
+
+const client = await clerkClient();
+const result = await client.apiKeys.verify(bearerToken);
+// result.subject is `org_xxx` (your org) or `user_xxx` (if user keys enabled)
+// result.claims carries any metadata you set at mint time
+```
+
+Sendero wraps this in [`apps/app/lib/api-key-auth.ts::resolveTenantFromApiKey()`](https://github.com/criptopoeta/sendero-arc/blob/main/apps/app/lib/api-key-auth.ts),
+which maps `subject` → `tenant.clerkOrgId` → internal `tenantId` and
+exposes `{ keyType, effectiveKeyType }` so downstream code can route
+sandbox vs production traffic correctly.
+
+### Sandbox vs production keys
+
+Users mint production keys via the Clerk UI. Sandbox keys are
+server-minted in the `organization.created` webhook with `claims: { type: 'sandbox' }`:
+
+```typescript
+await client.apiKeys.create({
+  subject: organizationId,
+  name: 'Sandbox key',
+  claims: { type: 'sandbox' },
+});
+```
+
+The resolver reads `claims.type` at verify time to tag traffic and route
+sandbox calls to non-settling meter events.
+
+## 6. Webhook endpoint
+
+Add a webhook in the Clerk dashboard:
+
+- **Endpoint URL:** `https://your-app.com/api/webhooks/clerk`
+- **Events:** `organization.created`, `organization.updated`,
+  `organization.deleted`, `organizationMembership.created`,
+  `organizationMembership.deleted`, `user.created`, `apiKey.created`
+- **Signing secret:** copy to `CLERK_WEBHOOK_SECRET` in your env
+
+Sendero's webhook handler at
+[`apps/app/app/api/webhooks/clerk/route.ts`](https://github.com/criptopoeta/sendero-arc/blob/main/apps/app/app/api/webhooks/clerk/route.ts)
+provisions a tenant row, a Circle wallet, and a sandbox API key on
+`organization.created`.
+
+## 7. Production cutover checklist
+
+When you flip to production:
+
+- [ ] Swap `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` to
+      `pk_live_` / `sk_live_`
+- [ ] Create a new webhook endpoint at your production URL; new signing
+      secret → `CLERK_WEBHOOK_SECRET`
+- [ ] Configure OAuth credentials with your own keys (shared
+      development credentials don't work in prod)
+- [ ] Verify all 4 plan slugs and all 13 feature slugs exist on the
+      production instance
+- [ ] Verify **Require payment method for free trials** is OFF
+- [ ] Verify **Enable Organization API keys** is ON
+- [ ] Point DNS + `NEXT_PUBLIC_APP_URL` at the production hostname
+- [ ] Run a smoke sign-up → org-create → API-key-mint → MCP-call flow
+      end-to-end before taking traffic
+
+## Why this order
+
+Sign-up → org → billing → API keys is the dependency chain:
+- You can't subscribe without an org (Clerk B2B billing is org-scoped).
+- You can't mint API keys without an org (org-scoped).
+- You can't verify an API key server-side without plans/features being
+  set up, or your `has({ plan })` and `has({ feature })` checks return
+  false everywhere.
+
+Get each step right, then move on. Every Sendero deployment has followed
+this same order.

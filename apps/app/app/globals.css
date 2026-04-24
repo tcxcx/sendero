@@ -528,15 +528,9 @@ a[role="button"]:active,
   z-index: 12;
   background: transparent;
 }
-/* Shadcn sidebar is position:fixed with inset-y-0 h-svh, so by default
-   it spans the entire viewport and would slide under the global
-   FooterRail. Override bottom + height so it stops exactly above the
-   footer rail. `auto` cancels the `h-svh` utility; the top stays
-   pinned via inset-y-0 and the bottom lifts by footer height. */
-.app-shell-root .group.peer[data-side] > .fixed.inset-y-0 {
-  bottom: var(--app-shell-footer-h);
-  height: auto;
-}
+/* Floating-pill sidebar positioning is defined earlier in this file
+   (top/left/bottom/width/z-index). This duplicate is kept as a no-op to
+   preserve the anchor for readers grepping for the footer override. */
 
 .topbar {
   display: flex;
@@ -1621,25 +1615,19 @@ a[role="button"]:active,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* Match the --app-shell-footer-h the sidebar reserves at the bottom,
-     so the global rail's visible band and the sidebar cutoff align. */
-  height: 34px;
-  padding: 0 20px;
+  /* Design spec: 14px 24px padding = ~48px visible band. The pill
+     sidebar above floats with a 16px gap clear of this rail. */
+  padding: 14px 24px;
   position: relative;
   isolation: isolate;
-  overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, white 22%, transparent),
-    color-mix(in oklab, var(--surface-floating) 8%, transparent) 45%,
-    color-mix(in oklab, var(--surface-base) 4%, transparent)
-  );
-  -webkit-backdrop-filter: blur(32px) saturate(1.85) brightness(1.04);
-  backdrop-filter: blur(32px) saturate(1.85) brightness(1.04);
+  /* Pill glass — parchment tint at 32% (slightly more transparent than
+     the sidebar's 38% so footer stays subordinate to it). */
+  background: rgba(247, 239, 228, 0.32);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+  backdrop-filter: blur(22px) saturate(1.15);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.62),
-    inset 0 -1px 0 rgba(31, 42, 68, 0.08),
-    0 -14px 36px rgba(31, 42, 68, 0.05);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(31, 42, 68, 0.06);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
