@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-import { useAuth, useClerk } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@sendero/ui/hover-card';
 import { Waypoints } from 'lucide-react';
 
@@ -13,7 +13,6 @@ const LLMS_TXT_URL = '/llms.txt';
 
 export function LlmsDocsCard() {
   const { has, isLoaded } = useAuth();
-  const { openOrganizationProfile } = useClerk();
 
   // `mcp_server_public` is the Clerk Billing feature attached to Pro + Enterprise
   // per packages/billing/src/plans.ts.
@@ -110,13 +109,12 @@ export function LlmsDocsCard() {
               View llms.txt ↗
             </Link>
           ) : (
-            <button
-              type="button"
-              onClick={() => openOrganizationProfile()}
+            <Link
+              href="/dashboard/billing/plans?upgrade=pro"
               className="flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-[color:var(--ink)] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] transition-opacity hover:opacity-90"
             >
               Go Pro →
-            </button>
+            </Link>
           )}
         </div>
       </HoverCardContent>

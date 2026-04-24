@@ -682,6 +682,7 @@
       },
       "peerDependencies": {
         "@sendero/tools": "*",
+        "zod": "^3.25.76",
       },
     },
   },

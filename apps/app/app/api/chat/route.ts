@@ -30,7 +30,7 @@ import {
 import { detectLocale, getLocaleSlice, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
-import { listWorkflows } from '@sendero/workflows';
+import { buildRunWorkflowTool, listWorkflows, listWorkflowsTool } from '@sendero/workflows';
 import {
   convertToModelMessages,
   generateText,
@@ -269,7 +269,23 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const tools = buildAiSdkTools(toolList, { traveler });
+  // Workflow orchestration tools — expose `list_workflows` + `run_workflow`
+  // alongside the leaf tools so the model can either chain manually or
+  // dispatch a full multi-step plan in one call. The runner needs the
+  // same per-request tool registry the LLM uses, so the factory closes
+  // over the freshly built `tools` map below.
+  const baseTools = buildAiSdkTools(toolList, { traveler });
+  const runWorkflowTool = buildRunWorkflowTool({
+    resolveTools: () => {
+      const registry: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {};
+      for (const def of toolList) {
+        registry[def.name] = args => def.handler(args, { traveler });
+      }
+      return registry;
+    },
+  });
+  const workflowTools = buildAiSdkTools([listWorkflowsTool, runWorkflowTool], { traveler });
+  const tools = { ...baseTools, ...workflowTools };
   const converted = await convertToModelMessages(messages);
 
   console.log(`[chat] using ${picked.label}`);

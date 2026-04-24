@@ -21,16 +21,21 @@ import {
   BadgeCheckIcon,
   CarTaxiFrontIcon,
   ClockIcon,
+  CloudIcon,
   ExternalLinkIcon,
   FileTextIcon,
   HotelIcon,
   MapIcon,
+  MapPinIcon,
+  MountainIcon,
   PlaneLandingIcon,
   ReceiptIcon,
   ScanLineIcon,
   ShieldAlertIcon,
+  ShieldCheckIcon,
   TicketIcon,
   UtensilsCrossedIcon,
+  WindIcon,
 } from 'lucide-react';
 
 import { AirportListCard } from '@/components/ai-elements/airport-list-card';
@@ -845,6 +850,181 @@ function formatMoney(amount: number, currency: string): string {
   }
 }
 
+// ─── BriefCard — shared shell for the lightweight concierge tools ───
+//
+// Six tools (weather, air-quality, address, timezone, elevation, safety)
+// return small flat objects. They were rendering as raw JSON in the
+// chat console because no dispatcher arm caught them. One shared
+// shell, six adapters that pull the right headline + meta lines.
+
+interface BriefCardProps {
+  icon: ReactElement;
+  kind: string;
+  headline: string;
+  meta?: string;
+  detail?: string;
+  badge?: { label: string; color?: string };
+  links?: SharePayload['mapLinks'];
+}
+
+function BriefCard({ icon, kind, headline, meta, detail, badge, links }: BriefCardProps) {
+  return (
+    <div className="grid gap-3">
+      <div className={cardShell}>
+        <div className="flex items-start gap-3">
+          <div className="mt-1 grid size-8 place-items-center rounded-lg bg-[color:var(--bg-soft)] text-[color:var(--ink)]">
+            {icon}
+          </div>
+          <div className="flex-1 grid gap-1.5">
+            <SectionLabel>{kind}</SectionLabel>
+            <div className="font-medium text-sm text-[color:var(--ink)]">{headline}</div>
+            {meta ? (
+              <div className="font-mono text-[11px] text-[color:var(--text-dim)]">{meta}</div>
+            ) : null}
+            {detail ? <div className="text-xs text-[color:var(--text-dim)]">{detail}</div> : null}
+          </div>
+          {badge ? (
+            <span
+              className="rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em]"
+              style={{ color: badge.color ?? 'var(--text-dim)' }}
+            >
+              {badge.label}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      {links ? (
+        <MapBlock
+          staticMapUrl={links.staticMapUrl}
+          googleMapsUrl={links.googleMapsUrl}
+          appleMapsUrl={links.appleMapsUrl}
+          alt={`${kind} preview`}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function asString(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v : undefined;
+}
+function asNumber(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+function WeatherBriefCard({ data }: { data: Record<string, unknown> }) {
+  const place = asString(data.place ?? data.location ?? data.city);
+  const summary = asString(data.summary ?? data.conditions);
+  const high = asNumber(data.highC ?? data.highCelsius);
+  const low = asNumber(data.lowC ?? data.lowCelsius);
+  const unit = asString(data.unit) ?? 'C';
+  const tempLine =
+    high !== undefined && low !== undefined ? `${low}° / ${high}° ${unit}` : undefined;
+  return (
+    <BriefCard
+      icon={<CloudIcon className="size-4" />}
+      kind="Weather brief"
+      headline={place ?? 'Forecast'}
+      meta={tempLine}
+      detail={summary}
+    />
+  );
+}
+
+function AirQualityBriefCard({ data }: { data: Record<string, unknown> }) {
+  const place = asString(data.place ?? data.location);
+  const aqi = asNumber(data.aqi ?? data.universalAqi);
+  const category = asString(data.category ?? data.dominantPollutant);
+  const advisory = asString(data.advisory ?? data.healthRecommendation);
+  const color =
+    aqi === undefined
+      ? undefined
+      : aqi >= 150
+        ? 'var(--accent-rose)'
+        : aqi >= 100
+          ? 'var(--accent-orange, #d9480f)'
+          : 'var(--accent-green)';
+  return (
+    <BriefCard
+      icon={<WindIcon className="size-4" />}
+      kind="Air quality"
+      headline={place ?? 'Air quality'}
+      meta={aqi !== undefined ? `AQI ${aqi}${category ? ` · ${category}` : ''}` : category}
+      detail={advisory}
+      badge={aqi !== undefined ? { label: `${aqi}`, color } : undefined}
+    />
+  );
+}
+
+function ValidateAddressCard({ data }: { data: Record<string, unknown> }) {
+  const verified = data.verified === true || data.valid === true;
+  const formatted = asString(data.formattedAddress ?? data.address);
+  const note = asString(data.note ?? data.message);
+  return (
+    <BriefCard
+      icon={<MapPinIcon className="size-4" />}
+      kind="Address check"
+      headline={formatted ?? 'Address'}
+      detail={note}
+      badge={{
+        label: verified ? 'Verified' : 'Unverified',
+        color: verified ? 'var(--accent-green)' : 'var(--text-dim)',
+      }}
+    />
+  );
+}
+
+function TimezoneBriefCard({ data }: { data: Record<string, unknown> }) {
+  const name = asString(data.timeZoneName ?? data.timezone);
+  const id = asString(data.timeZoneId);
+  const localTime = asString(data.localTimeIso ?? data.localTime);
+  const offset = asString(data.utcOffset);
+  return (
+    <BriefCard
+      icon={<ClockIcon className="size-4" />}
+      kind="Timezone"
+      headline={name ?? id ?? 'Local time'}
+      meta={[localTime ? localTime.slice(0, 16).replace('T', ' ') : null, offset]
+        .filter(Boolean)
+        .join(' · ')}
+    />
+  );
+}
+
+function ElevationRiskCard({ data }: { data: Record<string, unknown> }) {
+  const elevation = asNumber(data.elevationMeters ?? data.elevation);
+  const place = asString(data.place ?? data.location);
+  const risk = asString(data.riskLevel ?? data.risk);
+  const advisory = asString(data.advisory ?? data.summary);
+  return (
+    <BriefCard
+      icon={<MountainIcon className="size-4" />}
+      kind="Elevation risk"
+      headline={place ?? 'Elevation'}
+      meta={elevation !== undefined ? `${Math.round(elevation)} m` : undefined}
+      detail={advisory}
+      badge={risk ? { label: risk, color: riskColor(risk) } : undefined}
+    />
+  );
+}
+
+function TravelSafetyCard({ data }: { data: Record<string, unknown> }) {
+  const place = asString(data.place ?? data.location ?? data.country);
+  const risk = asString(data.riskLevel ?? data.level);
+  const summary = asString(data.summary ?? data.advisory);
+  const updated = asString(data.lastUpdated);
+  return (
+    <BriefCard
+      icon={<ShieldCheckIcon className="size-4" />}
+      kind="Travel safety"
+      headline={place ?? 'Safety advisory'}
+      meta={updated ? `Updated ${updated.slice(0, 10)}` : undefined}
+      detail={summary}
+      badge={risk ? { label: risk, color: riskColor(risk) } : undefined}
+    />
+  );
+}
+
 // ─── Dispatcher ──────────────────────────────────────────────────────
 
 export function TripToolCard({
@@ -891,5 +1071,11 @@ export function TripToolCard({
   if (toolName === 'scan_document') {
     return <ScanDocumentCard data={data as ScanResultShape} />;
   }
+  if (toolName === 'trip_weather_brief') return <WeatherBriefCard data={data} />;
+  if (toolName === 'air_quality_brief') return <AirQualityBriefCard data={data} />;
+  if (toolName === 'validate_travel_address') return <ValidateAddressCard data={data} />;
+  if (toolName === 'timezone_brief') return <TimezoneBriefCard data={data} />;
+  if (toolName === 'elevation_risk_brief') return <ElevationRiskCard data={data} />;
+  if (toolName === 'travel_safety_aid') return <TravelSafetyCard data={data} />;
   return null;
 }
