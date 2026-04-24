@@ -1,0 +1,35 @@
+{
+  "name": "@sendero/multisig",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — Weighted multisig module for Circle MSCA treasury wallets. Ported from desk-v1 (Fantasmita LLC, internal reuse). ERC-4337 v0.7 userOp builder, weighted-signature packing, treasury templates, security tiers, and Prisma-backed pending-op repo.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./signing": "./src/signing.ts",
+    "./userop-builder": "./src/userop-builder.ts",
+    "./weight-config": "./src/weight-config.ts",
+    "./templates": "./src/templates.ts",
+    "./security-tiers": "./src/security-tiers.ts",
+    "./submit": "./src/submit.ts",
+    "./weights": "./src/weights.ts",
+    "./contracts": "./src/contracts.ts",
+    "./constants": "./src/constants.ts",
+    "./modular": "./src/modular/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sendero/env": "workspace:*"
+  },
+  "peerDependencies": {
+    "viem": "^2.21.0",
+    "webauthn-p256": "0.0.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

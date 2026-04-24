@@ -92,7 +92,11 @@ fi
 
 # First kill known Sendero ports. These deliberately avoid Desk v1:
 # Desk uses 3000, 3002, 3009, 8080, 8787, 3099.
-for port in 3010 3011 3012 3020 3021 3030 42069; do
+# Includes mise `choose_port` fallbacks (311x/321x) and ad-hoc APP_PORT (e.g. 3050).
+# Next.js 16 also allows only ONE `next dev` per app directory — a stray server on any
+# port blocks another start and makes turbo `@sendero/app#dev` exit 1.
+sendero_ports="3050 3010 3110 3210 3011 3111 3211 3012 3112 3212 3020 3120 3220 3021 3121 3221 3030 3130 3230 42069 42169 42269"
+for port in $sendero_ports; do
   pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
   if [ -n "$pids" ]; then
     echo "Killing Sendero port $port: $pids"
@@ -106,9 +110,8 @@ stale_pids="$(
   ps axo pid=,command= | awk -v root="$root" '
     index($0, root) &&
     ($0 ~ /turbo run dev/ ||
-     $0 ~ /next dev -p 301[012]/ ||
-     $0 ~ /next dev -p 3020/ ||
-     $0 ~ /storybook dev -p 3030/ ||
+     $0 ~ /next dev/ ||
+     $0 ~ /storybook dev/ ||
      $0 ~ /ponder dev/ ||
      $0 ~ /bun run --watch src\\/server.ts/) { print $1 }
   '
@@ -124,9 +127,8 @@ remaining="$(
   ps axo user=,pid=,command= | awk -v root="$root" '
     index($0, root) &&
     ($0 ~ /turbo run dev/ ||
-     $0 ~ /next dev -p 301[012]/ ||
-     $0 ~ /next dev -p 3020/ ||
-     $0 ~ /storybook dev -p 3030/ ||
+     $0 ~ /next dev/ ||
+     $0 ~ /storybook dev/ ||
      $0 ~ /ponder dev/ ||
      $0 ~ /bun run --watch src\\/server.ts/) { print }
   '
@@ -134,7 +136,7 @@ remaining="$(
 if [ -n "$remaining" ]; then
   blocked_ports=""
   blocked_pids=""
-  for port in 3010 3011 3012 3020 3021 3030 42069; do
+  for port in $sendero_ports; do
     pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
     if [ -n "$pids" ]; then
       blocked_ports="$blocked_ports

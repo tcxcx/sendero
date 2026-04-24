@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
-import { DialogShell, dialogStyles } from './dialog-shell';
+import { DialogShell } from './dialog-shell';
 
 type Token = 'USDC' | 'EURC';
 
@@ -151,12 +151,30 @@ export function SwapDialog() {
       )}
 
       <button type="button" className="dlg-primary" disabled={!valid || busy} onClick={submit}>
-        {busy ? 'Signing treasury tx…' : `Swap ${amt || '0'} ${fromT} → ${toT}`}
+        {busy ? (
+          <>
+            <span className="dlg-spinner" aria-hidden="true" />
+            <span>Signing treasury tx…</span>
+          </>
+        ) : (
+          <>
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <path
+                d="M7 10h10l-3-3m3 3l-3 3M17 14H7l3 3m-3-3l3-3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span>
+              Swap {amt || '0'} {fromT} → {toT}
+            </span>
+          </>
+        )}
       </button>
 
-      <style jsx global>
-        {dialogStyles}
-      </style>
       <style jsx>{`
         .sw-row {
           display: grid;

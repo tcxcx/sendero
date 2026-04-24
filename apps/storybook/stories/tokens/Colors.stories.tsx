@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import { senderoBrand } from '@sendero/ui/brand';
 import * as React from 'react';
 
 /**
@@ -100,13 +101,81 @@ export const Vermilion: Story = {
   ),
 };
 
+export const BrandBookPalette: Story = {
+  render: () => (
+    <React.Fragment>
+      <div style={{ padding: 32 }}>
+        <h2 style={{ marginTop: 0 }}>Sendero brand book palette</h2>
+        <p style={{ color: 'var(--text-dim)', maxWidth: 620 }}>
+          Vermillion is the primary brand expression. Midnight, sea, and sand support it; they do
+          not replace it.
+        </p>
+        <div
+          style={{
+            display: 'grid',
+            gap: 16,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          }}
+        >
+          {Object.values(senderoBrand.colors)
+            .slice(0, 4)
+            .map(color => (
+              <div
+                key={color.name}
+                style={{
+                  background: 'var(--bg-elev)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    background: color.hex,
+                    height: 72,
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                />
+                <div style={{ padding: 12 }}>
+                  <div
+                    style={{
+                      color: 'var(--ink)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {color.name}
+                  </div>
+                  <code
+                    style={{
+                      color: 'var(--text-dim)',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 11,
+                    }}
+                  >
+                    {color.hex}
+                  </code>
+                  <div style={{ color: 'var(--text-faint)', fontSize: 11, marginTop: 4 }}>
+                    {color.role}
+                  </div>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    </React.Fragment>
+  ),
+};
+
 export const Surfaces: Story = {
   render: () => (
     <div style={{ padding: 32 }}>
       <h2 style={{ marginTop: 0 }}>Surfaces</h2>
       <Grid
         swatches={[
-          { name: 'Background', varName: '--bg', note: 'Cream page' },
+          { name: 'Background', varName: '--bg', note: 'Parchment page' },
           { name: 'Elevated', varName: '--bg-elev' },
           { name: 'Panel', varName: '--bg-panel' },
           { name: 'Sunk', varName: '--bg-sunk' },

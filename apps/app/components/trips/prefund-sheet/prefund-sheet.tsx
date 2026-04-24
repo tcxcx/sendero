@@ -20,9 +20,9 @@ export function PrefundSheet({ open }: { open: boolean }) {
     <Sheet open={open} onOpenChange={value => !value && close()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>New trip</SheetTitle>
+          <SheetTitle>Create prepaid trip</SheetTitle>
           <SheetDescription>
-            Prefund a guest trip and send the traveler a claim link.
+            Prefund a traveler escrow, then send the claim link over WhatsApp, Slack, or email.
           </SheetDescription>
         </SheetHeader>
         {result ? (

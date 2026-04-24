@@ -11,6 +11,17 @@ body {
   font-family: var(--font-sans);
 }
 
+::selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
+}
+::-moz-selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
+}
+
 code,
 pre {
   font-family: var(--font-mono);

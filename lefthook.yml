@@ -51,7 +51,7 @@ pre-push:
     build:
       skip:
         - ref: $SKIP_PUSH_CHECKS
-      run: bunx turbo run build --cache-dir=.turbo
+      run: NEXT_DIST_DIR=${NEXT_DIST_DIR:-.next-turbo} bunx turbo run build --cache-dir=.turbo
 
     typecheck:
       skip:

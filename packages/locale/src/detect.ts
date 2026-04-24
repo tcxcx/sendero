@@ -9,9 +9,7 @@
  *   5. Fallback: `en-US`
  */
 
-import { SUPPORTED_LOCALES } from './glossary';
-
-const FALLBACK = 'en-US' as const;
+import { DEFAULT_LOCALE, normalizeLocale } from './glossary';
 
 export function bestMatchFromAcceptLanguage(header: string | null | undefined): string | null {
   if (!header) return null;
@@ -26,17 +24,12 @@ export function bestMatchFromAcceptLanguage(header: string | null | undefined): 
     .sort((a, b) => b.q - a.q);
 
   for (const { tag } of candidates) {
-    const match = (SUPPORTED_LOCALES as readonly string[]).find(
-      l => l.toLowerCase() === tag.toLowerCase()
-    );
+    const match = normalizeLocale(tag);
     if (match) return match;
   }
   // Language-only fallback
   for (const { tag } of candidates) {
-    const lang = tag.toLowerCase().split('-')[0];
-    const match = (SUPPORTED_LOCALES as readonly string[]).find(l =>
-      l.toLowerCase().startsWith(`${lang}-`)
-    );
+    const match = normalizeLocale(tag.toLowerCase().split('-')[0]);
     if (match) return match;
   }
   return null;
@@ -61,7 +54,17 @@ const COUNTRY_TO_LOCALE: Record<string, string> = {
 
 export function localeForCountry(country: string | null | undefined): string | null {
   if (!country) return null;
-  return COUNTRY_TO_LOCALE[country.toUpperCase()] ?? null;
+  return normalizeLocale(COUNTRY_TO_LOCALE[country.toUpperCase()]) ?? null;
+}
+
+export function localeForPhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/[^\d+]/g, '');
+  if (digits.startsWith('+54') || digits.startsWith('54')) return 'es-AR';
+  if (digits.startsWith('+55') || digits.startsWith('55')) return 'pt-BR';
+  if (digits.startsWith('+52') || digits.startsWith('52')) return 'es-MX';
+  if (digits.startsWith('+1') || digits.startsWith('1')) return 'en-US';
+  return null;
 }
 
 export interface LocaleDetectInput {
@@ -73,10 +76,10 @@ export interface LocaleDetectInput {
 
 export function detectLocale(input: LocaleDetectInput): string {
   return (
-    input.cookie ||
-    input.userPreference ||
+    normalizeLocale(input.cookie) ||
+    normalizeLocale(input.userPreference) ||
     bestMatchFromAcceptLanguage(input.acceptLanguage) ||
     localeForCountry(input.country) ||
-    FALLBACK
+    DEFAULT_LOCALE
   );
 }

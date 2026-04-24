@@ -3,7 +3,15 @@
   "ui": "tui",
   "daemon": true,
   "globalDependencies": ["**/.env", "**/.env.local", ".mise.toml"],
-  "globalEnv": ["NODE_ENV", "VERCEL", "VERCEL_ENV", "VERCEL_URL", "CI", "SKIP_ENV_VALIDATION"],
+  "globalEnv": [
+    "NODE_ENV",
+    "VERCEL",
+    "VERCEL_ENV",
+    "VERCEL_URL",
+    "CI",
+    "SKIP_ENV_VALIDATION",
+    "NEXT_DIST_DIR"
+  ],
   "globalPassThroughEnv": [
     "DATABASE_URL",
     "DIRECT_URL",
@@ -125,7 +133,15 @@
         "!.next/**",
         "!dist/**"
       ],
-      "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts", "dist/**", ".vercel/output/**"]
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        ".next-turbo/**",
+        "!.next-turbo/cache/**",
+        "next-env.d.ts",
+        "dist/**",
+        ".vercel/output/**"
+      ]
     },
     "@sendero/app#build": {
       "env": [
@@ -161,19 +177,25 @@
       ],
       "dependsOn": ["^build", "db:generate", "@sendero/env#validate"],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.local", "!.next/**"],
-      "outputs": [".next/**", "!.next/cache/**", ".vercel/output/**"]
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        ".next-turbo/**",
+        "!.next-turbo/cache/**",
+        ".vercel/output/**"
+      ]
     },
     "@sendero/marketing#build": {
       "env": ["BASEHUB_TOKEN", "NEXT_PUBLIC_SITE_URL"],
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.local"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", ".next-turbo/**", "!.next-turbo/cache/**"]
     },
     "@sendero/help#build": {
       "env": ["BASEHUB_TOKEN", "NEXT_PUBLIC_SITE_URL"],
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.local"],
-      "outputs": [".next/**", "!.next/cache/**"]
+      "outputs": [".next/**", "!.next/cache/**", ".next-turbo/**", "!.next-turbo/cache/**"]
     },
     "@sendero/env#validate": {
       "env": [
@@ -198,7 +220,11 @@
     },
     "@sendero/edge#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".wrangler/**"]
+      "outputs": []
+    },
+    "@sendero/storybook#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["storybook-static/**"]
     },
     "@sendero/database#db:generate": {
       "inputs": ["prisma/schema.prisma", "package.json"],

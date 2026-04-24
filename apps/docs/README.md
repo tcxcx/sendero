@@ -25,8 +25,9 @@ apps/docs/
 │   ├── meta.json                   # sidebar order
 │   ├── index.mdx                   # welcome
 │   ├── quickstart.mdx
+│   ├── agent-to-agent-booking.mdx
 │   ├── tools/
-│   │   ├── overview.mdx            # 14-tool table
+│   │   ├── overview.mdx            # public tool + workflow table
 │   │   ├── search_flights.mdx
 │   │   └── settle_split.mdx
 │   ├── x402-nanopayments.mdx
@@ -40,7 +41,7 @@ apps/docs/
 
 ## Keeping tool docs in sync with the registry
 
-Today the per-tool MDX (`content/docs/tools/*.mdx`) is authored by hand. The source of truth for the 14 tools is `packages/tools/src/*.ts` — each file exports a `ToolDef` with `name`, `description`, input JSON schema, and output schema.
+Today the per-tool MDX (`content/docs/tools/*.mdx`) is authored by hand. The source of truth for public tools is `packages/tools/src/*.ts` — each file exports a `ToolDef` with `name`, `description`, input JSON schema, and output schema. The source of truth for multi-step plans is `packages/workflows/src/catalog.ts`.
 
 **Next step (post-hackathon):**
 

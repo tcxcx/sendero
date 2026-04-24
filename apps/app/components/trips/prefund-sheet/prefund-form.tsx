@@ -32,7 +32,14 @@ export function PrefundForm({ onSuccess }: { onSuccess: (result: PrefundResult) 
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({
     resolver: zodResolver(prefundFormSchema),
-    defaultValues: { budgetUsdc: '', guestEmail: '', expiresInDays: 30, require2fa: true },
+    defaultValues: {
+      budgetUsdc: '',
+      guestEmail: '',
+      guestName: '',
+      tripSummary: '',
+      expiresInDays: 30,
+      require2fa: true,
+    },
   });
 
   async function onSubmit(values: FormValues) {
@@ -71,7 +78,7 @@ export function PrefundForm({ onSuccess }: { onSuccess: (result: PrefundResult) 
           name="guestEmail"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Guest email</FormLabel>
+              <FormLabel>Traveler email</FormLabel>
               <FormControl>
                 <Input type="email" placeholder="traveler@example.com" {...field} />
               </FormControl>
@@ -84,7 +91,7 @@ export function PrefundForm({ onSuccess }: { onSuccess: (result: PrefundResult) 
           name="guestName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Guest name</FormLabel>
+              <FormLabel>Traveler name</FormLabel>
               <FormControl>
                 <Input placeholder="Optional" {...field} />
               </FormControl>
@@ -137,7 +144,7 @@ export function PrefundForm({ onSuccess }: { onSuccess: (result: PrefundResult) 
           <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
         ) : null}
         <Button type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? 'Sending...' : 'Send invite'}
+          {form.formState.isSubmitting ? 'Creating...' : 'Create claim link'}
         </Button>
       </form>
     </Form>

@@ -1,7 +1,10 @@
+@import "@sendero/ui/motion.css";
+
 :root {
   --bg: #fff;
   --fg: #111;
   --muted: #6b6b6b;
+  --ink: #fb542b;
   --accent: #fb542b;
   --border: #e6e6e6;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -12,6 +15,7 @@
     --bg: #0b0b0b;
     --fg: #f4f4f4;
     --muted: #9a9a9a;
+    --ink: #fb542b;
     --border: #222;
   }
 }
@@ -25,6 +29,16 @@ body {
   color: var(--fg);
   font-family: var(--sans);
   line-height: 1.6;
+}
+::selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
+}
+::-moz-selection {
+  background: var(--ink);
+  color: #fafaf7;
+  text-shadow: none;
 }
 a {
   color: inherit;

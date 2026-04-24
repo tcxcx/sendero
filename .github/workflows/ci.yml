@@ -17,6 +17,12 @@ env:
   UV_THREADPOOL_SIZE: "14"
   NODE_OPTIONS: "--max-old-space-size=6144"
   SKIP_ENV_VALIDATION: "1"
+  # mise ships Node with a GPG-signed tarball; the signing key
+  # ("EDDSA 5BE8...D356") isn't in the runner's default keyring, so
+  # mise bails with "Can't check signature: No public key". Download
+  # over HTTPS is still integrity-checked via SHA — disabling GPG here
+  # skips the broken keyring lookup without weakening transit security.
+  MISE_NODE_VERIFY: "false"
 
 jobs:
   validate:

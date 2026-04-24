@@ -6,8 +6,10 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+
 import { useSendero } from './store';
 import { useMeterStream, useMeterSummary } from './use-meter';
+import { WorkflowGraph } from './workflow-graph';
 
 interface Runtime {
   provider: string | null;
@@ -35,7 +37,9 @@ export function WorkflowLog() {
 
   // Group events by `group` name, preserving order.
   const grouped = workflow.reduce<Record<string, typeof workflow>>((acc, evt) => {
-    (acc[evt.group] ||= []).push(evt);
+    const bucket = acc[evt.group] ?? [];
+    bucket.push(evt);
+    acc[evt.group] = bucket;
     return acc;
   }, {});
 
@@ -49,10 +53,11 @@ export function WorkflowLog() {
         <span className="tag faint mono">▣ run · stream</span>
       </div>
       <div className="col-body log">
+        <WorkflowGraph workflow={workflow} />
+
         <div
           style={{
             padding: '12px 14px',
-            borderBottom: '1px solid var(--border)',
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
           }}
@@ -164,11 +169,11 @@ export function WorkflowLog() {
             </span>
           </div>
 
-          {meterEvents.slice(-12).map((e, i) => {
+          {meterEvents.slice(-12).map(e => {
             const bullet =
               e.status === 'paid' ? 'done' : e.status === 'rejected' ? 'fail' : 'pending';
             return (
-              <div key={`m-${i}`} className={`log-event ${bullet}`}>
+              <div key={`${e.at}-${e.toolName}-${e.status}`} className={`log-event ${bullet}`}>
                 <span className="bullet">
                   {e.status === 'paid' ? '●' : e.status === 'rejected' ? '○' : '◌'}
                 </span>

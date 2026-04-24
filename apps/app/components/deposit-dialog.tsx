@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
-import { DialogShell, dialogStyles } from './dialog-shell';
+import { DialogShell } from './dialog-shell';
 import { useSendero } from './store';
 
 export function DepositDialog() {
@@ -90,29 +90,48 @@ export function DepositDialog() {
       {result && <div className="dlg-ok">{result}</div>}
 
       <button type="button" className="dlg-primary" disabled={!validAmt || busy} onClick={drip}>
-        {busy ? 'Sending…' : `🚰 Drip ${amt || '0'} USDC from treasury`}
+        {busy ? (
+          <>
+            <span className="dlg-spinner" aria-hidden="true" />
+            <span>Sending drip…</span>
+          </>
+        ) : (
+          <>
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <path
+                d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span>Drip {amt || '0'} USDC from treasury</span>
+          </>
+        )}
       </button>
 
       <a
-        className="dlg-primary"
+        className="dlg-primary dlg-primary-ghost"
         href={faucetHref}
         target="_blank"
         rel="noreferrer"
-        style={{
-          background: 'var(--bg-elev)',
-          color: 'var(--ink)',
-          border: '1.5px solid var(--ink)',
-          textAlign: 'center',
-          textDecoration: 'none',
-          marginTop: 2,
-        }}
+        style={{ textDecoration: 'none' }}
       >
-        Circle faucet ↗ · 20 USDC per drip
+        <span>Circle faucet</span>
+        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+          <path
+            d="M7 17L17 7M9 7h8v8"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span style={{ opacity: 0.6, marginLeft: 4 }}>· 20 USDC per drip</span>
       </a>
-
-      <style jsx global>
-        {dialogStyles}
-      </style>
     </DialogShell>
   );
 }

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 
 async function expectNoFrameworkOverlay(page: Page) {
   await expect(
@@ -12,7 +12,7 @@ test.describe('public product smoke', () => {
 
     await expectNoFrameworkOverlay(page);
     await expect(
-      page.getByRole('heading', { name: /AI travel agents that live where your customers/i })
+      page.getByRole('heading', { name: /Run every trip from one Agentic workspace/i })
     ).toBeVisible();
     await expect(page.getByRole('link', { name: /Request access/i }).first()).toHaveAttribute(
       'href',
@@ -22,6 +22,11 @@ test.describe('public product smoke', () => {
       'href',
       '/llms.txt'
     );
+    await expect(
+      page.getByRole('heading', { name: /Connect buyers and travelers/i })
+    ).toBeVisible();
+    await expect(page.getByText(/WhatsApp traveler/i)).toBeVisible();
+    await expect(page.getByText(/Corporate Slack/i)).toBeVisible();
   });
 
   test('llms.txt stays public and agent-readable', async ({ page }) => {
@@ -33,13 +38,49 @@ test.describe('public product smoke', () => {
     await expect(page.locator('body')).toContainText('Arc testnet settlement');
   });
 
+  test('robots and sitemap stay public for crawlers', async ({ request }) => {
+    const robots = await request.get('/robots.txt');
+    expect(robots.ok()).toBe(true);
+
+    const robotsText = await robots.text();
+    expect(robotsText).toContain('Sitemap: https://www.sendero.travel/sitemap.xml');
+    expect(robotsText).toContain('User-Agent: GPTBot');
+    expect(robotsText).not.toContain('/sign-in');
+
+    const sitemap = await request.get('/sitemap.xml');
+    expect(sitemap.ok()).toBe(true);
+
+    const sitemapText = await sitemap.text();
+    expect(sitemapText).toContain('<loc>https://www.sendero.travel/</loc>');
+    expect(sitemapText).toContain('<loc>https://www.sendero.travel/.well-known/llms.txt</loc>');
+    expect(sitemapText).not.toContain('/sign-in');
+  });
+
   test('protected workspace redirects into the Clerk-managed sign-in shell', async ({ page }) => {
     await page.goto('/app');
 
     await expectNoFrameworkOverlay(page);
     await expect(page).toHaveURL(/\/sign-in\?redirect_url=/);
     await expect(page.getByRole('heading', { name: /Welcome back/i })).toBeVisible();
-    await expect(page.getByText(/Protected routes stay behind Clerk/i)).toBeVisible();
+    await expect(
+      page.getByText(/Protected routes stay behind Sendero access checks/i)
+    ).toBeVisible();
+    await expect(
+      page
+        .getByPlaceholder(/email/i)
+        .or(page.getByText(/Clerk connection delayed/i))
+        .first()
+    ).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('login shell persists selected locale through proxy middleware', async ({ page }) => {
+    await page.goto('/sign-in?sendero_locale=es-AR');
+
+    await expectNoFrameworkOverlay(page);
+    await expect(page).toHaveURL(/\/sign-in(?:$|\?)/);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es-AR');
+    await expect(page.getByRole('heading', { name: /Volvé a entrar/i })).toBeVisible();
+    await expect(page.getByLabel(/Language/i)).toHaveValue('es-AR');
   });
 
   test('waitlist route never renders a blank Clerk panel', async ({ page }) => {
@@ -51,8 +92,27 @@ test.describe('public product smoke', () => {
     ).toBeVisible();
 
     const clerkEmail = page.getByPlaceholder(/email/i);
-    const senderoLoadingState = page.getByText(/Waitlist identity/i);
+    const clerkRecoveryState = page.getByText(/Clerk connection delayed/i);
 
-    await expect(clerkEmail.or(senderoLoadingState).first()).toBeVisible({ timeout: 15_000 });
+    await expect(clerkEmail.or(clerkRecoveryState).first()).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  test('sign-up route exposes the live hackathon access form', async ({ page }) => {
+    await page.goto('/sign-up');
+
+    await expectNoFrameworkOverlay(page);
+    await expect(
+      page.getByRole('heading', { name: /Sign up for hackathon access/i })
+    ).toBeVisible();
+    await expect(page.getByText(/Sign-ups are currently unavailable/i)).toHaveCount(0);
+
+    const clerkEmail = page.getByPlaceholder(/email/i);
+    const clerkRecoveryState = page.getByText(/Clerk connection delayed/i);
+
+    await expect(clerkEmail.or(clerkRecoveryState).first()).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });

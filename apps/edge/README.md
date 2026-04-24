@@ -41,12 +41,21 @@ Routes map cleanly out of the Hono app. Free tier covers hackathon load.
 bun run dev:edge          # from repo root, listens on :3021
 ```
 
-### Vercel (experimental)
+### Vercel
 
-`vercel.json` + `api/[[...route]].ts` route exist, but Vercel's monorepo
-handling of `workspace:*` deps is thin. Either vendor `@sendero/tools/src`
-into this package or deploy via Cloudflare. Local `bun run dev:edge`
-always works.
+Vercel deploys for this package must use the prebuilt flow. `@sendero/edge`
+imports several `workspace:*` packages, so a remote deploy that uploads only
+`apps/edge` cannot install or bundle the tool registry.
+
+```bash
+cd apps/edge
+bun run vercel:build
+bun run vercel:deploy
+```
+
+`vercel:build` runs with the local monorepo available and writes
+`.vercel/output`; `vercel:deploy` uploads that prebuilt output to
+`sendero-arc-edge` without asking Vercel to reinstall a partial workspace.
 
 ## Adapter status
 

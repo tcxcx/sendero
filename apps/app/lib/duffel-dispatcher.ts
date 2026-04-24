@@ -14,8 +14,10 @@
 import { prisma } from '@sendero/database';
 import { bookFlightWorkflow, guestPrefundWorkflow } from '@sendero/workflows/catalog';
 import { resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
-import type { DuffelWebhookEvent } from '@sendero/duffel';
+import type { DuffelAirlineCreditWire, DuffelWebhookEvent } from '@sendero/duffel';
+import { getAirlineCredit } from '@sendero/duffel';
 
+import { upsertAirlineCredit } from './airline-credits-sync';
 import { makeToolRegistry } from './tool-registry';
 import { persistPausedRun, readPausedRun } from './workflow-pause';
 
@@ -30,6 +32,21 @@ export async function dispatchDuffelEvent(args: {
    */
   tools?: ToolRegistry;
 }): Promise<{ matched: boolean; runId?: string; run?: WorkflowRun }> {
+  // Airline credit lifecycle hits a different resource type (acd_…).
+  // Snapshot it into our Prisma cache first — and short-circuit before
+  // the booking lookup so we don't log `no booking for acd_…`.
+  if (args.event.type === 'service.refunded' || args.event.orderId.startsWith('acd_')) {
+    try {
+      const wire = (await getAirlineCredit(args.event.orderId)) as DuffelAirlineCreditWire;
+      await upsertAirlineCredit(wire);
+    } catch (err) {
+      console.warn('[duffel-dispatcher] airline credit sync failed', err);
+    }
+    if (args.event.orderId.startsWith('acd_')) {
+      return { matched: true };
+    }
+  }
+
   const booking = await prisma.booking.findUnique({
     where: { duffelOrderId: args.event.orderId },
     select: { id: true, tenantId: true, metadata: true },
@@ -56,11 +73,30 @@ export async function dispatchDuffelEvent(args: {
     return { matched: false, runId: paused.runId };
   }
 
-  const status = args.event.status === 'ticketed' ? 'ticketed' : 'failed';
+  // Canonical mapping from Duffel webhook status → workflow resolution.
+  // 'ticketed' happy path; 'schedule_changed' and 'cancelled' are new
+  // lifecycle branches that paused workflows can opt into. 'refunded'
+  // and 'pending' collapse to 'failed' (so the default book_flight
+  // workflow routes through cancel_booking); dedicated
+  // cancellation/change workflows read the richer `status` directly.
+  const resolutionStatus =
+    args.event.status === 'ticketed'
+      ? 'ticketed'
+      : args.event.status === 'cancelled'
+        ? 'cancelled'
+        : args.event.status === 'schedule_changed'
+          ? 'schedule_changed'
+          : args.event.status === 'refunded'
+            ? 'refunded'
+            : 'failed';
   const resumed = await resumeRun({
     workflow,
     run: paused.snapshot,
-    resolution: { status, duffelOrderId: args.event.orderId },
+    resolution: {
+      status: resolutionStatus,
+      duffelOrderId: args.event.orderId,
+      eventType: args.event.type,
+    },
     tools: args.tools ?? makeToolRegistry(),
   });
 

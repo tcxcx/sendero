@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
-import { DialogShell, dialogStyles } from './dialog-shell';
+import { DialogShell } from './dialog-shell';
 import {
   ARC_BRIDGE_SOURCES,
   bridgeChainLabel,
@@ -155,12 +155,29 @@ export function BridgeDialog() {
       )}
 
       <button type="button" className="dlg-primary" disabled={!valid || busy} onClick={submit}>
-        {busy ? 'Signing + mint…' : `Bridge ${amt || '0'} USDC · ${bridgeChainLabel(chain)} → Arc`}
+        {busy ? (
+          <>
+            <span className="dlg-spinner" aria-hidden="true" />
+            <span>Signing + mint…</span>
+          </>
+        ) : (
+          <>
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <path
+                d="M4 17c4-8 12-8 16 0M4 17l3-2m-3 2l2 3M20 17l-3-2m3 2l-2 3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span>
+              Bridge {amt || '0'} USDC · {bridgeChainLabel(chain)} → Arc
+            </span>
+          </>
+        )}
       </button>
-
-      <style jsx global>
-        {dialogStyles}
-      </style>
     </DialogShell>
   );
 }

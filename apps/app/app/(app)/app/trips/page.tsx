@@ -5,7 +5,9 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
 import { PrefundSheet } from '@/components/trips/prefund-sheet/prefund-sheet';
 import { TripsTable } from '@/components/trips/trips-table';
+import { getAppCopy } from '@/lib/app-copy';
 import { parseListQuery } from '@/lib/parse-list-query';
+import { getRequestLocale } from '@/lib/request-locale';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 import { prisma, type Prisma } from '@sendero/database';
 
@@ -30,6 +32,8 @@ export default async function TripsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { tenant } = await requireCurrentTenant();
+  const locale = await getRequestLocale();
+  const copy = getAppCopy(locale).trips;
   const params = await searchParams;
   const query = parseListQuery(params, { knownFilters: ['status'] });
   const status = parseTripStatus(query.filters.status);
@@ -60,19 +64,19 @@ export default async function TripsPage({
   return (
     <>
       <PageHeader
-        title="Trips"
-        description="Create and monitor prefunded traveler trips."
+        title={copy.title}
+        description={copy.description}
         actions={
           <Button asChild>
-            <Link href="/app/trips?sheet=new">New trip</Link>
+            <Link href="/app/trips?sheet=new">{copy.createCta}</Link>
           </Button>
         }
       />
       {trips.length === 0 ? (
         <EmptyState
-          title="No trips yet"
-          description="Create a prefunded trip to send a secure claim link to a traveler."
-          cta={{ label: 'New trip', href: '/app/trips?sheet=new' }}
+          title={copy.emptyTitle}
+          description={copy.emptyDescription}
+          cta={{ label: copy.createCta, href: '/app/trips?sheet=new' }}
         />
       ) : (
         <div className="flex flex-col gap-4">

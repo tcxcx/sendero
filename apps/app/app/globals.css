@@ -1,4 +1,14 @@
 @tailwind base;
+
+/* Tailwind v4 (@tailwindcss/postcss) does not auto-read tailwind.config.ts
+   when the legacy @tailwind directives are used. Without this, the scanner
+   never sees responsive utilities like `md:flex` / `md:block` that the
+   shadcn sidebar relies on — the sidebar stays `display: none` at every
+   breakpoint. Explicitly pointing at the config restores the `content:`
+   paths and regenerates the full utility set. */
+@config "../tailwind.config.ts";
+
+@custom-variant dark (&:is(.dark *));
 @tailwind components;
 @tailwind utilities;
 
@@ -11,20 +21,20 @@
      sea-of-blue fintech default. LATAM-adjacent (Mexican pottery,
      Peruvian textiles, Argentine leather) without being literal. */
   --ink: #fb542b;
-  --ink-dim: color-mix(in oklab, var(--ink) 8%, white);
-  --ink-soft: color-mix(in oklab, var(--ink) 14%, white);
+  --ink-dim: color-mix(in oklab, var(--ink) 8%, var(--bg));
+  --ink-soft: color-mix(in oklab, var(--ink) 14%, var(--bg));
 
-  --bg: #fafaf7;
-  --bg-elev: #ffffff;
-  --bg-panel: oklch(0.975 0.004 80);
-  --bg-sunk: oklch(0.96 0.004 80);
+  --bg: #eedcc7;
+  --bg-elev: #f5e7d6;
+  --bg-panel: color-mix(in oklab, var(--bg) 82%, #fff7ec);
+  --bg-sunk: color-mix(in oklab, var(--bg) 88%, var(--accent-amber));
 
   --text: oklch(0.22 0.015 250);
   --text-dim: oklch(0.48 0.015 250);
   --text-faint: oklch(0.65 0.01 250);
 
-  --border: oklch(0.89 0.005 80);
-  --border-strong: oklch(0.78 0.008 80);
+  --border: #d8c1a7;
+  --border-strong: #b99c7d;
 
   --accent-green: oklch(0.62 0.13 155);
   --accent-amber: oklch(0.72 0.14 75);
@@ -36,9 +46,86 @@
   --radius: 2px;
   --radius-md: 4px;
 
+  --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-pixel: "Departure Mono", ui-monospace, monospace;
   --font-sans: "Geist", ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  /* Sidebar palette — aligned to DESIGN.md: Parchment surfaces,
+     Vermillion primary, warm editorial accents. Shadcn's default
+     neutral-gray sidebar tokens (near-white hsl) made the nav feel
+     like generic SaaS chrome instead of a travel map-room. */
+  --sidebar: var(--surface-base);
+  --sidebar-foreground: oklch(0.22 0.015 250);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--surface-floating);
+  --sidebar-accent: var(--tint-vermillion-soft);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: transparent;
+  --sidebar-ring: var(--ink);
+
+  /* =====================================================
+     Sendero surface + shadow + tint system (see DESIGN.md §7).
+     Mirrored from @sendero/ui/globals.css so the authenticated
+     app picks up tokens even if the shared stylesheet loads after.
+     ===================================================== */
+  --surface-base: #eedcc7;
+  --surface-raised: #f7efe4;
+  --surface-floating: #fdfbf7;
+  --surface-terminal: rgba(31, 42, 68, 0.97);
+
+  --shadow-xs: 0 1px 2px rgba(31, 42, 68, 0.04);
+  --shadow-sm: 0 1px 2px rgba(31, 42, 68, 0.04), 0 4px 12px -6px rgba(31, 42, 68, 0.06);
+  --shadow-md: 0 1px 2px rgba(31, 42, 68, 0.04), 0 8px 24px -12px rgba(31, 42, 68, 0.08);
+  --shadow-lg: 0 2px 4px rgba(31, 42, 68, 0.06), 0 16px 40px -16px rgba(31, 42, 68, 0.14);
+  --shadow-xl: 0 2px 4px rgba(31, 42, 68, 0.06), 0 24px 48px -20px rgba(31, 42, 68, 0.18);
+  --shadow-terminal: 0 2px 4px rgba(31, 42, 68, 0.12), 0 24px 48px -20px rgba(31, 42, 68, 0.35);
+
+  --tint-vermillion-soft: rgba(214, 84, 56, 0.1);
+  --tint-vermillion-medium: rgba(214, 84, 56, 0.18);
+  --tint-sea-soft: rgba(15, 124, 130, 0.1);
+  --tint-sand-soft: rgba(182, 132, 78, 0.12);
+  --tint-midnight-soft: rgba(31, 42, 68, 0.04);
+  --tint-midnight-medium: rgba(31, 42, 68, 0.08);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* Hairlines — editorial rhythm, never structural (DESIGN.md §9). */
+  --hairline-color: #d8c1a7;
+  --hairline-color-soft: rgba(31, 42, 68, 0.08);
+  --hairline-color-strong: rgba(31, 42, 68, 0.14);
+  --hairline: 1px solid var(--hairline-color);
+  --hairline-soft: 1px solid var(--hairline-color-soft);
+  --hairline-strong: 1px solid var(--hairline-color-strong);
+
+  /* Dotted grid — micro-illustration graticule. */
+  --dot-grid-color: rgba(31, 42, 68, 0.18);
+  --dot-grid-size: 8px;
+  --dot-grid-pattern:
+    radial-gradient(circle, var(--dot-grid-color) 1px, transparent 1px) 0 0 / var(--dot-grid-size)
+    var(--dot-grid-size);
+
+  /* Editorial numeral scale — Handle-inspired, Sendero-adapted. */
+  --numeral-xl: clamp(3.5rem, 6vw, 5.5rem);
+  --numeral-lg: clamp(2.75rem, 4.5vw, 4rem);
+  --numeral-md: clamp(2rem, 3vw, 2.75rem);
+
+  --label-meta: 0.6875rem;
+  --label-meta-tracking: 0.12em;
+
+  --surface-transition:
+    box-shadow 240ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms
+    cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --surface-transition: none;
+  }
 }
 
 .dark {
@@ -56,6 +143,37 @@
   --text-faint: oklch(0.48 0.01 250);
   --border: oklch(0.22 0.01 250);
   --border-strong: oklch(0.32 0.01 250);
+  --sidebar: hsl(240 5.9% 10%);
+  --sidebar-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 3.7% 15.9%);
+  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-border: hsl(240 3.7% 15.9%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+  /* Align shadcn / Tailwind semantic colors with Sendero dark surfaces so
+     `bg-background`, `text-muted-foreground`, Clerk shell, and SidebarInset
+     track `html.dark` (toggled from the agent console store). */
+  --background: 220 14% 5%;
+  --foreground: 220 10% 96%;
+  --muted: 220 10% 12%;
+  --muted-foreground: 220 8% 62%;
+  --border: 220 8% 20%;
+  --input: 220 8% 20%;
+  --ring: 11 72% 58%;
+  --secondary: 220 10% 11%;
+  --secondary-foreground: 220 10% 96%;
+  --accent: 220 10% 15%;
+  --accent-foreground: 220 10% 96%;
+  --card: 220 10% 7%;
+  --card-foreground: 220 10% 96%;
+  --popover: 220 10% 7%;
+  --popover-foreground: 220 10% 96%;
+  --primary: 11 72% 58%;
+  --primary-foreground: 33 100% 97%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 33 100% 97%;
 }
 
 * {
@@ -66,13 +184,91 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   letter-spacing: 0;
+}
+
+/* =====================================================
+   Grainy-gradient page wash (DESIGN.md §19, App Shell).
+   Radial parchment field with whispers of sea + sand at
+   the corners and a low-opacity noise overlay — the
+   authenticated app floats on this as a single raised
+   card, a document on a desk.
+   ===================================================== */
+body {
+  background-color: var(--surface-base);
+  background-image:
+    radial-gradient(
+      ellipse 120% 90% at 100% 0%,
+      rgba(182, 132, 78, 0.04),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 110% 80% at 0% 100%,
+      rgba(15, 124, 130, 0.03),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at center,
+      var(--surface-base),
+      color-mix(in oklab, var(--surface-base) 94%, var(--sendero-midnight, #1f2a44))
+    );
+  background-attachment: fixed;
+  min-height: 100svh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.12  0 0 0 0 0.16  0 0 0 0 0.27  0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* App shell ensures its children render above the body wash. */
+.app-shell-root {
+  position: relative;
+  z-index: 1;
+}
+
+/* =====================================================
+   Composer focus ring — the ONE focus-border in the app.
+   1px vermillion at 40% opacity, fades in over 160ms paired
+   with a shadow lift (DESIGN.md §9, §13.8).
+   ===================================================== */
+.composer-card:focus-within {
+  border-color: color-mix(in oklab, var(--ink) 40%, transparent);
+}
+
+/* =====================================================
+   Emil typography defaults (DESIGN.md §16):
+   tabular-nums on data, currency sizing, focus-visible.
+   ===================================================== */
+[data-tabular],
+table,
+.mono,
+.footer-rail,
+.cbar-chip,
+.wd-addr,
+.step-cell,
+.dlg-input,
+.dlg-label {
+  font-variant-numeric: tabular-nums;
+}
+*:focus {
+  outline: none;
+}
+*:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+p {
+  max-inline-size: 72ch;
 }
 
 @layer base {
@@ -90,9 +286,8 @@ body {
     color: inherit;
   }
 }
-/* Text selection — vermilion bg with cream text. Brand-carrying,
-   unmistakable. Pairs the warm primary with cream pulled from the
-   page background (var(--bg) at full opacity) for maximum contrast. */
+/* Text selection — vermilion highlight with cream glyphs. Brand-carrying,
+   unmistakable, and inherited by docs, code blocks, and transcripts. */
 ::selection {
   background: var(--ink);
   color: #fafaf7;
@@ -103,10 +298,44 @@ body {
   color: #fafaf7;
   text-shadow: none;
 }
-.dark ::selection,
-.dark ::-moz-selection {
-  background: var(--ink);
-  color: #0a0b0d;
+
+button,
+a[role="button"],
+.app-shell-main a,
+.app-shell-main button {
+  transition-timing-function: var(--motion-ease-out);
+}
+
+button:active,
+a[role="button"]:active,
+.app-shell-main a:active,
+.app-shell-main button:active {
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-shell-main > * {
+    animation: app-surface-in 420ms var(--motion-ease-out) both;
+  }
+
+  .app-shell-main > *:nth-child(2) {
+    animation-delay: 45ms;
+  }
+
+  .app-shell-main > *:nth-child(3) {
+    animation-delay: 75ms;
+  }
+}
+
+@keyframes app-surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* =====================================================
@@ -180,10 +409,41 @@ body {
    App shell
    ===================================================== */
 .app {
-  min-height: 100vh;
+  /* Fills SidebarInset's <main>, not the viewport. The outer main sits
+     below the 64px AppHeader and above the global 34px AppShellFooter,
+     so we respect the parent box instead of claiming 100vh. */
+  height: 100%;
+  min-height: 100%;
   display: grid;
-  /* ConsoleBar auto-height, workspace fills rest, FooterRail. */
-  grid-template-rows: auto 1fr 34px;
+  /* ConsoleBar auto-height, workspace fills rest. The app-shell footer
+     now lives outside this grid (see AppChrome → AppShellFooter) so it
+     spans the sidebar + main together as one global rail. */
+  grid-template-rows: auto minmax(0, 1fr);
+}
+/* Trip inbox + surfaces that carry the booking step rail under the
+   ConsoleBar add a second auto row so the workspace still fills the
+   remainder without overflowing. */
+.app.app--with-steprail {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* =====================================================
+   App-shell global footer space
+   ===================================================== */
+.app-shell-root {
+  /* Height of the global AppShellFooter. Exposed as a var so the
+     shadcn sidebar can reserve room at the bottom without duplicating
+     the magic number. Update here if FooterRail padding changes. */
+  --app-shell-footer-h: 34px;
+}
+/* Shadcn sidebar is position:fixed with inset-y-0 h-svh, so by default
+   it spans the entire viewport and would slide under the global
+   FooterRail. Override bottom + height so it stops exactly above the
+   footer rail. `auto` cancels the `h-svh` utility; the top stays
+   pinned via inset-y-0 and the bottom lifts by footer height. */
+.app-shell-root .group.peer[data-side] > .fixed.inset-y-0 {
+  bottom: var(--app-shell-footer-h);
+  height: auto;
 }
 
 .topbar {
@@ -368,21 +628,21 @@ body {
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  background: var(--bg-elev);
+  background: var(--surface-raised);
 }
 .col.sunk {
-  background: var(--bg-sunk);
+  /* Midnight Veil — the "console voice" surface (DESIGN.md §19). */
+  background: var(--surface-terminal);
+  color: #f2ecdc;
 }
-.col + .col {
-  border-left: 1px solid var(--border);
-}
+/* No more column dividers — whitespace + surface tier carries the
+   separation (DESIGN.md §9). */
 
 .col-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
   min-height: 38px;
 }
 .col-head .title {
@@ -661,51 +921,58 @@ body {
   letter-spacing: 0;
 }
 
-/* Horizontal step rail — slimmer */
+/* Horizontal step rail — pill cells on parchment (DESIGN.md §19). */
 .step-rail {
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 4px 0;
+  gap: 6px;
+  padding: 10px 20px;
+  background: var(--surface-base);
 }
 .step-cell {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  transition: var(--surface-transition);
   min-width: 0;
 }
-.step-cell + .step-cell::before {
-  content: "";
-  display: block;
-  width: 16px;
-  height: 1px;
-  background: var(--border);
-  margin-right: 2px;
+.step-cell.active {
+  background: var(--tint-vermillion-soft);
+  box-shadow: var(--shadow-xs);
+}
+.step-cell.done {
+  background: var(--tint-sea-soft);
 }
 .step-cell.active .step-dot {
   background: var(--ink);
-  border-color: var(--ink);
+  border-color: transparent;
 }
 .step-cell.done .step-dot {
-  background: var(--accent-green);
-  border-color: var(--accent-green);
+  background: var(--sendero-sea, #0f7c82);
+  border-color: transparent;
 }
-.step-cell.done .step-name,
+.step-cell.done .step-name {
+  color: var(--sendero-sea, #0f7c82);
+}
 .step-cell.active .step-name {
-  color: var(--text);
+  color: var(--ink);
 }
 .step-cell.pending .step-name {
-  color: var(--text-faint);
+  color: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 60%, transparent);
 }
 
 .step-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-elev);
+  border: 0;
+  background: transparent;
   flex-shrink: 0;
+}
+.step-cell.pending .step-dot {
+  background: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 20%, transparent);
 }
 .step-idx {
   display: none;
@@ -945,11 +1212,11 @@ body {
 }
 .approver.done .check {
   background: var(--accent-green);
-  color: #fff;
+  color: #fff7ec;
 }
 .approver.active .check {
   background: var(--ink);
-  color: #fff;
+  color: #fff7ec;
 }
 .approver .name {
   color: var(--text);
@@ -1222,14 +1489,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-elev);
+  /* Match the --app-shell-footer-h the sidebar reserves at the bottom,
+     so the global rail's visible band and the sidebar cutoff align. */
+  height: 34px;
+  padding: 0 20px;
+  /* Borderless on parchment — DESIGN.md §19. Midnight at 60% opacity
+     gives the rail its meta-info feel without a hard top rule. */
+  background: var(--surface-base);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 60%, transparent);
 }
 .footer-rail .group {
   display: flex;
@@ -1671,4 +1942,208 @@ hr.rule {
   .workspace {
     grid-template-columns: 320px 1fr 300px;
   }
+}
+
+@theme inline {
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Responsive breakpoints — required for Tailwind v4 to emit
+     sm:/md:/lg:/xl:/2xl: utilities. Without this, shadcn components
+     like Sidebar that use `hidden md:flex` render as `display: none`
+     at every viewport size. Values match Tailwind's v3 defaults. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
+
+/* =====================================================
+   Dialog controls (Deposit · Send · Swap · Bridge)
+   Shared `dlg-*` classes consumed by all treasury dialogs.
+   Previously lived in <style jsx global> but Turbopack's
+   SWC plugin does not inline variable template literals
+   into the styled-jsx output — the rules never landed in
+   the DOM. Hoisted here so every dialog gets them for free
+   and they survive any bundler migration.
+   ===================================================== */
+.dlg-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+.dlg-input {
+  padding: 11px 13px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+.dlg-input:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 18%, transparent);
+}
+.dlg-input::placeholder {
+  color: var(--text-faint);
+}
+.dlg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.dlg-sub {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.dlg-err {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #e34;
+  padding: 9px 11px;
+  border-left: 2px solid #e34;
+  background: color-mix(in oklab, #e34 6%, transparent);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.dlg-ok {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #0cc67a;
+  padding: 9px 11px;
+  border-left: 2px solid #0cc67a;
+  background: color-mix(in oklab, #0cc67a 6%, transparent);
+  line-height: 1.5;
+}
+.dlg-ok strong {
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+.dlg-link {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.dlg-primary {
+  padding: 13px 14px;
+  background: var(--ink);
+  color: var(--bg-elev);
+  border: 1.5px solid var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition:
+    transform 80ms,
+    box-shadow 120ms,
+    background 120ms;
+  text-decoration: none;
+}
+.dlg-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--ink) 92%, black);
+  box-shadow: 0 6px 18px -10px color-mix(in oklab, var(--ink) 60%, transparent);
+}
+.dlg-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.dlg-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 30%, transparent);
+}
+.dlg-primary:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.dlg-primary.dlg-primary-ghost {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+.dlg-primary.dlg-primary-ghost:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
+}
+.dlg-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid color-mix(in oklab, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: dlg-spin 700ms linear infinite;
+  flex-shrink: 0;
+}
+@keyframes dlg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dlg-spinner {
+    animation-duration: 2s;
+  }
+}
+.dlg-select {
+  padding: 11px 13px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+.dlg-select:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 18%, transparent);
+}
+.dlg-segmented {
+  display: grid;
+  grid-auto-flow: column;
+  border: 1.5px solid var(--border);
+}
+.dlg-seg-btn {
+  background: var(--bg);
+  border: none;
+  padding: 10px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 120ms;
+}
+.dlg-seg-btn + .dlg-seg-btn {
+  border-left: 1px solid var(--border);
+}
+.dlg-seg-btn.sel {
+  background: var(--ink);
+  color: var(--bg-elev);
+}
+.dlg-seg-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }

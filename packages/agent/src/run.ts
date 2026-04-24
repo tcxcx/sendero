@@ -25,13 +25,13 @@ import type { CapStore } from '@sendero/billing/caps';
 import { type MeterStore, preflight } from '@sendero/billing/meter';
 import type { BillingSegment } from '@sendero/billing/pricing';
 import type { MeterStatus } from '@sendero/database';
-import { buildAgentContext } from '@sendero/intelligence';
 import { getLocaleSlice } from '@sendero/locale';
 import { listWorkflows } from '@sendero/workflows';
 import type { LanguageModel, ToolSet } from 'ai';
 import { generateText, stepCountIs } from 'ai';
 
-import type { AgentInput, AgentOutput } from './channels';
+import type { AgentInput, AgentOutput, AgentMediaAttachment } from './channels';
+import { isMediaAttachment } from './channels';
 import { buildIdempotencyKey, isDuplicateKeyError } from './idempotency';
 import {
   type AgentProviderOptions,
@@ -39,7 +39,7 @@ import {
   type ModelTier,
   selectModel,
 } from './models';
-import { renderWorkflowsBlock } from './prompt';
+import { buildSystemPrompt, renderWorkflowsBlock } from './prompt';
 import { appendTurn, type ConversationState, type SessionStore } from './session';
 
 export interface TripSnapshot {
@@ -137,31 +137,60 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     listWorkflows().map(w => ({ id: w.id, label: w.label, description: w.description }))
   );
   const recentTurnsBlock = renderRecentTurns(state);
-  const systemPrompt = [
-    buildAgentContext({ localeSlice, trip }),
-    recentTurnsBlock,
-    workflowsBlock,
-    args.persona,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  const systemPrompt = buildSystemPrompt({
+    persona: args.persona,
+    locale: input.actor.locale,
+    localeSlice: localeSliceMatchesRequestedLanguage(localeSlice.locale, input.actor.locale)
+      ? localeSlice
+      : null,
+    channelHint: renderChannelHint(input),
+    tripContext: renderTripContext(trip),
+    workflowCatalog: workflowsBlock,
+    recentTurns: recentTurnsBlock,
+  });
 
   // 5. LLM turn — when `model` is a gateway string AND AI_GATEWAY_API_KEY
   //    (or VERCEL_OIDC_TOKEN) is set, AI SDK auto-routes through the
   //    Vercel AI Gateway and honors providerOptions.gateway.order for
   //    automatic fallback across providers.
-  const tier: ModelTier = args.tier ?? 'smart';
+  //
+  //    Multimodal turns: when the user message carries attachments, we
+  //    construct a multi-part user message so Gemini (or any multimodal
+  //    provider) sees both the image/document and the text. We also
+  //    automatically promote to the `smart` tier — OCR benefits from
+  //    Pro-class reasoning on ambiguous layouts.
+  const mediaAttachments = (input.attachments ?? []).filter(isMediaAttachment);
+  const hasMedia = mediaAttachments.length > 0;
+  const tier: ModelTier = hasMedia ? 'smart' : (args.tier ?? 'smart');
   const providerOptions: AgentProviderOptions | undefined =
     typeof args.model === 'string' ? buildProviderOptions(tier) : undefined;
-  const result = await generateText({
-    model: args.model,
-    system: systemPrompt,
-    prompt: input.text,
-    tools: args.tools,
-    stopWhen: stepCountIs(4),
-    maxRetries: 2,
-    providerOptions,
-  });
+  const result = hasMedia
+    ? await generateText({
+        model: args.model,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              ...mediaAttachments.map(toFilePart),
+              ...(input.text ? [{ type: 'text' as const, text: input.text }] : []),
+            ],
+          },
+        ],
+        tools: args.tools,
+        stopWhen: stepCountIs(4),
+        maxRetries: 2,
+        providerOptions,
+      })
+    : await generateText({
+        model: args.model,
+        system: systemPrompt,
+        prompt: input.text,
+        tools: args.tools,
+        stopWhen: stepCountIs(4),
+        maxRetries: 2,
+        providerOptions,
+      });
 
   const latencyMs = Date.now() - startedAt;
   const trail = (result.toolCalls ?? []).map(tc => ({
@@ -240,6 +269,33 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
 
 // ─── helpers ─────────────────────────────────────────────────────────
 
+/**
+ * Turn an AgentMediaAttachment into an AI SDK v6 file content part.
+ * Prefers the raw URL (cheaper — Gemini fetches it server-side) and
+ * falls back to inline base64 data when the adapter downloaded the
+ * payload itself (e.g. WhatsApp media must be pulled with a bearer
+ * token, so the URL isn't publicly fetchable).
+ */
+function toFilePart(attachment: AgentMediaAttachment): {
+  type: 'file';
+  data: string;
+  mediaType: string;
+  filename?: string;
+} {
+  const payload = attachment.url ?? attachment.data ?? '';
+  if (!payload) {
+    throw new Error(
+      `Attachment (${attachment.kind}/${attachment.mediaType}) has neither url nor data`
+    );
+  }
+  return {
+    type: 'file',
+    data: payload,
+    mediaType: attachment.mediaType,
+    ...(attachment.filename ? { filename: attachment.filename } : {}),
+  };
+}
+
 function subjectKeyFromActor(input: AgentInput): string {
   // Simple default: channel:userId. Consumers can override via meta.subjectKey.
   const metaKey = (input.meta?.subjectKey as string | undefined) ?? null;
@@ -253,4 +309,49 @@ function renderRecentTurns(state: ConversationState): string {
     '## Recent conversation',
     ...recent.map(t => `- ${t.role}: ${t.text.slice(0, 200)}`),
   ].join('\n');
+}
+
+function renderChannelHint(input: AgentInput): string {
+  const subject = input.meta?.subjectKey ? `\n- Subject key: ${input.meta.subjectKey}` : '';
+  const displayName = input.actor.displayName
+    ? `\n- Traveler name: ${input.actor.displayName}`
+    : '';
+
+  const instruction =
+    input.channel === 'whatsapp'
+      ? 'Plain text only. Keep messages compact for mobile, one clear next action per reply.'
+      : input.channel === 'slack'
+        ? 'Use concise Slack mrkdwn. Preserve thread context and make approval states explicit.'
+        : input.channel === 'mcp'
+          ? 'Return schema-literal, auditable responses. Prefer machine-readable next actions.'
+          : input.channel === 'email'
+            ? 'Write clear email prose with a subject-worthy first sentence and exact trip/payment details.'
+            : 'Coordinate with the web UI; do not duplicate cards already visible on screen.';
+
+  return `- Channel: ${input.channel}
+- Locale: ${input.actor.locale ?? 'unknown'}${displayName}${subject}
+- Instruction: ${instruction}`;
+}
+
+function renderTripContext(trip: TripSnapshot | null): string {
+  if (!trip) return '';
+  return [
+    `- Trip: \`${trip.tripId}\` (${trip.status})`,
+    `- Route: ${trip.route}`,
+    `- Departs: ${trip.departAt}`,
+    trip.pnr ? `- PNR: \`${trip.pnr}\`` : '',
+    trip.bookingRef ? `- Booking: \`${trip.bookingRef}\`` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function localeSliceMatchesRequestedLanguage(
+  sliceLocale: string,
+  requested: string | null
+): boolean {
+  if (!requested) return true;
+  const sliceLanguage = sliceLocale.toLowerCase().split('-')[0];
+  const requestedLanguage = requested.toLowerCase().split('-')[0];
+  return sliceLanguage === requestedLanguage;
 }

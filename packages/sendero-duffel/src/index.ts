@@ -13,12 +13,47 @@
 import { Duffel } from '@duffel/api';
 import { env } from '@sendero/env';
 
+import type {
+  DuffelAirlineCreditCreateWire,
+  DuffelAirlineCreditId,
+  DuffelAirlineCreditWire,
+  DuffelAvailableServiceBaggageWire,
+  DuffelAvailableServiceCFARWire,
+  DuffelAvailableServiceWire,
+  DuffelConditionsWire,
+  DuffelCreateOrderWire,
+  DuffelCurrencyCode,
+  DuffelCustomerUserGroupPayloadWire,
+  DuffelCustomerUserGroupWire,
+  DuffelCustomerUserId,
+  DuffelCustomerUserPayloadWire,
+  DuffelCustomerUserWire,
+  DuffelLeisureFareType,
+  DuffelOfferRequestCreateWire,
+  DuffelOfferRequestPassengerWire,
+  DuffelOfferWireMinimal,
+  DuffelOrderCancellationId,
+  DuffelOrderCancellationWire,
+  DuffelOrderId,
+  DuffelPlaceSuggestionWire,
+  DuffelPrivateFaresMap,
+  DuffelSeatMapWire,
+  DuffelServiceId,
+  DuffelStaysBookingPayloadWire,
+  DuffelStaysBookingWire,
+  DuffelStaysQuoteId,
+  DuffelStaysQuoteWire,
+  DuffelStaysRateId,
+} from './types';
+
 export {
   verifyDuffelSignature,
   parseDuffelWebhook,
   type DuffelWebhookEvent,
   type DuffelWebhookStatus,
+  type DuffelWebhookEventType,
 } from './webhook';
+export * from './types';
 
 let client: Duffel | null = null;
 
@@ -40,6 +75,30 @@ export interface FlightSearchParams {
   returnDate?: string;
   passengers?: number;
   cabinClass?: 'economy' | 'premium_economy' | 'business' | 'first';
+  /**
+   * Corporate negotiated fares + corporate loyalty programmes keyed by
+   * airline IATA code. E.g. `{ "AA": [{ corporate_code, tour_code }], "UA":
+   * [{ tour_code }] }`. See https://duffel.com/docs/guides/accessing-corporate-private-fares
+   * and https://duffel.com/docs/guides/adding-corporate-loyalty-programme-accounts.
+   */
+  privateFares?: DuffelPrivateFaresMap;
+  /**
+   * Per-passenger leisure private-fare type (student, contract_bulk, etc).
+   * Pass one per passenger slot (same order as Duffel passengers list).
+   * See https://duffel.com/docs/guides/accessing-leisure-private-fares.
+   */
+  leisureFareTypes?: Array<DuffelLeisureFareType | undefined>;
+  /**
+   * Match offers against a Duffel CustomerUser so their attached
+   * airline_credits surface as `available_airline_credit_ids[]`.
+   */
+  customerUserId?: DuffelCustomerUserId;
+  /**
+   * Explicit airline-credit pool to test against this search.
+   */
+  airlineCreditIds?: DuffelAirlineCreditId[];
+  /** Loyalty programme accounts per passenger (same order as passengers). */
+  loyaltyProgrammeAccounts?: Array<Array<{ airlineIataCode: string; accountNumber: string }>>;
 }
 
 export interface FlightOfferSummary {
@@ -70,9 +129,23 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
   const duffel = getDuffel();
 
   const passengerCount = params.passengers ?? 1;
-  const passengers = Array.from({ length: passengerCount }, () => ({
-    type: 'adult' as const,
-  }));
+  const passengers: DuffelOfferRequestPassengerWire[] = Array.from(
+    { length: passengerCount },
+    (_unused, idx) => {
+      const wire: DuffelOfferRequestPassengerWire = { type: 'adult' };
+      const fareType = params.leisureFareTypes?.[idx];
+      if (fareType) wire.fare_type = fareType;
+      if (idx === 0 && params.customerUserId) wire.user_id = params.customerUserId;
+      const loyalty = params.loyaltyProgrammeAccounts?.[idx];
+      if (loyalty?.length) {
+        wire.loyalty_programme_accounts = loyalty.map(l => ({
+          airline_iata_code: l.airlineIataCode,
+          account_number: l.accountNumber,
+        }));
+      }
+      return wire;
+    }
+  );
 
   const slices: { origin: string; destination: string; departure_date: string }[] = [
     {
@@ -89,12 +162,22 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
     });
   }
 
-  const response = await duffel.offerRequests.create({
+  const body: DuffelOfferRequestCreateWire = {
     slices,
     passengers,
     cabin_class: params.cabinClass ?? 'economy',
     return_offers: true,
-  } as any);
+  };
+  if (params.privateFares && Object.keys(params.privateFares).length) {
+    body.private_fares = params.privateFares;
+  }
+  if (params.airlineCreditIds?.length) {
+    body.airline_credit_ids = params.airlineCreditIds;
+  }
+
+  const response = await duffel.offerRequests.create(
+    body as unknown as Parameters<typeof duffel.offerRequests.create>[0]
+  );
 
   const offers = ((response.data as any).offers || []).slice(0, 10);
 
@@ -144,6 +227,22 @@ export interface HoldOrderParams {
   passengerDob?: string;
   passengerGender?: 'male' | 'female';
   idempotencyKey: string;
+  /**
+   * Optional Duffel Customer Users to attach to the order. The first
+   * element is also bound to the passenger via `user_id`. Additional
+   * entries are added to the order-level `users` array so they unlock
+   * Travel Support Assistant access (e.g. personal assistant, team lead).
+   * See https://duffel.com/docs/guides/modelling-customers
+   */
+  customerUserIds?: string[];
+  /**
+   * Optional ancillary services to attach at order creation time — e.g.
+   * baggage, cancel-for-any-reason, or seats. Each entry is a Duffel
+   * available-service `id` plus `quantity`. Seat services come from
+   * `getSeatMap(offerId)`; bag / CFAR services come from the offer's
+   * `available_services` via `getOfferWithServices(offerId)`.
+   */
+  services?: Array<{ id: string; quantity: number }>;
 }
 
 export interface HoldOrderResult {
@@ -152,20 +251,25 @@ export interface HoldOrderResult {
   totalAmount: string;
   totalCurrency: string;
   paymentRequiredBy: string;
+  /** Snapshot of the services that were attached at creation time. */
+  services: Array<{ id: string; quantity: number }>;
 }
 
 export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrderResult> {
   const duffel = getDuffel();
 
   // Duffel requires a passenger ID that matches the offer's passenger ID.
-  const offer = await duffel.offers.get(params.offerId);
-  const passengerId = (offer.data as any).passengers?.[0]?.id || 'pax_0001';
+  const offerResp = await duffel.offers.get(params.offerId);
+  const offer = offerResp.data as unknown as DuffelOfferWireMinimal;
+  const passengerId = offer.passengers?.[0]?.id || 'pax_0001';
 
   const [givenName, ...rest] = params.passengerName.split(' ');
   const familyName = rest.join(' ') || 'Traveler';
 
-  const response = await duffel.orders.create({
-    selected_offers: [params.offerId],
+  const primaryCustomerUserId = params.customerUserIds?.[0] as DuffelCustomerUserId | undefined;
+
+  const order: DuffelCreateOrderWire = {
+    selected_offers: [params.offerId as DuffelCreateOrderWire['selected_offers'][number]],
     type: 'hold',
     passengers: [
       {
@@ -177,18 +281,40 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
         born_on: params.passengerDob || '1990-01-01',
         gender: params.passengerGender === 'female' ? 'f' : 'm',
         title: 'mr',
-        type: 'adult' as const,
+        type: 'adult',
+        ...(primaryCustomerUserId ? { user_id: primaryCustomerUserId } : {}),
       },
     ],
     metadata: { idempotency_key: params.idempotencyKey },
-  } as any);
+  };
+  if (params.customerUserIds?.length) {
+    order.users = params.customerUserIds as DuffelCustomerUserId[];
+  }
+  if (params.services?.length) {
+    order.services = params.services.map(s => ({
+      id: s.id as DuffelServiceId,
+      quantity: s.quantity,
+    }));
+  }
+
+  const response = await duffel.orders.create(
+    order as unknown as Parameters<typeof duffel.orders.create>[0]
+  );
+  const orderData = response.data as unknown as {
+    id: string;
+    booking_reference: string;
+    total_amount: string;
+    total_currency: string;
+    payment_status?: { payment_required_by?: string };
+  };
 
   return {
-    orderId: response.data.id,
-    bookingReference: response.data.booking_reference,
-    totalAmount: response.data.total_amount,
-    totalCurrency: response.data.total_currency,
-    paymentRequiredBy: (response.data as any).payment_status?.payment_required_by || '',
+    orderId: orderData.id,
+    bookingReference: orderData.booking_reference,
+    totalAmount: orderData.total_amount,
+    totalCurrency: orderData.total_currency,
+    paymentRequiredBy: orderData.payment_status?.payment_required_by || '',
+    services: params.services ?? [],
   };
 }
 
@@ -415,4 +541,733 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOffe
         .slice(0, 5),
     };
   });
+}
+
+// ============================================================================
+// Customer Users + Customer User Groups (Duffel identity)
+//
+// See https://duffel.com/docs/guides/modelling-customers — attaching a
+// CustomerUser to an order unlocks the Travel Support Assistant and
+// lets Duffel send confirmation + support emails.
+// ============================================================================
+
+/** Wrapper payload (camelCase-ish) that the tool layer uses. */
+export interface DuffelCustomerUserPayload {
+  email: string;
+  given_name: string;
+  family_name: string;
+  phone_number?: string;
+  group_id?: DuffelCustomerUserId | string;
+  /** Accepted by REST; not in SDK type as of @duffel/api v4.24. */
+  preferred_language?: string;
+}
+
+export type DuffelCustomerUser = DuffelCustomerUserWire;
+export type DuffelCustomerUserGroup = DuffelCustomerUserGroupWire;
+
+function toWireCustomerUserPayload(p: DuffelCustomerUserPayload): DuffelCustomerUserPayloadWire {
+  return {
+    email: p.email,
+    given_name: p.given_name,
+    family_name: p.family_name,
+    phone_number: p.phone_number ?? null,
+    group_id: (p.group_id as DuffelCustomerUserPayloadWire['group_id']) ?? null,
+    preferred_language: p.preferred_language ?? null,
+  };
+}
+
+/**
+ * The @duffel/api SDK's TS signatures for `identity.customerUsers.*` don't
+ * include `preferred_language` and typecast payloads narrowly. We bridge
+ * through `unknown` + our wire type so callers stay strictly typed.
+ */
+export async function createCustomerUser(
+  payload: DuffelCustomerUserPayload
+): Promise<DuffelCustomerUser> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUsers.create(
+    toWireCustomerUserPayload(payload) as unknown as Parameters<
+      typeof duffel.identity.customerUsers.create
+    >[0]
+  );
+  return r.data as unknown as DuffelCustomerUser;
+}
+
+export async function getCustomerUser(
+  id: DuffelCustomerUserId | string
+): Promise<DuffelCustomerUser> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUsers.get(id);
+  return r.data as unknown as DuffelCustomerUser;
+}
+
+export async function updateCustomerUser(
+  id: DuffelCustomerUserId | string,
+  payload: DuffelCustomerUserPayload
+): Promise<DuffelCustomerUser> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUsers.update(
+    id,
+    toWireCustomerUserPayload(payload) as unknown as Parameters<
+      typeof duffel.identity.customerUsers.update
+    >[1]
+  );
+  return r.data as unknown as DuffelCustomerUser;
+}
+
+export async function findCustomerUserByEmail(email: string): Promise<DuffelCustomerUser | null> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUsers.list({ email } as unknown as Parameters<
+    typeof duffel.identity.customerUsers.list
+  >[0]);
+  const list = r.data as unknown as DuffelCustomerUserWire[];
+  return list[0] ?? null;
+}
+
+export async function createCustomerUserGroup(args: {
+  name: string;
+  userIds?: DuffelCustomerUserId[];
+}): Promise<DuffelCustomerUserGroup> {
+  const duffel = getDuffel();
+  const wire: DuffelCustomerUserGroupPayloadWire = {
+    name: args.name,
+    user_ids: args.userIds ?? [],
+  };
+  const r = await duffel.identity.customerUserGroups.create(
+    wire as unknown as Parameters<typeof duffel.identity.customerUserGroups.create>[0]
+  );
+  return r.data as unknown as DuffelCustomerUserGroup;
+}
+
+export async function getCustomerUserGroup(id: string): Promise<DuffelCustomerUserGroup> {
+  const duffel = getDuffel();
+  const r = await duffel.identity.customerUserGroups.get(id);
+  return r.data as unknown as DuffelCustomerUserGroup;
+}
+
+// ============================================================================
+// Ancillary services — baggage, CFAR, seats
+// ============================================================================
+
+export type DuffelAncillaryType = 'baggage' | 'cancel_for_any_reason';
+
+export interface DuffelAvailableServiceBaggage {
+  id: string;
+  type: 'baggage';
+  maximumQuantity: number;
+  passengerIds: string[];
+  segmentIds: string[];
+  totalAmount: string;
+  totalCurrency: string;
+  metadata: {
+    kind?: 'carry_on' | 'checked';
+    maxWeightKg?: number | null;
+    maxHeightCm?: number | null;
+    maxLengthCm?: number | null;
+    maxDepthCm?: number | null;
+  };
+}
+
+export interface DuffelAvailableServiceCFAR {
+  id: string;
+  type: 'cancel_for_any_reason';
+  maximumQuantity: number;
+  passengerIds: string[];
+  segmentIds: string[];
+  totalAmount: string;
+  totalCurrency: string;
+  metadata: {
+    refundAmount?: string;
+    merchantCopy?: string;
+    termsAndConditionsUrl?: string;
+  };
+}
+
+export type DuffelAvailableService = DuffelAvailableServiceBaggage | DuffelAvailableServiceCFAR;
+
+function mapAvailableService(
+  raw: DuffelAvailableServiceWire | null | undefined
+): DuffelAvailableService | null {
+  if (!raw || typeof raw !== 'object' || !raw.id || !raw.type) return null;
+  const base = {
+    id: String(raw.id),
+    maximumQuantity: Number(raw.maximum_quantity ?? 1),
+    passengerIds: Array.isArray(raw.passenger_ids) ? raw.passenger_ids.map(String) : [],
+    segmentIds: Array.isArray(raw.segment_ids) ? raw.segment_ids.map(String) : [],
+    totalAmount: String(raw.total_amount ?? '0'),
+    totalCurrency: String(raw.total_currency ?? 'USD'),
+  };
+  if (raw.type === 'baggage') {
+    const meta = (raw as DuffelAvailableServiceBaggageWire).metadata;
+    return {
+      ...base,
+      type: 'baggage',
+      metadata: {
+        kind: meta?.type,
+        maxWeightKg: meta?.maximum_weight_kg ?? null,
+        maxHeightCm: meta?.maximum_height_cm ?? null,
+        maxLengthCm: meta?.maximum_length_cm ?? null,
+        maxDepthCm: meta?.maximum_depth_cm ?? null,
+      },
+    };
+  }
+  if (raw.type === 'cancel_for_any_reason') {
+    const meta = (raw as DuffelAvailableServiceCFARWire).metadata;
+    return {
+      ...base,
+      type: 'cancel_for_any_reason',
+      metadata: {
+        refundAmount: meta?.refund_amount,
+        merchantCopy: meta?.merchant_copy,
+        termsAndConditionsUrl: meta?.terms_and_conditions_url,
+      },
+    };
+  }
+  return null;
+}
+
+export interface DuffelSeatOption {
+  serviceId: string;
+  designator: string;
+  name?: string;
+  cabinClass?: string;
+  passengerId: string;
+  totalAmount: string;
+  totalCurrency: string;
+  disclosures: string[];
+}
+
+export interface DuffelOfferAncillaries {
+  offerId: string;
+  available: DuffelAvailableService[];
+  seats: DuffelSeatOption[];
+  currency: string;
+}
+
+export async function getOfferWithAncillaries(offerId: string): Promise<DuffelOfferAncillaries> {
+  const duffel = getDuffel();
+  const offer = (await duffel.offers.get(offerId)).data as unknown as DuffelOfferWireMinimal;
+  const services = Array.isArray(offer.available_services) ? offer.available_services : [];
+  const available = services
+    .map(raw => mapAvailableService(raw as DuffelAvailableServiceWire))
+    .filter((s): s is DuffelAvailableService => Boolean(s));
+
+  let seats: DuffelSeatOption[] = [];
+  try {
+    const maps = (
+      await duffel.seatMaps.get({ offer_id: offerId } as unknown as Parameters<
+        typeof duffel.seatMaps.get
+      >[0])
+    ).data as unknown as DuffelSeatMapWire[];
+    for (const map of maps ?? []) {
+      for (const cabin of map?.cabins ?? []) {
+        const cabinClass = cabin?.cabin_class;
+        for (const row of cabin?.rows ?? []) {
+          for (const section of row?.sections ?? []) {
+            for (const el of section?.elements ?? []) {
+              if (el?.type !== 'seat') continue;
+              for (const svc of el?.available_services ?? []) {
+                seats.push({
+                  serviceId: String(svc.id),
+                  designator: String(el.designator ?? ''),
+                  name: el.name,
+                  cabinClass,
+                  passengerId: String(svc.passenger_id ?? ''),
+                  totalAmount: String(svc.total_amount ?? '0'),
+                  totalCurrency: String(svc.total_currency ?? 'USD'),
+                  disclosures: Array.isArray(el.disclosures) ? el.disclosures : [],
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // Some offer types don't expose seat maps — swallow + return empty.
+    seats = [];
+  }
+
+  return {
+    offerId,
+    available,
+    seats,
+    currency: offer.total_currency ?? 'USD',
+  };
+}
+
+export interface AddServicesParams {
+  orderId: string;
+  services: Array<{ id: DuffelServiceId | string; quantity: number }>;
+  payment: { type: 'balance'; currency: string; amount: string };
+}
+
+export async function addServicesToOrder(params: AddServicesParams): Promise<unknown> {
+  const duffel = getDuffel();
+  const ordersWithAddServices = duffel.orders as unknown as {
+    addServices: (
+      orderId: string,
+      body: { add_services: AddServicesParams['services']; payment: AddServicesParams['payment'] }
+    ) => Promise<{ data: unknown }>;
+  };
+  const r = await ordersWithAddServices.addServices(params.orderId, {
+    add_services: params.services,
+    payment: params.payment,
+  });
+  return r.data;
+}
+
+// ============================================================================
+// Offer conditions + private fares + airline credit availability
+// ============================================================================
+
+export interface OfferConditionsSummary {
+  offerId: string;
+  totalAmount: string;
+  totalCurrency: string;
+  conditions: DuffelConditionsWire | null;
+  slices: Array<{
+    sliceId: string;
+    origin: string;
+    destination: string;
+    change_before_departure: DuffelConditionsWire['change_before_departure'];
+  }>;
+  privateFaresApplied: Array<{
+    type: string;
+    corporate_code?: string;
+    tour_code?: string;
+    tracking_reference?: string;
+  }>;
+  availableAirlineCreditIds: string[];
+  supportedLoyaltyProgrammes: string[];
+}
+
+export async function getOfferConditions(offerId: string): Promise<OfferConditionsSummary> {
+  const duffel = getDuffel();
+  const raw = (await duffel.offers.get(offerId)).data as unknown as {
+    id: string;
+    total_amount: string;
+    total_currency: string;
+    conditions?: DuffelConditionsWire | null;
+    slices?: Array<{
+      id: string;
+      origin?: { iata_code?: string };
+      destination?: { iata_code?: string };
+      conditions?: DuffelConditionsWire;
+    }>;
+    private_fares?: Array<{
+      type: string;
+      corporate_code?: string;
+      tour_code?: string;
+      tracking_reference?: string;
+    }>;
+    available_airline_credit_ids?: string[];
+    supported_loyalty_programmes?: string[];
+  };
+  return {
+    offerId: raw.id,
+    totalAmount: raw.total_amount,
+    totalCurrency: raw.total_currency,
+    conditions: raw.conditions ?? null,
+    slices: (raw.slices ?? []).map(s => ({
+      sliceId: s.id,
+      origin: s.origin?.iata_code ?? '',
+      destination: s.destination?.iata_code ?? '',
+      change_before_departure: s.conditions?.change_before_departure ?? null,
+    })),
+    privateFaresApplied: raw.private_fares ?? [],
+    availableAirlineCreditIds: raw.available_airline_credit_ids ?? [],
+    supportedLoyaltyProgrammes: raw.supported_loyalty_programmes ?? [],
+  };
+}
+
+// ============================================================================
+// Places suggestions (airport/city radius search)
+// ============================================================================
+
+export interface PlaceSuggestionsParams {
+  /** Free-form text — airline name, city, airport code, etc. */
+  query?: string;
+  /** Latitude + longitude + radius in metres. `rad` ≤ 500000 (500km). */
+  lat?: number;
+  lng?: number;
+  radMeters?: number;
+}
+
+export interface DuffelPlaceSuggestion {
+  type: 'airport' | 'city' | string;
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  timeZone: string;
+  iataCode?: string;
+  iataCityCode?: string;
+  iataCountryCode?: string;
+  icaoCode?: string;
+  cityName?: string;
+}
+
+function toPlaceSuggestion(raw: DuffelPlaceSuggestionWire): DuffelPlaceSuggestion {
+  return {
+    type: raw.type,
+    id: raw.id,
+    name: raw.name,
+    latitude: raw.latitude,
+    longitude: raw.longitude,
+    timeZone: raw.time_zone,
+    iataCode: raw.iata_code,
+    iataCityCode: raw.iata_city_code,
+    iataCountryCode: raw.iata_country_code,
+    icaoCode: raw.icao_code,
+    cityName: raw.city_name,
+  };
+}
+
+export async function duffelPlaceSuggestions(
+  params: PlaceSuggestionsParams
+): Promise<DuffelPlaceSuggestion[]> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const qs = new URLSearchParams();
+  if (params.query) qs.set('query', params.query);
+  if (typeof params.lat === 'number') qs.set('lat', String(params.lat));
+  if (typeof params.lng === 'number') qs.set('lng', String(params.lng));
+  if (typeof params.radMeters === 'number') qs.set('rad', String(params.radMeters));
+  const res = await fetch(`https://api.duffel.com/places/suggestions?${qs.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.places.suggestions ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data?: DuffelPlaceSuggestionWire[] };
+  return (json.data ?? []).map(toPlaceSuggestion);
+}
+
+// ============================================================================
+// Airline credits — create, get, list
+// ============================================================================
+
+export async function createAirlineCredit(
+  payload: DuffelAirlineCreditCreateWire
+): Promise<DuffelAirlineCreditWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch('https://api.duffel.com/air/airline_credits', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ data: payload }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.airline_credits.create ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelAirlineCreditWire };
+  return json.data;
+}
+
+export async function getAirlineCredit(
+  id: DuffelAirlineCreditId | string
+): Promise<DuffelAirlineCreditWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch(`https://api.duffel.com/air/airline_credits/${encodeURIComponent(id)}`, {
+    headers: {
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.airline_credits.get ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelAirlineCreditWire };
+  return json.data;
+}
+
+export interface ListAirlineCreditsParams {
+  userId?: DuffelCustomerUserId;
+  limit?: number;
+  after?: string;
+  before?: string;
+}
+
+export async function listAirlineCredits(
+  params: ListAirlineCreditsParams = {}
+): Promise<{ data: DuffelAirlineCreditWire[]; meta?: { after?: string; before?: string } }> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const qs = new URLSearchParams();
+  if (params.userId) qs.set('user_id', params.userId);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.after) qs.set('after', params.after);
+  if (params.before) qs.set('before', params.before);
+  const res = await fetch(`https://api.duffel.com/air/airline_credits?${qs.toString()}`, {
+    headers: {
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.airline_credits.list ${res.status}: ${body.slice(0, 400)}`);
+  }
+  return (await res.json()) as {
+    data: DuffelAirlineCreditWire[];
+    meta?: { after?: string; before?: string };
+  };
+}
+
+// ============================================================================
+// Order cancellations — quote + confirm
+// ============================================================================
+
+export async function createOrderCancellation(
+  orderId: DuffelOrderId | string
+): Promise<DuffelOrderCancellationWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch('https://api.duffel.com/air/order_cancellations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ data: { order_id: orderId } }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.order_cancellations.create ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelOrderCancellationWire };
+  return json.data;
+}
+
+export async function confirmOrderCancellation(
+  cancellationId: DuffelOrderCancellationId | string
+): Promise<DuffelOrderCancellationWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch(
+    `https://api.duffel.com/air/order_cancellations/${encodeURIComponent(cancellationId)}/actions/confirm`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Duffel-Version': 'v2',
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.order_cancellations.confirm ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelOrderCancellationWire };
+  return json.data;
+}
+
+// ============================================================================
+// Stays — quotes + bookings
+// ============================================================================
+
+export async function createStayQuote(
+  rateId: DuffelStaysRateId | string
+): Promise<DuffelStaysQuoteWire> {
+  const duffel = getDuffel();
+  const stays = duffel.stays as unknown as {
+    quotes: { create: (id: string) => Promise<{ data: DuffelStaysQuoteWire }> };
+  };
+  const r = await stays.quotes.create(String(rateId));
+  return r.data;
+}
+
+export async function createStayBooking(
+  payload: DuffelStaysBookingPayloadWire
+): Promise<DuffelStaysBookingWire> {
+  const duffel = getDuffel();
+  const stays = duffel.stays as unknown as {
+    bookings: {
+      create: (body: DuffelStaysBookingPayloadWire) => Promise<{ data: DuffelStaysBookingWire }>;
+    };
+  };
+  const r = await stays.bookings.create(payload);
+  return r.data;
+}
+
+export async function getStayQuote(id: DuffelStaysQuoteId | string): Promise<DuffelStaysQuoteWire> {
+  const duffel = getDuffel();
+  const stays = duffel.stays as unknown as {
+    quotes: { get: (id: string) => Promise<{ data: DuffelStaysQuoteWire }> };
+  };
+  const r = await stays.quotes.get(String(id));
+  return r.data;
+}
+
+// ============================================================================
+// Air payments — mixed balance/card/airline-credit splits on hold orders
+// ============================================================================
+
+export type DuffelPaymentType = 'balance' | 'card' | 'airline_credit' | 'arc_bsp_cash';
+
+export interface DuffelPaymentInput {
+  type: DuffelPaymentType;
+  amount: string;
+  currency: DuffelCurrencyCode;
+  /** Required when type === 'airline_credit'. */
+  airline_credit_id?: DuffelAirlineCreditId;
+  /** Required when type === 'card'. */
+  card_id?: string;
+  three_d_secure_session_id?: string;
+}
+
+export interface DuffelPaymentWire {
+  id: string;
+  type: DuffelPaymentType | (string & {});
+  amount: string;
+  currency: DuffelCurrencyCode;
+  order_id: DuffelOrderId;
+  status: 'succeeded' | 'failed' | 'pending' | 'cancelled' | (string & {});
+  created_at: string;
+  card_id?: string;
+  airline_credit_id?: DuffelAirlineCreditId;
+  failure_reason?: string;
+}
+
+export async function payOrder(args: {
+  orderId: DuffelOrderId | string;
+  payments: DuffelPaymentInput[];
+}): Promise<DuffelPaymentWire[]> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch('https://api.duffel.com/air/payments', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      data: { order_id: args.orderId, payments: args.payments },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.payments.create ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelPaymentWire[] };
+  return json.data;
+}
+
+// ============================================================================
+// Stays — negotiated rates CRUD
+// ============================================================================
+
+export interface DuffelStaysNegotiatedRatePayload {
+  displayName: string;
+  rateAccessCode: string;
+  accommodationIds: string[];
+}
+
+export async function createStaysNegotiatedRate(p: DuffelStaysNegotiatedRatePayload): Promise<{
+  id: string;
+  display_name: string;
+  rate_access_code: string;
+  accommodation_ids: string[];
+  live_mode: boolean;
+}> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch('https://api.duffel.com/stays/negotiated_rates', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      data: {
+        display_name: p.displayName,
+        rate_access_code: p.rateAccessCode,
+        accommodation_ids: p.accommodationIds,
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.stays.negotiated_rates.create ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as {
+    data: Awaited<ReturnType<typeof createStaysNegotiatedRate>>;
+  };
+  return json.data;
+}
+
+export async function updateStaysNegotiatedRate(
+  id: string,
+  patch: Partial<DuffelStaysNegotiatedRatePayload>
+): Promise<Awaited<ReturnType<typeof createStaysNegotiatedRate>>> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const body: Record<string, unknown> = {};
+  if (patch.displayName) body.display_name = patch.displayName;
+  if (patch.rateAccessCode) body.rate_access_code = patch.rateAccessCode;
+  if (patch.accommodationIds) body.accommodation_ids = patch.accommodationIds;
+  const res = await fetch(
+    `https://api.duffel.com/stays/negotiated_rates/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Duffel-Version': 'v2',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ data: body }),
+    }
+  );
+  if (!res.ok) {
+    const b = await res.text();
+    throw new Error(`duffel.stays.negotiated_rates.update ${res.status}: ${b.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as {
+    data: Awaited<ReturnType<typeof createStaysNegotiatedRate>>;
+  };
+  return json.data;
+}
+
+export async function deleteStaysNegotiatedRate(id: string): Promise<void> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch(
+    `https://api.duffel.com/stays/negotiated_rates/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        'Duffel-Version': 'v2',
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  if (!res.ok && res.status !== 204) {
+    const body = await res.text();
+    throw new Error(`duffel.stays.negotiated_rates.delete ${res.status}: ${body.slice(0, 400)}`);
+  }
 }

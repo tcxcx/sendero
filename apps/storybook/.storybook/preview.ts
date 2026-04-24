@@ -1,5 +1,5 @@
-import type { Preview } from '@storybook/react';
 import { withThemeByClassName } from '@storybook/addon-themes';
+import type { Preview } from '@storybook/react';
 
 // Load the root Sendero stylesheet so every story inherits the
 // exact vermilion token set the shipping app uses.
@@ -7,13 +7,23 @@ import '@sendero/ui/globals.css';
 import '../../app/app/globals.css';
 import './storybook-shell.css';
 
+type ViteImportMeta = ImportMeta & {
+  env?: {
+    DEV?: boolean;
+  };
+};
+
+if ((import.meta as ViteImportMeta).env?.DEV) {
+  void import('react-grab');
+}
+
 const preview: Preview = {
   parameters: {
     layout: 'padded',
     backgrounds: {
-      default: 'cream',
+      default: 'parchment',
       values: [
-        { name: 'cream', value: '#fafaf7' },
+        { name: 'parchment', value: '#eedcc7' },
         { name: 'ink', value: '#fb542b' },
         { name: 'dark', value: '#0a0b0d' },
       ],

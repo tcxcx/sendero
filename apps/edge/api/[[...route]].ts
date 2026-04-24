@@ -1,6 +1,8 @@
 /**
  * Vercel entrypoint — serverless Node function wrapping the Hono app.
  * Deployed as `sendero-arc-edge` with Root Directory = apps/edge/.
+ * Use `bun run vercel:build` followed by `bun run vercel:deploy` so the
+ * prebuilt output is produced with monorepo workspace packages available.
  * Works on Vercel's Node runtime (not Edge — we need Circle SDKs which
  * depend on viem/crypto polyfills outside the Edge runtime).
  */

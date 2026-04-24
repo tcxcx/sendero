@@ -13,11 +13,15 @@
  * grows a channel-branch.
  */
 
+import { renderLocaleSlicePrompt, type CompactLocaleSlice } from '@sendero/locale';
+
 export interface SystemPromptSections {
   /** Required: who the agent is and how it behaves. */
   persona: string;
   /** Traveler's BCP-47 locale — steers reply language. */
   locale?: string | null;
+  /** Compact locale glossary slice from @sendero/locale. */
+  localeSlice?: CompactLocaleSlice | null;
   /** Optional: short channel-shape hint (e.g. "Slack mrkdwn", "WhatsApp 1600-char limit"). */
   channelHint?: string;
   /** Live runtime context the dispatch / chat routes auto-inject each turn (JSON-stringified). */
@@ -101,6 +105,10 @@ function localeSteering(locale: string | null | undefined): string | null {
  */
 export function buildSystemPrompt(sections: SystemPromptSections): string {
   const parts: string[] = [sections.persona.trim()];
+
+  if (sections.localeSlice) {
+    parts.push(renderLocaleSlicePrompt(sections.localeSlice));
+  }
 
   const locale = localeSteering(sections.locale);
   if (locale) parts.push(locale);

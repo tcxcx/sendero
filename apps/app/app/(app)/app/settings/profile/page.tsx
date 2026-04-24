@@ -7,7 +7,7 @@ export default function ProfilePage() {
         appearance={{
           elements: {
             rootBox: 'w-full max-w-4xl',
-            cardBox: 'shadow-none border border-border',
+            cardBox: 'shadow-[var(--shadow-md)] rounded-[var(--radius-lg)]',
           },
         }}
       />

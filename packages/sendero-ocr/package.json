@@ -1,0 +1,28 @@
+{
+  "name": "@sendero/ocr",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — multimodal document extraction (invoices, receipts, boarding passes, ID documents). Ported from desk-v1 @bu/documents (Fantasmita LLC, internal reuse) and adapted for Vercel serverless + @sendero/agent's Vertex/Gemini cascade.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schemas": "./src/schemas/index.ts",
+    "./extract": "./src/extract.ts",
+    "./normalize": "./src/normalize.ts",
+    "./providers/gemini-multimodal": "./src/providers/gemini-multimodal.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@ai-sdk/google": "^2.0.0",
+    "@ai-sdk/google-vertex": "^4.0.0",
+    "ai": "^6.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
