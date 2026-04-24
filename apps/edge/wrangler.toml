@@ -7,5 +7,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 PORT = "8787"
-# All secrets (ANTHROPIC_API_KEY, CIRCLE_*, TREASURY_*) must be pushed
-# with `wrangler secret put <NAME>` — never commit them.
+# Force Prisma's Neon driver adapter — module-top `makeClient()` otherwise
+# falls back to the Node path and crashes on Worker boot.
+SENDERO_DB_DRIVER = "neon"
+# All secrets (ANTHROPIC_API_KEY, CIRCLE_*, TREASURY_*, DATABASE_URL)
+# must be pushed with `wrangler secret put <NAME>` — never commit them.
