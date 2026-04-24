@@ -1,11 +1,15 @@
 'use client';
 
+import { useEffect } from 'react';
+
 import { usePathname } from 'next/navigation';
 
-import { AppHeader } from '@/components/app-shell/app-header';
-import { MainAppSidebar } from '@/components/dashboard/main-app-sidebar';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { cn } from '@sendero/ui/cn';
+
+import { AppHeader } from '@/components/app-shell/app-header';
+import { AppSidebar } from '@/components/app-sidebar';
+import { hydrateFromStorage } from '@/components/store';
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 
 type ShellHeaderCopy = {
   signIn: string;
@@ -23,6 +27,10 @@ export function AppChrome({
 }) {
   const pathname = usePathname() ?? '';
 
+  useEffect(() => {
+    hydrateFromStorage();
+  }, []);
+
   const mainPad =
     pathname === '/app/inbox' ||
     pathname.startsWith('/app/inbox/') ||
@@ -34,7 +42,7 @@ export function AppChrome({
 
   return (
     <SidebarProvider>
-      <MainAppSidebar />
+      <AppSidebar />
       <SidebarInset>
         <AppHeader
           copy={headerCopy}

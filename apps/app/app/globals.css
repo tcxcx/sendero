@@ -1,5 +1,13 @@
 @tailwind base;
 
+/* Tailwind v4 (@tailwindcss/postcss) does not auto-read tailwind.config.ts
+   when the legacy @tailwind directives are used. Without this, the scanner
+   never sees responsive utilities like `md:flex` / `md:block` that the
+   shadcn sidebar relies on — the sidebar stays `display: none` at every
+   breakpoint. Explicitly pointing at the config restores the `content:`
+   paths and regenerates the full utility set. */
+@config "../tailwind.config.ts";
+
 @custom-variant dark (&:is(.dark *));
 @tailwind components;
 @tailwind utilities;
@@ -77,6 +85,29 @@
   --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
   --sidebar-border: hsl(240 3.7% 15.9%);
   --sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+  /* Align shadcn / Tailwind semantic colors with Sendero dark surfaces so
+     `bg-background`, `text-muted-foreground`, Clerk shell, and SidebarInset
+     track `html.dark` (toggled from the agent console store). */
+  --background: 220 14% 5%;
+  --foreground: 220 10% 96%;
+  --muted: 220 10% 12%;
+  --muted-foreground: 220 8% 62%;
+  --border: 220 8% 20%;
+  --input: 220 8% 20%;
+  --ring: 11 72% 58%;
+  --secondary: 220 10% 11%;
+  --secondary-foreground: 220 10% 96%;
+  --accent: 220 10% 15%;
+  --accent-foreground: 220 10% 96%;
+  --card: 220 10% 7%;
+  --card-foreground: 220 10% 96%;
+  --popover: 220 10% 7%;
+  --popover-foreground: 220 10% 96%;
+  --primary: 11 72% 58%;
+  --primary-foreground: 33 100% 97%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 33 100% 97%;
 }
 
 * {
@@ -234,10 +265,14 @@ a[role="button"]:active,
    App shell
    ===================================================== */
 .app {
-  min-height: 100vh;
+  /* Fill the parent container (e.g. SidebarInset's main), not the
+     viewport. The outer <main> already sits below the 64px AppHeader,
+     so using 100vh here pushes the FooterRail off-screen. */
+  height: 100%;
+  min-height: 100%;
   display: grid;
   /* ConsoleBar auto-height, workspace fills rest, FooterRail. */
-  grid-template-rows: auto 1fr 34px;
+  grid-template-rows: auto minmax(0, 1fr) 34px;
 }
 
 .topbar {
@@ -1736,4 +1771,14 @@ hr.rule {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Responsive breakpoints — required for Tailwind v4 to emit
+     sm:/md:/lg:/xl:/2xl: utilities. Without this, shadcn components
+     like Sidebar that use `hidden md:flex` render as `display: none`
+     at every viewport size. Values match Tailwind's v3 defaults. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
 }

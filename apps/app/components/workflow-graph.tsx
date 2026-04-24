@@ -54,10 +54,10 @@ function statusLabel(status: WorkflowEvent['bullet']) {
 const nodeTypes = {
   workflow: ({ data }: { data: WorkflowNodeData }) => (
     <Node
-      className="w-[280px] border-[color:var(--border)] bg-[color:var(--panel)] shadow-none"
+      className="w-[280px] rounded-none border-[color:var(--border)] bg-[color:var(--bg-elev)] shadow-none"
       handles={{ source: true, target: true }}
     >
-      <NodeHeader className="bg-[color:var(--bg-soft)]">
+      <NodeHeader className="rounded-none border-[color:var(--border)] bg-[color:var(--bg-sunk)]">
         <NodeTitle className="font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--ink)]">
           {data.label}
         </NodeTitle>
@@ -65,14 +65,20 @@ const nodeTypes = {
           {data.description}
         </NodeDescription>
       </NodeHeader>
-      <NodeContent className="grid gap-2 bg-[color:var(--panel)] text-xs text-[color:var(--text)]">
+      <NodeContent className="grid gap-2 bg-[color:var(--bg-elev)] text-xs text-[color:var(--text)]">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--text-faint)]">
             Status
           </span>
           <span
-            className="rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em]"
+            className="border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em]"
             style={{
+              borderColor:
+                data.status === 'done'
+                  ? 'color-mix(in oklab, var(--accent-green) 40%, var(--border))'
+                  : data.status === 'fail'
+                    ? 'color-mix(in oklab, var(--accent-rose) 40%, var(--border))'
+                    : 'var(--ink)',
               color:
                 data.status === 'done'
                   ? 'var(--accent-green)'
@@ -85,7 +91,7 @@ const nodeTypes = {
           </span>
         </div>
       </NodeContent>
-      <NodeFooter className="flex items-center justify-between bg-[color:var(--bg-soft)] font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--text-faint)]">
+      <NodeFooter className="flex items-center justify-between rounded-none border-[color:var(--border)] bg-[color:var(--bg-sunk)] font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--text-faint)]">
         <span>{data.count} evt</span>
         <span>{data.latestAt}</span>
       </NodeFooter>
@@ -160,7 +166,7 @@ export function WorkflowGraph({ workflow }: WorkflowGraphProps) {
       }}
     >
       <Canvas
-        className="bg-[color:var(--panel)]"
+        className="bg-[color:var(--bg)]"
         edgeTypes={edgeTypes}
         edges={edges}
         elementsSelectable={false}
@@ -172,8 +178,11 @@ export function WorkflowGraph({ workflow }: WorkflowGraphProps) {
         nodesConnectable={false}
         nodesDraggable={false}
       >
-        <Controls />
-        <Panel position="top-left">
+        <Controls className="rounded-none border-[color:var(--border)] bg-[color:var(--bg-elev)] [&>button]:text-[color:var(--text)] [&_svg]:fill-[color:var(--text)]" />
+        <Panel
+          className="rounded-none border-[color:var(--border)] bg-[color:var(--bg-elev)]"
+          position="top-left"
+        >
           <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--text-faint)]">
             Sendero workflow map
           </div>

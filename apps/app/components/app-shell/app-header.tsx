@@ -1,8 +1,13 @@
+'use client';
+
 import type { ReactNode } from 'react';
+
 import Link from 'next/link';
 
 import { OrganizationSwitcher, Show, UserButton } from '@clerk/nextjs';
 import { Button } from '@sendero/ui/button';
+
+import { useSendero } from '@/components/store';
 
 import { LanguageSelector } from '../language-selector';
 
@@ -25,11 +30,16 @@ export function AppHeader({
   locale?: string;
   startSlot?: ReactNode;
 }) {
+  const dark = useSendero(s => s.dark);
+  const clerkAppearance = dark
+    ? { baseTheme: 'dark' as const, variables: { colorInputBackground: 'hsl(220 10% 12%)' } }
+    : undefined;
+
   return (
-    <header className="flex h-16 min-w-0 items-center justify-between border-b border-[color:var(--ink)] bg-background px-4 sm:px-6">
+    <header className="flex h-16 min-w-0 items-center justify-between border-b border-[color:var(--ink)] bg-background text-foreground px-4 sm:px-6">
       <div className="flex min-w-0 items-center gap-2">
         {startSlot}
-        <Link href="/app" className="flex min-w-0 items-center gap-2">
+        <Link href="/app" className="flex min-w-0 items-center gap-2 text-foreground">
           <img
             alt=""
             className="h-7 w-7 shrink-0 object-contain"
@@ -43,10 +53,11 @@ export function AppHeader({
         <LanguageSelector canonicalPath="/app" currentLocale={locale} />
         <Show when="signed-in">
           <OrganizationSwitcher
+            appearance={clerkAppearance}
             afterSelectOrganizationUrl="/app"
             afterCreateOrganizationUrl="/onboarding"
           />
-          <UserButton userProfileUrl="/app/settings/profile" />
+          <UserButton appearance={clerkAppearance} userProfileUrl="/app/settings/profile" />
         </Show>
         <Show when="signed-out">
           <Button asChild variant="ghost" size="sm">

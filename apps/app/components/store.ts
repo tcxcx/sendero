@@ -394,13 +394,12 @@ export function hydrateFromStorage() {
       showWorkflow: boolean;
       dark: boolean;
     }>;
+    const dark = p.dark ?? false;
     useSendero.setState({
       showWorkflow: p.showWorkflow ?? true,
-      dark: p.dark ?? false,
+      dark,
     });
-    if (p.dark) {
-      document.documentElement.classList.add('dark');
-    }
+    document.documentElement.classList.toggle('dark', dark);
   } catch {
     /* ignore */
   }
