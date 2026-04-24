@@ -45,7 +45,10 @@ export function AppChrome({
     <div className="app-shell-root flex min-h-svh w-full flex-col">
       <SidebarProvider className="min-h-0 flex-1">
         <AppSidebar />
-        <SidebarInset>
+        {/* DESIGN.md §12 — the main content surface floats as a single
+            raised card on the grainy gradient. Margin on ≥lg, rounded
+            `--radius-xl`, `--shadow-xl`, and `--surface-raised` fill. */}
+        <SidebarInset className="md:my-3 md:mr-3 md:rounded-[var(--radius-xl)] md:bg-[color:var(--surface-raised)] md:shadow-[var(--shadow-xl)]">
           <AppHeader
             copy={headerCopy}
             locale={locale}

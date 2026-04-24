@@ -184,13 +184,82 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   letter-spacing: 0;
+}
+
+/* =====================================================
+   Grainy-gradient page wash (DESIGN.md §19, App Shell).
+   Radial parchment field with whispers of sea + sand at
+   the corners and a low-opacity noise overlay — the
+   authenticated app floats on this as a single raised
+   card, a document on a desk.
+   ===================================================== */
+body {
+  background-color: var(--surface-base);
+  background-image:
+    radial-gradient(
+      ellipse 120% 90% at 100% 0%,
+      rgba(182, 132, 78, 0.04),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 110% 80% at 0% 100%,
+      rgba(15, 124, 130, 0.03),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at center,
+      var(--surface-base),
+      color-mix(in oklab, var(--surface-base) 94%, var(--sendero-midnight, #1f2a44))
+    );
+  background-attachment: fixed;
+  min-height: 100svh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.12  0 0 0 0 0.16  0 0 0 0 0.27  0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* App shell ensures its children render above the body wash. */
+.app-shell-root {
+  position: relative;
+  z-index: 1;
+}
+
+/* =====================================================
+   Emil typography defaults (DESIGN.md §16):
+   tabular-nums on data, currency sizing, focus-visible.
+   ===================================================== */
+[data-tabular],
+table,
+.mono,
+.footer-rail,
+.cbar-chip,
+.wd-addr,
+.step-cell,
+.dlg-input,
+.dlg-label {
+  font-variant-numeric: tabular-nums;
+}
+*:focus {
+  outline: none;
+}
+*:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+p {
+  max-inline-size: 72ch;
 }
 
 @layer base {
