@@ -3,6 +3,12 @@
 /**
  * DialogShell — common modal chrome for send / swap / bridge / deposit.
  * Closes on backdrop click, Escape key, or programmatic `onClose`.
+ *
+ * Design spec:
+ *   - Backdrop: 16% ink tint + 6px blur, fades 160ms.
+ *   - Card: 460px, Arc cream surface, dual-layer shadow, lifts 8px on open.
+ *   - Header: mono micro-caps title + kbd-style subtitle chip.
+ *   - Close: 28px hit-target w/ SVG × icon + hover ring (WCAG AA).
  */
 
 import { useEffect, type ReactNode } from 'react';
@@ -39,8 +45,16 @@ export function DialogShell({
             <span className="ds-title">{title}</span>
             {subtitle && <span className="ds-subtitle">{subtitle}</span>}
           </div>
-          <button className="ds-close" onClick={onClose} aria-label="close" type="button">
-            ✕
+          <button className="ds-close" onClick={onClose} aria-label="Close dialog" type="button">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path
+                d="M6 6l12 12M18 6L6 18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
           </button>
         </div>
         <div className="ds-body">{children}</div>
@@ -51,194 +65,113 @@ export function DialogShell({
           position: fixed;
           inset: 0;
           z-index: 120;
-          background: color-mix(in oklab, var(--ink) 12%, transparent);
-          backdrop-filter: blur(2px);
+          background: color-mix(in oklab, var(--ink) 16%, transparent);
+          backdrop-filter: blur(6px) saturate(1.05);
+          -webkit-backdrop-filter: blur(6px) saturate(1.05);
           display: grid;
           place-items: center;
           padding: 24px;
-          animation: ds-fade 140ms ease-out;
+          animation: ds-fade 160ms ease-out;
         }
         @keyframes ds-fade {
           from { opacity: 0; }
           to   { opacity: 1; }
         }
+        @media (prefers-reduced-motion: reduce) {
+          .ds-backdrop, .ds-card { animation: none; }
+        }
         .ds-card {
           width: 100%;
-          max-width: 440px;
+          max-width: 460px;
           background: var(--bg-elev);
           border: 1.5px solid var(--ink);
-          box-shadow: 0 14px 36px -16px rgba(0, 0, 0, 0.3);
-          animation: ds-up 180ms ease-out;
+          /* dual-layer shadow: a sharp near-field + a softer far-field
+             so the card reads as lifted on the cream surface without
+             looking plasticky */
+          box-shadow:
+            0 1px 0 rgba(0,0,0,0.04),
+            0 18px 40px -14px color-mix(in oklab, var(--ink) 24%, transparent),
+            0 40px 80px -40px rgba(0,0,0,0.28);
+          animation: ds-up 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
           max-height: calc(100vh - 48px);
           overflow: auto;
         }
         @keyframes ds-up {
-          from { transform: translateY(6px); opacity: 0; }
-          to   { transform: translateY(0);   opacity: 1; }
+          from { transform: translateY(10px) scale(0.985); opacity: 0; }
+          to   { transform: translateY(0)    scale(1);     opacity: 1; }
         }
         .ds-head {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 12px 14px;
+          gap: 12px;
+          padding: 14px 16px;
           border-bottom: 1px solid var(--border);
+          background: color-mix(in oklab, var(--ink) 2%, var(--bg-elev));
         }
         .ds-head-text {
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 3px;
+          min-width: 0;
         }
         .ds-title {
           font-family: var(--font-mono);
           font-size: 11px;
-          letter-spacing: 0.14em;
+          font-weight: 600;
+          letter-spacing: 0.16em;
           text-transform: uppercase;
           color: var(--ink);
+          line-height: 1.2;
         }
         .ds-subtitle {
           font-family: var(--font-mono);
-          font-size: 9px;
-          letter-spacing: 0.08em;
+          font-size: 9.5px;
+          letter-spacing: 0.1em;
           text-transform: uppercase;
           color: var(--text-faint);
+          line-height: 1.2;
         }
         .ds-close {
-          background: none;
-          border: none;
+          width: 28px;
+          height: 28px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: transparent;
+          border: 1px solid transparent;
           color: var(--text-dim);
           cursor: pointer;
-          font-size: 14px;
-          padding: 4px 6px;
+          padding: 0;
           line-height: 1;
+          transition: color 120ms, border-color 120ms, background 120ms;
+          flex-shrink: 0;
         }
         .ds-close:hover {
           color: var(--ink);
+          border-color: var(--ink);
+          background: color-mix(in oklab, var(--ink) 6%, transparent);
+        }
+        .ds-close:focus-visible {
+          outline: none;
+          border-color: var(--ink);
+          box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 22%, transparent);
         }
         .ds-body {
-          padding: 16px;
+          padding: 18px 16px 16px;
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 14px;
         }
       `}</style>
     </div>
   );
 }
 
-/* Shared control styles consumed by the dialog contents via className. */
-export const dialogStyles = `
-  .dlg-label {
-    font-family: var(--font-mono);
-    font-size: 9px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-faint);
-  }
-  .dlg-input {
-    padding: 10px 12px;
-    border: 1.5px solid var(--border);
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: 14px;
-    outline: none;
-    width: 100%;
-  }
-  .dlg-input:focus {
-    border-color: var(--ink);
-  }
-  .dlg-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .dlg-sub {
-    font-family: var(--font-sans);
-    font-size: 12.5px;
-    color: var(--text-dim);
-    line-height: 1.5;
-  }
-  .dlg-err {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--accent-rose, #e34);
-    padding: 8px 10px;
-    border-left: 2px solid var(--accent-rose, #e34);
-    background: color-mix(in oklab, var(--accent-rose, #e34) 6%, transparent);
-    line-height: 1.5;
-    word-break: break-word;
-  }
-  .dlg-ok {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--accent-green, #0cc67a);
-    padding: 8px 10px;
-    border-left: 2px solid var(--accent-green, #0cc67a);
-    background: color-mix(in oklab, var(--accent-green, #0cc67a) 6%, transparent);
-    line-height: 1.5;
-  }
-  .dlg-ok strong {
-    color: var(--text);
-    font-family: var(--font-sans);
-  }
-  .dlg-link {
-    color: var(--ink);
-    text-decoration: underline;
-  }
-  .dlg-primary {
-    padding: 12px 14px;
-    background: var(--ink);
-    color: var(--bg-elev);
-    border: none;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    cursor: pointer;
-    width: 100%;
-  }
-  .dlg-primary:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .dlg-select {
-    padding: 10px 12px;
-    border: 1.5px solid var(--border);
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: 13px;
-    outline: none;
-    width: 100%;
-  }
-  .dlg-select:focus {
-    border-color: var(--ink);
-  }
-  .dlg-segmented {
-    display: grid;
-    grid-auto-flow: column;
-    border: 1.5px solid var(--border);
-  }
-  .dlg-seg-btn {
-    background: var(--bg);
-    border: none;
-    padding: 10px 8px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    color: var(--text-dim);
-    cursor: pointer;
-    transition: all 120ms;
-  }
-  .dlg-seg-btn + .dlg-seg-btn {
-    border-left: 1px solid var(--border);
-  }
-  .dlg-seg-btn.sel {
-    background: var(--ink);
-    color: var(--bg-elev);
-  }
-  .dlg-seg-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-`;
+/**
+ * Kept as an empty export for backwards-compat with callers that still
+ * import `dialogStyles`. The actual CSS lives in `app/globals.css` under
+ * the "Dialog controls" section — Turbopack's SWC styled-jsx plugin
+ * dropped the rules when they were authored here as a template literal.
+ */
+export const dialogStyles = '';

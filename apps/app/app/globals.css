@@ -1782,3 +1782,186 @@ hr.rule {
   --breakpoint-xl: 80rem;
   --breakpoint-2xl: 96rem;
 }
+
+/* =====================================================
+   Dialog controls (Deposit · Send · Swap · Bridge)
+   Shared `dlg-*` classes consumed by all treasury dialogs.
+   Previously lived in <style jsx global> but Turbopack's
+   SWC plugin does not inline variable template literals
+   into the styled-jsx output — the rules never landed in
+   the DOM. Hoisted here so every dialog gets them for free
+   and they survive any bundler migration.
+   ===================================================== */
+.dlg-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+.dlg-input {
+  padding: 11px 13px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+.dlg-input:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 18%, transparent);
+}
+.dlg-input::placeholder {
+  color: var(--text-faint);
+}
+.dlg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.dlg-sub {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.dlg-err {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #e34;
+  padding: 9px 11px;
+  border-left: 2px solid #e34;
+  background: color-mix(in oklab, #e34 6%, transparent);
+  line-height: 1.5;
+  word-break: break-word;
+}
+.dlg-ok {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #0cc67a;
+  padding: 9px 11px;
+  border-left: 2px solid #0cc67a;
+  background: color-mix(in oklab, #0cc67a 6%, transparent);
+  line-height: 1.5;
+}
+.dlg-ok strong {
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+.dlg-link {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.dlg-primary {
+  padding: 13px 14px;
+  background: var(--ink);
+  color: var(--bg-elev);
+  border: 1.5px solid var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition:
+    transform 80ms,
+    box-shadow 120ms,
+    background 120ms;
+  text-decoration: none;
+}
+.dlg-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--ink) 92%, black);
+  box-shadow: 0 6px 18px -10px color-mix(in oklab, var(--ink) 60%, transparent);
+}
+.dlg-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.dlg-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 30%, transparent);
+}
+.dlg-primary:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.dlg-primary.dlg-primary-ghost {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+.dlg-primary.dlg-primary-ghost:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
+}
+.dlg-spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid color-mix(in oklab, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: dlg-spin 700ms linear infinite;
+  flex-shrink: 0;
+}
+@keyframes dlg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dlg-spinner {
+    animation-duration: 2s;
+  }
+}
+.dlg-select {
+  padding: 11px 13px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+.dlg-select:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 18%, transparent);
+}
+.dlg-segmented {
+  display: grid;
+  grid-auto-flow: column;
+  border: 1.5px solid var(--border);
+}
+.dlg-seg-btn {
+  background: var(--bg);
+  border: none;
+  padding: 10px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 120ms;
+}
+.dlg-seg-btn + .dlg-seg-btn {
+  border-left: 1px solid var(--border);
+}
+.dlg-seg-btn.sel {
+  background: var(--ink);
+  color: var(--bg-elev);
+}
+.dlg-seg-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

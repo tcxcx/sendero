@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
-import { DialogShell, dialogStyles } from './dialog-shell';
+import { DialogShell } from './dialog-shell';
 
 type Token = 'USDC' | 'EURC';
 
@@ -131,14 +131,30 @@ export function SendDialog() {
       )}
 
       <button type="button" className="dlg-primary" disabled={!valid || busy} onClick={submit}>
-        {busy
-          ? 'Signing…'
-          : `Send ${amt || '0'} ${tok} → ${validTo ? `${toAddr.slice(0, 6)}…${toAddr.slice(-4)}` : '—'}`}
+        {busy ? (
+          <>
+            <span className="dlg-spinner" aria-hidden="true" />
+            <span>Signing transaction…</span>
+          </>
+        ) : (
+          <>
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <path
+                d="M5 12h14m0 0l-5-5m5 5l-5 5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span>
+              Send {amt || '0'} {tok} →{' '}
+              {validTo ? `${toAddr.slice(0, 6)}…${toAddr.slice(-4)}` : '—'}
+            </span>
+          </>
+        )}
       </button>
-
-      <style jsx global>
-        {dialogStyles}
-      </style>
     </DialogShell>
   );
 }
