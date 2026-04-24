@@ -4,6 +4,8 @@ name = "sendero-arc-edge"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = true
 
 [vars]
 PORT = "8787"
