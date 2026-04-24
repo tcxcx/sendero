@@ -119,8 +119,10 @@ export function TripThreadComposer({
         : `Reply is delivered to the traveler on ${CHANNEL_LABELS[channel]} · ${locale}.`;
 
   return (
-    <div className="border-t border-border bg-background">
-      <div className="flex flex-wrap items-center gap-2 border-b border-dashed border-border px-4 py-2">
+    // Borderless composer card: raised surface with a soft shadow
+    // (DESIGN.md §19, Composer). Focus raises shadow via :focus-within.
+    <div className="rounded-[var(--radius-md)] bg-[color:var(--surface-raised)] shadow-[var(--shadow-sm)] focus-within:shadow-[var(--shadow-md)] transition-[box-shadow] duration-[240ms]">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2">
         <ModeToggle mode={mode} onChange={setMode} />
         <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
         <ChannelSelect
@@ -187,7 +189,7 @@ export function TripThreadComposer({
         />
       ) : null}
 
-      <div className="flex items-center justify-between gap-3 border-t border-dashed border-border px-4 py-2">
+      <div className="flex items-center justify-between gap-3 px-4 py-2">
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
           {primaryHint}
         </span>
@@ -272,7 +274,7 @@ function PolishChip({
   if (!suggestion && !busy) return null;
 
   return (
-    <div className="flex items-start gap-2 border-t border-dashed border-border bg-[color:var(--bg-sunk)] px-4 py-2 font-mono text-[11px] text-[color:var(--text)]">
+    <div className="flex items-start gap-2 mt-1 bg-[color:var(--bg-sunk)] px-4 py-2 font-mono text-[11px] text-[color:var(--text)]">
       <SparklesIcon className="mt-0.5 size-3 shrink-0 text-[color:var(--ink)]" />
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 text-[9px] uppercase tracking-[0.14em] text-[color:var(--text-faint)]">
@@ -334,7 +336,7 @@ function ChannelPreviewStrip({
   onToggle: () => void;
 }) {
   return (
-    <div className="border-t border-dashed border-border bg-[color:var(--bg-sunk)]/60">
+    <div className="mt-1 bg-[color:var(--bg-sunk)]/60">
       <button
         type="button"
         onClick={onToggle}
@@ -344,7 +346,7 @@ function ChannelPreviewStrip({
         {open ? 'Hide preview' : `Preview on ${CHANNEL_LABELS[channel]} · ${locale}`}
       </button>
       {open ? (
-        <div className="border-t border-dashed border-border px-4 pb-3 pt-2">
+        <div className="mt-1 px-4 pb-3 pt-2">
           <ChannelRender channel={channel} text={text} locale={locale} />
         </div>
       ) : null}
@@ -386,7 +388,7 @@ function ChannelRender({
   if (channel === 'email') {
     return (
       <div className="rounded-md border border-[color:var(--border)] bg-[color:var(--bg-elev)] p-3 text-[13px]">
-        <div className="mb-2 border-b border-dashed border-[color:var(--border)] pb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--text-dim)]">
+        <div className="mb-2 mb-1 pb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--text-dim)]">
           From: Sendero Support &lt;support@sendero.app&gt; · {locale}
         </div>
         <div className="whitespace-pre-wrap break-words text-[color:var(--text)]">{text}</div>

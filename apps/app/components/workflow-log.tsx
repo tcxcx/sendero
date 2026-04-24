@@ -58,7 +58,6 @@ export function WorkflowLog() {
         <div
           style={{
             padding: '12px 14px',
-            borderBottom: '1px solid var(--border)',
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
           }}

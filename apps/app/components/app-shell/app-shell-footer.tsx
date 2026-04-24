@@ -53,7 +53,9 @@ export function AppShellFooter() {
   }, [userAuth]);
 
   return (
-    <div className="app-shell-footer shrink-0 border-t border-[color:var(--border)] bg-[color:var(--bg-elev)]">
+    // Borderless: floats on the parchment field, no top rule. Spacing
+    // and type opacity carry the separation (DESIGN.md §19).
+    <div className="app-shell-footer shrink-0 bg-[color:var(--surface-base)]">
       <FooterRail />
     </div>
   );

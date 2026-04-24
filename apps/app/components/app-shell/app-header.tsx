@@ -35,8 +35,9 @@ export function AppHeader({
     ? { baseTheme: 'dark' as const, variables: { colorInputBackground: 'hsl(220 10% 12%)' } }
     : undefined;
 
+  // Borderless: sits directly on the parchment field (DESIGN.md §19).
   return (
-    <header className="flex h-16 min-w-0 items-center justify-between border-b border-[color:var(--ink)] bg-background text-foreground px-4 sm:px-6">
+    <header className="flex h-16 min-w-0 items-center justify-between bg-[color:var(--surface-base)] text-foreground px-4 sm:px-6">
       <div className="flex min-w-0 items-center gap-2">
         {startSlot}
         <Link href="/app" className="flex min-w-0 items-center gap-2 text-foreground">

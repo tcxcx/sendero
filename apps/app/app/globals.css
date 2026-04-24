@@ -57,14 +57,75 @@
      Vermillion primary, warm editorial accents. Shadcn's default
      neutral-gray sidebar tokens (near-white hsl) made the nav feel
      like generic SaaS chrome instead of a travel map-room. */
-  --sidebar: #f0dcc3;
+  --sidebar: var(--surface-base);
   --sidebar-foreground: oklch(0.22 0.015 250);
   --sidebar-primary: var(--ink);
-  --sidebar-primary-foreground: var(--bg-elev);
-  --sidebar-accent: color-mix(in oklab, var(--ink) 10%, var(--bg-elev));
+  --sidebar-primary-foreground: var(--surface-floating);
+  --sidebar-accent: var(--tint-vermillion-soft);
   --sidebar-accent-foreground: var(--ink);
-  --sidebar-border: var(--border);
+  --sidebar-border: transparent;
   --sidebar-ring: var(--ink);
+
+  /* =====================================================
+     Sendero surface + shadow + tint system (see DESIGN.md §7).
+     Mirrored from @sendero/ui/globals.css so the authenticated
+     app picks up tokens even if the shared stylesheet loads after.
+     ===================================================== */
+  --surface-base: #eedcc7;
+  --surface-raised: #f7efe4;
+  --surface-floating: #fdfbf7;
+  --surface-terminal: rgba(31, 42, 68, 0.97);
+
+  --shadow-xs: 0 1px 2px rgba(31, 42, 68, 0.04);
+  --shadow-sm: 0 1px 2px rgba(31, 42, 68, 0.04), 0 4px 12px -6px rgba(31, 42, 68, 0.06);
+  --shadow-md: 0 1px 2px rgba(31, 42, 68, 0.04), 0 8px 24px -12px rgba(31, 42, 68, 0.08);
+  --shadow-lg: 0 2px 4px rgba(31, 42, 68, 0.06), 0 16px 40px -16px rgba(31, 42, 68, 0.14);
+  --shadow-xl: 0 2px 4px rgba(31, 42, 68, 0.06), 0 24px 48px -20px rgba(31, 42, 68, 0.18);
+  --shadow-terminal: 0 2px 4px rgba(31, 42, 68, 0.12), 0 24px 48px -20px rgba(31, 42, 68, 0.35);
+
+  --tint-vermillion-soft: rgba(214, 84, 56, 0.1);
+  --tint-vermillion-medium: rgba(214, 84, 56, 0.18);
+  --tint-sea-soft: rgba(15, 124, 130, 0.1);
+  --tint-sand-soft: rgba(182, 132, 78, 0.12);
+  --tint-midnight-soft: rgba(31, 42, 68, 0.04);
+  --tint-midnight-medium: rgba(31, 42, 68, 0.08);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* Hairlines — editorial rhythm, never structural (DESIGN.md §9). */
+  --hairline-color: #d8c1a7;
+  --hairline-color-soft: rgba(31, 42, 68, 0.08);
+  --hairline-color-strong: rgba(31, 42, 68, 0.14);
+  --hairline: 1px solid var(--hairline-color);
+  --hairline-soft: 1px solid var(--hairline-color-soft);
+  --hairline-strong: 1px solid var(--hairline-color-strong);
+
+  /* Dotted grid — micro-illustration graticule. */
+  --dot-grid-color: rgba(31, 42, 68, 0.18);
+  --dot-grid-size: 8px;
+  --dot-grid-pattern:
+    radial-gradient(circle, var(--dot-grid-color) 1px, transparent 1px) 0 0 / var(--dot-grid-size)
+    var(--dot-grid-size);
+
+  /* Editorial numeral scale — Handle-inspired, Sendero-adapted. */
+  --numeral-xl: clamp(3.5rem, 6vw, 5.5rem);
+  --numeral-lg: clamp(2.75rem, 4.5vw, 4rem);
+  --numeral-md: clamp(2rem, 3vw, 2.75rem);
+
+  --label-meta: 0.6875rem;
+  --label-meta-tracking: 0.12em;
+
+  --surface-transition:
+    box-shadow 240ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms
+    cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --surface-transition: none;
+  }
 }
 
 .dark {
@@ -489,21 +550,21 @@ a[role="button"]:active,
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  background: var(--bg-elev);
+  background: var(--surface-raised);
 }
 .col.sunk {
-  background: var(--bg-sunk);
+  /* Midnight Veil — the "console voice" surface (DESIGN.md §19). */
+  background: var(--surface-terminal);
+  color: #f2ecdc;
 }
-.col + .col {
-  border-left: 1px solid var(--border);
-}
+/* No more column dividers — whitespace + surface tier carries the
+   separation (DESIGN.md §9). */
 
 .col-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
   min-height: 38px;
 }
 .col-head .title {
@@ -782,51 +843,58 @@ a[role="button"]:active,
   letter-spacing: 0;
 }
 
-/* Horizontal step rail — slimmer */
+/* Horizontal step rail — pill cells on parchment (DESIGN.md §19). */
 .step-rail {
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 4px 0;
+  gap: 6px;
+  padding: 10px 20px;
+  background: var(--surface-base);
 }
 .step-cell {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  transition: var(--surface-transition);
   min-width: 0;
 }
-.step-cell + .step-cell::before {
-  content: "";
-  display: block;
-  width: 16px;
-  height: 1px;
-  background: var(--border);
-  margin-right: 2px;
+.step-cell.active {
+  background: var(--tint-vermillion-soft);
+  box-shadow: var(--shadow-xs);
+}
+.step-cell.done {
+  background: var(--tint-sea-soft);
 }
 .step-cell.active .step-dot {
   background: var(--ink);
-  border-color: var(--ink);
+  border-color: transparent;
 }
 .step-cell.done .step-dot {
-  background: var(--accent-green);
-  border-color: var(--accent-green);
+  background: var(--sendero-sea, #0f7c82);
+  border-color: transparent;
 }
-.step-cell.done .step-name,
+.step-cell.done .step-name {
+  color: var(--sendero-sea, #0f7c82);
+}
 .step-cell.active .step-name {
-  color: var(--text);
+  color: var(--ink);
 }
 .step-cell.pending .step-name {
-  color: var(--text-faint);
+  color: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 60%, transparent);
 }
 
 .step-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-elev);
+  border: 0;
+  background: transparent;
   flex-shrink: 0;
+}
+.step-cell.pending .step-dot {
+  background: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 20%, transparent);
 }
 .step-idx {
   display: none;
@@ -1346,14 +1414,15 @@ a[role="button"]:active,
   /* Match the --app-shell-footer-h the sidebar reserves at the bottom,
      so the global rail's visible band and the sidebar cutoff align. */
   height: 34px;
-  padding: 0 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-elev);
+  padding: 0 20px;
+  /* Borderless on parchment — DESIGN.md §19. Midnight at 60% opacity
+     gives the rail its meta-info feel without a hard top rule. */
+  background: var(--surface-base);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-dim);
+  color: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 60%, transparent);
 }
 .footer-rail .group {
   display: flex;

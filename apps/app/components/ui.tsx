@@ -7,6 +7,8 @@
  * row. StepRail, ErrorBanner, FooterRail unchanged.
  */
 
+import type { ReactNode } from 'react';
+
 import Link from 'next/link';
 import { useSendero, deriveStep } from './store';
 import { AgentChip } from './agent-chip';
@@ -22,12 +24,15 @@ export interface ConsoleBarProps {
   crumbHref?: string;
   /** Optional secondary crumb (e.g. trip title) rendered after the primary. */
   subCrumb?: string;
+  /** Optional slot rendered in the middle area (e.g. a panel toggle). */
+  trailingSlot?: ReactNode;
 }
 
 export function ConsoleBar({
   crumb = 'Agent console',
   crumbHref = '/',
   subCrumb,
+  trailingSlot,
 }: ConsoleBarProps = {}) {
   const traveler = useSendero(s => s.traveler);
   const status = useSendero(s => s.status);
@@ -82,7 +87,7 @@ export function ConsoleBar({
         </Tooltip>
       </div>
 
-      {/* MIDDLE: contextual status chip */}
+      {/* MIDDLE: contextual status chip + optional trailing slot */}
       <div className="cbar-mid">
         <div className="cbar-chip">
           <span>{label}</span>
@@ -106,6 +111,7 @@ export function ConsoleBar({
             </>
           )}
         </div>
+        {trailingSlot}
       </div>
 
       {/* RIGHT: agent chip + user dropdown */}
@@ -121,8 +127,8 @@ export function ConsoleBar({
           align-items: center;
           gap: 18px;
           padding: 10px 16px;
-          border-bottom: 1px solid var(--border);
-          background: var(--bg-elev);
+          /* Borderless on parchment (DESIGN.md §19). */
+          background: var(--surface-base);
           min-height: 54px;
         }
         .cbar-left {
@@ -224,8 +230,11 @@ export function ConsoleBar({
           align-items: center;
           gap: 8px;
           padding: 5px 10px;
-          border: 1px solid var(--ink);
+          /* Tinted vermillion pill, no outline — DESIGN.md §19. */
+          background: var(--tint-vermillion-soft);
           color: var(--ink);
+          border-radius: 999px;
+          box-shadow: var(--shadow-xs);
           font-family: var(--font-mono);
           font-size: 10px;
           letter-spacing: 0.1em;

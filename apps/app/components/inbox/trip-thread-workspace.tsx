@@ -204,8 +204,10 @@ export function TripThreadWorkspace({ trip }: { trip: TripThreadContext }) {
   const channels = trip.channels.length ? trip.channels : [trip.defaultChannel];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-row overflow-hidden bg-background">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    // Borderless workspace: thread panel is a raised card, side panel
+    // is a stack of mini-cards — no dividers between layout regions.
+    <div className="flex min-h-0 flex-1 flex-row gap-4 overflow-hidden bg-[color:var(--surface-base)] p-4">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] shadow-[var(--shadow-md)]">
         <TripThreadHeader
           trip={trip}
           aiEnabled={aiEnabled}
@@ -214,7 +216,7 @@ export function TripThreadWorkspace({ trip }: { trip: TripThreadContext }) {
         />
         <div className="flex-1 overflow-y-auto">
           <Conversation className="h-full">
-            <ConversationContent className="gap-5 px-5 py-5">
+            <ConversationContent className="gap-5 px-6 py-6">
               {messages.length === 0 && outbound.length === 0 ? <EmptyThread trip={trip} /> : null}
               {messages.map(m => (
                 <ChatMessageView
@@ -227,12 +229,12 @@ export function TripThreadWorkspace({ trip }: { trip: TripThreadContext }) {
                 <OutboundMessageView key={o.id} entry={o} />
               ))}
               {error ? (
-                <div className="rounded-lg border border-[color:var(--accent-rose)]/40 bg-[color:var(--accent-rose)]/5 px-3 py-2 text-xs text-[color:var(--accent-rose)]">
+                <div className="rounded-[var(--radius-sm)] bg-[color:var(--accent-rose)]/5 px-3 py-2 text-xs text-[color:var(--accent-rose)] shadow-[var(--shadow-xs)]">
                   {error.message}
                 </div>
               ) : null}
               {sendError ? (
-                <div className="rounded-lg border border-[color:var(--accent-rose)]/40 bg-[color:var(--accent-rose)]/5 px-3 py-2 text-xs text-[color:var(--accent-rose)]">
+                <div className="rounded-[var(--radius-sm)] bg-[color:var(--accent-rose)]/5 px-3 py-2 text-xs text-[color:var(--accent-rose)] shadow-[var(--shadow-xs)]">
                   {sendError}
                 </div>
               ) : null}
@@ -240,16 +242,18 @@ export function TripThreadWorkspace({ trip }: { trip: TripThreadContext }) {
             <ConversationScrollButton />
           </Conversation>
         </div>
-        <TripThreadComposer
-          defaultChannel={trip.defaultChannel}
-          disabled={sendBusy || isStreaming}
-          onSubmit={handleSubmit}
-          customerName={trip.traveler?.name}
-          tripStatus={trip.status}
-          locale={trip.travelerLocale}
-        />
+        <div className="px-4 pb-4">
+          <TripThreadComposer
+            defaultChannel={trip.defaultChannel}
+            disabled={sendBusy || isStreaming}
+            onSubmit={handleSubmit}
+            customerName={trip.traveler?.name}
+            tripStatus={trip.status}
+            locale={trip.travelerLocale}
+          />
+        </div>
         {isStreaming ? (
-          <div className="flex items-center justify-end border-t border-border px-4 py-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="flex items-center justify-end px-6 pb-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
             <button
               type="button"
               onClick={() => stop()}
@@ -259,7 +263,7 @@ export function TripThreadWorkspace({ trip }: { trip: TripThreadContext }) {
             </button>
           </div>
         ) : null}
-      </div>
+      </section>
       <TripSidePanel trip={trip} aiEnabled={aiEnabled} />
     </div>
   );
@@ -277,7 +281,8 @@ function TripThreadHeader({
   channels: ChannelKindSlug[];
 }) {
   return (
-    <header className="flex flex-col gap-2 border-b border-border bg-[color:var(--panel)] px-5 py-3">
+    // Borderless header inside the raised thread card (DESIGN.md §19).
+    <header className="flex flex-col gap-2 px-6 pt-5 pb-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
           {trip.status}
@@ -336,9 +341,20 @@ function HandoffToggle({
 
 function EmptyThread({ trip }: { trip: TripThreadContext }) {
   return (
-    <div className="rounded-2xl border border-dashed border-border bg-[color:var(--panel)] px-4 py-6 text-sm text-muted-foreground">
-      <div className="font-medium text-[color:var(--ink)]">Start a thread on this trip.</div>
-      <p className="mt-1">
+    // No dashed border — parchment surface nested inside the raised
+    // thread card, 32px padding, a binocular mark at 20% opacity above
+    // the headline (DESIGN.md §19, Empty States).
+    <div className="flex flex-col items-center gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-base)] px-6 py-10 text-center">
+      <img
+        alt=""
+        aria-hidden="true"
+        className="h-8 w-8 opacity-20"
+        src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
+      />
+      <div className="text-sm font-medium text-[color:var(--ink)]">
+        Start a thread on this trip.
+      </div>
+      <p className="max-w-md text-xs text-muted-foreground">
         Ask the agent to summarize the trip, draft a reply, or run tools. Use Human mode to message
         the traveler directly via {trip.defaultChannel}. Internal notes stay in this thread.
       </p>
@@ -549,55 +565,79 @@ function TripSidePanel({ trip, aiEnabled }: { trip: TripThreadContext; aiEnabled
   const travelerSub = trip.traveler?.email ?? trip.traveler?.phone;
 
   return (
-    <aside
-      style={{ width: '22rem' }}
-      className="flex shrink-0 flex-col border-l border-border bg-muted/10"
-    >
-      <div className="flex flex-col gap-3 border-b border-border px-4 py-4">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            Trip
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-            {aiEnabled ? 'Agent on' : 'Human only'}
-          </span>
-        </div>
+    // Borderless column of floating mini-cards on parchment — no left
+    // rule, no internal horizontal lines (DESIGN.md §19).
+    <aside style={{ width: '22rem' }} className="flex shrink-0 flex-col gap-3 overflow-y-auto">
+      <PanelCard
+        label="Trip"
+        trailing={aiEnabled ? 'Agent on' : 'Human only'}
+        trailingTint={aiEnabled}
+      >
         <div className="text-sm font-medium text-[color:var(--ink)]">{trip.title}</div>
         {trip.intent?.purpose ? (
-          <div className="text-xs text-muted-foreground">{trip.intent.purpose}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{trip.intent.purpose}</div>
         ) : null}
-      </div>
+      </PanelCard>
       {hasTraveler ? (
-        <PanelRow
-          label="Traveler"
-          value={trip.traveler?.name ?? travelerSub ?? ''}
-          sub={trip.traveler?.name ? travelerSub : undefined}
-        />
+        <PanelCard label="Traveler">
+          <div className="text-sm text-[color:var(--ink)]">
+            {trip.traveler?.name ?? travelerSub}
+          </div>
+          {trip.traveler?.name && travelerSub ? (
+            <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{travelerSub}</div>
+          ) : null}
+        </PanelCard>
       ) : null}
       {trip.booking?.pnr ? (
-        <PanelRow
-          label="PNR"
-          value={trip.booking.pnr}
-          sub={
-            trip.booking.totalAmount
-              ? `${trip.booking.totalAmount} ${trip.booking.totalCurrency ?? ''}`
-              : undefined
-          }
-        />
+        <PanelCard label="PNR">
+          <div className="text-sm text-[color:var(--ink)]">{trip.booking.pnr}</div>
+          {trip.booking.totalAmount ? (
+            <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+              {trip.booking.totalAmount} {trip.booking.totalCurrency ?? ''}
+            </div>
+          ) : null}
+        </PanelCard>
       ) : null}
-      {hasChannels ? <PanelRow label="Channels" value={trip.channels.join(' · ')} /> : null}
+      {hasChannels ? (
+        <PanelCard label="Channels">
+          <div className="text-sm text-[color:var(--ink)]">{trip.channels.join(' · ')}</div>
+        </PanelCard>
+      ) : null}
     </aside>
   );
 }
 
-function PanelRow({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function PanelCard({
+  label,
+  trailing,
+  trailingTint,
+  children,
+}: {
+  label: string;
+  trailing?: string;
+  trailingTint?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="border-b border-border px-4 py-3">
-      <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
+    <div className="rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] px-4 py-4 shadow-[var(--shadow-md)]">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground opacity-60">
+          {label}
+        </span>
+        {trailing ? (
+          <span
+            className={
+              'rounded-full px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.12em] ' +
+              (trailingTint
+                ? 'bg-[color:var(--tint-vermillion-soft)] text-[color:var(--ink)]'
+                : 'text-muted-foreground')
+            }
+          >
+            {trailing}
+          </span>
+        ) : null}
       </div>
-      <div className="mt-0.5 text-sm text-[color:var(--ink)]">{value}</div>
-      {sub ? <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{sub}</div> : null}
+      <div className="mt-2">{children}</div>
     </div>
   );
 }
