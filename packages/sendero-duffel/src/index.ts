@@ -123,6 +123,19 @@ export interface FlightOfferSummary {
   stops: number;
   cabinClass: string;
   expiresAt: string;
+  /**
+   * Whether the offer can be held without instant payment.
+   * Maps to Duffel's `payment_requirements.requires_instant_payment === false`
+   * — only those offers accept `type: 'hold'` on order creation. We surface
+   * this on the wire so the UI can hide / disable the "Hold seat" CTA
+   * before it round-trips to the airline.
+   */
+  holdable: boolean;
+  /**
+   * RFC3339 deadline by which a hold must be paid for, when present. Duffel
+   * returns this on holdable offers under `payment_requirements.payment_required_by`.
+   */
+  paymentRequiredBy: string | null;
 }
 
 export async function searchFlights(params: FlightSearchParams): Promise<FlightOfferSummary[]> {
@@ -215,6 +228,8 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
       stops: Math.max(0, (o.slices?.[0]?.segments?.length || 1) - 1),
       cabinClass: firstSegment?.passengers?.[0]?.cabin_class || 'economy',
       expiresAt: o.expires_at,
+      holdable: o.payment_requirements?.requires_instant_payment === false,
+      paymentRequiredBy: o.payment_requirements?.payment_required_by ?? null,
     };
   });
 }

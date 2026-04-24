@@ -29,6 +29,15 @@ interface SupportEditorProps {
   footerSlot?: ReactNode;
   /** Exposes the underlying editor so the parent can imperatively clear it, etc. */
   onReady?: (editor: Editor) => void;
+  /**
+   * Accessible label for the editor's contenteditable root. Tiptap renders a
+   * raw `<div contenteditable>` which is otherwise opaque to screen readers
+   * and Playwright's `getByRole('textbox', …)` lookups. Required so the
+   * composer is discoverable through standard accessibility tooling.
+   */
+  ariaLabel: string;
+  /** Stable selector for tests / automation. */
+  testId?: string;
 }
 
 export function SupportEditor({
@@ -42,6 +51,8 @@ export function SupportEditor({
   className,
   footerSlot,
   onReady,
+  ariaLabel,
+  testId,
 }: SupportEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -52,6 +63,11 @@ export function SupportEditor({
     ],
     editorProps: {
       attributes: {
+        role: 'textbox',
+        'aria-label': ariaLabel,
+        'aria-multiline': 'true',
+        'aria-disabled': disabled ? 'true' : 'false',
+        ...(testId ? { 'data-testid': testId } : {}),
         class: cn(
           'prose-none min-h-[72px] w-full resize-none bg-transparent px-4 py-3 text-[13px] leading-[1.5] text-[color:var(--text)] outline-none',
           '[&_p.is-editor-empty:first-child]:before:pointer-events-none [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:text-[color:var(--text-faint)] [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]',
