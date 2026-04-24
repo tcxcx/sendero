@@ -165,6 +165,11 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
       'CRUD for Duffel Stays negotiated rates (corporate RACs). action: create | update | delete.',
   },
   {
+    label: 'scan_document',
+    description:
+      'Extract structured fields from a travel or finance document (invoice, receipt, boarding pass, or ID) via the @sendero/ocr multimodal pipeline. Accepts a public URL or inline base64; returns a typed object plus provider, model, and latency.',
+  },
+  {
     label: 'send_tokens',
     description: 'Transfer USDC on Arc.',
   },

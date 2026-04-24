@@ -35,6 +35,7 @@ Sendero exposes a shared tool registry across MCP, web chat, WhatsApp, Slack, an
 | `airport_transfer_coordinator` | Composed | $0.008 | Pickup plan with meeting point, primary transport, backup options, and airport→destination route. |
 | `airport_arrival_playbook` | Composed | $0.008 | One-screen arrival briefing: 5-step playbook, transport, timezone, and route. |
 | `trip_delay_replanner` | Composed | $0.01 | Rebuild a disrupted itinerary: replacement flights, overnight hotel, and route. |
+| `scan_document` | Multimodal | $0.01 | Extract structured fields from a travel/finance document (invoice, receipt, boarding pass, ID) via the @sendero/ocr pipeline. |
 | `send_tokens` | On-chain | $0.003 | Transfer USDC on Arc. |
 | `gateway_transfer` | On-chain | $0.003 | Move USDC through Circle Gateway. |
 | `prefund_trip` | Escrow | $0.003 | Create a prepaid guest escrow and return a shareable claim link. |

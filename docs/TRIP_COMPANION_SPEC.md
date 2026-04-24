@@ -2,7 +2,7 @@
 
 Date: 2026-04-23
 Branch: `feat/phase-11-invoicing`
-Status: spec + implementation contract. Most of the atomic pieces exist on branch (48 tools, 16 workflows, 5 new AI-Elements cards). This document ties them into one coherent post-book experience and enumerates what's still missing.
+Status: spec + implementation contract. Most of the atomic pieces exist on branch (49 tools, 16 workflows, 5 new AI-Elements cards). This document ties them into one coherent post-book experience and enumerates what's still missing.
 
 ## Product summary
 
@@ -380,7 +380,7 @@ Each step is one commit. Each typecheck-passes before landing. Each is reviewabl
 
 The thesis: **the AI agent + durable workflow engine + on-chain settlement + email receipts combine so the traveler's whole post-book journey happens inside one conversation that survives channels, devices, airlines, and time.**
 
-Every piece of this spec is already on branch in atomic form — 48 tools, 16 workflows, 5 AI-Elements cards, 2 Prisma migrations pending deploy, 2 utility scripts. The work remaining is connective tissue, not new capability: email templates, share-shape adapters, audit tables, one new workflow (arrival playbook), one UI composer extension (credit split).
+Every piece of this spec is already on branch in atomic form — 49 tools, 16 workflows, 5 AI-Elements cards, 2 Prisma migrations pending deploy, 2 utility scripts. The work remaining is connective tissue, not new capability: email templates, share-shape adapters, audit tables, one new workflow (arrival playbook), one UI composer extension (credit split).
 
 Two sibling documents accompany this spec:
 - `docs/TECH_DEBT_AUDIT.md` — what's owed on the existing code
