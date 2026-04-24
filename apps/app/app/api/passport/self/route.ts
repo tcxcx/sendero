@@ -41,41 +41,52 @@ export async function GET(req: NextRequest) {
   const actor = await resolveActor();
   if (!actor) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const reveal = new URL(req.url).searchParams.get('reveal') === '1';
+  try {
+    const reveal = new URL(req.url).searchParams.get('reveal') === '1';
 
-  const signals = await readVaultSignals(prisma, {
-    tenantId: actor.tenantId,
-    userId: actor.userId,
-    documentVariant: 'passport',
-    actor: {
-      actorRef: `usr:${actor.clerkUserId}`,
-      source: 'api/passport/self',
-      context: { reveal },
-    },
-  });
-  if (!signals) return NextResponse.json({ vault: null });
+    const signals = await readVaultSignals(prisma, {
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      documentVariant: 'passport',
+      actor: {
+        actorRef: `usr:${actor.clerkUserId}`,
+        source: 'api/passport/self',
+        context: { reveal },
+      },
+    });
+    if (!signals) return NextResponse.json({ vault: null });
 
-  const base = {
-    vaultId: signals.id,
-    documentVariant: signals.documentVariant,
-    nationalityIso3: signals.nationalityIso3,
-    expiresOn: signals.expiresOn ? signals.expiresOn.toISOString().slice(0, 10) : null,
-    mrzChecksumValid: signals.mrzChecksumValid,
-    extractedBy: signals.extractedBy,
-    extractedAt: signals.extractedAt.toISOString(),
-  };
+    const base = {
+      vaultId: signals.id,
+      documentVariant: signals.documentVariant,
+      nationalityIso3: signals.nationalityIso3,
+      expiresOn: signals.expiresOn ? signals.expiresOn.toISOString().slice(0, 10) : null,
+      mrzChecksumValid: signals.mrzChecksumValid,
+      extractedBy: signals.extractedBy,
+      extractedAt: signals.extractedAt.toISOString(),
+    };
 
-  if (!reveal) return NextResponse.json({ vault: base, payload: null });
+    if (!reveal) return NextResponse.json({ vault: base, payload: null });
 
-  const payload = await decryptVaultPayload(prisma, {
-    vaultId: signals.id,
-    tenantId: actor.tenantId,
-    actor: {
-      actorRef: `usr:${actor.clerkUserId}`,
-      source: 'api/passport/self?reveal=1',
-    },
-  });
-  return NextResponse.json({ vault: base, payload });
+    const payload = await decryptVaultPayload(prisma, {
+      vaultId: signals.id,
+      tenantId: actor.tenantId,
+      actor: {
+        actorRef: `usr:${actor.clerkUserId}`,
+        source: 'api/passport/self?reveal=1',
+      },
+    });
+    return NextResponse.json({ vault: base, payload });
+  } catch (err) {
+    console.error('[passport/self] read failed:', err);
+    return NextResponse.json(
+      {
+        error: 'vault_read_failed',
+        message: 'Passport vault state could not be loaded. Try again or contact support.',
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function DELETE(_req: NextRequest) {

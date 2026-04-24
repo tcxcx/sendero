@@ -16,25 +16,34 @@ import {
 
 import type { ToolDef } from './types';
 
-const inputSchema = z.discriminatedUnion('action', [
-  z.object({
-    action: z.literal('create'),
-    displayName: z.string().min(1).max(200),
-    rateAccessCode: z.string().min(1).max(20),
-    accommodationIds: z.array(z.string().min(3)).min(1).max(500),
-  }),
-  z.object({
-    action: z.literal('update'),
-    negotiatedRateId: z.string().min(3),
+const inputSchema = z
+  .object({
+    action: z.enum(['create', 'update', 'delete']),
+    negotiatedRateId: z.string().min(3).optional(),
     displayName: z.string().min(1).max(200).optional(),
     rateAccessCode: z.string().min(1).max(20).optional(),
     accommodationIds: z.array(z.string().min(3)).min(1).max(500).optional(),
-  }),
-  z.object({
-    action: z.literal('delete'),
-    negotiatedRateId: z.string().min(3),
-  }),
-]);
+  })
+  .superRefine((input, ctx) => {
+    if (input.action === 'create') {
+      for (const field of ['displayName', 'rateAccessCode', 'accommodationIds'] as const) {
+        if (!input[field]) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message: `${field} is required when action is create`,
+          });
+        }
+      }
+    }
+    if ((input.action === 'update' || input.action === 'delete') && !input.negotiatedRateId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['negotiatedRateId'],
+        message: 'negotiatedRateId is required when action is update or delete',
+      });
+    }
+  });
 
 export type ManageStaysNegotiatedRateInput = z.infer<typeof inputSchema>;
 
@@ -55,9 +64,9 @@ export async function manageStaysNegotiatedRate(
 ): Promise<ManageStaysNegotiatedRateResult> {
   if (input.action === 'create') {
     const row = await createStaysNegotiatedRate({
-      displayName: input.displayName,
-      rateAccessCode: input.rateAccessCode,
-      accommodationIds: input.accommodationIds,
+      displayName: input.displayName!,
+      rateAccessCode: input.rateAccessCode!,
+      accommodationIds: input.accommodationIds!,
     });
     return {
       action: 'create',
@@ -72,7 +81,7 @@ export async function manageStaysNegotiatedRate(
     };
   }
   if (input.action === 'update') {
-    const row = await updateStaysNegotiatedRate(input.negotiatedRateId, {
+    const row = await updateStaysNegotiatedRate(input.negotiatedRateId!, {
       displayName: input.displayName,
       rateAccessCode: input.rateAccessCode,
       accommodationIds: input.accommodationIds,
@@ -89,10 +98,10 @@ export async function manageStaysNegotiatedRate(
       },
     };
   }
-  await deleteStaysNegotiatedRate(input.negotiatedRateId);
+  await deleteStaysNegotiatedRate(input.negotiatedRateId!);
   return {
     action: 'delete',
-    id: input.negotiatedRateId,
+    id: input.negotiatedRateId!,
     share: {
       title: 'Negotiated rate deleted',
       body: `Removed ${input.negotiatedRateId}`,
