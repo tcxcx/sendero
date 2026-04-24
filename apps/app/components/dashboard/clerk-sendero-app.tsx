@@ -3,7 +3,7 @@
 /**
  * ClerkSenderoApp — mount the post-auth product workspace
  * (ConsoleBar + ChatCol + Stage + WorkflowLog + FooterRail) inside a
- * Clerk-authenticated `/app/*` route.
+ * Clerk-authenticated `/dashboard/*` route.
  *
  * The original `SenderoApp` gates on the zustand `userAuth` set by the
  * passkey ceremony in `<LandingHero />`. Clerk-authed operators never

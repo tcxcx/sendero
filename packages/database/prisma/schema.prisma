@@ -113,6 +113,10 @@ enum MeterStatus {
   paid
   free
   rejected
+  /// API-key-authenticated call from a sandbox key (or a production
+  /// key downgraded during testnet-beta network mode). Row is kept for
+  /// analytics; NanopayBatch excludes `status='sandbox'` from settlement.
+  sandbox
 }
 
 enum SettlementStatus {
@@ -574,16 +578,23 @@ model Wallet {
 /// Clerk webhook handler / org provisioning flow (phase-11c). Distinct
 /// from the user-scoped Wallet model above.
 model CircleWallet {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   tenantId          String
   clerkOrgId        String?
-  address           String   @unique
+  address           String    @unique
   kind              String
   chain             String
   circleWalletSetId String?
   circleWalletId    String?
-  createdAt         DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+  /// Cached USDC balance in micro-USDC (1 USDC = 1_000_000). Authoritative
+  /// source is the Circle webhook → `syncWalletBalance()` in
+  /// @sendero/circle/balance-sync. Read this in the UI; do not poll RPC.
+  usdcBalanceMicro  BigInt?
+  /// Cached EURC balance, same convention as usdcBalanceMicro.
+  eurcBalanceMicro  BigInt?
+  balanceUpdatedAt  DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

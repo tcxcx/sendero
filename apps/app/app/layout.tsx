@@ -1,5 +1,4 @@
 import type { Viewport } from 'next';
-import Script from 'next/script';
 
 import { ClerkProvider } from '@clerk/nextjs';
 import { SUPPORTED_LOCALES } from '@sendero/locale';
@@ -28,7 +27,7 @@ const CLERK_ALLOWED_REDIRECT_ORIGINS = buildClerkAllowedRedirectOrigins();
 const CLERK_SIGN_IN_FALLBACK =
   process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL ??
   process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL ??
-  '/app';
+  '/dashboard';
 const CLERK_SIGN_UP_FALLBACK =
   process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL ??
   process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL ??
@@ -100,13 +99,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale}>
       <head>
-        {process.env.NODE_ENV === 'development' && (
-          <Script
-            src="https://unpkg.com/react-grab/dist/index.global.js"
-            crossOrigin="anonymous"
-            strategy="beforeInteractive"
-          />
-        )}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link

@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test';
 
 import { cancelBookingTool } from './cancel-booking';
-import { confirmDuffelTool } from './confirm-duffel';
+import { confirmFlightTool } from './confirm-flight';
 import { settleBookingTool } from './settle-booking';
 
 const BID = `0x${'1'.repeat(64)}`;
@@ -9,8 +9,8 @@ const TID = `0x${'2'.repeat(64)}`;
 const HASH = `0x${'3'.repeat(64)}`;
 const ESCROW = `0x${'a'.repeat(40)}`;
 
-test('confirm_duffel returns an encoded call', async () => {
-  const out: any = await confirmDuffelTool.handler({
+test('confirm_flight returns an encoded call', async () => {
+  const out: any = await confirmFlightTool.handler({
     bookingId: BID,
     duffelOrderHash: HASH,
     escrowAddress: ESCROW,

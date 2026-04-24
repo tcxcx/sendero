@@ -112,7 +112,9 @@ const prefundInput = z.object({
     .string()
     .max(200)
     .optional()
-    .describe('Short route summary for the subject line, e.g. "SFO → LHR" or "Mexico City holiday".'),
+    .describe(
+      'Short route summary for the subject line, e.g. "SFO → LHR" or "Mexico City holiday".'
+    ),
 });
 
 export const prefundTripTool: ToolDef = {
@@ -196,7 +198,11 @@ export const prefundTripTool: ToolDef = {
     let emailResult: { ok: boolean; id?: string; error?: string; skipped?: boolean } | null = null;
     if (parsed.guestEmail) {
       if (!notificationsConfigured()) {
-        emailResult = { ok: false, skipped: true, error: 'RESEND_API_KEY / SENDERO_EMAIL_FROM not set' };
+        emailResult = {
+          ok: false,
+          skipped: true,
+          error: 'RESEND_API_KEY / SENDERO_EMAIL_FROM not set',
+        };
       } else {
         const notifier = createNotifier();
         const expiresIso = new Date(Number(expiresAt) * 1000).toISOString();
@@ -334,7 +340,7 @@ const reserveInput = z.object({
 export const reserveBookingTool: ToolDef = {
   name: 'reserve_booking',
   description:
-    'Agent path: reserve an upper-bound USDC amount from a claimed trip for a specific booking attempt. Called before search_flights → book_flight so escrow can block any conflicting draws while Duffel is held. Returns the on-chain call to submit and the bookingId to thread through commit_booking + confirm_duffel.',
+    'Agent path: reserve an upper-bound USDC amount from a claimed trip for a specific booking attempt. Called before search_flights → book_flight so escrow can block any conflicting draws while Duffel is held. Returns the on-chain call to submit and the bookingId to thread through commit_booking + confirm_flight.',
   inputSchema: reserveInput,
   jsonSchema: {
     type: 'object',
@@ -363,7 +369,7 @@ export const reserveBookingTool: ToolDef = {
       upperBoundMicro: upperBound.toString(),
       escrowAddress: escrow,
       onchainCall: { to: call.to, data: call.data, value: call.value.toString() },
-      note: 'Submit via agent MSCA userOp. The bookingId must round-trip through commit_booking → confirm_duffel → settle_booking so the escrow lifecycle closes.',
+      note: 'Submit via agent MSCA userOp. The bookingId must round-trip through commit_booking → confirm_flight → settle_booking so the escrow lifecycle closes.',
     };
   },
 };
@@ -386,7 +392,7 @@ const commitInput = z.object({
 export const commitBookingTool: ToolDef = {
   name: 'commit_booking',
   description:
-    'Agent path: commit the actual vendor amount for a reserved booking. Releases the slack back to the trip budget. Use after Duffel returns a priced offer and before the booking is ticketed. Pair with confirm_duffel once the order hash is known and settle_booking after the PNR is ticketed.',
+    'Agent path: commit the actual vendor amount for a reserved booking. Releases the slack back to the trip budget. Use after Duffel returns a priced offer and before the booking is ticketed. Pair with confirm_flight once the order hash is known and settle_booking after the PNR is ticketed.',
   inputSchema: commitInput,
   jsonSchema: {
     type: 'object',

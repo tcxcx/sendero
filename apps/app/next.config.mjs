@@ -24,6 +24,15 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.unsplash.com' },
     ],
   },
+  // Legacy /app/* routes were renamed to /dashboard/* (see app/(app)/dashboard).
+  // Redirect old bookmarks, email links, and third-party callbacks so nothing
+  // that pre-dated the rename 404s.
+  async redirects() {
+    return [
+      { source: '/app', destination: '/dashboard', permanent: true },
+      { source: '/app/:path*', destination: '/dashboard/:path*', permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

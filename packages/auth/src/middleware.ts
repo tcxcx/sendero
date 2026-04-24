@@ -12,9 +12,9 @@
  * Route taxonomy (hard-coded here — edit to extend):
  *   public:       /, /sign-in, /sign-up, /pricing, /api/public/*
  *   guest-chat:   /chat           (ephemeral MSCA, no Clerk required)
- *   authed:       /app/*          (Clerk user required, tenant optional)
- *   tenant-scope: /app/(agency)/* (Clerk user + active org required)
- *   admin:        /app/admin/*    (agency-admin role)
+ *   authed:       /dashboard/*          (Clerk user required, tenant optional)
+ *   tenant-scope: /dashboard/(agency)/* (Clerk user + active org required)
+ *   admin:        /dashboard/admin/*    (agency-admin role)
  */
 
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
@@ -32,11 +32,11 @@ const isPublic = createRouteMatcher([
 const isGuestChat = createRouteMatcher(['/chat(.*)', '/api/chat/public(.*)']);
 
 const isTenantScoped = createRouteMatcher([
-  '/app/(agency|trips|finance|settlements)/(.*)',
+  '/dashboard/(agency|trips|finance|settlements)/(.*)',
   '/api/(agency|trips|finance|settlements)/(.*)',
 ]);
 
-const isAdmin = createRouteMatcher(['/app/admin(.*)', '/api/admin/(.*)']);
+const isAdmin = createRouteMatcher(['/dashboard/admin(.*)', '/api/admin/(.*)']);
 
 export function senderoMiddleware() {
   return clerkMiddleware(async (auth, req) => {
@@ -51,16 +51,16 @@ export function senderoMiddleware() {
     }
 
     // Post-signup passkey gate: every authed page redirects to
-    // /app/onboarding/passkey until the MSCA link is recorded. We signal
+    // /dashboard/onboarding/passkey until the MSCA link is recorded. We signal
     // "linked" via the `sendero_msca` cookie (set by /api/auth/link-msca).
     const hasMsca = req.cookies.get('sendero_msca')?.value === '1';
-    const onboardingPath = '/app/onboarding/passkey';
+    const onboardingPath = '/dashboard/onboarding/passkey';
     if (!hasMsca && !url.pathname.startsWith(onboardingPath)) {
       return NextResponse.redirect(new URL(onboardingPath, req.url));
     }
 
     if (isTenantScoped(req) && !orgId) {
-      return NextResponse.redirect(new URL('/app/select-agency', req.url));
+      return NextResponse.redirect(new URL('/dashboard/select-agency', req.url));
     }
 
     if (isAdmin(req) && orgRole !== 'org:admin') {

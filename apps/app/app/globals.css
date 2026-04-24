@@ -57,7 +57,7 @@
      Vermillion primary, warm editorial accents. Shadcn's default
      neutral-gray sidebar tokens (near-white hsl) made the nav feel
      like generic SaaS chrome instead of a travel map-room. */
-  --sidebar: var(--surface-base);
+  --sidebar: transparent;
   --sidebar-foreground: oklch(0.22 0.015 250);
   --sidebar-primary: var(--ink);
   --sidebar-primary-foreground: var(--surface-floating);
@@ -143,7 +143,7 @@
   --text-faint: oklch(0.48 0.01 250);
   --border: oklch(0.22 0.01 250);
   --border-strong: oklch(0.32 0.01 250);
-  --sidebar: hsl(240 5.9% 10%);
+  --sidebar: transparent;
   --sidebar-foreground: hsl(240 4.8% 95.9%);
   --sidebar-primary: hsl(224.3 76.3% 48%);
   --sidebar-primary-foreground: hsl(0 0% 100%);
@@ -202,16 +202,8 @@ body {
 body {
   background-color: var(--surface-base);
   background-image:
-    radial-gradient(
-      ellipse 120% 90% at 100% 0%,
-      rgba(182, 132, 78, 0.04),
-      transparent 60%
-    ),
-    radial-gradient(
-      ellipse 110% 80% at 0% 100%,
-      rgba(15, 124, 130, 0.03),
-      transparent 60%
-    ),
+    radial-gradient(ellipse 120% 90% at 100% 0%, rgba(182, 132, 78, 0.04), transparent 60%),
+    radial-gradient(ellipse 110% 80% at 0% 100%, rgba(15, 124, 130, 0.03), transparent 60%),
     radial-gradient(
       ellipse at center,
       var(--surface-base),
@@ -221,7 +213,7 @@ body {
   min-height: 100svh;
 }
 body::before {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -233,6 +225,100 @@ body::before {
 .app-shell-root {
   position: relative;
   z-index: 1;
+}
+/*
+ * Outer parchment topography — contour-line texture behind the raised
+ * SidebarInset card. Visible through the my-3/mr-3 gaps and through
+ * the rounded corners of the inset.
+ *
+ * Source: https://heropatterns.com ("Topography" variant).
+ * Local asset: /patterns/topography.svg (fill is pure #000 so
+ * mask-image is the correct primitive here — a single theme color
+ * drives the visible stroke via the ::before's background-color).
+ */
+.app-shell-root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Pushed to 72% ink + 0.55 opacity so the glass panes have real
+     contrast to refract — visible contour lines are what make the
+     backdrop-filter read as "glass" on iteration in /tmp/glass-test. */
+  background-color: color-mix(in oklab, var(--ink) 72%, transparent);
+  -webkit-mask-image: url("/patterns/topography.svg");
+  mask-image: url("/patterns/topography.svg");
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 520px 520px;
+  mask-size: 520px 520px;
+  opacity: 0.55;
+}
+/* Sidebar sits on the topography — frosted-glass wash lets the
+   contour lines bleed through while still giving the nav its own
+   readable surface. Interactive items (hover, active) still carry
+   their own tinted vermillion backgrounds on top of the glass. */
+/* Apple liquid-glass sidebar — tuned in /tmp/glass-test.html via /browse.
+   Five-stop 135° diagonal gradient places a bright specular highlight at
+   the top-left corner and a softer wash at the bottom-left, so the pane
+   reads as a curved piece of glass catching light from the upper-left.
+   blur(42px) + saturate(2.4) + brightness(1.08) refracts the topography
+   pattern behind; inset glow from the top adds depth; 2px white top edge
+   + 2px white left edge + ink shadow right/bottom render the raised
+   glass lip. Outer 2px drop-shadow floats the pane above the card.
+   isolation: isolate forces a stacking context so backdrop-filter
+   reliably captures the topography layer below. */
+.app-shell-root .group\/sidebar-wrapper {
+  background: transparent;
+}
+
+/* Design spec (Claude Design / "Glass shell.html"): the sidebar is a
+   floating rounded-pill pane that sits ABOVE the full-width footer with
+   breathing room. Override shadcn's default full-height fixed positioner
+   to: inset 16px from top, 16px from left, stop above the footer with a
+   16px gap, 232px wide. z:20 so it floats above main card. */
+.app-shell-root .group.peer[data-side] > .fixed.inset-y-0 {
+  top: 16px;
+  left: 16px;
+  bottom: calc(var(--app-shell-footer-h, 48px) + 16px);
+  height: auto;
+  width: 232px;
+  z-index: 20;
+  background: transparent;
+}
+
+.app-shell-root [data-sidebar="sidebar"] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 28px;
+  /* Pill glass — parchment tint at 38% per design spec, blur 22px,
+     saturate 1.15. Simple, legible, matches the Tweaks-panel default
+     values in the handoff. */
+  background: rgba(247, 239, 228, 0.38);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+  backdrop-filter: blur(22px) saturate(1.15);
+  /* Top edge bright (2x edge-alpha per design) */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    /* Bottom edge soft */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+    /* Drop shadow — pane floats over the topography */
+    0 18px 40px -20px rgba(31, 42, 68, 0.18);
+}
+
+.app-shell-root [data-sidebar="sidebar"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Top-left specular + left-edge highlight — lets the rounded pill
+     catch light from the upper-left corner. */
+  background:
+    radial-gradient(circle at 18% 6%, rgba(255, 255, 255, 0.4), transparent 34%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12), transparent 45%);
+  opacity: 0.85;
 }
 
 /* =====================================================
@@ -435,6 +521,12 @@ a[role="button"]:active,
      shadcn sidebar can reserve room at the bottom without duplicating
      the magic number. Update here if FooterRail padding changes. */
   --app-shell-footer-h: 34px;
+}
+
+.app-shell-footer {
+  position: relative;
+  z-index: 12;
+  background: transparent;
 }
 /* Shadcn sidebar is position:fixed with inset-y-0 h-svh, so by default
    it spans the entire viewport and would slide under the global
@@ -873,10 +965,11 @@ a[role="button"]:active,
    Stage (center)
    ===================================================== */
 .stage {
-  padding: 24px 28px 32px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
+  background: transparent;
 }
 
 .stage-head {
@@ -884,8 +977,8 @@ a[role="button"]:active,
   justify-content: space-between;
   align-items: flex-end;
   gap: 16px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
+  padding-bottom: 18px;
+  border-bottom: 1px solid color-mix(in oklab, var(--ink) 18%, transparent);
 }
 .stage-head > :first-child {
   flex: 1;
@@ -925,18 +1018,20 @@ a[role="button"]:active,
 .step-rail {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
-  background: var(--surface-base);
+  gap: 8px;
+  padding: 6px 0;
+  background: transparent;
+  flex-wrap: wrap;
 }
 .step-cell {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
+  gap: 7px;
+  padding: 6px 12px;
   border-radius: 999px;
   transition: var(--surface-transition);
   min-width: 0;
+  background: transparent;
 }
 .step-cell.active {
   background: var(--tint-vermillion-soft);
@@ -988,18 +1083,55 @@ a[role="button"]:active,
 
 /* Card — quieter, less console-y */
 .card {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in oklab, var(--ink) 14%, var(--border));
   background: var(--bg-elev);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   overflow: hidden;
+}
+.stage .card {
+  border-color: color-mix(in oklab, var(--ink) 16%, transparent);
+  background: color-mix(in oklab, var(--ink) 2%, #fff);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px rgba(31, 42, 68, 0.03);
 }
 .card-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  min-height: 42px;
+  padding: 14px 18px;
+  border-bottom: 1px solid color-mix(in oklab, var(--ink) 14%, var(--border));
+  min-height: 44px;
+}
+.stage .card-head {
+  border-bottom-color: color-mix(in oklab, var(--ink) 14%, transparent);
+}
+
+/* Form inputs inside the stage — soft, vermillion-tinted focus. */
+.stage-input {
+  padding: 11px 13px;
+  border: 1px solid color-mix(in oklab, var(--ink) 20%, var(--border));
+  background: #fff;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.stage-input:hover {
+  border-color: color-mix(in oklab, var(--ink) 36%, var(--border));
+}
+.stage-input:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink) 16%, transparent);
+}
+.stage-submit {
+  padding: 9px 18px !important;
+  font-size: 11px !important;
+  letter-spacing: 0.12em !important;
+  border-radius: var(--radius-sm) !important;
 }
 .card-head .title {
   font-family: var(--font-sans);
@@ -1416,8 +1548,8 @@ a[role="button"]:active,
   align-items: center;
   gap: 8px;
   justify-content: space-between;
-  padding: 8px 14px;
-  background: var(--bg-sunk);
+  padding: 10px 16px;
+  background: color-mix(in oklab, var(--ink) 6%, var(--bg-sunk));
 }
 .log-head .name {
   font-family: var(--font-mono);
@@ -1436,11 +1568,11 @@ a[role="button"]:active,
   display: grid;
   grid-template-columns: 14px 1fr auto;
   align-items: baseline;
-  padding: 6px 14px;
-  gap: 10px;
+  padding: 8px 16px;
+  gap: 12px;
   font-family: var(--font-mono);
   font-size: 11px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid color-mix(in oklab, var(--ink) 14%, rgba(255, 255, 255, 0.04));
 }
 .log-event:first-child {
   border-top: none;
@@ -1493,14 +1625,36 @@ a[role="button"]:active,
      so the global rail's visible band and the sidebar cutoff align. */
   height: 34px;
   padding: 0 20px;
-  /* Borderless on parchment — DESIGN.md §19. Midnight at 60% opacity
-     gives the rail its meta-info feel without a hard top rule. */
-  background: var(--surface-base);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, white 22%, transparent),
+    color-mix(in oklab, var(--surface-floating) 8%, transparent) 45%,
+    color-mix(in oklab, var(--surface-base) 4%, transparent)
+  );
+  -webkit-backdrop-filter: blur(32px) saturate(1.85) brightness(1.04);
+  backdrop-filter: blur(32px) saturate(1.85) brightness(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -1px 0 rgba(31, 42, 68, 0.08),
+    0 -14px 36px rgba(31, 42, 68, 0.05);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 60%, transparent);
+}
+.footer-rail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 45%),
+    radial-gradient(circle at 50% -120%, rgba(255, 255, 255, 0.28), transparent 72%);
 }
 .footer-rail .group {
   display: flex;
@@ -1796,6 +1950,30 @@ a[role="button"]:active,
   border: 1.5px solid var(--ink);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
+.footer-tweaks-btn {
+  margin-left: 12px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in oklab, var(--ink) 40%, transparent);
+  background: color-mix(in oklab, var(--bg-elev) 60%, transparent);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+.footer-tweaks-btn:hover {
+  border-color: var(--ink);
+  background: var(--bg-elev);
+}
 .tweaks-panel.hidden {
   display: none;
 }
@@ -1895,21 +2073,32 @@ a[role="button"]:active,
 }
 
 /* =====================================================
-   Scrollbars
+   Scrollbars — vermillion ink thumb across the app.
    ===================================================== */
+* {
+  scrollbar-color: var(--ink) transparent;
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--ink) 85%, black);
+  background-clip: padding-box;
+}
 .col-body::-webkit-scrollbar,
 .chat-body::-webkit-scrollbar {
   width: 8px;
-}
-.col-body::-webkit-scrollbar-track,
-.chat-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-.col-body::-webkit-scrollbar-thumb,
-.chat-body::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border: 2px solid transparent;
-  background-clip: padding-box;
 }
 
 /* misc */

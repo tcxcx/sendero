@@ -156,7 +156,7 @@ export const senderoLanguageSelectorCss = `
   .sendero-language-selector-options {
     display: inline-grid;
     grid-template-columns: repeat(4, minmax(34px, 1fr));
-    border: 1px solid var(--sendero-language-ink);
+    border: 1px solid var(--border, var(--sendero-language-ink));
     background: var(--sendero-language-bg);
   }
 
@@ -165,7 +165,7 @@ export const senderoLanguageSelectorCss = `
     min-width: 34px;
     min-height: 30px;
     place-items: center;
-    border-left: 1px solid var(--sendero-language-ink);
+    border-left: 1px solid var(--border, var(--sendero-language-ink));
     color: var(--sendero-language-ink);
     text-decoration: none;
     transition:
@@ -209,5 +209,23 @@ export const senderoLanguageSelectorCss = `
     .sendero-language-selector-options a {
       transition: none;
     }
+  }
+
+  /* Compact variant: label hidden, tighter cells — fits beside a sidebar
+     toggle icon as a peer sized control. */
+  .sendero-language-selector.is-compact {
+    gap: 0;
+  }
+  .sendero-language-selector.is-compact > span {
+    display: none;
+  }
+  .sendero-language-selector.is-compact .sendero-language-selector-options {
+    grid-template-columns: repeat(4, minmax(24px, 1fr));
+  }
+  .sendero-language-selector.is-compact .sendero-language-selector-options a {
+    min-width: 24px;
+    min-height: 28px;
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
   }
 `;

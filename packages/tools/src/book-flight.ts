@@ -8,7 +8,7 @@ import {
   type DuffelPaymentInput,
 } from '@sendero/duffel';
 import type { ToolDef, ToolContext } from './types';
-import { ensureDuffelCustomer } from './ensure-duffel-customer';
+import { ensureFlightCustomer } from './ensure-flight-customer';
 
 const serviceSchema = z.object({
   id: z.string().min(1),
@@ -25,7 +25,7 @@ const inputSchema = z.object({
   /**
    * Additional Duffel CustomerUser ids (`icu_…`) that should have access
    * to this order. The primary traveler is always resolved from the
-   * Clerk session via `ensure_duffel_customer` — this list is for team
+   * Clerk session via `ensure_flight_customer` — this list is for team
    * leads, assistants, and other parties who should see the order.
    */
   additionalCustomerUserIds: z.array(z.string().min(3)).optional(),
@@ -44,7 +44,7 @@ type BookFlightInput = z.infer<typeof inputSchema>;
 export const bookFlightTool: ToolDef = {
   name: 'book_flight',
   description:
-    'Book a flight via Duffel for the signed-in user: ensures the Duffel CustomerUser exists, creates a hold order (with any ancillary services attached), and pays from the pre-funded Duffel Balance — optionally splitting payment with a traveler airline credit. Returns the PNR + order id. The traveler automatically gets Travel Support Assistant access through their linked icu_… identity. Passenger identity comes from the signed-in Clerk session — do not ask the user for name, email, or phone.',
+    'Book a flight for the signed-in user: ensures the traveler identity exists with the supplier, creates a hold order (with any ancillary services attached), and pays from the pre-funded balance — optionally splitting payment with a traveler airline credit. Returns the PNR + order id. The traveler automatically gets Travel Support Assistant access through their linked identity. Passenger identity comes from the signed-in Clerk session — do not ask the user for name, email, or phone.',
   inputSchema,
   jsonSchema: {
     type: 'object',
@@ -72,7 +72,7 @@ export const bookFlightTool: ToolDef = {
       airlineCreditId: {
         type: 'string',
         description:
-          'Duffel airline credit id (acd_…) to redeem toward this booking. Remainder paid from balance.',
+          'Airline credit id (acd_…) to redeem toward this booking. Remainder paid from balance.',
       },
     },
   },
@@ -84,13 +84,13 @@ export const bookFlightTool: ToolDef = {
     const customerUserIds: string[] = [];
     if (ctx?.traveler?.userId) {
       try {
-        const identity = await ensureDuffelCustomer(
+        const identity = await ensureFlightCustomer(
           { clerkUserId: ctx.traveler.userId, tenantId: ctx.traveler.tenantId },
           ctx
         );
-        customerUserIds.push(identity.duffelCustomerUserId);
+        customerUserIds.push(identity.supplierTravelerId);
       } catch (err) {
-        console.warn('[book_flight] ensure_duffel_customer failed, continuing without link', err);
+        console.warn('[book_flight] ensure_flight_customer failed, continuing without link', err);
       }
     }
     if (input.additionalCustomerUserIds?.length) {

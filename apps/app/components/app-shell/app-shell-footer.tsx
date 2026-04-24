@@ -6,7 +6,7 @@
  * width (sidebar rail + main inset together), not just the main column.
  *
  * Renders the same FooterRail content (Arc chain / treasury / nanopay
- * state) used by /app/console and the inbox trip views, and handles the
+ * state) used by /dashboard/console and the inbox trip views, and handles the
  * store lifecycle so the rail has live data even on routes that don't
  * mount SenderoApp.
  */
@@ -55,7 +55,7 @@ export function AppShellFooter() {
   return (
     // Borderless: floats on the parchment field, no top rule. Spacing
     // and type opacity carry the separation (DESIGN.md §19).
-    <div className="app-shell-footer shrink-0 bg-[color:var(--surface-base)]">
+    <div className="app-shell-footer shrink-0 bg-transparent">
       <FooterRail />
     </div>
   );

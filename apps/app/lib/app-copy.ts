@@ -439,13 +439,12 @@ const EN_US: AppCopy = {
   },
   shell: {
     nav: [
-      { href: '/app', label: 'Home', exact: true },
-      { href: '/app/ops', label: 'Ops' },
-      { href: '/app/trips', label: 'Trips' },
-      { href: '/app/billing/invoices', label: 'Invoices' },
-      { href: '/app/spend', label: 'Spend' },
-      { href: '/app/caps', label: 'Caps' },
-      { href: '/app/settings/billing', label: 'Settings' },
+      { href: '/dashboard', label: 'Home', exact: true },
+      { href: '/dashboard/trips', label: 'Trips' },
+      { href: '/dashboard/billing/invoices', label: 'Invoices' },
+      { href: '/dashboard/spend', label: 'Spend' },
+      { href: '/dashboard/caps', label: 'Caps' },
+      { href: '/dashboard/settings/billing', label: 'Settings' },
     ],
     header: {
       signIn: 'Sign in',
@@ -467,27 +466,17 @@ const EN_US: AppCopy = {
     shortcutOpen: 'Open',
     shortcuts: [
       {
-        href: '/app/ops',
-        label: 'Ops workspace',
-        description: 'Run quote, approval, service, refund, and artifact chains.',
-      },
-      {
-        href: '/app/trips?sheet=new',
-        label: 'Prepaid trip',
-        description: 'Create a USDC budget and traveler claim link.',
-      },
-      {
-        href: '/app/channels/whatsapp',
+        href: '/dashboard/channels/whatsapp',
         label: 'WhatsApp agency',
         description: 'Connect a Business number for white-label travel.',
       },
       {
-        href: '/app/channels/slack',
+        href: '/dashboard/channels/slack',
         label: 'Slack workplace',
         description: 'Install approvals and employee travel DMs.',
       },
       {
-        href: '/app/integrations/mcp',
+        href: '/dashboard/integrations/mcp',
         label: 'MCP agents',
         description: 'Expose the same journey engine to other LLMs.',
       },
@@ -745,13 +734,12 @@ const ES_MX: AppCopy = {
   },
   shell: {
     nav: [
-      { href: '/app', label: 'Inicio', exact: true },
-      { href: '/app/ops', label: 'Ops' },
-      { href: '/app/trips', label: 'Viajes' },
-      { href: '/app/billing/invoices', label: 'Facturas' },
-      { href: '/app/spend', label: 'Gasto' },
-      { href: '/app/caps', label: 'Límites' },
-      { href: '/app/settings/billing', label: 'Ajustes' },
+      { href: '/dashboard', label: 'Inicio', exact: true },
+      { href: '/dashboard/trips', label: 'Viajes' },
+      { href: '/dashboard/billing/invoices', label: 'Facturas' },
+      { href: '/dashboard/spend', label: 'Gasto' },
+      { href: '/dashboard/caps', label: 'Límites' },
+      { href: '/dashboard/settings/billing', label: 'Ajustes' },
     ],
     header: { signIn: 'Ingresar', getStarted: 'Empezar' },
   },
@@ -771,27 +759,17 @@ const ES_MX: AppCopy = {
     shortcutOpen: 'Abrir',
     shortcuts: [
       {
-        href: '/app/ops',
-        label: 'Workspace ops',
-        description: 'Opera cotización, aprobación, soporte, reembolso y artefactos.',
-      },
-      {
-        href: '/app/trips?sheet=new',
-        label: 'Viaje prepagado',
-        description: 'Crea presupuesto USDC y link de claim.',
-      },
-      {
-        href: '/app/channels/whatsapp',
+        href: '/dashboard/channels/whatsapp',
         label: 'Agencia WhatsApp',
         description: 'Conecta un número Business white-label.',
       },
       {
-        href: '/app/channels/slack',
+        href: '/dashboard/channels/slack',
         label: 'Slack workplace',
         description: 'Instala aprobaciones y DMs de viaje.',
       },
       {
-        href: '/app/integrations/mcp',
+        href: '/dashboard/integrations/mcp',
         label: 'Agentes MCP',
         description: 'Expone el journey a otros LLMs.',
       },
@@ -856,27 +834,17 @@ const ES_AR: AppCopy = {
       'Empezá con un link de escrow prepagado y enruta al viajero por WhatsApp, Slack, web o MCP sin cambiar el motor de reservas.',
     shortcuts: [
       {
-        href: '/app/ops',
-        label: 'Workspace ops',
-        description: 'Operá cotización, aprobación, soporte, reembolso y artefactos.',
-      },
-      {
-        href: '/app/trips?sheet=new',
-        label: 'Viaje prepagado',
-        description: 'Creá presupuesto USDC y link de claim.',
-      },
-      {
-        href: '/app/channels/whatsapp',
+        href: '/dashboard/channels/whatsapp',
         label: 'Agencia WhatsApp',
         description: 'Conectá un número Business white-label.',
       },
       {
-        href: '/app/channels/slack',
+        href: '/dashboard/channels/slack',
         label: 'Slack workplace',
         description: 'Instalá aprobaciones y DMs de viaje.',
       },
       {
-        href: '/app/integrations/mcp',
+        href: '/dashboard/integrations/mcp',
         label: 'Agentes MCP',
         description: 'Exponé el journey a otros LLMs.',
       },
@@ -1106,13 +1074,12 @@ const PT_BR: AppCopy = {
   },
   shell: {
     nav: [
-      { href: '/app', label: 'Início', exact: true },
-      { href: '/app/ops', label: 'Ops' },
-      { href: '/app/trips', label: 'Viagens' },
-      { href: '/app/billing/invoices', label: 'Faturas' },
-      { href: '/app/spend', label: 'Gastos' },
-      { href: '/app/caps', label: 'Limites' },
-      { href: '/app/settings/billing', label: 'Configurações' },
+      { href: '/dashboard', label: 'Início', exact: true },
+      { href: '/dashboard/trips', label: 'Viagens' },
+      { href: '/dashboard/billing/invoices', label: 'Faturas' },
+      { href: '/dashboard/spend', label: 'Gastos' },
+      { href: '/dashboard/caps', label: 'Limites' },
+      { href: '/dashboard/settings/billing', label: 'Configurações' },
     ],
     header: { signIn: 'Entrar', getStarted: 'Começar' },
   },
@@ -1132,27 +1099,17 @@ const PT_BR: AppCopy = {
     shortcutOpen: 'Abrir',
     shortcuts: [
       {
-        href: '/app/ops',
-        label: 'Workspace ops',
-        description: 'Opere cotação, aprovação, suporte, reembolso e artefatos.',
-      },
-      {
-        href: '/app/trips?sheet=new',
-        label: 'Viagem pré-paga',
-        description: 'Crie orçamento USDC e link de claim.',
-      },
-      {
-        href: '/app/channels/whatsapp',
+        href: '/dashboard/channels/whatsapp',
         label: 'Agência WhatsApp',
         description: 'Conecte um número Business white-label.',
       },
       {
-        href: '/app/channels/slack',
+        href: '/dashboard/channels/slack',
         label: 'Slack workplace',
         description: 'Instale aprovações e DMs de viagem.',
       },
       {
-        href: '/app/integrations/mcp',
+        href: '/dashboard/integrations/mcp',
         label: 'Agentes MCP',
         description: 'Exponha a jornada para outros LLMs.',
       },

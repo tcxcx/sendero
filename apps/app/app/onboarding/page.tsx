@@ -77,9 +77,9 @@ export default function OnboardingPage() {
     }
     pushedToApp.current = true;
     if (IS_DEV) {
-      console.log('[onboarding] onboardingComplete → /app', orgRef.current?.publicMetadata);
+      console.log('[onboarding] onboardingComplete → /dashboard', orgRef.current?.publicMetadata);
     }
-    router.push('/app');
+    router.push('/dashboard');
   }, [onboardingComplete, router]);
 
   useEffect(() => {

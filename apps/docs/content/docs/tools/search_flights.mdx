@@ -1,11 +1,11 @@
 ---
 title: search_flights
-description: Search live Duffel flight inventory by route, date, cabin, and passenger count.
+description: Search live live flight inventory by route, date, cabin, and passenger count.
 ---
 
 **Category:** External API
 **Price:** $0.002
-**Backed by:** Duffel Flights API
+**Backed by:** supplier inventory layer
 
 ## Input
 
@@ -22,7 +22,7 @@ description: Search live Duffel flight inventory by route, date, cabin, and pass
 
 ## Output
 
-The tool returns the top three Duffel offers:
+The tool returns the top three flight offers:
 
 ```ts
 {
@@ -30,7 +30,7 @@ The tool returns the top three Duffel offers:
     id: string;       // pass to book_flight as offerId
     totalAmount: string;
     totalCurrency: string;
-    // plus provider itinerary fields from @sendero/duffel
+    // plus provider itinerary fields
   }>;
 }
 ```
@@ -88,7 +88,7 @@ curl -X POST $SENDERO_EDGE_URL/tools/search_flights \
 2. Sendero returns `402 Payment Required` with a `PAYMENT-REQUIRED` header.
 3. Sign the EIP-3009 authorization for 2,000 atomic USDC.
 4. Retry with `Payment-Signature`.
-5. Sendero executes the Duffel search and returns offers plus the payment receipt.
+5. Sendero executes the flight search and returns offers plus the payment receipt.
 
 Most production clients hide this flow behind a small payment helper. See [x402 nanopayments](/docs/x402-nanopayments) for the raw protocol.
 
@@ -98,5 +98,5 @@ Most production clients hide this flow behind a small payment helper. See [x402 
 | ---- | ------- |
 | `payment_required` | The direct HTTP endpoint needs an x402 signature. |
 | `invalid_input` | Origin, destination, date, passenger count, or cabin class failed validation. |
-| `no_offers` | Duffel returned no flights for the route. |
-| `provider_timeout` | Duffel did not respond within the configured timeout. |
+| `no_offers` | the supplier returned no flights for the route. |
+| `provider_timeout` | the supplier did not respond within the configured timeout. |

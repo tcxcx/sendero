@@ -21,23 +21,21 @@ export type SidebarLinkCopy = {
 };
 
 const defaultLinks: SidebarLinkCopy[] = [
-  { href: '/app', label: 'Home', exact: true },
-  { href: '/app/ops', label: 'Ops' },
-  { href: '/app/trips', label: 'Trips' },
-  { href: '/app/billing/invoices', label: 'Invoices' },
-  { href: '/app/spend', label: 'Spend' },
-  { href: '/app/caps', label: 'Caps' },
-  { href: '/app/settings/billing', label: 'Settings' },
+  { href: '/dashboard', label: 'Home', exact: true },
+  { href: '/dashboard/trips', label: 'Trips' },
+  { href: '/dashboard/billing/invoices', label: 'Invoices' },
+  { href: '/dashboard/spend', label: 'Spend' },
+  { href: '/dashboard/caps', label: 'Caps' },
+  { href: '/dashboard/settings/billing', label: 'Settings' },
 ];
 
 const iconsByHref: Record<string, LucideIcon> = {
-  '/app': Home,
-  '/app/ops': Briefcase,
-  '/app/trips': Briefcase,
-  '/app/billing/invoices': FileText,
-  '/app/spend': BarChart3,
-  '/app/caps': ShieldAlert,
-  '/app/settings/billing': Settings,
+  '/dashboard': Home,
+  '/dashboard/trips': Briefcase,
+  '/dashboard/billing/invoices': FileText,
+  '/dashboard/spend': BarChart3,
+  '/dashboard/caps': ShieldAlert,
+  '/dashboard/settings/billing': Settings,
 };
 
 export function Sidebar({ links = defaultLinks }: { links?: SidebarLinkCopy[] }) {

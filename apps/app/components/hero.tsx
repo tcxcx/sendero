@@ -153,9 +153,9 @@ export function LandingHero() {
 
           <p className="hero-sub">
             Every booking spawns its own AI agent. Reachable over <strong>email</strong> and{' '}
-            <strong>WhatsApp</strong>, it issues a real PNR via Duffel, clears policy with
-            Clerk-bound org rules, and settles on Arc Testnet through an ERC-8183 escrow job. No
-            seed phrase, no native gas token — USDC is the gas.
+            <strong>WhatsApp</strong>, it issues a real PNR, clears policy with Clerk-bound org
+            rules, and settles on Arc Testnet through an ERC-8183 escrow job. No seed phrase, no
+            native gas token — USDC is the gas.
           </p>
 
           <MarginStrip />
@@ -290,7 +290,7 @@ export function LandingHero() {
       </main>
 
       <footer className="hero-foot">
-        <span>Duffel sandbox · Arc Testnet · Circle Modular Wallets</span>
+        <span>Arc Testnet · Circle Modular Wallets</span>
         <span className="dot-sep">·</span>
         <span>Account lazily deploys on first booking. Gas in USDC.</span>
       </footer>

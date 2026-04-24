@@ -7,7 +7,7 @@ test.describe('authenticated role gates', () => {
   );
 
   test('protected app shell loads for authenticated users', async ({ page }) => {
-    await page.goto('/app');
+    await page.goto('/dashboard');
     await expect(page.getByRole('link', { name: /Trips/i })).toBeVisible();
   });
 });

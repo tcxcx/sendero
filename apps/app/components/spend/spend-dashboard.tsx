@@ -168,7 +168,7 @@ export function SpendDashboard({
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
+    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-white p-6 shadow-[var(--shadow-md)]">
       <h3 className="text-[15px] font-semibold tracking-normal text-foreground">{title}</h3>
       {children}
     </section>
@@ -177,7 +177,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <section className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-5 shadow-[var(--shadow-md)]">
+    <section className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-white p-5 shadow-[var(--shadow-md)]">
       <div
         className="font-mono uppercase text-muted-foreground"
         style={{

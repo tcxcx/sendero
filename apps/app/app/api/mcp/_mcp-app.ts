@@ -62,7 +62,7 @@ async function handleRpc(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
               name: 'sendero-arc',
               version: '0.9.5-alpha',
               description:
-                'AI travel agent + USDC settlement rail on Arc L2. Books real flights via Duffel, settles via Circle Gateway + App Kit.',
+                'AI travel agent + USDC settlement rail on Arc L2. Books real flights, hotels, and trip services; settles via Circle Gateway + App Kit.',
             },
           },
         };
@@ -115,6 +115,27 @@ export const mcpApp = new Hono()
     })
   )
   .post('/', async c => {
+    // API key is required for JSON-RPC calls. The GET discovery handler
+    // above remains public so agents can fetch the server manifest.
+    const { resolveTenantFromApiKey } = await import('@/lib/api-key-auth');
+    const resolved = await resolveTenantFromApiKey(c.req.raw);
+    if (!resolved) {
+      return c.json(
+        {
+          jsonrpc: '2.0',
+          id: null,
+          error: {
+            code: -32001,
+            message:
+              'Missing or invalid API key. Mint one at /dashboard/settings/api-keys and send as `Authorization: Bearer ak_…`.',
+          },
+        },
+        401
+      );
+    }
+    c.set('tenantId' as never, resolved.tenantId as never);
+    c.set('apiKeyType' as never, resolved.effectiveKeyType as never);
+
     const body = (await c.req.json()) as JsonRpcRequest | JsonRpcRequest[];
     const batch = Array.isArray(body) ? body : [body];
     const responses: JsonRpcResponse[] = [];

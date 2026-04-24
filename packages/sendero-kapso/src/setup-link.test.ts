@@ -41,7 +41,7 @@ describe('startOnboarding', () => {
     const out = await startOnboarding(client, {
       tenantId: 'tenant_x',
       tenantName: 'Acme',
-      redirectUrl: 'https://sendero.travel/app/settings/channels?onboarding=whatsapp',
+      redirectUrl: 'https://sendero.travel/dashboard/settings/channels?onboarding=whatsapp',
       countryIsos: ['US', 'BR'],
     });
 

@@ -15,7 +15,7 @@
  *       back to Booking.metadata.workflow.
  *     - Response must be 200 { ok:true } (matched=true path).
  *   Post-resume on-chain submission: read the resumed run's trail for the
- *     encoded confirm_duffel + settle_booking calls and submit them via
+ *     encoded confirm_flight + settle_booking calls and submit them via
  *     the smoke's viem wallet (operator path).
  *   Assertions: booking status in the escrow contract is SETTLED (enum=2)
  *     AND the vendor address received `vendorAmount` micro-USDC.
@@ -117,9 +117,7 @@ async function ensureServerUp(): Promise<void> {
       throw new Error(`bad status ${r.status}`);
     }
   } catch (err) {
-    console.error(
-      `[smoke/resume-settle] dev server not reachable at ${BASE_URL} — start it first`
-    );
+    console.error(`[smoke/resume-settle] dev server not reachable at ${BASE_URL} — start it first`);
     throw err;
   }
 }

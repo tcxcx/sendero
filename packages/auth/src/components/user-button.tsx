@@ -3,5 +3,5 @@
 import { UserButton } from '@clerk/nextjs';
 
 export function SenderoUserButton(props: { userProfileUrl?: string }) {
-  return <UserButton userProfileUrl={props.userProfileUrl ?? '/app/profile'} />;
+  return <UserButton userProfileUrl={props.userProfileUrl ?? '/dashboard/profile'} />;
 }

@@ -19,7 +19,7 @@ export default function SignUpForm() {
             signInUrl="/sign-in"
             waitlistUrl="/waitlist"
             fallbackRedirectUrl="/onboarding"
-            signInFallbackRedirectUrl="/app"
+            signInFallbackRedirectUrl="/dashboard"
             appearance={{
               elements: {
                 rootBox: '!w-full',

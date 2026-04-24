@@ -8,7 +8,7 @@ export function SenderoOrgSwitcher(props: {
 }) {
   return (
     <OrganizationSwitcher
-      afterSelectOrganizationUrl={props.afterSelectOrganizationUrl ?? '/app'}
+      afterSelectOrganizationUrl={props.afterSelectOrganizationUrl ?? '/dashboard'}
       afterCreateOrganizationUrl={props.afterCreateOrganizationUrl ?? '/onboarding'}
       appearance={{
         elements: {

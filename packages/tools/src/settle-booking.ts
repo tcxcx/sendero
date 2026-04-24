@@ -30,7 +30,7 @@ function resolveEscrow(override?: string | null): Address {
 export const settleBookingTool: ToolDef = {
   name: 'settle_booking',
   description:
-    'Agent path: release escrow for a confirmed booking. Transfers vendorAmount to the vendor and feeAmount to the operator in one tx. Caller submits via operator MSCA userOp. Should run AFTER confirm_duffel and only when Duffel status=ticketed.',
+    'Agent path: release escrow for a confirmed booking. Transfers vendorAmount to the vendor and feeAmount to the operator in one tx. Caller submits via operator MSCA userOp. Should run AFTER confirm_flight and only when Duffel status=ticketed.',
   inputSchema: settleInput,
   jsonSchema: {
     type: 'object',

@@ -10,9 +10,10 @@
 import type { ReactNode } from 'react';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { useSendero, deriveStep } from './store';
 import { AgentChip } from './agent-chip';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { WalletDropdown } from './wallet-dropdown';
 
 /* ─── ConsoleBar ────────────────────────────────────────────────────────── */
@@ -452,8 +453,72 @@ export function FooterRail() {
             </span>
           </>
         )}
+        <TweaksToggle />
       </div>
     </div>
+  );
+}
+
+function TweaksToggle() {
+  const showWorkflow = useSendero(s => s.showWorkflow);
+  const dark = useSendero(s => s.dark);
+  const setShowWorkflow = useSendero(s => s.setShowWorkflow);
+  const setDark = useSendero(s => s.setDark);
+
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <TooltipProvider delayDuration={200} skipDelayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setOpen(!open)}
+              aria-label="Tweaks"
+              className="footer-tweaks-btn"
+            >
+              ◇ Tweaks
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="font-mono text-[10px] tracking-wider">
+            toggle theme + workflow terminal
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      {open && (
+        <div className="tweaks-panel">
+          <div className="tweaks-head">
+            <span>TWEAKS</span>
+            <button onClick={() => setOpen(false)}>✕</button>
+          </div>
+          <div className="tweaks-body">
+            <div className="tweak-group">
+              <span className="tk-label">Workflow terminal</span>
+              <div className="tweak-toggle">
+                <div
+                  className={`tw-switch ${showWorkflow ? 'on' : ''}`}
+                  onClick={() => setShowWorkflow(!showWorkflow)}
+                >
+                  <div className="knob" />
+                </div>
+                <span>{showWorkflow ? 'Visible' : 'Hidden'}</span>
+              </div>
+            </div>
+
+            <div className="tweak-group">
+              <span className="tk-label">Theme</span>
+              <div className="tweak-toggle">
+                <div className={`tw-switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>
+                  <div className="knob" />
+                </div>
+                <span>{dark ? 'Dark' : 'Light'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

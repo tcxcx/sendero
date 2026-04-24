@@ -118,16 +118,15 @@ function SearchForm() {
     <div className="card">
       <div className="card-head">
         <span className="title">Search flights</span>
-        <span className="tag faint">Duffel</span>
+        <span className="tag faint">Live inventory</span>
       </div>
       <form
         onSubmit={submit}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: 12,
-          padding: 16,
-          alignItems: 'end',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 14,
+          padding: 20,
         }}
       >
         <Field label="Origin (IATA)">
@@ -135,7 +134,7 @@ function SearchForm() {
             value={origin}
             onChange={e => setOrigin(e.target.value.toUpperCase())}
             maxLength={3}
-            style={inputStyle()}
+            className="stage-input"
           />
         </Field>
         <Field label="Destination (IATA)">
@@ -143,7 +142,7 @@ function SearchForm() {
             value={destination}
             onChange={e => setDestination(e.target.value.toUpperCase())}
             maxLength={3}
-            style={inputStyle()}
+            className="stage-input"
           />
         </Field>
         <Field label="Depart">
@@ -151,7 +150,7 @@ function SearchForm() {
             type="date"
             value={departureDate}
             onChange={e => setDepartureDate(e.target.value)}
-            style={inputStyle()}
+            className="stage-input"
           />
         </Field>
         <Field label="Return">
@@ -159,7 +158,7 @@ function SearchForm() {
             type="date"
             value={returnDate}
             onChange={e => setReturnDate(e.target.value)}
-            style={inputStyle()}
+            className="stage-input"
           />
         </Field>
         <Field label="Pax">
@@ -169,14 +168,14 @@ function SearchForm() {
             max={9}
             value={passengers}
             onChange={e => setPassengers(Number(e.target.value))}
-            style={inputStyle()}
+            className="stage-input"
           />
         </Field>
         <Field label="Cabin">
           <select
             value={cabinClass}
             onChange={e => setCabinClass(e.target.value as any)}
-            style={inputStyle()}
+            className="stage-input"
           >
             <option value="economy">Economy</option>
             <option value="premium_economy">Premium Economy</option>
@@ -184,17 +183,18 @@ function SearchForm() {
             <option value="first">First</option>
           </select>
         </Field>
-        <button
-          type="submit"
-          className="btn primary"
+        <div
           style={{
             gridColumn: 'span 2',
-            alignSelf: 'end',
-            padding: '10px 12px',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginTop: 4,
           }}
         >
-          Search flights →
-        </button>
+          <button type="submit" className="btn primary stage-submit">
+            Search flights →
+          </button>
+        </div>
       </form>
     </div>
   );
@@ -206,10 +206,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 4,
+        gap: 6,
         fontFamily: 'var(--font-mono)',
         fontSize: 10,
-        letterSpacing: '0.08em',
+        letterSpacing: '0.1em',
         textTransform: 'uppercase',
         color: 'var(--text-dim)',
       }}
@@ -218,18 +218,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
-}
-
-function inputStyle(): React.CSSProperties {
-  return {
-    padding: '8px 10px',
-    border: '1.5px solid var(--border)',
-    background: 'var(--bg-elev)',
-    color: 'var(--text)',
-    fontFamily: 'var(--font-sans)',
-    fontSize: 13,
-    outline: 'none',
-  };
 }
 
 function OffersCard({
@@ -399,7 +387,7 @@ function HoldCard({
           }}
         >
           <button className="btn primary" disabled={paying} onClick={onPay}>
-            {paying ? 'Settling on Arc…' : 'Pay from Duffel Balance →'}
+            {paying ? 'Settling on Arc…' : 'Pay from prepaid balance →'}
           </button>
         </div>
       )}

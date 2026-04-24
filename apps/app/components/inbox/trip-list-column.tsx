@@ -31,7 +31,7 @@ export type InboxTripRow = {
 
 export function TripListColumn({ trips }: { trips: InboxTripRow[] }) {
   const pathname = usePathname() ?? '';
-  const selectedId = pathname.startsWith('/app/inbox/') ? pathname.split('/').pop() : null;
+  const selectedId = pathname.startsWith('/dashboard/inbox/') ? pathname.split('/').pop() : null;
   const [q, setQ] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
 
@@ -90,7 +90,7 @@ export function TripListColumn({ trips }: { trips: InboxTripRow[] }) {
           return (
             <Link
               key={trip.id}
-              href={`/app/inbox/${trip.id}`}
+              href={`/dashboard/inbox/${trip.id}`}
               aria-current={active ? 'page' : undefined}
               className={
                 'group relative flex cursor-pointer flex-col gap-1 overflow-hidden rounded-[var(--radius-md)] px-3 py-3 text-sm leading-tight transition-[box-shadow,background-color] duration-[240ms] ease-[cubic-bezier(0.23,1,0.32,1)] ' +

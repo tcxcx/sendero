@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { searchFlights, type FlightSearchParams } from '@sendero/duffel';
 import type { ToolDef, ToolContext } from './types';
-import { ensureDuffelCustomer } from './ensure-duffel-customer';
+import { ensureFlightCustomer } from './ensure-flight-customer';
 
 const privateFareCredentialSchema = z
   .object({
@@ -69,7 +69,7 @@ type SearchFlightsInput = z.infer<typeof inputSchema>;
 export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
   name: 'search_flights',
   description:
-    'Search flights between two airports. Requires IATA codes and a departure date (YYYY-MM-DD). Supports corporate private fares + corporate loyalty programmes via `privateFares`, leisure private fares via per-passenger `leisureFareTypes`, per-passenger loyalty accounts, and Duffel airline-credit matching via `airlineCreditIds` or `linkSessionTraveler`.',
+    'Search flights between two airports. Requires IATA codes and a departure date (YYYY-MM-DD). Supports corporate private fares + corporate loyalty programmes via `privateFares`, leisure private fares via per-passenger `leisureFareTypes`, per-passenger loyalty accounts, and airline-credit matching via `airlineCreditIds` or `linkSessionTraveler`.',
   inputSchema,
   jsonSchema: {
     type: 'object',
@@ -142,11 +142,11 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
     let customerUserId = input.customerUserId as FlightSearchParams['customerUserId'];
     if (!customerUserId && input.linkSessionTraveler && ctx?.traveler?.userId) {
       try {
-        const identity = await ensureDuffelCustomer(
+        const identity = await ensureFlightCustomer(
           { clerkUserId: ctx.traveler.userId, tenantId: ctx.traveler.tenantId },
           ctx
         );
-        customerUserId = identity.duffelCustomerUserId as FlightSearchParams['customerUserId'];
+        customerUserId = identity.supplierTravelerId as FlightSearchParams['customerUserId'];
       } catch {
         // continue without link
       }

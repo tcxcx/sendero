@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { prisma } from '@sendero/database';
 import { listAirlineCredits } from '@sendero/duffel';
 
-import { ensureDuffelCustomer } from './ensure-duffel-customer';
+import { ensureFlightCustomer } from './ensure-flight-customer';
 import type { ToolContext, ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -65,14 +65,14 @@ export async function listAirlineCreditsForUser(
   let userId: string | undefined;
   if (!customerUserId && (input.clerkUserId || ctx?.traveler?.userId)) {
     try {
-      const identity = await ensureDuffelCustomer(
+      const identity = await ensureFlightCustomer(
         {
           clerkUserId: input.clerkUserId ?? ctx?.traveler?.userId,
           tenantId: input.tenantId ?? ctx?.traveler?.tenantId,
         },
         ctx
       );
-      customerUserId = identity.duffelCustomerUserId;
+      customerUserId = identity.supplierTravelerId;
       userId = identity.userId;
     } catch {
       customerUserId = undefined;

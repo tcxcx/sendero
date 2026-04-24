@@ -65,9 +65,9 @@ export function DialogShell({
           position: fixed;
           inset: 0;
           z-index: 120;
-          background: color-mix(in oklab, var(--ink) 16%, transparent);
-          backdrop-filter: blur(6px) saturate(1.05);
-          -webkit-backdrop-filter: blur(6px) saturate(1.05);
+          background: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 52%, transparent);
+          backdrop-filter: blur(10px) saturate(1.1);
+          -webkit-backdrop-filter: blur(10px) saturate(1.1);
           display: grid;
           place-items: center;
           padding: 24px;

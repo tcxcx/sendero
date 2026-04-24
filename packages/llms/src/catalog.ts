@@ -115,7 +115,7 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
       'Rebuild a disrupted itinerary: replacement flights, overnight hotel fallback, airport-to-hotel route, and a traveler-ready share card.',
   },
   {
-    label: 'ensure_duffel_customer',
+    label: 'ensure_flight_customer',
     description:
       'Idempotently sync the traveler with Duffel identity (CustomerUser + CustomerUserGroup) and return the icu_… id. Unlocks Travel Support Assistant for future orders.',
   },
@@ -191,7 +191,7 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
     description: 'Commit the actual vendor amount and release unused escrow reserve.',
   },
   {
-    label: 'confirm_duffel',
+    label: 'confirm_flight',
     description: 'Confirm a Duffel hold and attach booking metadata for settlement.',
   },
   {
@@ -272,7 +272,7 @@ export const AGENT_WORKFLOW_CATALOG: LlmsItem[] = [
   {
     label: 'sendero.book_with_ancillaries',
     description:
-      'Sell-up flow: search flights, list ancillaries, pause for selection, then hold with bags/seats/CFAR attached. Unlocks Travel Support Assistant via ensure_duffel_customer.',
+      'Sell-up flow: search flights, list ancillaries, pause for selection, then hold with bags/seats/CFAR attached. Unlocks Travel Support Assistant via ensure_flight_customer.',
   },
   {
     label: 'sendero.cancellation_recovery',
@@ -468,22 +468,34 @@ export function buildSenderoAppLlms(options: SurfaceOptions = {}): LlmsTxtConfig
       {
         heading: 'Primary Routes',
         items: withOrigin(o.app, [
-          { label: 'Buyer dashboard', href: '/app', description: 'Protected tenant overview.' },
-          { label: 'Trips', href: '/app/trips', description: 'Tenant trip list and detail pages.' },
+          {
+            label: 'Buyer dashboard',
+            href: '/dashboard',
+            description: 'Protected tenant overview.',
+          },
+          {
+            label: 'Trips',
+            href: '/dashboard/trips',
+            description: 'Tenant trip list and detail pages.',
+          },
           {
             label: 'Invoices',
-            href: '/app/billing/invoices',
+            href: '/dashboard/billing/invoices',
             description: 'Tenant invoice list, details, and authenticated PDF downloads.',
           },
           {
             label: 'Spend',
-            href: '/app/spend',
+            href: '/dashboard/spend',
             description: 'Spend dashboard and invoice rollups.',
           },
-          { label: 'Caps', href: '/app/caps', description: 'Tenant spend and policy cap editor.' },
+          {
+            label: 'Caps',
+            href: '/dashboard/caps',
+            description: 'Tenant spend and policy cap editor.',
+          },
           {
             label: 'Settings',
-            href: '/app/settings',
+            href: '/dashboard/settings',
             description: 'Billing, branding, profile, and organization settings.',
           },
         ]),

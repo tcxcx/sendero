@@ -12,15 +12,10 @@
 import { useEffect, useState } from 'react';
 import { LandingHero } from './hero';
 import { ProfileGate } from './profile-gate';
-import { ConsoleBar } from './ui';
 import { ChatCol } from './chat-col';
 import { Stage } from './stage';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { TooltipProvider } from './ui/tooltip';
 import { WorkflowLog } from './workflow-log';
-import { SwapDialog } from './swap-dialog';
-import { SendDialog } from './send-dialog';
-import { BridgeDialog } from './bridge-dialog';
-import { DepositDialog } from './deposit-dialog';
 import { hydrateFromStorage, subscribePersist, useSendero } from './store';
 import { refreshTreasury } from './actions';
 
@@ -28,7 +23,7 @@ export interface SenderoAppProps {
   /**
    * 'passkey' (default) — public root flow: LandingHero pre-auth,
    * ProfileGate post-auth.
-   * 'bypass' — authenticated product shell (e.g. /app/console) where a
+   * 'bypass' — authenticated product shell (e.g. /dashboard/console) where a
    * Clerk-authed operator is the user. Skip LandingHero + ProfileGate
    * because the operator isn't the traveler for Duffel bookings; those
    * use the trip's traveler data.
@@ -79,8 +74,6 @@ export function SenderoApp({ gate = 'passkey' }: SenderoAppProps = {}) {
   const workspace = (
     <TooltipProvider delayDuration={200} skipDelayDuration={300}>
       <div className="app" data-screen-label="Agent Console">
-        <ConsoleBar />
-
         <div
           className="workspace"
           style={showWorkflow ? undefined : { gridTemplateColumns: '360px 1fr' }}
@@ -91,12 +84,7 @@ export function SenderoApp({ gate = 'passkey' }: SenderoAppProps = {}) {
         </div>
       </div>
 
-      <TweaksToggle />
       <SettleCelebration />
-      <SwapDialog />
-      <SendDialog />
-      <BridgeDialog />
-      <DepositDialog />
     </TooltipProvider>
   );
 
@@ -237,80 +225,5 @@ function SettleCelebration() {
         }
       `}</style>
     </div>
-  );
-}
-
-function TweaksToggle() {
-  const showWorkflow = useSendero(s => s.showWorkflow);
-  const dark = useSendero(s => s.dark);
-  const setShowWorkflow = useSendero(s => s.setShowWorkflow);
-  const setDark = useSendero(s => s.setDark);
-
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={() => setOpen(!open)}
-            aria-label="Tweaks"
-            style={{
-              position: 'fixed',
-              right: 16,
-              bottom: 44,
-              zIndex: 99,
-              padding: '8px 12px',
-              border: '1.5px solid var(--ink)',
-              background: 'var(--bg-elev)',
-              color: 'var(--ink)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              cursor: 'pointer',
-            }}
-          >
-            ◇ Tweaks
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="left" className="font-mono text-[10px] tracking-wider">
-          toggle theme + workflow terminal
-        </TooltipContent>
-      </Tooltip>
-
-      {open && (
-        <div className="tweaks-panel">
-          <div className="tweaks-head">
-            <span>TWEAKS</span>
-            <button onClick={() => setOpen(false)}>✕</button>
-          </div>
-          <div className="tweaks-body">
-            <div className="tweak-group">
-              <span className="tk-label">Workflow terminal</span>
-              <div className="tweak-toggle">
-                <div
-                  className={`tw-switch ${showWorkflow ? 'on' : ''}`}
-                  onClick={() => setShowWorkflow(!showWorkflow)}
-                >
-                  <div className="knob" />
-                </div>
-                <span>{showWorkflow ? 'Visible' : 'Hidden'}</span>
-              </div>
-            </div>
-
-            <div className="tweak-group">
-              <span className="tk-label">Theme</span>
-              <div className="tweak-toggle">
-                <div className={`tw-switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>
-                  <div className="knob" />
-                </div>
-                <span>{dark ? 'Dark' : 'Light'}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
   );
 }

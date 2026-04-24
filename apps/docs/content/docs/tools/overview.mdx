@@ -17,20 +17,20 @@ Sendero exposes a shared tool registry across MCP, web chat, WhatsApp, Slack, an
 | `quote_fx` | Read | $0.0008 | Quote indicative travel FX. |
 | `gateway_balance` | Read | $0.001 | Read Circle Gateway unified USDC liquidity. |
 | `guest_claim_link` | Escrow | $0.001 | Turn a guest claim link into claim calldata for a traveler wallet. |
-| `search_flights` | External API | $0.002 | Search Duffel flight inventory by route and date. |
+| `search_flights` | External API | $0.002 | Search live flight inventory by route and date. |
 | `search_hotels` | External API | $0.002 | Search lodging inventory for the trip context. |
 | `recommend_restaurants` | Concierge | $0.002 | Recommend restaurants from traveler context and location. |
 | `export_route_map` | Concierge | $0.002 | Export a route or itinerary into Google Maps and Apple Maps links with a static preview card. |
 | `trip_checkin_reminder` | Concierge | $0.003 | Canonical check-in nudge: window, transit note, leave-by, and next action. |
-| `list_flight_ancillaries` | Concierge | $0.002 | Read bags, cancel-for-any-reason, and seat map on a Duffel offer — feeds book_flight `services[]`. |
-| `ensure_duffel_customer` | Identity | $0.003 | Idempotent Duffel CustomerUser + CustomerUserGroup sync. Unlocks Travel Support Assistant for the traveler. |
-| `find_airports_nearby` | Read | $0.001 | Duffel places-suggestions wrapper: airports + cities within a radius of a lat/lng or matching a free-form query. |
+| `list_flight_ancillaries` | Concierge | $0.002 | Read bags, cancel-for-any-reason, and seat map on a flight offer — feeds book_flight `services[]`. |
+| `ensure_traveler_identity` | Identity | $0.003 | Idempotent traveler identity + CustomerUserGroup sync. Unlocks Travel Support Assistant for the traveler. |
+| `find_airports_nearby` | Read | $0.001 | Places lookup —: airports + cities within a radius of a lat/lng or matching a free-form query. |
 | `display_offer_conditions` | Read | $0.001 | Canonical change/refund conditions (free · penalty · allowed-unknown-fee · not allowed · unknown), slice-level + private fares + credit applicability. |
-| `quote_stay` | External API | $0.003 | Turn a Duffel Stays rate into a quote — surfaces cancellation timeline, payment type, and supported loyalty programme. |
-| `book_stay` | Composed | $0.008 | Book a Duffel Stays quote with loyalty_programme_account_number + Customer User linkage. |
-| `cancel_order_quote` | External API | $0.002 | Unconfirmed Duffel cancellation quote — refund destination + any airline credits to be issued. |
+| `quote_stay` | External API | $0.003 | Turn a our lodging supplier network rate into a quote — surfaces cancellation timeline, payment type, and supported loyalty programme. |
+| `book_stay` | Composed | $0.008 | Book a our lodging supplier network quote with loyalty_programme_account_number + Customer User linkage. |
+| `cancel_order_quote` | External API | $0.002 | Unconfirmed cancellation quote — refund destination + any airline credits to be issued. |
 | `confirm_cancel_order` | Composed | $0.003 | Confirm a cancellation quote (must run within expiry). Returns final airline-credit codes. |
-| `list_airline_credits` | Read | $0.001 | Traveler's Duffel airline credits (unused tickets, MCOs, vouchers) with state + totals. |
+| `list_airline_credits` | Read | $0.001 | Traveler's airline credits (unused tickets, MCOs, vouchers) with state + totals. |
 | `restaurant_route_card` | Composed | $0.005 | Shortlist restaurants and export a route from the traveler to the top pick. |
 | `airport_transfer_coordinator` | Composed | $0.008 | Pickup plan with meeting point, primary transport, backup options, and airport→destination route. |
 | `airport_arrival_playbook` | Composed | $0.008 | One-screen arrival briefing: 5-step playbook, transport, timezone, and route. |
@@ -41,13 +41,13 @@ Sendero exposes a shared tool registry across MCP, web chat, WhatsApp, Slack, an
 | `prefund_trip` | Escrow | $0.003 | Create a prepaid guest escrow and return a shareable claim link. |
 | `reserve_booking` | Escrow | $0.003 | Reserve an upper-bound amount from a claimed trip budget. |
 | `commit_booking` | Escrow | $0.003 | Commit the actual vendor amount and release unused reserve. |
-| `confirm_duffel` | Escrow | $0.003 | Attach Duffel ticketing proof to the on-chain booking. |
+| `confirm_ticketing` | Escrow | $0.003 | Attach ticketing proof to the on-chain booking. |
 | `settle_booking` | Escrow | $0.003 | Release escrow to the vendor and fee legs. |
 | `cancel_booking` | Escrow | $0.003 | Cancel and sweep unspent escrow back to the buyer. |
 | `swap_tokens` | On-chain | $0.005 | Swap tokens on Arc. |
 | `bridge_to_arc` | On-chain | $0.005 | Bridge USDC into Arc with CCTP. |
 | `generate_booking_invoice` | Invoice | $0.005 | Create invoice records, render PDF, and email the traveler. |
-| `book_flight` | Composed | $0.008 | Hold and pay a Duffel order from prefunded balance. |
+| `book_flight` | Composed | $0.008 | Hold and pay a flight hold order from prefunded balance. |
 | `swap_and_bridge` | Composed | $0.01 | One-shot bridge into Arc and swap. |
 | `settle_split` | Composed | $0.01 | Atomically fan out supplier, agency, rail, and validator payments. |
 
@@ -57,7 +57,7 @@ Tools are low-level capabilities. Real travel operations should use named workfl
 
 | Workflow | Does |
 | -------- | ---- |
-| `sendero.book_flight` | Search, policy-check, reserve escrow, hold Duffel, wait for ticketing, settle, and invoice. |
+| `sendero.book_flight` | Search, policy-check, reserve escrow, hold the flight, wait for ticketing, settle, and invoice. |
 | `sendero.guest_prefund` | Create a prepaid traveler budget, wait for claim, then book against the claimed escrow. |
 | `sendero.agency_cohort` | Prefund many traveler links for agency cohorts or group travel. |
 | `sendero.group_trip` | Coordinate multiple travelers before confirming. |

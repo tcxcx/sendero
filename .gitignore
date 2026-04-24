@@ -73,3 +73,6 @@ apps/storybook/storybook-static/
 qa-logins.local.json
 .env.local.bak
 *.local.json
+
+# Temporary files from vercel/ops scripts
+.tmp-*.json

@@ -65,6 +65,7 @@ export interface MarketingPostcard {
 export interface MarketingNav {
   website: string;
   app: string;
+  pricing: string;
   agents: string;
 }
 
@@ -148,6 +149,7 @@ const EN_US: MarketingContent = {
   nav: {
     website: 'Website',
     app: 'App',
+    pricing: 'Pricing',
     agents: 'For AI agents',
   },
   hero: {
@@ -359,36 +361,65 @@ const EN_US: MarketingContent = {
     ],
   },
   pricing: {
-    heading: 'Priced by travel actions, not seats.',
+    heading: 'One workspace free. Scale when you need to.',
     subheading:
-      'Sendero is metered around the work the agent performs: search, context, booking, settlement, and reconciliation. No idle-seat tax for seasonal travel teams.',
+      'Sendero meters per travel action — search, book, MCP. A paid plan unlocks more workspaces, discounts on nanopayments, and a lower booking take rate. Start free.',
     tiers: [
       {
-        id: 'search',
-        name: 'Search',
-        price: '$0.02',
-        unit: 'per flight or hotel search',
-        description: 'Real-time supplier inventory, filtered by traveler context and policy.',
-        features: ['Duffel flight search', 'Hotel search workflow', 'Traveler and policy context'],
-        cta: { label: 'Join waitlist', href: '#waitlist' },
+        id: 'free',
+        name: 'Free',
+        price: '$0',
+        unit: 'one workspace · sandbox only',
+        description: 'Ship a prototype, test the MCP, try the agent console.',
+        features: [
+          '1 workspace',
+          'Sandbox API key (rate-limited)',
+          'Baseline nanopayment pricing',
+          'Agent console + Arc testnet',
+        ],
+        cta: { label: 'Start free', href: '/dashboard' },
       },
       {
-        id: 'book',
-        name: 'Book',
-        price: '$1.00',
-        unit: 'per confirmed booking plus 0.5% GMV',
-        description: 'Offer hold, confirmation, settlement, invoice, and reconciliation.',
-        features: ['PNR issuance', 'USDC settlement on Arc', 'Invoice and audit record'],
+        id: 'basic',
+        name: 'Basic',
+        price: '$19',
+        unit: '/mo · or $15/mo billed annually',
+        description: 'Agencies and small teams running multiple brands.',
+        features: [
+          'Up to 5 workspaces',
+          '3 production API keys',
+          'WhatsApp + Slack channels',
+          '15% off nanopayments · 5% off take rate',
+        ],
+        cta: { label: 'Upgrade to Basic', href: '/dashboard/billing/plans' },
+      },
+      {
+        id: 'pro',
+        name: 'Pro',
+        price: '$60',
+        unit: '/mo · or $50/mo billed annually',
+        description: 'TMCs and agentic platforms at scale.',
+        features: [
+          'Unlimited workspaces · 25 API keys',
+          'Public MCP server + custom webhooks',
+          'Audit log export · priority support',
+          '30% off nanopayments · 10% off take rate',
+        ],
+        cta: { label: 'Upgrade to Pro', href: '/dashboard/billing/plans' },
+      },
+      {
+        id: 'enterprise',
+        name: 'Enterprise',
+        price: 'Custom',
+        unit: 'contact sales',
+        description: 'White-label, SSO/SAML, custom SLA, dedicated solution eng.',
+        features: [
+          'Unlimited API keys and spend',
+          'SSO/SAML + audit export',
+          'White-label + custom SLA',
+          '50% off nanopayments · 15% off take rate',
+        ],
         cta: { label: 'Talk to sales', href: 'mailto:sales@sendero.travel' },
-      },
-      {
-        id: 'agents',
-        name: 'AI agents',
-        price: '$0.05',
-        unit: 'per MCP context call',
-        description: 'Travel tools and workflow calls exposed for LLM-native buyers.',
-        features: ['MCP server and llms.txt', 'x402-style payment boundaries', 'Stateful runs'],
-        cta: { label: 'Read llms.txt', href: '/llms.txt' },
       },
     ],
   },
@@ -409,6 +440,7 @@ const ES_MX: MarketingContent = {
   nav: {
     website: 'Sitio',
     app: 'App',
+    pricing: 'Precios',
     agents: 'Para agentes IA',
   },
   hero: {
@@ -535,35 +567,22 @@ const ES_MX: MarketingContent = {
     })),
   },
   pricing: {
-    heading: 'Precio por acciones de viaje, no por asientos.',
+    heading: 'Un workspace gratis. Escala cuando lo necesites.',
     subheading:
-      'Sendero se mide por el trabajo que hace el agente: búsqueda, contexto, reserva, liquidación y conciliación. Sin impuesto por usuarios inactivos.',
-    tiers: [
-      {
-        ...EN_US.pricing.tiers[0],
-        name: 'Búsqueda',
-        unit: 'por búsqueda de vuelo u hotel',
-        description: 'Inventario real, filtrado por contexto del viajero y política.',
-        features: ['Búsqueda Duffel', 'Flujo de hoteles', 'Contexto de viajero y política'],
-        cta: { label: 'Unirme', href: '#waitlist' },
+      'Sendero se mide por acción de viaje: búsqueda, reserva, MCP. Un plan pago desbloquea más workspaces, descuentos en nanopagos y una tarifa de reserva menor. Empieza gratis.',
+    tiers: EN_US.pricing.tiers.map(t => ({
+      ...t,
+      name: t.id === 'free' ? 'Gratis' : t.id === 'enterprise' ? 'Empresa' : t.name,
+      cta: {
+        ...t.cta,
+        label:
+          t.id === 'free'
+            ? 'Empezar gratis'
+            : t.id === 'enterprise'
+              ? 'Hablar con ventas'
+              : `Actualizar a ${t.name}`,
       },
-      {
-        ...EN_US.pricing.tiers[1],
-        name: 'Reserva',
-        unit: 'por reserva confirmada más 0.5% GMV',
-        description: 'Hold, confirmación, liquidación, factura y conciliación.',
-        features: ['Emisión de PNR', 'Liquidación USDC en Arc', 'Factura y auditoría'],
-        cta: { label: 'Hablar con ventas', href: 'mailto:sales@sendero.travel' },
-      },
-      {
-        ...EN_US.pricing.tiers[2],
-        name: 'Agentes IA',
-        unit: 'por llamada de contexto MCP',
-        description: 'Herramientas y workflows de viaje para compradores LLM-native.',
-        features: ['MCP y llms.txt', 'Límites de pago estilo x402', 'Ejecuciones con estado'],
-        cta: { label: 'Leer llms.txt', href: '/llms.txt' },
-      },
-    ],
+    })),
   },
   symbols: {
     eyebrow: 'Lenguaje de activos',
@@ -578,6 +597,7 @@ const PT_BR: MarketingContent = {
   nav: {
     website: 'Site',
     app: 'App',
+    pricing: 'Preços',
     agents: 'Para agentes IA',
   },
   hero: {
@@ -682,35 +702,22 @@ const PT_BR: MarketingContent = {
     postcards: EN_US.passport.postcards,
   },
   pricing: {
-    heading: 'Preço por ações de viagem, não por assentos.',
+    heading: 'Um workspace grátis. Escale quando precisar.',
     subheading:
-      'A Sendero é medida pelo trabalho que o agente executa: busca, contexto, reserva, liquidação e reconciliação. Sem cobrança por usuários parados.',
-    tiers: [
-      {
-        ...EN_US.pricing.tiers[0],
-        name: 'Busca',
-        unit: 'por busca de voo ou hotel',
-        description: 'Inventário real filtrado por contexto do viajante e política.',
-        features: ['Busca Duffel', 'Fluxo de hotéis', 'Contexto de viajante e política'],
-        cta: { label: 'Entrar na lista', href: '#waitlist' },
+      'A Sendero cobra por ação de viagem: busca, reserva, MCP. Um plano pago libera mais workspaces, desconto em nanopagamentos e taxa de reserva menor. Comece grátis.',
+    tiers: EN_US.pricing.tiers.map(t => ({
+      ...t,
+      name: t.id === 'free' ? 'Grátis' : t.id === 'enterprise' ? 'Empresa' : t.name,
+      cta: {
+        ...t.cta,
+        label:
+          t.id === 'free'
+            ? 'Começar grátis'
+            : t.id === 'enterprise'
+              ? 'Falar com vendas'
+              : `Assinar ${t.name}`,
       },
-      {
-        ...EN_US.pricing.tiers[1],
-        name: 'Reserva',
-        unit: 'por reserva confirmada mais 0,5% GMV',
-        description: 'Hold, confirmação, liquidação, nota e reconciliação.',
-        features: ['Emissão de PNR', 'Liquidação USDC na Arc', 'Nota e auditoria'],
-        cta: { label: 'Falar com vendas', href: 'mailto:sales@sendero.travel' },
-      },
-      {
-        ...EN_US.pricing.tiers[2],
-        name: 'Agentes IA',
-        unit: 'por chamada de contexto MCP',
-        description: 'Ferramentas e workflows de viagem para compradores LLM-native.',
-        features: ['MCP e llms.txt', 'Limites de pagamento estilo x402', 'Execuções com estado'],
-        cta: { label: 'Ler llms.txt', href: '/llms.txt' },
-      },
-    ],
+    })),
   },
   symbols: {
     eyebrow: 'Linguagem visual',
@@ -734,12 +741,7 @@ const ES_AR: MarketingContent = {
     title: 'Sumate a la lista de mainnet.',
     body: 'Estamos abriendo onboarding productivo por etapas para agencias, empresas y builders de IA. Sumate si querés acceso temprano a presupuestos prepagados, herramientas MCP o operaciones white-label.',
   },
-  pricing: {
-    ...ES_MX.pricing,
-    tiers: ES_MX.pricing.tiers.map(tier =>
-      tier.id === 'search' ? { ...tier, cta: { label: 'Sumarme', href: '#waitlist' } } : tier
-    ),
-  },
+  pricing: ES_MX.pricing,
 };
 
 const FALLBACK_CONTENT: Record<string, MarketingContent> = {

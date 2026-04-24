@@ -22,16 +22,16 @@ A full flight booking is not one tool call. It is an escrow-backed workflow:
 2. Prefund a trip budget with `prefund_trip`.
 3. Send the traveler the claim link, or let the traveler claim from WhatsApp, Slack, email, or web.
 4. Run `sendero.book_flight` with the claimed `tripId`, route, dates, passenger count, cabin, and optional policy id.
-5. Sendero searches Duffel inventory with `search_flights`.
+5. Sendero searches live flight inventory with `search_flights`.
 6. Sendero checks policy with `check_policy`.
 7. Sendero reserves upper-bound escrow with `reserve_booking`.
-8. Sendero holds the Duffel offer with `book_flight`.
+8. Sendero holds the flight offer with `book_flight`.
 9. Sendero commits the actual vendor amount with `commit_booking`.
-10. The workflow pauses until the Duffel ticketing webhook arrives.
-11. If ticketed, Sendero calls `confirm_duffel`, `settle_booking`, and `generate_booking_invoice`.
+10. The workflow pauses until the ticketing webhook arrives.
+11. If ticketed, Sendero calls `confirm_ticketing`, `settle_booking`, and `generate_booking_invoice`.
 12. If ticketing fails, Sendero calls `cancel_booking` and refunds unspent escrow.
 
-The same workflow can pause for Slack approvals, traveler OTP, Duffel ticketing, or other external events. Do not reimplement those waits in your own agent unless you need custom orchestration.
+The same workflow can pause for Slack approvals, traveler OTP, ticketing, or other external events. Do not reimplement those waits in your own agent unless you need custom orchestration.
 
 ## Discover capabilities
 
@@ -110,7 +110,7 @@ curl -X POST https://www.sendero.travel/api/workflows/resume \
   }'
 ```
 
-Duffel ticketing usually resumes through Sendero's Duffel webhook automatically. Slack approval buttons and WhatsApp claim links also resume the same workflow runner.
+ticketing usually resumes through our supplier webhook automatically. Slack approval buttons and WhatsApp claim links also resume the same workflow runner.
 
 ## Call raw tools over MCP
 

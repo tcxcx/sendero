@@ -10,6 +10,13 @@ export {
   getTreasuryBalances,
 } from './wallets';
 export {
+  fetchWalletBalances,
+  syncWalletBalance,
+  toMicro,
+  type CircleWalletStore,
+  type WalletBalancesMicro,
+} from './balance-sync';
+export {
   getAppKit,
   getTreasuryAdapter,
   getTreasuryAddress,
