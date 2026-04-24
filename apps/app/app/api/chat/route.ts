@@ -249,10 +249,24 @@ export async function POST(req: NextRequest) {
     const tried = failures.map(f => f.label).join(', ') || 'none';
     const lastMessage = failures[failures.length - 1]?.message ?? 'no provider configured';
     console.error(`[chat] all providers failed; tried=${tried}; last=${lastMessage}`, failures);
-    return new Response(
-      'All AI providers are unavailable right now — gateway, Google, OpenAI, and Anthropic all failed to respond. Please try again in a minute. If this keeps happening, check the provider credit balances.',
-      { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
-    );
+    // Production: generic message — don't leak provider error text to
+    // end users. Dev / preview / local: include the per-candidate
+    // reason so the operator immediately sees "AI_GATEWAY_API_KEY is
+    // invalid" or "model not available" without digging through logs.
+    const isProd = (process.env.VERCEL_ENV ?? process.env.NODE_ENV) === 'production';
+    const body = isProd
+      ? 'All AI providers are unavailable right now — gateway, Google, OpenAI, and Anthropic all failed to respond. Please try again in a minute. If this keeps happening, check the provider credit balances.'
+      : [
+          'All AI providers failed. Per-candidate reasons (dev-mode diagnostic — prod shows a generic message):',
+          '',
+          ...failures.map(f => `  • ${f.label}\n    ${f.message}`),
+          '',
+          'If gateway credits exist, check AI_GATEWAY_API_KEY is the one for the billed workspace and that the model is enabled on your gateway.',
+        ].join('\n');
+    return new Response(body, {
+      status: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
   }
 
   const tools = buildAiSdkTools(toolList, { traveler });

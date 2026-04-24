@@ -41,8 +41,6 @@ import {
   UploadCloudIcon,
 } from 'lucide-react';
 
-import { PageHeader } from '@/components/app-shell/page-header';
-
 interface VaultSignals {
   vaultId: string;
   documentVariant: string;
@@ -180,11 +178,6 @@ export default function PassportPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Passport"
-        description="Your identity document lives encrypted in the vault. The agent only ever sees sanitized signals — nationality and expiry month — never your name, DOB, or passport number."
-      />
-
       {status === 'on_file' && vault ? (
         <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] px-5 py-4 shadow-[var(--shadow-md)]">
           <div className="flex items-start gap-3">

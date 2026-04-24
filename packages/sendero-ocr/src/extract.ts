@@ -66,28 +66,28 @@ export interface ExtractDocumentArgs {
 export type ExtractDocumentResult =
   | {
       kind: 'invoice';
-      provider: 'vertex' | 'google';
+      provider: 'gateway' | 'vertex' | 'google';
       model: string;
       latencyMs: number;
       data: InvoiceExtraction;
     }
   | {
       kind: 'receipt';
-      provider: 'vertex' | 'google';
+      provider: 'gateway' | 'vertex' | 'google';
       model: string;
       latencyMs: number;
       data: ReceiptExtraction;
     }
   | {
       kind: 'boarding_pass';
-      provider: 'vertex' | 'google';
+      provider: 'gateway' | 'vertex' | 'google';
       model: string;
       latencyMs: number;
       data: BoardingPassExtraction;
     }
   | {
       kind: 'id_document';
-      provider: 'vertex' | 'google';
+      provider: 'gateway' | 'vertex' | 'google';
       model: string;
       latencyMs: number;
       data: IdDocumentExtraction;

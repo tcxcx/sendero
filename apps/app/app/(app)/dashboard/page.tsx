@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { prisma } from '@sendero/database';
 import { Button } from '@sendero/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@sendero/ui/table';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@sendero/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@sendero/ui/tooltip';
 import { ArrowRight, type LucideIcon, Sparkles } from 'lucide-react';
 
 const CHANNEL_HREFS = {
@@ -15,7 +15,7 @@ const NEUTRAL_SHORTCUT_ICONS: Record<string, LucideIcon> = {
   '/dashboard/integrations/mcp': Sparkles,
 };
 
-import { PageHeader } from '@/components/app-shell/page-header';
+import { PageActions } from '@/components/dashboard/page-actions';
 import { PlanTeaser } from '@/components/dashboard/plan-teaser';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { TripStatusBadge } from '@/components/trips/trip-status-badge';
@@ -79,13 +79,9 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <TooltipProvider delayDuration={120} skipDelayDuration={300}>
-        <PageHeader
-          title={copy.pageTitle}
-          description={copy.pageDescription(tenant.displayName)}
-          actions={
-            <div className="flex flex-wrap items-center gap-2">
-              {copy.shortcuts.map(s => {
+      <PageActions>
+        <>
+          {copy.shortcuts.map(s => {
                 if (s.href === CHANNEL_HREFS.whatsapp) {
                   return (
                     <ChannelPill
@@ -146,16 +142,14 @@ export default async function DashboardPage() {
                   </div>
                 </TooltipContent>
               </Tooltip>
-              <Button asChild>
-                <Link href="/dashboard/trips?sheet=new">
-                  Create prepaid trip
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
-              </Button>
-            </div>
-          }
-        />
-      </TooltipProvider>
+          <Button asChild>
+            <Link href="/dashboard/trips?sheet=new">
+              Create prepaid trip
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Link>
+          </Button>
+        </>
+      </PageActions>
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard

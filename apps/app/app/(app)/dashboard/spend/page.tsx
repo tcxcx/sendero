@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server';
-import { PageHeader } from '@/components/app-shell/page-header';
 import { RetryButton } from '@/components/admin/retry-button';
+import { PageActions } from '@/components/dashboard/page-actions';
 import { SpendDashboard } from '@/components/spend/spend-dashboard';
 import { requireAnyRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
@@ -48,13 +48,11 @@ export default async function SpendPage({
 
   return (
     <>
-      <PageHeader
-        title="Spend"
-        description="Nanopayment spend, caps, and recent settlement batches."
-        actions={
-          canRetry ? <RetryButton kind="failed-batches" label="Retry failed batches" /> : null
-        }
-      />
+      {canRetry ? (
+        <PageActions>
+          <RetryButton kind="failed-batches" label="Retry failed batches" />
+        </PageActions>
+      ) : null}
       <SpendDashboard
         tenantName={tenant.displayName}
         tier={tenant.billingTier}
