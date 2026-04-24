@@ -47,6 +47,20 @@ export function AgentChip() {
     };
   }, []);
 
+  // `g x` hotkey → open Arcscan in a new tab. The shortcut is registered
+  // globally in `useAppHotkeys`; that hook dispatches a CustomEvent we
+  // resolve here against the current `data.explorerUrl`.
+  useEffect(() => {
+    const onHotkey = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail !== 'open-arcscan') return;
+      if (!data?.explorerUrl) return;
+      window.open(data.explorerUrl, '_blank', 'noopener,noreferrer');
+    };
+    window.addEventListener('sendero:hotkey', onHotkey);
+    return () => window.removeEventListener('sendero:hotkey', onHotkey);
+  }, [data?.explorerUrl]);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -132,8 +146,17 @@ export function AgentChip() {
             </div>
           </div>
 
-          <a className="ac-open" href={data.explorerUrl} target="_blank" rel="noreferrer">
+          <a
+            className="ac-open"
+            href={data.explorerUrl}
+            target="_blank"
+            rel="noreferrer"
+            title="Open Arcscan (g x)"
+          >
             View on Arcscan ↗
+            <kbd className="ac-kbd" aria-hidden>
+              g x
+            </kbd>
           </a>
         </div>
       )}

@@ -176,8 +176,12 @@ export function SearchPaletteBody({ onClose }: PaletteBodyProps) {
         // Input wrapper — vermillion hairline instead of the default dark border
         '[&_[cmdk-input-wrapper]]:border-b-[color:color-mix(in_oklab,var(--ink)_18%,transparent)]',
         '[&_[cmdk-input-wrapper]]:px-4',
-        // Input itself — roomier, mono placeholder
+        // Input itself — roomier, mono placeholder. Kill the browser's
+        // default focus outline (it picks up --ink and overflows the
+        // wrapper by 2px on each edge); cmdk already signals focus via
+        // the wrapper's bottom hairline.
         '[&_[cmdk-input]]:h-12 [&_[cmdk-input]]:text-[14px] [&_[cmdk-input]]:placeholder:font-mono [&_[cmdk-input]]:placeholder:tracking-[0.02em]',
+        '[&_[cmdk-input]]:outline-none [&_[cmdk-input]]:ring-0 [&_[cmdk-input]:focus]:outline-none [&_[cmdk-input]:focus-visible]:outline-none',
         // Group headings — mono uppercase editorial
         '[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.14em] [&_[cmdk-group-heading]]:text-[color:color-mix(in_oklab,var(--sendero-midnight,#1F2A44)_55%,transparent)]',
         // Items — breathier, vermillion selected state
@@ -322,9 +326,14 @@ export function SearchShortcutHint({ className }: { className?: string }) {
 }
 
 /**
- * Vermillion-tinted glassmorphism backdrop. Rendered as a portal-ed
- * fixed overlay when the palette is open. Shades out the dashboard
- * behind so the floating combobox reads as focused.
+ * Dim + blur backdrop rendered as a portal-ed fixed overlay when the
+ * palette is open. Shades out the dashboard behind so the floating
+ * combobox reads as focused.
+ *
+ * No `saturate()` — the sidebar's vermillion topography pattern
+ * bleeds warm under any saturation boost, making the sidebar look
+ * orange-tinted on hover-open. Blur + a cool dark wash is enough to
+ * defocus the dashboard without amplifying red channels.
  */
 export function SearchBackdrop({ open }: { open: boolean }) {
   if (!open) return null;
@@ -333,9 +342,9 @@ export function SearchBackdrop({ open }: { open: boolean }) {
       aria-hidden
       className="pointer-events-none fixed inset-0 z-40"
       style={{
-        background: 'color-mix(in oklab, var(--ink) 14%, transparent)',
-        backdropFilter: 'blur(10px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(10px) saturate(1.2)',
+        background: 'color-mix(in oklab, var(--sendero-midnight, #1F2A44) 16%, transparent)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         animation: 'search-backdrop-in 180ms ease-out forwards',
       }}
     />

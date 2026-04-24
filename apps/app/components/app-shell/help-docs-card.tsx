@@ -20,7 +20,7 @@ export function HelpDocsCard() {
             asChild
             size="sm"
             tooltip="Help · Support"
-            className="flex w-full justify-center gap-2 rounded-none px-3.5 py-6 font-mono text-[11px] uppercase tracking-[0.12em] text-foreground transition-[background-color,color] duration-120 hover:bg-[color:color-mix(in_oklab,var(--ink)_6%,transparent)] hover:text-[color:var(--ink)] group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!px-0 group-data-[collapsible=icon]:!py-2"
+            className="flex w-full items-center justify-center gap-2 rounded-none px-3.5 py-6 font-mono text-[11px] uppercase tracking-[0.12em] text-foreground transition-[background-color,color] duration-120 hover:bg-[color:color-mix(in_oklab,var(--ink)_6%,transparent)] hover:text-[color:var(--ink)] group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!mx-auto"
           >
             <Link href={HELP_URL} target="_blank" rel="noreferrer">
               <LifeBuoy className="size-4 text-[color:var(--ink)]" />

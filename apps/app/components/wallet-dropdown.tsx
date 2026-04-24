@@ -15,6 +15,7 @@ import { useQueryState } from 'nuqs';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useSendero } from './store';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { useIsMac } from './hooks/use-is-mac';
 import { logout } from '@sendero/circle/modular-wallets';
 
 const ARCSCAN = 'https://testnet.arcscan.app';
@@ -22,6 +23,7 @@ const ARCSCAN = 'https://testnet.arcscan.app';
 type Token = 'USDC' | 'EURC';
 
 export function WalletDropdown() {
+  const isMac = useIsMac();
   const userAuth = useSendero(s => s.userAuth);
   const setUserAuth = useSendero(s => s.setUserAuth);
   const { user: clerkUser } = useUser();
@@ -263,21 +265,25 @@ export function WalletDropdown() {
               <ActionCircle
                 icon={<Icon name="deposit" />}
                 label="Deposit"
+                hint={isMac ? '⌘⇧D' : 'Ctrl+Shift+D'}
                 onClick={() => openAction('deposit')}
               />
               <ActionCircle
                 icon={<Icon name="send" />}
                 label="Send"
+                hint={isMac ? '⌘⇧S' : 'Ctrl+Shift+S'}
                 onClick={() => openAction('send')}
               />
               <ActionCircle
                 icon={<Icon name="swap" />}
                 label="Swap"
+                hint={isMac ? '⌘⇧W' : 'Ctrl+Shift+W'}
                 onClick={() => openAction('swap')}
               />
               <ActionCircle
                 icon={<Icon name="bridge" />}
                 label="Bridge"
+                hint={isMac ? '⌘⇧R' : 'Ctrl+Shift+R'}
                 onClick={() => openAction('bridge')}
               />
             </div>
@@ -708,14 +714,22 @@ export function WalletDropdown() {
 function ActionCircle({
   icon,
   label,
+  hint,
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
+  hint?: string;
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="ac-btn" onClick={onClick}>
+    <button
+      type="button"
+      className="ac-btn"
+      onClick={onClick}
+      title={hint ? `${label} · ${hint}` : label}
+      aria-label={hint ? `${label} (${hint})` : label}
+    >
       <span className="ac-circle">{icon}</span>
       <span className="ac-label">{label}</span>
       <style jsx>{`

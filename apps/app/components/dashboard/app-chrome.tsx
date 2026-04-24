@@ -16,6 +16,7 @@ import { DepositDialog } from '@/components/deposit-dialog';
 import { SendDialog } from '@/components/send-dialog';
 import { hydrateFromStorage } from '@/components/store';
 import { SwapDialog } from '@/components/swap-dialog';
+import { useAppHotkeys } from '@/components/use-app-hotkeys';
 import { useArcChainStream } from '@/components/use-arc-chain-stream';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 
@@ -40,6 +41,7 @@ export function AppChrome({
   }, []);
 
   useArcChainStream();
+  useAppHotkeys();
 
   const mainPad =
     pathname === '/dashboard/inbox' ||
