@@ -159,10 +159,22 @@ function summarize(description: string): string {
   return firstSentence.length > 140 ? firstSentence.slice(0, 137) + '…' : firstSentence;
 }
 
-/** Group tools into OpenAPI tags so Scalar renders a sidebar per family. */
+/**
+ * Group tools into OpenAPI tags so Scalar renders a sidebar per
+ * family.  Keep **letter-for-letter** in sync with `toolToScope()` in
+ * @sendero/auth/dispatch-auth — drift between them means a public tag
+ * disagrees with a runtime enforcement scope, which is a lie to the
+ * developer.  The openapi.test.ts 'tag ↔ scope consistency' test
+ * catches any drift the moment it's introduced.
+ */
 function categorize(toolName: string): string {
-  if (toolName.startsWith('search_') || toolName.startsWith('find_')) return 'Search';
-  if (toolName.startsWith('book_') || toolName.startsWith('hold_')) return 'Bookings';
+  return SCOPE_TO_TAG[scopeOf(toolName)];
+}
+
+/** Same classification tree as @sendero/auth/dispatch-auth toolToScope. */
+function scopeOf(toolName: string): keyof typeof SCOPE_TO_TAG {
+  if (toolName.startsWith('search_') || toolName.startsWith('find_')) return 'search';
+  if (toolName.startsWith('book_') || toolName.startsWith('hold_')) return 'bookings';
   if (
     toolName === 'reserve_booking' ||
     toolName === 'commit_booking' ||
@@ -170,9 +182,10 @@ function categorize(toolName: string): string {
     toolName === 'settle_booking' ||
     toolName === 'settle_split' ||
     toolName === 'guest_claim_link' ||
+    toolName === 'confirm_flight' ||
     toolName.includes('cancel')
   )
-    return 'Settlement';
+    return 'settlement';
   if (
     toolName === 'check_treasury' ||
     toolName === 'swap_tokens' ||
@@ -182,14 +195,12 @@ function categorize(toolName: string): string {
     toolName === 'gateway_balance' ||
     toolName === 'gateway_transfer'
   )
-    return 'Treasury';
-  if (toolName === 'scan_document' || toolName === 'generate_booking_invoice') return 'Documents';
-  if (toolName === 'check_travel_eligibility') return 'Compliance';
+    return 'treasury';
+  if (toolName === 'scan_document' || toolName === 'generate_booking_invoice') return 'documents';
+  if (toolName === 'check_travel_eligibility') return 'compliance';
   if (
     toolName.startsWith('airport_') ||
-    toolName === 'trip_checkin_reminder' ||
-    toolName === 'trip_delay_replanner' ||
-    toolName === 'trip_weather_brief' ||
+    toolName.startsWith('trip_') ||
     toolName === 'restaurant_route_card' ||
     toolName === 'recommend_restaurants' ||
     toolName === 'travel_safety_aid' ||
@@ -200,11 +211,20 @@ function categorize(toolName: string): string {
     toolName === 'geocode_trip_stop' ||
     toolName === 'validate_travel_address'
   )
-    return 'Trip assistance';
-  if (toolName === 'quote_fx' || toolName === 'rate_agent' || toolName === 'faucet_drip')
-    return 'Utilities';
-  return 'Tools';
+    return 'trip_assistance';
+  return 'utilities';
 }
+
+const SCOPE_TO_TAG = {
+  search: 'Search',
+  bookings: 'Bookings',
+  settlement: 'Settlement',
+  treasury: 'Treasury',
+  documents: 'Documents',
+  compliance: 'Compliance',
+  trip_assistance: 'Trip assistance',
+  utilities: 'Utilities',
+} as const;
 
 /** `scan_document` → `ScanDocumentInput`. */
 function toSchemaName(toolName: string): string {
