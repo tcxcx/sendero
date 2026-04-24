@@ -45,12 +45,35 @@ export type ApiKeyKind = 'sandbox' | 'production';
  * we fall through to the live verify — the cache is an optimization,
  * not a dependency. Fire-and-forget writes so a Redis hiccup doesn't
  * slow the hot path.
+ *
+ * Cache keys are env-scoped (`<envTag>:apikey:verify:…`) so that
+ * Preview and Production can safely share one Upstash DB — without
+ * the prefix, a preview-tenant cache entry could short-circuit a
+ * production verify and vice versa.
+ *
+ * Revocation path: the Clerk `apiKey.revoked` webhook calls
+ * `invalidateApiKeyCache(keyId)` which drops the cached entry
+ * immediately, cutting the stale window from ≤60s to ≤webhook RTT.
+ * We track a reverse index (`…:apikey:byid:<keyId>` → tokenHash) at
+ * cache-write time so the webhook can find the token-hash entry
+ * without knowing the raw token.
  */
 const VERIFY_TTL_SECONDS = 60;
-const CACHE_PREFIX = 'apikey:verify:';
 
-function cacheKey(token: string): string {
-  return CACHE_PREFIX + crypto.createHash('sha256').update(token).digest('hex');
+function envTag(): string {
+  // VERCEL_ENV is one of "production" | "preview" | "development" on
+  // Vercel; local dev has neither, so fall back to NODE_ENV.
+  const v = process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? 'development';
+  return v.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+function verifyCacheKey(token: string): string {
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
+  return `${envTag()}:apikey:verify:${hash}`;
+}
+
+function keyIdIndexKey(keyId: string): string {
+  return `${envTag()}:apikey:byid:${keyId}`;
 }
 
 export interface ResolvedApiKey {
@@ -87,12 +110,12 @@ export async function resolveTenantFromApiKey(
   // each cost a verify() round-trip).
   if (!token.startsWith('ak_')) return null;
 
-  // Short-circuit through Redis. Revocation takes up to
-  // VERIFY_TTL_SECONDS (60s) to propagate; trade-off is ~1 verify/min/key
-  // instead of 1 verify/request. If Redis is unavailable we fall through
-  // to the live verify path.
+  // Short-circuit through Redis. TTL bounds the staleness at
+  // VERIFY_TTL_SECONDS; the `apiKey.revoked` webhook invalidates
+  // immediately via invalidateApiKeyCache(), so real-world revocation
+  // lag is bounded by webhook RTT, not TTL.
   const redis = getRedis();
-  const cacheId = cacheKey(token);
+  const cacheId = verifyCacheKey(token);
   if (redis) {
     const hit = await redis.get<ResolvedApiKey>(cacheId).catch(() => null);
     if (hit) return hit;
@@ -134,11 +157,35 @@ export async function resolveTenantFromApiKey(
   };
 
   // Fire-and-forget. If Redis is down we still return the resolved
-  // value — next request will just re-verify against Clerk.
+  // value — next request will just re-verify against Clerk. The
+  // byId index lets the revocation webhook find this entry without
+  // knowing the raw token. Both entries share the TTL so the reverse
+  // index can't outlive the forward entry.
   if (redis) {
     void redis.set(cacheId, resolved, { ex: VERIFY_TTL_SECONDS }).catch(() => {});
+    void redis
+      .set(keyIdIndexKey(resolved.keyId), cacheId, { ex: VERIFY_TTL_SECONDS })
+      .catch(() => {});
   }
   return resolved;
+}
+
+/**
+ * Drop any cached verify entry for `keyId`. Called from the Clerk
+ * `apiKey.revoked` / `apiKey.deleted` webhook so a revoked key stops
+ * authorizing within webhook RTT instead of up to VERIFY_TTL_SECONDS.
+ */
+export async function invalidateApiKeyCache(keyId: string): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  const indexKey = keyIdIndexKey(keyId);
+  try {
+    const cacheId = await redis.get<string>(indexKey);
+    if (cacheId) await redis.del(cacheId);
+    await redis.del(indexKey);
+  } catch (err) {
+    console.warn('[api-key-auth] cache invalidation failed', { keyId, err });
+  }
 }
 
 /**
@@ -146,9 +193,7 @@ export async function resolveTenantFromApiKey(
  * narrowed shape. Isolated so tests can stub it without touching
  * `@clerk/nextjs/server`.
  */
-async function clerkClientVerify(
-  token: string
-): Promise<{
+async function clerkClientVerify(token: string): Promise<{
   id: string;
   subject: string;
   name?: string | null;

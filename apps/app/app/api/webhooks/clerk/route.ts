@@ -32,6 +32,7 @@ import {
 } from '@sendero/duffel';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
+import { invalidateApiKeyCache } from '@/lib/api-key-auth';
 import { webhookEventStore } from '@/lib/webhook-events';
 
 export const runtime = 'nodejs';
@@ -101,9 +102,25 @@ async function dispatch(event: { type: string; data: Record<string, unknown> }):
       return onMembershipDeleted(event.data);
     case 'apiKey.created':
       return onApiKeyCreated(event.data);
+    case 'apiKey.revoked':
+    case 'apiKey.deleted':
+      return onApiKeyRevoked(event.data);
     default:
       console.log('[webhooks/clerk] unhandled event.type:', event.type);
   }
+}
+
+/**
+ * Bust the verify cache the moment Clerk tells us a key is dead.
+ * Without this, a compromised or rotated key keeps authorizing for up
+ * to VERIFY_TTL_SECONDS (60s by default). The cache is best-effort —
+ * Redis outage just means we fall back to the TTL-based expiry, which
+ * is the same behavior as before we added the cache at all.
+ */
+async function onApiKeyRevoked(data: Record<string, unknown>): Promise<void> {
+  const id = typeof data.id === 'string' ? data.id : null;
+  if (!id) return;
+  await invalidateApiKeyCache(id);
 }
 
 function asRecord(x: unknown): Record<string, unknown> {
@@ -434,21 +451,53 @@ async function onApiKeyCreated(data: Record<string, unknown>): Promise<void> {
       };
     }
   ).apiKeys;
-  if (!api?.list || !api?.revoke) {
-    console.warn(
-      '[webhooks/clerk] clerkClient.apiKeys list/revoke unavailable; skipping enforcement'
+  if (!api?.revoke) {
+    // Fail closed. A missing revoke API means we cannot enforce the
+    // quota at all; previously we returned silently and let the key
+    // live. Safer to leave it revoked-on-best-effort + return.
+    console.error(
+      '[webhooks/clerk] clerkClient.apiKeys.revoke unavailable; cannot enforce plan quota',
+      { subject, keyId: id, tier }
     );
+    return;
+  }
+
+  if (!api.list) {
+    // No list API available → we can't count existing keys. Fail
+    // closed: revoke this mint. The user retries after we upgrade the
+    // Clerk SDK or after the transient outage resolves. Previous
+    // behavior skipped enforcement entirely, letting anyone on free
+    // mint unlimited production keys.
+    console.warn('[webhooks/clerk] apiKey list unavailable, revoking new key defensively', {
+      subject,
+      keyId: id,
+      tier,
+    });
+    await revokeKey(api.revoke, id, tier, plan.productionApiKeyLimit, 'list_api_unavailable');
     return;
   }
 
   const resp = await api.list({ subject }).catch(err => {
     console.warn('[webhooks/clerk] apiKey list failed', { subject, err });
-    return null;
+    return null as null;
   });
-  const keys = resp?.data ?? [];
+  if (!resp) {
+    // Fail closed on transient list errors. Users can retry; we don't
+    // want a Clerk hiccup to let a free-tier org mint past their quota.
+    await revokeKey(api.revoke, id, tier, plan.productionApiKeyLimit, 'list_api_error');
+    return;
+  }
+
+  const keys = resp.data ?? [];
   const productionActive = keys.filter(k => !k.revoked && (k.claims?.type ?? null) !== 'sandbox');
 
-  if (productionActive.length <= plan.productionApiKeyLimit) return;
+  // Clerk's list endpoint is eventually-consistent with the create
+  // event that just fired. Ensure the fresh key counts exactly once:
+  // either it's already in the list, or we add it synthetically.
+  const alreadyCounted = productionActive.some(k => k.id === id);
+  const effectiveActive = alreadyCounted ? productionActive.length : productionActive.length + 1;
+
+  if (effectiveActive <= plan.productionApiKeyLimit) return;
 
   // Over limit — revoke the key that just minted (it's the most recent
   // event; revoking it is the least-surprising UX — "you tried to mint
@@ -467,5 +516,29 @@ async function onApiKeyCreated(data: Record<string, unknown>): Promise<void> {
     });
   } catch (err) {
     console.error('[webhooks/clerk] apiKey revoke failed', { keyId: id, err });
+  }
+}
+
+/**
+ * Best-effort revoke helper used from fail-closed paths. Never throws —
+ * a revoke failure is already logged at the call site and we don't
+ * want to block the webhook dispatch on it (Clerk will retry the
+ * whole event anyway). Reason strings end up in the audit log.
+ */
+async function revokeKey(
+  revoke: (args: { apiKeyId: string; revocationReason?: string }) => Promise<unknown>,
+  keyId: string,
+  tier: string,
+  limit: number,
+  reason: string
+): Promise<void> {
+  try {
+    await revoke({
+      apiKeyId: keyId,
+      revocationReason: `Revoked (${reason}): ${tier} plan enforcement could not verify key count (limit ${limit}). Retry in a minute or contact support.`,
+    });
+    console.warn('[webhooks/clerk] apiKey fail-closed revoked', { keyId, tier, reason });
+  } catch (err) {
+    console.error('[webhooks/clerk] apiKey fail-closed revoke failed', { keyId, reason, err });
   }
 }

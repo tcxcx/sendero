@@ -1,6 +1,6 @@
 export { renderToBuffer, renderToStream } from '@react-pdf/renderer';
 export { InvoicePdf, renderInvoicePdfBuffer } from './templates/pdf';
-export { InvoiceHtml, renderInvoiceHtml } from './templates/html';
+export { InvoiceHtml, renderInvoiceHtml, renderInvoiceQrDataUrl } from './templates/html';
 export * from './token';
 export * from './utils/public-url';
 export * from './utils/calculate';

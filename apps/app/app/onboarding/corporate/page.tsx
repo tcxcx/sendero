@@ -12,6 +12,8 @@ import { prisma } from '@sendero/database';
 import { buildInstallUrl, DEFAULT_BOT_SCOPES } from '@sendero/slack';
 import { redirect } from 'next/navigation';
 
+import { signSlackState } from '@/lib/slack-oauth-state';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +51,7 @@ async function installCorporate(formData: FormData): Promise<void> {
     select: { id: true },
   });
 
-  const state = Buffer.from(JSON.stringify({ tenantId: tenant.id })).toString('base64url');
+  const state = signSlackState(tenant.id);
   const installUrl = buildInstallUrl({
     clientId: clientId as string,
     scopes: DEFAULT_BOT_SCOPES,

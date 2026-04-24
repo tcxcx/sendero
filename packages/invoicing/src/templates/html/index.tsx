@@ -6,12 +6,22 @@ import { Summary } from './components/summary';
 import { Note } from './components/note';
 import { QRCode } from './components/qr-code';
 
+/**
+ * Compute the QR data URL for an invoice's public link. Exposed so
+ * callers can render `<InvoiceHtml>` as JSX directly (letting React
+ * escape tenant-controlled fields) instead of piping through the
+ * string form + dangerouslySetInnerHTML.
+ */
+export async function renderInvoiceQrDataUrl(publicUrl: string): Promise<string> {
+  const QRCodeUtil = await import('qrcode');
+  return QRCodeUtil.default.toDataURL(publicUrl, { width: 144, margin: 1 });
+}
+
 export function InvoiceHtml(props: TemplateProps & { qrDataUrl?: string }) {
   return (
     <div
       style={{
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Arial, sans-serif',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Arial, sans-serif',
         color: '#0b0b0b',
         background: '#ffffff',
         maxWidth: 720,
@@ -24,9 +34,7 @@ export function InvoiceHtml(props: TemplateProps & { qrDataUrl?: string }) {
       <LineItems {...props} />
       <div style={{ height: 32 }} />
       <Summary {...props} />
-      {props.template.include_qr && props.qrDataUrl ? (
-        <QRCode dataUrl={props.qrDataUrl} />
-      ) : null}
+      {props.template.include_qr && props.qrDataUrl ? <QRCode dataUrl={props.qrDataUrl} /> : null}
       <Note {...props} />
     </div>
   );
@@ -44,8 +52,27 @@ export async function renderInvoiceHtml(
   const qrDataUrl = props.template.include_qr
     ? await QRCodeUtil.default.toDataURL(props.publicUrl, { width: 144, margin: 1 })
     : '';
-  const body = renderToStaticMarkup(
-    <InvoiceHtml {...props} qrDataUrl={qrDataUrl} />
+  const body = renderToStaticMarkup(<InvoiceHtml {...props} qrDataUrl={qrDataUrl} />);
+  // Escape the tenant-controlled invoice.number before interpolating
+  // into raw HTML. React would handle this if number were a child, but
+  // the doctype/head wrapper is a string template — so an invoice
+  // number like `</title><script>alert(1)</script>` would otherwise
+  // escape the title and execute in every caller that uses the full
+  // document (email, standalone viewer, PDF host pages).
+  const titleNumber = escapeHtml(props.invoice.number);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${titleNumber}</title></head><body style="margin:0;padding:0;background:#f5f2ee;">${body}</body></html>`;
+}
+
+function escapeHtml(input: string): string {
+  return input.replace(/[&<>"']/g, ch =>
+    ch === '&'
+      ? '&amp;'
+      : ch === '<'
+        ? '&lt;'
+        : ch === '>'
+          ? '&gt;'
+          : ch === '"'
+            ? '&quot;'
+            : '&#39;'
   );
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${props.invoice.number}</title></head><body style="margin:0;padding:0;background:#f5f2ee;">${body}</body></html>`;
 }
