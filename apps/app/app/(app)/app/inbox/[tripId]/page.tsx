@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { prisma } from '@sendero/database';
 import type { Prisma } from '@sendero/database';
+import { detectLocale, localeForPhone } from '@sendero/locale';
 
 import type { ChannelKindSlug } from '@/components/inbox/channel-badge';
 import {
@@ -67,6 +68,7 @@ export default async function InboxTripPage({ params }: Props) {
           displayName: true,
           email: true,
           phone: true,
+          metadata: true,
         },
       },
       bookings: {
@@ -103,6 +105,18 @@ export default async function InboxTripPage({ params }: Props) {
   const travelerName = trip.traveler?.displayName ?? '';
   const lastBooking = trip.bookings[0];
 
+  const travelerPreferredLocale = stringFromJson(trip.traveler?.metadata ?? null, 'locale', '');
+  const travelerLocale = detectLocale({
+    userPreference: travelerPreferredLocale || undefined,
+    country: null,
+    acceptLanguage: null,
+    cookie: null,
+  });
+  const phoneLocale = localeForPhone(trip.traveler?.phone);
+  const resolvedTravelerLocale = travelerPreferredLocale
+    ? travelerLocale
+    : (phoneLocale ?? travelerLocale);
+
   const ctx: TripThreadContext = {
     tripId: trip.id,
     tenantId: tenant.id,
@@ -117,6 +131,7 @@ export default async function InboxTripPage({ params }: Props) {
           phone: trip.traveler.phone ?? undefined,
         }
       : null,
+    travelerLocale: resolvedTravelerLocale,
     channels,
     defaultChannel,
     booking: lastBooking

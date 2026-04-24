@@ -69,6 +69,8 @@ export interface TripThreadContext {
     email?: string;
     phone?: string;
   } | null;
+  /** Traveler locale (BCP-47). Drives rewrite language in the composer. */
+  travelerLocale: string;
   channels: ChannelKindSlug[];
   defaultChannel: ChannelKindSlug;
   booking?: {
@@ -242,6 +244,9 @@ export function TripThreadWorkspace({ trip }: { trip: TripThreadContext }) {
           defaultChannel={trip.defaultChannel}
           disabled={sendBusy || isStreaming}
           onSubmit={handleSubmit}
+          customerName={trip.traveler?.name}
+          tripStatus={trip.status}
+          locale={trip.travelerLocale}
         />
         {isStreaming ? (
           <div className="flex items-center justify-end border-t border-border px-4 py-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
