@@ -72,6 +72,7 @@
     "@sendero/seo": "workspace:*",
     "@sendero/slack": "workspace:*",
     "@sendero/tools": "workspace:*",
+    "@sendero/sherpa": "workspace:*",
     "@sendero/ui": "workspace:*",
     "@sendero/vault": "workspace:*",
     "@sendero/webhooks": "workspace:*",

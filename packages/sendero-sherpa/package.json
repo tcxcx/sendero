@@ -1,0 +1,19 @@
+{
+  "name": "@sendero/sherpa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero — Sherpa Requirements + eVisa/eTA REST client. Wraps POST /v3/trips (JSON:API) with sandbox/prod switching, circuit breaker, and graceful fallback to the curated corridor table in @sendero/vault when the provider is unreachable or the tenant hasn't enabled Sherpa.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./types": "./src/types.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

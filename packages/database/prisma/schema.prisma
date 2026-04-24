@@ -264,6 +264,7 @@ model Tenant {
   supportTurns        SupportTurn[]
   pendingMultisigOps  PendingMultisigOp[]
   passportVaults      PassportVault[]
+  tripEligibilityRuns TripEligibilityRun[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -300,6 +301,7 @@ model User {
   whatsappLinkTokens WhatsAppLinkToken[]
   airlineCredits     AirlineCredit[]
   passportVaults     PassportVault[]
+  tripEligibilityRuns TripEligibilityRun[]
 
   @@index([createdAt])
   @@map("users")
@@ -1451,4 +1453,86 @@ model PassportVaultAccessLog {
   @@index([vaultId, createdAt])
   @@index([action, createdAt])
   @@map("passport_vault_access_log")
+}
+
+// ─── Trip Eligibility Runs (async visa verification) ─────────────────────────
+//
+// Per-(trip × traveler) verification job.  Calls out to Sherpa's
+// Requirements API (`POST /v3/trips`) in the background so the booking
+// UI never halts waiting for an external network round-trip.  Frontend
+// subscribes to the run's SSE channel (`pg_notify('trip_eligibility_run:${id}')`)
+// and updates the verdict card in place the moment the run transitions
+// to `succeeded` or `failed`.
+//
+// Failure path: when Sherpa is unreachable / returns 5xx, we fall back
+// to the curated corridor table in @sendero/vault/visa-rules and mark
+// the run `succeeded` with `source = 'fallback'` — the UX is never
+// blocked by an external provider outage.
+//
+// Access pattern:
+//   1. startRun(tripId, travelerUserId)   — writes a `pending` row
+//   2. background worker calls Sherpa     — writes `running → succeeded | failed`
+//   3. finalize emits pg_notify           — SSE updates the frontend
+//   4. verdict JSON is consumed & cached on the trip page
+//
+// The ingested Sherpa response stays in `providerRaw` for audit +
+// replay.  We don't expose it to the LLM — the verdict alone is what
+// tools and workflows see.
+model TripEligibilityRun {
+  id         String @id @default(cuid())
+  tenantId   String
+  /// Optional — runs can be started for a draft trip not yet persisted
+  /// (client-side dry-run on flight search).  Real trip FKs are set
+  /// once the trip is created.
+  tripId     String?
+  travelerId String
+
+  /// State machine: pending → running → (succeeded | failed | skipped).
+  /// `skipped` means we short-circuited to the curated-JSON path
+  /// because the tenant hasn't enabled Sherpa.
+  status String @default("pending")
+
+  /// Which source produced the verdict: 'sherpa' | 'fallback_rules' | 'none'.
+  source String?
+
+  /// Opaque identifier Sherpa stamps on the trip object (tri_... slug).
+  /// Used to de-duplicate re-runs + correlate webhook callbacks.
+  sherpaTripId String?
+
+  /// Origin + destination ISO-3 at the time of the run.  Storing these
+  /// lets us re-run without walking the Trip graph.
+  originIso3      String
+  destinationIso3 String
+  departureDate   DateTime @db.Date
+  returnDate      DateTime? @db.Date
+  purpose         String    @default("business")
+
+  /// Sanitized verdict JSON — same shape as TravelEligibilityVerdict
+  /// from @sendero/vault.  Safe for the LLM; the raw Sherpa body is
+  /// kept in `providerRaw` for replay but never exposed.
+  verdict Json?
+
+  /// Raw Sherpa response body (when source='sherpa').  Never rendered
+  /// in the UI; used for audit replay + regression testing.
+  providerRaw Json?
+
+  /// Human-readable failure reason when status='failed'.
+  failureReason String?
+
+  /// Triggers: 'flight_search' | 'booking_review' | 'agent_tool' | 'manual'.
+  trigger String @default("manual")
+
+  requestedByActor String? // clerkUserId / svc:keyId / wf:id:step
+
+  requestedAt  DateTime  @default(now()) @db.Timestamptz(6)
+  startedAt    DateTime? @db.Timestamptz(6)
+  completedAt  DateTime? @db.Timestamptz(6)
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  traveler User   @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, tripId])
+  @@index([travelerId, requestedAt])
+  @@index([status, requestedAt])
+  @@map("trip_eligibility_runs")
 }
