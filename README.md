@@ -33,6 +33,51 @@
 
 <br />
 
+## Business model — production-grade SaaS + x402 nanopayments
+
+Sendero monetizes on **two independent revenue legs** from day one. This is not a future plan — it is wired through Clerk Billing, `@sendero/billing`, and the agent dispatch path today.
+
+**Leg 1 — Recurring SaaS (Clerk Billing on organizations).** Four plan tiers, monthly or annual, with a zero-card 14-day Pro trial. Plans gate capabilities (workspaces, production API keys, MCP-server exposure, SSO, white-label, SLA) via `has({ feature })`. Trial users get the full Pro ceiling at zero friction so they convert on what they actually shipped.
+
+**Leg 2 — Per-call nanopayments (x402 on Arc, settled in USDC).** Every agent action — flight search, policy check, booking hold, confirmation, MCP tool call, AI-agent context — is priced in micro-USDC and metered through `MeterEvent`. The traveler's or buyer's Circle wallet settles in batches on Arc L2. This leg is consumption-based and runs in parallel to the subscription: SaaS customers still pay nanopayments, just at a discounted unit rate.
+
+This is why the business model is durable: **the trial doesn't stop revenue, it shifts it.** A trialing user is still earning us nanopayment margin on every search and booking while they evaluate whether to pay for the SaaS shell. By the time Clerk flips the trial off, we've already shipped real trips against their wallet.
+
+### Plan tiers (source of truth: [`packages/billing/src/plans.ts`](./packages/billing/src/plans.ts))
+
+| | **Free** | **Basic** | **Pro** | **Enterprise** |
+|---|---|---|---|---|
+| **Monthly** | $0 | $19/mo | $60/mo | Custom *(list $1,500/mo)* |
+| **Annual** | — | $15/mo *billed $180/yr* | $50/mo *billed $600/yr* | Custom *(list $1,250/mo · $15k/yr)* |
+| **Workspaces** | 1 | 5 | Unlimited | Unlimited |
+| **Production API keys** | 0 *(sandbox only)* | 3 | 25 | Unlimited |
+| **Monthly spend cap ceiling** | $100 | $2,000 | $20,000 | Unlimited |
+| **Nanopayment discount** | — | 15% off | 30% off | 50% off |
+| **Booking take-rate discount** | — | 5% off | 10% off | 15% off |
+| **WhatsApp + Slack channels** | — | ✓ | ✓ | ✓ |
+| **Public MCP server** | — | — | ✓ | ✓ |
+| **Custom webhooks + audit export** | — | — | ✓ | ✓ |
+| **SSO/SAML + white-label + custom SLA** | — | — | — | ✓ |
+
+### Why this shape
+
+- **API keys on the scale axis, not the integration axis.** For an agent-native platform where x402 is the primary distribution channel, production keys are equivalent to seats on traditional SaaS. Gating them is the commercial ask.
+- **Nanopayment discount scales with plan.** Paying MRR earns you unit economics. TMCs who would otherwise negotiate custom rates get default-priced terms — no bespoke contracts at Pro and below.
+- **Zero-card trial on Pro, not Basic.** The trial should reveal the ceiling (public MCP, custom webhooks, audit export), not a throttled middle. Clerk's Oct-2025 no-card trials make this frictionless.
+- **Annual = 15–21% off with clean monthly-equivalent numbers.** Clerk's annual field is actually the *monthly rate when billed annually* (validated as ≤ monthly). $15 and $50 present cleaner than the exact 2-months-free computed values and still deliver real savings.
+- **Enterprise is an upward-open quote.** No list price, highest discount tier in code (50% / 15%), full capability set. Negotiation happens in the SLA, not in the feature checkbox matrix.
+
+### Why this signals a durable vertical AI + SaaS business
+
+Vertical AI agents that only charge per-call have thin defensibility — the next cheaper LLM or router eats your margin. Vertical AI agents that only charge SaaS miss the obvious x402 opportunity sitting on the same agent runtime. Sendero does both, in one workspace, on one codebase, from day one:
+
+- **SaaS pays for the platform** (workspaces, channels, MCP, identity, audit).
+- **Nanopayments pay for the calls** (every search, every booking, every settlement, every tool exposed to other agents).
+
+Trials monetize leg 2 even when leg 1 is $0. Pro+ customers monetize both. Enterprise customers monetize both at committed discounts. The Clerk subscription keeps the customer; the Arc settlement keeps the network. Neither is the whole business — both together are.
+
+<br />
+
 # Sendero × Arc
 
 Sendero is an AI operating layer for travel agencies, TMCs, concierge teams, and corporate travel desks and also individual travelers. It turns messy travel requests into quotes, approvals, bookings, service actions, refunds, artifacts, invoices, and settlement trails. Arc/Circle is the trust and money backplane: every flight, hotel, and ground leg can be booked by an AI workflow and settled on Arc L2 in USDC or EURC.
@@ -79,7 +124,7 @@ Implementation lives in [`packages/llms`](./packages/llms) (generator + shared c
 
 1. Read **`llms.txt`** on the origin you are integrating against (local: same path on that app’s dev server, e.g. the product app at `http://localhost:3010/llms.txt` when you run `mise run dev:web`).
 2. Connect to MCP at **`https://edge.sendero.travel/mcp`**, call `initialize`, then **`tools/list`**.
-3. For a real booking, prefer the **`sendero.book_flight`** workflow instead of manually chaining tools. It searches Duffel, checks policy, reserves prepaid escrow, holds the offer, waits for ticketing, settles the booking, and generates the invoice.
+3. For a real booking, prefer the **`sendero.book_flight`** workflow instead of manually chaining tools. It searches supplier inventory, checks policy, reserves prepaid escrow, holds the offer, waits for ticketing, settles the booking, and generates the invoice.
 
 Direct HTTP clients can call **`/tools/:name`** on the edge origin with **x402 `Payment-Signature`** headers. Use safe identifiers such as `tenantId`, `userId`, `tripId`, `bookingId`, and `runId`. Never persist guest private-link fragments, plaintext claim codes, raw card data, seed phrases, or API secrets.
 
@@ -189,7 +234,7 @@ A **guest pass** is a WhatsApp-shareable link that lets someone without a Sender
 2. [`@sendero/guest`](./packages/sendero-guest) emits a Peanut-style share link (private key in URL fragment, never server-side) — email mirrors the link as the durable channel.
 3. Guest enrolls an **MSCA passkey** and signs `claimTrip(tripId, guestWallet, signature)`.
 4. Agent books inside the budget. `reserve_booking` / `commit_booking` draw down per leg.
-5. On Duffel ticketing, `settle_booking` atomically splits vendor + agency + fee + reputation tip via [`@sendero/sendero-nanopayments`](./packages/sendero-nanopayments).
+5. On ticketing confirmation, `settle_booking` atomically splits vendor + agency + fee + reputation tip via [`@sendero/sendero-nanopayments`](./packages/sendero-nanopayments).
 6. Unspent budget auto-refunds to the buyer at expiry.
 
 Canonical workflows: `guestPrefundWorkflow` (single seat) and `agencyCohortWorkflow` (bulk). UX rules:
@@ -206,7 +251,7 @@ Canonical workflows: `guestPrefundWorkflow` (single seat) and `agencyCohortWorkf
 
 [`packages/workflows`](./packages/workflows) persists every `WorkflowRun` with scratchpad + trail. `pause` steps suspend and `resumeRun()` continues from the exact pending step when a webhook / traveler reply / approval lands — days later, different channel, different device. This is why:
 
-- Start on WhatsApp, pause awaiting `duffel_order_ticketed`, push email + Slack-ops ping hours later — one run.
+- Start on WhatsApp, pause awaiting `supplier_order_ticketed`, push email + Slack-ops ping hours later — one run.
 - Survive airline cancellations: `cancellationRecoveryWorkflow` is a second durable run resumed from the `order.cancelled` event.
 - A traveler can switch from web to WhatsApp mid-flow — the run is keyed by traveler + tripId, not by session.
 
@@ -232,7 +277,7 @@ The AI agent can hallucinate. The chain cannot. Design so the chain is the trust
 
 - **Escrow before tool call** — `prefund_trip` + `reserve_booking` lock funds before the LLM is allowed to book. Worst case: the agent fails to book; it cannot overspend.
 - **Policy as on-chain check, not a prompt instruction** — `check_policy` is a tool-gated step; the LLM cannot skip it.
-- **Settle only on confirmed state** — `settle_booking` fires on the `duffel_order_ticketed` webhook, not on the LLM saying "I booked it".
+- **Settle only on confirmed state** — `settle_booking` fires on the `supplier_order_ticketed` webhook, not on the LLM saying "I booked it".
 - **Agent actions logged on-chain** — `log_agent_action` writes what the agent did and the fee it consumed. Auditable without trusting us.
 - **Identity via MSCA passkey** — guest claims go through a Modular Smart Account passkey; the LLM never sees keys.
 - **Show the proof** — every terminal surface (email, WA, Slack, web) includes the tx hash + explorer URL. The presence of the proof deters fraud.
@@ -241,7 +286,7 @@ The AI agent can hallucinate. The chain cannot. Design so the chain is the trust
 
 ### Offer cards and accessibility
 
-A simple return flight carries 32+ data points. Above the fold: carrier + logo (Duffel-licensed via [`@sendero/sendero-duffel`](./packages/sendero-duffel)), total price in traveler currency (via `quote_fx`), duration, stops, depart → arrive times, airports. Everything else — segments, baggage, fare-brand amenities, change/cancel terms, carbon — goes into expandables (and we track expansion for conversion analytics). Filters default to price + duration; loyalty filter surfaces only when the tenant has it. Required passenger fields are driven by Duffel's per-order requirements, not a static form, to minimize drop-off.
+A simple return flight carries 32+ data points. Above the fold: carrier + logo, total price in traveler currency (via `quote_fx`), duration, stops, depart → arrive times, airports. Everything else — segments, baggage, fare-brand amenities, change/cancel terms, carbon — goes into expandables (and we track expansion for conversion analytics). Filters default to price + duration; loyalty filter surfaces only when the tenant has it. Required passenger fields are driven by the supplier's per-order requirements, not a static form, to minimize drop-off.
 
 Accessibility is non-negotiable: ~1 in 5 travelers have accessibility needs. 44×44 px hit-targets, WCAG AA contrast, logical keyboard order, `prefers-reduced-motion` respected, airline logos with semantic `alt`, status never color-only, email always has a `text` fallback alongside `html`.
 
@@ -334,7 +379,7 @@ bun run bootstrap-agent
 - **Circle Developer-Controlled Wallets** — provider/treasury signing
 - **ERC-8183** agentic commerce (escrow) + **ERC-8004** agent identity/reputation
 - **Ponder indexer** ([`apps/ponder`](./apps/ponder), workspace `@sendero/indexer`) — Postgres-backed index of **`SenderoGuestEscrow`** on Arc Testnet; ships a **GraphQL** read API (`mise run dev:indexer` / port `42069` locally). **Production:** self-hosted on **Railway** (~$5/mo vs hosted-subgraph pricing); see [`apps/ponder/README.md`](./apps/ponder/README.md).
-- **Duffel** flights + stays
+- First-party supplier flights + stays
 
 <a id="technology-partners"></a>
 
@@ -395,7 +440,7 @@ Sendero can be called by another AI agent as a travel sub-agent:
 - **`llms.txt` manifests** — see the [surface table](#llms-txt-surfaces) above; each app links to the others for cross-discovery.
 - `/mcp` on the edge worker and `/api/mcp` on the app expose the shared `@sendero/tools` registry over MCP JSON-RPC.
 - `/tools/:name` exposes the same tools as x402-gated direct HTTP endpoints.
-- `/api/workflows/run` and `/api/workflows/resume` run named plans such as `sendero.book_flight`, which handles search, policy, escrow reservation, Duffel ticketing pauses, settlement, and invoice generation.
+- `/api/workflows/run` and `/api/workflows/resume` run named plans such as `sendero.book_flight`, which handles search, policy, escrow reservation, ticketing pauses, settlement, and invoice generation.
 - `/app/ops` maps the Legora-style travel-ops gaps into skill prompts, operator queue lanes, channel fit, and workflow chains such as `sendero.ops_quote_to_book`, `sendero.ops_rebook_refund`, and `sendero.ops_artifact_pack` in order for contributor's doing LLMs vibe coding to have inspiration of other tools to create.
 
 Start with `apps/docs/content/docs/agent-to-agent-booking.mdx` for the complete delegated booking flow.
@@ -407,10 +452,10 @@ sendero-arc/
 ├── app/
 │   ├── api/
 │   │   ├── agent/{identity,runtime}/  # ERC-8004 reputation + runtime meta
-│   │   ├── bookings/{hold,[id]/pay}/  # Duffel hold + balance-pay
+│   │   ├── bookings/{hold,[id]/pay}/  # supplier hold + balance-pay
 │   │   ├── chat/                      # AI agent (several tools)
-│   │   ├── flights/search/            # Duffel flight search
-│   │   ├── hotels/search/             # Duffel Stays
+│   │   ├── flights/search/            # flight search
+│   │   ├── hotels/search/             # stays search
 │   │   └── treasury/balance/          # Circle treasury + Arc RPC
 │   ├── layout.tsx
 │   ├── page.tsx
@@ -430,7 +475,7 @@ sendero-arc/
 │   ├── arc-identity.ts     # ERC-8004 identity + reputation
 │   ├── arc-jobs.ts         # ERC-8183 job escrow
 │   ├── circle.ts           # Circle DCW (treasury + provider)
-│   ├── duffel.ts           # Duffel flights + stays
+│   ├── supplier.ts         # Flight + stay supplier adapter
 │   ├── env.ts              # Env accessors
 │   └── user-wallet.ts      # Circle Modular Wallets (passkey)
 └── scripts/
@@ -446,7 +491,7 @@ sendero-arc/
 - [Google Gemini](https://ai.google.dev/gemini-api/docs) & [Google AI Studio](https://aistudio.google.com/) — multimodal agents, function calling, and sponsor-aligned defaults.
 - [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) — unified routing, observability, and provider failover.
 - [Circle Arc](https://www.arc.network/) — USDC as native gas, sub-second finality.
-- [Duffel](https://duffel.com) — real flight inventory and PNR issuance.
+- First-party supplier integrations — real flight inventory and PNR issuance.
 - [Circle Nanopayments](https://www.circle.com/nanopayments) — USDC-native agentic payments. batching thousands of offchain signatures into a single onchain transaction through [Circle Gateway](https://developers.circle.com/gateway), the per-payment gas cost is effectively eliminated.
 - [x402](https://x402.org) — HTTP-native agentic payments.
 - [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) — tool-aware LLM integration.
