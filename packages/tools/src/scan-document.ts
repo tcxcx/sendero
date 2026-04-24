@@ -38,15 +38,11 @@ const inputSchema = z.object({
     .string()
     .url()
     .optional()
-    .describe(
-      'HTTPS URL of the document. Either documentUrl OR data+mediaType must be supplied.'
-    ),
+    .describe('HTTPS URL of the document. Either documentUrl OR data+mediaType must be supplied.'),
   data: z
     .string()
     .optional()
-    .describe(
-      'Base64-encoded document bytes. Prefer documentUrl when the file is already hosted.'
-    ),
+    .describe('Base64-encoded document bytes. Prefer documentUrl when the file is already hosted.'),
   mediaType: z
     .string()
     .optional()
@@ -138,9 +134,36 @@ export const scanDocumentTool: ToolDef = {
   },
 };
 
-/** Server-side fetch of a document URL, returning base64 + resolved mimetype. */
+/**
+ * Server-side fetch of a document URL, returning base64 + resolved
+ * mimetype. Guards against SSRF: the LLM controls `documentUrl`, so a
+ * crafted prompt could otherwise pull cloud metadata endpoints or
+ * internal services (169.254.169.254, 127.0.0.1, 10.x.x.x, etc.) and
+ * leak creds or internal state.
+ *
+ * Rules:
+ *   - https only (http is rejected; data:/file:/ftp: never reach fetch)
+ *   - literal IP hostnames are blocked if they fall in private/link-
+ *     local/loopback ranges
+ *   - loopback + common local hostnames blocked
+ *   - redirect chain hops re-enter this guard (fetch's default redirect
+ *     follow can smuggle a private IP as the second hop)
+ *
+ * Limitation: we don't resolve the hostname to an IP before fetching.
+ * An attacker-controlled DNS record pointing at 127.0.0.1 would slip
+ * through. For a hardened production guard, resolve via `dns.lookup`
+ * and re-check. Deferred to avoid a Node-only dependency in this
+ * package; the domain-level guard already blocks the common attacks.
+ */
 async function fetchDocument(url: string): Promise<{ base64: string; mediaType: string }> {
-  const response = await fetch(url);
+  assertFetchableUrl(url);
+  const response = await fetch(url, { redirect: 'manual' });
+  if (response.status >= 300 && response.status < 400) {
+    const next = response.headers.get('location');
+    if (!next) throw new Error('scan_document: redirect without location header');
+    assertFetchableUrl(next);
+    return fetchDocument(next);
+  }
   if (!response.ok) {
     throw new Error(`scan_document: failed to fetch ${url} — ${response.status}`);
   }
@@ -161,4 +184,41 @@ async function fetchDocument(url: string): Promise<{ base64: string; mediaType: 
   // Node / Bun environments both have global Buffer.
   const base64 = Buffer.from(buf).toString('base64');
   return { base64, mediaType };
+}
+
+/** Reject private-range URLs, non-https schemes, and known bad hostnames. */
+function assertFetchableUrl(raw: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error('scan_document: invalid URL');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`scan_document: only https:// URLs are allowed (got ${parsed.protocol})`);
+  }
+  const host = parsed.hostname.toLowerCase();
+
+  // Block IPv6 loopback / link-local / unique-local
+  if (
+    host === '::1' ||
+    host.startsWith('[::1]') ||
+    host.startsWith('fc') ||
+    host.startsWith('fd')
+  ) {
+    throw new Error('scan_document: private-range URL refused');
+  }
+  // Block IPv4 loopback + private + link-local + cloud-metadata
+  if (/^127\./.test(host)) throw new Error('scan_document: loopback URL refused');
+  if (/^10\./.test(host)) throw new Error('scan_document: private-range URL refused');
+  if (/^192\.168\./.test(host)) throw new Error('scan_document: private-range URL refused');
+  if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(host))
+    throw new Error('scan_document: private-range URL refused');
+  if (/^169\.254\./.test(host)) throw new Error('scan_document: link-local / metadata URL refused');
+  if (host === '0.0.0.0') throw new Error('scan_document: wildcard URL refused');
+
+  // Common local hostnames.
+  if (host === 'localhost' || host === 'metadata.google.internal' || host === 'metadata') {
+    throw new Error('scan_document: local hostname refused');
+  }
 }

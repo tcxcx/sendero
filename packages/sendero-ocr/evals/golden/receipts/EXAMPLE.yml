@@ -1,0 +1,18 @@
+# Example ground-truth file — delete after you add real fixtures.
+# Pair with a receipt image at the same slug, e.g. EXAMPLE.png or EXAMPLE.pdf.
+kind: receipt
+description: Italian coffee shop, EUR, with tax line visible
+
+expected:
+  currency: EUR
+  date: 2026-03-12
+  total_amount: 8.50
+  subtotal_amount: 7.95
+  tax_amount: 0.55
+  tax_rate: 7
+  store_name: Cafe Sant'Ambrogio
+  payment_method: credit card
+
+fuzzy:
+  - store_name
+  - payment_method

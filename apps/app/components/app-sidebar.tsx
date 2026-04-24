@@ -2,9 +2,11 @@
 
 import type { ComponentProps } from 'react';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+
+import { BrandUpgradeCard } from '@/components/app-shell/brand-upgrade-card';
+import { LlmsDocsCard } from '@/components/app-shell/llms-docs-card';
 
 import { OrganizationSwitcher } from '@clerk/nextjs';
 
@@ -20,9 +22,9 @@ import {
   Minus,
   Plane,
   Plus,
+  ScanLine,
   ShieldAlert,
   Sparkles,
-  Waypoints,
 } from 'lucide-react';
 
 import { SearchForm } from '@/components/search-form';
@@ -52,6 +54,7 @@ const sections: NavSection[] = [
     items: [
       { title: 'Home', url: '/dashboard', icon: Home },
       { title: 'Agent console', url: '/dashboard/console', icon: Bot },
+      { title: 'Scan document', url: '/dashboard/scan', icon: ScanLine },
       { title: 'Trip inboxes', url: '/dashboard/inbox', icon: Inbox },
       { title: 'Trips', url: '/dashboard/trips', icon: Plane },
     ],
@@ -123,10 +126,10 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
               >
                 <SidebarMenuItem>
                   <CollapsibleTrigger asChild>
-                    <SidebarMenuButton>
+                    <SidebarMenuButton className="group/trigger">
                       <span className="truncate">{section.title}</span>
-                      <Plus className="ml-auto size-4 shrink-0 group-data-[state=open]/collapsible:hidden" />
-                      <Minus className="ml-auto size-4 shrink-0 group-data-[state=closed]/collapsible:hidden" />
+                      <Plus className="ml-auto size-4 shrink-0 text-[color:var(--ink)] transition-transform duration-200 ease-out group-hover/trigger:rotate-45 group-data-[state=open]/collapsible:hidden" />
+                      <Minus className="ml-auto size-4 shrink-0 text-[color:var(--ink)] transition-transform duration-200 ease-out group-hover/trigger:rotate-90 group-data-[state=closed]/collapsible:hidden" />
                     </SidebarMenuButton>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
@@ -175,34 +178,19 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="p-0 gap-0">
+        <div
+          aria-hidden
+          className="h-px w-full bg-[color:color-mix(in_oklab,var(--ink)_24%,transparent)] group-data-[collapsible=icon]:hidden"
+        />
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              size="sm"
-              className="flex w-full justify-center gap-2 rounded-none border-t border-[color:var(--border)] px-3.5 py-3 font-mono text-[11px] uppercase tracking-[0.12em] text-foreground transition-[background-color,color] duration-120 hover:bg-[color:color-mix(in_oklab,var(--ink)_6%,transparent)] hover:text-[color:var(--ink)]"
-            >
-              <Link href="/llms.txt" target="_blank" rel="noreferrer">
-                <Waypoints className="size-4" />
-                <span>llms.txt</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          <LlmsDocsCard />
         </SidebarMenu>
-        <Link
-          href="/dashboard"
-          aria-label="Sendero home"
-          className="mx-auto flex items-center justify-center py-3 group-data-[collapsible=icon]:py-1"
-        >
-          <Image
-            src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
-            alt=""
-            width={112}
-            height={112}
-            className="h-28 w-28 object-contain transition-[width,height] duration-200 group-data-[collapsible=icon]:h-5 group-data-[collapsible=icon]:w-5"
-          />
-        </Link>
+        <div
+          aria-hidden
+          className="h-px w-full bg-[color:color-mix(in_oklab,var(--ink)_24%,transparent)] group-data-[collapsible=icon]:hidden"
+        />
+        <BrandUpgradeCard />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

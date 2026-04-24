@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Sendero × Arc — Next.js 16 App Router. Web console for agent-per-trip corporate travel.",
   "scripts": {
-    "dev": "next dev -p ${APP_PORT:-3010}",
+    "dev": "NODE_OPTIONS='--max-http-header-size=32768' next dev -p ${APP_PORT:-3010}",
     "build": "next build",
     "start": "next start -p ${APP_PORT:-3010}",
     "lint": "biome lint .",
@@ -67,6 +67,7 @@
     "@sendero/multisig": "workspace:*",
     "@sendero/nanopayments": "workspace:*",
     "@sendero/notifications": "workspace:*",
+    "@sendero/ocr": "workspace:*",
     "@sendero/seo": "workspace:*",
     "@sendero/slack": "workspace:*",
     "@sendero/tools": "workspace:*",

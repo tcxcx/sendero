@@ -28,8 +28,20 @@ import {
 /** The universal per-channel file cap mirrors @sendero/whatsapp MAX_MEDIA_BYTES. */
 export const MAX_OCR_BYTES = 20 * 1024 * 1024;
 
-/** Document kinds that can contain sensitive PII (government IDs, cards). */
+/**
+ * Hard-gated kinds — extraction refuses unless the caller passes
+ * `allowSensitive: true`. Used for government IDs (passport MRZ,
+ * national ID numbers). Requires tenant admin opt-in at the call site.
+ */
 const SENSITIVE_KINDS: ReadonlyArray<DocumentKind> = ['id_document'];
+
+/**
+ * Soft-gated kinds — extraction runs but emits a PII warning so
+ * operators can audit what was scanned. Boarding passes carry PNR
+ * (anyone with the 6-char code can modify/cancel the booking) plus
+ * passport fragments on international flights.
+ */
+const PII_KINDS: ReadonlyArray<DocumentKind> = ['boarding_pass'];
 
 export interface ExtractDocumentArgs {
   /** What to extract. */
@@ -103,9 +115,7 @@ export function base64ByteSize(data: string): number {
   return Math.max(0, Math.floor((pure.length * 3) / 4) - padding);
 }
 
-export async function extractDocument(
-  args: ExtractDocumentArgs
-): Promise<ExtractDocumentResult> {
+export async function extractDocument(args: ExtractDocumentArgs): Promise<ExtractDocumentResult> {
   // ── gatekeeping ──────────────────────────────────────────────────────
   if (!isAllowedOcrMimeType(args.mediaType)) {
     throw new Error(
@@ -115,13 +125,20 @@ export async function extractDocument(
   const size = base64ByteSize(args.data);
   if (size > MAX_OCR_BYTES) {
     // NEVER log the payload — even truncated. Only the shape.
-    throw new Error(
-      `document payload ${size} bytes exceeds ${MAX_OCR_BYTES} byte cap`
-    );
+    throw new Error(`document payload ${size} bytes exceeds ${MAX_OCR_BYTES} byte cap`);
   }
   if (SENSITIVE_KINDS.includes(args.kind) && !args.allowSensitive) {
     throw new Error(
       `kind "${args.kind}" requires compliance-mode opt-in (pass allowSensitive: true)`
+    );
+  }
+  if (PII_KINDS.includes(args.kind)) {
+    // Audit signal only. Boarding passes are allowed through without a
+    // compliance flag (the traveler uploaded it to their own account),
+    // but we want ops to see "yes, this tenant scanned PNR-bearing
+    // documents" in log ingestion. Never log the payload itself.
+    console.warn(
+      `[ocr] scanning PII-containing kind '${args.kind}' — document may contain PNR, passport, or frequent-flyer data`
     );
   }
 
@@ -252,5 +269,5 @@ const ID_DOCUMENT_PROMPT = [
   'You extract structured fields from government ID documents (passports, national IDs, driver licenses, residence permits).',
   'Use ISO 3166-1 alpha-3 for country codes and ISO 8601 for dates.',
   'Transcribe the MRZ lines verbatim including fillers (<). TD3 passports have 2 MRZ lines; TD1 national IDs have 3.',
-  "If this is not actually an ID document, set document_variant null and leave the rest null.",
+  'If this is not actually an ID document, set document_variant null and leave the rest null.',
 ].join('\n');
