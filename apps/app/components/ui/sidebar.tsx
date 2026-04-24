@@ -23,11 +23,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 // Design spec (Claude Design handoff): floating pill at left:16px,
-// width:232px, right gutter:16px. Peer gap-div reserves 264px = 16+232+16
-// so the main card's left edge lines up with a 16px visual gap.
-const SIDEBAR_WIDTH = '16.5rem';
-const SIDEBAR_WIDTH_MOBILE = '18rem';
-const SIDEBAR_WIDTH_ICON = '3rem';
+// width:200px, right gutter:16px. Peer gap-div reserves 232px =
+// (16 + 200 + 16). PX not rem because the repo sets html font-size
+// to 13px, which would make a 14.5rem width resolve to 188.5px and
+// cause the pill to overlap the main card.
+const SIDEBAR_WIDTH = '232px';
+const SIDEBAR_WIDTH_MOBILE = '272px';
+const SIDEBAR_WIDTH_ICON = '48px';
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
 
 type SidebarContextProps = {
