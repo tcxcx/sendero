@@ -22,10 +22,14 @@ import {
   CarTaxiFrontIcon,
   ClockIcon,
   ExternalLinkIcon,
+  FileTextIcon,
   HotelIcon,
   MapIcon,
   PlaneLandingIcon,
+  ReceiptIcon,
+  ScanLineIcon,
   ShieldAlertIcon,
+  TicketIcon,
   UtensilsCrossedIcon,
 } from 'lucide-react';
 
@@ -655,6 +659,192 @@ function DelayReplannerView({ data }: { data: DelayReplannerResult }) {
   );
 }
 
+// ─── scan_document ──────────────────────────────────────────────────
+//
+// Renders the typed extraction from @sendero/ocr (Gemini 2.5 Flash +
+// Zod-backed structured output). Three shapes — receipt / invoice /
+// boarding_pass — each get their own lead fields and a secondary grid.
+// Latency is shown in the header to keep the Gemini demo credible.
+
+type ScanResultShape = {
+  kind?: 'receipt' | 'invoice' | 'boarding_pass' | 'id_document';
+  provider?: string;
+  model?: string;
+  latencyMs?: number;
+  data?: Record<string, unknown>;
+};
+
+function ScanDocumentCard({ data }: { data: ScanResultShape }) {
+  const kind = data.kind ?? 'receipt';
+  const extracted = (data.data ?? {}) as Record<string, unknown>;
+  const Icon =
+    kind === 'boarding_pass' ? TicketIcon : kind === 'invoice' ? FileTextIcon : ReceiptIcon;
+  const label =
+    kind === 'boarding_pass' ? 'Boarding pass' : kind === 'invoice' ? 'Invoice' : 'Receipt';
+
+  return (
+    <div className="grid gap-2">
+      <div className={cardShell}>
+        <div className="flex items-start gap-3">
+          <div className="mt-1 grid size-8 place-items-center rounded-lg bg-[color:var(--bg-soft)] text-[color:var(--ink)]">
+            <Icon className="size-4" />
+          </div>
+          <div className="flex-1 grid gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--ink)]">
+                {label} extracted
+              </span>
+              {data.latencyMs ? (
+                <span className="font-mono text-[10px] text-[color:var(--text-faint)]">
+                  · {data.latencyMs} ms · {data.model ?? 'gemini'}
+                </span>
+              ) : null}
+            </div>
+            <ScanLead kind={kind} data={extracted} />
+            <ScanFieldGrid kind={kind} data={extracted} />
+          </div>
+          <ScanLineIcon className="size-4 text-[color:var(--text-faint)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScanLead({
+  kind,
+  data,
+}: {
+  kind: ScanResultShape['kind'];
+  data: Record<string, unknown>;
+}) {
+  if (kind === 'boarding_pass') {
+    const pax = stringOrNull(data.passenger_name);
+    const route =
+      stringOrNull(data.origin_iata) && stringOrNull(data.destination_iata)
+        ? `${data.origin_iata} → ${data.destination_iata}`
+        : null;
+    const flight = stringOrNull(data.carrier_code)
+      ? `${data.carrier_code}${stringOrNull(data.flight_number) ?? ''}`
+      : stringOrNull(data.flight_number);
+    const primary = [pax, route].filter(Boolean).join(' · ');
+    return primary ? (
+      <div className="font-medium text-sm text-[color:var(--ink)]">
+        {primary}
+        {flight ? (
+          <span className="ml-2 font-mono text-[11px] text-[color:var(--text-dim)]">{flight}</span>
+        ) : null}
+      </div>
+    ) : null;
+  }
+  if (kind === 'invoice') {
+    const vendor = stringOrNull(data.vendor_name);
+    const total = numberOrNull(data.total_amount);
+    const currency = stringOrNull(data.currency) ?? '';
+    const primary = vendor ?? 'Invoice';
+    return (
+      <div className="font-medium text-sm text-[color:var(--ink)]">
+        {primary}
+        {total !== null ? (
+          <span className="ml-2 font-mono text-[11px] text-[color:var(--text-dim)]">
+            {formatMoney(total, currency)}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+  // receipt
+  const merchant = stringOrNull(data.store_name);
+  const total = numberOrNull(data.total_amount);
+  const currency = stringOrNull(data.currency) ?? '';
+  const primary = merchant ?? 'Receipt';
+  return (
+    <div className="font-medium text-sm text-[color:var(--ink)]">
+      {primary}
+      {total !== null ? (
+        <span className="ml-2 font-mono text-[11px] text-[color:var(--text-dim)]">
+          {formatMoney(total, currency)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function ScanFieldGrid({
+  kind,
+  data,
+}: {
+  kind: ScanResultShape['kind'];
+  data: Record<string, unknown>;
+}) {
+  const rows: Array<[string, string]> = [];
+  if (kind === 'boarding_pass') {
+    const push = (k: string, v: unknown) => {
+      const s = stringOrNull(v);
+      if (s) rows.push([k, s]);
+    };
+    push('PNR', data.pnr);
+    push('Seat', data.seat);
+    push('Gate', data.gate);
+    push('Cabin', data.cabin_class);
+    push('Boards', data.boarding_at);
+    push('Departs', data.departure_at);
+  } else if (kind === 'invoice') {
+    const push = (k: string, v: unknown) => {
+      const s = stringOrNull(v);
+      if (s) rows.push([k, s]);
+    };
+    push('Invoice #', data.invoice_number);
+    push('Issued', data.invoice_date);
+    push('Due', data.due_date);
+    const tax = numberOrNull(data.tax_amount);
+    if (tax !== null) rows.push(['Tax', formatMoney(tax, stringOrNull(data.currency) ?? '')]);
+    push('Customer', data.customer_name);
+  } else {
+    const push = (k: string, v: unknown) => {
+      const s = stringOrNull(v);
+      if (s) rows.push([k, s]);
+    };
+    push('Date', data.date);
+    push('Payment', data.payment_method);
+    const tax = numberOrNull(data.tax_amount);
+    if (tax !== null) rows.push(['Tax', formatMoney(tax, stringOrNull(data.currency) ?? '')]);
+    const subtotal = numberOrNull(data.subtotal_amount);
+    if (subtotal !== null)
+      rows.push(['Subtotal', formatMoney(subtotal, stringOrNull(data.currency) ?? '')]);
+  }
+  if (rows.length === 0) return null;
+  return (
+    <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-[11px]">
+      {rows.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="text-[color:var(--text-faint)] uppercase tracking-[0.1em] text-[10px]">
+            {k}
+          </dt>
+          <dd className="truncate text-[color:var(--text-dim)]">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function stringOrNull(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() ? v : null;
+}
+
+function numberOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function formatMoney(amount: number, currency: string): string {
+  const cur = currency.trim().toUpperCase();
+  if (!cur) return amount.toFixed(2);
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${cur}`;
+  }
+}
+
 // ─── Dispatcher ──────────────────────────────────────────────────────
 
 export function TripToolCard({
@@ -697,6 +887,9 @@ export function TripToolCard({
     return (
       <CancellationQuoteCard data={data as Parameters<typeof CancellationQuoteCard>[0]['data']} />
     );
+  }
+  if (toolName === 'scan_document') {
+    return <ScanDocumentCard data={data as ScanResultShape} />;
   }
   return null;
 }

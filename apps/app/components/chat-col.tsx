@@ -239,6 +239,13 @@ export function ChatCol() {
               text: `replan(<span class="v">${leg.origin ?? '—'} → ${leg.destination ?? '—'}</span> · ${toolInput.disruption?.kind ?? 'disruption'})`,
               t: clock(),
             });
+          } else if (toolName === 'scan_document') {
+            s.logEvent({
+              group: 'ocr.scan',
+              bullet: 'active',
+              text: `extract(<span class="v">${toolInput.kind ?? 'document'}</span>)`,
+              t: clock(),
+            });
           }
         }
 
@@ -395,6 +402,22 @@ export function ChatCol() {
               text: output.recommendedRebook
                 ? `rebook · <span class="v">${output.recommendedRebook.segmentsSummary}</span>`
                 : 'no self-serve rebook · agent handoff',
+              t: clock(),
+            });
+          } else if (toolName === 'scan_document' && output) {
+            const extracted = (output.data ?? {}) as Record<string, unknown>;
+            const kind = output.kind ?? toolInput.kind ?? 'document';
+            const summary =
+              kind === 'boarding_pass'
+                ? `${extracted.origin_iata ?? '—'} → ${extracted.destination_iata ?? '—'} · PNR ${extracted.pnr ?? '—'}`
+                : kind === 'invoice'
+                  ? `${extracted.vendor_name ?? 'Invoice'} · ${extracted.total_amount ?? '—'} ${extracted.currency ?? ''}`
+                  : `${extracted.store_name ?? 'Receipt'} · ${extracted.total_amount ?? '—'} ${extracted.currency ?? ''}`;
+            s.updateLastEvent('ocr.scan', { bullet: 'done' });
+            s.logEvent({
+              group: 'ocr.scan',
+              bullet: 'done',
+              text: `<span class="v">${summary}</span> · ${output.latencyMs ?? '?'}ms`,
               t: clock(),
             });
           }

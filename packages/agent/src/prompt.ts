@@ -13,7 +13,7 @@
  * grows a channel-branch.
  */
 
-import { renderLocaleSlicePrompt, type CompactLocaleSlice } from '@sendero/locale';
+import { type CompactLocaleSlice, renderLocaleSlicePrompt } from '@sendero/locale';
 
 export interface SystemPromptSections {
   /** Required: who the agent is and how it behaves. */
@@ -34,6 +34,12 @@ export interface SystemPromptSections {
   recentTurns?: string;
   /** Tenant / booking policy surface if present (version + key rules). */
   policyContext?: string;
+  /**
+   * Per-turn attachment hint. Present only when the user message carries
+   * a PDF / image / document; tells the agent to reach for the
+   * `scan_document` tool rather than describing the file in prose.
+   */
+  attachmentsHint?: string;
   /** Extra guidelines (confidence caveats, follow-up handling, etc.). */
   responseGuidelines?: string;
 }
@@ -129,6 +135,10 @@ export function buildSystemPrompt(sections: SystemPromptSections): string {
 
   if (sections.policyContext?.trim()) {
     parts.push(`## Policy\n\n${sections.policyContext.trim()}`);
+  }
+
+  if (sections.attachmentsHint?.trim()) {
+    parts.push(`## Attachments\n\n${sections.attachmentsHint.trim()}`);
   }
 
   if (sections.workflowCatalog?.trim()) {

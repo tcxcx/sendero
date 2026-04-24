@@ -30,7 +30,7 @@ import { listWorkflows } from '@sendero/workflows';
 import type { LanguageModel, ToolSet } from 'ai';
 import { generateText, stepCountIs } from 'ai';
 
-import type { AgentInput, AgentOutput, AgentMediaAttachment } from './channels';
+import type { AgentInput, AgentMediaAttachment, AgentOutput } from './channels';
 import { isMediaAttachment } from './channels';
 import { buildIdempotencyKey, isDuplicateKeyError } from './idempotency';
 import {
@@ -145,6 +145,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     listWorkflows().map(w => ({ id: w.id, label: w.label, description: w.description }))
   );
   const recentTurnsBlock = renderRecentTurns(state);
+  const attachmentsHintBlock = renderAttachmentsHint(input);
   const systemPrompt = buildSystemPrompt({
     persona: args.persona,
     locale: input.actor.locale,
@@ -155,6 +156,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     tripContext: renderTripContext(trip),
     workflowCatalog: workflowsBlock,
     recentTurns: recentTurnsBlock,
+    attachmentsHint: attachmentsHintBlock,
   });
 
   // 5. LLM turn — when `model` is a gateway string AND AI_GATEWAY_API_KEY
@@ -339,6 +341,33 @@ function renderChannelHint(input: AgentInput): string {
   return `- Channel: ${input.channel}
 - Locale: ${input.actor.locale ?? 'unknown'}${displayName}${subject}
 - Instruction: ${instruction}`;
+}
+
+/**
+ * When the traveler attaches a PDF or image, tell the model to pull
+ * structured fields with `scan_document` before replying — instead of
+ * describing the attachment in prose. The tool accepts inline base64 +
+ * mediaType, which is exactly what the adapter just downloaded, so the
+ * round-trip stays cheap.
+ */
+function renderAttachmentsHint(input: AgentInput): string {
+  const media = (input.attachments ?? []).filter(isMediaAttachment);
+  if (media.length === 0) return '';
+  const manifest = media
+    .map((m, i) => `  ${i + 1}. ${m.kind}/${m.mediaType}${m.filename ? ` (${m.filename})` : ''}`)
+    .join('\n');
+  return [
+    `The traveler attached ${media.length} document${media.length === 1 ? '' : 's'}:`,
+    manifest,
+    '',
+    'Reach for the `scan_document` tool to pull structured fields before replying. Pick `kind` from context:',
+    '- Receipt (coffee, taxi, hotel folio, grocery till, ride-share e-receipt) → `kind: "receipt"`',
+    '- Invoice / SaaS bill / contractor invoice / supplier bill → `kind: "invoice"`',
+    '- Airline boarding pass (mobile, PDF, screenshot) → `kind: "boarding_pass"`',
+    '- Government ID / passport / driver license → refuse, these are compliance-gated',
+    '',
+    'The attachment is already on the turn; call `scan_document` with the same `data + mediaType` you see. One short sentence like "Reading the receipt…" is enough before the tool call — after the tool returns, confirm what you extracted in one line and offer the next useful action (log as expense, reconcile to trip, verify PNR). Never transcribe the full extraction back — the UI already renders a card.',
+  ].join('\n');
 }
 
 function renderTripContext(trip: TripSnapshot | null): string {
