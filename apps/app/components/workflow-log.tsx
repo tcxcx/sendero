@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSendero } from './store';
 import { useMeterStream, useMeterSummary } from './use-meter';
 import { WorkflowGraph } from './workflow-graph';
+import { DigitTicker, SmoothNumber } from './footer-numbers';
 
 interface Runtime {
   provider: string | null;
@@ -66,7 +67,18 @@ export function WorkflowLog() {
           <Row k="model" v={modelLabel} />
           <Row k="tools" v={toolLabel} />
           <Row k="chain" v={`Arc L2 · ${treasury?.arc?.chainId ?? '—'}`} />
-          <Row k="block" v={`#${treasury?.arc?.blockNumber ?? '—'}`} />
+          <Row
+            k="block"
+            v={
+              treasury?.arc?.blockNumber ? (
+                <>
+                  #<DigitTicker value={treasury.arc.blockNumber} />
+                </>
+              ) : (
+                '#—'
+              )
+            }
+          />
         </div>
 
         {Object.keys(grouped).length === 0 && (
@@ -110,8 +122,11 @@ export function WorkflowLog() {
         ))}
 
         <div className="log-group">
-          <div className="log-head">
-            <span className="name">▸ nanopayments · x402 · arc</span>
+          <div
+            className="log-head"
+            title="USDC is Arc's native gas token. Per-call charges are paid in nano-USDC (1 nUSDC = 1e-9 USDC)."
+          >
+            <span className="name">▸ gas · nanopayments · arc</span>
             <span className="dur">
               {meterSummary
                 ? `${meterSummary.paidCalls}p / ${meterSummary.rejectedCalls}r`
@@ -132,7 +147,7 @@ export function WorkflowLog() {
               gap: 2,
             }}
           >
-            <span>arc paid</span>
+            <span title="Total USDC paid as Arc gas (nUSDC = nano-USDC)">arc paid (nUSDC)</span>
             <span
               style={{
                 color: 'var(--usdc)',
@@ -140,7 +155,16 @@ export function WorkflowLog() {
                 fontVariantNumeric: 'tabular-nums',
               }}
             >
-              {meterSummary ? `$${meterSummary.totalUsdc}` : '—'}
+              {meterSummary ? (
+                <SmoothNumber
+                  value={Number(meterSummary.totalUsdc) || 0}
+                  precision={6}
+                  suffix=" USDC"
+                  cadence="fast"
+                />
+              ) : (
+                '—'
+              )}
             </span>
             <span>ethereum (est)</span>
             <span
@@ -150,7 +174,16 @@ export function WorkflowLog() {
                 fontVariantNumeric: 'tabular-nums',
               }}
             >
-              {meterSummary ? `$${meterSummary.ethereum.totalUsd.toFixed(2)}` : '—'}
+              {meterSummary ? (
+                <SmoothNumber
+                  value={Number(meterSummary.ethereum.totalUsd) || 0}
+                  precision={2}
+                  prefix="$"
+                  cadence="calm"
+                />
+              ) : (
+                '—'
+              )}
             </span>
             <span>margin delta</span>
             <span
@@ -163,9 +196,16 @@ export function WorkflowLog() {
                 fontWeight: 500,
               }}
             >
-              {meterSummary && meterSummary.ethereum.marginFactor > 0
-                ? `${meterSummary.ethereum.marginFactor}×`
-                : '—'}
+              {meterSummary && meterSummary.ethereum.marginFactor > 0 ? (
+                <SmoothNumber
+                  value={Number(meterSummary.ethereum.marginFactor) || 0}
+                  precision={1}
+                  suffix="×"
+                  cadence="calm"
+                />
+              ) : (
+                '—'
+              )}
             </span>
           </div>
 
@@ -223,7 +263,7 @@ export function WorkflowLog() {
   );
 }
 
-function Row({ k, v, vColor }: { k: string; v: string; vColor?: string }) {
+function Row({ k, v, vColor }: { k: string; v: React.ReactNode; vColor?: string }) {
   return (
     <div
       style={{

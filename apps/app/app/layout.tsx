@@ -1,4 +1,5 @@
 import type { Viewport } from 'next';
+import Script from 'next/script';
 
 import { ClerkProvider } from '@clerk/nextjs';
 import { SUPPORTED_LOCALES } from '@sendero/locale';
@@ -118,6 +119,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         ))}
       </head>
       <body>
+        {process.env.NODE_ENV === 'development' && (
+          <Script
+            src="https://unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="afterInteractive"
+          />
+        )}
         <ClerkProvider
           signInUrl="/sign-in"
           signUpUrl="/sign-up"

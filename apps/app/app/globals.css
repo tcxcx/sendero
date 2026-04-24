@@ -282,43 +282,57 @@ body::before {
   left: 16px;
   bottom: calc(var(--app-shell-footer-h, 48px) + 16px);
   height: auto;
-  width: 232px;
+  width: 200px;
+  max-width: 200px;
   z-index: 20;
   background: transparent;
+  /* No overflow:hidden here — the inner pill's drop shadow needs room
+     to escape. Content clipping happens on [data-sidebar="sidebar"]. */
+  transition:
+    width 200ms ease,
+    max-width 200ms ease;
 }
 
+/* Collapsed icon state. Two coordinated adjustments keep the pill
+   inside the gap-div so it can't overlap the main card:
+   1. Pill itself shrinks to 3rem (48px) wide.
+   2. The shadcn gap-div (first child of .group.peer) is widened to
+      calc(3rem + 16px) = 64px so it reserves enough room for the pill
+      PLUS its 16px left offset. Tailwind JIT generates the gap-div's
+      collapsed width as `w-[var(--sidebar-width-icon)]` = 3rem; we
+      override that specific descendant via an attribute selector. */
+.app-shell-root .group.peer[data-collapsible="icon"] > .fixed.inset-y-0 {
+  width: 48px;
+  max-width: 48px;
+}
+.app-shell-root .group.peer[data-collapsible="icon"] [data-sidebar="sidebar"] {
+  max-width: 48px;
+}
+.app-shell-root .group.peer[data-collapsible="icon"] > div:first-child {
+  width: 64px;
+}
+
+/* Design tweak defaults (Claude Design handoff, glassAlpha=0,
+   glassBlur=2, glassSat=1.15, glassEdge=0.12): ghost pane. No fill,
+   barely any blur, just soft edge highlights + drop shadow. Topography
+   is almost fully visible through the pane. */
 .app-shell-root [data-sidebar="sidebar"] {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   border-radius: 28px;
-  /* Pill glass — parchment tint at 38% per design spec, blur 22px,
-     saturate 1.15. Simple, legible, matches the Tweaks-panel default
-     values in the handoff. */
-  background: rgba(247, 239, 228, 0.38);
-  -webkit-backdrop-filter: blur(22px) saturate(1.15);
-  backdrop-filter: blur(22px) saturate(1.15);
-  /* Top edge bright (2x edge-alpha per design) */
+  max-width: 232px;
+  background: rgba(247, 239, 228, 0);
+  -webkit-backdrop-filter: blur(2px) saturate(1.15);
+  backdrop-filter: blur(2px) saturate(1.15);
+  /* Top edge: edge * 1.6 = 0.192 */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    /* Bottom edge soft */
-    inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.192),
+    /* Bottom edge: edge = 0.12 */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12),
     /* Drop shadow — pane floats over the topography */
     0 18px 40px -20px rgba(31, 42, 68, 0.18);
-}
-
-.app-shell-root [data-sidebar="sidebar"]::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  /* Top-left specular + left-edge highlight — lets the rounded pill
-     catch light from the upper-left corner. */
-  background:
-    radial-gradient(circle at 18% 6%, rgba(255, 255, 255, 0.4), transparent 34%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.12), transparent 45%);
-  opacity: 0.85;
+  transition: background-color 200ms ease;
 }
 
 /* =====================================================
@@ -518,9 +532,10 @@ a[role="button"]:active,
    ===================================================== */
 .app-shell-root {
   /* Height of the global AppShellFooter. Exposed as a var so the
-     shadcn sidebar can reserve room at the bottom without duplicating
-     the magic number. Update here if FooterRail padding changes. */
-  --app-shell-footer-h: 34px;
+     floating-pill sidebar reserves room above it without duplicating
+     the magic number. 14px top-pad + 14px bot-pad + ~20px content
+     line-height = ~48px. Update here if FooterRail padding changes. */
+  --app-shell-footer-h: 48px;
 }
 
 .app-shell-footer {
@@ -1620,30 +1635,25 @@ a[role="button"]:active,
   padding: 14px 24px;
   position: relative;
   isolation: isolate;
-  /* Pill glass — parchment tint at 32% (slightly more transparent than
-     the sidebar's 38% so footer stays subordinate to it). */
-  background: rgba(247, 239, 228, 0.32);
-  -webkit-backdrop-filter: blur(22px) saturate(1.15);
-  backdrop-filter: blur(22px) saturate(1.15);
+  /* Ghost glass — fully transparent, 2px blur, just an edge highlight.
+     Matches the handoff's tweak values (glassAlpha=0, glassBlur=2,
+     glassEdge=0.12 with edge * 1.4 top = 0.168). */
+  background: rgba(247, 239, 228, 0);
+  -webkit-backdrop-filter: blur(2px) saturate(1.15);
+  backdrop-filter: blur(2px) saturate(1.15);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.168),
     inset 0 -1px 0 rgba(31, 42, 68, 0.06);
+  transition: background-color 200ms ease;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--sendero-midnight, #1f2a44) 60%, transparent);
 }
-.footer-rail::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 45%),
-    radial-gradient(circle at 50% -120%, rgba(255, 255, 255, 0.28), transparent 72%);
-}
+/* ::before specular was part of the heavier v1 glass. Ghost-glass
+   tweak defaults (glassAlpha=0, glassBlur=2) need only the edge
+   highlights on .footer-rail itself — no additional white wash. */
 .footer-rail .group {
   display: flex;
   align-items: center;
@@ -1937,6 +1947,15 @@ a[role="button"]:active,
   background: var(--bg-elev);
   border: 1.5px solid var(--ink);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+.dashboard-crumbs {
+  padding: 2px 20px 6px;
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+}
+.dashboard-crumbs nav {
+  min-width: 0;
 }
 .footer-tweaks-btn {
   margin-left: 12px;

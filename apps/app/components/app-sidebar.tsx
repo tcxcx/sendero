@@ -6,7 +6,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { BrandUpgradeCard } from '@/components/app-shell/brand-upgrade-card';
+import { HelpDocsCard } from '@/components/app-shell/help-docs-card';
 import { LlmsDocsCard } from '@/components/app-shell/llms-docs-card';
+import { SocialsRow } from '@/components/app-shell/socials-row';
 
 import { OrganizationSwitcher } from '@clerk/nextjs';
 
@@ -190,7 +192,19 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           aria-hidden
           className="h-px w-full bg-[color:color-mix(in_oklab,var(--ink)_24%,transparent)] group-data-[collapsible=icon]:hidden"
         />
+        <SidebarMenu>
+          <HelpDocsCard />
+        </SidebarMenu>
+        <div
+          aria-hidden
+          className="h-px w-full bg-[color:color-mix(in_oklab,var(--ink)_24%,transparent)] group-data-[collapsible=icon]:hidden"
+        />
         <BrandUpgradeCard />
+        <div
+          aria-hidden
+          className="h-px w-full bg-[color:color-mix(in_oklab,var(--ink)_24%,transparent)] group-data-[collapsible=icon]:hidden"
+        />
+        <SocialsRow />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

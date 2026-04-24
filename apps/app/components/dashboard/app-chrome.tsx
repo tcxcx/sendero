@@ -8,6 +8,7 @@ import { cn } from '@sendero/ui/cn';
 
 import { AppHeader } from '@/components/app-shell/app-header';
 import { AppShellFooter } from '@/components/app-shell/app-shell-footer';
+import { DashboardBreadcrumb } from '@/components/app-shell/dashboard-breadcrumb';
 import { AppSidebar } from '@/components/app-sidebar';
 import { BridgeDialog } from '@/components/bridge-dialog';
 import { ClerkWalletBridge } from '@/components/clerk-wallet-bridge';
@@ -15,6 +16,7 @@ import { DepositDialog } from '@/components/deposit-dialog';
 import { SendDialog } from '@/components/send-dialog';
 import { hydrateFromStorage } from '@/components/store';
 import { SwapDialog } from '@/components/swap-dialog';
+import { useArcChainStream } from '@/components/use-arc-chain-stream';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 
 type ShellHeaderCopy = {
@@ -37,6 +39,8 @@ export function AppChrome({
     hydrateFromStorage();
   }, []);
 
+  useArcChainStream();
+
   const mainPad =
     pathname === '/dashboard/inbox' ||
     pathname.startsWith('/dashboard/inbox/') ||
@@ -55,7 +59,7 @@ export function AppChrome({
             raised card on the grainy gradient. Margin on ≥lg, rounded
             `--radius-xl`, `--shadow-xl`, and `--surface-raised` fill. */}
         <SidebarInset
-          className="min-h-0 md:my-3 md:mr-3 md:rounded-tl-[36px] md:rounded-tr-[20px] md:rounded-bl-[20px] md:rounded-br-[20px] md:bg-[color:var(--surface-raised)] md:shadow-[var(--shadow-xl)] md:border-2"
+          className="min-h-0 md:mt-4 md:mr-4 md:mb-4 md:rounded-tl-[36px] md:rounded-tr-[20px] md:rounded-bl-[20px] md:rounded-br-[20px] md:bg-[color:var(--surface-raised)] md:shadow-[var(--shadow-xl)] md:border-2"
           style={{ borderColor: 'color-mix(in oklab, var(--ink) 55%, transparent)' }}
         >
           <AppHeader
@@ -63,6 +67,7 @@ export function AppChrome({
             locale={locale}
             startSlot={<SidebarTrigger className="-ml-1 shrink-0" aria-label="Toggle sidebar" />}
           />
+          <DashboardBreadcrumb />
           <main
             className={cn('app-shell-main min-h-0 flex-1 overflow-auto my-2', mainPad, mainFlex)}
           >

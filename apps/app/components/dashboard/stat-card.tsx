@@ -15,7 +15,7 @@
 
 import Link from 'next/link';
 
-import { AnimatedNumber } from '@sendero/ui/animated-number';
+import { SmoothNumber } from '@/components/footer-numbers';
 
 export function StatCard({
   title,
@@ -51,11 +51,12 @@ export function StatCard({
           href={href}
           className={
             'inline-flex shrink-0 items-center gap-1 rounded-full ' +
-            'border border-[color:color-mix(in_oklab,var(--ink)_72%,black)] ' +
             'bg-[color:var(--ink)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ' +
-            'text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] ' +
-            'transition-[background-color,box-shadow] duration-[160ms] ' +
-            'hover:bg-[color:color-mix(in_oklab,var(--ink)_92%,black)]'
+            'text-white shadow-[0_1px_2px_rgba(31,42,68,0.12),0_4px_12px_rgba(31,42,68,0.08),inset_0_1px_0_rgba(255,255,255,0.22)] ' +
+            'transition-[background-color,box-shadow,transform] duration-[160ms] ' +
+            'hover:bg-[color:color-mix(in_oklab,var(--ink)_92%,black)] ' +
+            'hover:shadow-[0_2px_4px_rgba(31,42,68,0.14),0_8px_18px_rgba(31,42,68,0.12),inset_0_1px_0_rgba(255,255,255,0.24)] ' +
+            'hover:-translate-y-px'
           }
         >
           View
@@ -99,7 +100,7 @@ function StatValue({ raw, numeric }: { raw: string; numeric: number | null }) {
       className="text-[length:var(--numeral-md)] font-semibold leading-none text-foreground"
       style={{ fontVariantNumeric: 'tabular-nums' }}
     >
-      <AnimatedNumber value={numeric} precision={precision} prefix={prefix} />
+      <SmoothNumber value={numeric} precision={precision} prefix={prefix} cadence="calm" />
     </div>
   );
 }

@@ -359,6 +359,7 @@ export function ErrorBanner() {
 /* ─── FooterRail ──────────────────────────────────────────────────────── */
 
 import { useMeterSummary } from './use-meter';
+import { DigitTicker, SmoothNumber } from './footer-numbers';
 
 export function FooterRail() {
   const treasury = useSendero(s => s.treasury);
@@ -386,11 +387,26 @@ export function FooterRail() {
         </span>
         <span>·</span>
         <span>
-          block <strong style={{ color: 'var(--ink)' }}>#{block}</strong>
+          block{' '}
+          <strong style={{ color: 'var(--ink)' }}>
+            #{block === '—' ? '—' : <DigitTicker value={block} />}
+          </strong>
         </span>
         <span>·</span>
         <span>
-          gas <strong>{treasury?.arc?.gasPrice ? formatGwei(treasury.arc.gasPrice) : '—'}</strong>
+          gas{' '}
+          <strong title="USDC is Arc's native gas token (1 nUSDC = 1e-9 USDC)">
+            {treasury?.arc?.gasPrice ? (
+              <SmoothNumber
+                value={Number(treasury.arc.gasPrice) / 1e9}
+                precision={4}
+                suffix=" nUSDC"
+                cadence="fast"
+              />
+            ) : (
+              '—'
+            )}
+          </strong>
         </span>
       </div>
       <div className="group">
@@ -404,13 +420,31 @@ export function FooterRail() {
         <span>
           balance{' '}
           <strong style={{ color: 'var(--usdc)' }}>
-            {usdc ? `${formatAmount(usdc.amount)} USDC` : '— USDC'}
+            {usdc ? (
+              <SmoothNumber
+                value={Number(usdc.amount)}
+                precision={2}
+                suffix=" USDC"
+                cadence="calm"
+              />
+            ) : (
+              '— USDC'
+            )}
           </strong>
         </span>
         <span>·</span>
         <span>
           <strong style={{ color: 'var(--eurc)' }}>
-            {eurc ? `${formatAmount(eurc.amount)} EURC` : '— EURC'}
+            {eurc ? (
+              <SmoothNumber
+                value={Number(eurc.amount)}
+                precision={2}
+                suffix=" EURC"
+                cadence="calm"
+              />
+            ) : (
+              '— EURC'
+            )}
           </strong>
         </span>
       </div>
@@ -426,13 +460,31 @@ export function FooterRail() {
               color: (meter?.paidCalls ?? 0) >= 50 ? 'var(--accent-green)' : 'var(--ink)',
             }}
           >
-            {meter ? `${meter.paidCalls}/${meter.totalEvents} calls` : '—'}
+            {meter ? (
+              <>
+                <DigitTicker value={meter.paidCalls} />/<DigitTicker value={meter.totalEvents} />{' '}
+                calls
+              </>
+            ) : (
+              '—'
+            )}
           </strong>
         </span>
         <span>·</span>
         <span>
           paid{' '}
-          <strong style={{ color: 'var(--usdc)' }}>{meter ? `$${meter.totalUsdc}` : '—'}</strong>
+          <strong style={{ color: 'var(--usdc)' }}>
+            {meter ? (
+              <SmoothNumber
+                value={Number(meter.totalUsdc) || 0}
+                precision={6}
+                prefix="$"
+                cadence="fast"
+              />
+            ) : (
+              '—'
+            )}
+          </strong>
         </span>
         {meter && meter.ethereum.marginFactor > 0 && (
           <>
@@ -528,9 +580,14 @@ function formatAmount(raw: string): string {
   return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
 
-function formatGwei(raw: string): string {
+/**
+ * Arc's native gas token is USDC at 18 decimals, so 1 wei = 1e-18 USDC and
+ * 1 nano-USDC = 1e9 wei — numerically identical to gwei on an ETH chain.
+ * Same digit, accurate unit. (1 gwei == 1 nUSDC on Arc.)
+ */
+function formatGas(raw: string): string {
   const n = Number(raw);
   if (!Number.isFinite(n)) return raw;
-  const gwei = n / 1e9;
-  return `${gwei.toFixed(4)} gwei`;
+  const nUsdc = n / 1e9;
+  return `${nUsdc.toFixed(4)} nUSDC`;
 }
