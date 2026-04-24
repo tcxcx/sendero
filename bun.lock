@@ -68,6 +68,7 @@
         "@sendero/guest": "workspace:*",
         "@sendero/intelligence": "workspace:*",
         "@sendero/invoicing": "workspace:*",
+        "@sendero/kapso": "workspace:*",
         "@sendero/llms": "workspace:*",
         "@sendero/locale": "workspace:*",
         "@sendero/multisig": "workspace:*",
@@ -80,6 +81,7 @@
         "@sendero/webhooks": "workspace:*",
         "@sendero/whatsapp": "workspace:*",
         "@sendero/workflows": "workspace:*",
+        "@slack/web-api": "^7.0.0",
         "@streamdown/cjk": "^1.0.3",
         "@streamdown/code": "^1.1.1",
         "@streamdown/math": "^1.0.2",
@@ -481,6 +483,16 @@
       "version": "0.1.0",
       "dependencies": {
         "viem": "^2.21.0",
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
+    "packages/sendero-kapso": {
+      "name": "@sendero/kapso",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^3.25.76",
       },
       "devDependencies": {
         "typescript": "^5.8.3",
@@ -1354,6 +1366,8 @@
     "@sendero/intelligence": ["@sendero/intelligence@workspace:packages/intelligence"],
 
     "@sendero/invoicing": ["@sendero/invoicing@workspace:packages/invoicing"],
+
+    "@sendero/kapso": ["@sendero/kapso@workspace:packages/sendero-kapso"],
 
     "@sendero/llms": ["@sendero/llms@workspace:packages/llms"],
 

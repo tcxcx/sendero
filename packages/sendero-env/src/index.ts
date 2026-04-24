@@ -78,7 +78,19 @@ export const env = {
   whatsappPhoneNumberId: () => process.env.WHATSAPP_PHONE_NUMBER_ID || null,
   whatsappApiBaseUrl: () => process.env.WHATSAPP_API_BASE_URL || null,
   whatsappDefaultCountry: () => process.env.WHATSAPP_DEFAULT_COUNTRY || 'US',
+  /**
+   * Dev-only last-resort fallback for inbound WA webhooks whose
+   * phoneNumberId can't be mapped to a WhatsAppInstall row. Leave
+   * unset in production — ops alerts on unresolved installs.
+   */
   whatsappDefaultTenantId: () => process.env.WHATSAPP_DEFAULT_TENANT_ID || null,
+
+  // ── BYO WhatsApp via Kapso (Phase 11h) ────────────────────────────
+  kapsoApiKey: () => process.env.KAPSO_API_KEY || null,
+  kapsoApiBaseUrl: () => process.env.KAPSO_API_BASE_URL || 'https://api.kapso.ai',
+  /** Public URL Kapso posts BYO WhatsApp events to. Override in dev (ngrok). */
+  kapsoWebhookBaseUrl: () =>
+    process.env.KAPSO_WEBHOOK_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || null,
 
   slackSigningSecret: () => process.env.SLACK_SIGNING_SECRET || null,
   slackClientId: () => process.env.SLACK_CLIENT_ID || null,
