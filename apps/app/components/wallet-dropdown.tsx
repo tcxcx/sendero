@@ -44,7 +44,7 @@ async function readBalanceOf(client: ArcPublicClient, token: Hex, account: Hex):
 }
 import { useQueryState } from 'nuqs';
 import { useSendero } from './store';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { logout } from '@sendero/circle/modular-wallets';
 
 const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;

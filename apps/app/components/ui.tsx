@@ -10,7 +10,7 @@
 import Link from 'next/link';
 import { useSendero, deriveStep } from './store';
 import { AgentChip } from './agent-chip';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { WalletDropdown } from './wallet-dropdown';
 
 /* ─── ConsoleBar ────────────────────────────────────────────────────────── */

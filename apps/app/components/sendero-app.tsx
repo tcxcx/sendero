@@ -15,7 +15,7 @@ import { ProfileGate } from './profile-gate';
 import { ConsoleBar, FooterRail } from './ui';
 import { ChatCol } from './chat-col';
 import { Stage } from './stage';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { WorkflowLog } from './workflow-log';
 import { SwapDialog } from './swap-dialog';
 import { SendDialog } from './send-dialog';
