@@ -153,3 +153,25 @@ The legacy shared-secret path trusts `body.tenantId` by design (internal channel
 - Override: `SKIP_MIGRATION_CHECK=1 git commit` (document why in the commit message).
 
 Prisma on Postgres does **not** wrap migrations in a transaction by default, so isolated `ALTER TYPE ADD VALUE` statements are safe. The lint protects against the combined-pattern footgun for future migrations.
+
+## x402 edge hardening — scopes, signing, envelopes
+
+`apps/app/app/api/agent/dispatch/route.ts` runs three controls on every turn, all shared via `@sendero/auth/dispatch-auth` so the edge worker can adopt them later:
+
+- **Scopes**: `ResolvedApiKey.scopes` (populated in `apps/app/lib/api-key-auth.ts`) filters the tool registry via `filterToolsByScopes()` **before** the LLM sees it. Sandbox keys default to `['*']`; user-minted production keys default to the read-mostly `DEFAULT_PROD_SCOPES` stamped by the Clerk `apiKey.created` webhook into `tenant.metadata.apiKeyScopes[keyId]`.
+- **Signing** (privileged only): `scopesRequireSignature()` triggers when the key has `settlement`, `treasury`, or `*`. Headers: `x-sendero-ts` + `x-sendero-nonce` + `x-sendero-sig = v1=<hex>`. HMAC key is `sha256(bearer)`. Upstash `SETNX EX 120s` dedupes nonces. Read-mostly scopes skip signing entirely — the hot path stays sub-second.
+- **Response envelopes**: every dispatch reply carries `x-sendero-trace-id`, `x-sendero-meter-id`, `x-sendero-ts`, `x-sendero-sig` via `buildResponseHeaders()`. Customers verify on reception to detect replay of cached responses as paid.
+
+Priority order when you add tools: update `toolToScope()` in `packages/auth/src/dispatch-auth.ts` (keeps OpenAPI categorizer in sync) and, if the tool moves USDC or reads PII, add it to `PRIVILEGED_TOOLS`. The docs page at `/docs/security` (source: `apps/docs/content/docs/security.mdx`) is the public recipe for customers.
+
+## OpenAPI + agent DX
+
+The Sendero tool surface ships as a single OpenAPI 3.1 doc generated from the canonical `toolList`:
+
+- Spec: `POST /api/openapi.json` → route at `apps/app/app/api/openapi.json/route.ts` → generator at `packages/tools/src/openapi.ts` → served as `application/json` with CORS.
+- Interactive viewer: `/api-viewer` in `apps/docs` renders `@scalar/api-reference-react` against the spec. It lives outside the Fumadocs shell because Scalar takes over the page body.
+- Docs-as-markdown: any `/docs/*` URL gains a `.md` variant via `apps/docs/app/docs/[[...slug]].md/route.ts`. Serves raw MDX with frontmatter stripped. Mirrors Sherpa's "Trips LLM Friendly" pattern across the whole tree.
+- Top-nav on docs: `apps/docs/app/docs/layout.tsx` → API Reference, MCP, Get API key (deep-links to `/dashboard/settings/api-keys` — Clerk-native, no form).
+- `llms.txt` advertises every surface: `packages/llms/src/catalog.ts → buildSenderoDocsLlms` surfaces OpenAPI URL, Scalar viewer, self-serve key path, per-page `.md` pattern.
+
+When you add a new tool, the OpenAPI doc + the MCP manifest + the docs sidebar all pick it up with no extra edits — the canonical registry is the single source of truth. Don't hand-maintain separate spec files.

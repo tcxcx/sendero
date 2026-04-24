@@ -24,7 +24,7 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
 import { verifyClerkWebhook } from '@sendero/auth/webhooks';
 import { provisionTenantWallet } from '@sendero/circle';
-import { prisma } from '@sendero/database';
+import { Prisma, prisma } from '@sendero/database';
 import {
   createCustomerUser,
   createCustomerUserGroup,
@@ -416,12 +416,18 @@ async function onApiKeyCreated(data: Record<string, unknown>): Promise<void> {
 
   const tenant = await prisma.tenant.findUnique({
     where: { clerkOrgId: subject },
-    select: { id: true, billingTier: true },
+    select: { id: true, billingTier: true, metadata: true },
   });
   if (!tenant) {
     console.warn('[webhooks/clerk] apiKey.created for unknown org, no action', { subject });
     return;
   }
+
+  // Default-stamp safe scopes for every new production key.  Admins
+  // can promote individual keys later via the tenant admin UI; until
+  // then a new key is search+trip-assistance+utilities+compliance+
+  // documents only.  Settlement + treasury require an explicit opt-in.
+  await stampDefaultScopesOnKey(tenant.id, id, tenant.metadata);
 
   // Map tenant.billingTier (legacy enum) to the Clerk-billed plan tier.
   // Mirrors `resolveTenantPlan()` in api/agent/dispatch/route.ts — keep
@@ -540,5 +546,43 @@ async function revokeKey(
     console.warn('[webhooks/clerk] apiKey fail-closed revoked', { keyId, tier, reason });
   } catch (err) {
     console.error('[webhooks/clerk] apiKey fail-closed revoke failed', { keyId, reason, err });
+  }
+}
+
+/**
+ * Write DEFAULT_PROD_SCOPES into tenant.metadata.apiKeyScopes[keyId]
+ * on every new production key.  Non-destructive: merges with whatever
+ * the tenant has already set.  Read at request time by
+ * `resolveScopesForKey()` in apps/app/lib/api-key-auth.ts.
+ */
+async function stampDefaultScopesOnKey(
+  tenantId: string,
+  keyId: string,
+  currentMeta: unknown
+): Promise<void> {
+  const { DEFAULT_PROD_SCOPES } = await import('@sendero/auth/dispatch-auth');
+  const base =
+    currentMeta && typeof currentMeta === 'object' && !Array.isArray(currentMeta)
+      ? (currentMeta as Record<string, unknown>)
+      : {};
+  const existingScopes =
+    base.apiKeyScopes && typeof base.apiKeyScopes === 'object' && !Array.isArray(base.apiKeyScopes)
+      ? (base.apiKeyScopes as Record<string, unknown>)
+      : {};
+  if (existingScopes[keyId]) return; // already stamped; admins may have customized
+  try {
+    const nextMeta = {
+      ...base,
+      apiKeyScopes: {
+        ...existingScopes,
+        [keyId]: [...DEFAULT_PROD_SCOPES],
+      },
+    };
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { metadata: nextMeta as unknown as Prisma.InputJsonValue },
+    });
+  } catch (err) {
+    console.warn('[webhooks/clerk] failed to stamp default scopes on key', { keyId, err });
   }
 }

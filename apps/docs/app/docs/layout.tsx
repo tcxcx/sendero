@@ -1,10 +1,41 @@
 import type { ReactNode } from 'react';
 
 import { buildLocaleApiHrefs, SenderoLanguageSelector } from '@sendero/ui/language-selector';
-import { DocsLayout } from 'fumadocs-ui/layouts/docs';
+import { DocsLayout, type LinkItemType } from 'fumadocs-ui/layouts/docs';
+import { BookOpenIcon, KeyIcon, PlugIcon } from 'lucide-react';
 
 import { getDocsRequestLocale } from '@/lib/request-locale';
 import { source } from '@/lib/source';
+
+/**
+ * Top-nav links — Stripe / Sherpa pattern, one click past their gated form.
+ *
+ *   API Reference → embedded Scalar viewer against /api/openapi.json.
+ *   MCP           → /docs/mcp-integration with /api/mcp config snippets.
+ *   Get API key   → deep link to the Clerk-native API-key UI inside the
+ *                   app. No form, no waiting, no sales call.
+ */
+const TOP_NAV_LINKS: LinkItemType[] = [
+  {
+    type: 'main',
+    text: 'API Reference',
+    url: '/docs/api-reference',
+    icon: <BookOpenIcon className="size-3.5" aria-hidden="true" />,
+  },
+  {
+    type: 'main',
+    text: 'MCP',
+    url: '/docs/mcp-integration',
+    icon: <PlugIcon className="size-3.5" aria-hidden="true" />,
+  },
+  {
+    type: 'main',
+    text: 'Get API key',
+    url: 'https://www.sendero.travel/dashboard/settings/api-keys',
+    external: true,
+    icon: <KeyIcon className="size-3.5" aria-hidden="true" />,
+  },
+];
 
 export default async function Layout({ children }: { children: ReactNode }) {
   const locale = await getDocsRequestLocale();
@@ -12,6 +43,7 @@ export default async function Layout({ children }: { children: ReactNode }) {
   return (
     <DocsLayout
       tree={source.pageTree}
+      links={TOP_NAV_LINKS}
       nav={{
         title: (
           <span

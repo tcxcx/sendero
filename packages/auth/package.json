@@ -15,6 +15,7 @@
     "./store": "./src/store.ts",
     "./types": "./src/types.ts",
     "./claims": "./src/claims.ts",
+    "./dispatch-auth": "./src/dispatch-auth.ts",
     "./roles": "./src/roles.ts",
     "./webhooks": "./src/webhooks.ts",
     "./proxy": "./src/proxy.ts",

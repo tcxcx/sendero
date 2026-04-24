@@ -817,6 +817,18 @@ export function buildSenderoDocsLlms(options: SurfaceOptions = {}): LlmsTxtConfi
         heading: 'Canonical Agent Endpoints',
         items: [
           {
+            label: 'OpenAPI 3.1 spec',
+            href: absoluteUrl(o.app, '/api/openapi.json'),
+            description:
+              'Machine-readable description of every tool — generated from the canonical registry in @sendero/tools, so drift between code and docs is impossible. Feed this to Scalar / Redoc / Postman / your OpenAPI client.',
+          },
+          {
+            label: 'Scalar API viewer',
+            href: absoluteUrl(o.docs, '/api-viewer'),
+            description:
+              'Interactive HTML viewer over the OpenAPI spec. Try-it-out against sandbox keys.',
+          },
+          {
             label: 'Edge MCP',
             href: absoluteUrl(o.edge, '/mcp'),
             description: 'Primary non-UI MCP endpoint for agent hosts.',
@@ -830,6 +842,18 @@ export function buildSenderoDocsLlms(options: SurfaceOptions = {}): LlmsTxtConfi
             label: 'Paid HTTP tools',
             href: absoluteUrl(o.edge, '/tools'),
             description: 'x402-gated direct HTTP tool catalog for hosts that do not speak MCP.',
+          },
+          {
+            label: 'Self-serve API key',
+            href: absoluteUrl(o.app, '/dashboard/settings/api-keys'),
+            description:
+              'Clerk-native API-key issuance. One click, no form, no sales call. Sandbox keys are auto-issued on tenant creation and do not move real USDC.',
+          },
+          {
+            label: 'Per-page LLM markdown',
+            href: absoluteUrl(o.docs, '/docs/api-reference.md'),
+            description:
+              'Append `.md` to any docs URL for a plaintext-markdown version — LLM-friendly, no HTML chrome. Mirrors Sherpa\'s "Trips LLM Friendly" pattern across every page.',
           },
         ],
       },

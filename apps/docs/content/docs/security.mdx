@@ -1,0 +1,153 @@
+---
+title: Edge security — scopes, signing, envelopes
+description: How Sendero hardens the x402 dispatch surface without sacrificing DX or hot-path latency. Scoped API keys, HMAC-signed requests on privileged tools, signed response envelopes, Redis nonce dedup.
+---
+
+An x402 ecosystem monetizes every leaked key adversarially. A stolen bearer that fires 10 000 cheap searches before we revoke is still real money. A stolen bearer that moves USDC is catastrophic.
+
+Sendero's answer is **defence in depth without latency tax** — three layers, each ships in isolation, none add cost to the hot path:
+
+- **Scoped API keys** — each key carries a capability set. A compromised search key can never move funds.
+- **HMAC-signed requests on privileged tools only** — settlement + treasury + vault-backed reads require a signature; search/quote/plan stay bearer-only.
+- **Signed response envelopes** — every reply carries a trace id + meter id + HMAC signature, so replay caches can't lie about what was paid.
+
+## Scoped API keys
+
+Every Sendero key carries a scope set. Cross-family access requires an explicit grant.
+
+| Scope | What it unlocks |
+| --- | --- |
+| `search` | `search_flights`, `search_hotels`, `find_airports_nearby` |
+| `bookings` | `book_flight`, `book_stay`, `hold_*` |
+| `settlement` | `reserve_booking`, `commit_booking`, `settle_booking`, `settle_split`, `prefund_trip`, `cancel_*` |
+| `treasury` | `check_treasury`, `swap_tokens`, `send_tokens`, `bridge_to_arc`, `gateway_*` |
+| `documents` | `scan_document`, `generate_booking_invoice` |
+| `compliance` | `check_travel_eligibility` |
+| `trip_assistance` | airport playbooks, weather, safety, restaurant route cards, timezone briefs |
+| `utilities` | `quote_fx`, `rate_agent`, `faucet_drip` |
+| `*` | all scopes (sandbox keys default to this) |
+
+**Defaults on key mint:**
+
+- **Sandbox** (auto-issued on tenant creation): `['*']` — operators are trusted.
+- **Production** (minted via `/dashboard/settings/api-keys`): `['search', 'trip_assistance', 'utilities', 'compliance', 'documents']` — read-mostly. No settlement, no treasury.
+
+Tenant admins promote keys via `tenant.metadata.apiKeyScopes[keyId]`. A frontend that only needs to show flight quotes gets a search-scoped key that *cannot* drain funds even if stolen from a browser. The LLM at dispatch time never even sees tools outside the scope — `filterToolsByScopes()` prunes the registry before the prompt is built, so prompt injection can't trick it into calling a tool it doesn't have.
+
+Source: [`packages/auth/src/dispatch-auth.ts`](https://github.com/tcxcx/sendero/blob/main/packages/auth/src/dispatch-auth.ts) · [`apps/app/lib/dispatch-scopes.ts`](https://github.com/tcxcx/sendero/blob/main/apps/app/lib/dispatch-scopes.ts)
+
+## HMAC request signing — privileged tools only
+
+Any key with `settlement`, `treasury`, or `*` in its scopes must sign its requests with an HMAC derived from the bearer token. Signing is **not** required for read-mostly scopes, so the hot path (search, quote, compliance verdicts) keeps its sub-second latency budget.
+
+### Headers the server expects
+
+```
+Authorization:     Bearer ak_live_…
+x-sendero-ts:      1714060800                 # unix seconds
+x-sendero-nonce:   01HKXABCDEFGHIJ            # 8-128 URL-safe chars, unique
+x-sendero-sig:     v1=<64-char hex>
+```
+
+### The canonical string to sign
+
+```
+v1
+<ts>
+<nonce>
+<METHOD>
+<PATH>
+<tool_name or 'dispatch_turn'>
+sha256:<hex-of-request-body>
+```
+
+Lines are literal `\n`. No trailing newline.
+
+### The signing recipe (Node)
+
+```ts
+import { createHash, createHmac } from 'node:crypto';
+
+const bearer = process.env.SENDERO_API_KEY!; // ak_live_…
+const body = JSON.stringify({ tenantId, userId, channel: 'web', text: '…' });
+const ts = Math.floor(Date.now() / 1000);
+const nonce = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+
+const canonical = [
+  'v1',
+  String(ts),
+  nonce,
+  'POST',
+  '/api/agent/dispatch',
+  'dispatch_turn',
+  `sha256:${createHash('sha256').update(body).digest('hex')}`,
+].join('\n');
+
+const hmacKey = createHash('sha256').update(bearer).digest();
+const sig = 'v1=' + createHmac('sha256', hmacKey).update(canonical).digest('hex');
+
+await fetch('https://www.sendero.travel/api/agent/dispatch', {
+  method: 'POST',
+  headers: {
+    'authorization': `Bearer ${bearer}`,
+    'content-type':  'application/json',
+    'x-sendero-ts':    String(ts),
+    'x-sendero-nonce': nonce,
+    'x-sendero-sig':   sig,
+  },
+  body,
+});
+```
+
+### What the server checks
+
+1. Timestamp within ±60 seconds of wall clock.
+2. Nonce hasn't been used in the last 120 seconds (Upstash Redis `SETNX`).
+3. Constant-time HMAC comparison on the canonical string.
+
+All three use the bearer token itself as the shared secret — **no extra key distribution, no rotation dance**. Lose the bearer, lose signing, lose everything anyway — no regression.
+
+Source: [`packages/auth/src/dispatch-auth.ts`](https://github.com/tcxcx/sendero/blob/main/packages/auth/src/dispatch-auth.ts) · [`apps/app/lib/dispatch-signing.ts`](https://github.com/tcxcx/sendero/blob/main/apps/app/lib/dispatch-signing.ts)
+
+## Signed response envelopes — every reply
+
+Every `/api/agent/dispatch` response carries four headers:
+
+```
+x-sendero-trace-id:  trace_01HKX4A2BC…
+x-sendero-meter-id:  chat_reply | search_flights | …
+x-sendero-ts:        1714060801
+x-sendero-sig:       v1=<hex>
+```
+
+The signature covers `v1 \n traceId \n meterId \n ts \n sha256:<body>` with the same bearer-derived HMAC key the customer has. Verify on reception to detect:
+
+- **Response replays** — an attacker caches a successful search result and hands it to users without paying. The `meterId` in the envelope is tied to a `MeterEvent` row on our side; a reused envelope is flagged at audit.
+- **In-flight tampering** — a compromised proxy swaps out a booking total. Signature verification fails; your SDK throws.
+
+The `x-sendero-trace-id` is the one header every support ticket should quote. We key our audit log on it.
+
+Source: [`buildResponseHeaders()` + `signResponseEnvelope()`](https://github.com/tcxcx/sendero/blob/main/packages/auth/src/dispatch-auth.ts)
+
+## Performance promise
+
+| Path | Auth | Cost over bearer |
+| --- | --- | --- |
+| Discovery (`/api/openapi.json`, `/llms.txt`, `/docs/*`) | None | — |
+| Hot path (`search`, `compliance`, `trip_assistance`, `utilities`) | Bearer + scope check | ~0 (in-process) |
+| Privileged (`settlement`, `treasury`, `*`) | Bearer + HMAC + nonce | ~200µs sig verify + one Redis `SETNX` |
+| All dispatch responses | — | Trace id + HMAC sign ~50µs |
+
+We never hit Clerk on the hot path — the key-verify result is cached in Upstash for 60 s ([source](https://github.com/tcxcx/sendero/blob/main/apps/app/lib/api-key-auth.ts)). Scope check is a `Set.has`. Signature verification happens at the Vercel function boundary, before anything downstream allocates. The envelope signing piggybacks the same HMAC key we already computed.
+
+## Failure modes
+
+- **No bearer on a signed-scope key** → `401 signature_required`.
+- **Timestamp out of window** → `401 signature_required` with `reason: stale_timestamp`.
+- **Nonce replayed** → `401 signature_required` with `reason: bad_signature`.
+- **Scope missing** → the tool simply isn't in the registry the LLM sees. No surprise 403s mid-turn.
+- **Redis outage on a signed path** → fail-closed (we refuse the call). On the bearer-only path we fall through to live Clerk verify.
+
+## Rollout
+
+Existing integrations keep working with no changes. Scope defaults are read-mostly safe; privileged scopes require the tenant admin to opt in, and only once they opt in does signing become required.
