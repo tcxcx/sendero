@@ -77,6 +77,7 @@
         "@sendero/notifications": "workspace:*",
         "@sendero/ocr": "workspace:*",
         "@sendero/seo": "workspace:*",
+        "@sendero/sherpa": "workspace:*",
         "@sendero/slack": "workspace:*",
         "@sendero/tools": "workspace:*",
         "@sendero/ui": "workspace:*",
@@ -541,6 +542,13 @@
         "zod": "^3.25.0",
       },
     },
+    "packages/sendero-sherpa": {
+      "name": "@sendero/sherpa",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
     "packages/sendero-vault": {
       "name": "@sendero/vault",
       "version": "0.1.0",
@@ -553,6 +561,7 @@
       "peerDependencies": {
         "@sendero/database": "*",
         "@sendero/ocr": "*",
+        "@sendero/sherpa": "*",
       },
     },
     "packages/seo": {
@@ -1443,6 +1452,8 @@
     "@sendero/ocr": ["@sendero/ocr@workspace:packages/sendero-ocr"],
 
     "@sendero/seo": ["@sendero/seo@workspace:packages/seo"],
+
+    "@sendero/sherpa": ["@sendero/sherpa@workspace:packages/sendero-sherpa"],
 
     "@sendero/slack": ["@sendero/slack@workspace:packages/slack"],
 

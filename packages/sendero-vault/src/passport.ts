@@ -285,6 +285,89 @@ export async function decryptVaultPayload(
 }
 
 /**
+ * Ticketing record — the controlled PII read path.
+ *
+ * Airline ticketing (Duffel create order), TSA Secure Flight, and
+ * visa-ancillary submissions all need the traveler's full legal name,
+ * DOB, and passport number.  These live inside `ciphertext`; they are
+ * NOT in any plaintext column and they are NEVER exposed to the LLM,
+ * the agent tool surface, or the workflow scratchpad.
+ *
+ * This function decrypts ONLY the ticketing-critical fields and
+ * writes a `ticketing_read` access-log row distinct from `decrypt` so
+ * compliance can audit "passport# left the vault for legitimate
+ * booking reasons" separately from "owner viewed their own data".
+ *
+ * Callers:
+ *   - book_flight workflow step (Duffel passenger builder)
+ *   - visa ancillary submission (Sherpa eVisa apply)
+ *
+ * Not for:
+ *   - the agent tool surface (use readVaultSignals instead)
+ *   - chat / inbox / any UI surface outside /dashboard/passport
+ */
+export interface VaultTicketingRecord {
+  fullName: string;
+  dateOfBirth: string;
+  passportNumber: string;
+  nationality: string;
+  expiresOn: string;
+  issuingState: string;
+  documentVariant: PassportVaultVariant;
+}
+
+export async function readVaultTicketingRecord(
+  prisma: PrismaClient,
+  args: { vaultId: string; tenantId: string; actor: VaultActor }
+): Promise<VaultTicketingRecord | null> {
+  const payload = await decryptVaultPayload(prisma, {
+    vaultId: args.vaultId,
+    tenantId: args.tenantId,
+    actor: {
+      ...args.actor,
+      source: `ticketing:${args.actor.source}`,
+    },
+  });
+  if (!payload) return null;
+
+  // Write a separate `ticketing_read` audit row so compliance can
+  // distinguish ticketing decrypts from owner-self-view decrypts.
+  await writeAccessLog(prisma, {
+    vaultId: args.vaultId,
+    action: 'ticketing_read',
+    actor: args.actor,
+  });
+
+  const extraction = (payload.extraction ?? {}) as Record<string, unknown>;
+  const fullName = [extraction.given_names, extraction.surname].filter(Boolean).join(' ').trim();
+  const variant = await prisma.passportVault.findUnique({
+    where: { id: args.vaultId },
+    select: { documentVariant: true },
+  });
+  return {
+    fullName: fullName || '',
+    dateOfBirth: typeof extraction.date_of_birth === 'string' ? extraction.date_of_birth : '',
+    passportNumber:
+      typeof extraction.document_number === 'string' ? (extraction.document_number as string) : '',
+    nationality:
+      typeof extraction.nationality === 'string' ? (extraction.nationality as string) : '',
+    expiresOn:
+      typeof extraction.date_of_expiry === 'string'
+        ? (extraction.date_of_expiry as string)
+        : typeof extraction.expiration_date === 'string'
+          ? (extraction.expiration_date as string)
+          : '',
+    issuingState:
+      typeof extraction.issuing_country === 'string'
+        ? (extraction.issuing_country as string)
+        : typeof extraction.issuing_state === 'string'
+          ? (extraction.issuing_state as string)
+          : '',
+    documentVariant: (variant?.documentVariant ?? 'passport') as PassportVaultVariant,
+  };
+}
+
+/**
  * Mark a vault row revoked.  We do NOT delete — we keep the row so the
  * access log remains joinable, but set revokedAt and zero the
  * ciphertext bytea.
@@ -307,11 +390,13 @@ export async function revokeVault(
   });
 }
 
+type VaultAction = 'upsert' | 'signals_read' | 'decrypt' | 'revoke' | 'verify' | 'ticketing_read';
+
 async function writeAccessLog(
   prisma: PrismaClient,
   args: {
     vaultId: string;
-    action: 'upsert' | 'signals_read' | 'decrypt' | 'revoke' | 'verify';
+    action: VaultAction;
     actor: VaultActor;
   }
 ): Promise<void> {

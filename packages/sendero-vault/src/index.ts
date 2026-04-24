@@ -28,13 +28,18 @@ export type {
   PassportVaultVariant,
   UpsertVaultInput,
   VaultActor,
+  VaultTicketingRecord,
 } from './passport';
 export {
   decryptVaultPayload,
   readVaultSignals,
+  readVaultTicketingRecord,
   revokeVault,
   upsertPassportVault,
 } from './passport';
+
+export type { EligibilityRunSummary, StartEligibilityRunInput } from './eligibility-run';
+export { executeEligibilityRun, startEligibilityRun } from './eligibility-run';
 
 export type { ExtractedPassport, ExtractFromMrzInput } from './extract';
 export { extractPassportFromMrz } from './extract';

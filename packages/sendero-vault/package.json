@@ -13,7 +13,8 @@
   },
   "peerDependencies": {
     "@sendero/database": "*",
-    "@sendero/ocr": "*"
+    "@sendero/ocr": "*",
+    "@sendero/sherpa": "*"
   },
   "dependencies": {
     "mrz-fast": "^1.0.9"
