@@ -119,9 +119,13 @@ export function TripThreadComposer({
         : `Reply is delivered to the traveler on ${CHANNEL_LABELS[channel]} · ${locale}.`;
 
   return (
-    // Borderless composer card: raised surface with a soft shadow
-    // (DESIGN.md §19, Composer). Focus raises shadow via :focus-within.
-    <div className="rounded-[var(--radius-md)] bg-[color:var(--surface-raised)] shadow-[var(--shadow-sm)] focus-within:shadow-[var(--shadow-md)] transition-[box-shadow] duration-[240ms]">
+    // Composer card: raised surface with soft shadow + the one focus
+    // ring in the app — a 1px vermillion-at-40% border fades in on
+    // focus-within, paired with a shadow lift (DESIGN.md §9, §13.8).
+    <div
+      className="composer-card rounded-[var(--radius-md)] bg-[color:var(--surface-raised)] shadow-[var(--shadow-sm)] focus-within:shadow-[var(--shadow-md)] transition-[box-shadow,border-color] duration-[160ms] ease-[cubic-bezier(0.23,1,0.32,1)]"
+      style={{ border: '1px solid transparent' }}
+    >
       <div className="flex flex-wrap items-center gap-2 px-4 py-2">
         <ModeToggle mode={mode} onChange={setMode} />
         <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />

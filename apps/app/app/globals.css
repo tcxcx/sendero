@@ -236,6 +236,15 @@ body::before {
 }
 
 /* =====================================================
+   Composer focus ring — the ONE focus-border in the app.
+   1px vermillion at 40% opacity, fades in over 160ms paired
+   with a shadow lift (DESIGN.md §9, §13.8).
+   ===================================================== */
+.composer-card:focus-within {
+  border-color: color-mix(in oklab, var(--ink) 40%, transparent);
+}
+
+/* =====================================================
    Emil typography defaults (DESIGN.md §16):
    tabular-nums on data, currency sizing, focus-visible.
    ===================================================== */
