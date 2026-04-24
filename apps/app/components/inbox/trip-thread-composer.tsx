@@ -251,6 +251,8 @@ export function TripThreadComposer({
         onEnter={submit}
         rewrite={rewrite}
         context={rewriteContext}
+        ariaLabel={composerAriaLabel(mode, isInternal, channel, locale)}
+        testId="trip-thread-composer-input"
         footerSlot={
           mode === 'human' && !isInternal ? (
             <PolishChip
@@ -282,6 +284,8 @@ export function TripThreadComposer({
           type="button"
           onClick={submit}
           disabled={disabled || !text.trim()}
+          aria-label={primaryLabel}
+          data-testid="trip-thread-composer-submit"
           className="composer-send inline-flex items-center gap-1 bg-[color:var(--ink)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {primaryLabel}
@@ -724,6 +728,17 @@ function composerPlaceholder(
   }
   if (isInternal) return 'Internal note — operators and agent only…';
   return `Reply to traveler via ${CHANNEL_LABELS[channel]} (${locale})…`;
+}
+
+function composerAriaLabel(
+  mode: ComposerMode,
+  isInternal: boolean,
+  channel: ChannelKindSlug,
+  locale: string
+) {
+  if (mode === 'agent') return 'Message to Sendero agent';
+  if (isInternal) return 'Internal note';
+  return `Reply to traveler via ${CHANNEL_LABELS[channel]} in ${locale}`;
 }
 
 const CHANNEL_LABELS: Record<ChannelKindSlug, string> = {

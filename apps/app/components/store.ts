@@ -28,6 +28,13 @@ export interface FlightOffer {
   stops: number;
   cabinClass: string;
   expiresAt: string;
+  /**
+   * Whether the offer can be held without instant payment. When false, the
+   * "Hold seat" CTA is replaced with an instant-only label so users don't
+   * trigger a guaranteed airline-side rejection.
+   */
+  holdable?: boolean;
+  paymentRequiredBy?: string | null;
 }
 
 export interface HotelOffer {

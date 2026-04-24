@@ -289,20 +289,37 @@ function OffersCard({
                   </span>
                   <span className="token">{offer.currency}</span>
                 </div>
-                <button
-                  className={`btn ${isSelected ? 'primary' : ''}`}
-                  disabled={disabled}
-                  onClick={() =>
-                    holdFlight(offer.id, {
-                      name: traveler.name,
-                      email: traveler.email,
-                      phone: userAuth?.phone,
-                    })
-                  }
-                  style={{ padding: '6px 12px', fontSize: 10 }}
-                >
-                  {disabled ? '…' : 'Hold seat →'}
-                </button>
+                {offer.holdable === false ? (
+                  <span
+                    title="Airline requires instant payment for this fare. Hold the seat is not available; book to commit."
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: 10,
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-dim)',
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    Instant only
+                  </span>
+                ) : (
+                  <button
+                    className={`btn ${isSelected ? 'primary' : ''}`}
+                    disabled={disabled}
+                    onClick={() =>
+                      holdFlight(offer.id, {
+                        name: traveler.name,
+                        email: traveler.email,
+                        phone: userAuth?.phone,
+                      })
+                    }
+                    style={{ padding: '6px 12px', fontSize: 10 }}
+                  >
+                    {disabled ? '…' : 'Hold seat →'}
+                  </button>
+                )}
               </div>
             </div>
           );

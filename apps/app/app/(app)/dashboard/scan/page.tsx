@@ -8,9 +8,11 @@
  * Zod-backed structured output, and this page renders the parsed
  * fields in real time.
  *
- * The judging flow: drag → drop → sub-second extraction → labelled
- * fields → a "save as expense" CTA. All fields are editable; what
- * Gemini returns is a starting point, not a verdict.
+ * Flow: drag → drop → extract → labelled fields → a "save as expense"
+ * CTA. Wall-clock latency is dominated by the model call and ranges
+ * from ~1s to several seconds depending on document length and the
+ * cold-path provider; we show the measured latency on the result so
+ * the user always sees ground truth.
  */
 
 import { useRef, useState } from 'react';
@@ -229,8 +231,10 @@ export default function ScanPage() {
             thousand/decimal separators, and root domains.
           </li>
           <li>
-            <strong>5.</strong> Typed object returns. Latency is usually 400-900ms on Flash for a
-            one-page receipt.
+            <strong>5.</strong> Typed object returns. End-to-end wall time depends on document
+            length and the chosen provider — usually 1–3s for a one-page receipt; multi-page PDFs
+            and cold-path Vertex requests can take longer. The measured latency shows in the result
+            above.
           </li>
         </ol>
       </section>
