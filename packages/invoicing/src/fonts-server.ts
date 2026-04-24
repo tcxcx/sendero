@@ -9,7 +9,9 @@ const FONT_BASE =
   'https://PLACEHOLDER-RUN-DEPLOY-FONTS.blob.vercel-storage.com/fonts/invoice';
 
 function localFallback(name: string): string {
-  const here = dirname(fileURLToPath(import.meta.url));
+  const url = import.meta.url;
+  if (!url) return `./assets/fonts/${name}`;
+  const here = dirname(fileURLToPath(url));
   return join(here, 'assets', 'fonts', name);
 }
 
