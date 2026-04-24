@@ -2474,26 +2474,43 @@ hr.rule {
 
 /* =====================================================
    Tooltip — brand variants (WhatsApp + Slack).
-   Same geometry as the ink variant but swapped for each brand's
-   palette. Used on the dashboard quick-action pills so the hover
-   popover reads as co-branded. Per the brand sources:
-     - WhatsApp: Mountain Meadow #25D366 fill, white text, subtle
-       Snow Flurry rim. Solid (no gradient) to match the logo's
-       phone-circle fill.
-     - Slack: Honey Flower → deep-aubergine gradient fill, white
-       text, Fuel Yellow bottom hairline (one of the four petal
-       colors kept as a single accent line). The logo's four-color
-       petals stay in the pill trigger — the tooltip only carries
-       the brand's dominant aubergine.
+   Same topography geometry as the ink variant: dim brand-dark fill
+   + brand-bright contour lines masked through topography.svg. The
+   logo stays four-color (Slack) / green-phone (WhatsApp) on the
+   trigger chip; the tooltip re-uses the brand's dim/bright pair so
+   the hover popover reads as co-branded without screaming.
+     - WhatsApp: dim Bunker-green fill, Mountain Meadow topo lines.
+     - Slack:    dim Fuel-Yellow fill, Honey Flower topo lines,
+                 Fuel-Yellow hairline (one accent line as kicker).
    ===================================================== */
 [data-radix-popper-content-wrapper] [data-variant="whatsapp"] {
   position: relative;
-  background-color: #25d366 !important;
+  isolation: isolate;
+  /* Dim Bunker-green — mixes Mountain Meadow into Bunker so text
+     reads white and the bright lines pop. */
+  background-color: color-mix(in oklab, #25d366 18%, #111b21) !important;
   color: #fff !important;
-  border-color: #1fb358 !important;
+  border-color: color-mix(in oklab, #25d366 30%, #111b21) !important;
   box-shadow:
-    0 1px 2px rgba(17, 27, 33, 0.12),
-    0 12px 28px -12px rgba(37, 211, 102, 0.45) !important;
+    0 1px 2px rgba(17, 27, 33, 0.15),
+    0 12px 28px -12px rgba(17, 27, 33, 0.35) !important;
+  overflow: hidden;
+}
+[data-radix-popper-content-wrapper] [data-variant="whatsapp"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Mountain Meadow lines, same topography mask as the ink variant. */
+  background-color: #25d366;
+  -webkit-mask-image: url("/patterns/topography.svg");
+  mask-image: url("/patterns/topography.svg");
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 220px 220px;
+  mask-size: 220px 220px;
+  opacity: 0.55;
 }
 [data-radix-popper-content-wrapper] [data-variant="whatsapp"] > * {
   position: relative;
@@ -2502,14 +2519,33 @@ hr.rule {
 
 [data-radix-popper-content-wrapper] [data-variant="slack"] {
   position: relative;
+  isolation: isolate;
+  /* Dim Fuel Yellow — mixes brand yellow into Cod Gray so purple
+     contour lines stand out and text stays readable. */
+  background-color: color-mix(in oklab, #ecb32e 22%, #1d1d1d) !important;
   color: #fff !important;
-  border-color: #4a1750 !important;
-  background-image: linear-gradient(135deg, #611f69 0%, #4a1750 100%) !important;
-  background-color: #611f69 !important;
+  border-color: color-mix(in oklab, #ecb32e 30%, #1d1d1d) !important;
   box-shadow:
-    0 1px 2px rgba(29, 29, 29, 0.14),
-    0 12px 28px -12px rgba(97, 31, 105, 0.45),
+    0 1px 2px rgba(29, 29, 29, 0.15),
+    0 12px 28px -12px rgba(29, 29, 29, 0.35),
     inset 0 -1.5px 0 0 #ecb32e !important;
+  overflow: hidden;
+}
+[data-radix-popper-content-wrapper] [data-variant="slack"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Honey Flower aubergine lines over the dim-yellow fill. */
+  background-color: #611f69;
+  -webkit-mask-image: url("/patterns/topography.svg");
+  mask-image: url("/patterns/topography.svg");
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 220px 220px;
+  mask-size: 220px 220px;
+  opacity: 0.65;
 }
 [data-radix-popper-content-wrapper] [data-variant="slack"] > * {
   position: relative;

@@ -78,8 +78,12 @@ export interface GeminiExtractArgs<TSchema extends ZodTypeAny> {
 
 export interface GeminiExtractResult<TOut> {
   data: TOut;
-  /** Which provider actually ran the extraction. */
-  provider: 'vertex' | 'google';
+  /**
+   * Which credential path actually ran the extraction.  `gateway`
+   * means the Vercel AI Gateway routed it (and we can't tell from
+   * the client which underlying provider the gateway picked).
+   */
+  provider: 'gateway' | 'vertex' | 'google';
   /** Model id used (post `geminiDirectModelId` mapping). */
   model: string;
   latencyMs: number;
@@ -107,10 +111,10 @@ export async function extractWithGemini<TSchema extends ZodTypeAny>(
   const gatewayModelId = `google/${args.model ?? 'gemini-2.5-flash'}`;
   const directModelId = geminiDirectModelId(gatewayModelId);
 
-  const picked = pickProvider(directModelId);
+  const picked = pickProvider(gatewayModelId, directModelId);
   if (!picked) {
     throw new Error(
-      'No Gemini credentials configured. Set GOOGLE_CLOUD_PROJECT (+ADC) for Vertex, or GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY for direct Gemini.'
+      'No Gemini credentials configured. Set AI_GATEWAY_API_KEY (preferred — uses Vercel AI Gateway credits), GOOGLE_CLOUD_PROJECT (+ADC) for Vertex, or GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY for direct Gemini.'
     );
   }
 
@@ -163,14 +167,39 @@ export async function extractWithGemini<TSchema extends ZodTypeAny>(
 // ─── provider selection ───────────────────────────────────────────────
 
 interface PickedProvider {
-  provider: 'vertex' | 'google';
+  provider: 'gateway' | 'vertex' | 'google';
+  /**
+   * Gateway path passes a bare `google/<model>` string — AI SDK v6
+   * routes strings through `AI_GATEWAY_API_KEY` (or
+   * `VERCEL_OIDC_TOKEN` on Vercel) automatically.  Vertex / Google
+   * direct paths pass a fully-constructed LanguageModel instance.
+   */
   model: LanguageModel;
 }
 
-function pickProvider(modelId: string): PickedProvider | null {
-  const vertex = tryVertex(modelId);
+/**
+ * Priority order:
+ *   1. Vercel AI Gateway (when `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN`).
+ *      Consolidates billing, no per-provider key management, and
+ *      falls over gracefully between gateway-side providers.
+ *   2. Vertex direct (when `GOOGLE_CLOUD_PROJECT` + ADC).
+ *      Fronts Gemini against a real GCP project — avoids the
+ *      AI Studio free-tier quota ceiling.
+ *   3. AI Studio direct (when `GOOGLE_GENERATIVE_AI_API_KEY` / `GEMINI_API_KEY`).
+ */
+function pickProvider(gatewayModelId: string, directModelId: string): PickedProvider | null {
+  const gateway = tryGateway(gatewayModelId);
+  if (gateway) return gateway;
+  const vertex = tryVertex(directModelId);
   if (vertex) return vertex;
-  return tryGoogle(modelId);
+  return tryGoogle(directModelId);
+}
+
+function tryGateway(gatewayModelId: string): PickedProvider | null {
+  if (process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN) {
+    return { provider: 'gateway', model: gatewayModelId };
+  }
+  return null;
 }
 
 function tryVertex(modelId: string): PickedProvider | null {

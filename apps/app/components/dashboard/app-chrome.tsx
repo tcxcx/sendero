@@ -5,10 +5,12 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { cn } from '@sendero/ui/cn';
+import { TooltipProvider } from '@sendero/ui/tooltip';
 
 import { AppHeader } from '@/components/app-shell/app-header';
 import { AppShellFooter } from '@/components/app-shell/app-shell-footer';
 import { DashboardBreadcrumb } from '@/components/app-shell/dashboard-breadcrumb';
+import { DashboardPageHeader } from '@/components/app-shell/dashboard-page-header';
 import { AppSidebar } from '@/components/app-sidebar';
 import { BridgeDialog } from '@/components/bridge-dialog';
 import { ClerkWalletBridge } from '@/components/clerk-wallet-bridge';
@@ -55,6 +57,7 @@ export function AppChrome({
   return (
     <div className="app-shell-root flex h-svh w-full flex-col">
       <ClerkWalletBridge />
+      <TooltipProvider delayDuration={120} skipDelayDuration={300}>
       <SidebarProvider className="min-h-0 flex-1">
         <AppSidebar />
         {/* DESIGN.md §12 — the main content surface floats as a single
@@ -70,6 +73,7 @@ export function AppChrome({
             startSlot={<SidebarTrigger className="-ml-1 shrink-0" aria-label="Toggle sidebar" />}
           />
           <DashboardBreadcrumb />
+          <DashboardPageHeader />
           <main
             className={cn('app-shell-main min-h-0 flex-1 overflow-auto my-2', mainPad, mainFlex)}
           >
@@ -77,6 +81,7 @@ export function AppChrome({
           </main>
         </SidebarInset>
       </SidebarProvider>
+      </TooltipProvider>
       <AppShellFooter />
       <SwapDialog />
       <SendDialog />

@@ -28,23 +28,6 @@ export function Stage() {
     <div className="col" style={{ background: 'var(--bg)' }}>
       <div className="col-body">
         <div className="stage">
-          <div className="stage-head">
-            <div>
-              <h1 className="stage-title">
-                {holdOrder
-                  ? `Booking ${holdOrder.bookingReference}`
-                  : search
-                    ? `${search.origin} → ${search.destination}`
-                    : 'Sendero agent console'}
-              </h1>
-              <div className="stage-sub">
-                {search
-                  ? `${search.departureDate}${search.returnDate ? ` — ${search.returnDate}` : ''} · ${search.passengers} pax`
-                  : 'Ready to book. Ask the agent, or use the search form below.'}
-              </div>
-            </div>
-          </div>
-
           <StepRail />
           <ErrorBanner />
 

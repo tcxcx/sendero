@@ -1,4 +1,3 @@
-import { PageHeader } from '@/components/app-shell/page-header';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
 import { InvoiceFilters } from '@/components/invoices/invoice-filters';
@@ -88,7 +87,6 @@ export default async function InvoicesPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title={copy.title} description={copy.description} />
       <InvoiceFilters status={status} kind={kind} period={period} />
       {invoices.length === 0 ? (
         <EmptyState title={copy.emptyTitle} description={copy.emptyDescription} />

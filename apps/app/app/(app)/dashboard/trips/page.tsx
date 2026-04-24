@@ -1,6 +1,6 @@
 import { Button } from '@sendero/ui/button';
 import Link from 'next/link';
-import { PageHeader } from '@/components/app-shell/page-header';
+import { PageActions } from '@/components/dashboard/page-actions';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
 import { PrefundSheet } from '@/components/trips/prefund-sheet/prefund-sheet';
@@ -63,15 +63,11 @@ export default async function TripsPage({
 
   return (
     <>
-      <PageHeader
-        title={copy.title}
-        description={copy.description}
-        actions={
-          <Button asChild>
-            <Link href="/dashboard/trips?sheet=new">{copy.createCta}</Link>
-          </Button>
-        }
-      />
+      <PageActions>
+        <Button asChild>
+          <Link href="/dashboard/trips?sheet=new">{copy.createCta}</Link>
+        </Button>
+      </PageActions>
       {trips.length === 0 ? (
         <EmptyState
           title={copy.emptyTitle}

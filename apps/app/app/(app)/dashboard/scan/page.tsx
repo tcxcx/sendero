@@ -17,14 +17,12 @@ import { useRef, useState } from 'react';
 
 import { Button } from '@sendero/ui/button';
 
-import { PageHeader } from '@/components/app-shell/page-header';
-
 type DocKind = 'receipt' | 'invoice' | 'boarding_pass';
 
 type ScanResponse =
   | {
       kind: DocKind;
-      provider: 'vertex' | 'google';
+      provider: 'gateway' | 'vertex' | 'google';
       model: string;
       latencyMs: number;
       data: Record<string, unknown>;
@@ -100,11 +98,6 @@ export default function ScanPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Scan document"
-        description="Extract structured fields from receipts, invoices, and boarding passes. Powered by Google Gemini 2.5 Flash + Zod schemas."
-      />
-
       <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">

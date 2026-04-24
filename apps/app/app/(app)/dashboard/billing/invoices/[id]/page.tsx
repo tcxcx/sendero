@@ -1,7 +1,7 @@
 import { auth } from '@clerk/nextjs/server';
 import { notFound } from 'next/navigation';
-import { PageHeader } from '@/components/app-shell/page-header';
 import { RetryButton } from '@/components/admin/retry-button';
+import { PageActions } from '@/components/dashboard/page-actions';
 import { DownloadPdfButton } from '@/components/invoices/download-pdf-button';
 import { InvoiceDetailView } from '@/components/invoices/invoice-detail-view';
 import { requireCurrentTenant } from '@/lib/tenant-context';
@@ -23,18 +23,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Invoice detail"
-        description="Native invoice view with secure PDF download."
-        actions={
-          <div className="flex flex-wrap items-start gap-2">
-            {canRetry ? (
-              <RetryButton kind="invoice-pdf" id={invoice.id} label="Retry PDF render" />
-            ) : null}
-            <DownloadPdfButton invoiceId={invoice.id} number={invoice.number} />
-          </div>
-        }
-      />
+      <PageActions>
+        <>
+          {canRetry ? (
+            <RetryButton kind="invoice-pdf" id={invoice.id} label="Retry PDF render" />
+          ) : null}
+          <DownloadPdfButton invoiceId={invoice.id} number={invoice.number} />
+        </>
+      </PageActions>
       <InvoiceDetailView invoice={invoice} />
     </div>
   );
