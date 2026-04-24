@@ -27,8 +27,15 @@ const DOCS_ROOT = resolve(process.cwd(), 'content/docs');
 export const runtime = 'nodejs';
 export const dynamic = 'force-static';
 
-export async function GET(_req: Request, { params }: { params: Promise<{ slug?: string[] }> }) {
-  const { slug } = await params;
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ slug?: string[] } | undefined> }
+) {
+  // `params` can resolve to `undefined` for the root `/docs.md` path
+  // during static prerender (Next 15 behavior on optional catch-all
+  // routes). Default the destructured slug accordingly.
+  const resolved = (await params) ?? {};
+  const slug = resolved.slug;
   const segments = (slug ?? []).filter(s => s !== '');
 
   // Try `<slug>.mdx` first, then `<slug>/index.mdx`, then the root `index.mdx`.
