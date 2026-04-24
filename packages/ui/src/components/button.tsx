@@ -15,6 +15,13 @@ const buttonVariants = cva(
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
+        // Sendero "topography" CTA. Outline at rest; on hover, the
+        // vermilion topography pattern fills in from the bottom-left
+        // and a "selection rectangle" wraps the label in white-on-ink.
+        // Pair the children with <span> elements named below or use the
+        // <TopographyButton> wrapper for the full markup.
+        topography:
+          'agent-console-cta border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] bg-[color:var(--bg-elev)] text-[color:var(--text)] hover:text-[color:#fff]',
       },
       size: {
         default: 'h-10 px-4 py-2',
@@ -46,4 +53,29 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = 'Button';
 
-export { Button, buttonVariants };
+/**
+ * TopographyButton — convenience wrapper that renders the two `<span>`
+ * children the `topography` variant needs (background mask layer +
+ * label that gets the selection-rectangle on hover). Use anywhere a
+ * standard `<Button variant="topography">` would go but you don't want
+ * to manage the inner spans.
+ */
+const TopographyButton = React.forwardRef<
+  HTMLButtonElement,
+  Omit<ButtonProps, 'variant'> & { children: React.ReactNode }
+>(({ className, size, asChild = false, children, ...props }, ref) => {
+  const Comp = asChild ? Slot : 'button';
+  return (
+    <Comp
+      className={cn(buttonVariants({ variant: 'topography', size, className }))}
+      ref={ref}
+      {...props}
+    >
+      <span className="agent-console-cta__bg" aria-hidden="true" />
+      <span className="agent-console-cta__label">{children}</span>
+    </Comp>
+  );
+});
+TopographyButton.displayName = 'TopographyButton';
+
+export { Button, TopographyButton, buttonVariants };

@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 import { BrandUpgradeCard } from '@/components/app-shell/brand-upgrade-card';
 import { HelpDocsCard } from '@/components/app-shell/help-docs-card';
 import { LlmsDocsCard } from '@/components/app-shell/llms-docs-card';
+import { OperatorOnboardingCard } from '@/components/app-shell/operator-onboarding-card';
 import { SocialsRow } from '@/components/app-shell/socials-row';
 
 import { OrganizationSwitcher } from '@clerk/nextjs';
@@ -74,7 +75,7 @@ const sections: NavSection[] = [
     items: [
       { title: 'WhatsApp', url: '/dashboard/channels/whatsapp', icon: MessageCircle },
       { title: 'Slack', url: '/dashboard/channels/slack', icon: Landmark },
-      { title: 'MCP / LLM tools', url: '/dashboard/integrations/mcp', icon: Sparkles },
+      { title: 'API keys / MCP', url: '/dashboard/integrations/mcp', icon: Sparkles },
     ],
   },
 ];
@@ -181,6 +182,13 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       </SidebarContent>
 
       <SidebarFooter className="p-0 gap-0">
+        <div
+          aria-hidden
+          className="h-px w-full bg-[color:color-mix(in_oklab,var(--ink)_24%,transparent)] group-data-[collapsible=icon]:hidden"
+        />
+        <SidebarMenu>
+          <OperatorOnboardingCard />
+        </SidebarMenu>
         <div
           aria-hidden
           className="h-px w-full bg-[color:color-mix(in_oklab,var(--ink)_24%,transparent)] group-data-[collapsible=icon]:hidden"

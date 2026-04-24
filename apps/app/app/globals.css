@@ -72,7 +72,7 @@
      app picks up tokens even if the shared stylesheet loads after.
      ===================================================== */
   --surface-base: #eedcc7;
-  --surface-raised: #f7efe4;
+  --surface-raised: #e8dfd2;
   --surface-floating: #fdfbf7;
   --surface-terminal: rgba(31, 42, 68, 0.97);
 
@@ -276,7 +276,12 @@ body::before {
    floating rounded-pill pane that sits ABOVE the full-width footer with
    breathing room. Override shadcn's default full-height fixed positioner
    to: inset 16px from top, 16px from left, stop above the footer with a
-   16px gap, 232px wide. z:20 so it floats above main card. */
+   16px gap, 232px wide.
+
+   z:45 sits ABOVE the command-palette backdrop (z:40) but below the
+   palette content (z:50). Keeps the sidebar crisp while the palette is
+   open — backdrop dim + blur only affects the main content area, the
+   sidebar stays the visual anchor for the search trigger. */
 .app-shell-root .group.peer[data-side] > .fixed.inset-y-0 {
   top: 16px;
   left: 16px;
@@ -284,7 +289,7 @@ body::before {
   height: auto;
   width: 200px;
   max-width: 200px;
-  z-index: 20;
+  z-index: 45;
   background: transparent;
   /* No overflow:hidden here — the inner pill's drop shadow needs room
      to escape. Content clipping happens on [data-sidebar="sidebar"]. */
@@ -2342,4 +2347,163 @@ hr.rule {
 .dlg-seg-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* =====================================================
+   Agent console CTA — topography fill that lights up to ink on hover.
+   Two stacked layers: a vermillion fill, masked by the topography SVG,
+   slides in from the bottom-left while the label color crossfades to
+   the parchment. Pure CSS, GPU-friendly transform/opacity transitions
+   so it stays buttery on a 2x trackpad hover.
+   ===================================================== */
+.agent-console-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    border-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.agent-console-cta__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--ink);
+  -webkit-mask-image: url("/patterns/topography.svg");
+  mask-image: url("/patterns/topography.svg");
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 220px 220px;
+  mask-size: 220px 220px;
+  opacity: 0;
+  transform: translate3d(-12%, 12%, 0) scale(0.96);
+  transition:
+    opacity 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.agent-console-cta__label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 0.25em;
+  margin-inline: -0.25em;
+  border-radius: 3px;
+  transition:
+    color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.agent-console-cta:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.agent-console-cta:hover .agent-console-cta__bg {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+}
+/* Hover state: full vermilion fill behind the label acts as a
+   selection rectangle hugging the glyphs; text turns parchment-white. */
+.agent-console-cta:hover .agent-console-cta__label {
+  color: #fff;
+  background-color: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink) 92%, black);
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-console-cta__bg {
+    transition: opacity 120ms linear;
+    transform: none;
+  }
+}
+
+/* Operator onboarding "egg" wrapper — narrow margin so the pill floats
+   inside the rail without touching the dividers above and below. */
+.onb-egg-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 10px 14px;
+}
+
+/* =====================================================
+   Tooltip — vermilion topography variant.
+   Same visual language as the .agent-console-cta hover state: white
+   text on a vermilion fill masked by the topography contour pattern,
+   plus a directional arrow that picks up the same fill.
+   Apply by passing `data-variant="ink"` to <TooltipContent>.
+   ===================================================== */
+[data-radix-popper-content-wrapper] [data-variant="ink"] {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--ink) !important;
+  color: #fff !important;
+  border-color: color-mix(in oklab, var(--ink) 92%, black) !important;
+  box-shadow:
+    0 1px 2px rgba(31, 42, 68, 0.1),
+    0 12px 28px -12px rgba(31, 42, 68, 0.3) !important;
+  overflow: hidden;
+}
+[data-radix-popper-content-wrapper] [data-variant="ink"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: rgba(255, 255, 255, 0.18);
+  -webkit-mask-image: url("/patterns/topography.svg");
+  mask-image: url("/patterns/topography.svg");
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 220px 220px;
+  mask-size: 220px 220px;
+  opacity: 0.75;
+}
+[data-radix-popper-content-wrapper] [data-variant="ink"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* =====================================================
+   Tooltip — brand variants (WhatsApp + Slack).
+   Same geometry as the ink variant but swapped for each brand's
+   palette. Used on the dashboard quick-action pills so the hover
+   popover reads as co-branded. Per the brand sources:
+     - WhatsApp: Mountain Meadow #25D366 fill, white text, subtle
+       Snow Flurry rim. Solid (no gradient) to match the logo's
+       phone-circle fill.
+     - Slack: Honey Flower → deep-aubergine gradient fill, white
+       text, Fuel Yellow bottom hairline (one of the four petal
+       colors kept as a single accent line). The logo's four-color
+       petals stay in the pill trigger — the tooltip only carries
+       the brand's dominant aubergine.
+   ===================================================== */
+[data-radix-popper-content-wrapper] [data-variant="whatsapp"] {
+  position: relative;
+  background-color: #25d366 !important;
+  color: #fff !important;
+  border-color: #1fb358 !important;
+  box-shadow:
+    0 1px 2px rgba(17, 27, 33, 0.12),
+    0 12px 28px -12px rgba(37, 211, 102, 0.45) !important;
+}
+[data-radix-popper-content-wrapper] [data-variant="whatsapp"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+[data-radix-popper-content-wrapper] [data-variant="slack"] {
+  position: relative;
+  color: #fff !important;
+  border-color: #4a1750 !important;
+  background-image: linear-gradient(135deg, #611f69 0%, #4a1750 100%) !important;
+  background-color: #611f69 !important;
+  box-shadow:
+    0 1px 2px rgba(29, 29, 29, 0.14),
+    0 12px 28px -12px rgba(97, 31, 105, 0.45),
+    inset 0 -1.5px 0 0 #ecb32e !important;
+}
+[data-radix-popper-content-wrapper] [data-variant="slack"] > * {
+  position: relative;
+  z-index: 1;
 }

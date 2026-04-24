@@ -377,6 +377,38 @@ function productSection(): LlmsSection {
   };
 }
 
+function computerUseShortcutsSection(): LlmsSection {
+  // Mirrors HOTKEY_MANIFEST in apps/app/components/use-app-hotkeys.ts.
+  // Kept inline (not imported) to avoid the llms package depending on
+  // app code; both lists are short and change rarely. Update both when
+  // adding shortcuts.
+  return {
+    heading: 'Computer Use Shortcuts',
+    body: 'Keyboard shortcuts the dashboard wires globally. Useful for browser-driving / computer-use agents that operate the UI without clicking. `mod` = ⌘ on Mac, Ctrl elsewhere. `g <letter>` is a Linear-style chord (press g, then the letter within 1 second). All shortcuts are suppressed while a text input is focused, except the modifier-prefixed wallet actions.',
+    items: [
+      { label: 'mod+k', description: 'Open the global command palette.' },
+      { label: 'mod+b', description: 'Toggle the sidebar (collapse / expand).' },
+      { label: 'g x', description: 'Open the active travel agent in Arcscan in a new tab.' },
+      { label: 'mod+shift+d', description: 'Open the Deposit USDC dialog.' },
+      { label: 'mod+shift+s', description: 'Open the Send dialog.' },
+      { label: 'mod+shift+w', description: 'Open the Swap dialog (USDC ↔ EURC).' },
+      { label: 'mod+shift+r', description: 'Open the Bridge to Arc dialog.' },
+      { label: 'g h', description: 'Navigate to /dashboard (home).' },
+      { label: 'g c', description: 'Navigate to /dashboard/console (agent console).' },
+      { label: 'g i', description: 'Navigate to /dashboard/inbox (trip inboxes).' },
+      { label: 'g t', description: 'Navigate to /dashboard/trips.' },
+      { label: 'g v', description: 'Navigate to /dashboard/billing/invoices.' },
+      { label: 'g p', description: 'Navigate to /dashboard/billing/plans.' },
+      { label: 'g n', description: 'Navigate to /dashboard/spend.' },
+      { label: 'g a', description: 'Navigate to /dashboard/caps.' },
+      { label: 'g w', description: 'Navigate to /dashboard/channels/whatsapp.' },
+      { label: 'g k', description: 'Navigate to /dashboard/channels/slack.' },
+      { label: 'g m', description: 'Navigate to /dashboard/integrations/mcp.' },
+      { label: 'g s', description: 'Navigate to /dashboard/settings.' },
+    ],
+  };
+}
+
 function agentGuidanceSection(): LlmsSection {
   return {
     heading: 'Agent Guidance',
@@ -580,6 +612,7 @@ export function buildSenderoAppLlms(options: SurfaceOptions = {}): LlmsTxtConfig
         items: AGENT_WORKFLOW_CATALOG,
       },
       agentGuidanceSection(),
+      computerUseShortcutsSection(),
       seoDiscoverySection(o, 'app'),
       {
         heading: 'Related Surfaces',

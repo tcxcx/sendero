@@ -480,3 +480,133 @@ Sendero should look like it: understands travel deeply, reduces chaos, guides yo
 **Sendero's product should feel like a calm map-room of floating cards on parchment, not a grid of bordered boxes.**
 
 **Hairlines are editorial rhythm; shadows are structure; vermillion is precious.**
+### 20. Sidebar Hover-Card Pattern
+
+The dashboard sidebar's footer rail uses a single composable pattern for
+high-context affordances: a `SidebarMenuButton` row that doubles as a
+`HoverCardTrigger`. On hover (right-side, portaled to escape the
+sidebar's `overflow:hidden`), a card pops out with explainer copy plus
+1–2 primary CTAs.
+
+Variants in production today:
+
+- **Brand · plan card** (`<BrandUpgradeCard />`) — the bottom logo
+  reveals the current Clerk plan and an Enterprise upgrade pitch (with
+  whitelabel / SSO / audit copy). Org `imageUrl` swaps in for the
+  Sendero mark on Enterprise.
+- **`Docs · MCP`** (`<LlmsDocsCard />`) — explains MCP + llms.txt with
+  three plain-English use cases (travel ops, corporate, builders) and
+  a Pro upgrade CTA when MCP isn't unlocked.
+- **`Help · Support`** (`<HelpDocsCard />`) — docs link + WhatsApp
+  message-us CTA + email fallback.
+- **`Setup`** (`<OperatorOnboardingCard />`) — vertical white "egg"
+  pill in the rail with a per-plan onboarding checklist. Items
+  filtered by plan tier; auto-detects org existence + member count
+  from Clerk; manual checks persist to localStorage. Hides itself
+  once the operator's tier is fully complete.
+
+The shared rules:
+1. Trigger row is full-width edge-to-edge between hairline dividers
+   (`border-b color-mix(--ink 24%)`), `py-6` for breathing room.
+2. Icons are vermilion (`text-[color:var(--ink)]`) so the rail reads
+   as a sequence of bookmarks.
+3. Card body uses 3 sections: header (icon + kicker + label + plan
+   badge), explainer paragraph, two-button CTA row (outline + filled).
+4. Cards return `null` when not applicable to the current plan, so
+   the rail trims itself per tier — never shows dead pitch surface.
+5. All hover cards portal (`HoverCardPrimitive.Portal`) and bump
+   `z-[60]` so they escape the sidebar's stacking context.
+
+### 21. Topography CTA Pattern
+
+The dashboard's `Open agent console` button uses a topography-fill
+hover treatment that mirrors the page background's contour-line
+pattern. Available as the `topography` `Button` variant
+(`packages/ui/src/components/button.tsx`) or the higher-level
+`<TopographyButton>` wrapper.
+
+Visual mechanics:
+1. **At rest**: outline button on parchment, ink-tinted border at 22%.
+2. **On hover**: a vermilion fill, masked by `topography.svg`, slides
+   in from the bottom-left and scales up over 280–420ms with
+   `cubic-bezier(0.22, 1, 0.36, 1)` (no overshoot).
+3. **Label treatment**: gets a "selection rectangle" — vermilion fill
+   + 1px inset hairline + white text — so the phrase reads like a
+   highlighted text selection.
+4. **Reduced motion**: keeps the fill but skips the slide.
+
+Use the `data-variant="ink"` `<TooltipContent>` modifier when pairing a
+tooltip with this button — same vermilion topography on a darker base
+keeps the visual chord intact.
+
+### 22. Animated Numbers In The Footer Rail
+
+Sub-second telemetry (Arc block#, gas, nano-USDC paid) needs animation
+that doesn't bounce or thrash. Two strategies, both in
+`apps/app/components/footer-numbers.tsx`:
+
+- **`<DigitTicker>`** — per-digit vertical slide. Only the digit that
+  actually changed moves; the rest stay still. `ease-out-quart` over
+  420ms. Best for monotonic counters (block#, calls).
+- **`<SmoothNumber>`** — tight spring around `<AnimatedNumber>`. Two
+  cadence presets:
+    - `fast` (mass 0.5 / stiffness 220 / damping 28) — settles in
+      ~250ms with no overshoot. Used for gas + paid USDC.
+    - `calm` (the editorial default) — used for treasury balances and
+      dashboard stat cards.
+
+Both honor `prefers-reduced-motion`: ticker snaps; spring `jump()`s.
+
+### 23. Computer-Use Shortcuts
+
+Every dashboard hotkey is registered globally in
+`apps/app/components/use-app-hotkeys.ts` (mounted in `AppChrome`) and
+mirrored as a `Computer Use Shortcuts` section in `llms.txt` so
+browser-driving agents can list and execute them deterministically.
+
+Two registers:
+- **Action chord**: `mod+shift+<letter>` opens a wallet dialog. Mod-prefixed so it never collides with text input.
+- **"Go" chord**: `g <letter>` (Linear-style, 1s window) for navigation. Suppressed inside `<input>` / `<textarea>` / `[cmdk-input]` / `contentEditable`.
+
+When adding a shortcut, update both `HOTKEY_MANIFEST` *and*
+`computerUseShortcutsSection()` in `packages/llms/src/catalog.ts`.
+
+### 24. Operator Onboarding Card Pattern
+
+The sidebar's `<OperatorOnboardingCard />` is a per-tenant B2B
+checklist surface. Three rules keep it consistent with the rest of the
+sidebar lockup:
+
+1. **Same row pattern as `Docs · MCP` / `Help · Support`** — full-width
+   `SidebarMenuButton` between hairlines, vermilion `ListChecks` icon,
+   `py-6` padding. Trailing `n/m` pill in vermilion-soft.
+2. **HoverCard reveals the full checklist.** Right-side, portaled,
+   `z-[60]`. Each item: green check-square + label + detail line.
+   Items link to their resolution route; the check toggle persists
+   manual completion to localStorage.
+3. **Per-plan filtering.** Each `ChecklistItem` has a `minPlan`. Items
+   above the org's tier are hidden. Once everything in the visible set
+   is done, the card returns `null` — the rail stays quiet for mature
+   workspaces.
+
+The card plugs in between `SidebarContent` and the footer's
+`Docs · MCP` row, with hairline dividers above and below. It is *not*
+the place for individual-traveler onboarding (that lived in the older
+`TravelerOnboardingCard` and was removed from the dashboard surface).
+
+### 25. Token Update — `--surface-raised`
+
+`--surface-raised` was retuned from `#f7efe4` to `#E8DFD2` (slightly
+warmer, more saturated parchment). Updated in both
+`apps/app/app/globals.css` and `packages/ui/src/globals.css` so all
+surface-raised cards (StatCards, PlanTeaser, recent-trips, settings
+panels) sit on the same field.
+
+### 26. Settings → API Keys Migration
+
+Per the DX journey, key minting + MCP wiring instructions are
+single-page. `/dashboard/integrations/mcp` now renders the API keys
+panel directly (imports the existing `ApiKeysPage` body), and the
+sidebar nav entry is renamed `API keys / MCP`. The standalone
+`/dashboard/settings/api-keys` route still resolves but the canonical
+operator surface is the integrations page.

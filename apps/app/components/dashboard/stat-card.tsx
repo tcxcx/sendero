@@ -34,7 +34,7 @@ export function StatCard({
   return (
     <div
       className={
-        'group flex flex-col gap-2 rounded-[var(--radius-lg)] bg-white px-5 py-4 ' +
+        'group flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] px-5 py-4 ' +
         'shadow-[var(--shadow-md)] transition-[box-shadow] duration-[240ms] ease-[cubic-bezier(0.23,1,0.32,1)] ' +
         'hover:shadow-[var(--shadow-lg)]'
       }
@@ -47,32 +47,36 @@ export function StatCard({
       </div>
       <div className="flex items-end justify-between gap-3">
         <StatValue raw={value} numeric={numeric} />
-        <Link
-          href={href}
-          className={
-            'inline-flex shrink-0 items-center gap-1 rounded-full ' +
-            'bg-[color:var(--ink)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ' +
-            'text-white shadow-[0_1px_2px_rgba(31,42,68,0.12),0_4px_12px_rgba(31,42,68,0.08),inset_0_1px_0_rgba(255,255,255,0.22)] ' +
-            'transition-[background-color,box-shadow,transform] duration-[160ms] ' +
-            'hover:bg-[color:color-mix(in_oklab,var(--ink)_92%,black)] ' +
-            'hover:shadow-[0_2px_4px_rgba(31,42,68,0.14),0_8px_18px_rgba(31,42,68,0.12),inset_0_1px_0_rgba(255,255,255,0.24)] ' +
-            'hover:-translate-y-px'
-          }
-        >
-          View
-          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" className="-mr-0.5">
-            <path
-              d="M5 12h14m0 0l-5-5m5 5l-5 5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Link>
+        <div className="flex flex-col items-end gap-1">
+          {description ? (
+            <span className="text-[11px] leading-tight text-muted-foreground">{description}</span>
+          ) : null}
+          <Link
+            href={href}
+            className={
+              'inline-flex shrink-0 items-center gap-1 rounded-full ' +
+              'bg-[color:var(--ink)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ' +
+              'text-white shadow-[0_1px_2px_rgba(31,42,68,0.12),0_4px_12px_rgba(31,42,68,0.08),inset_0_1px_0_rgba(255,255,255,0.22)] ' +
+              'transition-[background-color,box-shadow,transform] duration-[160ms] ' +
+              'hover:bg-[color:color-mix(in_oklab,var(--ink)_92%,black)] ' +
+              'hover:shadow-[0_2px_4px_rgba(31,42,68,0.14),0_8px_18px_rgba(31,42,68,0.12),inset_0_1px_0_rgba(255,255,255,0.24)] ' +
+              'hover:-translate-y-px'
+            }
+          >
+            View
+            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" className="-mr-0.5">
+              <path
+                d="M5 12h14m0 0l-5-5m5 5l-5 5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Link>
+        </div>
       </div>
-      {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
     </div>
   );
 }
