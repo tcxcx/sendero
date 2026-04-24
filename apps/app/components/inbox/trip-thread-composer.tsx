@@ -22,14 +22,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { SupportEditor } from '@sendero/ui/tiptap';
 import type { RewriteFn, RewriteRequest, RewriteResponse } from '@sendero/ui/tiptap';
+import { SupportEditor } from '@sendero/ui/tiptap';
 import {
   ArrowRightIcon,
   BotIcon,
   CheckIcon,
   EyeIcon,
   EyeOffIcon,
+  Loader2Icon,
+  PaperclipIcon,
+  ScanLineIcon,
   SendIcon,
   SparklesIcon,
   UserIcon,
@@ -69,6 +72,8 @@ export function TripThreadComposer({
   const [isInternal, setIsInternal] = useState(false);
   const [text, setText] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [scan, setScan] = useState<ScanState | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const effectiveChannel: ChannelKindSlug = isInternal ? 'internal' : channel;
   const rewriteChannel =
@@ -98,11 +103,54 @@ export function TripThreadComposer({
     [customerName, tripStatus, rewriteChannel, locale]
   );
 
+  const scanFile = useCallback(async (file: File) => {
+    setScan({ kind: 'pending', fileName: file.name });
+    const form = new FormData();
+    form.append('file', file);
+    form.append('kind', guessScanKind(file.name));
+    try {
+      const res = await fetch('/api/scan', { method: 'POST', body: form });
+      const payload = (await res.json()) as ScanApiResponse;
+      if (!res.ok || 'error' in payload) {
+        const message =
+          'message' in payload
+            ? (payload.message ?? payload.error)
+            : 'error' in payload
+              ? payload.error
+              : 'Extraction failed';
+        setScan({ kind: 'error', fileName: file.name, message: String(message) });
+        return;
+      }
+      setScan({
+        kind: 'ready',
+        fileName: file.name,
+        scanKind: payload.kind,
+        latencyMs: payload.latencyMs,
+        model: payload.model,
+        data: payload.data,
+      });
+    } catch (err) {
+      setScan({
+        kind: 'error',
+        fileName: file.name,
+        message: err instanceof Error ? err.message : 'Extraction failed',
+      });
+    }
+  }, []);
+
+  const insertScanSummary = () => {
+    if (scan?.kind !== 'ready') return;
+    const summary = summarizeScan(scan);
+    setText(prev => (prev.trim() ? `${prev.trim()}\n${summary}` : summary));
+    setScan(null);
+  };
+
   const submit = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
     void onSubmit({ text: trimmed, mode, channel: effectiveChannel, isInternal });
     setText('');
+    setScan(null);
   };
 
   const primaryLabel =
@@ -151,6 +199,31 @@ export function TripThreadComposer({
           />
           Internal
         </label>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || scan?.kind === 'pending'}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground transition-colors duration-150 ease-out hover:border-[color:var(--ink)] hover:text-[color:var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
+          title="Attach and scan a receipt, invoice, or boarding pass"
+        >
+          {scan?.kind === 'pending' ? (
+            <Loader2Icon className="size-3 animate-spin" />
+          ) : (
+            <PaperclipIcon className="size-3" />
+          )}
+          {scan?.kind === 'pending' ? 'Scanning…' : 'Scan doc'}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,image/png,image/jpeg,image/webp,image/heic,image/heif"
+          className="hidden"
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) void scanFile(f);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }}
+        />
         <span className="ml-auto inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
           <ChannelBadge channel={effectiveChannel} size="xs" />
           <span>→</span>
@@ -161,6 +234,14 @@ export function TripThreadComposer({
           <span>{locale}</span>
         </span>
       </div>
+
+      {scan ? (
+        <ScanAttachmentChip
+          state={scan}
+          onInsert={insertScanSummary}
+          onDismiss={() => setScan(null)}
+        />
+      ) : null}
 
       <SupportEditor
         value={text}
@@ -209,6 +290,160 @@ export function TripThreadComposer({
           ) : (
             <SendIcon className="size-3.5" />
           )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type ScanDocKind = 'receipt' | 'invoice' | 'boarding_pass';
+
+type ScanState =
+  | { kind: 'pending'; fileName: string }
+  | { kind: 'error'; fileName: string; message: string }
+  | {
+      kind: 'ready';
+      fileName: string;
+      scanKind: ScanDocKind | 'id_document';
+      latencyMs: number;
+      model: string;
+      data: Record<string, unknown>;
+    };
+
+type ScanApiResponse =
+  | {
+      kind: ScanDocKind | 'id_document';
+      provider: string;
+      model: string;
+      latencyMs: number;
+      data: Record<string, unknown>;
+    }
+  | { error: string; message?: string };
+
+function guessScanKind(fileName: string): ScanDocKind {
+  const lower = fileName.toLowerCase();
+  if (/(invoice|bill|factura|factur|rechnung)/i.test(lower)) return 'invoice';
+  if (/(boarding|bp|pnr|flight)/i.test(lower)) return 'boarding_pass';
+  return 'receipt';
+}
+
+function summarizeScan(scan: ScanState & { kind: 'ready' }): string {
+  const d = scan.data;
+  if (scan.scanKind === 'boarding_pass') {
+    const pax = stringField(d, 'passenger_name');
+    const route =
+      stringField(d, 'origin_iata') && stringField(d, 'destination_iata')
+        ? `${d.origin_iata} → ${d.destination_iata}`
+        : '';
+    const flight = stringField(d, 'carrier_code')
+      ? `${d.carrier_code}${stringField(d, 'flight_number') ?? ''}`
+      : (stringField(d, 'flight_number') ?? '');
+    const pnr = stringField(d, 'pnr');
+    const seat = stringField(d, 'seat');
+    return [
+      'Boarding pass',
+      pax ? `· ${pax}` : '',
+      route ? `· ${route}` : '',
+      flight ? `· ${flight}` : '',
+      pnr ? `· PNR ${pnr}` : '',
+      seat ? `· seat ${seat}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+  if (scan.scanKind === 'invoice') {
+    const vendor = stringField(d, 'vendor_name');
+    const total = numberField(d, 'total_amount');
+    const currency = stringField(d, 'currency') ?? '';
+    const num = stringField(d, 'invoice_number');
+    const date = stringField(d, 'invoice_date');
+    return [
+      `Invoice${vendor ? ` — ${vendor}` : ''}`,
+      total !== null ? `· ${fmtMoney(total, currency)}` : '',
+      num ? `· #${num}` : '',
+      date ? `· ${date}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+  const merchant = stringField(d, 'store_name');
+  const total = numberField(d, 'total_amount');
+  const currency = stringField(d, 'currency') ?? '';
+  const date = stringField(d, 'date');
+  return [
+    `Receipt${merchant ? ` — ${merchant}` : ''}`,
+    total !== null ? `· ${fmtMoney(total, currency)}` : '',
+    date ? `· ${date}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function stringField(data: Record<string, unknown>, key: string): string | null {
+  const v = data[key];
+  return typeof v === 'string' && v.trim() ? v : null;
+}
+
+function numberField(data: Record<string, unknown>, key: string): number | null {
+  const v = data[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function fmtMoney(amount: number, currency: string): string {
+  const cur = currency.trim().toUpperCase();
+  if (!cur) return amount.toFixed(2);
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${cur}`;
+  }
+}
+
+function ScanAttachmentChip({
+  state,
+  onInsert,
+  onDismiss,
+}: {
+  state: ScanState;
+  onInsert: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="mt-1 flex items-start gap-2 bg-[color:var(--bg-sunk)] px-4 py-2 font-mono text-[11px] text-[color:var(--text)]">
+      <ScanLineIcon className="mt-0.5 size-3 shrink-0 text-[color:var(--ink)]" />
+      <div className="min-w-0 flex-1">
+        <div className="mb-0.5 text-[9px] uppercase tracking-[0.14em] text-[color:var(--text-faint)]">
+          {state.kind === 'pending'
+            ? 'Scanning with Gemini 2.5 Flash…'
+            : state.kind === 'error'
+              ? 'Scan failed'
+              : `Extracted in ${state.latencyMs} ms · ${state.model}`}
+        </div>
+        <div className="truncate text-[color:var(--text-dim)]">
+          {state.kind === 'ready' ? summarizeScan(state) : state.fileName}
+        </div>
+        {state.kind === 'error' ? (
+          <div className="mt-0.5 text-[10px] text-[color:var(--accent-rose)]">{state.message}</div>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {state.kind === 'ready' ? (
+          <button
+            type="button"
+            onClick={onInsert}
+            className="inline-flex items-center gap-1 border border-[color:var(--ink)] px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[color:var(--ink)] hover:bg-[color:var(--ink)] hover:text-[color:var(--bg-elev)]"
+            title="Insert a one-line summary into the reply"
+          >
+            <CheckIcon className="size-3" /> Insert
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="inline-flex items-center gap-1 border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[color:var(--text-dim)] hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
+          title="Dismiss"
+        >
+          <XIcon className="size-3" />
         </button>
       </div>
     </div>
