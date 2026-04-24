@@ -5,6 +5,7 @@ import type { Prisma } from '@sendero/database';
 import { detectLocale, localeForPhone } from '@sendero/locale';
 
 import type { ChannelKindSlug } from '@/components/inbox/channel-badge';
+import { TripConsoleShell } from '@/components/inbox/trip-console-shell';
 import {
   TripThreadWorkspace,
   type TripThreadContext,
@@ -143,5 +144,9 @@ export default async function InboxTripPage({ params }: Props) {
       : null,
   };
 
-  return <TripThreadWorkspace trip={ctx} />;
+  return (
+    <TripConsoleShell tripTitle={ctx.title}>
+      <TripThreadWorkspace trip={ctx} />
+    </TripConsoleShell>
+  );
 }

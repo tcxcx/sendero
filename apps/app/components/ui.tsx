@@ -15,7 +15,20 @@ import { WalletDropdown } from './wallet-dropdown';
 
 /* ─── ConsoleBar ────────────────────────────────────────────────────────── */
 
-export function ConsoleBar() {
+export interface ConsoleBarProps {
+  /** Breadcrumb label. Defaults to "Agent console". */
+  crumb?: string;
+  /** Breadcrumb link target. Defaults to "/". */
+  crumbHref?: string;
+  /** Optional secondary crumb (e.g. trip title) rendered after the primary. */
+  subCrumb?: string;
+}
+
+export function ConsoleBar({
+  crumb = 'Agent console',
+  crumbHref = '/',
+  subCrumb,
+}: ConsoleBarProps = {}) {
   const traveler = useSendero(s => s.traveler);
   const status = useSendero(s => s.status);
   const search = useSendero(s => s.search);
@@ -45,9 +58,17 @@ export function ConsoleBar() {
           <span className="cbar-word">SENDERO</span>
         </Link>
         <span className="cbar-sep">/</span>
-        <Link href="/" className="cbar-crumb">
-          Agent console
+        <Link href={crumbHref} className="cbar-crumb">
+          {crumb}
         </Link>
+        {subCrumb ? (
+          <>
+            <span className="cbar-sep">/</span>
+            <span className="cbar-crumb cbar-crumb-sub" title={subCrumb}>
+              {subCrumb}
+            </span>
+          </>
+        ) : null}
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="cbar-pulse-wrap" tabIndex={0}>
@@ -108,11 +129,14 @@ export function ConsoleBar() {
           display: flex;
           align-items: center;
           gap: 10px;
+          flex-wrap: nowrap;
+          min-width: 0;
           font-family: var(--font-mono);
           font-size: 11px;
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: var(--text-dim);
+          white-space: nowrap;
         }
         .cbar-brand {
           display: inline-flex;
@@ -150,6 +174,17 @@ export function ConsoleBar() {
         }
         .cbar-crumb:hover {
           color: var(--ink);
+        }
+        /* Secondary crumb — used to carry scoped context (e.g. a trip
+           title) without stealing visual weight from the primary. */
+        .cbar-crumb-sub {
+          color: var(--ink);
+          max-width: 24ch;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: inline-block;
+          vertical-align: middle;
         }
         .cbar-pulse-wrap {
           display: inline-flex;

@@ -27,7 +27,10 @@ export function InboxWithSidebars({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-[calc(100dvh-3.5rem)] w-full flex-1 flex-row overflow-hidden">
+    // Fill the parent <main> box rather than claiming `100dvh - header`
+    // — the app shell now has a global footer below the main, so any
+    // viewport-relative min-height overflows beneath the footer rail.
+    <div className="flex h-full min-h-0 w-full flex-1 flex-row overflow-hidden">
       <TripListColumn trips={trips} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">{children}</div>
     </div>

@@ -52,14 +52,19 @@
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-pixel: "Departure Mono", ui-monospace, monospace;
   --font-sans: "Geist", ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+
+  /* Sidebar palette — aligned to DESIGN.md: Parchment surfaces,
+     Vermillion primary, warm editorial accents. Shadcn's default
+     neutral-gray sidebar tokens (near-white hsl) made the nav feel
+     like generic SaaS chrome instead of a travel map-room. */
+  --sidebar: #f0dcc3;
+  --sidebar-foreground: oklch(0.22 0.015 250);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--bg-elev);
+  --sidebar-accent: color-mix(in oklab, var(--ink) 10%, var(--bg-elev));
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ink);
 }
 
 .dark {
@@ -265,14 +270,41 @@ a[role="button"]:active,
    App shell
    ===================================================== */
 .app {
-  /* Fill the parent container (e.g. SidebarInset's main), not the
-     viewport. The outer <main> already sits below the 64px AppHeader,
-     so using 100vh here pushes the FooterRail off-screen. */
+  /* Fills SidebarInset's <main>, not the viewport. The outer main sits
+     below the 64px AppHeader and above the global 34px AppShellFooter,
+     so we respect the parent box instead of claiming 100vh. */
   height: 100%;
   min-height: 100%;
   display: grid;
-  /* ConsoleBar auto-height, workspace fills rest, FooterRail. */
-  grid-template-rows: auto minmax(0, 1fr) 34px;
+  /* ConsoleBar auto-height, workspace fills rest. The app-shell footer
+     now lives outside this grid (see AppChrome → AppShellFooter) so it
+     spans the sidebar + main together as one global rail. */
+  grid-template-rows: auto minmax(0, 1fr);
+}
+/* Trip inbox + surfaces that carry the booking step rail under the
+   ConsoleBar add a second auto row so the workspace still fills the
+   remainder without overflowing. */
+.app.app--with-steprail {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* =====================================================
+   App-shell global footer space
+   ===================================================== */
+.app-shell-root {
+  /* Height of the global AppShellFooter. Exposed as a var so the
+     shadcn sidebar can reserve room at the bottom without duplicating
+     the magic number. Update here if FooterRail padding changes. */
+  --app-shell-footer-h: 34px;
+}
+/* Shadcn sidebar is position:fixed with inset-y-0 h-svh, so by default
+   it spans the entire viewport and would slide under the global
+   FooterRail. Override bottom + height so it stops exactly above the
+   footer rail. `auto` cancels the `h-svh` utility; the top stays
+   pinned via inset-y-0 and the bottom lifts by footer height. */
+.app-shell-root .group.peer[data-side] > .fixed.inset-y-0 {
+  bottom: var(--app-shell-footer-h);
+  height: auto;
 }
 
 .topbar {
@@ -1311,6 +1343,9 @@ a[role="button"]:active,
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Match the --app-shell-footer-h the sidebar reserves at the bottom,
+     so the global rail's visible band and the sidebar cutoff align. */
+  height: 34px;
   padding: 0 16px;
   border-top: 1px solid var(--border);
   background: var(--bg-elev);

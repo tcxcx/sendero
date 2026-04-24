@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { LandingHero } from './hero';
 import { ProfileGate } from './profile-gate';
-import { ConsoleBar, FooterRail } from './ui';
+import { ConsoleBar } from './ui';
 import { ChatCol } from './chat-col';
 import { Stage } from './stage';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
@@ -89,8 +89,6 @@ export function SenderoApp({ gate = 'passkey' }: SenderoAppProps = {}) {
           <Stage />
           {showWorkflow && <WorkflowLog />}
         </div>
-
-        <FooterRail />
       </div>
 
       <TweaksToggle />
