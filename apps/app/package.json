@@ -16,6 +16,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
     "@ai-sdk/google": "^2.0.0",
+    "@ai-sdk/google-vertex": "^4.0.112",
     "@ai-sdk/openai": "^2.0.0",
     "@ai-sdk/react": "^3.0.170",
     "@circle-fin/adapter-circle-wallets": "^1.2.5",
@@ -62,6 +63,7 @@
     "@sendero/invoicing": "workspace:*",
     "@sendero/llms": "workspace:*",
     "@sendero/locale": "workspace:*",
+    "@sendero/multisig": "workspace:*",
     "@sendero/nanopayments": "workspace:*",
     "@sendero/notifications": "workspace:*",
     "@sendero/seo": "workspace:*",

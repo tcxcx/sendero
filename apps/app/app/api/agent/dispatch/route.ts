@@ -28,6 +28,7 @@ import {
   directProviderCascade,
   directProviderModel,
   gatewayConfigured,
+  gatewayErrorAllowsDirectRetry,
   geminiDirectModelId,
   googleGenerativeAiKey,
   type ModelTier,
@@ -392,19 +393,6 @@ function directModelFromString(direct: string): LanguageModel | null {
   if (provider === 'anthropic') return anthropic(modelId);
   if (provider === 'openai') return openai(modelId);
   return null;
-}
-
-function gatewayErrorAllowsDirectRetry(err: unknown): boolean {
-  if (!gatewayConfigured()) return false;
-  const message = err instanceof Error ? err.message : String(err);
-  const lower = message.toLowerCase();
-  return (
-    lower.includes('free credits') ||
-    lower.includes('restricted access') ||
-    lower.includes('ai_gateway') ||
-    lower.includes('ai gateway') ||
-    lower.includes('gateway')
-  );
 }
 
 async function resolveSegment(tenantId: string): Promise<BillingSegment> {

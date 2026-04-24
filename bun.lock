@@ -70,6 +70,7 @@
         "@sendero/invoicing": "workspace:*",
         "@sendero/llms": "workspace:*",
         "@sendero/locale": "workspace:*",
+        "@sendero/multisig": "workspace:*",
         "@sendero/nanopayments": "workspace:*",
         "@sendero/notifications": "workspace:*",
         "@sendero/seo": "workspace:*",

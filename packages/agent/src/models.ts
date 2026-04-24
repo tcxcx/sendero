@@ -140,7 +140,38 @@ export function googleGenerativeAiKey(): string | null {
   return process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY || null;
 }
 
+/** Google Cloud project id for Vertex AI. Locally discovered via ADC if unset. */
+export function vertexProject(): string | null {
+  return (
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.GOOGLE_VERTEX_PROJECT ||
+    null
+  );
+}
+
+/** Google Cloud region for Vertex AI. Defaults to us-central1. */
+export function vertexLocation(): string {
+  return process.env.GOOGLE_CLOUD_LOCATION || process.env.GOOGLE_VERTEX_LOCATION || 'us-central1';
+}
+
+/**
+ * True when Vertex AI is reachable. Two acceptance paths:
+ *  1. Service-account JSON pasted into GOOGLE_APPLICATION_CREDENTIALS_JSON
+ *     (prod on Vercel — can't ship an ADC file with the bundle).
+ *  2. GOOGLE_APPLICATION_CREDENTIALS pointing at a file on disk OR a
+ *     local `~/.config/gcloud/application_default_credentials.json` from
+ *     `gcloud auth application-default login` (dev).
+ * In both cases GOOGLE_CLOUD_PROJECT must be set so the SDK knows which
+ * project to bill. We probe-then-stream, so a misconfigured Vertex just
+ * falls through to the next provider.
+ */
+export function vertexConfigured(): boolean {
+  return Boolean(vertexProject());
+}
+
 function providerHasKey(provider: string): boolean {
+  if (provider === 'vertex') return vertexConfigured();
   if (provider === 'google') return Boolean(googleGenerativeAiKey());
   if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
   if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
@@ -150,11 +181,15 @@ function providerHasKey(provider: string): boolean {
 /**
  * Ordered `provider/model` handles for **direct** SDK calls when the
  * gateway is not configured (or after a gateway hard-fail in dispatch).
- * Order: **Gemini → OpenAI → Anthropic** within the tier’s candidate list.
+ * Order: **Vertex → Gemini (AI Studio) → OpenAI → Anthropic** within the
+ * tier’s candidate list. Vertex fronts the same Gemini model ids as
+ * AI Studio but bills against a real GCP project, so it doesn't hit the
+ * free-credits restrictions that burn AI Studio keys on shared quota.
  */
 export function directProviderCascade(tier: ModelTier): string[] {
   const { primary, fallbacks } = MODEL_TIERS[tier];
   const candidates = [primary, ...fallbacks];
+  const vertex: string[] = [];
   const google: string[] = [];
   const openai: string[] = [];
   const anthropic: string[] = [];
@@ -162,12 +197,16 @@ export function directProviderCascade(tier: ModelTier): string[] {
   for (const id of candidates) {
     if (seen.has(id)) continue;
     seen.add(id);
-    const [p] = id.split('/');
-    if (p === 'google') google.push(id);
-    else if (p === 'openai') openai.push(id);
+    const [p, m] = id.split('/');
+    if (p === 'google') {
+      // Same Gemini model id exposed through both providers — we fan it
+      // out so Vertex (when configured) gets first crack, then AI Studio.
+      vertex.push(`vertex/${m}`);
+      google.push(id);
+    } else if (p === 'openai') openai.push(id);
     else if (p === 'anthropic') anthropic.push(id);
   }
-  const ordered = [...google, ...openai, ...anthropic];
+  const ordered = [...vertex, ...google, ...openai, ...anthropic];
   return ordered.filter(id => {
     const [p] = id.split('/');
     return providerHasKey(p);
@@ -181,6 +220,29 @@ export function directProviderCascade(tier: ModelTier): string[] {
 export function directProviderModel(tier: ModelTier): string | null {
   const cascade = directProviderCascade(tier);
   return cascade[0] ?? null;
+}
+
+/**
+ * True when an error thrown by a gateway-routed call is plausibly a
+ * gateway-level (not provider-level) failure, and we should cascade to
+ * direct-provider retries. Matches the Vercel AI Gateway "free credits
+ * restricted" family, plus generic "gateway" mentions and AI_GATEWAY env
+ * references that bubble up from the SDK.
+ *
+ * Shared by /api/chat (web console, streaming) and /api/agent/dispatch
+ * (channel fan-in, generateText). Both cascade the same way.
+ */
+export function gatewayErrorAllowsDirectRetry(err: unknown): boolean {
+  if (!gatewayConfigured()) return false;
+  const message = err instanceof Error ? err.message : String(err);
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('free credits') ||
+    lower.includes('restricted access') ||
+    lower.includes('ai_gateway') ||
+    lower.includes('ai gateway') ||
+    lower.includes('gateway')
+  );
 }
 
 /**

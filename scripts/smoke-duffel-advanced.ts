@@ -107,14 +107,22 @@ async function main() {
   section('Airline credits (test data)');
   try {
     // Create a credit pinned to a dummy traveler, then round-trip get.
+    // Duffel validates `code` as an e-ticket number format: 13 digits,
+    // AA prefix "001" (airline ARC code). Random 10-digit tail keeps
+    // runs idempotent without re-using a code.
+    const eTicketTail = String(Date.now()).padStart(10, '0').slice(-10);
     const credit = await createAirlineCredit({
       airline_iata_code: 'AA',
-      code: `SMOKE${Date.now()}`,
+      code: `001${eTicketTail}`,
       amount: '50.00',
       amount_currency: 'USD',
       issued_on: new Date().toISOString().slice(0, 10),
       expires_at: new Date(Date.now() + 365 * 24 * 3600_000).toISOString(),
       type: 'eticket',
+      // Duffel validation: must supply user_id or given_name/family_name.
+      // Smoke uses a synthetic traveler — no real user to bind to.
+      given_name: 'Smoke',
+      family_name: `Test${Date.now()}`,
     });
     pass('createAirlineCredit', credit.id);
     const roundTripped = await getAirlineCredit(credit.id);

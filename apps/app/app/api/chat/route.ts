@@ -10,24 +10,34 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { anthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createVertex } from '@ai-sdk/google-vertex';
 import { openai } from '@ai-sdk/openai';
 import {
   buildProviderOptions,
   buildSystemPrompt,
-  directProviderModel,
+  directProviderCascade,
   gatewayConfigured,
+  gatewayErrorAllowsDirectRetry,
   geminiDirectModelId,
   googleGenerativeAiKey,
   type ModelTier,
   renderWorkflowsBlock,
   selectModel,
   SENDERO_SOUL,
+  vertexLocation,
+  vertexProject,
 } from '@sendero/agent';
 import { detectLocale, getLocaleSlice, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 import { listWorkflows } from '@sendero/workflows';
-import { convertToModelMessages, type LanguageModel, stepCountIs, streamText } from 'ai';
+import {
+  convertToModelMessages,
+  generateText,
+  type LanguageModel,
+  stepCountIs,
+  streamText,
+} from 'ai';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -76,36 +86,113 @@ Today's date: ${new Date().toISOString().split('T')[0]}.`;
 type Picked = { model: LanguageModel | string; label: string; tier: ModelTier };
 
 /**
- * Route selection: prefer Vercel AI Gateway string form so providerOptions
- * kicks in fallback chains and we keep unified observability. Without the
- * gateway, use the same **Gemini → OpenAI → Anthropic** cascade as
- * `/api/agent/dispatch` (`directProviderModel` in `@sendero/agent`).
+ * Short in-memory cooldown after a gateway-level failure (e.g. "Free
+ * credits temporarily restricted"). During the cooldown we skip the
+ * gateway entirely and go straight to the direct-provider cascade, so
+ * subsequent chat turns don't re-probe a known-broken gateway.
+ *
+ * 60s is long enough to weather the kind of bursty rate-limit Vercel
+ * imposes, short enough that recovery is quick. Per-process only —
+ * serverless cold starts reset it, which is fine.
  */
-function pickModel(tier: ModelTier = 'fast'): Picked | null {
-  if (gatewayConfigured()) {
+let gatewayBrokenUntil = 0;
+
+function resolveDirectPickeds(tier: ModelTier): Picked[] {
+  const picks: Picked[] = [];
+  for (const direct of directProviderCascade(tier)) {
+    const [provider, modelId] = direct.split('/') as [string, string];
+    if (provider === 'vertex') {
+      const project = vertexProject();
+      if (!project) continue;
+      // Credentials resolution, two paths:
+      //   - Local: the SDK auto-discovers ADC from
+      //     ~/.config/gcloud/application_default_credentials.json
+      //     (via `gcloud auth application-default login`). Pass nothing.
+      //   - Vercel: GOOGLE_APPLICATION_CREDENTIALS_JSON holds a SA JSON
+      //     pasted via `vercel env add`. google-auth-library does NOT
+      //     auto-read that env, so we parse and pass inline. Parse errors
+      //     fall through to the next provider — probe surface is robust.
+      let googleAuthOptions: Parameters<typeof createVertex>[0]['googleAuthOptions'];
+      const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+      if (saJson) {
+        try {
+          googleAuthOptions = { credentials: JSON.parse(saJson) };
+        } catch (err) {
+          console.warn(
+            '[chat] GOOGLE_APPLICATION_CREDENTIALS_JSON is set but not valid JSON, skipping vertex',
+            err instanceof Error ? err.message : err
+          );
+          continue;
+        }
+      }
+      const vertex = createVertex({
+        project,
+        location: vertexLocation(),
+        googleAuthOptions,
+      });
+      // `modelId` here is already the bare Gemini name (e.g. gemini-3-flash)
+      // because directProviderCascade emits `vertex/<modelId>` for us.
+      picks.push({
+        model: vertex(geminiDirectModelId(`google/${modelId}`)),
+        label: `direct:${direct}`,
+        tier,
+      });
+    } else if (provider === 'google') {
+      const key = googleGenerativeAiKey();
+      if (!key) continue;
+      const google = createGoogleGenerativeAI({ apiKey: key });
+      picks.push({
+        model: google(geminiDirectModelId(direct)),
+        label: `direct:${direct}`,
+        tier,
+      });
+    } else if (provider === 'anthropic') {
+      picks.push({ model: anthropic(modelId), label: `direct:${direct}`, tier });
+    } else if (provider === 'openai') {
+      picks.push({ model: openai(modelId), label: `direct:${direct}`, tier });
+    }
+  }
+  return picks;
+}
+
+/**
+ * Ordered cascade: [gateway (if configured and not on cooldown),
+ * ...direct-provider cascade]. The chat route probes each in order and
+ * streams with the first one that responds to a 4-token probe.
+ */
+function pickModelCascade(tier: ModelTier = 'fast'): Picked[] {
+  const picks: Picked[] = [];
+  const gatewayOk = gatewayConfigured() && Date.now() >= gatewayBrokenUntil;
+  if (gatewayOk) {
     const { model } = selectModel({ tier });
-    return { model, label: `gateway:${model}`, tier };
+    picks.push({ model, label: `gateway:${model}`, tier });
   }
-  const direct = directProviderModel(tier);
-  if (!direct) return null;
-  const [provider, modelId] = direct.split('/') as [string, string];
-  if (provider === 'google') {
-    const key = googleGenerativeAiKey();
-    if (!key) return null;
-    const google = createGoogleGenerativeAI({ apiKey: key });
-    return {
-      model: google(geminiDirectModelId(direct)),
-      label: `direct:${direct}`,
-      tier,
-    };
+  picks.push(...resolveDirectPickeds(tier));
+  return picks;
+}
+
+/**
+ * Tiny probe: burn ≤ 4 tokens to confirm the model responds at all.
+ * This catches the Vercel AI Gateway "Free credits restricted" family
+ * (and similar provider-account-level failures) before we start
+ * streaming bytes to the client, where an error would surface as a
+ * confusing inline assistant message.
+ */
+async function probeModel(pick: Picked): Promise<{ ok: true } | { ok: false; err: unknown }> {
+  try {
+    const providerOptions =
+      typeof pick.model === 'string' ? buildProviderOptions(pick.tier) : undefined;
+    await generateText({
+      model: pick.model,
+      prompt: 'ok',
+      maxOutputTokens: 4,
+      maxRetries: 0,
+      providerOptions,
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, err };
   }
-  if (provider === 'anthropic') {
-    return { model: anthropic(modelId), label: `direct:${direct}`, tier };
-  }
-  if (provider === 'openai') {
-    return { model: openai(modelId), label: `direct:${direct}`, tier };
-  }
-  return null;
 }
 
 interface ChatBody {
@@ -127,15 +214,44 @@ export async function POST(req: NextRequest) {
   // Chat tier defaults to 'fast' (sonnet-class) for responsive replies.
   // A trailing body.tier override lets power users force a smart/cheap turn.
   const requestedTier: ModelTier = body.tier ?? 'fast';
-  const picked = pickModel(requestedTier);
+  const cascade = pickModelCascade(requestedTier);
+  if (cascade.length === 0) {
+    // Plain text because useChat renders the raw body as `error.message`.
+    // Give the operator a human sentence, not a JSON blob.
+    return new Response(
+      'The AI agent isn’t configured yet. Set AI_GATEWAY_API_KEY or any of GOOGLE_GENERATIVE_AI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY and try again.',
+      { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+    );
+  }
+
+  // Probe the cascade in order: gateway → Google → OpenAI → Anthropic.
+  // First model that round-trips a 4-token call wins. A gateway-level
+  // failure arms the 60s cooldown so follow-on turns skip the probe and
+  // go direct. Per-candidate failure is recorded for the final error
+  // surface if every provider falls over.
+  let picked: Picked | null = null;
+  const failures: Array<{ label: string; message: string }> = [];
+  for (const candidate of cascade) {
+    const probe = await probeModel(candidate);
+    if (probe.ok === true) {
+      picked = candidate;
+      break;
+    }
+    const err = probe.err;
+    const msg = err instanceof Error ? err.message : String(err);
+    failures.push({ label: candidate.label, message: msg });
+    console.warn(`[chat] probe failed for ${candidate.label}: ${msg}`);
+    if (candidate.label.startsWith('gateway:') && gatewayErrorAllowsDirectRetry(err)) {
+      gatewayBrokenUntil = Date.now() + 60_000;
+    }
+  }
   if (!picked) {
-    return NextResponse.json(
-      {
-        error: 'ai_not_configured',
-        message:
-          'Set AI_GATEWAY_API_KEY (preferred), or provision Vercel OIDC, or fall back to GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY in .env.local.',
-      },
-      { status: 503 }
+    const tried = failures.map(f => f.label).join(', ') || 'none';
+    const lastMessage = failures[failures.length - 1]?.message ?? 'no provider configured';
+    console.error(`[chat] all providers failed; tried=${tried}; last=${lastMessage}`, failures);
+    return new Response(
+      'All AI providers are unavailable right now — gateway, Google, OpenAI, and Anthropic all failed to respond. Please try again in a minute. If this keeps happening, check the provider credit balances.',
+      { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
     );
   }
 
