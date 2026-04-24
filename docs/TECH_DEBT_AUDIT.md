@@ -67,8 +67,8 @@ It's been taking on every tool renderer over three commits. `ToolPreview`, `Mess
 ### 15. AI Elements `Canvas` usage — only in `workflow-graph.tsx`
 The product has 4+ places that would benefit from a graph view (booking workflow, delay recovery branches, approval flow, handoff timeline). Workflow-graph is the only one using it today. Low-priority, but the Canvas primitive is already paid-for; we should reuse it.
 
-### 16. Pricing catalog → 48 entries, no per-tier grouping
-`packages/tools/src/pricing.ts` is a flat dict. At 48 tools, it's becoming hard to scan "what's the concierge tier look like?" vs "what's the composed tier?". Refactor into `TIERS` const + derived dict with pricing (no behavior change; tests already cover coverage).
+### 16. Pricing catalog → 49 entries, no per-tier grouping
+`packages/tools/src/pricing.ts` is a flat dict. At 49 tools, it's becoming hard to scan "what's the concierge tier look like?" vs "what's the composed tier?". Refactor into `TIERS` const + derived dict with pricing (no behavior change; tests already cover coverage).
 
 ### 17. `@duffel/api` cast escape hatches
 Even after the types pass, `as unknown as Parameters<typeof duffel.orders.create>[0]` appears 3 times in the wrapper because the SDK type lags. Consider a single type-bridge module `packages/sendero-duffel/src/sdk-bridge.ts` where these casts live — keeps the happy path clean.
