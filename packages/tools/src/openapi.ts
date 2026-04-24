@@ -20,6 +20,7 @@
  *     surface for non-agent integrations.
  */
 
+import { type KeyScope, toolToScope } from './scopes';
 import type { ToolDef } from './types';
 
 export interface OpenApiDocInput {
@@ -161,61 +162,15 @@ function summarize(description: string): string {
 
 /**
  * Group tools into OpenAPI tags so Scalar renders a sidebar per
- * family.  Keep **letter-for-letter** in sync with `toolToScope()` in
- * @sendero/auth/dispatch-auth — drift between them means a public tag
- * disagrees with a runtime enforcement scope, which is a lie to the
- * developer.  The openapi.test.ts 'tag ↔ scope consistency' test
- * catches any drift the moment it's introduced.
+ * family.  Tag = proper-cased, human-readable label derived from the
+ * canonical `toolToScope()` mapping — so the public docs and the
+ * runtime scope check can never disagree.
  */
 function categorize(toolName: string): string {
-  return SCOPE_TO_TAG[scopeOf(toolName)];
+  return SCOPE_TO_TAG[toolToScope(toolName) as keyof typeof SCOPE_TO_TAG] ?? 'Utilities';
 }
 
-/** Same classification tree as @sendero/auth/dispatch-auth toolToScope. */
-function scopeOf(toolName: string): keyof typeof SCOPE_TO_TAG {
-  if (toolName.startsWith('search_') || toolName.startsWith('find_')) return 'search';
-  if (toolName.startsWith('book_') || toolName.startsWith('hold_')) return 'bookings';
-  if (
-    toolName === 'reserve_booking' ||
-    toolName === 'commit_booking' ||
-    toolName === 'prefund_trip' ||
-    toolName === 'settle_booking' ||
-    toolName === 'settle_split' ||
-    toolName === 'guest_claim_link' ||
-    toolName === 'confirm_flight' ||
-    toolName.includes('cancel')
-  )
-    return 'settlement';
-  if (
-    toolName === 'check_treasury' ||
-    toolName === 'swap_tokens' ||
-    toolName === 'send_tokens' ||
-    toolName === 'bridge_to_arc' ||
-    toolName === 'swap_and_bridge' ||
-    toolName === 'gateway_balance' ||
-    toolName === 'gateway_transfer'
-  )
-    return 'treasury';
-  if (toolName === 'scan_document' || toolName === 'generate_booking_invoice') return 'documents';
-  if (toolName === 'check_travel_eligibility') return 'compliance';
-  if (
-    toolName.startsWith('airport_') ||
-    toolName.startsWith('trip_') ||
-    toolName === 'restaurant_route_card' ||
-    toolName === 'recommend_restaurants' ||
-    toolName === 'travel_safety_aid' ||
-    toolName === 'elevation_risk_brief' ||
-    toolName === 'air_quality_brief' ||
-    toolName === 'timezone_brief' ||
-    toolName === 'export_route_map' ||
-    toolName === 'geocode_trip_stop' ||
-    toolName === 'validate_travel_address'
-  )
-    return 'trip_assistance';
-  return 'utilities';
-}
-
-const SCOPE_TO_TAG = {
+const SCOPE_TO_TAG: Record<Exclude<KeyScope, '*'>, string> = {
   search: 'Search',
   bookings: 'Bookings',
   settlement: 'Settlement',
@@ -224,7 +179,7 @@ const SCOPE_TO_TAG = {
   compliance: 'Compliance',
   trip_assistance: 'Trip assistance',
   utilities: 'Utilities',
-} as const;
+};
 
 /** `scan_document` → `ScanDocumentInput`. */
 function toSchemaName(toolName: string): string {

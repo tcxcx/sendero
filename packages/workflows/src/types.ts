@@ -48,7 +48,17 @@ export interface PauseStep {
   id: string;
   label: string;
   /** Reason that downstream consumers can match on ("approval", "otp"). */
-  reason: 'approval' | 'otp' | '3ds' | 'user_reply' | 'external_event';
+  reason:
+    | 'approval'
+    | 'otp'
+    | '3ds'
+    | 'user_reply'
+    | 'external_event'
+    /** Traveler-document verdict is 'block' — wait for the traveler
+     *  to upload a fresh passport or update their declared profile
+     *  before the booking flow proceeds. Surfaces on the trip page
+     *  as a remediation card. */
+    | 'eligibility_blocked';
   /** Timeout in ms before the pause auto-fails. Default: no timeout. */
   timeoutMs?: number;
   /** Arbitrary metadata for the UI (approver id, prompt text, etc.). */

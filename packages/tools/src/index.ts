@@ -84,6 +84,16 @@ export { checkTravelEligibilityTool } from './check-travel-eligibility';
 export type { OpenApiDocInput } from './openapi';
 export { buildOpenApiDoc } from './openapi';
 export { scanDocumentTool } from './scan-document';
+export type { KeyScope } from './scopes';
+export {
+  DEFAULT_PROD_SCOPES,
+  hasScope,
+  KEY_SCOPES,
+  PRIVILEGED_TOOLS,
+  requiresSignature,
+  SANDBOX_SCOPES,
+  toolToScope,
+} from './scopes';
 export {
   type GeocodeTripStopInput,
   type GeocodeTripStopResult,

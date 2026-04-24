@@ -12,7 +12,9 @@ const ESCROW = `0x${'a'.repeat(40)}`;
 test('confirm_flight returns an encoded call', async () => {
   const out: any = await confirmFlightTool.handler({
     bookingId: BID,
-    duffelOrderHash: HASH,
+    // Field renamed from `duffelOrderHash` → `ticketOrderHash` in
+    // commit cd6ff4a as part of the Duffel→flight supplier abstraction.
+    ticketOrderHash: HASH,
     escrowAddress: ESCROW,
   });
   expect(out.onchainCall.to.toLowerCase()).toBe(ESCROW.toLowerCase());
