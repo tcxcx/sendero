@@ -44,6 +44,7 @@ async function readBalanceOf(client: ArcPublicClient, token: Hex, account: Hex):
 }
 import { useQueryState } from 'nuqs';
 import { useSendero } from './store';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { logout } from '@sendero/circle/modular-wallets';
 
 const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;
@@ -196,15 +197,55 @@ export function WalletDropdown() {
               <span className="wd-id-role">Passkey · {userAuth.email || 'no email'}</span>
             </div>
             <div className="wd-id-actions">
-              <button
-                type="button"
-                className="wd-chip"
-                onClick={copy}
-                aria-label="copy address"
-                title={userAuth.address}
-              >
-                {copied ? '✓ copied' : short}
-              </button>
+              <Tooltip open={copied ? true : undefined}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="wd-chip"
+                    onClick={copy}
+                    aria-label={`copy address ${userAuth.address}`}
+                  >
+                    <span className="wd-chip-icon" aria-hidden="true">
+                      {copied ? (
+                        <svg viewBox="0 0 24 24" width="12" height="12">
+                          <path
+                            d="M5 12l5 5 9-11"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" width="12" height="12">
+                          <rect
+                            x="8"
+                            y="8"
+                            width="12"
+                            height="12"
+                            rx="2"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          />
+                          <path
+                            d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="wd-chip-label">{copied ? 'copied' : short}</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="font-mono text-[10px] tracking-wider">
+                  {copied ? 'copied to clipboard' : 'click to copy address'}
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
 
@@ -272,23 +313,37 @@ export function WalletDropdown() {
 
           {/* Meta footer */}
           <div className="wd-meta">
-            <a
-              className="wd-meta-link"
-              href={`${ARCSCAN}/address/${userAuth.address}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              View on Arcscan ↗
-            </a>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  className="wd-meta-link"
+                  href={`${ARCSCAN}/address/${userAuth.address}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View on Arcscan ↗
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="font-mono text-[10px] tracking-wider">
+                opens Arc block explorer in a new tab
+              </TooltipContent>
+            </Tooltip>
             <span className="wd-meta-sep">·</span>
-            <button
-              type="button"
-              className="wd-meta-refresh"
-              onClick={refresh}
-              aria-label="refresh balance"
-            >
-              ↻ refresh
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="wd-meta-refresh"
+                  onClick={refresh}
+                  aria-label="refresh balance"
+                >
+                  ↻ refresh
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="font-mono text-[10px] tracking-wider">
+                re-read on-chain balance (auto-refreshes every 15s)
+              </TooltipContent>
+            </Tooltip>
             <span className="wd-meta-sep">·</span>
             <span className="wd-meta-ver">v0.9.4-alpha</span>
           </div>
@@ -308,7 +363,11 @@ export function WalletDropdown() {
           display: inline-flex;
           align-items: center;
           gap: 10px;
-          padding: 4px 8px 4px 4px;
+          /* Shared vertical rhythm with AgentChip — both ConsoleBar
+             trigger buttons sit on one 48px baseline so the name +
+             address stack here doesn't overshoot the rating chip. */
+          min-height: 48px;
+          padding: 6px 10px 6px 6px;
           border: 1px solid var(--border);
           background: var(--bg-elev);
           color: var(--text);
@@ -421,6 +480,9 @@ export function WalletDropdown() {
           color: var(--text-dim);
         }
         .wd-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
           font-family: var(--font-mono);
           font-size: 10px;
           letter-spacing: 0.04em;
@@ -429,10 +491,26 @@ export function WalletDropdown() {
           border: 1px solid var(--border);
           padding: 4px 8px;
           cursor: pointer;
-          transition: border-color 120ms;
+          transition:
+            border-color 120ms,
+            color 120ms,
+            background 120ms;
         }
         .wd-chip:hover {
           border-color: var(--ink);
+          color: var(--text);
+        }
+        .wd-chip-icon {
+          display: inline-flex;
+          align-items: center;
+          color: var(--text-dim);
+          transition: color 120ms;
+        }
+        .wd-chip:hover .wd-chip-icon {
+          color: var(--ink);
+        }
+        .wd-chip-label {
+          display: inline-block;
         }
 
         .wd-tabs {
@@ -568,7 +646,9 @@ export function WalletDropdown() {
         }
 
         .wd-signout {
-          padding: 10px 14px;
+          display: block;
+          width: 100%;
+          padding: 12px 14px;
           margin: 0;
           background: none;
           border: none;
@@ -576,9 +656,9 @@ export function WalletDropdown() {
           color: var(--accent-rose, #e34);
           font-family: var(--font-mono);
           font-size: 11px;
-          letter-spacing: 0.1em;
+          letter-spacing: 0.12em;
           text-transform: uppercase;
-          text-align: left;
+          text-align: center;
           cursor: pointer;
           transition: background 120ms;
         }

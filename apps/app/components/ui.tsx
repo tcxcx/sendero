@@ -10,6 +10,7 @@
 import Link from 'next/link';
 import { useSendero, deriveStep } from './store';
 import { AgentChip } from './agent-chip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { WalletDropdown } from './wallet-dropdown';
 
 /* ─── ConsoleBar ────────────────────────────────────────────────────────── */
@@ -47,8 +48,17 @@ export function ConsoleBar() {
         <Link href="/" className="cbar-crumb">
           Agent console
         </Link>
-        <span className="cbar-pulse" aria-hidden="true" />
-        <span className="cbar-active">agent · active</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cbar-pulse-wrap" tabIndex={0}>
+              <span className="cbar-pulse" aria-hidden="true" />
+              <span className="cbar-active">agent · active</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="font-mono text-[10px] tracking-wider">
+            agent is online and ready to take a turn
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       {/* MIDDLE: contextual status chip */}
@@ -141,12 +151,23 @@ export function ConsoleBar() {
         .cbar-crumb:hover {
           color: var(--ink);
         }
+        .cbar-pulse-wrap {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          margin-left: 8px;
+          cursor: default;
+          outline: none;
+        }
+        .cbar-pulse-wrap:focus-visible {
+          outline: 1px solid var(--ink);
+          outline-offset: 2px;
+        }
         .cbar-pulse {
           width: 6px;
           height: 6px;
           border-radius: 50%;
           background: var(--accent-green, #0cc67a);
-          margin-left: 8px;
           animation: cbar-pulse 1.6s ease-in-out infinite;
           flex-shrink: 0;
         }

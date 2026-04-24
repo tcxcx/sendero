@@ -15,6 +15,7 @@ import { ProfileGate } from './profile-gate';
 import { ConsoleBar, FooterRail } from './ui';
 import { ChatCol } from './chat-col';
 import { Stage } from './stage';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { WorkflowLog } from './workflow-log';
 import { SwapDialog } from './swap-dialog';
 import { SendDialog } from './send-dialog';
@@ -71,8 +72,12 @@ export function SenderoApp({ gate = 'passkey' }: SenderoAppProps = {}) {
     );
   }
 
+  // TooltipProvider wraps the whole workspace so any descendant can drop
+  // in a <Tooltip> without re-establishing a provider. delayDuration: 200
+  // = tight enough to feel responsive on hover, slow enough that drive-by
+  // pointer passes don't flash tooltips.
   const workspace = (
-    <>
+    <TooltipProvider delayDuration={200} skipDelayDuration={300}>
       <div className="app" data-screen-label="Agent Console">
         <ConsoleBar />
 
@@ -94,7 +99,7 @@ export function SenderoApp({ gate = 'passkey' }: SenderoAppProps = {}) {
       <SendDialog />
       <BridgeDialog />
       <DepositDialog />
-    </>
+    </TooltipProvider>
   );
 
   if (gate === 'bypass') return workspace;
@@ -247,26 +252,34 @@ function TweaksToggle() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(!open)}
-        aria-label="Tweaks"
-        style={{
-          position: 'fixed',
-          right: 16,
-          bottom: 44,
-          zIndex: 99,
-          padding: '8px 12px',
-          border: '1.5px solid var(--ink)',
-          background: 'var(--bg-elev)',
-          color: 'var(--ink)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-        }}
-      >
-        ◇ Tweaks
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={() => setOpen(!open)}
+            aria-label="Tweaks"
+            style={{
+              position: 'fixed',
+              right: 16,
+              bottom: 44,
+              zIndex: 99,
+              padding: '8px 12px',
+              border: '1.5px solid var(--ink)',
+              background: 'var(--bg-elev)',
+              color: 'var(--ink)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              cursor: 'pointer',
+            }}
+          >
+            ◇ Tweaks
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="font-mono text-[10px] tracking-wider">
+          toggle theme + workflow terminal
+        </TooltipContent>
+      </Tooltip>
 
       {open && (
         <div className="tweaks-panel">
