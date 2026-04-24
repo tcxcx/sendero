@@ -8,11 +8,15 @@
  * Zod-backed structured output, and this page renders the parsed
  * fields in real time.
  *
- * Flow: drag → drop → extract → labelled fields → a "save as expense"
- * CTA. Wall-clock latency is dominated by the model call and ranges
- * from ~1s to several seconds depending on document length and the
- * cold-path provider; we show the measured latency on the result so
- * the user always sees ground truth.
+ * Flow: drag → drop → extract → labelled fields. Wall-clock latency
+ * is dominated by the model call and ranges from ~1s to several
+ * seconds depending on document length and the cold-path provider;
+ * we show the measured latency on the result so the user always sees
+ * ground truth.
+ *
+ * NOTE: a "save as expense" follow-up CTA is on the roadmap but not
+ * wired yet — no Expense table or /api/expense route exists today.
+ * Add both before promising the action in the UI.
  */
 
 import { useRef, useState } from 'react';
