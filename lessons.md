@@ -133,3 +133,106 @@ Free keeping a sandbox key (not zero total) matters — the dev-to-customer funn
 ### Clerk dashboard copy is not a spec
 
 The Clerk dashboard field "Free trial: Delay billing new customers for a set number of days" *sounds* like it requires a card. It doesn't, post-Oct-2025. Reading dashboard UI copy as if it were normative docs is a failure mode. Check the docs, not the form label.
+
+## Security sweep — pre-production review (2026-04)
+
+A 12-finding security review caught several classes of bug the codebase would otherwise have shipped. The specific fixes are in `fix(security): close 8 critical findings from pre-prod review` — the patterns below are the durable takeaway.
+
+### Prefer removing attack surface over patching it
+
+The public invoice viewer originally round-tripped through `renderInvoiceHtml()` (returns a full `<!doctype>` string), extracted `<body>` via regex, and piped the result into `dangerouslySetInnerHTML`. Three seams that could leak tenant input as executable HTML.
+
+The fix wasn't "add an `escapeHtml()` for each field" — it was "render `<InvoiceHtml {...props} />` as JSX directly". React already escapes every text node and attribute. Removing `dangerouslySetInnerHTML` eliminated the class, not a specific instance. The regex body-extraction went with it.
+
+**Rule:** when a review flags "tenant input reaches dangerouslySetInnerHTML / eval / exec / raw SQL", check whether the dangerous primitive is needed at all. Usually it isn't — it was reached by accident, and the safe primitive was one refactor away. Patches decay. Removed surfaces stay removed.
+
+### Webhook security is a stack: signature + freshness + dedup
+
+The Circle webhook had signature verification (ECDSA) and dedup via `notificationId`. Still replay-able: if an attacker strips `notificationId` from a captured signed payload, the fallback `externalId = ${type}:${timestamp ?? Date.now()}` lets each replay through because `Date.now()` changes.
+
+Fix: require `timestamp` after signature verify, reject if outside `[now − 10min, now + 5min]`, and make the externalId fallback deterministic (`${type}:${timestamp}` with no `Date.now()` branch).
+
+**Rule:** every inbound webhook needs all three gates — signature (authenticity), freshness (replay), dedup (idempotency). Missing any one leaves a working exploit. The Slack/Stripe/Circle norm is a ~5–10 min freshness window; use it.
+
+### Validate URL-interpolated headers before fetch
+
+Circle's webhook took `x-circle-key-id` from the request, interpolated it into `https://api.circle.com/v2/notifications/publicKey/${keyId}`, and `fetch()`-ed. Attacker-controlled → SSRF + cache-growth DoS (one outbound fetch per forged request, plus an unbounded in-memory map).
+
+Fix: strict UUID regex + bounded-LRU cache. Two lines, kills both vectors.
+
+**Rule:** any attacker-controlled string that ends up inside a URL path, a SQL fragment, a shell command, a file path, or a fetch target needs a pattern gate at the boundary — even when the downstream system "probably" rejects bad input. Defense at the seam beats defense at the sink.
+
+### Fail closed on quota enforcement
+
+The apiKey quota enforcement had a silent fail-open: if `clerkClient.apiKeys.list()` returned null (transient error, missing API), we counted zero active keys and let the mint through. A free-tier org could mint unlimited production keys during any Clerk hiccup.
+
+Fix: on list failure, revoke the freshly-minted key with a `list_api_error` reason and ask the user to retry. Also: include the new key in the count synthetically if Clerk's eventually-consistent list hasn't picked it up yet.
+
+**Rule:** quota/gate logic that depends on an external API must fail closed. The cost of a transient "please retry" is trivially small compared to the class of "attacker exploits the outage window".
+
+### OAuth state is a capability token
+
+Our Slack OAuth state was `base64(JSON({ tenantId }))` — unsigned. An attacker can forge a state carrying any tenantId, trick a target into the install URL, and end up with the victim's Slack workspace bound to the attacker's tenant. Classic install-CSRF.
+
+Fix: HMAC-SHA256 signed `payload.signature` wire format with a 10-min TTL and constant-time verify. Lives in `apps/app/lib/slack-oauth-state.ts`. Both construction site (onboarding page) and verification site (webhook) share the helper.
+
+**Rule:** any state/nonce/continuation parameter that's round-tripped through an external service IS a capability token. Sign it with HMAC, bound it with `exp`, verify in constant time. `JSON.parse(base64url(param))` anywhere in the codebase is a red flag — grep for it quarterly.
+
+### Constant-time compare for every secret header
+
+Internal shared secrets (`AGENT_DISPATCH_SECRET`, `CRON_SECRET`) were compared with JavaScript `===`. String `===` short-circuits on the first mismatched character. Measuring N requests lets a remote attacker recover the secret byte-by-byte. Real, not theoretical.
+
+Fix: `crypto.timingSafeEqual` via a `safeEqual(a, b)` helper that length-checks first (length leak is acceptable for ~32-byte secrets, content leak is not).
+
+**Rule:** every secret-bearing header comparison uses `crypto.timingSafeEqual`. Add it to the checklist when introducing any shared-secret auth path.
+
+### Env-scope any shared cache
+
+Upstash Redis on Vercel Marketplace (`upstash-kv-orange-leaf`) is shared across Preview / Production / Development by default — same `KV_REST_API_URL` gets stamped on every Vercel scope. Without a namespace prefix, a Preview-tenant cache entry can short-circuit a Production verify (and vice versa).
+
+Fix: every Redis key starts with `<envTag>:…` where `envTag` is derived from `VERCEL_ENV ?? NODE_ENV`. Applied to the API-key verify cache; the pattern is now the default for any shared-Redis consumer we add.
+
+**Rule:** any shared infra (Redis, blob, queue) used in multiple Vercel scopes needs an env prefix on the key namespace. Small function, huge blast radius if skipped.
+
+### Cache invalidation beats TTL-only expiry when the source emits events
+
+Our verify-cache's 60s TTL bounded the stale-authz window on a revoked API key. Acceptable floor, but we already get `apiKey.revoked` webhooks from Clerk — the real stale window should be webhook RTT, not TTL.
+
+Fix: maintain a reverse index `<env>:apikey:byid:<keyId>` → tokenHash at cache-write time, and have the revoke webhook call `invalidateApiKeyCache(keyId)` which drops both entries. TTL still protects against missed webhooks.
+
+**Rule:** if the source of truth emits a lifecycle event (revoke/delete/update), subscribe to it and invalidate the cache. TTL is a safety net, not a primary mechanism. The reverse index trick (main cache keyed by token, lookup cache keyed by id) generalizes to any cache where the lifecycle event knows the id but not the raw key.
+
+## Prisma migration safety (2026-04)
+
+### `ALTER TYPE ADD VALUE` inside a Prisma migration is safe — here's why
+
+The review flagged `ALTER TYPE "MeterStatus" ADD VALUE 'sandbox'` as potentially unsafe inside "a Prisma tx". Investigated: **it's fine on this stack**.
+
+- **Prisma Migrate does NOT wrap Postgres migrations in a transaction by default.** Source: Prisma's own blog, "Prisma Migrate DX Primitives" — *"PostgreSQL users can opt-in to transactions by adding `BEGIN;` and `COMMIT;` to their schema migrations, though it's not the default."* Every single-file Postgres migration Prisma runs is already tx-free unless the migration explicitly opens one.
+- **Postgres 12+ allows `ALTER TYPE ADD VALUE` inside a tx anyway**, with one constraint: the new value can't be referenced in the same tx. Neon runs PG 16. We don't reference `'sandbox'` in the migration — runtime code does. Safe.
+
+The *actual* landmine is `ALTER TYPE ... ADD VALUE 'x'` + a same-file `'x'` reference (UPDATE / CHECK / etc.). That combo fails on PG <12 and on any tx-wrapped migration. Split into two migrations to avoid it.
+
+### Pre-commit lint beats code review for migration footguns
+
+Shipping a bad migration is a one-way door — rollback means a second migration + data reconciliation. Worth blocking at commit time, not at review time.
+
+`scripts/check-prisma-migrations.ts` (wired via lefthook `pre-commit` as `migration-lint`):
+- **BLOCKS:** `ALTER TYPE ADD VALUE 'x'` combined with a same-file reference to `'x'`.
+- **WARNS:** `CREATE INDEX` without `CONCURRENTLY` (write-blocks large tables).
+- **WARNS:** `ADD COLUMN NOT NULL` without `DEFAULT` (locks during backfill).
+
+Override with `SKIP_MIGRATION_CHECK=1 git commit` when you genuinely know better (rare). Add new checks as we learn new footguns.
+
+**Rule:** for any class of bug where rollback is expensive, write the static check once. Dev environment cost is ~30ms; future-review cost is 0.
+
+## UI sizing: px vs rem isn't a style preference (2026-04)
+
+`apps/app/globals.css` sets `html { font-size: 13px }` for dense dashboard typography. This silently breaks every rem-based layout measurement in the app:
+
+- `14.5rem` you'd expect to be 232px resolves to **188.5px**.
+- Sidebar pill designed for 232px overflowed the main card on every `/dashboard/*` route until we noticed the root font-size.
+
+**Rule:** layout-critical widths (sidebar, card max-widths, fixed positioning offsets) use **px**. Visual-rhythm sizing (font-size, line-height, margin/padding at the text scale) stays **rem** so it composes with the 13px root. Design specs from tooling (Figma, Claude Design) quote px — honor them literally.
+
+If you change `html { font-size }` again, grep for rem-based `SIDEBAR_WIDTH` / `MAX_WIDTH` / `HEADER_HEIGHT` constants and reconsider each.
