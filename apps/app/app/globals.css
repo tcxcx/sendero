@@ -2551,3 +2551,47 @@ hr.rule {
   position: relative;
   z-index: 1;
 }
+
+/* =====================================================
+   App loading spinner — 12-bar rotator used by the
+   full-screen `AppLoadingOverlay` (see
+   components/app-shell/app-loading-overlay.tsx).
+   Ported from desk-v1's `.loading-bar` pattern; bars
+   currentColor so Tailwind text-color classes drive the
+   hue. Default: vermillion ink.
+   ===================================================== */
+.app-loading-spinner {
+  position: relative;
+  width: var(--spinner-size, 48px);
+  height: var(--spinner-size, 48px);
+  color: var(--ink, #fb542b);
+}
+.app-loading-spinner__ring {
+  position: absolute;
+  inset: 0;
+}
+.app-loading-spinner__bar {
+  position: absolute;
+  left: -10%;
+  top: -3.9%;
+  width: 24%;
+  height: 8%;
+  background: currentColor;
+  border-radius: 6px;
+  animation: app-loading-fade 1.2s linear infinite;
+  transform-origin: center;
+}
+@keyframes app-loading-fade {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.15;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-spinner__bar {
+    animation: none;
+    opacity: 0.6;
+  }
+}
