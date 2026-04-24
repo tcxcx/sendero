@@ -63,3 +63,6 @@ apps/storybook/storybook-static/
 # Playwright
 apps/app/test-results/
 apps/app/playwright-report/
+
+# Local dev credentials (do not commit)
+qa-logins.local.json
