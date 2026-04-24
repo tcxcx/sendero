@@ -94,6 +94,9 @@ const clerkDevelopmentScriptPins =
       }
     : {};
 
+const enableReactGrab =
+  process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_ENABLE_REACT_GRAB === '1';
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getRequestLocale();
 
@@ -119,7 +122,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         ))}
       </head>
       <body>
-        {process.env.NODE_ENV === 'development' && (
+        {enableReactGrab && (
           <Script
             src="https://unpkg.com/react-grab/dist/index.global.js"
             crossOrigin="anonymous"

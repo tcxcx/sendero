@@ -502,7 +502,7 @@ export function ChatCol() {
                 className="composer-tool"
                 onClick={() =>
                   sendMessage({
-                    text: 'Book me SFO → LHR on May 4, premium economy, 1 pax.',
+                    text: 'Search premium economy flights SFO → LHR, departing 2026-05-08 and returning 2026-05-15, for 1 passenger.',
                   })
                 }
               >
@@ -569,7 +569,11 @@ function AgentWelcome({
           <button
             type="button"
             className="suggestion"
-            onClick={() => onSuggest('Book SFO → LHR on May 4, premium economy, 1 passenger.')}
+            onClick={() =>
+              onSuggest(
+                'Search premium economy flights SFO → LHR, departing 2026-05-08 and returning 2026-05-15, for 1 passenger.'
+              )
+            }
           >
             Business trip SFO → LHR
           </button>

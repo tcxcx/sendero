@@ -54,86 +54,99 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const { userId, orgId } = await auth();
-  if (!userId || !orgId) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  try {
+    const { userId, orgId } = await auth();
+    if (!userId || !orgId) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
 
-  const payload = BodySchema.safeParse(await req.json().catch(() => null));
-  if (!payload.success) {
-    return NextResponse.json(
-      { error: 'invalid_body', issues: payload.error.flatten() },
-      { status: 400 }
-    );
-  }
+    const payload = BodySchema.safeParse(await req.json().catch(() => null));
+    if (!payload.success) {
+      return NextResponse.json(
+        { error: 'invalid_body', issues: payload.error.flatten() },
+        { status: 400 }
+      );
+    }
 
-  const user = await prisma.user.findUnique({
-    where: { clerkUserId: userId },
-    select: { id: true },
-  });
-  const tenant = await prisma.tenant.findUnique({
-    where: { clerkOrgId: orgId },
-    select: { id: true },
-  });
-  if (!user || !tenant) {
-    return NextResponse.json({ error: 'tenant_or_user_not_found' }, { status: 404 });
-  }
+    const user = await prisma.user.findUnique({
+      where: { clerkUserId: userId },
+      select: { id: true },
+    });
+    const tenant = await prisma.tenant.findUnique({
+      where: { clerkOrgId: orgId },
+      select: { id: true },
+    });
+    if (!user || !tenant) {
+      return NextResponse.json({ error: 'tenant_or_user_not_found' }, { status: 404 });
+    }
 
-  const imageSha256 =
-    payload.data.imageSha256 ??
-    createHash('sha256').update(`${payload.data.mrzLine1}\n${payload.data.mrzLine2}`).digest('hex');
+    const imageSha256 =
+      payload.data.imageSha256 ??
+      createHash('sha256')
+        .update(`${payload.data.mrzLine1}\n${payload.data.mrzLine2}`)
+        .digest('hex');
 
-  const extracted = extractPassportFromMrz({
-    mrzLine1: payload.data.mrzLine1,
-    mrzLine2: payload.data.mrzLine2,
-    imageSha256,
-    filename: payload.data.filename ?? null,
-  });
-  if (!extracted) {
-    return NextResponse.json(
-      {
-        error: 'mrz_parse_failed',
-        message:
-          'The MRZ lines did not parse or failed checksum validation. Re-scan the passport and try again.',
-      },
-      { status: 422 }
-    );
-  }
-
-  const signals = await upsertPassportVault(prisma, {
-    tenantId: tenant.id,
-    userId: user.id,
-    documentVariant: 'passport',
-    payload: {
-      extraction: extracted,
+    const extracted = extractPassportFromMrz({
+      mrzLine1: payload.data.mrzLine1,
+      mrzLine2: payload.data.mrzLine2,
       imageSha256,
       filename: payload.data.filename ?? null,
-      uploadedAt: new Date().toISOString(),
-    },
-    signals: {
-      nationalityIso3: extracted.nationality || null,
-      expiresOn: extracted.expirationDate ? new Date(extracted.expirationDate) : null,
-      mrzChecksumValid: extracted.mrzChecksumValid,
-    },
-    extractedBy: 'mrz_fast',
-    actor: {
-      actorRef: `usr:${userId}`,
-      source: 'api/passport/upload',
-      context: {
-        ip: req.headers.get('x-forwarded-for') ?? null,
-        userAgent: req.headers.get('user-agent') ?? null,
-      },
-    },
-  });
+    });
+    if (!extracted) {
+      return NextResponse.json(
+        {
+          error: 'mrz_parse_failed',
+          message:
+            'The MRZ lines did not parse or failed checksum validation. Re-scan the passport and try again.',
+        },
+        { status: 422 }
+      );
+    }
 
-  // Return ONLY sanitized signals.  No MRZ, no name, no passport#.
-  return NextResponse.json({
-    vaultId: signals.id,
-    documentVariant: signals.documentVariant,
-    nationalityIso3: signals.nationalityIso3,
-    expiresOn: signals.expiresOn ? signals.expiresOn.toISOString().slice(0, 10) : null,
-    mrzChecksumValid: signals.mrzChecksumValid,
-    extractedBy: signals.extractedBy,
-    extractedAt: signals.extractedAt.toISOString(),
-  });
+    const signals = await upsertPassportVault(prisma, {
+      tenantId: tenant.id,
+      userId: user.id,
+      documentVariant: 'passport',
+      payload: {
+        extraction: extracted,
+        imageSha256,
+        filename: payload.data.filename ?? null,
+        uploadedAt: new Date().toISOString(),
+      },
+      signals: {
+        nationalityIso3: extracted.nationality || null,
+        expiresOn: extracted.expirationDate ? new Date(extracted.expirationDate) : null,
+        mrzChecksumValid: extracted.mrzChecksumValid,
+      },
+      extractedBy: 'mrz_fast',
+      actor: {
+        actorRef: `usr:${userId}`,
+        source: 'api/passport/upload',
+        context: {
+          ip: req.headers.get('x-forwarded-for') ?? null,
+          userAgent: req.headers.get('user-agent') ?? null,
+        },
+      },
+    });
+
+    // Return ONLY sanitized signals.  No MRZ, no name, no passport#.
+    return NextResponse.json({
+      vaultId: signals.id,
+      documentVariant: signals.documentVariant,
+      nationalityIso3: signals.nationalityIso3,
+      expiresOn: signals.expiresOn ? signals.expiresOn.toISOString().slice(0, 10) : null,
+      mrzChecksumValid: signals.mrzChecksumValid,
+      extractedBy: signals.extractedBy,
+      extractedAt: signals.extractedAt.toISOString(),
+    });
+  } catch (err) {
+    console.error('[passport/upload] failed:', err);
+    return NextResponse.json(
+      {
+        error: 'vault_upload_failed',
+        message: 'Passport vault could not save the document. Try again or contact support.',
+      },
+      { status: 500 }
+    );
+  }
 }

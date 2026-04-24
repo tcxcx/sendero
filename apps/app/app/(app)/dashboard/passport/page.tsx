@@ -68,7 +68,14 @@ export default function PassportPage() {
   const loadVault = useCallback(async () => {
     try {
       const res = await fetch('/api/passport/self', { cache: 'no-store' });
-      const body = (await res.json()) as { vault: VaultSignals | null };
+      const body = (await res.json()) as {
+        error?: string;
+        message?: string;
+        vault?: VaultSignals | null;
+      };
+      if (!res.ok || body.error) {
+        throw new Error(body.message ?? body.error ?? 'Failed to load vault state');
+      }
       setVault(body.vault);
       setStatus(body.vault ? 'on_file' : 'empty');
     } catch (err) {
@@ -96,7 +103,7 @@ export default function PassportPage() {
             imageSha256,
           }),
         });
-        const body = (await res.json()) as
+        const body = (await safeJson(res)) as
           | { vaultId: string; [k: string]: unknown }
           | { error: string; message?: string };
         if (!res.ok || 'error' in body) {
@@ -390,4 +397,12 @@ function timeAgo(iso: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+async function safeJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return { error: 'invalid_response', message: res.statusText || 'Request failed' };
+  }
 }

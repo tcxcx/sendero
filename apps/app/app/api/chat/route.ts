@@ -185,7 +185,7 @@ async function probeModel(pick: Picked): Promise<{ ok: true } | { ok: false; err
     await generateText({
       model: pick.model,
       prompt: 'ok',
-      maxOutputTokens: 4,
+      maxOutputTokens: 16,
       maxRetries: 0,
       providerOptions,
     });

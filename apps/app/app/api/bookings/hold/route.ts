@@ -48,7 +48,10 @@ export async function POST(req: NextRequest) {
         duffelErrors.map((e: any) => e.title || e.message || JSON.stringify(e)).join('; ')) ||
       (err instanceof Error ? err.message : String(err)) ||
       'unknown';
+    const userMessage = /invalid order create type/i.test(message)
+      ? 'This offer cannot be held by the airline. Choose another offer or run a new search for holdable inventory.'
+      : message;
     console.error('[bookings/hold] duffel error:', duffelErrors || err);
-    return NextResponse.json({ error: 'hold_failed', message }, { status: 500 });
+    return NextResponse.json({ error: 'hold_failed', message: userMessage }, { status: 500 });
   }
 }
