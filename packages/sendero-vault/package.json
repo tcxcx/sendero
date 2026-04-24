@@ -1,0 +1,27 @@
+{
+  "name": "@sendero/vault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero passport/identity vault. Envelope-encrypted storage (pgcrypto pgp_sym_encrypt, per-tenant DEK derived from env KEK via HKDF), append-only access log, sanitized-signal reads. Only consumer allowed to touch PassportVault.ciphertext.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./envelope": "./src/envelope.ts",
+    "./passport": "./src/passport.ts",
+    "./verify": "./src/verify.ts"
+  },
+  "peerDependencies": {
+    "@sendero/database": "*",
+    "@sendero/ocr": "*"
+  },
+  "dependencies": {
+    "mrz-fast": "^1.0.9"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

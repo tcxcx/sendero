@@ -1412,6 +1412,41 @@ export const cancelOrderWithCreditsWorkflow: WorkflowDef = {
   ],
 };
 
+// ─── verify-travel-documents: passport vault → eligibility verdict ───
+//
+// Deterministic, no-LLM workflow. Reads sanitized signals from the
+// traveler's passport vault, applies the 6-month-validity + visa rules,
+// and produces a TravelEligibilityVerdict. Called by book_flight as a
+// precondition — a `block` verdict aborts the booking before we touch
+// any supplier.
+
+export const verifyTravelDocumentsWorkflow: WorkflowDef = {
+  id: 'sendero.verify_travel_documents',
+  version: 1,
+  label: 'Verify travel documents',
+  description:
+    "Check a traveler's passport eligibility for an upcoming trip. Reads the encrypted vault (signals only — never names, DOB, or passport#), checks expiry + 6-month rule, runs visa-rules lookup. Returns a pass/warn/block verdict with enum reason codes the UI can render. No PII ever enters the workflow scratchpad or the agent context.",
+  steps: [
+    {
+      kind: 'tool',
+      id: 'verdict',
+      tool: 'check_travel_eligibility',
+      label: 'Check travel eligibility',
+      as: 'verdict',
+      args: {
+        travelerUserId: $('input.travelerUserId'),
+        originIso3: $('input.originIso3'),
+        destinationIso3: $('input.destinationIso3'),
+        departureDate: $('input.departureDate'),
+        returnDate: $('input.returnDate'),
+        purpose: $('input.purpose'),
+      },
+      retries: 0,
+      timeoutMs: 10_000,
+    },
+  ],
+};
+
 export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [bookFlightWorkflow.id]: bookFlightWorkflow,
   [groupTripWorkflow.id]: groupTripWorkflow,
@@ -1429,6 +1464,7 @@ export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [cancellationRecoveryWorkflow.id]: cancellationRecoveryWorkflow,
   [bookStayWithLoyaltyWorkflow.id]: bookStayWithLoyaltyWorkflow,
   [cancelOrderWithCreditsWorkflow.id]: cancelOrderWithCreditsWorkflow,
+  [verifyTravelDocumentsWorkflow.id]: verifyTravelDocumentsWorkflow,
 };
 
 /** Resolve a workflow by id; returns null if unknown. */

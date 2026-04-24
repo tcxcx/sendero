@@ -86,6 +86,11 @@ export const TOOL_PRICING: Record<string, string> = {
 
   // Multimodal OCR — one Gemini Pro multimodal call per invocation
   scan_document: '0.01',
+
+  // Travel-compliance verdict — DB read + deterministic rule eval, no
+  // LLM, no external API (until Sherpa is wired). Priced minimal so
+  // workflows can call it on every booking without budget pressure.
+  check_travel_eligibility: '0.0005',
 };
 
 /** USDC has 6 decimals on every chain. */

@@ -47,6 +47,7 @@
         "@radix-ui/react-dropdown-menu": "^2.1.16",
         "@radix-ui/react-hover-card": "^1.1.15",
         "@radix-ui/react-label": "^2.1.8",
+        "@radix-ui/react-popover": "^1.1.15",
         "@radix-ui/react-select": "^2.2.6",
         "@radix-ui/react-separator": "^1.1.8",
         "@radix-ui/react-slot": "^1.2.4",
@@ -79,6 +80,7 @@
         "@sendero/slack": "workspace:*",
         "@sendero/tools": "workspace:*",
         "@sendero/ui": "workspace:*",
+        "@sendero/vault": "workspace:*",
         "@sendero/webhooks": "workspace:*",
         "@sendero/whatsapp": "workspace:*",
         "@sendero/workflows": "workspace:*",
@@ -539,6 +541,20 @@
         "zod": "^3.25.0",
       },
     },
+    "packages/sendero-vault": {
+      "name": "@sendero/vault",
+      "version": "0.1.0",
+      "dependencies": {
+        "mrz-fast": "^1.0.9",
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "@sendero/database": "*",
+        "@sendero/ocr": "*",
+      },
+    },
     "packages/seo": {
       "name": "@sendero/seo",
       "version": "0.1.0",
@@ -577,6 +593,7 @@
         "@sendero/nanopayments": "*",
         "@sendero/notifications": "*",
         "@sendero/ocr": "*",
+        "@sendero/vault": "*",
         "@vercel/blob": "^2.3.3",
         "ai": "*",
         "viem": "*",
@@ -1434,6 +1451,8 @@
     "@sendero/tools": ["@sendero/tools@workspace:packages/tools"],
 
     "@sendero/ui": ["@sendero/ui@workspace:packages/ui"],
+
+    "@sendero/vault": ["@sendero/vault@workspace:packages/sendero-vault"],
 
     "@sendero/webhooks": ["@sendero/webhooks@workspace:packages/webhooks"],
 
@@ -2954,6 +2973,8 @@
     "motion-dom": ["motion-dom@12.38.0", "", { "dependencies": { "motion-utils": "^12.36.0" } }, "sha512-pdkHLD8QYRp8VfiNLb8xIBJis1byQ9gPT3Jnh2jqfFtAsWUA3dEepDlsWe/xMpO8McV+VdpKVcp+E+TGJEtOoA=="],
 
     "motion-utils": ["motion-utils@12.36.0", "", {}, "sha512-eHWisygbiwVvf6PZ1vhaHCLamvkSbPIeAYxWUuL3a2PD/TROgE7FvfHWTIH4vMl798QLfMw15nRqIaRDXTlYRg=="],
+
+    "mrz-fast": ["mrz-fast@1.0.9", "", {}, "sha512-Y6TQ0PBBwQcxMKBGo9Y3C868vQPs6CkDO/VDGnkYjSih70wjbjOV3zpv5tzPiTq2/8JUNLR5bNn72LCytRBpvA=="],
 
     "ms": ["ms@2.1.3", "", {}, "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="],
 

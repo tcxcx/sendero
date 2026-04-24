@@ -17,13 +17,14 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  previewFeatures = ["driverAdapters", "postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pgcrypto]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -262,6 +263,7 @@ model Tenant {
   arrivalPlaybookRuns ArrivalPlaybookRun[]
   supportTurns        SupportTurn[]
   pendingMultisigOps  PendingMultisigOp[]
+  passportVaults      PassportVault[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -297,6 +299,7 @@ model User {
   channelIdentities  ChannelIdentity[]
   whatsappLinkTokens WhatsAppLinkToken[]
   airlineCredits     AirlineCredit[]
+  passportVaults     PassportVault[]
 
   @@index([createdAt])
   @@map("users")
@@ -1339,4 +1342,113 @@ model PendingMultisigOp {
   @@index([opHash])
   @@index([expiresAt])
   @@map("pending_multisig_ops")
+}
+
+// ─── Passport Vault (envelope-encrypted) ─────────────────────────────────────
+//
+// Highly-sensitive traveler identity documents. The full extraction (name,
+// passport#, DOB, MRZ lines, place of birth, image hash) lives ONLY in the
+// `ciphertext` column — encrypted via pgcrypto pgp_sym_encrypt with a
+// per-tenant DEK derived from the env-stored KEK (see @sendero/vault).
+//
+// The plaintext sibling columns carry ONLY sanitized signals the LLM and
+// agent tools are allowed to see:
+//   - nationalityIso3         : "USA" — needed for visa-rule lookup
+//   - expiresOn               : date  — needed for 6-month-rule check
+//   - documentVariant         : passport | national_id | drivers_license | …
+//   - mrzChecksumValid        : bool  — trust signal
+//   - extractedBy             : mrz_fast | gemini_zdr
+//
+// Name / DOB / document number / MRZ lines / place of birth / image hash
+// NEVER appear in plaintext columns. They only exist inside `ciphertext`,
+// decryptable only by:
+//   - the traveler themselves via /dashboard/passport (Clerk-auth)
+//   - a workflow step running under the `vault:decrypt` service role
+// Every decrypt goes through PassportVaultAccessLog (append-only).
+//
+// Compliance note: this table is INTENTIONALLY not referenced from Trip —
+// a vault entry is scoped to (tenantId, userId) and reused across trips.
+model PassportVault {
+  id       String @id @default(cuid())
+  tenantId String
+  userId   String
+
+  /// Envelope-encrypted full extraction blob (JSON-encoded IdDocumentExtraction
+  /// + image SHA-256 + original filename). Written via pgp_sym_encrypt with
+  /// the tenant DEK. Reads go through @sendero/vault decryptEnvelope().
+  ciphertext Bytes
+
+  /// AES-GCM nonce / PGP session-key wrapper bytes if we switch off pgp_sym
+  /// down the road. Null when using pgp_sym_encrypt (it's self-contained).
+  nonce Bytes?
+
+  /// Key version — bumps when we rotate the KEK. @sendero/vault keeps old
+  /// DEKs around keyed by this version so we can decrypt + re-wrap on read.
+  keyVersion Int @default(1)
+
+  // ── Sanitized signals (plaintext, LLM-safe) ─────────────────────────────
+
+  /// ISO 3166-1 alpha-3 nationality code. Needed for visa-rule lookup.
+  /// NOT stored when this would de-facto identify the traveler (e.g. the
+  /// only American on a single-tenant agency) — caller decides.
+  nationalityIso3 String?
+
+  /// Expiry date. Date only, not datetime, to minimize fingerprint.
+  expiresOn DateTime? @db.Date
+
+  /// Document kind. No issuing country here — that's in ciphertext.
+  documentVariant String // passport | national_id | drivers_license | residence_permit
+
+  /// Machine-readable zone passed the ICAO 9303 checksum suite.
+  mrzChecksumValid Boolean @default(false)
+
+  /// Which extractor produced this row. Audit signal.
+  extractedBy String // mrz_fast | gemini_zdr | manual
+
+  extractedAt DateTime @default(now()) @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  /// Revocation flag — when true, the ciphertext is tombstoned. We keep the
+  /// row so access logs remain joinable, but decrypt requests fail fast.
+  revokedAt DateTime? @db.Timestamptz(6)
+
+  tenant     Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessLogs PassportVaultAccessLog[]
+
+  @@unique([tenantId, userId, documentVariant])
+  @@index([tenantId, expiresOn])
+  @@index([userId])
+  @@map("passport_vault")
+}
+
+/// Append-only audit log for every decrypt / read / verify operation on a
+/// vault entry. Written from @sendero/vault; never truncated.
+model PassportVaultAccessLog {
+  id      String @id @default(cuid())
+  vaultId String
+
+  /// What the caller did: decrypt | signals_read | verify | revoke | upsert.
+  action String
+
+  /// Who asked. For self-service: clerkUserId. For agents: svc:{apiKeyId}.
+  /// For workflow: wf:{workflowId}:{stepId}. For humans via operator view:
+  /// op:{clerkUserId}.
+  actorRef String
+
+  /// Where the call came from — ties back to a route or workflow run.
+  source String // api/passport/upload | api/passport/[id]/self | workflow:verify_travel_documents | ...
+
+  /// JSON context (ip, userAgent, tripId, reason). Never contains decrypted
+  /// PII — decrypted payloads are consumed then dropped, not logged.
+  context Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  vault PassportVault @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+
+  @@index([vaultId, createdAt])
+  @@index([action, createdAt])
+  @@map("passport_vault_access_log")
 }
