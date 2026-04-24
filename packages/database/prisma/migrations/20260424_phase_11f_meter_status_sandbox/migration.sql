@@ -2,4 +2,15 @@
 -- recorded for analytics but excluded from NanopayBatch settlement.
 -- Used by API-key-authenticated calls from sandbox keys and by
 -- production keys downgraded during testnet-beta network mode.
+--
+-- Safe on Prisma 5.x + Postgres 12+:
+--   - Prisma Migrate does NOT wrap Postgres migrations in a transaction
+--     by default (see Prisma blog "prisma-migrate-dx-primitives"), so
+--     the ALTER TYPE commits immediately.
+--   - Even if a future migration is tx-wrapped (`BEGIN;...COMMIT;`),
+--     Postgres 12+ allows ALTER TYPE ADD VALUE inside a tx as long as
+--     the new value isn't referenced in the same tx. We don't reference
+--     'sandbox' here — code uses it at runtime only.
+-- The pre-commit `migration-lint` hook blocks future migrations that
+-- add an enum value and reference it in the same file.
 ALTER TYPE "MeterStatus" ADD VALUE 'sandbox';
