@@ -25,6 +25,12 @@ import crypto from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { clerkClient } from '@clerk/nextjs/server';
 
+import {
+  DEFAULT_PROD_SCOPES,
+  KEY_SCOPES,
+  type KeyScope,
+  SANDBOX_SCOPES,
+} from '@sendero/auth/dispatch-auth';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 
@@ -85,6 +91,64 @@ export interface ResolvedApiKey {
   /** Effective type after network-mode downgrade. */
   effectiveKeyType: ApiKeyKind;
   label: string | null;
+  /**
+   * Granted capability scopes for this key. '*' means every scope;
+   * specific scopes (e.g. ['search', 'trip_assistance']) mean
+   * narrow access.  Sandbox keys default to ['*'] (trusted dev);
+   * user-minted production keys default to DEFAULT_PROD_SCOPES
+   * (read-mostly, never settlement/treasury).
+   *
+   * Scope storage: we look up `tenant.metadata.apiKeyScopes[keyId]`
+   * at verify time.  Admins can promote / restrict per-key scopes
+   * via the tenant admin UI.  Keys without an explicit entry get
+   * the safe default for their type.
+   */
+  scopes: readonly KeyScope[];
+}
+
+/**
+ * Narrow / widen an unknown value into a KeyScope array.  Tolerates
+ * string-or-array / mixed-case / invalid entries by dropping them.
+ */
+export function normalizeScopes(raw: unknown, fallback: readonly KeyScope[]): readonly KeyScope[] {
+  const candidate = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : null;
+  if (!candidate) return fallback;
+  const cleaned = candidate
+    .filter((s): s is string => typeof s === 'string')
+    .map(s => s.trim().toLowerCase())
+    .filter(s => s === '*' || (KEY_SCOPES as readonly string[]).includes(s)) as KeyScope[];
+  return cleaned.length === 0 ? fallback : cleaned;
+}
+
+async function resolveScopesForKey(
+  clerkOrgId: string,
+  keyId: string,
+  keyType: ApiKeyKind,
+  claimedScopes: unknown
+): Promise<readonly KeyScope[]> {
+  const defaults = keyType === 'sandbox' ? SANDBOX_SCOPES : DEFAULT_PROD_SCOPES;
+
+  // Claims come first when set explicitly by the webhook on mint.
+  if (claimedScopes !== undefined) {
+    return normalizeScopes(claimedScopes, defaults);
+  }
+
+  // Then per-key scopes stashed on tenant metadata.  Admins can write
+  // `tenant.metadata.apiKeyScopes[keyId] = ['search', 'bookings']`
+  // without a migration.
+  const tenant = await prisma.tenant.findUnique({
+    where: { clerkOrgId },
+    select: { metadata: true },
+  });
+  const meta = tenant?.metadata;
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    const scopesMap = (meta as Record<string, unknown>).apiKeyScopes;
+    if (scopesMap && typeof scopesMap === 'object' && !Array.isArray(scopesMap)) {
+      const entry = (scopesMap as Record<string, unknown>)[keyId];
+      if (entry !== undefined) return normalizeScopes(entry, defaults);
+    }
+  }
+  return defaults;
 }
 
 function extractBearer(req: Request | NextRequest): string | null {
@@ -147,6 +211,8 @@ export async function resolveTenantFromApiKey(
   const effectiveKeyType: ApiKeyKind =
     env.isTestnetBeta() && keyType === 'production' ? 'sandbox' : keyType;
 
+  const scopes = await resolveScopesForKey(subject, verified.id, keyType, claims.scopes);
+
   const resolved: ResolvedApiKey = {
     tenantId: tenant.id,
     clerkOrgId: subject,
@@ -154,6 +220,7 @@ export async function resolveTenantFromApiKey(
     keyType,
     effectiveKeyType,
     label: verified.name ?? null,
+    scopes,
   };
 
   // Fire-and-forget. If Redis is down we still return the resolved

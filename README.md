@@ -162,6 +162,39 @@ Agents, workflow scratchpads, and log lines only ever see enum codes + non-PII `
 
 A new traveler signs in → dashboard shows the 10-second onboarding card → every flight search from that moment runs visa-aware, async via Sherpa in the background. **USA → CAN** business trip → verdict `ok` in under 400 ms, "visa-free" badge on the offer, one-tap book. **BRA → USA** 5-day business trip → verdict `warn` with `visa_required_not_on_file` + a Sherpa B2 eVisa `ancillary` hint → offer card sprouts *"Add B2 visa assistance — $185"*, tap adds it to the Arc-settled booking cart alongside the flight. WhatsApp a passport photo at any point → the agent refuses, logs the attempt, and replies *"passports go in the secure vault — here's a link"*. Upload, MRZ validates, vault encrypts. **Same rigor as on-chain escrow, applied to identity documents — and the same rigor applied to ancillary revenue.**
 
+## Developer experience — the docs surface we wanted when we started
+
+Sherpa's docs set the B2B API bar: top-nav API access, Postman import, "Trips LLM Friendly" endpoint. We matched it and closed two gaps they don't — **self-service key issuance** (they gate behind a form; we Clerk-native it) and **per-page markdown exports** for every docs page (they have one LLM endpoint; we automate the pattern across the whole tree).
+
+- **Canonical OpenAPI 3.1** at [`/api/openapi.json`](https://www.sendero.travel/api/openapi.json), generated from the tool registry in [`packages/tools/src/openapi.ts`](./packages/tools/src/openapi.ts). Scalar, Redoc, Postman, Insomnia consume it as-is. **Can't drift from code** — there's no hand-maintained spec.
+- **Interactive Scalar viewer** at [`/api-viewer`](./apps/docs/app/api-viewer/page.tsx). Try any tool, copy the `curl`, deep-link to Clerk's API-key UI.
+- **Docs-as-markdown for agents** — append `.md` to any `/docs/*` URL. Route at [`apps/docs/app/docs/[[...slug]].md/route.ts`](./apps/docs/app/docs/%5B%5B...slug%5D%5D.md/route.ts). Single pattern, every page.
+- **Top-nav CTA** in [`apps/docs/app/docs/layout.tsx`](./apps/docs/app/docs/layout.tsx): API Reference → MCP → Get API key. The last link goes straight to [`/dashboard/settings/api-keys`](./apps/app/app/(app)/dashboard/settings/api-keys) — Clerk-native, one click, no form.
+- **llms.txt surfaces it all** — [`packages/llms/src/catalog.ts`](./packages/llms/src/catalog.ts) advertises the OpenAPI URL, the Scalar viewer, the per-page `.md` pattern, and the self-serve key path. An agent crawling our site discovers every surface in one fetch.
+
+**Time-to-first-success** (per the `developer-experience` skill's north star): sign up → mint key → first nanopayment-billed tool call in under 5 minutes, no sales call, no email thread.
+
+## Hardening the x402 edge — scoped keys, signed requests, signed envelopes
+
+x402 monetizes every leaked key adversarially. A stolen bearer that fires 10 000 cheap searches before we revoke is still real money; a stolen bearer that moves USDC is catastrophic. Sendero's answer is **defence in depth without latency tax** — three controls, each small, each ships in isolation, none add cost to the hot path.
+
+See [`/docs/security`](./apps/docs/content/docs/security.mdx) for the full integration recipe.
+
+**1. Scoped API keys** ([`packages/auth/src/dispatch-auth.ts`](./packages/auth/src/dispatch-auth.ts), [`apps/app/lib/dispatch-scopes.ts`](./apps/app/lib/dispatch-scopes.ts)). Every key carries a scope set: `search`, `bookings`, `settlement`, `treasury`, `documents`, `compliance`, `trip_assistance`, `utilities`, or `*`. Sandbox keys default to `*`; production keys mint with a read-mostly default (`search + trip_assistance + utilities + compliance + documents`) — **no settlement, no treasury**. Tenant admins promote keys via `tenant.metadata.apiKeyScopes[keyId]`. The dispatch route **filters the tool registry before the LLM sees it** (`filterToolsByScopes`), so prompt injection can't sneak the model into calling a tool outside scope.
+
+**2. HMAC-signed requests — privileged tools only** ([`apps/app/lib/dispatch-signing.ts`](./apps/app/lib/dispatch-signing.ts)). Keys with `settlement`, `treasury`, or `*` must sign with `x-sendero-ts` + `x-sendero-nonce` + `x-sendero-sig = HMAC-SHA256(sha256(bearer), canonical-string)`. Read-mostly scopes stay bearer-only so the hot path keeps its sub-second latency budget. **Nonce dedup via Upstash `SET NX EX 120s`** catches replays inside the 60s signature window. The bearer itself is the shared secret — no separate key distribution, no rotation dance.
+
+**3. Signed response envelopes — every reply** ([`buildResponseHeaders()`](./packages/auth/src/dispatch-auth.ts) + [`dispatch/route.ts`](./apps/app/app/api/agent/dispatch/route.ts)). Every response carries `x-sendero-trace-id`, `x-sendero-meter-id`, `x-sendero-ts`, `x-sendero-sig` signing the exact response bytes + the meter-event id that billed. Customers verify on reception → MITM replays of cached responses are exposed as unpaid. The trace id is what support tickets quote; it keys our audit log.
+
+**The result**: a compromised search key spams free-tier search but cannot move USDC or touch passport PII. A settlement key is useless without the ability to sign with the bearer (which the attacker would need too — at which point signing doesn't matter, but also nothing else does). A response can't be cached-and-replayed as paid. And the hot path stays at **Clerk-verify-cached → scope-check → tool-call — no extra round trips**.
+
+| Path | Auth | Cost over bearer |
+| --- | --- | --- |
+| Discovery (`/api/openapi.json`, `/llms.txt`, `/docs/*`) | None | — |
+| Hot path (`search`, `compliance`, `trip_assistance`, `utilities`) | Bearer + scope check | ~0 (in-process) |
+| Privileged (`settlement`, `treasury`, `*`) | Bearer + HMAC + nonce | ~200µs sig verify + one Redis `SETNX` |
+| All dispatch responses | — | Trace id + HMAC sign ~50µs |
+
 <br />
 
 # Sendero × Arc

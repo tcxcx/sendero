@@ -1,0 +1,59 @@
+---
+title: API Reference
+description: Interactive OpenAPI 3.1 reference for the Sendero tool registry. Mint a key, call a tool, watch the nanopayment settle on Arc.
+---
+
+Every callable Sendero surface is one URL away.
+
+- **Live OpenAPI 3.1 document** — [`/api/openapi.json`](https://www.sendero.travel/api/openapi.json). Scalar, Redoc, Postman, Insomnia, and `curl` consume it as-is. Generated from the canonical tool registry in [`packages/tools/src/openapi.ts`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/openapi.ts), so drift between code and docs is impossible.
+- **Interactive browser** — [**launch the Scalar viewer →**](/api-viewer). Try any tool against a live sandbox key, copy-paste the `curl` for production.
+- **MCP parity** — every tool is also live on the MCP server at [`/api/mcp`](/docs/mcp-integration). Same schemas, same auth, same pricing.
+- **LLM-friendly exports** — append `.md` to any docs page for raw markdown the way Sherpa exposes their "Trips LLM Friendly" endpoint. Example: [`/docs/tools/search_flights.md`](/docs/tools/search_flights.md). Or pull the full crawl manifest at [`/llms.txt`](/llms.txt).
+
+> **Mint a key before you try it.** Every request carries a Clerk-issued API key on `Authorization: Bearer`. Production keys are one click at [`/dashboard/settings/api-keys`](https://www.sendero.travel/dashboard/settings/api-keys) — **no form, no gating, no sales call**. Sandbox keys are auto-issued on tenant creation and never move real USDC.
+
+## Dispatch shape
+
+Every tool is reachable at `POST /api/agent/dispatch` with one body shape. The server derives the service-account subject (`svc:${keyId}`) from the key, so `userId` never rides on the wire.
+
+```bash
+curl -X POST https://www.sendero.travel/api/agent/dispatch \
+  -H "Authorization: Bearer ak_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "tenant_abc123",
+    "tool": "search_flights",
+    "args": {
+      "origin": "SFO",
+      "destination": "LHR",
+      "departureDate": "2026-06-15",
+      "passengers": 1,
+      "cabinClass": "business"
+    }
+  }'
+```
+
+Response includes `{ ok, result, latencyMs, priceMicroUsdc }` — the settled nanopayment amount is right there in the response, auditable.
+
+## How to use the docs programmatically
+
+Point a coding agent at any of:
+
+| Surface | URL | What it's for |
+| --- | --- | --- |
+| OpenAPI 3.1 | `/api/openapi.json` | Full tool registry, machine-readable, cacheable |
+| LLM manifest | `/llms.txt`, `/.well-known/llms.txt` | Endpoint roots + per-surface crawl hints |
+| Per-page markdown | append `.md` to any `/docs/*` URL | Plain-text source for LLM ingestion |
+| MCP tools/list | `/api/mcp` (JSON-RPC) | Agent-native protocol, same auth |
+
+Each URL returns `Access-Control-Allow-Origin: *`, `Cache-Control: max-age=3600` where it makes sense.
+
+## Pricing + plan tiers
+
+Every call bills one x402 nanopayment in micro-USDC. See [`packages/tools/src/pricing.ts`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/pricing.ts) for the canonical per-tool price and [`/docs/pricing`](/docs/pricing) for plan-tier discount rules (Pro tier cuts nanopayments 30%, Enterprise 50%).
+
+## Changelog highlights
+
+- **2026-04-24** — Published canonical [`/api/openapi.json`](https://www.sendero.travel/api/openapi.json) generated from the tool registry. Added per-page `.md` exports (append `.md` to any docs URL). Added top-nav *Get API key* deep link. Added `check_travel_eligibility` for visa/passport verdicts and `scan_document` for receipt/invoice/boarding-pass OCR. Shipped [`@sendero/sherpa`](https://github.com/tcxcx/sendero/tree/main/packages/sendero-sherpa) with the vendored Sherpa Requirements API v3 spec.
+- **2026-04-23** — Duffel tool names abstracted (`*_duffel_*` → `*_flight_*`) so supplier IP stays out of public MCP/docs/LLM surfaces.
+- **2026-04-17** — Dispatch auth migrated to Clerk native API keys ([GA'd April 17, 2026](https://clerk.com)). Self-service key minting replaces the gated form pattern most of our peers still use.

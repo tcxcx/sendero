@@ -11,6 +11,7 @@
     "./adapters/mcp": "./src/adapters/mcp.ts",
     "./agent": "./src/agent.ts",
     "./meter": "./src/meter.ts",
+    "./openapi": "./src/openapi.ts",
     "./pricing": "./src/pricing.ts",
     "./types": "./src/types.ts",
     "./faucet": "./src/faucet.ts"

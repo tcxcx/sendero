@@ -81,6 +81,8 @@ export {
 } from './faucet';
 export { generateBookingInvoiceTool } from './generate-booking-invoice';
 export { checkTravelEligibilityTool } from './check-travel-eligibility';
+export type { OpenApiDocInput } from './openapi';
+export { buildOpenApiDoc } from './openapi';
 export { scanDocumentTool } from './scan-document';
 export {
   type GeocodeTripStopInput,

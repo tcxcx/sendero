@@ -46,6 +46,9 @@ import { DEFAULT_PRICING, type BillingSegment, type PricedAction } from '@sender
 import { planPriceFor, resolvePlan, type PlanTier } from '@sendero/billing/plans';
 
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
+import { filterToolsByScopes } from '@/lib/dispatch-scopes';
+import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
+import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { prisma } from '@sendero/database';
 import { detectLocale, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
@@ -126,9 +129,38 @@ export async function POST(req: NextRequest) {
     if (authError) return authError;
   }
 
+  // Read the body as text FIRST so we can hash the exact bytes for
+  // request signature verification + response envelope signing. Don't
+  // call req.json() ahead of this — it consumes the stream.
+  const rawBody = await req.text();
+  const bearer = extractBearerForSigning(req);
+
+  // Scoped signing policy: keys with settlement / treasury / '*' scope
+  // must HMAC-sign the request. Read-mostly scopes stay bearer-only so
+  // the hot path keeps its sub-second latency.
+  if (apiKey && bearer && scopesRequireSignature(apiKey.scopes)) {
+    const verdict = await enforceRequestSignature({
+      req,
+      bearer,
+      body: rawBody,
+      toolName: 'dispatch_turn',
+    });
+    if (verdict.ok !== true) {
+      return NextResponse.json(
+        {
+          error: 'signature_required',
+          reason: verdict.reason,
+          message: verdict.message,
+          docs: 'https://docs.sendero.travel/docs/api-reference#request-signing',
+        },
+        { status: 401 }
+      );
+    }
+  }
+
   let body: z.infer<typeof BodySchema>;
   try {
-    body = BodySchema.parse(await req.json());
+    body = BodySchema.parse(JSON.parse(rawBody));
   } catch (err) {
     return NextResponse.json(
       { error: 'invalid_input', issues: err instanceof z.ZodError ? err.issues : [] },
@@ -174,7 +206,13 @@ export async function POST(req: NextRequest) {
 
   const distinctId = hashDistinctId(body.userId);
   const locale = body.locale ?? requestLocale(req);
-  const tools = buildAiSdkTools(toolList, {
+  // Filter the tool registry BEFORE the LLM sees it.  A tool the caller
+  // isn't authorized for is removed, so prompt injection can't sneak
+  // the model into calling it.  Shared-secret / sandbox paths grant
+  // '*' implicitly.
+  const grantedScopes = apiKey?.scopes ?? (['*'] as const);
+  const scopedTools = filterToolsByScopes(toolList, grantedScopes);
+  const tools = buildAiSdkTools(scopedTools, {
     traveler: { userId: body.userId, tenantId: body.tenantId },
   });
 
@@ -316,27 +354,59 @@ export async function POST(req: NextRequest) {
   await flush();
 
   if (result.blocked) {
-    return NextResponse.json(
-      {
-        error: 'cap_exceeded',
-        text: result.text,
-        periods: result.capPeriods.map(p => ({
-          period: p.period,
-          spentMicro: p.spentMicro.toString(),
-          capMicro: p.capMicro.toString(),
-          remainingMicro: p.remainingMicro.toString(),
-        })),
+    const blockedBody = JSON.stringify({
+      error: 'cap_exceeded',
+      text: result.text,
+      periods: result.capPeriods.map(p => ({
+        period: p.period,
+        spentMicro: p.spentMicro.toString(),
+        capMicro: p.capMicro.toString(),
+        remainingMicro: p.remainingMicro.toString(),
+      })),
+    });
+    return new NextResponse(blockedBody, {
+      status: 402,
+      headers: {
+        'content-type': 'application/json',
+        ...buildResponseHeaders({ bearer, meterId: 'blocked', body: blockedBody }),
       },
-      { status: 402 }
-    );
+    });
   }
 
-  return NextResponse.json({
+  const successBody = JSON.stringify({
     text: result.text,
     trail: result.trail,
     latencyMs: result.latencyMs,
     billed: result.billed,
   });
+  return new NextResponse(successBody, {
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      ...buildResponseHeaders({
+        bearer,
+        meterId: result.billed ? (result.trail[0]?.toolName ?? 'chat_reply') : 'free',
+        body: successBody,
+      }),
+    },
+  });
+}
+
+/**
+ * Extract the bearer exactly as the request carries it.  Mirrors the
+ * extraction in `api-key-auth.ts` but without the `ak_` format guard —
+ * internal callers using AGENT_DISPATCH_SECRET don't have a bearer,
+ * so we return null and skip signing.
+ */
+function extractBearerForSigning(req: NextRequest): string | null {
+  const auth = req.headers.get('authorization') ?? req.headers.get('Authorization');
+  if (auth) {
+    const match = /^Bearer\s+(\S+)/i.exec(auth);
+    if (match && match[1].startsWith('ak_')) return match[1];
+  }
+  const custom = req.headers.get('x-sendero-api-key') ?? req.headers.get('X-Sendero-Api-Key');
+  if (custom && custom.trim().startsWith('ak_')) return custom.trim();
+  return null;
 }
 
 function requestLocale(req: NextRequest): string {

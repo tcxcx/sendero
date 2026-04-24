@@ -236,3 +236,61 @@ Override with `SKIP_MIGRATION_CHECK=1 git commit` when you genuinely know better
 **Rule:** layout-critical widths (sidebar, card max-widths, fixed positioning offsets) use **px**. Visual-rhythm sizing (font-size, line-height, margin/padding at the text scale) stays **rem** so it composes with the 13px root. Design specs from tooling (Figma, Claude Design) quote px — honor them literally.
 
 If you change `html { font-size }` again, grep for rem-based `SIDEBAR_WIDTH` / `MAX_WIDTH` / `HEADER_HEIGHT` constants and reconsider each.
+
+## x402 edge hardening — three small controls, zero hot-path tax (2026-04)
+
+x402 changes the attack economics. In a non-metered API, a stolen key = cost to us to revoke. In x402, every unrevoked second = real USDC bleeding out. The mental shift: **treat every leaked key as adversarial from second zero**, not as a future problem to fix.
+
+### The three controls we shipped
+
+1. **Scoped API keys.** Each key carries a capability set (`search`, `bookings`, `settlement`, `treasury`, …). Sandbox defaults to `['*']`, production to read-mostly (`search + compliance + trip_assistance + utilities + documents`). Settlement and treasury require explicit admin opt-in per key. Enforcement: filter the tool registry **before the LLM sees it** (`filterToolsByScopes` in `apps/app/lib/dispatch-scopes.ts`). A tool the model can't see can't be called via prompt injection.
+
+2. **HMAC request signing on privileged tools only.** Keys with `settlement`/`treasury`/`*` must sign every dispatch with `x-sendero-ts` + `x-sendero-nonce` + `x-sendero-sig`. The shared HMAC key is `sha256(bearer_token)` — **no separate key distribution, no rotation dance**. Upstash `SETNX EX 120s` dedupes nonces. Read-mostly scopes stay bearer-only so the hot path keeps its sub-second budget. See `packages/auth/src/dispatch-auth.ts` + `apps/app/lib/dispatch-signing.ts`.
+
+3. **Signed response envelopes on every reply.** Every `/api/agent/dispatch` response carries `x-sendero-trace-id`, `x-sendero-meter-id`, `x-sendero-ts`, `x-sendero-sig`. The signature covers the response body + meter-event id. Customers verify on reception → MITM replays of cached responses are exposed. The trace id is the universal support-ticket anchor.
+
+### Principles worth reusing
+
+- **Symmetric HMAC with the bearer-as-secret** beats the usual "give the customer two secrets" pattern. One key to manage, one to revoke. Derive the HMAC key as `sha256(bearer)` so logs accidentally emitting the HMAC key don't leak the Authorization header.
+- **Scope enforcement at the registry level, not at the call site.** Filter the tools the LLM *can see* rather than checking at invocation time. Prompt-injection attacks stop being interesting.
+- **Signing is a conditional tax, not a uniform one.** Hot-path scopes (search/compliance/assistance) stay bearer-only; only privileged scopes pay the ~200µs signature verify. The read side of x402 can ship Gemini-speed; the write side carries its own proof.
+- **Every response has a trace id, not just errors.** We added `x-sendero-trace-id` universally. Costs 50µs, saves hours of "paste your request and I'll dig through logs" in support.
+
+### Performance budget we held
+
+| Path | Extra latency |
+| --- | --- |
+| Discovery (`/api/openapi.json`, `/llms.txt`, docs) | — |
+| Hot path (`search`, `compliance`, `trip_assistance`, `utilities`) | ~0 |
+| Privileged (`settlement`, `treasury`, `*`) | ~200µs sig verify + one Redis SETNX |
+| Every response | Trace id + HMAC sign ~50µs |
+
+We never hit Clerk on the hot path — Upstash caches key verify for 60s; scope check is a `Set.has`; signature verification happens at the Vercel function boundary before Node runtime allocates. Envelope signing reuses the same HMAC key we already computed.
+
+### Rollout rule
+
+New security controls must be **backwards-compatible by default** or adoption is zero. Existing integrations keep working because:
+- Default scopes on new production keys are the old behavior (read-mostly). Admins opt into settlement.
+- Signing is only *required* once a key has a privileged scope. Upgrading a key = upgrading its signing requirement at the same moment.
+
+## Developer experience as a shipping discipline (2026-04)
+
+Sherpa's docs UX is the B2B API bar. What made their integration fast wasn't their product — it was that **they let us integrate without talking to them**. Two hours from "here's the JSON" to a working client. That's the number to beat.
+
+### What actually matters to integrators
+
+1. **One URL that returns the full wire spec.** We ship `/api/openapi.json` generated from the canonical tool registry in `packages/tools/src/openapi.ts`. Can't drift from code — there's no hand-maintained spec.
+2. **A self-service key-issuance path that's one click.** Sherpa gates behind a form + email thread. We ship Clerk-native API keys — signed-in user → `/dashboard/settings/api-keys` → production key in 10 seconds, no sales call.
+3. **Every docs page available as plain markdown.** Sherpa has one LLM-friendly endpoint. We automate the pattern: append `.md` to any `/docs/*` URL. Route at `apps/docs/app/docs/[[...slug]].md/route.ts`.
+4. **Progressive disclosure**. `/docs/api-reference` for the overview, `/api-viewer` for the interactive Scalar UI, `/api/openapi.json` for the raw spec. Readers pick depth.
+
+### What the developer-experience skill recommended that stuck
+
+- **Time-to-first-success is the metric.** If a developer can't call their first tool in under 5 minutes, you have a DX problem. Every friction point in the mint → sign → call flow should be measured in seconds, not minutes.
+- **Pit of success.** The common path has to be the correct path. Our dispatch body is the same shape for every tool; service-account `userId` is derived from the key, so there's no way to accidentally impersonate a user.
+- **Changelog as contract.** Every entry answers *what changed, why, what to do*. Internal refactors don't belong there.
+- **Error messages as documentation.** `signature_required` errors cite `/docs/api-reference#request-signing` in the response body so a developer's first-contact with signing requirements is a link to the recipe, not a 401 with no context.
+
+### The "vendor the spec" pattern
+
+When Sherpa handed us their Swagger 2.0 JSON file, we dropped it into `packages/sendero-sherpa/openapi/sherpa-requirements-api-v3.json` and rewrote the client against it in one evening. **Vendoring the upstream spec inside the package that consumes it** is the right default for partner integrations: the JSON is authoritative, the TypeScript types are a convenience view, and diffing on upgrade is mechanical. Commit the JSON — the 94KB once is cheaper than the 2h it takes to rediscover a field name.

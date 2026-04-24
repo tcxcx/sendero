@@ -1,0 +1,43 @@
+/**
+ * GET /api/openapi.json
+ *
+ * OpenAPI 3.1 document for the Sendero tool registry.  Served as
+ * `application/json` so Scalar, Redoc, Postman, Insomnia, and curl
+ * can consume it without negotiation.  Generated from the canonical
+ * tool registry in `@sendero/tools` — there is no hand-maintained
+ * spec.  One source of truth keeps drift impossible.
+ *
+ * DX rationale:
+ *   - Agents and human developers discover every callable surface
+ *     with one URL.
+ *   - The docs site embeds Scalar against this URL so reviewers have
+ *     a try-it-out surface without a second backend.
+ *   - llms.txt links this doc so agent crawlers pull it as-is.
+ *
+ * Public — no auth required to read the spec itself. Per-tool auth is
+ * a Clerk API key on the actual `/api/agent/dispatch` call.
+ */
+
+import { buildOpenApiDoc, toolList } from '@sendero/tools';
+import { resolvePublicOrigin } from '@sendero/seo';
+import { NextResponse } from 'next/server';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-static';
+export const revalidate = 3600;
+
+export function GET() {
+  const origin = resolvePublicOrigin(process.env.NEXT_PUBLIC_APP_URL, 'https://www.sendero.travel');
+  const doc = buildOpenApiDoc({
+    title: 'Sendero Agent Tools',
+    version: '1.0.0',
+    serverUrl: origin,
+    tools: toolList,
+  });
+  return NextResponse.json(doc, {
+    headers: {
+      'cache-control': 'public, max-age=3600, s-maxage=3600',
+      'access-control-allow-origin': '*',
+    },
+  });
+}
