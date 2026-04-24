@@ -27,7 +27,12 @@
  */
 
 import { Prisma, type PrismaClient } from '@sendero/database';
-import type { SherpaRequirement, TripsRequest } from '@sendero/sherpa';
+import type {
+  NormalizedRequirement,
+  TravelNode,
+  TravelPurpose,
+  TripRequestAttributes,
+} from '@sendero/sherpa';
 import { postTrips, resolveSherpaConfig } from '@sendero/sherpa';
 
 import { readDeclaredTravelerSignals, readTenantDefaultNationality } from './declared';
@@ -131,42 +136,45 @@ export async function executeEligibilityRun(
     const nationalityIso =
       passport?.nationalityIso3 ?? declared?.declaredNationalityIso3 ?? tenantDefault ?? null;
     const sherpaCfg = resolveSherpaConfig();
-    let sherpaRequirements: SherpaRequirement[] = [];
+    let sherpaRequirements: NormalizedRequirement[] = [];
     let providerRaw: unknown = null;
     let sherpaTripId: string | null = null;
     let source: 'sherpa' | 'fallback_rules' = 'fallback_rules';
 
     if (sherpaCfg && nationalityIso) {
-      const tripsReq: TripsRequest = {
-        purpose: run.purpose as TripsRequest['purpose'],
-        travelers: [
-          {
-            nationalityIso,
-            ...(passport?.expiresOn
-              ? { passportExpiry: passport.expiresOn.toISOString().slice(0, 10) }
-              : declared?.declaredPassportExpiry
-                ? {
-                    passportExpiry: declared.declaredPassportExpiry.toISOString().slice(0, 10),
-                  }
-                : {}),
-          },
-        ],
-        nodes: [
-          {
-            code: run.originIso3,
-            type: 'country',
+      const purpose = (
+        run.purpose.toUpperCase() === 'LEISURE' ? 'TOURISM' : run.purpose.toUpperCase()
+      ) as TravelPurpose;
+
+      const nodes: TravelNode[] = [
+        {
+          type: 'ORIGIN',
+          locationCode: run.originIso3,
+          departure: {
             date: run.departureDate.toISOString().slice(0, 10),
-            role: 'origin',
+            travelMode: 'AIR',
           },
-          {
-            code: run.destinationIso3,
-            type: 'country',
+        },
+        {
+          type: 'DESTINATION',
+          locationCode: run.destinationIso3,
+          arrival: {
             date: run.departureDate.toISOString().slice(0, 10),
-            role: 'destination',
+            travelMode: 'AIR',
           },
-        ],
+        },
+      ];
+
+      const attributes: TripRequestAttributes = {
+        locale: 'en-US',
+        currency: 'USD',
+        travelNodes: nodes,
+        traveller: {
+          passports: [nationalityIso],
+          travelPurposes: [purpose],
+        },
       };
-      const result = await postTrips(tripsReq, sherpaCfg);
+      const result = await postTrips({ attributes, config: sherpaCfg });
       if (result.ok === true) {
         sherpaRequirements = result.data.requirements;
         providerRaw = result.data.raw;
@@ -231,7 +239,7 @@ export async function executeEligibilityRun(
  */
 function overlaySherpaOntoVerdict(
   verdict: TravelEligibilityVerdict,
-  requirements: SherpaRequirement[]
+  requirements: NormalizedRequirement[]
 ): void {
   if (requirements.length === 0) return;
   // Strip the curated 'visa_*' reasons; Sherpa is more authoritative.
@@ -245,7 +253,7 @@ function overlaySherpaOntoVerdict(
       r.code !== 'visa_corridor_uncurated'
   );
   for (const req of requirements) {
-    const next = mapSherpaRequirementToReason(req);
+    const next = mapNormalizedRequirementToReason(req);
     if (next) verdict.reasons.push(next);
   }
   // Re-collapse status after the rewrite.
@@ -254,7 +262,7 @@ function overlaySherpaOntoVerdict(
   else verdict.status = 'ok';
 }
 
-function mapSherpaRequirementToReason(req: SherpaRequirement): VerdictReason | null {
+function mapNormalizedRequirementToReason(req: NormalizedRequirement): VerdictReason | null {
   switch (req.kind) {
     case 'visa_free':
       return { code: 'visa_free', severity: 'ok' };

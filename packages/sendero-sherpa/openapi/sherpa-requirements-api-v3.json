@@ -1,0 +1,2841 @@
+{
+  "swagger": "2.0",
+  "host": "requirements-api.joinsherpa.com",
+  "schemes": ["https"],
+  "info": {
+    "title": "Sherpa Requirements API v3",
+    "description": "## Overview\n\nThe Sherpa Requirements API v3 provides comprehensive travel requirements details for complete trip itineraries. Submit detailed trip information and receive categorized requirements including visas, restrictions, and documentation needs.\n\n## Getting Started\n\n### Authentication\nInclude your API key in the `x-api-key` header with every request.\n\n### Getting an API Key\nVisit [Sherpa Documentation](https://docs.joinsherpa.io) to create an account and generate your API key.\n\n### Base URL\n`https://requirements-api.joinsherpa.com/v3`\n\n### Response Format\nJSON responses following JSON:API specification.\n\n### UTM parameters and redirect URLs\n\nYou can pass optional **UTM query parameters on the `POST /trips` request URL** (not in the JSON body). Supported parameters: `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, and `utm_content`.\n\nWhen the response includes **redirect** objects, the API merges these UTM values onto each `redirect.url` using the same deep-link rules as Sherpa web surfaces (query parameters are appended to the URL; if the URL already has a query string, new parameters are added with `&`). Use this to attribute traffic when travelers open trip-level or category-level \"See details\" links from your integration.\n\nRedirect fields may appear on:\n\n- `data.attributes.redirect` — trip-level deep link\nRedirect object has `url` (required) and optional `label` for UI copy.\n\n**Example request:** `POST https://requirements-api.joinsherpa.com/v3/trips?utm_source=partner-app&utm_medium=api&utm_campaign=requirements-check`\n\nFor campaign naming and analytics patterns, see [UTM tracking](https://docs.joinsherpa.io/resources/utm-tracking).\n\n> **Note**: Individual restrictions and procedures returned in the Trips Endpoint can be accessed directly via the [v2 API endpoints](/v2) for detailed information and filtering options.\n\n## Key Features\n\n### Trips Endpoint\nSubmit complete itineraries with origin/destination, transit points, travel dates, and traveler information (passport, vaccination status).\n\n### Data Models\n- `TripRequest`: Trip submission with traveler details\n- `TripResponse`: Categorized requirements details\n- `TripResourceRedirect`: Deep link `url` and optional `label`; UTM query parameters on `POST /trips` merge onto each returned `url`\n- `ProcedureEntity`: Travel procedures and requirements\n- `RestrictionEntity`: Travel restrictions and entry requirements\n- `InformationCategoryGroup`: Organized requirement categories (may include `redirect`)\n\n### Requirement Categories\nRequirements are automatically categorized into:\n- **Visa Requirements**: Entry visas and travel authorizations\n- **Travel Restrictions**: Entry bans and travel limitations\n- **Passports and IDs**: Document requirements\n- **Quarantine**: Isolation and quarantine requirements\n- **Vaccination**: Immunization requirements\n- **COVID-19 Testing**: Testing requirements and procedures\n- **Other Documents**: Additional documentation needs\n\nFor detailed endpoint documentation and data model schemas, see the sections below.",
+    "version": "3.0.3",
+    "contact": {
+      "name": "Sherpa Developer Support",
+      "url": "https://docs.joinsherpa.io/"
+    },
+    "license": {
+      "name": "Proprietary. All rights reserved.",
+      "url": "https://joinsherpa.com"
+    }
+  },
+  "basePath": "/v3",
+  "paths": {
+    "/trips": {
+      "post": {
+        "consumes": ["application/vnd.api+json"],
+        "produces": ["application/vnd.api+json"],
+        "summary": "Travel details per trip",
+        "description": "Submit a complete trip itinerary for comprehensive travel requirements details. This endpoint processes the entire trip including origin, destination, transit points, and traveler information to provide categorized requirements and restrictions.\n\nOptional UTM query parameters on this request (`utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`) are merged onto `redirect.url` values in the response when redirects are returned. See the API overview for details.",
+        "operationId": "createTrip",
+        "parameters": [
+          {
+            "collectionFormat": "multi",
+            "in": "query",
+            "items": {
+              "type": "string"
+            },
+            "name": "include",
+            "required": false,
+            "type": "array",
+            "description": "Additional resources to include in the response"
+          },
+          {
+            "in": "query",
+            "name": "utm_source",
+            "required": false,
+            "type": "string",
+            "description": "UTM: traffic source (for example your app or site name). Merged onto `redirect.url` in the response when redirects are returned."
+          },
+          {
+            "in": "query",
+            "name": "utm_medium",
+            "required": false,
+            "type": "string",
+            "description": "UTM: marketing medium (for example `api` or `widget`). Merged onto `redirect.url` in the response when redirects are returned."
+          },
+          {
+            "in": "query",
+            "name": "utm_campaign",
+            "required": false,
+            "type": "string",
+            "description": "UTM: campaign name. Merged onto `redirect.url` in the response when redirects are returned."
+          },
+          {
+            "in": "query",
+            "name": "utm_term",
+            "required": false,
+            "type": "string",
+            "description": "UTM: optional keyword or extra context. Merged onto `redirect.url` in the response when redirects are returned."
+          },
+          {
+            "in": "query",
+            "name": "utm_content",
+            "required": false,
+            "type": "string",
+            "description": "UTM: differentiates similar links or CTAs. Merged onto `redirect.url` in the response when redirects are returned."
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "type": "string",
+            "required": true,
+            "description": "Your API key for authentication"
+          },
+          {
+            "in": "body",
+            "name": "body",
+            "required": true,
+            "description": "Complete trip information including itinerary and traveler details",
+            "schema": {
+              "$ref": "#/definitions/TripRequest"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Trip details retrieved successfully",
+            "schema": {
+              "$ref": "#/definitions/TripResponse"
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters or missing required information",
+            "schema": {
+              "$ref": "#/definitions/TripErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing API key"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": ["trips"]
+      }
+    }
+  },
+  "definitions": {
+    "Action": {
+      "properties": {
+        "intent": {
+          "description": "Intent of the url.",
+          "example": "apply-product",
+          "type": "string"
+        },
+        "product": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Product"
+            }
+          ],
+          "description": "Details about the the product referenced with productId (if available)."
+        },
+        "productId": {
+          "description": "Id of an external or sherpa product.",
+          "example": "CAN_ETA",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Name of the provider. Provider is the one who provides the link/product.",
+          "example": "sherpa",
+          "type": "string"
+        },
+        "title": {
+          "description": "A localized text to be used as the Link Text.",
+          "example": "Apply Online",
+          "type": "string"
+        },
+        "type": {
+          "description": "Type of the link.",
+          "enum": ["LINK", "DOWNLOAD", "INSTRUCTION"],
+          "example": "LINK",
+          "type": "string"
+        },
+        "url": {
+          "description": "An external or call to action link.",
+          "example": "https://apply.joinsherpa.com/products?passport=AUS&destinations=CAN&affiliateId=sherpa",
+          "type": "string"
+        }
+      },
+      "required": ["title", "url", "type", "provider"],
+      "type": "object"
+    },
+    "ArrivalOrDeparture": {
+      "properties": {
+        "date": {
+          "example": "2022-10-15",
+          "type": "string"
+        },
+        "time": {
+          "example": "14:59:59",
+          "type": "string"
+        },
+        "travelMode": {
+          "default": "AIR",
+          "description": "The method of transportation used to arrive to or depart from a travel node.",
+          "enum": ["AIR", "SEA", "LAND"],
+          "example": "AIR",
+          "type": "string"
+        }
+      },
+      "required": ["date", "time"],
+      "type": "object"
+    },
+    "Duration": {
+      "properties": {
+        "text": {
+          "description": "Readable text for the duration.",
+          "example": "14 days",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "INSTANT",
+            "SECONDS",
+            "MINUTES",
+            "HOURS",
+            "DAYS",
+            "MONTHS",
+            "YEARS",
+            "BUSINESS_DAYS"
+          ],
+          "example": "DAYS",
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": ["type", "value"],
+      "type": "object"
+    },
+    "Error": {
+      "properties": {
+        "detail": {
+          "description": "Localized error message that can be displayed on the frontend",
+          "example": "data.attributes.traveller.vaccinations.0.status must be a valid enum value",
+          "type": "string"
+        },
+        "status": {
+          "description": "Standard Http response status code.",
+          "example": "400",
+          "type": "string"
+        },
+        "title": {
+          "description": "Error title that can be used programmatically (not localized).",
+          "example": "BadRequestException",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Icon": {
+      "properties": {
+        "name": {
+          "description": "the file name of an icon.",
+          "example": "circle-stop",
+          "type": "string"
+        }
+      },
+      "required": ["name"],
+      "type": "object"
+    },
+    "InfoGrouping": {
+      "properties": {
+        "data": {
+          "description": "The sorted array of associated references to restrictions/procedures that can be used to navigate the included resources. The order of the information is descending based on the importance, always start with the first element when displaying on the page.",
+          "items": {
+            "$ref": "#/definitions/ReferenceData"
+          },
+          "type": "array"
+        },
+        "description": {
+          "description": "Description of this group.",
+          "example": "This is a description of a group.",
+          "type": "string"
+        },
+        "enforcement": {
+          "description": "The enforcement describes the strictness level of the resources included.",
+          "enum": [
+            "MANDATORY",
+            "RECOMMENDED",
+            "MAY_BE_REQUIRED",
+            "OPTIONAL",
+            "NOT_REQUIRED",
+            "UNKNOWN"
+          ],
+          "type": "string"
+        },
+        "groupings": {
+          "description": "The sorted array of the subgroups embedded in this group. The type of the object in this array is the same as the current object (InfoGrouping). The order of the information is descending based on the importance, always start with the first element when displaying on the page.",
+          "example": [],
+          "items": {
+            "$ref": "#/definitions/InfoGrouping"
+          },
+          "type": "array"
+        },
+        "headline": {
+          "description": "A short and localized sentence to summarize the resources included in the group.",
+          "example": "You don't need a visa for the United States if you have a Canadian passport.",
+          "type": "string"
+        },
+        "icon": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Icon"
+            }
+          ],
+          "description": "This contains the icon information should be used to represent the group.",
+          "example": {
+            "name": "circle-stop"
+          }
+        },
+        "name": {
+          "description": "Localized text for the group name.",
+          "example": "Toronto, YYZ",
+          "type": "string"
+        },
+        "subheading": {
+          "description": "Subheading of this group.",
+          "example": "This is a subheading of a group.",
+          "type": "string"
+        },
+        "tooltip": {
+          "description": "tooltip text for this group",
+          "example": "This is a tooltip of a group.",
+          "type": "string"
+        }
+      },
+      "required": ["name"],
+      "type": "object"
+    },
+    "InformationCategoryGroup": {
+      "type": "object",
+      "description": "A category group that organizes travel requirements into logical sections. Each category contains related requirements and provides a structured way to present information to travelers.",
+      "properties": {
+        "type": {
+          "enum": [
+            "VISA_REQUIREMENTS",
+            "TRAVEL_RESTRICTIONS",
+            "PASSPORTS_AND_IDS",
+            "QUARANTINE",
+            "VACCINATION_OR_IMMUNIZATION",
+            "COVID_19_TESTING",
+            "OTHER_DOCUMENTS",
+            "DOCUMENTS_AND_FORMS",
+            "PUBLIC_HEALTH_REQUIREMENTS",
+            "ADDITIONAL_INFORMATION",
+            "UPCOMING"
+          ],
+          "example": "VISA_REQUIREMENTS",
+          "type": "string",
+          "description": "The type of information category that determines how requirements are grouped and displayed"
+        },
+        "name": {
+          "description": "Localized name of this information category that will be displayed to users.",
+          "example": "Visa Requirements",
+          "type": "string"
+        },
+        "description": {
+          "description": "Detailed description explaining what this category contains and how it applies to the traveler.",
+          "example": "Visa requirements are determined by your passport and the duration of your trip.",
+          "type": "string"
+        },
+        "headline": {
+          "description": "A concise headline summarizing the key information for this category.",
+          "example": "You need a visa for this trip",
+          "type": "string"
+        },
+        "subheading": {
+          "description": "Additional context or clarification for the category.",
+          "example": "Based on your US passport and 30-day stay",
+          "type": "string"
+        },
+        "tooltip": {
+          "description": "Helpful tooltip text that provides additional context when users hover over this category.",
+          "example": "Click to see detailed visa requirements and application process",
+          "type": "string"
+        },
+        "enforcement": {
+          "description": "The overall enforcement level for requirements in this category, indicating how strict the requirements are.",
+          "enum": [
+            "MANDATORY",
+            "RECOMMENDED",
+            "MAY_BE_REQUIRED",
+            "OPTIONAL",
+            "NOT_REQUIRED",
+            "UNKNOWN"
+          ],
+          "example": "MANDATORY",
+          "type": "string"
+        },
+        "icon": {
+          "$ref": "#/definitions/Icon",
+          "description": "Icon information used to visually represent this category in the user interface."
+        },
+        "redirect": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TripResourceRedirect"
+            }
+          ],
+          "description": "Optional deep link for this information category. UTM query parameters on `POST /trips` are merged onto `url` when this object is returned.",
+          "example": {
+            "url": "https://sherpa-widget.joinsherpa.com/destination/CAN?affiliateId=sherpa&nationality=GBR",
+            "label": "See details"
+          }
+        },
+        "groupings": {
+          "description": "Subgroupings within this category, organized by importance. Display the first element first as it contains the most critical information.",
+          "items": {
+            "$ref": "#/definitions/InfoGrouping"
+          },
+          "type": "array",
+          "example": [
+            {
+              "name": "Canada",
+              "headline": "You need an eTA for Canada",
+              "enforcement": "MANDATORY"
+            }
+          ]
+        }
+      },
+      "required": ["type", "name"],
+      "example": {
+        "type": "VISA_REQUIREMENTS",
+        "name": "Visa Requirements",
+        "description": "Visa requirements are determined by your passport and the duration of your trip.",
+        "headline": "You need a visa for this trip",
+        "enforcement": "MANDATORY",
+        "icon": {
+          "name": "visa-icon"
+        }
+      }
+    },
+    "LocationNameCodePair": {
+      "properties": {
+        "code": {
+          "description": "location code.",
+          "example": "CA-ON",
+          "type": "string"
+        },
+        "locationType": {
+          "enum": ["ORIGIN", "DESTINATION"],
+          "type": "string"
+        },
+        "text": {
+          "description": "location name.",
+          "example": "Ontario",
+          "type": "string"
+        },
+        "type": {
+          "enum": ["LOCATION"],
+          "type": "string"
+        }
+      },
+      "required": ["code", "text", "type"],
+      "type": "object"
+    },
+    "MapError": {
+      "properties": {
+        "detail": {
+          "description": "Localized error message that can be displayed on the frontend",
+          "example": "data.attributes.covid19VaccinationStatus value must be one of the following values: FULLY_VACCINATED,NOT_VACCINATED.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Standard Http response status code.",
+          "example": "400",
+          "type": "string"
+        },
+        "title": {
+          "description": "Error title that can be used programmatically (not localized).",
+          "example": "BadRequestException",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "MapRelationships": {
+      "properties": {
+        "origin": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/RelationshipSingle"
+            }
+          ],
+          "description": "If origin is missing, we will not include entry restriction information.",
+          "example": {
+            "data": {
+              "id": "CAN",
+              "type": "LOCATION"
+            }
+          }
+        }
+      },
+      "required": ["origin"],
+      "type": "object"
+    },
+    "MapRequestAttributes": {
+      "properties": {
+        "covid19VaccinationStatus": {
+          "description": "traveller current vaccination statuses",
+          "enum": ["FULLY_VACCINATED", "NOT_VACCINATED"],
+          "minimum": 1,
+          "type": "string"
+        },
+        "locale": {
+          "default": "en-US",
+          "description": "We support a list of locales and as well as their associated languages.",
+          "enum": [
+            "ar",
+            "ar-SA",
+            "da",
+            "da-DK",
+            "de",
+            "de-DE",
+            "en",
+            "en-US",
+            "en-CA",
+            "en-GB",
+            "es",
+            "es-XL",
+            "es-ES",
+            "fi",
+            "fi-FI",
+            "fr",
+            "fr-FR",
+            "fr-CA",
+            "id",
+            "id-ID",
+            "is",
+            "is-IS",
+            "it",
+            "it-IT",
+            "ja",
+            "ja-JP",
+            "ko",
+            "ko-KR",
+            "lv",
+            "lv-LV",
+            "ms",
+            "ms-MY",
+            "my",
+            "my-MM",
+            "nl",
+            "nl-NL",
+            "no",
+            "no-NO",
+            "pl",
+            "pl-PL",
+            "pt",
+            "pt-BR",
+            "pt-PT",
+            "ru",
+            "ru-RU",
+            "sv",
+            "sv-SE",
+            "th",
+            "th-TH",
+            "tr",
+            "tr-TR",
+            "vi",
+            "vi-VN",
+            "zh",
+            "zh-CN",
+            "zh-TW"
+          ],
+          "type": "string"
+        },
+        "passportCode": {
+          "description": "We only support one passport per traveller at the moment, please only pass the primary passport here. In future, we will add support for travellers with multiple passports issued by different governments. ",
+          "example": ["CAN", "D"],
+          "type": "string"
+        }
+      },
+      "required": ["passportCode"],
+      "type": "object"
+    },
+    "PriceBreakdown": {
+      "properties": {
+        "name": {
+          "description": "Localized name of the price breakdown.",
+          "type": "string"
+        },
+        "price": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Price"
+            }
+          ],
+          "description": "Price of the price breakdown."
+        },
+        "type": {
+          "description": "Type of the price breakdown.",
+          "enum": [
+            "GOVERNMENT_FEE",
+            "GOVERNMENT_PROCESSING_FEE",
+            "APPLICATION_SERVICE_FEE",
+            "INTERNATIONAL_VISITOR_LEVY"
+          ],
+          "type": "string"
+        }
+      },
+      "required": ["name", "type", "price"],
+      "type": "object"
+    },
+    "Price": {
+      "properties": {
+        "currency": {
+          "description": "Currency used to determine/represent the value.",
+          "enum": [
+            "AED",
+            "AFN",
+            "ALL",
+            "AMD",
+            "ANG",
+            "AOA",
+            "ARS",
+            "AUD",
+            "AWG",
+            "AZN",
+            "BAM",
+            "BBD",
+            "BDT",
+            "BGN",
+            "BHD",
+            "BIF",
+            "BMD",
+            "BND",
+            "BOB",
+            "BRL",
+            "BSD",
+            "BTC",
+            "BTN",
+            "BWP",
+            "BYN",
+            "BZD",
+            "CAD",
+            "CDF",
+            "CHF",
+            "CLF",
+            "CLP",
+            "CNH",
+            "CNY",
+            "COP",
+            "CRC",
+            "CUC",
+            "CUP",
+            "CVE",
+            "CZK",
+            "DJF",
+            "DKK",
+            "DOP",
+            "DZD",
+            "EGP",
+            "ERN",
+            "ETB",
+            "EUR",
+            "FJD",
+            "FKP",
+            "GBP",
+            "GEL",
+            "GGP",
+            "GHS",
+            "GIP",
+            "GMD",
+            "GNF",
+            "GTQ",
+            "GYD",
+            "HKD",
+            "HNL",
+            "HRK",
+            "HTG",
+            "HUF",
+            "IDR",
+            "ILS",
+            "IMP",
+            "INR",
+            "IQD",
+            "IRR",
+            "ISK",
+            "JEP",
+            "JMD",
+            "JOD",
+            "JPY",
+            "KES",
+            "KGS",
+            "KHR",
+            "KMF",
+            "KPW",
+            "KRW",
+            "KWD",
+            "KYD",
+            "KZT",
+            "LAK",
+            "LBP",
+            "LKR",
+            "LRD",
+            "LSL",
+            "LYD",
+            "MAD",
+            "MDL",
+            "MGA",
+            "MKD",
+            "MMK",
+            "MNT",
+            "MOP",
+            "MRO",
+            "MRU",
+            "MUR",
+            "MVR",
+            "MWK",
+            "MXN",
+            "MYR",
+            "MZN",
+            "NAD",
+            "NGN",
+            "NIO",
+            "NOK",
+            "NPR",
+            "NZD",
+            "OMR",
+            "PAB",
+            "PEN",
+            "PGK",
+            "PHP",
+            "PKR",
+            "PLN",
+            "PYG",
+            "QAR",
+            "RON",
+            "RSD",
+            "RUB",
+            "RWF",
+            "SAR",
+            "SBD",
+            "SCR",
+            "SDG",
+            "SEK",
+            "SGD",
+            "SHP",
+            "SLL",
+            "SOS",
+            "SRD",
+            "SSP",
+            "STD",
+            "STN",
+            "SVC",
+            "SYP",
+            "SZL",
+            "THB",
+            "TJS",
+            "TMT",
+            "TND",
+            "TOP",
+            "TRY",
+            "TTD",
+            "TWD",
+            "TZS",
+            "UAH",
+            "UGX",
+            "USD",
+            "UYU",
+            "UZS",
+            "VEF",
+            "VES",
+            "VND",
+            "VUV",
+            "WST",
+            "XAF",
+            "XAG",
+            "XAU",
+            "XCD",
+            "XDR",
+            "XOF",
+            "XPD",
+            "XPF",
+            "XPT",
+            "YER",
+            "ZAR",
+            "ZMW",
+            "ZWL"
+          ],
+          "example": "USD",
+          "type": "string"
+        },
+        "max": {
+          "description": "Maximum price of the product.",
+          "example": 10.45,
+          "type": "number"
+        },
+        "min": {
+          "description": "Minimum price of the product.",
+          "example": 10.45,
+          "type": "number"
+        },
+        "value": {
+          "description": "Price of the product.",
+          "example": 10.45,
+          "type": "number"
+        }
+      },
+      "required": ["currency", "value", "min", "max"],
+      "type": "object"
+    },
+    "ProcedureEntityAttributes": {
+      "properties": {
+        "tags": {
+          "description": "Some relevant tag values to indicate whether the procedure is applicable to international/domestic, air/land travel, vaccinated/not, tourism/transit etc.. If the values are not present or all tags are present,, the procedure is applicable to all travelers in that context.",
+          "example": ["international", "air", "tourism", "transit", "fully_vaccinated"],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "actions": {
+          "description": "This includes the external links relevant for the procedure. For example: A link to upload a document, a link to download an app, a link to submit visa application or a link to some instructions",
+          "items": {
+            "$ref": "#/definitions/Action"
+          },
+          "type": "array"
+        },
+        "airport": {
+          "description": "The airport where the procedure is imposed on. This attribute value can be any IATA airport code.",
+          "example": "YYZ",
+          "type": "string"
+        },
+        "category": {
+          "description": "The category describes the type of procedure",
+          "enum": [
+            "QUARANTINE",
+            "HEALTH_MEASURES",
+            "PPE",
+            "DOC_REQUIREMENT",
+            "COVID_19_TEST",
+            "DOC_REQUIRED",
+            "NO_QUARANTINE",
+            "NO_COVID_19_TEST",
+            "HEALTH_ASSESSMENT",
+            "SANITIZATION",
+            "RE_ENTRY_PERMIT",
+            "DEPOSIT_REQUIRED",
+            "HEALTH_INSURANCE",
+            "TRAVEL_INSURANCE"
+          ],
+          "example": "COVID_19_TEST",
+          "type": "string"
+        },
+        "createdAt": {
+          "description": "The created date of the procedure document at sherpa",
+          "example": "2022-09-09T00:00:00.000Z",
+          "type": "string"
+        },
+        "description": {
+          "description": "A summarized details about the procedure.",
+          "type": "string"
+        },
+        "documentTypes": {
+          "description": "The type of documents relevant for this procedure. This attribute is only present for category DOC_REQUIREMENT.",
+          "example": ["COVID_TEST_RESULT"],
+          "items": {
+            "enum": [
+              "COVID_TEST_RESULT",
+              "PASSENGER_LOCATOR_FORM",
+              "HEALTH_DECLARATION",
+              "MEDICAL_CERTIFICATE",
+              "HEALTH_CERTIFICATE",
+              "QUARANTINE_PLAN",
+              "TRAVEL_AUTHORIZATION",
+              "QUARANTINE_FORM",
+              "EXEMPTION_FORM",
+              "COVID_19_INSURANCE",
+              "TRAVEL_DECLARATION",
+              "MOBILE_APP",
+              "PRE_REGISTRATION_FORM",
+              "SURVEILLANCE_FORM",
+              "RE_ENTRY_PERMIT",
+              "ACCOMMODATION_BOOKING",
+              "INSURANCE_PROOF",
+              "ONLINE_REGISTRATION",
+              "QUESTIONNAIRE_FORM",
+              "HEALTH_PASS",
+              "IN_DESTINATION_PROOF",
+              "HEALTH_INSURANCE",
+              "TRAVEL_INSURANCE",
+              "COVID_RECOVERY_CERTIFICATE",
+              "COVID_19_VACCINATION",
+              "VACCINATION_CERTIFICATE",
+              "IMMUNITY_PROOF",
+              "YELLOW_FEVER_VACCINATION",
+              "E_VISA",
+              "ETA",
+              "EMBASSY_VISA",
+              "VISA",
+              "PAPER_VISA",
+              "PASSPORT",
+              "NATIONAL_ID"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "endDate": {
+          "description": "End date of the procedure. The end date may not be present if government specifies the procedure is applicable until further notice.",
+          "type": "string"
+        },
+        "enforcement": {
+          "description": "The enforcement describes the strictness level of the procedure.",
+          "enum": [
+            "MANDATORY",
+            "RECOMMENDED",
+            "MAY_BE_REQUIRED",
+            "OPTIONAL",
+            "NOT_REQUIRED",
+            "UNKNOWN"
+          ],
+          "example": "MANDATORY",
+          "type": "string"
+        },
+        "excluded": {
+          "description": "Exclusion criteria of the procedure, are based on location, airport and passport for either origin or destination.",
+          "example": [
+            {
+              "code": "AFG",
+              "locationType": "ORIGIN",
+              "text": "Afghanistan",
+              "type": "LOCATION"
+            },
+            {
+              "code": "FRA",
+              "text": "France (FRA)",
+              "type": "PASSPORT"
+            }
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "icon": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Icon"
+            }
+          ],
+          "description": "Icon details for the procedure."
+        },
+        "included": {
+          "description": "Inclusion criteria of the procedure, are based on location, airport and passport for either origin or destination.",
+          "example": [
+            {
+              "code": "AFG",
+              "locationType": "ORIGIN",
+              "text": "Afghanistan",
+              "type": "LOCATION"
+            },
+            {
+              "code": "FRA",
+              "text": "France (FRA)",
+              "type": "PASSPORT"
+            }
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "labels": {
+          "description": "Constant values in the procedure document and their localized text as a key-value pair.",
+          "type": "object"
+        },
+        "lastUpdatedAt": {
+          "description": "The last updated date of the procedure document at sherpa.",
+          "example": "2022-09-09T00:00:00.000Z",
+          "type": "string"
+        },
+        "lengthOfStay": {
+          "description": "Length of stay allowed with a given visa. The attribute is only present for visa procedures.",
+          "example": [
+            {
+              "type": "DAYS",
+              "value": 14
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/Duration"
+          },
+          "type": "array"
+        },
+        "location": {
+          "description": "The location where the procedure is imposed on. This attribute value can be any ISO 3166 alpha 3 code, ISO 3166-2 subdivision code or some additional codes(Please check sherpa docs)",
+          "example": "CAN",
+          "type": "string"
+        },
+        "medicalRequirementTypes": {
+          "description": "Type of medical requirements associated with the procedure.",
+          "example": ["PCR_TEST"],
+          "items": {
+            "enum": [
+              "PCR_TEST",
+              "RT_PCR_TEST",
+              "NUCLEIC_ACID_TEST",
+              "COVID_VACCINE",
+              "ANTIGEN_TEST",
+              "SEROLOGY_TEST",
+              "RAPID_TEST",
+              "UNSPECIFIED_COVID_TEST",
+              "LAMP_TEST",
+              "AG_RDT",
+              "TMA_TEST",
+              "ASSAY_TEST",
+              "MOLECULAR_TEST",
+              "NAAT_TEST",
+              "ANTIGEN_FIA_RAPID_TEST",
+              "RT_LAMP_TEST",
+              "ANTIBODY_TEST",
+              "NEAR",
+              "HDA",
+              "SDA",
+              "CRISPR",
+              "HEALTH_ASSESSMENT",
+              "SANITIZATION"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "more": {
+          "description": "Additional details, exemptions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "description": "Source of the procedure",
+          "example": [
+            {
+              "title": "Canada Official Website",
+              "type": "GOVERNMENT",
+              "url": "https://example-url-to-canada-official-website"
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/Source"
+          },
+          "type": "array"
+        },
+        "startDate": {
+          "description": "Start date of the procedure. If the start date is not present, the procedure is still active on the current date (based on the end date).",
+          "type": "string"
+        },
+        "subCategory": {
+          "description": "The sub-category describes the context where the procedure is applicable.",
+          "enum": [
+            "BEFORE_ARRIVAL",
+            "BEFORE_DEPARTURE",
+            "IN_FLIGHT",
+            "ON_ARRIVAL",
+            "DOMESTIC",
+            "IN_AIRPORT"
+          ],
+          "example": "BEFORE_DEPARTURE",
+          "type": "string"
+        },
+        "testWindows": {
+          "description": "Test windows determine when and what type of the test needs to be taken.",
+          "example": [
+            {
+              "condition": "BEFORE_DEPARTURE",
+              "medicalRequirementType": ["PCR_TEST"],
+              "type": "DAYS",
+              "value": 2
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/TestWindow"
+          },
+          "type": "array"
+        },
+        "title": {
+          "description": "A short summary about the procedure.",
+          "example": "Visa is required",
+          "type": "string"
+        },
+        "travelHistories": {
+          "description": "Travel history constraints associated with the procedure.",
+          "example": [
+            {
+              "days": 14,
+              "locations": [
+                {
+                  "code": "IRL",
+                  "text": "IRELAND",
+                  "type": "LOCATION"
+                }
+              ]
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/TravelHistoryAttributes"
+          },
+          "type": "array"
+        },
+        "travelPurposes": {
+          "description": "The travel purposes on which a procedure is applicable.",
+          "example": ["TOURISM"],
+          "items": {
+            "enum": ["TOURISM", "BUSINESS", "TRANSIT", "MEDICAL"],
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "category",
+        "subCategory",
+        "tags",
+        "enforcement",
+        "lengthOfStay",
+        "testWindows",
+        "location",
+        "airport",
+        "title",
+        "description",
+        "more",
+        "included",
+        "excluded",
+        "sources",
+        "travelHistories",
+        "lastUpdatedAt",
+        "createdAt",
+        "labels",
+        "icon"
+      ],
+      "type": "object"
+    },
+    "ProcedureEntity": {
+      "properties": {
+        "attributes": {
+          "$ref": "#/definitions/ProcedureEntityAttributes"
+        },
+        "id": {
+          "description": "Each returned procedure resource will have an unique UUID as the id of the resource.",
+          "example": "bd1f2596-bd7d-4e7a-997a-1ee8c5b5a9da",
+          "type": "string"
+        },
+        "links": {
+          "type": "object"
+        },
+        "meta": {
+          "type": "object"
+        },
+        "relationships": {
+          "type": "object"
+        },
+        "type": {
+          "enum": ["PROCEDURE"],
+          "example": "PROCEDURE",
+          "type": "string"
+        }
+      },
+      "required": ["id", "type", "attributes", "relationships", "links", "meta"],
+      "type": "object"
+    },
+    "Product": {
+      "properties": {
+        "destinations": {
+          "description": "Localized name of destinations allowed with the product.",
+          "example": ["Canada"],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Localized name of the product.",
+          "example": "Canadian eTa",
+          "type": "string"
+        },
+        "price": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Price"
+            }
+          ],
+          "description": "Price of the product."
+        },
+        "priceBreakdown": {
+          "description": "Price breakdown of the product.",
+          "items": {
+            "$ref": "#/definitions/PriceBreakdown"
+          },
+          "type": "array"
+        },
+        "productId": {
+          "description": "Id of the product",
+          "example": "CAN_ETA",
+          "type": "string"
+        },
+        "programId": {
+          "description": "Program id of the product",
+          "example": "CAN_ETA",
+          "type": "string"
+        },
+        "times": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ProductTimes"
+            }
+          ],
+          "description": "Application deadline"
+        },
+        "travelPurposes": {
+          "description": "Localized name of travel purposes allowed with the product.",
+          "example": ["Tourism", "Business", "Transit"],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "destinations",
+        "travelPurposes",
+        "price",
+        "priceBreakdown",
+        "times",
+        "productId",
+        "programId"
+      ],
+      "type": "object"
+    },
+    "ProductTimes": {
+      "properties": {
+        "applicationDeadline": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Duration"
+            }
+          ],
+          "description": "Application deadline"
+        }
+      },
+      "required": ["applicationDeadline"],
+      "type": "object"
+    },
+    "ReferenceData": {
+      "properties": {
+        "id": {
+          "description": "Id for the associated reference.",
+          "example": "bd1f2596-bd7d-4e7a-997a-1ee8c5b5a9da",
+          "type": "string"
+        },
+        "type": {
+          "enum": ["PROCEDURE", "RESTRICTION"],
+          "example": "PROCEDURE",
+          "type": "string"
+        }
+      },
+      "required": ["type", "id"],
+      "type": "object"
+    },
+    "Relationship": {
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/ReferenceData"
+        },
+        "meta": {
+          "$ref": "#/definitions/RelationshipMeta"
+        }
+      },
+      "required": ["data", "meta"],
+      "type": "object"
+    },
+    "RelationshipMeta": {
+      "properties": {
+        "count": {
+          "description": "The number of reference objects included in this relationship.",
+          "type": "number"
+        }
+      },
+      "required": ["count"],
+      "type": "object"
+    },
+    "RelationshipSingle": {
+      "properties": {
+        "data": {
+          "type": "object"
+        },
+        "links": {
+          "type": "object"
+        },
+        "meta": {
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "RestrictionEntityAttributes": {
+      "properties": {
+        "tags": {
+          "description": "Some relevant tag values to indicate whether the restriction is applicable to international/domestic, air/land travel, vaccinated/not, tourism/transit etc.. If the values are not present or all tags are present, the document is applicable to all travelers in that context.",
+          "example": ["international", "air", "tourism", "transit", "not_vaccinated"],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "actions": {
+          "description": "This includes the external links relevant for the restriction. For example: A link to some instructions",
+          "items": {
+            "$ref": "#/definitions/Action"
+          },
+          "type": "array"
+        },
+        "airport": {
+          "description": "The airport where the restriction is imposed on. This attribute value can be any IATA airport code.",
+          "example": "YYZ",
+          "type": "string"
+        },
+        "category": {
+          "description": "The category describes the type of restriction",
+          "enum": [
+            "NO_ENTRY",
+            "RESTRICTED_ENTRY",
+            "NO_EXIT",
+            "RESTRICTED_EXIT",
+            "ENTRY",
+            "EXIT",
+            "DOMESTIC",
+            "NO_RESTRICTION"
+          ],
+          "example": "RESTRICTED_ENTRY",
+          "type": "string"
+        },
+        "createdAt": {
+          "description": "The created date of the restriction document at sherpa",
+          "example": "2022-09-09T00:00:00.000Z",
+          "type": "string"
+        },
+        "description": {
+          "description": "A summarized details about the restriction.",
+          "type": "string"
+        },
+        "endDate": {
+          "description": "End date of the restriction. The end date may not be present if government specifies the restriction is applicable until further notice.",
+          "type": "string"
+        },
+        "icon": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Icon"
+            }
+          ],
+          "description": "Icon details for the restriction."
+        },
+        "included": {
+          "description": "Origin location or nationality based inclusion criteria of the restriction.",
+          "example": [
+            {
+              "code": "AFG",
+              "locationType": "ORIGIN",
+              "text": "Afghanistan",
+              "type": "LOCATION"
+            },
+            {
+              "code": "FRA",
+              "text": "France (FRA)",
+              "type": "PASSPORT"
+            }
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "labels": {
+          "description": "Constant values in the restriction document and their localized text as a key-value pair.",
+          "type": "object"
+        },
+        "lastUpdatedAt": {
+          "description": "The last updated date of the restriction document at sherpa.",
+          "example": "2022-09-09T00:00:00.000Z",
+          "type": "string"
+        },
+        "location": {
+          "description": "The location where the restriction is imposed on. This attribute value can be any ISO 3166 alpha 3 code, ISO 3166-2 subdivision code or some additional codes(Please check sherpa docs)",
+          "example": "CAN",
+          "type": "string"
+        },
+        "more": {
+          "description": "Additional details, exemptions",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "description": "Source of the restriction",
+          "example": [
+            {
+              "title": "Canada Official Website",
+              "type": "GOVERNMENT",
+              "url": "https://example-url-to-canada-official-website"
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/Source"
+          },
+          "type": "array"
+        },
+        "startDate": {
+          "description": "Start date of the restriction. If the start date is not present, the restriction is still active on the current date (based on the end date).",
+          "type": "string"
+        },
+        "subCategory": {
+          "description": "The sub-category describes the context where the restriction is applicable.",
+          "enum": ["ENTRY", "EXIT", "TRANSIT", "ON_ARRIVAL", "IN_FLIGHT", "BOARDING"],
+          "example": "ENTRY",
+          "type": "string"
+        },
+        "title": {
+          "description": "A short summary about the restriction",
+          "example": "Travel is allowed",
+          "type": "string"
+        },
+        "travelHistories": {
+          "description": "Travel history constraints associated with the procedure.",
+          "example": [
+            {
+              "days": 14,
+              "locations": [
+                {
+                  "code": "IRL",
+                  "text": "IRELAND",
+                  "type": "LOCATION"
+                }
+              ]
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/TravelHistoryAttributes"
+          },
+          "type": "array"
+        },
+        "travelPurposes": {
+          "description": "The travel purposes on which a restriction is applicable.",
+          "example": ["TOURISM"],
+          "items": {
+            "enum": ["TOURISM", "BUSINESS", "TRANSIT", "MEDICAL"],
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "category",
+        "subCategory",
+        "tags",
+        "location",
+        "airport",
+        "title",
+        "description",
+        "more",
+        "included",
+        "sources",
+        "travelHistories",
+        "lastUpdatedAt",
+        "createdAt",
+        "labels",
+        "icon"
+      ],
+      "type": "object"
+    },
+    "RestrictionEntity": {
+      "properties": {
+        "attributes": {
+          "$ref": "#/definitions/RestrictionEntityAttributes"
+        },
+        "id": {
+          "description": "Each returned restriction resource will have an unique UUID as the id of the resource.",
+          "example": "bd1f2596-bd7d-4e7a-997a-1ee8c5b5a9da",
+          "type": "string"
+        },
+        "links": {
+          "type": "object"
+        },
+        "meta": {
+          "type": "object"
+        },
+        "relationships": {
+          "type": "object"
+        },
+        "type": {
+          "enum": ["RESTRICTION"],
+          "example": "RESTRICTION",
+          "type": "string"
+        }
+      },
+      "required": ["id", "type", "attributes", "relationships", "links", "meta"],
+      "type": "object"
+    },
+    "Source": {
+      "properties": {
+        "title": {
+          "example": "Government of Canada",
+          "type": "string"
+        },
+        "type": {
+          "enum": ["GOVERNMENT", "AIRLINE", "AIRPORT", "ORGANIZATION", "UNKNOWN"],
+          "example": "GOVERNMENT",
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": ["type", "title", "url"],
+      "type": "object"
+    },
+    "TestWindow": {
+      "properties": {
+        "condition": {
+          "description": "Condition determines when the test should be taken.",
+          "enum": ["BEFORE_ARRIVAL", "BEFORE_DEPARTURE", "BEFORE_FINAL_BOARDING", "AFTER_ARRIVAL"],
+          "example": "BEFORE_ARRIVAL",
+          "type": "string"
+        },
+        "medicalRequirementType": {
+          "description": "MedicalRequirementType determines the type of test needs to be taken.",
+          "enum": [
+            "PCR_TEST",
+            "RT_PCR_TEST",
+            "NUCLEIC_ACID_TEST",
+            "COVID_VACCINE",
+            "ANTIGEN_TEST",
+            "SEROLOGY_TEST",
+            "RAPID_TEST",
+            "UNSPECIFIED_COVID_TEST",
+            "LAMP_TEST",
+            "AG_RDT",
+            "TMA_TEST",
+            "ASSAY_TEST",
+            "MOLECULAR_TEST",
+            "NAAT_TEST",
+            "ANTIGEN_FIA_RAPID_TEST",
+            "RT_LAMP_TEST",
+            "ANTIBODY_TEST",
+            "NEAR",
+            "HDA",
+            "SDA",
+            "CRISPR",
+            "HEALTH_ASSESSMENT",
+            "SANITIZATION"
+          ],
+          "example": "PCR_TEST",
+          "type": "string"
+        },
+        "text": {
+          "description": "Readable text for the duration.",
+          "example": "14 days",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "INSTANT",
+            "SECONDS",
+            "MINUTES",
+            "HOURS",
+            "DAYS",
+            "MONTHS",
+            "YEARS",
+            "BUSINESS_DAYS"
+          ],
+          "example": "DAYS",
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": ["type", "value"],
+      "type": "object"
+    },
+    "TravelHistoryAttributes": {
+      "properties": {
+        "days": {
+          "description": "Applicable number of days for the travel history.",
+          "example": 14,
+          "type": "number"
+        },
+        "locations": {
+          "description": "lo",
+          "example": [
+            {
+              "code": "CAN",
+              "text": "Canada",
+              "type": "ORIGIN"
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/LocationNameCodePair"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["locations", "days"],
+      "type": "object"
+    },
+    "TravelNode": {
+      "properties": {
+        "airportCode": {
+          "description": "IATA airport codes are supported to search for airports. IATA airport code is a three-character alphanumeric geocode designating many airports and metropolitan areas around the world, defined by the International Air Transport Association (IATA)",
+          "example": "YYZ",
+          "type": "string"
+        },
+        "airportName": {
+          "example": "Toronto",
+          "type": "string"
+        },
+        "arrival": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ArrivalOrDeparture"
+            }
+          ],
+          "description": "Arrival contains arrival-related information of this node including travel mode, date, time, etc."
+        },
+        "departure": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ArrivalOrDeparture"
+            }
+          ],
+          "description": "Departure contains departure-related information of this node including travel mode, date, time, etc."
+        },
+        "locationCode": {
+          "description": "The location code supports a list of ISO 3166-1 Alpha-2 codes, and ISO 3166-1 Alpha-3 codes, a limited number 3166-2 Subdivision codes for some countries as well as some custom codes.",
+          "example": "CAN",
+          "type": "string"
+        },
+        "locationName": {
+          "example": "Canada",
+          "type": "string"
+        },
+        "type": {
+          "enum": ["ORIGIN", "TRANSIT", "DESTINATION"],
+          "example": "DESTINATION",
+          "type": "string"
+        }
+      },
+      "required": ["type"],
+      "type": "object"
+    },
+    "TravelNodeRequest": {
+      "properties": {
+        "airportCode": {
+          "description": "IATA airport codes are supported to search for airports. IATA airport code is a three-character alphanumeric geocode designating many airports and metropolitan areas around the world, defined by the International Air Transport Association (IATA)",
+          "example": "YVR",
+          "type": "string"
+        },
+        "arrival": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ArrivalOrDeparture"
+            }
+          ],
+          "description": "This contains arrival-related date, time and travel mode information at the travel node.",
+          "example": {
+            "date": "2022-09-01",
+            "time": "12:50:00",
+            "travelMode": "AIR"
+          }
+        },
+        "departure": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ArrivalOrDeparture"
+            }
+          ],
+          "description": "This contains depature-related date, time and travel mode information at the travel node.",
+          "example": {
+            "date": "2022-09-01",
+            "time": "22:30:00",
+            "travelMode": "AIR"
+          }
+        },
+        "locationCode": {
+          "description": "The location code supports a list of ISO 3166-1 Alpha-2 codes, and ISO 3166-1 Alpha-3 codes, a limited number 3166-2 Subdivision codes for some countries as well as some custom codes.",
+          "example": "CAN",
+          "type": "string"
+        },
+        "type": {
+          "description": "Type is used to determine if the travel node is origin, transit or destination of the trip.",
+          "enum": ["ORIGIN", "TRANSIT", "DESTINATION"],
+          "example": "ORIGIN",
+          "type": "string"
+        }
+      },
+      "required": ["type"],
+      "type": "object"
+    },
+    "Traveller": {
+      "properties": {
+        "passports": {
+          "description": "We only support one passport per traveller at the moment, please only pass the primary passport here. In future, we will add support for travellers with multiple passports issued by different governments. ",
+          "example": ["CAN", "D"],
+          "items": {
+            "maximum": 1,
+            "minimum": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "travelPurposes": {
+          "description": "The purposes of the trip to the destination.",
+          "example": ["TOURISM"],
+          "items": {
+            "enum": ["TOURISM", "BUSINESS", "TRANSIT", "MEDICAL"],
+            "type": "string"
+          },
+          "minimum": 1,
+          "type": "array"
+        },
+        "vaccinations": {
+          "description": "An array of traveller current vaccination statuses",
+          "items": {
+            "$ref": "#/definitions/Vaccination",
+            "minimum": 1
+          },
+          "type": "array"
+        }
+      },
+      "required": ["passports"],
+      "type": "object"
+    },
+    "TripErrorResponse": {
+      "properties": {
+        "errors": {
+          "description": "An array of error objects.",
+          "example": [
+            {
+              "detail": "travelNodes is required.",
+              "status": 400,
+              "title": "BadRequestException"
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/Error"
+          },
+          "type": "array"
+        },
+        "meta": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TripMeta"
+            }
+          ],
+          "description": "A meta member can be used to include non-standard meta-information. ",
+          "example": {
+            "copyright": "Sherpa",
+            "version": "3.0.0"
+          }
+        }
+      },
+      "required": ["errors"],
+      "type": "object"
+    },
+    "TripMeta": {
+      "properties": {
+        "copyright": {
+          "example": "Sherpa",
+          "type": "string"
+        },
+        "version": {
+          "example": "3.0.0",
+          "type": "string"
+        }
+      },
+      "required": ["copyright", "version"],
+      "type": "object"
+    },
+    "TripRelationships": {
+      "properties": {
+        "procedures": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Relationship"
+            }
+          ],
+          "description": "Assoicated procedure resources.",
+          "example": {
+            "data": [
+              {
+                "id": "260c29ed-9b67-4c8d-9dff-348886356db4",
+                "type": "PROCEDURE"
+              }
+            ],
+            "meta": {
+              "count": 1
+            }
+          }
+        },
+        "restrictions": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Relationship"
+            }
+          ],
+          "description": "Assoicated restriction resources.",
+          "example": {
+            "data": [
+              {
+                "id": "260c29ed-9b67-4c8d-9dff-348886356dc4",
+                "type": "RESTRICTION"
+              },
+              {
+                "id": "260c29ed-9b67-4c8d-9dff-348886356dc5",
+                "type": "RESTRICTION"
+              }
+            ],
+            "meta": {
+              "count": 2
+            }
+          }
+        }
+      },
+      "required": ["restrictions", "procedures"],
+      "type": "object"
+    },
+    "TripRequestAttributes": {
+      "properties": {
+        "currency": {
+          "default": "USD",
+          "description": "Currency is used to retrieve product pricing information.",
+          "example": "CAD",
+          "type": "string"
+        },
+        "locale": {
+          "default": "en-US",
+          "description": "We support a list of locales and as well as their associated languages.",
+          "enum": [
+            "ar",
+            "ar-SA",
+            "da",
+            "da-DK",
+            "de",
+            "de-DE",
+            "en",
+            "en-US",
+            "en-CA",
+            "en-GB",
+            "es",
+            "es-XL",
+            "es-ES",
+            "fi",
+            "fi-FI",
+            "fr",
+            "fr-FR",
+            "fr-CA",
+            "id",
+            "id-ID",
+            "is",
+            "is-IS",
+            "it",
+            "it-IT",
+            "ja",
+            "ja-JP",
+            "ko",
+            "ko-KR",
+            "lv",
+            "lv-LV",
+            "ms",
+            "ms-MY",
+            "my",
+            "my-MM",
+            "nl",
+            "nl-NL",
+            "no",
+            "no-NO",
+            "pl",
+            "pl-PL",
+            "pt",
+            "pt-BR",
+            "pt-PT",
+            "ru",
+            "ru-RU",
+            "sv",
+            "sv-SE",
+            "th",
+            "th-TH",
+            "tr",
+            "tr-TR",
+            "vi",
+            "vi-VN",
+            "zh",
+            "zh-CN",
+            "zh-TW"
+          ],
+          "type": "string"
+        },
+        "travelNodes": {
+          "description": "Travel nodes contains a traveller's itinerary, which contains at least origin and destination, and up-to 3 transit nodes in between. The transit nodes must be in order.",
+          "example": [
+            {
+              "airportCode": "YVR",
+              "departure": {
+                "date": "2022-09-01",
+                "time": "12:30:00",
+                "travelMode": "AIR"
+              },
+              "type": "ORIGIN"
+            },
+            {
+              "arrival": {
+                "date": "2022-09-01",
+                "time": "18:00:00",
+                "travelMode": "AIR"
+              },
+              "departure": {
+                "date": "2022-09-01",
+                "time": "18:30:00",
+                "travelMode": "AIR"
+              },
+              "locationCode": "CA-ON",
+              "type": "TRANSIT"
+            },
+            {
+              "arrival": {
+                "date": "2022-09-01",
+                "time": "20:50:00",
+                "travelMode": "AIR"
+              },
+              "locationCode": "USA",
+              "type": "DESTINATION"
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/TravelNodeRequest"
+          },
+          "maxItems": 5,
+          "minItems": 2,
+          "type": "array"
+        },
+        "traveller": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Traveller"
+            }
+          ],
+          "description": "Traveller contains all traveller related information.",
+          "example": {
+            "passports": ["CAN"],
+            "vaccinations": [
+              {
+                "status": "FULLY_VACCINATED",
+                "type": "COVID_19"
+              }
+            ]
+          }
+        }
+      },
+      "required": ["traveller", "travelNodes"],
+      "type": "object"
+    },
+    "TripRequest": {
+      "type": "object",
+      "description": "Complete trip request containing all necessary information to retrieve travel requirements. This is the main request body for the /trips endpoint.",
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/TripRequestResource",
+          "description": "The trip resource containing all trip details and traveler information"
+        }
+      },
+      "required": ["data"],
+      "example": {
+        "data": {
+          "type": "TRIP",
+          "attributes": {
+            "locale": "en-US",
+            "currency": "USD",
+            "travelNodes": [
+              {
+                "type": "ORIGIN",
+                "locationCode": "USA",
+                "airportCode": "JFK",
+                "departure": {
+                  "date": "2024-02-15",
+                  "time": "10:30:00",
+                  "travelMode": "AIR"
+                }
+              },
+              {
+                "type": "DESTINATION",
+                "locationCode": "CAN",
+                "airportCode": "YYZ",
+                "arrival": {
+                  "date": "2024-02-15",
+                  "time": "13:45:00",
+                  "travelMode": "AIR"
+                }
+              }
+            ],
+            "traveller": {
+              "passports": ["USA"],
+              "travelPurposes": ["TOURISM"],
+              "vaccinations": [
+                {
+                  "type": "COVID_19",
+                  "status": "FULLY_VACCINATED"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "TripRequestResource": {
+      "properties": {
+        "attributes": {
+          "$ref": "#/definitions/TripRequestAttributes"
+        },
+        "type": {
+          "enum": ["TRIP"],
+          "example": "TRIP",
+          "type": "string"
+        }
+      },
+      "required": ["type", "attributes"],
+      "type": "object"
+    },
+    "TripResourceRedirect": {
+      "type": "object",
+      "description": "Deep link for the traveler (for example a \"See details\" action). When you pass UTM parameters on `POST /trips`, their values are merged onto `url`.",
+      "properties": {
+        "url": {
+          "description": "Destination URL for this redirect. Includes UTM parameters from the trips request when you provided them.",
+          "type": "string",
+          "example": "https://sherpa-widget.joinsherpa.com/destination/CAN?affiliateId=partner&utm_source=app&utm_medium=api"
+        },
+        "label": {
+          "description": "Localized label for the link (for example button text).",
+          "type": "string",
+          "example": "See details"
+        }
+      },
+      "required": ["url"]
+    },
+    "TripResourceAttributes": {
+      "properties": {
+        "alerts": {
+          "description": "Alerts are used to display warnings like unsupported trip information or special messages",
+          "example": [
+            "We don't have information for travel within Germany. Be sure to check official sources."
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "currency": {
+          "default": "USD",
+          "description": "Currency is used to retrieve product pricing information.",
+          "example": "CAD",
+          "type": "string"
+        },
+        "headline": {
+          "description": "A short sentence to summarize the resources included in the trip.",
+          "example": "Most travelers from Seattle, SEA can enter Ontario.",
+          "type": "string"
+        },
+        "informationGroups": {
+          "description": "Retrieved resources will be categorized into each group based on their information category, which is the type of each group.",
+          "example": [
+            {
+              "groupings": [
+                {
+                  "data": [
+                    {
+                      "id": "visa-proceudre-uuid",
+                      "type": "PROCEDURE"
+                    }
+                  ],
+                  "enforcement": "NOT_REQUIRED",
+                  "name": "Ontario"
+                }
+              ],
+              "name": "Visa Requirements",
+              "tooltip": "Visa requirements are determined by the passport you are travelling with and duration of your trip.",
+              "type": "VISA_REQUIREMENTS"
+            },
+            {
+              "groupings": [
+                {
+                  "data": [
+                    {
+                      "id": "travel-restriction-uuid",
+                      "type": "RESTRICTION"
+                    }
+                  ],
+                  "name": "Ontario"
+                }
+              ],
+              "name": "Travel Restrictions",
+              "tooltip": "Travel restrictions often depend on your travel history. Check details for each part of your trip to see if any of them apply to you.",
+              "type": "TRAVEL_RESTRICTIONS"
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/InformationCategoryGroup"
+          },
+          "type": "array"
+        },
+        "locale": {
+          "default": "en-US",
+          "description": "We support a list of locales and as well as their associated languages.",
+          "enum": [
+            "ar",
+            "ar-SA",
+            "da",
+            "da-DK",
+            "de",
+            "de-DE",
+            "en",
+            "en-US",
+            "en-CA",
+            "en-GB",
+            "es",
+            "es-XL",
+            "es-ES",
+            "fi",
+            "fi-FI",
+            "fr",
+            "fr-FR",
+            "fr-CA",
+            "id",
+            "id-ID",
+            "is",
+            "is-IS",
+            "it",
+            "it-IT",
+            "ja",
+            "ja-JP",
+            "ko",
+            "ko-KR",
+            "lv",
+            "lv-LV",
+            "ms",
+            "ms-MY",
+            "my",
+            "my-MM",
+            "nl",
+            "nl-NL",
+            "no",
+            "no-NO",
+            "pl",
+            "pl-PL",
+            "pt",
+            "pt-BR",
+            "pt-PT",
+            "ru",
+            "ru-RU",
+            "sv",
+            "sv-SE",
+            "th",
+            "th-TH",
+            "tr",
+            "tr-TR",
+            "vi",
+            "vi-VN",
+            "zh",
+            "zh-CN",
+            "zh-TW"
+          ],
+          "type": "string"
+        },
+        "redirect": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TripResourceRedirect"
+            }
+          ],
+          "description": "Trip-level deep link to Sherpa for full entry-requirement or product details. UTM query parameters on `POST /trips` are merged onto `url` when this object is returned.",
+          "example": {
+            "url": "https://apply.joinsherpa.com/",
+            "label": "See details"
+          }
+        },
+        "travelNodes": {
+          "description": "Travel nodes contains a traveller's itinerary, which contains at least origin and destination, and up-to 3 transit nodes in between. The transit nodes must be in order.",
+          "example": [
+            {
+              "airportCode": "YVR",
+              "airportName": "Vancouver",
+              "departure": {
+                "date": "2022-09-01",
+                "time": "12:30:00",
+                "travelMode": "AIR"
+              },
+              "type": "ORIGIN"
+            },
+            {
+              "arrival": {
+                "date": "2022-09-01",
+                "time": "18:00:00",
+                "travelMode": "AIR"
+              },
+              "departure": {
+                "date": "2022-09-01",
+                "time": "18:30:00",
+                "travelMode": "AIR"
+              },
+              "locationCode": "CA-ON",
+              "locationName": "Ontario",
+              "type": "TRANSIT"
+            },
+            {
+              "arrival": {
+                "date": "2022-09-01",
+                "time": "20:50:00",
+                "travelMode": "AIR"
+              },
+              "locationCode": "USA",
+              "locationName": "United States",
+              "type": "DESTINATION"
+            }
+          ],
+          "items": {
+            "$ref": "#/definitions/TravelNode"
+          },
+          "maxItems": 5,
+          "minItems": 2,
+          "type": "array"
+        },
+        "travelOpenness": {
+          "description": "This indicates the travel openness level of the requested trip.",
+          "enum": ["LEVEL_1", "LEVEL_2", "LEVEL_3", "LEVEL_4", "NO_INFORMATION"],
+          "example": "LEVEL_1",
+          "type": "string"
+        },
+        "traveller": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Traveller"
+            }
+          ],
+          "description": "Traveller contains all traveller-related information including passport, vaccination status, etc.",
+          "example": {
+            "passports": ["CAN"],
+            "vaccinations": [
+              {
+                "status": "FULLY_VACCINATED",
+                "type": "COVID_19"
+              }
+            ]
+          }
+        }
+      },
+      "required": ["headline", "travelNodes", "traveller", "currency"],
+      "type": "object"
+    },
+    "TripResource": {
+      "properties": {
+        "attributes": {
+          "$ref": "#/definitions/TripResourceAttributes"
+        },
+        "id": {
+          "description": "Each returned trip resource will have an unique UUID as the id of the resource.",
+          "example": "bd1f2596-bd7d-4e7a-997a-1ee8c5b5a9da",
+          "type": "string"
+        },
+        "relationships": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/TripRelationships"
+            }
+          ],
+          "description": "Relationships contains references from the trip resource in which it's defined to other resources."
+        },
+        "type": {
+          "enum": ["TRIP"],
+          "example": "TRIP",
+          "type": "string"
+        }
+      },
+      "required": ["type", "id", "attributes"],
+      "type": "object"
+    },
+    "TripResponse": {
+      "type": "object",
+      "description": "Successful response from the trips endpoint. Contains the trip details with categorized requirements and included related resources.",
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/TripResource",
+          "description": "The trip resource with categorized requirements and travel information"
+        },
+        "included": {
+          "type": "array",
+          "description": "Included resources referenced in the trip response. Contains detailed restriction and procedure entities that apply to the trip.",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/definitions/RestrictionEntity"
+              },
+              {
+                "$ref": "#/definitions/ProcedureEntity"
+              }
+            ]
+          },
+          "example": [
+            {
+              "id": "restriction-123",
+              "type": "RESTRICTION",
+              "attributes": {
+                "category": "RESTRICTED_ENTRY",
+                "subCategory": "ENTRY",
+                "title": "Travel is allowed with restrictions",
+                "description": "Travel is allowed for vaccinated travelers",
+                "enforcement": "MANDATORY",
+                "tags": ["international", "air", "vaccinated"],
+                "location": "CAN",
+                "airport": "YYZ"
+              }
+            },
+            {
+              "id": "procedure-456",
+              "type": "PROCEDURE",
+              "attributes": {
+                "category": "DOC_REQUIREMENT",
+                "subCategory": "BEFORE_DEPARTURE",
+                "title": "Electronic Travel Authorization (eTA) required",
+                "description": "You need a Canadian eTA for tourism, business or transit",
+                "enforcement": "MANDATORY",
+                "documentTypes": ["ETA"],
+                "tags": ["international", "air", "tourism"],
+                "location": "CAN"
+              }
+            }
+          ]
+        },
+        "meta": {
+          "$ref": "#/definitions/TripMeta",
+          "description": "Metadata about the response including copyright and version information"
+        }
+      },
+      "required": ["data"],
+      "example": {
+        "meta": {
+          "copyright": "Sherpa",
+          "version": "3.0.2"
+        },
+        "data": {
+          "id": "0953d404-2801-4d9e-84f4-8a1f22da1660",
+          "type": "TRIP",
+          "attributes": {
+            "traveller": {
+              "passports": ["GBR"],
+              "vaccinations": [
+                {
+                  "type": "COVID_19",
+                  "status": "NOT_VACCINATED"
+                }
+              ]
+            },
+            "locale": "en-US",
+            "travelNodes": [
+              {
+                "type": "ORIGIN",
+                "departure": {
+                  "date": "2025-12-12",
+                  "time": "12:59",
+                  "travelMode": "AIR"
+                },
+                "airportCode": "LHR",
+                "airportName": "London"
+              },
+              {
+                "type": "DESTINATION",
+                "arrival": {
+                  "date": "2025-12-12",
+                  "time": "12:59",
+                  "travelMode": "AIR"
+                },
+                "airportCode": "JFK",
+                "airportName": "New York"
+              }
+            ],
+            "headline": "Most travelers from London (LHR) can enter New York (JFK). See below for visa and travel requirements.",
+            "informationGroups": [
+              {
+                "name": "Visa Requirements",
+                "type": "VISA_REQUIREMENTS",
+                "tooltip": "Visa requirements are determined by the passport you are travelling with and duration of your trip.",
+                "groupings": [
+                  {
+                    "name": "New York (JFK)",
+                    "enforcement": "MANDATORY",
+                    "data": [
+                      {
+                        "type": "PROCEDURE",
+                        "id": "5683d46a-9338-41b1-a1f5-897a598e9a57"
+                      }
+                    ]
+                  }
+                ],
+                "enforcement": "MANDATORY",
+                "headline": "You need an ETA for United States if you have a British passport."
+              },
+              {
+                "name": "Passport and Documents",
+                "type": "DOCUMENTS_AND_FORMS",
+                "groupings": [
+                  {
+                    "name": "London (LHR)",
+                    "enforcement": "RECOMMENDED",
+                    "data": [
+                      {
+                        "type": "PROCEDURE",
+                        "id": "fddb2117-7c51-4a83-9a49-1feb20f443f8"
+                      }
+                    ]
+                  },
+                  {
+                    "name": "New York (JFK)",
+                    "enforcement": "MANDATORY",
+                    "data": [
+                      {
+                        "type": "PROCEDURE",
+                        "id": "cfc5223c-2216-4167-a24a-615622ffb9d5"
+                      }
+                    ]
+                  }
+                ],
+                "enforcement": "MANDATORY"
+              },
+              {
+                "name": "Health Risks and Requirements",
+                "type": "PUBLIC_HEALTH_REQUIREMENTS",
+                "enforcement": "NOT_REQUIRED"
+              },
+              {
+                "name": "Travel Restrictions",
+                "type": "TRAVEL_RESTRICTIONS",
+                "tooltip": "Travel restrictions often depend on your travel history. Check details for each part of your trip to see if any of them apply to you."
+              },
+              {
+                "name": "Additional Information",
+                "type": "ADDITIONAL_INFORMATION",
+                "groupings": [
+                  {
+                    "name": "New York (JFK)",
+                    "enforcement": "MAY_BE_REQUIRED",
+                    "data": [
+                      {
+                        "type": "PROCEDURE",
+                        "id": "85be2d6c-9fd5-429a-b684-751bd67877e1"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "Upcoming",
+                "type": "UPCOMING",
+                "tooltip": "Some of these changes may not be in effect yet and may change unexpectedly."
+              }
+            ],
+            "currency": "USD",
+            "travelOpenness": "NO_INFORMATION"
+          },
+          "relationships": {
+            "procedures": {
+              "data": [
+                {
+                  "type": "PROCEDURE",
+                  "id": "fddb2117-7c51-4a83-9a49-1feb20f443f8"
+                },
+                {
+                  "type": "PROCEDURE",
+                  "id": "5683d46a-9338-41b1-a1f5-897a598e9a57"
+                },
+                {
+                  "type": "PROCEDURE",
+                  "id": "cfc5223c-2216-4167-a24a-615622ffb9d5"
+                },
+                {
+                  "type": "PROCEDURE",
+                  "id": "85be2d6c-9fd5-429a-b684-751bd67877e1"
+                }
+              ],
+              "meta": {
+                "count": 4
+              }
+            },
+            "restrictions": {
+              "data": [],
+              "meta": {
+                "count": 0
+              }
+            }
+          }
+        },
+        "included": [
+          {
+            "id": "fddb2117-7c51-4a83-9a49-1feb20f443f8",
+            "type": "PROCEDURE",
+            "attributes": {
+              "category": "DOC_REQUIREMENT",
+              "subCategory": "BEFORE_DEPARTURE",
+              "title": "Book your airport pick-up or drop-off",
+              "description": "Book your ride to and from the airport or any destination with Welcome Pickups.",
+              "more": [],
+              "actions": [
+                {
+                  "type": "LINK",
+                  "title": "Reserve your ride in advance",
+                  "description": ".",
+                  "url": "https://www.book-online-transfers.com/en/Sherpa-airport-taxi",
+                  "provider": "government",
+                  "intent": "none",
+                  "productId": "RESERVE_AIRPORT_TRANSFER_USA"
+                }
+              ],
+              "sources": [
+                {
+                  "type": "AIRLINE",
+                  "title": "Welcome Pickups",
+                  "url": "https://www.book-online-transfers.com/en/Sherpa-airport-taxi"
+                }
+              ],
+              "lastUpdatedAt": "2025-08-19T12:51:00.000Z",
+              "createdAt": "2024-05-23T20:58:00.000Z",
+              "startDate": null,
+              "endDate": null,
+              "enforcement": "RECOMMENDED",
+              "documentTypes": ["MOBILE_APP"],
+              "tags": [
+                "international",
+                "domestic",
+                "fully_vaccinated",
+                "not_vaccinated",
+                "air",
+                "land"
+              ],
+              "included": [],
+              "icon": {
+                "name": "document"
+              }
+            },
+            "relationships": {
+              "location": {
+                "data": {
+                  "id": "GBR",
+                  "type": "LOCATION"
+                }
+              }
+            }
+          },
+          {
+            "id": "5683d46a-9338-41b1-a1f5-897a598e9a57",
+            "type": "PROCEDURE",
+            "attributes": {
+              "category": "DOC_REQUIREMENT",
+              "subCategory": "BEFORE_ARRIVAL",
+              "title": "Electronic Travel Authorization (ESTA)",
+              "description": "Travelers need a travel authorization to visit United States of America for Business or Tourism.",
+              "more": [
+                "A valid ESTA is required to visit the country. If the ESTA is expired or doesn't match the traveler's passport information, travelers will not be able to board their flight."
+              ],
+              "actions": [
+                {
+                  "type": "LINK",
+                  "title": "Apply for ESTA",
+                  "description": ".",
+                  "url": "https://sherpa-widget.joinsherpa.io/applications/products/USA_ESTA?affiliateId=sherpa&language=en-US&currency=USD",
+                  "provider": "sherpa",
+                  "intent": "apply-product",
+                  "productId": "USA_ESTA",
+                  "product": {
+                    "name": "USA ESTA",
+                    "price": {
+                      "value": 41,
+                      "currency": "USD"
+                    },
+                    "priceBreakdown": [
+                      {
+                        "type": "GOVERNMENT_FEE",
+                        "price": {
+                          "value": 21,
+                          "currency": "USD"
+                        },
+                        "name": "Government Fee"
+                      },
+                      {
+                        "type": "APPLICATION_SERVICE_FEE",
+                        "price": {
+                          "value": 20,
+                          "currency": "USD"
+                        },
+                        "name": "Convenience Fee"
+                      }
+                    ],
+                    "destinations": ["United States"],
+                    "travelPurposes": ["Tourism", "Transit", "Business"],
+                    "times": {
+                      "applicationDeadline": {
+                        "type": "HOURS",
+                        "value": 6,
+                        "text": "6 hours"
+                      }
+                    },
+                    "productId": "USA_ESTA",
+                    "programId": "USA_ESTA"
+                  }
+                }
+              ],
+              "sources": [
+                {
+                  "type": "GOVERNMENT",
+                  "title": "United States Department of State",
+                  "url": "https://www.state.gov/visas/"
+                }
+              ],
+              "lastUpdatedAt": "2025-07-29T08:39:00.000Z",
+              "createdAt": "2021-04-01T17:38:00.000Z",
+              "startDate": null,
+              "endDate": null,
+              "enforcement": "MANDATORY",
+              "documentTypes": ["ETA"],
+              "tags": [
+                "international",
+                "fully_vaccinated",
+                "not_vaccinated",
+                "land",
+                "air",
+                "sea",
+                "tourism",
+                "business"
+              ],
+              "travelPurposes": ["TOURISM", "BUSINESS"],
+              "lengthOfStay": [
+                {
+                  "type": "DAYS",
+                  "value": 90,
+                  "text": "90 days"
+                }
+              ],
+              "included": [
+                {
+                  "code": "AND",
+                  "text": " Andorra (AND)",
+                  "type": "PASSPORT"
+                },
+                {
+                  "code": "AUS",
+                  "text": "Australia (AUS)",
+                  "type": "PASSPORT"
+                },
+                {
+                  "code": "GBR",
+                  "text": "United Kingdom (GBR)",
+                  "type": "PASSPORT"
+                }
+              ],
+              "icon": {
+                "name": "visa"
+              }
+            },
+            "relationships": {
+              "location": {
+                "data": {
+                  "id": "USA",
+                  "type": "LOCATION"
+                }
+              }
+            }
+          },
+          {
+            "id": "cfc5223c-2216-4167-a24a-615622ffb9d5",
+            "type": "PROCEDURE",
+            "attributes": {
+              "category": "DOC_REQUIREMENT",
+              "subCategory": "BEFORE_ARRIVAL",
+              "title": "Travelers require a passport valid for the duration of stay in United States",
+              "description": "Travelers need a valid passport to enter United States. The traveler's passport must remain valid throughout the traveler's stay in United States.",
+              "more": [],
+              "actions": [],
+              "sources": [
+                {
+                  "type": "GOVERNMENT",
+                  "title": "US Customs and Border Protection ",
+                  "url": "https://www.cbp.gov/sites/default/files/assets/documents/2024-Mar/six-month-passport-validity-update-20220316.pdf"
+                }
+              ],
+              "lastUpdatedAt": "2025-07-29T09:13:00.000Z",
+              "createdAt": "2022-09-29T14:45:00.000Z",
+              "startDate": null,
+              "endDate": null,
+              "enforcement": "MANDATORY",
+              "documentTypes": ["PASSPORT"],
+              "tags": [
+                "international",
+                "fully_vaccinated",
+                "not_vaccinated",
+                "air",
+                "land",
+                "sea",
+                "tourism",
+                "business",
+                "transit"
+              ],
+              "travelPurposes": ["TOURISM", "BUSINESS", "TRANSIT"],
+              "included": [
+                {
+                  "code": "AFG",
+                  "text": "Afghanistan",
+                  "type": "LOCATION",
+                  "locationType": "ORIGIN"
+                },
+                {
+                  "code": "GBR",
+                  "text": "United Kingdom",
+                  "type": "LOCATION",
+                  "locationType": "ORIGIN"
+                }
+              ],
+              "icon": {
+                "name": "passport"
+              }
+            },
+            "relationships": {
+              "location": {
+                "data": {
+                  "id": "USA",
+                  "type": "LOCATION"
+                }
+              }
+            }
+          },
+          {
+            "id": "85be2d6c-9fd5-429a-b684-751bd67877e1",
+            "type": "PROCEDURE",
+            "attributes": {
+              "category": "DOC_REQUIREMENT",
+              "subCategory": "BEFORE_ARRIVAL",
+              "title": "CDC form for traveling with dogs",
+              "description": "Travelers bringing dogs into the United States from countries or regions deemed rabies-free or low-risk are required to complete a CDC Dog Import Form.",
+              "more": [
+                "Different requirements apply to dogs that have been in high-risk countries or regions in the last 6 months."
+              ],
+              "actions": [
+                {
+                  "type": "LINK",
+                  "title": "Complete online",
+                  "url": "https://cdc-786687.workflowcloud.com/forms/090dc543-7b2f-4538-b2c7-2919d12ecc73",
+                  "provider": "government",
+                  "intent": "none",
+                  "productId": "CDC_DOG_IMPORT"
+                }
+              ],
+              "sources": [
+                {
+                  "type": "GOVERNMENT",
+                  "title": "CDC Guidance for Traveling with Dogs",
+                  "url": "https://www.cdc.gov/importation/dogs/rabies-free-low-risk-countries.html"
+                }
+              ],
+              "lastUpdatedAt": "2025-06-26T11:15:00.000Z",
+              "createdAt": "2024-07-24T22:00:00.000Z",
+              "startDate": "2024-08-01T00:00:00.000Z",
+              "endDate": null,
+              "enforcement": "MAY_BE_REQUIRED",
+              "documentTypes": ["PRE_REGISTRATION_FORM"],
+              "tags": ["international", "fully_vaccinated", "not_vaccinated", "air", "land"],
+              "included": [
+                {
+                  "code": "ALB",
+                  "text": "Albania",
+                  "type": "LOCATION",
+                  "locationType": "ORIGIN"
+                },
+                {
+                  "code": "GBR",
+                  "text": "United Kingdom",
+                  "type": "LOCATION",
+                  "locationType": "ORIGIN"
+                }
+              ],
+              "icon": {
+                "name": "document"
+              }
+            },
+            "relationships": {
+              "location": {
+                "data": {
+                  "id": "USA",
+                  "type": "LOCATION"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "Vaccination": {
+      "properties": {
+        "status": {
+          "description": "The current status of the vaccination a traveller got.",
+          "enum": ["FULLY_VACCINATED", "NOT_VACCINATED"],
+          "example": "FULLY_VACCINATED",
+          "type": "string"
+        },
+        "type": {
+          "description": "The vaccination target.",
+          "enum": ["COVID_19"],
+          "example": "COVID_19",
+          "type": "string"
+        }
+      },
+      "required": ["type", "status"],
+      "type": "object"
+    }
+  },
+  "securityDefinitions": {
+    "access-token": {
+      "in": "header",
+      "name": "Authorization",
+      "type": "apiKey"
+    }
+  },
+  "tags": [
+    {
+      "name": "trips",
+      "description": "Trip details and requirements assessment"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Trip Details",
+      "tags": ["trips"]
+    }
+  ],
+  "x-logo": {
+    "url": "https://joinsherpa.com/assets/images/sherpa-logo.svg",
+    "altText": "Sherpa Logo"
+  },
+  "x-links": [
+    {
+      "name": "Documentation",
+      "url": "https://docs.joinsherpa.io"
+    },
+    {
+      "name": "Support",
+      "url": "https://support.joinsherpa.com"
+    }
+  ],
+  "x-components": {}
+}
