@@ -34,6 +34,8 @@
       "@sendero/whatsapp/*": ["../../packages/whatsapp/src/*"],
       "@sendero/slack": ["../../packages/slack/src/index.ts"],
       "@sendero/slack/*": ["../../packages/slack/src/*"],
+      "@sendero/kapso": ["../../packages/sendero-kapso/src/index.ts"],
+      "@sendero/kapso/*": ["../../packages/sendero-kapso/src/*"],
       "@sendero/locale": ["../../packages/locale/src/index.ts"],
       "@sendero/locale/*": ["../../packages/locale/src/*"],
       "@sendero/llms": ["../../packages/llms/src/index.ts"],
