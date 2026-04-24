@@ -16,6 +16,8 @@
  * Slack, email, or MCP without exposing an open LLM billing endpoint.
  */
 
+import crypto from 'node:crypto';
+
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { anthropic } from '@ai-sdk/anthropic';
@@ -357,11 +359,30 @@ function authorizeDispatch(req: NextRequest): NextResponse | null {
     );
   }
 
-  const bearer = req.headers.get('authorization');
-  const header = req.headers.get(DISPATCH_SECRET_HEADER);
-  if (header === expected || bearer === `Bearer ${expected}`) return null;
+  // Constant-time compare. Plain `===` leaks secret bytes through
+  // character-by-character timing — a remote attacker can recover the
+  // secret with enough measurements. timingSafeEqual short-circuits
+  // on length mismatch only, never on content.
+  //
+  // The body-tenantId trust below is intentional: this path is used
+  // by internal channel webhooks (WhatsApp, Slack, cron) that have
+  // already signature-verified their upstream call and need to
+  // dispatch on behalf of a specific tenant. Leaking the secret
+  // means impersonation of any tenant — rotate quarterly.
+  const bearer = req.headers.get('authorization') ?? '';
+  const header = req.headers.get(DISPATCH_SECRET_HEADER) ?? '';
+  const bearerExpected = `Bearer ${expected}`;
+
+  if (safeEqual(header, expected) || safeEqual(bearer, bearerExpected)) return null;
 
   return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
 // ─── store adapters — thin Prisma bindings ───────────────────────────

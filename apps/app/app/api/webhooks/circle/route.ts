@@ -37,6 +37,29 @@ export const maxDuration = 30;
 
 const CIRCLE_KEY_CACHE = new Map<string, { pem: string; fetchedAt: number }>();
 const KEY_TTL_MS = 24 * 60 * 60 * 1000;
+const KEY_CACHE_MAX = 64;
+
+/**
+ * Circle publishes public key IDs as lowercase UUIDs. Constrain the
+ * header to that shape before we interpolate it into an outbound URL
+ * — an attacker who controls `x-circle-key-id` would otherwise
+ * trigger arbitrary outbound fetches to `api.circle.com/<path>` and
+ * could traverse paths via `/../foo`. Strict UUID ≈ no interesting
+ * abuse surface.
+ */
+const CIRCLE_KEY_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * Webhook timestamp skew. Circle stamps every notification; we reject
+ * anything older than WEBHOOK_MAX_AGE_MS (replay) or more than
+ * WEBHOOK_FUTURE_SKEW_MS ahead (clock drift / forgery). The durable
+ * webhook store still dedupes by `notificationId` — this clock gate
+ * is belt-and-suspenders so the dedup window can't be bypassed by
+ * an attacker stripping `notificationId` to force a new externalId.
+ */
+const WEBHOOK_MAX_AGE_MS = 10 * 60 * 1000;
+const WEBHOOK_FUTURE_SKEW_MS = 5 * 60 * 1000;
+
 const HANDLED_TYPES = new Set([
   'transactions.inbound',
   'transactions.outbound',
@@ -46,15 +69,48 @@ const HANDLED_TYPES = new Set([
 ]);
 
 async function getCirclePublicKey(keyId: string): Promise<string | null> {
+  // Strict keyId validation runs at the call site too, but double-gate
+  // so this helper is safe regardless of who calls it.
+  if (!CIRCLE_KEY_ID_RE.test(keyId)) return null;
+
   const hit = CIRCLE_KEY_CACHE.get(keyId);
-  if (hit && Date.now() - hit.fetchedAt < KEY_TTL_MS) return hit.pem;
+  if (hit && Date.now() - hit.fetchedAt < KEY_TTL_MS) {
+    // LRU bump — reinsert so the most-recently-used key is last.
+    CIRCLE_KEY_CACHE.delete(keyId);
+    CIRCLE_KEY_CACHE.set(keyId, hit);
+    return hit.pem;
+  }
+
   const res = await fetch(`https://api.circle.com/v2/notifications/publicKey/${keyId}`);
   if (!res.ok) return null;
   const json = (await res.json()) as { data?: { publicKey?: string } };
   const pem = json.data?.publicKey ?? null;
   if (!pem) return null;
+
+  // Bounded LRU: attacker can't grow this map without limit even if
+  // they slip a keyId past the regex (e.g. via a key rotation).
+  if (CIRCLE_KEY_CACHE.size >= KEY_CACHE_MAX) {
+    const oldest = CIRCLE_KEY_CACHE.keys().next().value;
+    if (oldest) CIRCLE_KEY_CACHE.delete(oldest);
+  }
   CIRCLE_KEY_CACHE.set(keyId, { pem, fetchedAt: Date.now() });
   return pem;
+}
+
+/**
+ * Reject a webhook whose stamped time is outside the allowed window.
+ * Returns `null` on success, or an error tag on reject.
+ */
+function checkTimestampFreshness(
+  ts: string | undefined
+): 'missing' | 'unparseable' | 'stale' | 'future' | null {
+  if (!ts) return 'missing';
+  const parsed = Date.parse(ts);
+  if (!Number.isFinite(parsed)) return 'unparseable';
+  const now = Date.now();
+  if (now - parsed > WEBHOOK_MAX_AGE_MS) return 'stale';
+  if (parsed - now > WEBHOOK_FUTURE_SKEW_MS) return 'future';
+  return null;
 }
 
 function verifyCircleSignature(raw: string, signatureB64: string, pem: string): boolean {
@@ -173,6 +229,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'missing_signature' }, { status: 401 });
   }
 
+  // Reject forged keyId values before we reach the network. A non-UUID
+  // keyId can't belong to Circle and would otherwise spend one
+  // outbound fetch to api.circle.com per request.
+  if (!CIRCLE_KEY_ID_RE.test(keyId)) {
+    return NextResponse.json({ error: 'invalid_key_id' }, { status: 401 });
+  }
+
   const pem = await getCirclePublicKey(keyId);
   if (!pem) {
     return NextResponse.json({ error: 'public_key_fetch_failed' }, { status: 401 });
@@ -189,13 +252,28 @@ export async function POST(req: NextRequest) {
   }
 
   const type = event.notificationType ?? 'unknown';
-  const externalId = event.notificationId ?? `${type}:${event.timestamp ?? Date.now()}`;
   if (type === 'webhooks.test') {
     return NextResponse.json({ ok: true, test: true });
   }
   if (!HANDLED_TYPES.has(type)) {
     return NextResponse.json({ ok: true, ignored: type });
   }
+
+  // Replay gate. Must come AFTER signature verify so we don't leak
+  // timing differences on unsigned probes, and AFTER the test/ignore
+  // short-circuits so a test ping without a timestamp still returns
+  // ok. Only handled types require a fresh timestamp.
+  const freshness = checkTimestampFreshness(event.timestamp);
+  if (freshness) {
+    console.warn('[webhooks/circle] timestamp rejected:', freshness, event.timestamp);
+    return NextResponse.json({ error: 'stale_webhook', reason: freshness }, { status: 401 });
+  }
+
+  // externalId always derives from notificationId first. Falling back
+  // to `${type}:${timestamp}` is deterministic now that timestamp is
+  // required above — Date.now() is never reached, which is what
+  // previously defeated dedup on replay.
+  const externalId = event.notificationId ?? `${type}:${event.timestamp}`;
 
   const result = await processDurableWebhook({
     provider: 'circle',

@@ -14,7 +14,8 @@ import { prisma } from '@sendero/database';
 import {
   verifyInvoiceToken,
   invoiceToTemplateProps,
-  renderInvoiceHtml,
+  InvoiceHtml,
+  renderInvoiceQrDataUrl,
   type InvoiceTokenPayload,
 } from '@sendero/invoicing';
 
@@ -59,16 +60,16 @@ export default async function PublicInvoicePage({
     baseUrl: process.env.NEXT_PUBLIC_APP_URL,
   });
 
-  // renderInvoiceHtml returns a full `<!doctype html>...</html>` string. We
-  // extract the <body> inner content so React doesn't nest <html>/<body>
-  // inside the App Router's own document wrapping.
-  const html = await renderInvoiceHtml(props);
-  const innerMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  const innerBody = innerMatch ? innerMatch[1] : html;
+  // Render the invoice component as JSX so React escapes every
+  // tenant-controlled field (toName, toEmail, line item descriptions,
+  // invoice number, etc.). Previous versions round-tripped through
+  // `renderInvoiceHtml` + regex body-extraction + dangerouslySetInnerHTML,
+  // which left us one template-string edit away from an XSS.
+  const qrDataUrl = props.template.include_qr ? await renderInvoiceQrDataUrl(props.publicUrl) : '';
 
   return (
     <main style={{ background: '#f5f2ee', minHeight: '100vh' }}>
-      <div dangerouslySetInnerHTML={{ __html: innerBody }} />
+      <InvoiceHtml {...props} qrDataUrl={qrDataUrl} />
       <div style={{ textAlign: 'center', padding: '32px 16px' }}>
         <a
           href={`/api/invoices/${invoice.id}/pdf?token=${encodeURIComponent(token)}`}

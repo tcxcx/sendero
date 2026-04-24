@@ -22,6 +22,7 @@
 
 import { type NextRequest } from 'next/server';
 
+import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@sendero/database';
 
 import { openListener } from '@/lib/pg-listen';
@@ -42,11 +43,39 @@ type BalanceEvent = {
 };
 
 export async function GET(req: NextRequest) {
+  // Auth gate: Clerk session + tenant ownership of the queried address.
+  // Unauth'd or cross-tenant callers get 401/404 BEFORE the SSE headers
+  // are committed — EventSource will surface the non-200 on the client.
+  const { orgId } = await auth();
+  if (!orgId) {
+    return new Response('unauthorized', { status: 401 });
+  }
+
   const address = req.nextUrl.searchParams.get('address');
   if (!address) {
     return new Response('missing_address', { status: 400 });
   }
   const lowered = address.toLowerCase();
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { clerkOrgId: orgId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    return new Response('wallet_not_found', { status: 404 });
+  }
+
+  // Verify the caller's tenant owns this address. pg_notify fan-out
+  // streams balance updates for ALL addresses; without this check a
+  // subscriber could filter in-process for any address and see every
+  // tenant's balance change.
+  const owned = await prisma.circleWallet.findFirst({
+    where: { address: lowered, tenantId: tenant.id },
+    select: { id: true },
+  });
+  if (!owned) {
+    return new Response('wallet_not_found', { status: 404 });
+  }
 
   const encoder = new TextEncoder();
   const startedAt = Date.now();

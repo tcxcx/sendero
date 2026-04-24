@@ -6,15 +6,18 @@
  * fully supported — installs spanning multiple workspaces resolve to a
  * single (enterpriseId, teamId) record.
  *
- * State carries the Sendero tenantId (the Clerk org that initiated the
- * install). For Phase 2 the state is unsigned base64-JSON; harden with
- * an HMAC wrapper in Phase 3.
+ * `state` is HMAC-signed (see `lib/slack-oauth-state.ts`) and carries
+ * the initiating tenantId plus a 10-minute expiry. Unsigned / expired
+ * state is rejected before any DB lookup so a forged state can't bind
+ * a victim's Slack workspace to an attacker's tenant.
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 import { exchangeCode } from '@sendero/slack';
+
+import { verifySlackState, type SlackStateVerifyResult } from '@/lib/slack-oauth-state';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,16 +46,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'missing_params' }, { status: 400 });
   }
 
-  let tenantId: string;
-  try {
-    const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf-8')) as {
-      tenantId?: string;
-    };
-    if (!decoded.tenantId) throw new Error('tenantId missing from state');
-    tenantId = decoded.tenantId;
-  } catch {
-    return NextResponse.json({ error: 'invalid_state' }, { status: 400 });
+  const verified: SlackStateVerifyResult = verifySlackState(state);
+  if (verified.ok !== true) {
+    return NextResponse.json({ error: 'invalid_state', reason: verified.reason }, { status: 400 });
   }
+  const tenantId = verified.tenantId;
 
   const tenantExists = await prisma.tenant.findUnique({
     where: { id: tenantId },
