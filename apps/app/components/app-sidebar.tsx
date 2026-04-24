@@ -27,6 +27,7 @@ import {
   Plus,
   ScanLine,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 
@@ -58,6 +59,7 @@ const sections: NavSection[] = [
       { title: 'Home', url: '/dashboard', icon: Home },
       { title: 'Agent console', url: '/dashboard/console', icon: Bot },
       { title: 'Scan document', url: '/dashboard/scan', icon: ScanLine },
+      { title: 'Passport', url: '/dashboard/passport', icon: ShieldCheck },
       { title: 'Trip inboxes', url: '/dashboard/inbox', icon: Inbox },
       { title: 'Trips', url: '/dashboard/trips', icon: Plane },
     ],

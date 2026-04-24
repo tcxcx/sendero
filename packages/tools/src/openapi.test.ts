@@ -17,62 +17,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { buildOpenApiDoc } from './openapi';
 import { toolList } from './index';
-
-// Keep this in sync with toolToScope() in @sendero/auth/dispatch-auth —
-// we duplicate the mapping here so @sendero/tools doesn't need to
-// depend on the auth package. If these diverge the consistency test
-// below fails loudly.
-const EXPECTED_SCOPE: Record<string, string> = (() => {
-  const map: Record<string, string> = {};
-  for (const t of toolList) {
-    const n = t.name;
-    if (n.startsWith('search_') || n.startsWith('find_')) map[n] = 'search';
-    else if (n.startsWith('book_') || n.startsWith('hold_')) map[n] = 'bookings';
-    else if (
-      n === 'reserve_booking' ||
-      n === 'commit_booking' ||
-      n === 'prefund_trip' ||
-      n === 'settle_booking' ||
-      n === 'settle_split' ||
-      n === 'guest_claim_link' ||
-      n === 'confirm_flight' ||
-      n.includes('cancel')
-    )
-      map[n] = 'settlement';
-    else if (
-      n === 'check_treasury' ||
-      n === 'swap_tokens' ||
-      n === 'send_tokens' ||
-      n === 'bridge_to_arc' ||
-      n === 'swap_and_bridge' ||
-      n === 'gateway_balance' ||
-      n === 'gateway_transfer'
-    )
-      map[n] = 'treasury';
-    else if (n === 'scan_document' || n === 'generate_booking_invoice') map[n] = 'documents';
-    else if (n === 'check_travel_eligibility') map[n] = 'compliance';
-    else if (
-      n.startsWith('airport_') ||
-      n.startsWith('trip_') ||
-      n === 'restaurant_route_card' ||
-      n === 'recommend_restaurants' ||
-      n === 'travel_safety_aid' ||
-      n === 'elevation_risk_brief' ||
-      n === 'air_quality_brief' ||
-      n === 'timezone_brief' ||
-      n === 'export_route_map' ||
-      n === 'geocode_trip_stop' ||
-      n === 'validate_travel_address'
-    )
-      map[n] = 'trip_assistance';
-    else map[n] = 'utilities';
-  }
-  return map;
-})();
-
-function toolToScope(name: string): string {
-  return EXPECTED_SCOPE[name] ?? 'utilities';
-}
+import { toolToScope } from './scopes';
 
 const DOC = buildOpenApiDoc({
   title: 'Sendero Agent Tools',

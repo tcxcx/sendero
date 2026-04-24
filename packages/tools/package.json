@@ -13,6 +13,7 @@
     "./meter": "./src/meter.ts",
     "./openapi": "./src/openapi.ts",
     "./pricing": "./src/pricing.ts",
+    "./scopes": "./src/scopes.ts",
     "./types": "./src/types.ts",
     "./faucet": "./src/faucet.ts"
   },

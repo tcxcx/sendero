@@ -19,11 +19,65 @@ import { $, type WorkflowDef } from './types';
 
 export const bookFlightWorkflow: WorkflowDef = {
   id: 'sendero.book_flight',
-  version: 1,
+  version: 2,
   label: 'Book a flight',
   description:
-    'Escrow-backed booking: the trip must already be prefunded via prefund_trip. Searches Duffel inventory, validates policy, reserves escrow upper-bound, holds the offer, commits the actual vendor amount, waits for Duffel ticketing (via webhook), then releases escrow to vendor + fee legs on ticket confirmation, or refunds the buyer on failure.',
+    'Escrow-backed booking: the trip must already be prefunded via prefund_trip. Checks traveler eligibility (passport + visa) before touching any supplier, then searches Duffel inventory, validates policy, reserves escrow upper-bound, holds the offer, commits the actual vendor amount, waits for Duffel ticketing (via webhook), then releases escrow to vendor + fee legs on ticket confirmation, or refunds the buyer on failure.',
   steps: [
+    // ── Eligibility precondition — runs BEFORE any supplier call ──
+    //
+    // The traveler's passport + visa status is verified first. A
+    // `block` verdict pauses the workflow indefinitely; the admin UI
+    // surfaces the verdict's reason codes and lets the traveler
+    // update their declared profile or upload a fresh passport. Once
+    // fixed, `resumeRun()` continues past the pause into the normal
+    // search → policy → hold → commit path.
+    //
+    // Warn verdicts (passport expires < 6 months, visa required but
+    // not on file) continue to search — the trip card surfaces the
+    // warnings + ancillary CTAs so the traveler decides.
+    {
+      kind: 'tool',
+      id: 'eligibility',
+      tool: 'check_travel_eligibility',
+      label: 'Verify travel documents',
+      as: 'eligibility',
+      args: {
+        travelerUserId: $('input.travelerUserId'),
+        originIso3: $('input.originIso3'),
+        destinationIso3: $('input.destinationIso3'),
+        departureDate: $('input.departureDate'),
+        returnDate: $('input.returnDate'),
+        purpose: $('input.purpose'),
+      },
+      retries: 0,
+      timeoutMs: 10_000,
+    },
+    {
+      kind: 'branch',
+      id: 'eligibility_gate',
+      label: 'Eligibility gate',
+      when: $('eligibility.status'),
+      equals: 'block',
+      then: [
+        {
+          kind: 'pause',
+          id: 'await_eligibility_fix',
+          label: 'Blocked — traveler documents must be updated',
+          reason: 'eligibility_blocked',
+          payload: {
+            verdict: $('eligibility'),
+            reasons: $('eligibility.reasons'),
+            actions: $('eligibility.actions'),
+          },
+          // Seven days: long enough for a passport upload + visa
+          // application turnaround, short enough that stale trips
+          // don't linger in `paused` forever.
+          timeoutMs: 7 * 24 * 60 * 60 * 1000,
+        },
+      ],
+      otherwise: [],
+    },
     {
       kind: 'tool',
       id: 'search',
