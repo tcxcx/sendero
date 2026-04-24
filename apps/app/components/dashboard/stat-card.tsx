@@ -2,21 +2,20 @@
 
 /**
  * StatCard — dashboard KPI block. Borderless raised card on parchment
- * (DESIGN.md §7 + §19) with an editorial numeral headliner that counts
- * up on mount via `useCountUp()`.
+ * (DESIGN.md §7 + §19) with an editorial numeral headliner animated
+ * by @sendero/ui/animated-number (spring physics, not rAF easing).
  *
  * - Borderless (`--surface-raised` + `--shadow-md`), lifts to
  *   `--shadow-lg` on hover over 240ms.
- * - Value uses the `--numeral-lg` scale, tabular-nums, serif weight
- *   when the family supports it.
- * - Currency formats fade in instead of counting up (DESIGN.md §13.1 —
- *   mid-animation format jumps look cheap).
- * - Respects `prefers-reduced-motion` via the hook.
+ * - Value uses the `--numeral-md` scale, tabular-nums.
+ * - Currency symbols render as a static `prefix` on AnimatedNumber
+ *   so the glyph never flickers mid-animation (DESIGN.md §13.1).
+ * - Reduced-motion: AnimatedNumber jumps to the target instantly.
  */
 
 import Link from 'next/link';
 
-import { useCountUp } from '@/hooks/use-count-up';
+import { AnimatedNumber } from '@sendero/ui/animated-number';
 
 export function StatCard({
   title,
@@ -85,31 +84,26 @@ function StatValue({ raw, numeric }: { raw: string; numeric: number | null }) {
   if (numeric === null) {
     return (
       <div
-        className="text-[length:var(--numeral-md)] font-semibold leading-none tabular-nums text-foreground"
+        className="text-[length:var(--numeral-md)] font-semibold leading-none text-foreground"
         style={{ fontVariantNumeric: 'tabular-nums' }}
       >
         {raw}
       </div>
     );
   }
-  return <AnimatedNumeral raw={raw} target={numeric} />;
-}
+  // Split the displayed string into a static prefix (currency glyph,
+  // etc.) and the numeric body. AnimatedNumber animates only the body
+  // so the currency glyph never flickers.
+  const match = raw.match(/^([^\d.-]+)/);
+  const prefix = match ? match[1] : undefined;
+  const precision = /\.\d+/.test(raw) ? 2 : 0;
 
-function AnimatedNumeral({ raw, target }: { raw: string; target: number }) {
-  const value = useCountUp(target, { durationMs: 640 });
-  const hasCurrency = /[$€£]/.test(raw);
-  const hasDecimals = /\.\d+/.test(raw);
-  const rendered = hasCurrency
-    ? formatCurrency(raw, value)
-    : hasDecimals
-      ? value.toFixed(2)
-      : Math.round(value).toLocaleString();
   return (
     <div
-      className="text-[length:var(--numeral-md)] font-semibold leading-none tabular-nums text-foreground"
+      className="text-[length:var(--numeral-md)] font-semibold leading-none text-foreground"
       style={{ fontVariantNumeric: 'tabular-nums' }}
     >
-      {rendered}
+      <AnimatedNumber value={numeric} precision={precision} prefix={prefix} />
     </div>
   );
 }
@@ -118,14 +112,4 @@ function parseStatValue(raw: string): number | null {
   const cleaned = raw.replace(/[,\s]/g, '').replace(/^[^\d.-]+/, '');
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
-}
-
-function formatCurrency(template: string, value: number): string {
-  const match = template.match(/^([^\d.-]+)/);
-  const prefix = match ? match[1] : '';
-  const hasDecimals = /\.\d+/.test(template);
-  const body = hasDecimals
-    ? value.toFixed(2)
-    : Math.round(value).toLocaleString();
-  return `${prefix}${body}`;
 }
