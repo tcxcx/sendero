@@ -48,7 +48,10 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
           </a>
         </Button>
       </div>
-      <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+      <div
+        className="rounded-[var(--radius-md)] bg-[color:var(--surface-floating)] p-3 text-sm text-muted-foreground"
+        style={{ border: 'var(--hairline-soft)' }}
+      >
         Paste the same invite text into Slack for employee travel. The Slack app will use the
         workspace install for approvals, while the claim link keeps traveler budget custody in the
         escrow flow.
@@ -58,7 +61,10 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
           Email delivery was not confirmed: {result.invite.error ?? 'not configured'}.
         </p>
       ) : null}
-      <details className="rounded-md border border-border p-3 text-xs">
+      <details
+        className="rounded-[var(--radius-md)] p-3 text-xs"
+        style={{ border: 'var(--hairline-soft)' }}
+      >
         <summary className="cursor-pointer text-muted-foreground">On-chain calls</summary>
         <pre className="mt-3 overflow-x-auto whitespace-pre-wrap">
           {JSON.stringify(result.onchainCalls, null, 2)}
@@ -72,14 +78,20 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
 function Field({ label, value, large = false }: { label: string; value: string; large?: boolean }) {
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div
+        className="font-mono uppercase text-muted-foreground"
+        style={{
+          fontSize: 'var(--label-meta, 0.6875rem)',
+          letterSpacing: 'var(--label-meta-tracking, 0.12em)',
+        }}
+      >
         {label}
       </div>
       <div
         className={
           large
-            ? 'rounded-md bg-muted p-4 text-center font-mono text-2xl tracking-widest'
-            : 'break-all rounded-md bg-muted p-3 font-mono text-xs'
+            ? 'rounded-[var(--radius-md)] bg-[color:var(--surface-base)] p-4 text-center font-mono text-2xl tracking-widest'
+            : 'break-all rounded-[var(--radius-md)] bg-[color:var(--surface-base)] p-3 font-mono text-xs'
         }
       >
         {value}

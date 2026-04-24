@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 import { prisma } from '@sendero/database';
 import { Button } from '@sendero/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@sendero/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@sendero/ui/table';
 
 import { PageHeader } from '@/components/app-shell/page-header';
@@ -56,9 +55,11 @@ export default async function DashboardPage() {
     <div className="flex flex-col gap-6">
       <PageHeader title={copy.pageTitle} description={copy.pageDescription(tenant.displayName)} />
 
-      <section className="grid gap-4 rounded-md border border-border bg-muted/30 p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6">
+      <section className="grid gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-6">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold">{copy.agentConsole.title}</h2>
+          <h2 className="text-[15px] font-semibold tracking-normal text-foreground">
+            {copy.agentConsole.title}
+          </h2>
           <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
             {copy.agentConsole.description}
           </p>
@@ -101,48 +102,48 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{copy.recentTrips.title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{copy.recentTrips.trip}</TableHead>
-                <TableHead>{copy.recentTrips.status}</TableHead>
-                <TableHead>{copy.recentTrips.budget}</TableHead>
-                <TableHead>{copy.recentTrips.created}</TableHead>
+      <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
+        <h3 className="text-[15px] font-semibold tracking-normal text-foreground">
+          {copy.recentTrips.title}
+        </h3>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{copy.recentTrips.trip}</TableHead>
+              <TableHead>{copy.recentTrips.status}</TableHead>
+              <TableHead>{copy.recentTrips.budget}</TableHead>
+              <TableHead>{copy.recentTrips.created}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {recentTrips.map(trip => (
+              <TableRow key={trip.id}>
+                <TableCell>
+                  <Link href={`/app/trips/${trip.id}`} className="font-medium hover:underline">
+                    {stringFromJson(trip.metadata, 'tripSummary', trip.id.slice(0, 10))}
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <TripStatusBadge status={trip.status} />
+                </TableCell>
+                <TableCell style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatDecimalUsd(trip.totalUsdc)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(trip.createdAt)}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentTrips.map(trip => (
-                <TableRow key={trip.id}>
-                  <TableCell>
-                    <Link href={`/app/trips/${trip.id}`} className="font-medium hover:underline">
-                      {stringFromJson(trip.metadata, 'tripSummary', trip.id.slice(0, 10))}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <TripStatusBadge status={trip.status} />
-                  </TableCell>
-                  <TableCell>{formatDecimalUsd(trip.totalUsdc)}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(trip.createdAt)}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {recentTrips.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    {copy.recentTrips.empty}
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            ))}
+            {recentTrips.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-muted-foreground">
+                  {copy.recentTrips.empty}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </section>
     </div>
   );
 }
@@ -159,9 +160,9 @@ function JourneyShortcut({
   openLabel: string;
 }) {
   return (
-    <div className="flex min-h-40 flex-col justify-between rounded-md border border-border bg-background p-4">
+    <div className="flex min-h-40 flex-col justify-between rounded-[var(--radius-lg)] bg-[color:var(--surface-floating)] p-5 shadow-[var(--shadow-sm)] transition-shadow duration-200 hover:shadow-[var(--shadow-md)]">
       <div>
-        <h2 className="text-base font-medium">{label}</h2>
+        <h2 className="text-base font-medium tracking-normal text-foreground">{label}</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
       </div>
       <Button asChild variant="outline" size="sm" className="mt-4 justify-start">

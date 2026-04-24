@@ -10,6 +10,7 @@ import { math } from '@streamdown/math';
 import { mermaid } from '@streamdown/mermaid';
 import type { UIMessage } from 'ai';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import type { PluginConfig } from 'streamdown';
 import { Streamdown } from 'streamdown';
 
 import { Button } from '@/components/ui/button';
@@ -272,7 +273,11 @@ export const MessageBranchPage = ({ className, ...props }: MessageBranchPageProp
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+// streamdown@2.5.0 ships PluginConfig typed against shiki@2.5.0 while
+// @streamdown/code@1.1.1 is on shiki@3.23.0 — the two BundledLanguage
+// unions don't overlap structurally even though the runtime contract
+// matches. Cast through PluginConfig to bridge the upstream mismatch.
+const streamdownPlugins = { cjk, code, math, mermaid } as unknown as PluginConfig;
 
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (

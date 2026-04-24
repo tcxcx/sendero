@@ -25,7 +25,10 @@ export function PagePagination({
   if (totalPages <= 1) return null;
 
   return (
-    <div className="flex items-center justify-between border-t border-border pt-4 text-sm">
+    <div
+      className="flex items-center justify-between pt-4 text-sm"
+      style={{ borderTop: 'var(--hairline-soft)' }}
+    >
       <span className="text-muted-foreground">
         Page {page} of {totalPages}
       </span>

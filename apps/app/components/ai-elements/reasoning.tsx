@@ -19,6 +19,7 @@ import { code } from '@streamdown/code';
 import { math } from '@streamdown/math';
 import { mermaid } from '@streamdown/mermaid';
 import { BrainIcon, ChevronDownIcon } from 'lucide-react';
+import type { PluginConfig } from 'streamdown';
 import { Streamdown } from 'streamdown';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -190,7 +191,9 @@ export type ReasoningContentProps = ComponentProps<typeof CollapsibleContent> & 
   children: string;
 };
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+// Upstream streamdown@2.5.0 and @streamdown/code@1.1.1 ship different
+// shiki major versions; cast through PluginConfig to bridge the types.
+const streamdownPlugins = { cjk, code, math, mermaid } as unknown as PluginConfig;
 
 export const ReasoningContent = memo(({ className, children, ...props }: ReasoningContentProps) => (
   <CollapsibleContent
