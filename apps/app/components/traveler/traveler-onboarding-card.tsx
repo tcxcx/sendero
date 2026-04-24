@@ -148,7 +148,7 @@ export function TravelerOnboardingCard() {
   ];
 
   return (
-    <section className="relative grid gap-4 rounded-[var(--radius-lg)] bg-white px-5 py-4 shadow-[var(--shadow-md)] md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+    <section className="relative grid gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] px-5 py-4 shadow-[var(--shadow-md)] md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
       <div className="grid size-10 place-items-center rounded-full bg-[color:var(--tint-vermillion-soft)] text-[color:var(--ink)]">
         <GlobeIcon className="size-5" aria-hidden="true" />
       </div>
@@ -180,7 +180,7 @@ export function TravelerOnboardingCard() {
                 value={nationalityIso3}
                 onChange={e => setNationalityIso3(e.target.value)}
                 disabled={status === 'saving'}
-                className="rounded-md border border-border bg-white px-2 py-1.5 text-sm text-foreground"
+                className="rounded-md border border-border bg-[color:var(--surface-floating)] px-2 py-1.5 text-sm text-foreground"
               >
                 {TOP_NATIONALITIES.map(n => (
                   <option key={n.iso3} value={n.iso3}>
@@ -197,7 +197,7 @@ export function TravelerOnboardingCard() {
                 value={expiryMonth}
                 onChange={e => setExpiryMonth(Number.parseInt(e.target.value, 10))}
                 disabled={status === 'saving'}
-                className="rounded-md border border-border bg-white px-2 py-1.5 text-sm text-foreground"
+                className="rounded-md border border-border bg-[color:var(--surface-floating)] px-2 py-1.5 text-sm text-foreground"
               >
                 {months.map((m, i) => (
                   <option key={m} value={i + 1}>
@@ -214,7 +214,7 @@ export function TravelerOnboardingCard() {
                 value={expiryYear}
                 onChange={e => setExpiryYear(Number.parseInt(e.target.value, 10))}
                 disabled={status === 'saving'}
-                className="rounded-md border border-border bg-white px-2 py-1.5 text-sm text-foreground"
+                className="rounded-md border border-border bg-[color:var(--surface-floating)] px-2 py-1.5 text-sm text-foreground"
               >
                 {years.map(y => (
                   <option key={y} value={y}>

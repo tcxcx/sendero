@@ -13,7 +13,7 @@ export function InvoiceFilters({
   period?: string;
 }) {
   return (
-    <form className="mb-4 grid gap-3 rounded-[var(--radius-lg)] bg-white p-4 shadow-[var(--shadow-sm)] md:grid-cols-4">
+    <form className="mb-4 grid gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-4 shadow-[var(--shadow-sm)] md:grid-cols-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="status">Status</Label>
         <Select name="status" defaultValue={status ?? 'all'}>

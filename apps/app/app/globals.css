@@ -72,7 +72,15 @@
      app picks up tokens even if the shared stylesheet loads after.
      ===================================================== */
   --surface-base: #eedcc7;
-  --surface-raised: #e8dfd2;
+  /* --surface-raised was previously #e8dfd2 (darker than base, inverted from
+     DESIGN.md §7 which says parchment-light). At that value content cards read
+     as roughly the same warmth as the page field — effectively invisible.
+     Bumped to warm-white for a clear ≥9 L* delta against parchment so cards
+     read as floating. `--surface-floating` stays at the same value for the
+     popover/menu tier; the raised/floating distinction is now carried by
+     shadow depth rather than fill color, which is consistent with the
+     "layered surfaces on parchment — depth via shadow" rule. */
+  --surface-raised: #fdfbf7;
   --surface-floating: #fdfbf7;
   --surface-terminal: rgba(31, 42, 68, 0.97);
 
