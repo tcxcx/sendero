@@ -26,6 +26,8 @@
 
 import { prisma } from '@sendero/database';
 import {
+  readDeclaredTravelerSignals,
+  readTenantDefaultNationality,
   readVaultSignals,
   type TravelEligibilityVerdict,
   verifyTravelDocuments,
@@ -89,22 +91,32 @@ export const checkTravelEligibilityTool: ToolDef = {
 
     const actorRef = ctx?.traveler?.userId ? `usr:${ctx.traveler.userId}` : 'svc:agent';
 
-    const passport = await readVaultSignals(prisma, {
-      tenantId,
-      userId: input.travelerUserId,
-      documentVariant: 'passport',
-      actor: {
-        actorRef,
-        source: 'tool:check_travel_eligibility',
-        context: {
-          destinationIso3: input.destinationIso3,
-          purpose: input.purpose,
+    // Pull all three tiers in parallel. verifyTravelDocuments picks the
+    // highest-confidence one (vault > declared > tenant default) and
+    // emits tier-aware reason codes so the UI can show "verified" vs
+    // "self-declared" vs "tenant default" badges.
+    const [passport, declared, tenantDefaultNationalityIso3] = await Promise.all([
+      readVaultSignals(prisma, {
+        tenantId,
+        userId: input.travelerUserId,
+        documentVariant: 'passport',
+        actor: {
+          actorRef,
+          source: 'tool:check_travel_eligibility',
+          context: {
+            destinationIso3: input.destinationIso3,
+            purpose: input.purpose,
+          },
         },
-      },
-    });
+      }),
+      readDeclaredTravelerSignals(prisma, input.travelerUserId),
+      readTenantDefaultNationality(prisma, tenantId),
+    ]);
 
     const verdict = verifyTravelDocuments({
       passport,
+      declared,
+      tenantDefaultNationalityIso3,
       originIso3: input.originIso3,
       destinationIso3: input.destinationIso3,
       departureDate: input.departureDate,

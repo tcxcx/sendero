@@ -39,6 +39,17 @@ export {
 export type { ExtractedPassport, ExtractFromMrzInput } from './extract';
 export { extractPassportFromMrz } from './extract';
 
+export type { DeclaredTravelerSignals } from './declared';
+export {
+  parseDeclaredFromMetadata,
+  readDeclaredTravelerSignals,
+  readTenantDefaultNationality,
+  writeDeclaredTravelerSignals,
+} from './declared';
+
+export type { VisaStatus } from './visa-rules';
+export { lookupVisaStatus } from './visa-rules';
+
 export type {
   TravelEligibilityVerdict,
   VerdictAction,

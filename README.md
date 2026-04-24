@@ -108,6 +108,28 @@ RECEIPTS (12 docs)
 
 **Two entry points for the same extraction engine.** Interactive UI at `/dashboard/scan` for humans. Agent-callable `scan_document` MCP tool for LLMs and x402 runners. Both hit `extractDocument()` from `@sendero/ocr` — the only difference is who's uploading.
 
+### Private passport verification — four layers, four trust levels
+
+Travel compliance needs passports. Passports are the most sensitive document the platform will ever touch. Sendero's answer is a strict encryption + trust boundary: **the raw document never leaves the privileged path, the LLM only ever sees enum-coded verdicts.**
+
+<p align="center">
+  <img
+    src="./apps/app/public/architecture/passport_ocr_private_architecture.jpg"
+    alt="Four layers, four trust levels: traveler upload via signed URL to privileged Vercel MRZ path, encrypted PassportVault in Postgres, verification service, sanitized check_travel_eligibility verdict for agents"
+    width="92%"
+  />
+</p>
+
+**L1 — Intake.** Clerk-authed `POST /api/passport/upload`. The client extracts the two MRZ lines with [`mrz-fast`](https://www.npmjs.com/package/mrz-fast) (zero-dep, ICAO 9303 TD3, offline) and hashes the image to SHA-256. **The image bytes are discarded before the network call** — the server never sees pixels on the happy path.
+
+**L2 — Privileged extraction.** A Vercel Node function parses + checksum-validates the MRZ. Every per-field check digit *and* the composite check digit must pass — that's machine evidence of an honest extraction, no LLM round-trip needed to trust it. A compliance-gated Vertex AI fallback under [Gemini Zero Data Retention](https://ai.google.dev/gemini-api/docs/zdr) stays available for unusual layouts, but it's opt-in per tenant + audited per call, never the default.
+
+**L3 — Encrypted vault** (`packages/sendero-vault` + `PassportVault` model). `pgcrypto` `pgp_sym_encrypt(..., 'cipher-algo=aes256')` via parameterized `$queryRaw`, per-tenant Data Encryption Key derived via HKDF-SHA256 from a Vercel-env Key Encryption Key. **The KEK lives outside Postgres** — a DB dump's blast radius is bounded. Full name, passport#, DOB, MRZ lines, place of birth stay inside `ciphertext bytea`; only sanitized signals — `nationalityIso3`, `expiresOn`, `documentVariant`, `mrzChecksumValid` — surface as plaintext columns. Every read/write appends to `PassportVaultAccessLog` with `{ actorRef, source, context }` — tampering the log tampers the audit trail, and we append-only.
+
+**L4 — Agent surface** (`check_travel_eligibility` tool + `sendero.verify_travel_documents` workflow). The tool reads signals, applies the 6-month-validity + visa rules deterministically, returns `{ status: 'ok' | 'warn' | 'block', reasons: VerdictReasonCode[], actions: VerdictActionId[] }` — enum codes only, never free-form prose, never dates, never names. The UI decorates the verdict with human copy via a translation table the agent never touches. `book_flight` and `group_trip` will refuse on a `block` verdict before we touch a supplier.
+
+**What this buys in a demo.** A traveler WhatsApps a passport photo → the agent refuses, logs the attempt, and replies *"passports go in the secure vault — here's a link"*. Owner clicks a one-time signed link, uploads at `/dashboard/passport`, MRZ parses + checksums validate + vault encrypts. The trip page flips to *"✓ passport verified, no visa needed for USA→FRA 14d business"*. With an expired passport the agent gets `passport_expires_within_6_months_of_return` — a code — and knows to surface *"renew your passport"* without ever reading your name or date of birth. Same rigor as on-chain escrow, applied to identity documents.
+
 <br />
 
 # Sendero × Arc

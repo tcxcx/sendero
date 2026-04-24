@@ -146,6 +146,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
   );
   const recentTurnsBlock = renderRecentTurns(state);
   const attachmentsHintBlock = renderAttachmentsHint(input);
+  const travelDocumentHintBlock = renderTravelEligibilityHint();
   const systemPrompt = buildSystemPrompt({
     persona: args.persona,
     locale: input.actor.locale,
@@ -157,6 +158,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     workflowCatalog: workflowsBlock,
     recentTurns: recentTurnsBlock,
     attachmentsHint: attachmentsHintBlock,
+    travelDocumentHint: travelDocumentHintBlock,
   });
 
   // 5. LLM turn — when `model` is a gateway string AND AI_GATEWAY_API_KEY
@@ -350,6 +352,28 @@ function renderChannelHint(input: AgentInput): string {
  * mediaType, which is exactly what the adapter just downloaded, so the
  * round-trip stays cheap.
  */
+/**
+ * Proactively nudge the agent to call `check_travel_eligibility` on
+ * international trips, and to ask for the traveler's nationality +
+ * passport expiry conversationally when neither is on file.  Keeping
+ * the nudge short — the tool itself is what does the work.  The
+ * important line is the fast-path: don't block on a passport upload
+ * if we can ship a valid verdict off self-declared info.
+ */
+function renderTravelEligibilityHint(): string {
+  return [
+    '## Travel document eligibility',
+    '',
+    'Before confirming any cross-border booking, call `check_travel_eligibility` with the traveler + trip. The verdict tells you whether the traveler is cleared (ok), needs a nudge (warn), or the trip should be blocked (block).',
+    '',
+    'Fast path: if the traveler hasn\'t told us their nationality + passport expiry, ask conversationally ("which passport are you travelling on — US, UK, …?" and "what month does it expire?"). Save them from uploading a document just to quote a trip. The dashboard onboarding card persists this for us — `check_travel_eligibility` will pick it up next turn.',
+    '',
+    'Only ask the traveler to upload a passport (`upload_passport_to_proceed` action) when the verdict actually requires it — usually a visa-required corridor, expiry inside 12 months of return, or a high-value trip. Never ask preemptively.',
+    '',
+    'Verdicts carry enum reason codes, not free-form copy. Render them through the UI; never quote the codes back to the traveler verbatim.',
+  ].join('\n');
+}
+
 function renderAttachmentsHint(input: AgentInput): string {
   const media = (input.attachments ?? []).filter(isMediaAttachment);
   if (media.length === 0) return '';
