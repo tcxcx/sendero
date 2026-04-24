@@ -2,9 +2,14 @@
 
 /**
  * TripConsoleShell — wraps a single trip's workspace in the same
- * ConsoleBar + FooterRail chrome that `/app/console` uses, so managing
- * a trip (sidebar + thread list + conversation + AI side panel) feels
+ * ConsoleBar chrome that `/app/console` uses, so managing a trip feels
  * like one console scoped to that trip.
+ *
+ * Minimalism: the booking StepRail and the WorkflowLog tool-runner only
+ * mount once there's real state to display. On a fresh trip they'd
+ * otherwise render the global agent's placeholder phase (Intake dot)
+ * and an "idle" runtime readout that doesn't reflect this trip — filler
+ * that reads as chrome. We drop it until the agent actually starts.
  *
  * Handles the same zustand lifecycle as SenderoApp (hydrate from
  * storage, persist on change, poll treasury on a 20s cadence) and
@@ -18,7 +23,7 @@ import { type ReactNode, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 
 import { refreshTreasury } from '@/components/actions';
-import { hydrateFromStorage, subscribePersist, useSendero } from '@/components/store';
+import { deriveStep, hydrateFromStorage, subscribePersist, useSendero } from '@/components/store';
 import { ConsoleBar, StepRail } from '@/components/ui';
 import { WorkflowLog } from '@/components/workflow-log';
 
@@ -34,6 +39,20 @@ export function TripConsoleShell({
   const setUserAuth = useSendero(s => s.setUserAuth);
   const { user, isLoaded, isSignedIn } = useUser();
 
+  // Is there live booking state worth showing in the step rail or the
+  // tool-runner column? We look at anything the agent mutates — workflow
+  // events, a search request, a payment intent, a hold, or a step past
+  // Intake. No state → no rail, no panel. No filler.
+  const hasWorkflowState = useSendero(
+    s =>
+      s.workflow.length > 0 ||
+      !!s.search ||
+      !!s.payment ||
+      !!s.holdOrder ||
+      !!s.onChainSettlement ||
+      deriveStep(s) > 0
+  );
+
   useEffect(() => {
     hydrateFromStorage();
     const unsub = subscribePersist();
@@ -42,6 +61,8 @@ export function TripConsoleShell({
     };
   }, []);
 
+  // Synthesize userAuth from Clerk so FooterRail can render balances/meter
+  // without requiring the passkey ceremony. Matches ClerkSenderoApp's bridge.
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user) return;
     if (userAuth && userAuth.email) return;
@@ -61,19 +82,19 @@ export function TripConsoleShell({
   }, [userAuth]);
 
   return (
-    <div className="app app--with-steprail" data-screen-label="Trip Inbox">
+    <div
+      className={`app ${hasWorkflowState ? 'app--with-steprail' : ''}`}
+      data-screen-label="Trip Inbox"
+    >
       <ConsoleBar crumb="Trip inbox" crumbHref="/app/inbox" subCrumb={tripTitle} />
-      {/* Booking navigator: Intake → Search → Review → Hold → Pay → Settle.
-          Shared with /app/console so operators see the same phase language
-          whether they're working the global console or a specific trip. */}
-      <StepRail />
+      {hasWorkflowState ? <StepRail /> : null}
       <div className="flex min-h-0 flex-1 overflow-hidden bg-background">
         <div className="flex min-w-0 flex-1 overflow-hidden">{children}</div>
-        {/* Tool runner / workflow log, scoped to the active run. Hidden on
-            narrow viewports so the conversation + side-panel stay usable. */}
-        <aside className="hidden xl:flex w-[340px] shrink-0 flex-col border-l border-[color:var(--border)] bg-[color:var(--bg-sunk)]">
-          <WorkflowLog />
-        </aside>
+        {hasWorkflowState ? (
+          <aside className="hidden xl:flex w-[340px] shrink-0 flex-col border-l border-[color:var(--border)] bg-[color:var(--bg-sunk)]">
+            <WorkflowLog />
+          </aside>
+        ) : null}
       </div>
     </div>
   );

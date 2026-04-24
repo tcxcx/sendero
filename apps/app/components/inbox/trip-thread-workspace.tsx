@@ -290,18 +290,21 @@ function TripThreadHeader({
           <HandoffToggle enabled={aiEnabled} onChange={onToggleAi} />
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-muted-foreground">
-        {trip.intent?.origin && trip.intent?.destination ? (
-          <span>
-            {trip.intent.origin} → {trip.intent.destination}
-          </span>
-        ) : null}
-        {trip.intent?.dates ? <span>{trip.intent.dates}</span> : null}
-        {trip.booking?.pnr ? (
-          <span className="text-[color:var(--ink)]">PNR {trip.booking.pnr}</span>
-        ) : null}
-        <span className="truncate">Trip · {trip.tripId.slice(0, 12)}</span>
-      </div>
+      {/* Intent + PNR — rendered only when a field carries meaning.
+          No static trip-id slug: the URL already encodes it. */}
+      {trip.intent?.origin || trip.intent?.dates || trip.booking?.pnr ? (
+        <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-muted-foreground">
+          {trip.intent?.origin && trip.intent?.destination ? (
+            <span>
+              {trip.intent.origin} → {trip.intent.destination}
+            </span>
+          ) : null}
+          {trip.intent?.dates ? <span>{trip.intent.dates}</span> : null}
+          {trip.booking?.pnr ? (
+            <span className="text-[color:var(--ink)]">PNR {trip.booking.pnr}</span>
+          ) : null}
+        </div>
+      ) : null}
     </header>
   );
 }
@@ -538,6 +541,13 @@ function OutboundMessageView({ entry }: { entry: OutboundEntry }) {
 }
 
 function TripSidePanel({ trip, aiEnabled }: { trip: TripThreadContext; aiEnabled: boolean }) {
+  // Only show rows that carry real data — no "Not linked", no em-dash
+  // placeholders. The org switcher in the app header already carries
+  // tenant identity, so we don't duplicate it here.
+  const hasTraveler = Boolean(trip.traveler?.name || trip.traveler?.email || trip.traveler?.phone);
+  const hasChannels = trip.channels.length > 0;
+  const travelerSub = trip.traveler?.email ?? trip.traveler?.phone;
+
   return (
     <aside
       style={{ width: '22rem' }}
@@ -557,13 +567,13 @@ function TripSidePanel({ trip, aiEnabled }: { trip: TripThreadContext; aiEnabled
           <div className="text-xs text-muted-foreground">{trip.intent.purpose}</div>
         ) : null}
       </div>
-      <PanelRow label="Tenant" value={trip.tenantName ?? trip.tenantId.slice(0, 10)} />
-      <PanelRow
-        label="Traveler"
-        value={trip.traveler?.name ?? 'Not linked'}
-        sub={trip.traveler?.email}
-      />
-      {trip.traveler?.phone ? <PanelRow label="Phone" value={trip.traveler.phone} /> : null}
+      {hasTraveler ? (
+        <PanelRow
+          label="Traveler"
+          value={trip.traveler?.name ?? travelerSub ?? ''}
+          sub={trip.traveler?.name ? travelerSub : undefined}
+        />
+      ) : null}
       {trip.booking?.pnr ? (
         <PanelRow
           label="PNR"
@@ -575,15 +585,7 @@ function TripSidePanel({ trip, aiEnabled }: { trip: TripThreadContext; aiEnabled
           }
         />
       ) : null}
-      <PanelRow
-        label="Channels"
-        value={trip.channels.length > 0 ? trip.channels.join(' · ') : '—'}
-      />
-      <div className="flex-1" />
-      <div className="border-t border-border px-4 py-3 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-        Handoff toggle in header controls whether the agent can reply on its own. Human-only mode
-        means nothing sends to the traveler without an operator clicking Reply.
-      </div>
+      {hasChannels ? <PanelRow label="Channels" value={trip.channels.join(' · ')} /> : null}
     </aside>
   );
 }
