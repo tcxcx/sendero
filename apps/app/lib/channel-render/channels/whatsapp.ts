@@ -42,7 +42,7 @@ export interface WhatsAppPayload {
   type: 'text' | 'interactive' | 'image' | 'template';
   text?: { body: string; preview_url?: boolean };
   interactive?: {
-    type: 'button' | 'list';
+    type: 'button' | 'list' | 'cta_url';
     header?: { type: 'text' | 'image'; text?: string; image?: { link: string } };
     body: { text: string };
     footer?: { text: string };
@@ -160,6 +160,62 @@ function renderCardLike(card: CardLike): RenderedForChannel<WhatsAppPayload> {
   const ctas = card.ctas ?? [];
   const fitsButton = ctas.length > 0 && ctas.length <= MAX_BUTTONS;
   const body = buildCardBody(card);
+
+  // Single `open_link` CTA → WhatsApp's native `cta_url` interactive.
+  // Reply buttons can't carry a URL — treating an open_link as a reply
+  // would mean the traveler taps and the bot just receives a button
+  // event, never opens the page. cta_url is the canonical URL-button
+  // type. We only use it for the single-link case because Cloud API
+  // restricts cta_url to exactly one URL action.
+  const onlyOpenLink =
+    ctas.length === 1 && ctas[0].kind === 'open_link' && (ctas[0].href ?? ctas[0].value);
+  if (onlyOpenLink) {
+    const cta = ctas[0];
+    const url = (cta.href ?? cta.value ?? '').trim();
+    return {
+      channel: 'whatsapp',
+      payload: envelope({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: '',
+        type: 'interactive',
+        interactive: {
+          type: 'cta_url',
+          header: card.imageUrl ? { type: 'image', image: { link: card.imageUrl } } : undefined,
+          body: { text: body },
+          action: {
+            name: 'cta_url',
+            parameters: {
+              display_text: clip(cta.label, WA_BUTTON_TITLE_MAX),
+              url,
+            },
+          },
+        },
+      }),
+    };
+  }
+
+  // Mixed CTAs (e.g. open_link + reply approve) — Cloud API has no
+  // hybrid interactive that mixes URL + reply, so we degrade to a text
+  // bubble that includes the URL inline (with preview_url=true so the
+  // link card unfurls). Keeps the link tappable; the reply CTAs are
+  // expected to surface elsewhere (operator console / Slack) anyway.
+  const openLinkCta = ctas.find(c => c.kind === 'open_link' && (c.href ?? c.value));
+  if (openLinkCta && ctas.length > 1) {
+    const url = (openLinkCta.href ?? openLinkCta.value ?? '').trim();
+    const inline = `${body}\n\n${openLinkCta.label}: ${url}`;
+    return {
+      channel: 'whatsapp',
+      payload: envelope({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: '',
+        type: 'text',
+        text: { body: clipBody(inline, WA_BODY_MAX), preview_url: true },
+      }),
+      degraded: true,
+    };
+  }
 
   if (fitsButton) {
     const buttons = ctas.slice(0, MAX_BUTTONS).map(cta => ({

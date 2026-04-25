@@ -57,6 +57,7 @@ export function toolToScope(toolName: string): KeyScope {
     toolName === 'prefund_trip' ||
     toolName === 'settle_booking' ||
     toolName === 'settle_split' ||
+    toolName === 'send_pay_link' ||
     toolName === 'guest_claim_link' ||
     toolName === 'confirm_flight' ||
     // E2 — flipping the activated pricing policy row is an admin write
@@ -128,6 +129,7 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   'confirm_booking',
   'settle_booking',
   'settle_split',
+  'send_pay_link',
   'prefund_trip',
   'cancel_booking',
   'cancel_order_quote',
