@@ -87,17 +87,56 @@ export class KapsoClient {
   }
 
   // ── Customers ──────────────────────────────────────────────────────
-  async createCustomer(args: { name: string; external_id?: string }): Promise<KapsoCustomer> {
+  async createCustomer(args: {
+    name: string;
+    /** Sendero tenant id — Kapso indexes customers under this for lookup. */
+    externalCustomerId?: string;
+  }): Promise<KapsoCustomer> {
     const raw = await this.request<unknown>('/customers', {
       method: 'POST',
-      body: JSON.stringify({ customer: args }),
+      body: JSON.stringify({
+        customer: {
+          name: args.name,
+          external_customer_id: args.externalCustomerId,
+        },
+      }),
     });
-    return KapsoCustomer.parse(unwrap(raw, 'customer'));
+    return KapsoCustomer.parse(unwrap(raw, 'customer') ?? unwrap(raw, 'data'));
+  }
+
+  /**
+   * Find a Kapso customer by the Sendero tenant id we stamped on it.
+   * Kapso enforces uniqueness on `external_customer_id`, so the first
+   * match (if any) is the canonical one. Returns null when nothing is
+   * found — callers can `findOrCreate`.
+   */
+  async findCustomerByExternalId(externalCustomerId: string): Promise<KapsoCustomer | null> {
+    const raw = await this.request<unknown>(
+      `/customers?external_customer_id=${encodeURIComponent(externalCustomerId)}`
+    );
+    const list = unwrap(raw, 'data') ?? unwrap(raw, 'customers') ?? raw;
+    if (!Array.isArray(list) || list.length === 0) return null;
+    return KapsoCustomer.parse(list[0]);
+  }
+
+  /**
+   * Idempotent customer get-or-create. Avoids the 422
+   * "External customer has already been taken" error when a prior partial
+   * setup left a Kapso customer behind without a matching Sendero install
+   * row.
+   */
+  async findOrCreateCustomer(args: {
+    name: string;
+    externalCustomerId: string;
+  }): Promise<KapsoCustomer> {
+    const existing = await this.findCustomerByExternalId(args.externalCustomerId);
+    if (existing) return existing;
+    return this.createCustomer(args);
   }
 
   async getCustomer(customerId: string): Promise<KapsoCustomer> {
     const raw = await this.request<unknown>(`/customers/${customerId}`);
-    return KapsoCustomer.parse(unwrap(raw, 'customer'));
+    return KapsoCustomer.parse(unwrap(raw, 'customer') ?? unwrap(raw, 'data'));
   }
 
   // ── Setup links ────────────────────────────────────────────────────
@@ -114,12 +153,19 @@ export class KapsoClient {
       method: 'POST',
       body: JSON.stringify({ setup_link: body }),
     });
-    return KapsoSetupLink.parse(unwrap(raw, 'setup_link'));
+    const unwrapped = unwrap(raw, 'data') ?? unwrap(raw, 'setup_link') ?? raw;
+    // Kapso doesn't echo customer_id on this endpoint (it's in the URL).
+    // Stitch it in so downstream consumers always see it.
+    const stitched =
+      typeof unwrapped === 'object' && unwrapped !== null
+        ? { ...(unwrapped as object), customer_id: customerId }
+        : unwrapped;
+    return KapsoSetupLink.parse(stitched);
   }
 
   async getSetupLink(setupLinkId: string): Promise<KapsoSetupLink> {
     const raw = await this.request<unknown>(`/setup_links/${setupLinkId}`);
-    return KapsoSetupLink.parse(unwrap(raw, 'setup_link'));
+    return KapsoSetupLink.parse(unwrap(raw, 'data') ?? unwrap(raw, 'setup_link'));
   }
 
   // ── WhatsApp phone numbers ────────────────────────────────────────

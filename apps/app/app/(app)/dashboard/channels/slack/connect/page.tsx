@@ -7,13 +7,13 @@
 import { ChannelSetupWizard } from '@/components/channels/setup-wizard/wizard-shell';
 import { slackPanes } from '@/components/channels/setup-wizard/slack-panes';
 import { requireCurrentTenant } from '@/lib/tenant-context';
-import { loadOrStartRun } from '@/lib/workflow-run';
+import { loadOrStartWizardSession } from '@/lib/wizard-session';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SlackConnectPage() {
   const { tenant, userId } = await requireCurrentTenant();
-  const run = await loadOrStartRun({
+  const run = await loadOrStartWizardSession({
     tenantId: tenant.id,
     workflowId: 'sendero.slack_install',
     surfaceKey: 'channels:slack',

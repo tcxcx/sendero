@@ -23,7 +23,12 @@ export interface WizardStepDef {
 }
 
 export interface WizardRunSnapshot {
-  runId: string;
+  /**
+   * Session.id when status='paused' (the row holding the active pause's
+   * threadContext). Empty string on terminal — the wizard shell renders
+   * the completion / failure panel instead of POSTing to resume.
+   */
+  sessionId: string;
   workflowId: string;
   workflowLabel: string;
   status: 'running' | 'paused' | 'completed' | 'failed';
@@ -37,7 +42,7 @@ export interface WizardRunSnapshot {
   error?: { stepId: string; message: string };
 }
 
-/** Resolution shape POSTed back to /api/workflows/:runId/resume. */
+/** Resolution shape POSTed back to /api/workflows/resume as `{ sessionId, resolution }`. */
 export type WizardResolution = Record<string, unknown>;
 
 export interface WizardPaneProps<P = Record<string, unknown>> {

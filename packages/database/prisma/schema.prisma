@@ -265,7 +265,6 @@ model Tenant {
   pendingMultisigOps  PendingMultisigOp[]
   passportVaults      PassportVault[]
   tripEligibilityRuns TripEligibilityRun[]
-  workflowRuns        WorkflowRun[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -1542,38 +1541,7 @@ model TripEligibilityRun {
   @@map("trip_eligibility_runs")
 }
 
-/// Persisted workflow execution. Created when @sendero/workflows starts a
-/// run that may pause (channel setup wizards, multi-step booking flows
-/// awaiting approval). The runner is stateless — this row is the
-/// resumable checkpoint. `surfaceKey` lets product surfaces dedupe to one
-/// open run per tenant + scope (e.g. "channels:whatsapp").
-model WorkflowRun {
-  id              String   @id @default(cuid())
-  tenantId        String
-  workflowId      String
-  status          String   @default("running") // running | paused | completed | failed
-  scratchpad      Json     @default("{}")
-  trail           Json     @default("[]")
-  /// When status='paused', the next step waiting on a resolution.
-  currentStepId   String?
-  pauseReason     String?
-  pausePayload    Json?
-  /// Per-tenant scope key for one-active-run-per-surface enforcement.
-  /// Channel wizards use `channels:whatsapp` / `channels:slack`.
-  surfaceKey      String?
-  startedByUserId String?
-  errorStepId     String?
-  errorMessage    String?
-
-  startedAt  DateTime  @default(now()) @db.Timestamptz(6)
-  pausedAt   DateTime? @db.Timestamptz(6)
-  finishedAt DateTime? @db.Timestamptz(6)
-  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, surfaceKey])
-  @@index([tenantId, workflowId, status])
-  @@index([status, updatedAt])
-  @@map("workflow_runs")
-}
+// Note: the legacy `workflow_runs` table from migration 20260424_workflow_runs
+// has been superseded by `Session.threadContext` for paused-workflow
+// persistence (see /api/workflows/{run,resume,list}). The table is left
+// in place as dead state; drop it in a future cleanup migration.
