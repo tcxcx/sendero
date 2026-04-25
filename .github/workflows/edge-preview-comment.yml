@@ -166,20 +166,35 @@ jobs:
               return json.result || [];
             };
 
+            // CF Workers Builds API uses camelCase (commitHash, buildOutcome, ...)
+            // The snake_case fallbacks stay in case CF backports a v5 schema later.
+            const pick = (b, ...keys) => {
+              for (const k of keys) if (b && b[k] != null) return b[k];
+              return null;
+            };
+
             const matchBuild = (builds) =>
               (builds || []).find((b) => {
-                const sha = b.commit_hash || b.commit_sha || b.commit || '';
+                const sha = pick(b, 'commitHash', 'commit_hash', 'commit_sha', 'commit') || '';
                 return sha && PR_HEAD_SHA && sha.startsWith(PR_HEAD_SHA.slice(0, 7));
               });
 
+            const buildOutcome = (b) =>
+              (pick(b, 'buildOutcome', 'build_outcome') || '').toString().toLowerCase();
+            const buildStatus = (b) =>
+              (pick(b, 'status', 'state') || '').toString().toLowerCase();
+
             const isTerminal = (b) => {
-              const o = (b && (b.build_outcome || b.status || b.state) || '').toString().toLowerCase();
-              return ['success', 'succeeded', 'failure', 'failed', 'cancelled', 'canceled', 'error'].includes(o);
+              if (!b) return false;
+              // CF reports `status: "stopped"` once the build halts; `buildOutcome`
+              // then carries success | fail | cancelled.
+              if (buildStatus(b) === 'stopped' || buildOutcome(b)) {
+                const o = buildOutcome(b);
+                return ['success', 'succeeded', 'fail', 'failure', 'failed', 'cancelled', 'canceled', 'error'].includes(o);
+              }
+              return false;
             };
-            const isSuccess = (b) => {
-              const o = (b && (b.build_outcome || b.status || b.state) || '').toString().toLowerCase();
-              return o === 'success' || o === 'succeeded';
-            };
+            const isSuccess = (b) => ['success', 'succeeded'].includes(buildOutcome(b));
 
             // Poll up to 5 minutes (30 attempts * 10s).
             const maxAttempts = 30;
@@ -205,12 +220,28 @@ jobs:
             }
 
             const success = isSuccess(build);
-            const durationSec = build.build_duration_seconds ?? build.duration_seconds ?? build.duration ?? null;
-            const versionId = build.version_id || build.worker_version_id || build.version || null;
+            const durationSec = pick(
+              build,
+              'buildDurationSeconds',
+              'build_duration_seconds',
+              'durationSeconds',
+              'duration_seconds',
+              'duration',
+            );
+            const versionId = pick(
+              build,
+              'workerVersionId',
+              'versionId',
+              'version_id',
+              'worker_version_id',
+              'version',
+            );
             const versionUrl = versionId
               ? `https://${versionId}-${CF_WORKER_NAME}.${CF_WORKER_HOST}`
               : null;
-            const commitSubject = (build.commit_message || '').split('\n')[0] || '';
+            const commitSubject = (
+              pick(build, 'commitMessage', 'commit_message') || ''
+            ).split('\n')[0] || '';
             const statusLabel = success
               ? `Success in ${fmtDuration(durationSec)}`
               : `Failed — see [build logs](${dashboardBuildsUrl})`;
