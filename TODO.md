@@ -590,3 +590,98 @@ None are demo-blocking; all are real follow-ups before this flow goes to mainnet
 - [ ] Is DragonPass the right launch provider for lounge access, with LoungePass as commercial backup?
 - [ ] Should Rain be the first card / payout partner, or should we compare one more stablecoin-card stack?
 - [ ] Which finance export should be first: CSV, ERP sync, or accounting API?
+
+---
+
+## Post-hackathon — platform-release ship/2026-04-24 follow-ups
+
+Surfaced by /review on 2026-04-25 (hackathon-deadline session). All deferred,
+none block the submission demo.
+
+### P1 — fix in the first post-hackathon PR
+
+- [ ] **MeterEvent FK violation on first-time Clerk sign-in** —
+  `apps/app/app/api/agent/chat/route.ts:134` falls back to `a.userId`
+  (Clerk-format string) when `prisma.user.findUnique({clerkUserId})`
+  returns null. `MeterEvent.userId` is FK'd to `User.id` so the
+  `onFinish` write throws P2003. Race window: between Clerk sign-up
+  and the `apps/app/app/api/webhooks/clerk` user-created webhook
+  landing. Fix: reject with 401 ("first sign-in still provisioning")
+  OR auto-provision the User row inline. Option A is safer for
+  billing integrity.
+
+- [ ] **`submit_validation_response` enum schema fails Vertex** —
+  `packages/tools/src/submit-validation-response.ts:53` defines
+  `enum: [0, 100]` (numeric integers). Vertex AI's tool function-
+  declaration schema requires string enums. Gateway is more lenient
+  and accepts it; once we move chat traffic to Vertex direct (paid
+  credits or ADC), every turn that includes this tool fails.
+  Fix (1 line): drop the `enum`, keep `type: 'integer'`, document
+  allowed values (0=fail, 100=pass) in the description.
+
+### P2 — hardening, schedule when convenient
+
+- [ ] **Share-image token has no TTL** —
+  `apps/app/lib/og/share-url.ts`. Once signed, valid forever. JSDoc
+  explicitly accepts this for unfurl-bot caching. Add a `signedAt`
+  field + max-age check before any leak/rotation event makes it
+  load-bearing.
+
+- [ ] **Split `INVOICE_SIGNING_SECRET` -> dedicated `SHARE_SIGNING_SECRET`** —
+  Currently both invoice signing and share-image signing share one
+  secret. Rotating breaks both at once. Add a getter in
+  `@sendero/env`, prefer it with fallback to `INVOICE_SIGNING_SECRET`,
+  document the migration path.
+
+- [ ] **`/api/og/share` rate limit** — public route, edge runtime,
+  fail-soft on bad token. Each VALID token triggers a Satori render
+  (CPU). Add Upstash-Redis-backed per-IP rate limit (e.g. 30/min).
+  Cache-control `public, max-age=86400, immutable` already mitigates
+  the cache-fronted case.
+
+- [ ] **`CREATE INDEX CONCURRENTLY`** in three migrations on this
+  branch (`20260424_slack_user_binding`, `20260425_transfer_attempt_kind`,
+  `20260425_wallet_dcw_fields`). Lefthook already warns. All three
+  tables are young (<few hundred rows in dev) so the lock is sub-
+  second today, but follow the runbook on next migration.
+
+### P3 — confusing-but-not-broken
+
+- [ ] **AI Gateway "Free credits restricted" error is misleading on
+  paid accounts** — `tcxcxs-projects` Vercel team has $4.62 paid
+  balance + $0.38 used. The gateway's abuse-protection error
+  message implies free-tier even when balance is paid. Likely a
+  model-specific rate limit on the preview-tier `gemini-3.1-pro-preview`
+  / `gemini-3-flash` handles. Verify by switching to a stable
+  model (`gemini-2.5-pro`) and confirm the error class clears.
+  Root cause: Vercel AI Gateway error taxonomy. File issue
+  upstream after demo.
+
+- [ ] **Dev server's Turbopack module cache holds stale
+  `apps/app/lib/agent-models.ts`** — even after a kill+restart, the
+  Vertex direct path (`directModelFromString` for `vertex/...`)
+  doesn't activate without a hard cache wipe. `bun run` works
+  immediately. Workaround: `rm -rf apps/app/.next-turbo` before
+  `bun dev`.
+
+- [ ] **Cross-file `Date` mock pollution** in
+  `apps/app/lib/channel-render/__tests__/`. Slack approval-block
+  snapshot freezes Date in `beforeAll`; needs an `afterAll` cleanup
+  to stop pollution into other test files. 73/73 pass file-by-file;
+  72/73 when run together. Fix: add `afterAll(() => { ... })`
+  restoring the original Date global.
+
+### P4 — tech debt / cosmetic
+
+- [ ] **Unused deps from failed AI Elements CLI runs** —
+  `@radix-ui/react-progress` and `@radix-ui/react-scroll-area` (0
+  usages each). `apps/app/components/ui/accordion.tsx` and
+  `apps/app/components/ai-elements/inline-citation.tsx` are wrapper-
+  only with no downstream consumers (~25KB combined gzipped). Remove
+  in a cleanup PR.
+
+- [ ] **Concurrency-collision commit messages** — eight commits
+  this session bundle parallel session WIP into my commit messages
+  (e.g. `6434c10`, `9703425`, `5ad55e8`, `bfb768c`, `6a96e1f`,
+  `d6e1cc7`). PR squash-merge collapses. Don't try to rewrite local
+  history.
