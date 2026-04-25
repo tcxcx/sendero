@@ -22,6 +22,9 @@ import { z } from 'zod';
 import { prefundTripTool } from '@sendero/tools';
 import { capture } from '@sendero/analytics/server';
 import { prisma } from '@sendero/database';
+import { notifier } from '@sendero/notifications';
+
+import { getTenantNotificationEmail } from '@/lib/tenant-notification-email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -169,6 +172,29 @@ export async function POST(req: NextRequest) {
       channel: 'web',
     },
   });
+
+  // Out-of-band approval ping for the org admin so tenants without a
+  // Slack install still see hold-needs-approval. Fails-soft: a Resend
+  // error must never break the prefund response.
+  void (async () => {
+    try {
+      const adminEmail = await getTenantNotificationEmail(tenant.id);
+      if (!adminEmail) return;
+      const linkOrigin =
+        body.linkOrigin ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+      await notifier().sendHoldApproval(adminEmail, {
+        travelerName: body.guestName ?? body.guestEmail,
+        tripSummary: body.tripSummary ?? `${body.guestEmail} · prepaid invite`,
+        amount: body.budgetUsdc,
+        currency: 'USDC',
+        expiresAtIso: safeResult.expiresAt ?? new Date(Date.now() + 7 * 86400 * 1000).toISOString(),
+        reason: 'guest_invite_issued',
+        consoleUrl: `${linkOrigin.replace(/\/$/, '')}/dashboard/console?tripId=${encodeURIComponent(safeResult.tripId)}`,
+      });
+    } catch (err) {
+      console.warn('[guest/invite] sendHoldApproval failed', err);
+    }
+  })();
 
   return NextResponse.json(result);
 }
