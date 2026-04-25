@@ -33,6 +33,56 @@
 
 <br />
 
+## Verified on-chain — every Sendero contract is auditable on Arcscan
+
+Every contract Sendero deploys to Arc-Testnet is verified on Arcscan (Blockscout). Run `bun scripts/verify-deployments.ts` to audit all six in one shot — exits 1 on any real gap so CI can wire it as a post-deploy guard. Latest live audit:
+
+```
+✅  SenderoGuestEscrow proxy        0x640e15B2…f8515  ERC1967Proxy → SenderoGuestEscrow
+✅  SenderoStamps proxy             0xcc0fa835…71a03  EIP-1167 minimal proxy → TokenERC1155
+✅  SenderoStamps impl              0xCCf28A44…D4672  TokenERC1155 (thirdweb pre-audited)
+✅  ERC-8004 IdentityRegistry       0x8004A818…4BD9e  ERC1967Proxy → IdentityRegistryUpgradeable
+✅  ERC-8004 ReputationRegistry     0x8004B663…88713  ERC1967Proxy
+✅  ERC-8004 ValidationRegistry     0x8004Cb1B…B4272  ERC1967Proxy
+
+🎉 All contracts verified-equivalent. Ship it.
+```
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="https://testnet.arcscan.app/address/0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515" target="_blank" rel="noreferrer">
+        <img src="./apps/app/public/brand/screenshots/arcscan-guest-escrow.png" alt="SenderoGuestEscrow proxy on Arcscan: ERC1967Proxy with Implementation linked to SenderoGuestEscrow source" width="100%" />
+      </a>
+      <p align="center"><strong><a href="https://testnet.arcscan.app/address/0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515">SenderoGuestEscrow proxy</a></strong> — guest-escrow + claim-link contract powering the Peanut-style trip funding flow. Source verified, implementation linked.</p>
+    </td>
+    <td width="50%">
+      <a href="https://testnet.arcscan.app/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03" target="_blank" rel="noreferrer">
+        <img src="./apps/app/public/brand/screenshots/arcscan-stamps-proxy.png" alt="SenderoStamps proxy on Arcscan: Proxy + Token badges, Implementation links to verified TokenERC1155" width="100%" />
+      </a>
+      <p align="center"><strong><a href="https://testnet.arcscan.app/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03">SenderoStamps proxy</a></strong> — ERC-1155 collection where every NFT trip stamp lives. EIP-1167 minimal clone of the verified <code>TokenERC1155</code> impl; Arcscan auto-links them.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e" target="_blank" rel="noreferrer">
+        <img src="./apps/app/public/brand/screenshots/arcscan-erc8004-identity.png" alt="ERC-8004 IdentityRegistry on Arcscan: ERC1967Proxy with Implementation IdentityRegistryUpgradeable, 5,000 transactions" width="100%" />
+      </a>
+      <p align="center"><strong><a href="https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e">ERC-8004 IdentityRegistry</a></strong> — the on-chain agent registry where every Sendero org and traveler gets a per-subject identity NFT. Mints atomically with wallet provisioning per the dual-reputation plan.</p>
+    </td>
+    <td width="50%">
+      <a href="https://testnet.arcscan.app/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/2286" target="_blank" rel="noreferrer">
+        <img src="./apps/app/public/brand/screenshots/arcscan-sendero-agent-2286.png" alt="Sendero agent NFT #2286 on Arcscan — AgentIdentity ERC-721 token, owner address visible, single transfer (the mint) recorded" width="100%" />
+      </a>
+      <p align="center"><strong><a href="https://testnet.arcscan.app/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/2286">Sendero agent NFT #2286</a></strong> — the platform's own ERC-8004 identity, minted via the bootstrap script. Future mints (org + user identities) render real Sendero brand art via <a href="./apps/app/app/agents/[kind]/[id]/metadata.json/route.ts"><code>/agents/[kind]/[id]/metadata.json</code></a>.</p>
+    </td>
+  </tr>
+</table>
+
+The `Proxy` badge + `Implementation` link in each screenshot is what proves the verification: Arcscan resolves the proxy bytecode, finds the impl, and surfaces the impl's full Solidity source on the proxy's "Read/Write Contract" tab. Three deployment shapes covered (full-source / EIP-1167 minimal proxy / ERC1967 upgradeable proxy), all encoded in [`scripts/verify-deployments.ts`](./scripts/verify-deployments.ts) so future deployments stay audited.
+
+<br />
+
 ## Business model — production-grade SaaS + x402 nanopayments
 
 Sendero monetizes on **two independent revenue legs** from day one. This is not a future plan — it is wired through Clerk Billing, `@sendero/billing`, and the agent dispatch path today.
@@ -163,6 +213,25 @@ Agents, workflow scratchpads, and log lines only ever see enum codes + non-PII `
 A new traveler signs in → dashboard shows the 10-second onboarding card → every flight search from that moment runs visa-aware, async via Sherpa in the background. **USA → CAN** business trip → verdict `ok` in under 400 ms, "visa-free" badge on the offer, one-tap book. **BRA → USA** 5-day business trip → verdict `warn` with `visa_required_not_on_file` + a Sherpa B2 eVisa `ancillary` hint → offer card sprouts *"Add B2 visa assistance — $185"*, tap adds it to the Arc-settled booking cart alongside the flight. WhatsApp a passport photo at any point → the agent refuses, logs the attempt, and replies *"passports go in the secure vault — here's a link"*. Upload, MRZ validates, vault encrypts. **Same rigor as on-chain escrow, applied to identity documents — and the same rigor applied to ancillary revenue.**
 
 ### Living NFT stamps — Gemini generates trip art across the journey
+
+<p align="center">
+  <a href="https://gateway.pinata.cloud/ipfs/bafybeihzltlavpdf3xoksvx4542gzki5if4cpzgfezcms22k3bbvuonedy" target="_blank" rel="noreferrer">
+    <img
+      src="./apps/marketing/public/brand/stamps/boarding-pass-jfk-gru-vertex-gemini.png"
+      alt="Vintage 1960s boarding pass for JFK → GRU on AA — generated end-to-end this session by Gemini 2.5 Flash Image via Vercel + Vertex AI, pinned to IPFS via Pinata, ready to mint into a traveler's DCW on Arc-Testnet."
+      width="44%"
+    />
+  </a>
+</p>
+
+> **Live artifact from this hackathon submission** — 1024×1024 PNG generated in **~7s** by Gemini 2.5 Flash Image via Vertex AI, captioned in **~1s** by Gemini 2.5 Flash-Lite, both pinned to IPFS via Pinata in **~6s** combined. **Total wall-clock ~14s** for a fully-shareable, on-chain-ready NFT artifact.
+>
+> - **Image on IPFS** (canonical, immutable): [`ipfs://bafybei…onedy`](https://gateway.pinata.cloud/ipfs/bafybeihzltlavpdf3xoksvx4542gzki5if4cpzgfezcms22k3bbvuonedy) · mirrors: [ipfs.io](https://ipfs.io/ipfs/bafybeihzltlavpdf3xoksvx4542gzki5if4cpzgfezcms22k3bbvuonedy) · [cloudflare-ipfs](https://cloudflare-ipfs.com/ipfs/bafybeihzltlavpdf3xoksvx4542gzki5if4cpzgfezcms22k3bbvuonedy)
+> - **OpenSea-shape manifest** (the on-chain `tokenURI`): [`ipfs://bafkrei…sort4`](https://gateway.pinata.cloud/ipfs/bafkreig55n2lf4ktzj45ju6tit4z5wra4tuwifw76bfjynxsx5p7hsort4)
+> - **GPT-/Gemini-written caption** baked into the manifest: *"Confirmed AA to GRU from JFK – the adventure officially begins!"*
+> - **SenderoStamps ERC-1155 contract** (Circle SCP, deployed Apr 2026, all auto-verified by Circle's pipeline): Arcscan [`0xcc0f…1a03`](https://testnet.arcscan.app/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03) · Arc explorer [`0xcc0f…1a03`](https://testnet-explorer.arc.com/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03)
+>
+> **Why the art lives on IPFS, not Vercel Blob.** The OG unfurl path needs unauthenticated public HTTPS so Slackbot, WhatsApp, X, and Discord can fetch the image without a session cookie. Pinata's gateway gives us that for free; the on-chain `tokenURI` resolves to the same `ipfs://` CID through *any* IPFS gateway in the world, forever. Paste the manifest link into Slack and the boarding pass renders inline as the unfurl preview. Same `og:image` is set in `<head>` of [`/stamps/[tokenId]`](./apps/app/app/stamps/%5BtokenId%5D/page.tsx) for direct link previews.
 
 The same Gemini stack that reads documents (OCR above) also **paints them**. Every time a Sendero trip crosses a meaningful state boundary, a Vercel Workflow fires Gemini 2.5 Flash Image and a GPT-5-nano caption *in parallel*, pins both to IPFS, and mints an ERC-1155 stamp into the traveler's Developer Controlled Wallet on Arc-Testnet. By trip end the user owns a small **collectible passport** — every stamp is a moment in the journey, the art is generated specifically for that trip, and the OpenGraph payload makes Slack and WhatsApp render the art when the link is shared. **Proof-of-trip you can put in your pocket.**
 
