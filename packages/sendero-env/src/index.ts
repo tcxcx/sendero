@@ -130,8 +130,13 @@ export const env = {
   resendWebhookSecret: () => process.env.RESEND_WEBHOOK_SECRET || null,
 
   // ── Concierge / in-trip companion ─────────────────────────────────
+  // Both helpers fall back to GOOGLE_API_KEY so a single Google Cloud
+  // key with Maps + Places + Geocoding enabled covers every concierge
+  // tool. Operators can still split per-API keys for revocation
+  // isolation by setting GOOGLE_MAPS_API_KEY / GOOGLE_PLACES_API_KEY
+  // alongside the generic key.
   googleMapsApiKey: () => process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY || null,
-  googlePlacesApiKey: () => process.env.GOOGLE_API_KEY || null,
+  googlePlacesApiKey: () => process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_API_KEY || null,
 
   // ── Invoicing (Phase 11b) ─────────────────────────────────────────
   invoiceSigningSecret: () => process.env.INVOICE_SIGNING_SECRET || null,
