@@ -25,6 +25,7 @@ const isPublicRoute = createRouteMatcher([
   '/glass-debug',
   '/invoice/(.*)', // public invoice viewer (JWT-gated)
   '/stamps/(.*)', // public NFT stamp viewer + OG unfurl target (Slack/WhatsApp)
+  '/agents/(.*)', // public ERC-8004 agent metadata + reputation profile (org + user)
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/sso-callback(.*)',
