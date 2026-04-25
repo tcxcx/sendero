@@ -281,6 +281,7 @@ model Tenant {
   pendingMultisigOps  PendingMultisigOp[]
   passportVaults      PassportVault[]
   tripEligibilityRuns TripEligibilityRun[]
+  nftStamps           NftStamp[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -328,6 +329,8 @@ model User {
   slackUserBindings   SlackUserBinding[]
   transferPolicies    TransferPolicy[]      @relation("TravelerPolicies")
   transferAttempts    TransferAttempt[]     @relation("TravelerTransferAttempts")
+  nftStamps           NftStamp[]            @relation("StampTraveler")
+  nftStampOwnerships  NftStampOwnership[]   @relation("StampOwner")
 
   @@index([createdAt])
   @@map("users")
@@ -486,6 +489,7 @@ model Trip {
   settlements  Settlement[]
   attestations Attestation[]
   sessions     Session[]
+  nftStamps    NftStamp[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
@@ -536,6 +540,7 @@ model Booking {
 
   settlements Settlement[]
   invoice     Invoice?
+  nftStamps   NftStamp[]
 
   @@unique([tenantId, externalId])
   @@index([tenantId, createdAt])
@@ -1700,4 +1705,94 @@ model TripEligibilityRun {
   @@index([travelerId, requestedAt])
   @@index([status, requestedAt])
   @@map("trip_eligibility_runs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NFT STAMPS — souvenir collectibles minted across the trip lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One row per stamp class minted into the SenderoStamps ERC-1155
+/// contract on Arc-Testnet. The (kind, primaryKey) UNIQUE gives us
+/// idempotency at the application layer — Circle's TokenERC1155
+/// template assigns sequential tokenIds, so we map (kind, primaryKey)
+/// → tokenId here. Refreshable kinds (ItineraryMap) update `uri`
+/// in place; everything else is append-only.
+model NftStamp {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tripId       String?
+  bookingId    String?
+  travelerId   String?
+  /// One of: BoardingPass | SettlementReceipt | ItineraryMap | TripPassport
+  kind         String
+  /// Domain key for idempotency: bookingId for BoardingPass / Receipt,
+  /// tripId for ItineraryMap / TripPassport. Used in the unique pair
+  /// with `kind` so a re-attempt finds the existing tokenId rather
+  /// than minting a duplicate.
+  primaryKey   String
+  /// On-chain class id assigned by the contract (auto-increment).
+  /// Stored as decimal string to fit uint256.
+  tokenId      String
+  contract     String
+  /// Tenant slug copied at mint time so off-chain queries can fan
+  /// out by tenant without a join.
+  tenantSlug   String
+  /// IPFS metadata URI (canonical) — the contract's tokenURI value.
+  uri          String
+  /// Vercel Blob URL for hot UI rendering. Mirrors the manifest's
+  /// image_blob field.
+  blobUrl      String?
+  /// GPT-5-nano caption shown on the stamp page + OG description.
+  caption      String?
+  /// Free-form: brand snapshot at mint time, source meter event ids,
+  /// recipients[] for TripPassport, prior CIDs after refresh.
+  metadata     Json?
+  mintTxHash   String?
+  mintTxId     String?
+  /// `pending` (workflow started, mint not confirmed) | `minted` |
+  /// `failed` (workflow terminal failure) | `refreshed` (URI updated).
+  status       String   @default("pending")
+  mintedAt     DateTime?  @db.Timestamptz(6)
+  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip        Trip?               @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  booking     Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  traveler    User?               @relation("StampTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
+  ownerships  NftStampOwnership[]
+
+  @@unique([kind, primaryKey])
+  @@unique([contract, tokenId])
+  @@index([tenantId, mintedAt])
+  @@index([travelerId, mintedAt])
+  @@index([tripId])
+  @@index([status])
+  @@map("nft_stamps")
+}
+
+/// Per-(stamp, owner) balance rollup driven by Circle Event Monitor
+/// notifications (TransferSingle / TransferBatch). Source of truth
+/// for the "my stamps" page — read here, not from chain RPC.
+/// `ownerAddress` may be a traveler DCW (resolved → User via FK)
+/// or any external address (FK stays null).
+model NftStampOwnership {
+  id           String   @id @default(cuid())
+  stampId      String
+  ownerAddress String
+  /// Optional FK to User when ownerAddress matches a known DCW.
+  ownerUserId  String?
+  balance      BigInt   @default(0)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+  /// Last block + tx that moved this balance — for audit / debugging.
+  lastTxHash   String?
+  lastBlock    BigInt?
+
+  stamp NftStamp @relation(fields: [stampId], references: [id], onDelete: Cascade)
+  user  User?    @relation("StampOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+
+  @@unique([stampId, ownerAddress])
+  @@index([ownerAddress])
+  @@index([ownerUserId])
+  @@map("nft_stamp_ownerships")
 }

@@ -127,6 +127,11 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   'confirm_flight',
   // Vault-backed + ID-sensitive
   'scan_document', // kind === 'id_document' tightens further at the tool layer
+  // NFT stamps — touches on-chain state via Circle DCW + treasury wallet.
+  // The mint tool is internal:true so this gate is defense-in-depth in
+  // case it's ever exposed via a future surface.
+  'mint_stamp',
+  'refresh_stamp_uri',
 ]);
 // Note: channel-provisioning tools (kapso_*, slack_*) are NOT listed
 // here.  They're `internal: true` on their ToolDef, which strips them
