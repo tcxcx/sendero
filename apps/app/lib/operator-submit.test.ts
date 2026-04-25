@@ -97,7 +97,6 @@ describe('operator-submit env validation', () => {
       expect(result.reason).toBe('escrow_unconfigured');
     }
   });
-
 });
 
 // Real on-chain behavior (success paths, contract reverts decoded with
