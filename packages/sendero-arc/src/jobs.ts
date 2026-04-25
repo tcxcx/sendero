@@ -101,16 +101,17 @@ async function waitForCircleTx(txId: string, label: string, timeoutMs = 120_000)
  * Single helper to submit a contract execution via Circle DCW and wait for confirmation.
  */
 async function execContract(params: {
-  walletAddress: string;
+  walletId: string;
   contractAddress: Address;
   abiFunctionSignature: string;
   abiParameters: unknown[];
   label: string;
 }): Promise<TxResult> {
   const circle = getCircle();
+  // Pass `walletId` (UUID), not `walletAddress` (0x…). Sending a UUID into
+  // `walletAddress` produces Circle code 156001 ("Cannot find target wallet").
   const response = await circle.createContractExecutionTransaction({
-    walletAddress: params.walletAddress,
-    blockchain: 'ARC-TESTNET' as any,
+    walletId: params.walletId,
     contractAddress: params.contractAddress,
     abiFunctionSignature: params.abiFunctionSignature,
     abiParameters: params.abiParameters as any,
@@ -143,7 +144,7 @@ export async function createJob(params: CreateJobParams): Promise<{
 }> {
   const hook = params.hookAddress ?? '0x0000000000000000000000000000000000000000';
   const result = await execContract({
-    walletAddress: params.clientWalletAddress,
+    walletId: params.clientWalletAddress,
     contractAddress: AGENTIC_COMMERCE_ADDRESS,
     abiFunctionSignature: 'createJob(address,address,uint256,string,address)',
     abiParameters: [
@@ -187,7 +188,7 @@ export async function setBudget(params: {
   amount: bigint;
 }): Promise<TxResult> {
   return execContract({
-    walletAddress: params.providerWalletAddress,
+    walletId: params.providerWalletAddress,
     contractAddress: AGENTIC_COMMERCE_ADDRESS,
     abiFunctionSignature: 'setBudget(uint256,uint256,bytes)',
     abiParameters: [params.jobId.toString(), params.amount.toString(), '0x'],
@@ -204,7 +205,7 @@ export async function approveUsdc(params: {
   amount: bigint;
 }): Promise<TxResult> {
   return execContract({
-    walletAddress: params.clientWalletAddress,
+    walletId: params.clientWalletAddress,
     contractAddress: ARC_USDC_ADDRESS,
     abiFunctionSignature: 'approve(address,uint256)',
     abiParameters: [AGENTIC_COMMERCE_ADDRESS, params.amount.toString()],
@@ -220,7 +221,7 @@ export async function fundJob(params: {
   jobId: bigint;
 }): Promise<TxResult> {
   return execContract({
-    walletAddress: params.clientWalletAddress,
+    walletId: params.clientWalletAddress,
     contractAddress: AGENTIC_COMMERCE_ADDRESS,
     abiFunctionSignature: 'fund(uint256,bytes)',
     abiParameters: [params.jobId.toString(), '0x'],
@@ -238,7 +239,7 @@ export async function submitDeliverable(params: {
   deliverableHash: Hex;
 }): Promise<TxResult> {
   return execContract({
-    walletAddress: params.providerWalletAddress,
+    walletId: params.providerWalletAddress,
     contractAddress: AGENTIC_COMMERCE_ADDRESS,
     abiFunctionSignature: 'submit(uint256,bytes32,bytes)',
     abiParameters: [params.jobId.toString(), params.deliverableHash, '0x'],
@@ -256,7 +257,7 @@ export async function completeJob(params: {
   reasonHash: Hex;
 }): Promise<TxResult> {
   return execContract({
-    walletAddress: params.evaluatorWalletAddress,
+    walletId: params.evaluatorWalletAddress,
     contractAddress: AGENTIC_COMMERCE_ADDRESS,
     abiFunctionSignature: 'complete(uint256,bytes32,bytes)',
     abiParameters: [params.jobId.toString(), params.reasonHash, '0x'],
