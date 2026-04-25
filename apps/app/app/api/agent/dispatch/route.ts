@@ -48,6 +48,7 @@ import { planPriceFor, resolvePlan, type PlanTier } from '@sendero/billing/plans
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
+import { enforcePolicyChain } from '@/lib/transfer-policy';
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { prisma } from '@sendero/database';
 import { detectLocale, LOCALE_COOKIE_NAME } from '@sendero/locale';
@@ -202,6 +203,32 @@ export async function POST(req: NextRequest) {
       { error: 'empty_turn', message: 'Supply `text` or at least one attachment.' },
       { status: 400 }
     );
+  }
+
+  // Transfer-policy preflight. Loads tenant + traveler-scoped guards
+  // from `TransferPolicy` and runs them with `amountMicroUsdc: 0n` so
+  // hard windows that are *already* over cap reject the turn before
+  // the LLM runs (saves cost) and `requiresApproval` rows surface a
+  // pending envelope. Tool-scoped guards are evaluated per-charge
+  // inside `runAgentTurn` via the legacy CapStore — this preflight
+  // doesn't pre-empt them.
+  //
+  // Service-account callers (apiKey present) skip the traveler
+  // projection because their `body.userId = svc:<keyId>` isn't a real
+  // User row; only tenant-scoped policies apply.
+  const isServiceAccount = Boolean(apiKey);
+  const verdict = await enforcePolicyChain({
+    tenantId: body.tenantId,
+    travelerId: isServiceAccount ? undefined : body.userId,
+    context: {
+      tenantId: body.tenantId,
+      travelerId: isServiceAccount ? undefined : body.userId,
+      amountMicroUsdc: 0n,
+      kind: 'x402',
+    },
+  });
+  if (verdict.kind !== 'pass') {
+    return verdict.response;
   }
 
   const distinctId = hashDistinctId(body.userId);
