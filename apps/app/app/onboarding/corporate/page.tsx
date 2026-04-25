@@ -140,10 +140,11 @@ const headerStyle: React.CSSProperties = {
 };
 const markStyle: React.CSSProperties = { width: 12, height: 12, background: '#fb542b' };
 const h1Style: React.CSSProperties = {
+  fontFamily: 'var(--display)',
   fontSize: 36,
-  letterSpacing: '-0.03em',
+  letterSpacing: '-0.018em',
   margin: '0 0 16px',
-  fontWeight: 500,
+  fontWeight: 450,
   lineHeight: 1.1,
 };
 const pStyle: React.CSSProperties = { color: '#555', fontSize: 16, margin: '0 0 32px' };

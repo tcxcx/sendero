@@ -75,14 +75,14 @@ export async function HelpArticleForLocale({ locale, slug }: { locale: string; s
 
 const articleCss = `
   .hp-article-root { --hp-ease-out: cubic-bezier(0.23, 1, 0.32, 1); max-width: 760px; margin: 0 auto; padding: 32px 24px 80px; font-family: var(--sans); color: var(--fg); }
-  .hp-article-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 8px 0 44px; margin-bottom: 36px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; animation: hpArticleIn 420ms var(--hp-ease-out) both; }
+  .hp-article-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 8px 0 44px; margin-bottom: 36px; border-bottom: 1px solid var(--border); font-family: var(--mono-x); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; animation: hpArticleIn 420ms var(--hp-ease-out) both; }
   .hp-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--fg); text-decoration: none; }
   .hp-mark { display: inline-block; width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; }
   .hp-x { opacity: 0.4; }
-  .hp-breadcrumb { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 32px; }
-  article h1 { font-size: clamp(30px, 4vw, 44px); letter-spacing: -0.025em; margin: 0 0 16px; font-weight: 500; }
+  .hp-breadcrumb { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-family: var(--mono-x); font-size: 11px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 32px; }
+  article h1 { font-family: var(--display); font-size: clamp(30px, 4vw, 44px); letter-spacing: -0.018em; margin: 0 0 16px; font-weight: 450; text-wrap: balance; }
   .hp-article-excerpt { font-size: 18px; line-height: 1.5; color: var(--muted); margin: 0 0 16px; }
-  .hp-article-meta { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 32px; }
+  .hp-article-meta { font-family: var(--mono-x); font-size: 11px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 32px; }
   .hp-article-body { font-size: 16px; line-height: 1.72; }
   .hp-article-body p { margin: 0 0 18px; }
   .hp-article-link { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }

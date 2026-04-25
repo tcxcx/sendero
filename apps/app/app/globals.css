@@ -473,7 +473,7 @@ a[role="button"]:active,
 }
 
 .label {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -481,7 +481,7 @@ a[role="button"]:active,
 }
 
 .tag {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -575,7 +575,7 @@ a[role="button"]:active,
   padding: 0 16px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
 }
 .topbar-left {
@@ -610,7 +610,7 @@ a[role="button"]:active,
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
   color: var(--text-dim);
 }
@@ -680,7 +680,7 @@ a[role="button"]:active,
   padding: 6px 10px;
   border: 1.5px solid var(--ink);
   background: var(--bg-elev);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -708,7 +708,7 @@ a[role="button"]:active,
   gap: 6px;
   padding: 4px 8px;
   border: 1px solid var(--border);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -768,7 +768,7 @@ a[role="button"]:active,
   min-height: 38px;
 }
 .col-head .title {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -825,7 +825,7 @@ a[role="button"]:active,
   min-width: 0;
 }
 .msg-meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -883,7 +883,7 @@ a[role="button"]:active,
   margin-top: 8px;
 }
 .suggestion {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -966,7 +966,7 @@ a[role="button"]:active,
   gap: 4px;
 }
 .composer-tool {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -981,7 +981,7 @@ a[role="button"]:active,
 .composer-send {
   background: var(--ink);
   color: var(--bg-elev);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -1582,7 +1582,7 @@ a[role="button"]:active,
   background: color-mix(in oklab, var(--ink) 6%, var(--bg-sunk));
 }
 .log-head .name {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1716,7 +1716,7 @@ a[role="button"]:active,
   max-width: 520px;
 }
 .globe-eyebrow {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -1753,7 +1753,7 @@ a[role="button"]:active,
   margin-top: 10px;
 }
 .btn {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -1794,7 +1794,7 @@ a[role="button"]:active,
   border-right: none;
 }
 .globe-spec-cell .k {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1920,7 +1920,7 @@ a[role="button"]:active,
   display: inline-flex;
   gap: 28px;
   padding: 0 14px;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1945,7 +1945,7 @@ a[role="button"]:active,
   justify-content: space-between;
   padding: 0 24px;
   border-top: 1px solid var(--border);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -2012,7 +2012,7 @@ a[role="button"]:active,
   padding: 8px 12px;
   background: var(--ink);
   color: var(--bg-elev);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -2038,7 +2038,7 @@ a[role="button"]:active,
   gap: 6px;
 }
 .tweak-group .tk-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -2050,7 +2050,7 @@ a[role="button"]:active,
   gap: 4px;
 }
 .tweak-opt {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
