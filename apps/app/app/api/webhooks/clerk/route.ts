@@ -24,6 +24,7 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
 import { verifyClerkWebhook } from '@sendero/auth/webhooks';
 import { provisionTenantWallet } from '@sendero/circle';
+import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
 import { Prisma, prisma } from '@sendero/database';
 import {
   createCustomerUser,
@@ -136,6 +137,26 @@ async function onUserUpsert(data: Record<string, unknown>): Promise<void> {
   const firstName = String(data.first_name ?? '');
   const lastName = String(data.last_name ?? '');
   const displayName = `${firstName} ${lastName}`.trim() || String(data.username ?? '') || email;
+
+  // Merge-by-email guard: a guest provisioned via WhatsApp / Slack lands
+  // a User row with `clerkUserId=null` (and an `email` that may be the
+  // real address or a `slack:U02H…@placeholder.sendero` shim). When the
+  // human later signs into Clerk with the same email, Clerk's webhook
+  // arrives here. Without this guard the upsert-by-clerkUserId creates
+  // a *new* User and orphans the guest row — losing the wallet, the
+  // reputation, and the trip history. We claim the existing row first.
+  if (email) {
+    const orphan = await prisma.user.findFirst({
+      where: { email, clerkUserId: null },
+      select: { id: true },
+    });
+    if (orphan) {
+      await prisma.user.update({
+        where: { id: orphan.id },
+        data: { clerkUserId: id, source: 'native' },
+      });
+    }
+  }
 
   const user = await prisma.user.upsert({
     where: { clerkUserId: id },
@@ -277,6 +298,21 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     tenantId: tenant.id,
     clerkOrgId: id,
   });
+
+  // Mint the org's ERC-8004 identity NFT atomically with wallet
+  // provisioning. The treasury wallet (just provisioned above) becomes
+  // the agent owner. Failure is non-fatal — wallet stands on its own;
+  // the cron sweeper at /api/cron/retry-identity-provision picks up
+  // pending rows.
+  try {
+    await ensureOrgIdentity({ tenantId: tenant.id });
+  } catch (err) {
+    console.warn('[webhooks/clerk] org identity mint failed (non-fatal)', {
+      id,
+      tenantId: tenant.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   const client = await clerkClient();
   await client.organizations.updateOrganization(id, {

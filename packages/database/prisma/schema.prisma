@@ -282,6 +282,8 @@ model Tenant {
   passportVaults      PassportVault[]
   tripEligibilityRuns TripEligibilityRun[]
   nftStamps           NftStamp[]
+  onchainIdentities   OnchainIdentity[]
+  reputationPolicy    ReputationPolicy?
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -331,6 +333,7 @@ model User {
   transferAttempts    TransferAttempt[]     @relation("TravelerTransferAttempts")
   nftStamps           NftStamp[]            @relation("StampTraveler")
   nftStampOwnerships  NftStampOwnership[]   @relation("StampOwner")
+  onchainIdentities   OnchainIdentity[]
 
   @@index([createdAt])
   @@map("users")
@@ -490,6 +493,7 @@ model Trip {
   attestations Attestation[]
   sessions     Session[]
   nftStamps    NftStamp[]
+  reputationFeedback ReputationFeedback[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
@@ -541,6 +545,7 @@ model Booking {
   settlements Settlement[]
   invoice     Invoice?
   nftStamps   NftStamp[]
+  reputationFeedback ReputationFeedback[]
 
   @@unique([tenantId, externalId])
   @@index([tenantId, createdAt])
@@ -1801,4 +1806,160 @@ model NftStampOwnership {
   @@index([ownerAddress])
   @@index([ownerUserId])
   @@map("nft_stamp_ownerships")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ERC-8004 ON-CHAIN REPUTATION (identity + reputation + validation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// ERC-8004 IdentityRegistry agent NFT bound to a Sendero subject.
+/// Either the org's treasury wallet (kind='org', tenantId set) or the
+/// user's DCW (kind='user', userId set). Provisioning is async-with-
+/// retry, mirroring NftStamp.status semantics: `pending` → `minted` |
+/// `failed`. The sweeper retries `pending` rows forever; `failed` is
+/// terminal and surfaces in the admin UI.
+///
+/// Cached aggregations (cachedStars / cachedFeedbackCount /
+/// cachedValidatorCount / cachedValidationCount / cachedAt) are
+/// written by the Circle Event Monitor webhook on every FeedbackGiven
+/// / ValidationResponseSubmitted event so reads stay sub-50ms — chain
+/// RPC is only the fallback for external counterparties not yet in
+/// our index.
+model OnchainIdentity {
+  id                    String   @id @default(cuid())
+  /// 'org' | 'user' — drives FK + holderAddress source resolution.
+  kind                  String
+  tenantId              String? // populated when kind='org'
+  userId                String? // populated when kind='user'
+  chainId               Int // 5042002 for ARC-TESTNET
+  contract              String // IdentityRegistry address (0x8004A8…)
+  /// uint256 token id from IdentityRegistry — decimal string. Null
+  /// while pending; populated from the Transfer event in the mint
+  /// receipt.
+  agentId               String?
+  /// EOA/SCA that owns the NFT — copy of CircleWallet.address (org)
+  /// or Wallet.address (user). Lower-cased on insert.
+  holderAddress         String
+  /// Stable URL the contract stores via tokenURI(). Resolves to
+  /// `/agents/{kind}/{tenantId|userId}/metadata.json`.
+  metadataUri           String
+  mintTxHash            String?
+  mintTxId              String? // Circle DCW tx id
+  mintedAt              DateTime? @db.Timestamptz(6)
+  /// 'pending' (mint submitted) | 'minted' (NFT exists on-chain) |
+  /// 'failed' (terminal — sweeper gave up).
+  status                String   @default("pending")
+  /// Denormalized aggregations — written by Circle Event Monitor
+  /// webhook for sub-50ms reads. cachedAt is null until first event.
+  cachedStars           Float?
+  cachedFeedbackCount   Int      @default(0)
+  cachedValidatorCount  Int      @default(0)
+  cachedValidationCount Int      @default(0)
+  cachedAt              DateTime? @db.Timestamptz(6)
+  /// Number of provisioning attempts. After N attempts the sweeper
+  /// flips status='failed' and stops retrying.
+  attemptCount          Int      @default(0)
+  lastAttemptAt         DateTime? @db.Timestamptz(6)
+  lastError             String?
+  createdAt             DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant      Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user        User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  given       ReputationFeedback[] @relation("Rater")
+  received    ReputationFeedback[] @relation("Subject")
+  validations ValidationCheck[]
+
+  @@unique([contract, agentId])
+  /// App layer enforces "exactly one identity per (kind, subject)"
+  /// — Postgres partial-unique on these two pairs.
+  @@unique([kind, tenantId])
+  @@unique([kind, userId])
+  @@index([holderAddress])
+  @@index([status])
+  @@map("onchain_identities")
+}
+
+/// One row per on-chain ReputationRegistry FeedbackGiven event.
+/// Indexed by Circle Event Monitor → `/api/webhooks/circle/events`
+/// → `handleFeedbackGiven` (idempotent on `txHash`). The on-chain
+/// score is int128 0-100; we mirror it and denormalize stars =
+/// score / 20 for ORDER BY / AVG queries.
+///
+/// `tripId` / `bookingId` are audit-trail only (which trip drove
+/// this feedback). `fromIdentityId` is null for off-platform raters
+/// (external Sendero ecosystem partners) — `fromAddress` is the
+/// raw on-chain validator address regardless.
+model ReputationFeedback {
+  id             String   @id @default(cuid())
+  subjectId      String
+  fromIdentityId String? // null when rater is off-platform / unresolved
+  fromAddress    String
+  score          Int // 0-100
+  stars          Float // score / 20
+  tag            String?
+  feedbackHash   String
+  uri            String?
+  txHash         String   @unique
+  blockNumber    BigInt
+  tripId         String?
+  bookingId      String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+
+  subject OnchainIdentity  @relation("Subject", fields: [subjectId], references: [id], onDelete: Cascade)
+  from    OnchainIdentity? @relation("Rater", fields: [fromIdentityId], references: [id], onDelete: SetNull)
+  trip    Trip?            @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  booking Booking?         @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([subjectId, createdAt])
+  @@index([fromIdentityId])
+  @@index([tripId])
+  @@map("reputation_feedback")
+}
+
+/// ValidationRegistry request/response pair — KYC, KYB, suitability
+/// checks, etc. Two on-chain calls (request + response) reduce to one
+/// row keyed on the deterministic `requestHash`. `responseScore` is
+/// 100=passed, 0=failed, null=pending.
+model ValidationCheck {
+  id               String    @id @default(cuid())
+  subjectId        String
+  validatorAddress String
+  requestUri       String
+  requestHash      String    @unique
+  requestTxHash    String
+  responseScore    Int? // 100=passed, 0=failed, null=pending
+  responseTxHash   String?
+  tag              String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(6)
+  resolvedAt       DateTime? @db.Timestamptz(6)
+
+  subject OnchainIdentity @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@index([subjectId])
+  @@map("validation_checks")
+}
+
+/// Per-tenant rules used to gate engagement with counterparties.
+/// `enforcement` defaults to 'warn' so launch is non-blocking — admins
+/// surface violations in the UI before flipping a tenant to 'block'.
+/// Star threshold (`minStars`) only applies once a counterparty has
+/// crossed `minTripCount` so first-time travelers aren't accidentally
+/// blocked by a no-history zero score.
+model ReputationPolicy {
+  id              String   @id @default(cuid())
+  tenantId        String   @unique
+  minStars        Float?
+  minTripCount    Int?
+  maxDisputeRatio Float?
+  requireKyc      Boolean  @default(false)
+  requireKyb      Boolean  @default(false)
+  /// 'block' | 'warn' | 'allow'.
+  enforcement     String   @default("warn")
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("reputation_policies")
 }

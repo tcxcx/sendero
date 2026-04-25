@@ -29,6 +29,8 @@ import { getCircle } from '@sendero/circle';
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 
+import { ensureUserIdentity } from './provision-identity';
+
 const ARC_TESTNET_CHAIN_ID = 5042002;
 /**
  * Circle DCW blockchain id for Arc Testnet.  The SDK accepts these as
@@ -127,6 +129,21 @@ export async function ensureTravelerWallet(args: {
       },
       select: { id: true, address: true, circleWalletId: true, chainId: true },
     });
+
+    // Mint the traveler's ERC-8004 identity NFT atomically with wallet
+    // provisioning. Failure is non-fatal — the wallet stands on its
+    // own; the cron sweeper at /api/cron/retry-identity-provision
+    // picks up pending rows. Reputation can accumulate against the
+    // identity from day one once it lands.
+    try {
+      await ensureUserIdentity({ userId: args.userId });
+    } catch (err) {
+      console.warn(
+        '[ensureTravelerWallet] user identity mint failed (non-fatal)',
+        err instanceof Error ? err.message : err
+      );
+    }
+
     return {
       walletId: row.id,
       rowId: row.id,
