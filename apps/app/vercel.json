@@ -5,14 +5,9 @@
   "env": {
     "IS_BETA_OPEN": "true"
   },
-  "_crons_note": "Vercel Hobby allows max 2 crons. retry-identity-provision (every 5min) + refresh-markup-medians (weekly) are commented out below; route them via GitHub Actions or Trigger.dev until upgrading to Pro. Endpoints still exist + accept POST with CRON_SECRET so manual + Actions invocation works.",
   "crons": [
     { "path": "/api/cron/generate-platform-bills", "schedule": "0 2 1 * *" },
     { "path": "/api/cron/retry-wallet-provision", "schedule": "0 3 * * *" }
-  ],
-  "_crons_pro_tier": [
-    { "path": "/api/cron/retry-identity-provision", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/refresh-markup-medians", "schedule": "0 0 * * 0" }
   ],
   "ignoreCommand": "bash -c '[[ \"$VERCEL_GIT_COMMIT_REF\" == \"main\" || \"$VERCEL_GIT_COMMIT_REF\" == \"development\" ]] && exec npx turbo-ignore @sendero/app; exit 0'"
 }
