@@ -1,5 +1,16 @@
-# Cloudflare Workers config — run `wrangler deploy` from apps/edge/
-# to ship the Hono edge worker. Free tier covers hackathon traffic.
+# Cloudflare Workers config — sendero-arc-edge.
+#
+# Canonical deploy commands (repo-owned, call from any cwd):
+#   bun run deploy:edge            # production (main branch)
+#   bun run deploy:edge:preview    # preview / non-prod (versions upload)
+#   bun run deploy:edge:dry-run    # local validation, never publishes
+#
+# CF Workers Builds dashboard must set BOTH deploy commands to these scripts
+# so prod and preview don't drift again. The 2026-04-25 incident was caused
+# by the preview command being `npx wrangler versions upload` with no cd
+# into apps/edge, which couldn't find this wrangler.toml. The lefthook
+# `edge-deploy-check` pre-push hook now runs the dry-run locally to catch
+# config drift before it reaches CF.
 name = "sendero-arc-edge"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"

@@ -73,6 +73,25 @@ pre-push:
         - ref: $SKIP_PUSH_CHECKS
       run: bunx turbo run lint --cache-dir=.turbo
 
+    # Cloudflare Worker deploy validation. Catches config drift (missing
+    # entry-point, bad bindings, broken wrangler.toml) BEFORE it lands on
+    # CF Workers Builds.
+    #
+    # Why: 2026-04-25 the preview-branch deploy failed because the CF
+    # dashboard's preview deploy command was `npx wrangler versions upload`
+    # with no cd into apps/edge, so wrangler couldn't find wrangler.toml.
+    # The dry-run below would have caught it locally. Both prod and preview
+    # deploy commands in CF dashboard now call `bun run deploy:edge[:preview]`
+    # which invokes the same wrangler from apps/edge — they can't diverge.
+    #
+    # Glob narrows to pushes that actually touch edge code or its workspace
+    # deps (the worker's bundle).
+    edge-deploy-check:
+      glob: "{apps/edge/**/*.{ts,toml,jsonc,json},packages/{tools,agent,arc,circle,duffel,guest,llms,nanopayments,seo}/src/**/*.ts}"
+      skip:
+        - ref: $SKIP_PUSH_CHECKS
+      run: bun run deploy:edge:dry-run
+
 commit-msg:
   commands:
     non-empty:
