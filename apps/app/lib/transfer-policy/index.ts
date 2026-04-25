@@ -6,6 +6,7 @@
  * unless they need raw guard primitives.
  */
 
+export { enforcePolicyChain, type EnforceArgs, type PolicyVerdict } from './enforce';
 export { loadPolicyChain } from './load';
 export type { LoadPolicyChainArgs } from './load';
 export { prismaBudgetStore, prismaRateLimitStore } from './store';
