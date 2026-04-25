@@ -472,7 +472,13 @@ export const kapsoActivatePhoneNumberTool: ToolDef<
     }
 
     const client = kapsoClient();
-    if (client && !install.phoneNumberId.startsWith('pn_stub_')) {
+    // Skip the redundant Kapso verification when the webhook already
+    // moved the install to active — the phoneNumberId came from Kapso
+    // itself in the `whatsapp.phone_number.created` event, so re-fetching
+    // it just to prove it exists is busy work and adds a 404 failure
+    // mode if Kapso's API is briefly degraded. We still verify when the
+    // tool is invoked as a manual probe (status !== 'active').
+    if (client && install.status !== 'active' && !install.phoneNumberId.startsWith('pn_stub_')) {
       try {
         await client.getPhoneNumber(install.phoneNumberId);
       } catch (err) {

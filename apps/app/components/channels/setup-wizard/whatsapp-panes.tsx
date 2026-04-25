@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
-import { Check } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 
 import type { WizardPaneProps, WizardPaneRenderer } from './types';
 
@@ -183,39 +183,137 @@ function NumberPreview({ e164 }: { e164: string | null }) {
 
 // ─── 2. verify number ────────────────────────────────────────────────
 
-function VerifyNumberPane({ scratchpad, setResolution }: WizardPaneProps) {
-  const reservation = scratchpad.reservation as
-    | { e164?: string; phoneNumberId?: string; status?: string }
-    | undefined;
+interface InstallSnapshot {
+  status: string;
+  phoneNumberId: string | null;
+  displayPhoneNumber: string | null;
+  businessDisplayName: string | null;
+  setupLinkUrl: string | null;
+  setupLinkExpiresAt: string | null;
+  provisioned: boolean;
+  lastErrorMessage: string | null;
+}
+
+/**
+ * Step 2 — operator finishes Meta Embedded Signup in Kapso's hosted page.
+ *
+ * Kapso's `provision_phone_number=true` doesn't allocate the WABA phone
+ * number synchronously. The flow is:
+ *
+ *   1. We minted a setup link in step 1 (kapso_reserve_number stored
+ *      `metadata.setupLinkUrl` on WhatsAppInstall).
+ *   2. The operator clicks "Open Meta signup" → opens the Kapso hosted
+ *      page in a new tab → completes Embedded Signup (~30 sec).
+ *   3. Kapso fires `whatsapp.phone_number.created` to our project
+ *      webhook (apps/app/app/api/webhooks/kapso/route.ts), which writes
+ *      `phoneNumberId` + `status='active'` on WhatsAppInstall.
+ *   4. This pane polls /api/channels/whatsapp/install every 4s; once
+ *      `provisioned=true`, it surfaces the real number and enables
+ *      Continue. Operator clicks → wizard advances to brand profile.
+ */
+function VerifyNumberPane({ setResolution }: WizardPaneProps) {
+  const [snapshot, setSnapshot] = useState<InstallSnapshot | null>(null);
+  const [opened, setOpened] = useState(false);
+
   useEffect(() => {
-    setResolution({ acknowledged: true });
-  }, [setResolution]);
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch('/api/channels/whatsapp/install');
+        if (cancelled) return;
+        const data = (await res.json()) as { install: InstallSnapshot | null };
+        setSnapshot(data.install);
+      } catch {
+        /* ignore transient errors */
+      }
+    };
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (snapshot?.provisioned) {
+      setResolution({
+        acknowledged: true,
+        phoneNumberId: snapshot.phoneNumberId,
+        displayPhoneNumber: snapshot.displayPhoneNumber,
+      });
+    } else {
+      setResolution(null);
+    }
+  }, [snapshot, setResolution]);
+
+  const setupUrl = snapshot?.setupLinkUrl ?? null;
+  const provisioned = snapshot?.provisioned ?? false;
+
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_280px]">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <span className={FIELD_LABEL}>Provisioned number</span>
           <span className="font-mono text-[26px] tracking-tight text-[color:var(--ink)]">
-            {reservation?.e164 ?? '—'}
+            {snapshot?.displayPhoneNumber ?? 'pending'}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--accent-green,#16a34a)] text-white">
-            <Check className="h-3 w-3" />
-          </span>
-          <span className="text-sm text-[color:var(--text)]">
-            Verified via Sendero&rsquo;s shared WhatsApp Business Account.
-          </span>
-        </div>
-        <p className="max-w-[60ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
-          You can skip Meta business verification — Sendero already passed it once and shares the
-          umbrella account. Continue to brand the experience.
-        </p>
+
+        {provisioned ? (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--accent-green,#16a34a)] text-white">
+              <Check className="h-3 w-3" />
+            </span>
+            <span className="text-sm text-[color:var(--text)]">
+              Verified via Sendero&rsquo;s shared WhatsApp Business Account.
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="max-w-[60ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
+              Open the Meta Embedded Signup page in a new tab and approve the WhatsApp Business
+              connection. The wizard will detect when you&rsquo;re done.
+            </p>
+            <div className="flex items-center gap-3">
+              {setupUrl ? (
+                <a
+                  href={setupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setOpened(true)}
+                  className="inline-flex items-center gap-2 rounded-md bg-[color:#25D366] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                >
+                  Open Meta signup
+                </a>
+              ) : (
+                <span className="text-[12px] text-[color:var(--text-dim)]">
+                  Waiting for Kapso to mint the setup link…
+                </span>
+              )}
+              {opened ? (
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-[color:var(--text-dim)]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Watching for the webhook…
+                </span>
+              ) : null}
+            </div>
+            {snapshot?.lastErrorMessage ? (
+              <div className="rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
+                {snapshot.lastErrorMessage}
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
       <aside className="flex flex-col gap-2 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-4">
         <span className={PILL_FONT}>Connection ID</span>
         <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
-          {reservation?.phoneNumberId ?? 'pending'}
+          {snapshot?.phoneNumberId ?? 'pending'}
+        </span>
+        <span className={`${PILL_FONT} mt-2`}>Status</span>
+        <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
+          {snapshot?.status ?? 'unknown'}
         </span>
       </aside>
     </div>
