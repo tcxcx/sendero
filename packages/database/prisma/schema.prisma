@@ -266,6 +266,7 @@ model Tenant {
   slackUserBindings   SlackUserBinding[]
   whatsappInstall     WhatsAppInstall?
   whatsappLinkTokens  WhatsAppLinkToken[]
+  bookingPayTokens    BookingPayToken[]
   spendCaps           TenantSpendCap[]
   transferPolicies    TransferPolicy[]
   transferAttempts    TransferAttempt[]
@@ -572,6 +573,7 @@ model Booking {
   invoice            Invoice?
   nftStamps          NftStamp[]
   reputationFeedback ReputationFeedback[]
+  payTokens          BookingPayToken[]
 
   @@unique([tenantId, externalId])
   @@index([tenantId, createdAt])
@@ -1017,6 +1019,33 @@ model WhatsAppLinkToken {
   @@index([tenantId, userId])
   @@index([expiresAt])
   @@map("whatsapp_link_tokens")
+}
+
+/// Single-use magic link bridging an off-app traveler (agency / B2C with no
+/// Clerk session) to a hosted payment page at `/pay/[bookingId]`. Issued
+/// when an operator pre-funds + invites the traveler; consumed when the
+/// traveler taps the link and confirms the spend. Distinct from
+/// WhatsAppLinkToken (which links a signed-in user to a WA number) — the
+/// pay token authorises a one-shot spend on a specific booking.
+model BookingPayToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String
+  bookingId  String
+  /// 32 random bytes hex (64 chars). Stored bare — `@unique` is the lookup
+  /// key. Treated as a bearer credential; rotate on any leak.
+  token      String    @unique
+  expiresAt  DateTime  @db.Timestamptz(6)
+  consumedAt DateTime? @db.Timestamptz(6)
+  /// TransferAttempt the consumption created (null until consumption).
+  attemptId  String?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, bookingId])
+  @@index([expiresAt])
+  @@map("booking_pay_tokens")
 }
 
 /// Per-tenant WhatsApp Business install, mediated by Kapso.
