@@ -137,6 +137,209 @@
   --surface-transition:
     box-shadow 240ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms
     cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* ─── Sendero design system tokens ─────────────────────────────
+     Aligned with /sendero/project/App routes.html spec sheet. The
+     `.t-*` classes below consume these. */
+  --midnight: #1f2a44;
+  --vermillion: var(--ink);
+  --sea: #0f7c82;
+  --sand: #b6844e;
+  --surface-base: var(--bg);
+  --surface-raised: var(--bg-elev);
+  --surface-floating: #fdfbf7;
+  --surface-terminal: rgba(31, 42, 68, 0.97);
+  --tint-vermillion-soft: color-mix(in oklab, var(--vermillion) 10%, transparent);
+  --tint-vermillion-medium: color-mix(in oklab, var(--vermillion) 18%, transparent);
+  --tint-sea-soft: color-mix(in oklab, var(--sea) 10%, transparent);
+  --tint-sand-soft: color-mix(in oklab, var(--sand) 12%, transparent);
+  --tint-midnight-soft: color-mix(in oklab, var(--midnight) 4%, transparent);
+  --tint-midnight-medium: color-mix(in oklab, var(--midnight) 8%, transparent);
+  --hairline-color: var(--border);
+  --hairline-color-soft: color-mix(in oklab, var(--midnight) 8%, transparent);
+  --hairline-color-strong: color-mix(in oklab, var(--midnight) 14%, transparent);
+
+  /* Strict named scale — exact px (DESIGN.md §10) */
+  --t-display: 56px;
+  --t-h1: 40px;
+  --t-h2: 28px;
+  --t-h3: 20px;
+  --t-body: 14px;
+  --t-body-lg: 16px;
+  --t-meta: 11px;
+  --t-mono-size: 12px;
+
+  /* Channel-aware accents — keep in sync with apps/app/components/console/channels.tsx */
+  --ch-whatsapp: #25d366;
+  --ch-whatsapp-tint: #e7f6e9;
+  --ch-slack: #4a154b;
+  --ch-slack-tint: #f4ecf7;
+  --ch-sms: #3b82f6;
+  --ch-sms-tint: #e8f0fb;
+  --ch-internal: var(--midnight);
+  --ch-internal-tint: #f5ede0;
+}
+
+/* ─── Sendero type primitives — strict named scale ──────────────
+   Use these classes instead of ad-hoc Tailwind sizing whenever the
+   design calls for a named token. Mirrors /sendero/project/App
+   routes.html lines 57-83. */
+.t-display {
+  font-family: var(--font-display);
+  font-size: var(--t-display);
+  font-weight: 480;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  color: var(--midnight);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "ss01", "ss02";
+}
+.t-h1 {
+  font-family: var(--font-display);
+  font-size: var(--t-h1);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--midnight);
+}
+.t-h2 {
+  font-family: var(--font-display);
+  font-size: var(--t-h2);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0;
+  color: var(--midnight);
+}
+.t-h3 {
+  font-family: var(--font-sans);
+  font-size: var(--t-h3);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--midnight);
+}
+.t-body {
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  font-weight: 400;
+  line-height: 1.5;
+  color: color-mix(in oklab, var(--midnight) 85%, transparent);
+}
+.t-body-lg {
+  font-family: var(--font-sans);
+  font-size: var(--t-body-lg);
+  font-weight: 400;
+  line-height: 1.6;
+  color: color-mix(in oklab, var(--midnight) 85%, transparent);
+}
+.t-meta {
+  font-family: var(--font-sans);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: var(--label-meta-tracking);
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--midnight) 60%, transparent);
+  font-feature-settings: "smcp", "c2sc";
+}
+.t-mono {
+  font-family: var(--font-mono-x);
+  font-size: var(--t-mono-size);
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  color: color-mix(in oklab, var(--midnight) 78%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.t-num-lg {
+  font-family: var(--font-display);
+  font-size: var(--numeral-lg);
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--midnight);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.t-num-md {
+  font-family: var(--font-display);
+  font-size: var(--numeral-md);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+  color: var(--midnight);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Ink opacity helpers — used pervasively in the design artboards. */
+.ink-90 {
+  color: color-mix(in oklab, var(--midnight) 90%, transparent);
+}
+.ink-70 {
+  color: color-mix(in oklab, var(--midnight) 70%, transparent);
+}
+.ink-60 {
+  color: color-mix(in oklab, var(--midnight) 60%, transparent);
+}
+.ink-50 {
+  color: color-mix(in oklab, var(--midnight) 50%, transparent);
+}
+.ink-40 {
+  color: color-mix(in oklab, var(--midnight) 40%, transparent);
+}
+
+/* Sendero atoms — card surfaces + hairlines from the design system. */
+.sd-card-raised {
+  background: var(--surface-floating);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: var(--shadow-md);
+  padding: 20px 22px;
+}
+.sd-card-flat {
+  background: transparent;
+  border-radius: var(--radius-lg, 16px);
+  padding: 20px 22px;
+}
+.sd-hairline {
+  height: 1px;
+  background: var(--hairline-color);
+  border: 0;
+}
+.sd-hairline-soft {
+  height: 1px;
+  background: var(--hairline-color-soft);
+  border: 0;
+}
+.sd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sd-pill-sea {
+  background: var(--tint-sea-soft);
+  color: var(--sea);
+}
+.sd-pill-verm {
+  background: var(--tint-vermillion-soft);
+  color: var(--vermillion);
+}
+.sd-pill-sand {
+  background: var(--tint-sand-soft);
+  color: var(--sand);
+}
+.sd-pill-mid {
+  background: var(--midnight);
+  color: var(--surface-floating);
+}
+.sd-pill-outline {
+  background: transparent;
+  color: color-mix(in oklab, var(--midnight) 70%, transparent);
+  box-shadow: inset 0 0 0 1px var(--hairline-color);
 }
 @media (prefers-reduced-motion: reduce) {
   :root {

@@ -9,6 +9,7 @@ import {
   ChannelStatusPanel,
   type ChannelStatusKind,
 } from '@/components/channels/channel-status-panel';
+import { WhatsappConnectedPanel } from '@/components/channels/whatsapp-connected-panel';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export default async function WhatsAppChannelPage() {
@@ -23,6 +24,7 @@ export default async function WhatsAppChannelPage() {
       lastHealthyAt: true,
       lastErrorMessage: true,
       phoneNumberId: true,
+      metadata: true,
     },
   });
 
@@ -65,6 +67,44 @@ export default async function WhatsAppChannelPage() {
     }
   }
 
+  if (status === 'active' && install) {
+    const metadata = (install.metadata as Record<string, unknown> | null) ?? {};
+    const templates = Array.isArray(metadata.templates)
+      ? (metadata.templates as Array<{ name: string; status: string }>)
+      : [];
+    return (
+      <div className="flex max-w-5xl flex-col gap-6">
+        <WhatsappConnectedPanel
+          displayName={install.businessDisplayName}
+          displayPhoneNumber={install.displayPhoneNumber}
+          status="Connected"
+          templates={templates}
+          recentThreads={[]}
+          weeklyStats={{ trips: 0, messages: 0, deliveryRate: 100 }}
+        />
+        <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-sm)]">
+          <h3 className="text-[15px] font-semibold tracking-normal text-foreground">
+            What this does
+          </h3>
+          <ul className="flex flex-col gap-1.5 text-sm text-muted-foreground">
+            <li>
+              <strong className="text-foreground">Inbound</strong>: Travelers message your WhatsApp
+              number; the agent surfaces threads in{' '}
+              <Link className="underline underline-offset-2" href="/dashboard/inbox">
+                Trip inboxes
+              </Link>
+              .
+            </li>
+            <li>
+              <strong className="text-foreground">Outbound</strong>: Operators reply from the trip
+              composer; sends route through Kapso.
+            </li>
+          </ul>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <ChannelStatusPanel
@@ -73,32 +113,24 @@ export default async function WhatsAppChannelPage() {
         identifier={identifier}
         lastHealthyAt={install?.lastHealthyAt?.toISOString() ?? null}
         lastErrorMessage={install?.lastErrorMessage ?? null}
-        connectHref="/onboarding/agency"
+        connectHref="/dashboard/channels/whatsapp/connect"
         onProbe={status === 'not_installed' ? undefined : probe}
       />
-
       <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-sm)]">
         <h3 className="text-[15px] font-semibold tracking-normal text-foreground">
-          What this does
+          Set up the channel
         </h3>
-        <ul className="flex flex-col gap-1.5 text-sm text-muted-foreground">
-          <li>
-            <strong className="text-foreground">Inbound</strong>: Travelers message your WhatsApp
-            number; the agent surfaces threads in{' '}
-            <Link className="underline underline-offset-2" href="/dashboard/inbox">
-              Trip inboxes
-            </Link>
-            .
-          </li>
-          <li>
-            <strong className="text-foreground">Outbound</strong>: Operators reply from the trip
-            composer; sends route through Kapso → Meta Cloud API.
-          </li>
-          <li>
-            <strong className="text-foreground">Health</strong>: Hourly cron pings Kapso. Use the
-            probe button above to re-check on demand.
-          </li>
-        </ul>
+        <p className="text-sm text-muted-foreground">
+          The 5-step wizard takes about 5 minutes. Sendero owns the WhatsApp Business Account, so
+          there&rsquo;s no Meta embedded signup — you pick a number from our pool and brand the
+          experience.
+        </p>
+        <Link
+          href="/dashboard/channels/whatsapp/connect"
+          className="mt-2 inline-flex w-fit rounded-md bg-[color:var(--accent-rose)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-white transition-opacity hover:opacity-90"
+        >
+          Start setup
+        </Link>
       </section>
     </div>
   );
