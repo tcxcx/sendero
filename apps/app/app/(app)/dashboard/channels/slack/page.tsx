@@ -1,14 +1,21 @@
 import Link from 'next/link';
-import { revalidatePath } from 'next/cache';
 
 import { prisma } from '@sendero/database';
-import { WebClient } from '@slack/web-api';
 
 import {
   ChannelStatusPanel,
   type ChannelStatusKind,
 } from '@/components/channels/channel-status-panel';
+import { SlackConnectedPanel } from '@/components/channels/slack-connected-panel';
 import { requireCurrentTenant } from '@/lib/tenant-context';
+
+const ROUTE_FALLBACKS: Record<string, string> = {
+  trip_events: 'All trip events',
+  settlements: 'Settlements + invoices',
+  cap_warnings: 'Spend-cap warnings',
+  escalations: 'Cap breaches + over-policy holds',
+  silent: 'Health pings (suppressed)',
+};
 
 export default async function SlackChannelPage() {
   const { tenant } = await requireCurrentTenant();
@@ -22,31 +29,13 @@ export default async function SlackChannelPage() {
       teamName: true,
       enterpriseName: true,
       isEnterpriseInstall: true,
+      botUserId: true,
+      scope: true,
       installedAt: true,
       updatedAt: true,
+      routing: true,
     },
   });
-
-  async function probe(installId: string) {
-    'use server';
-    const { tenant: t } = await requireCurrentTenant();
-    const row = await prisma.slackInstall.findFirst({
-      where: { id: installId, tenantId: t.id },
-      select: { id: true, botToken: true },
-    });
-    if (!row) return { ok: false, message: 'Install not found' };
-    try {
-      const client = new WebClient(row.botToken);
-      const res = await client.auth.test();
-      if (!res.ok) throw new Error(res.error ?? 'slack_auth_failed');
-      revalidatePath('/dashboard/channels/slack');
-      return { ok: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      revalidatePath('/dashboard/channels/slack');
-      return { ok: false, message };
-    }
-  }
 
   if (installs.length === 0) {
     return (
@@ -57,39 +46,54 @@ export default async function SlackChannelPage() {
           identifier={null}
           lastHealthyAt={null}
           lastErrorMessage={null}
-          connectHref="/onboarding/corporate"
+          connectHref="/dashboard/channels/slack/connect"
         />
-        <section className="rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-sm)]">
+        <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-sm)]">
+          <h3 className="text-[15px] font-semibold tracking-normal text-foreground">
+            Set up the channel
+          </h3>
           <p className="text-sm text-muted-foreground">
-            Connect Slack from{' '}
-            <Link className="underline underline-offset-2" href="/onboarding/corporate">
-              Corporate onboarding
-            </Link>{' '}
-            to route employee trips into the same trip engine.
+            The 5-step wizard takes about 3 minutes. You install Sendero into your workspace, pick
+            which channels receive each event class, and we invite the bot for you.
           </p>
+          <Link
+            href="/dashboard/channels/slack/connect"
+            className="mt-2 inline-flex w-fit rounded-md bg-[color:var(--accent-rose)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-white transition-opacity hover:opacity-90"
+          >
+            Start setup
+          </Link>
         </section>
       </div>
     );
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-5xl flex-col gap-6">
       {installs.map(install => {
-        const installId = install.id;
-        const identifier =
+        const enterpriseLabel =
           install.isEnterpriseInstall && install.enterpriseName
-            ? `${install.enterpriseName} (Grid) · ${install.teamName}`
-            : install.teamName;
+            ? `${install.enterpriseName} (Grid)`
+            : null;
+        const routing =
+          (install.routing as {
+            defaultChannel?: string;
+            routes?: Array<{ eventClass: string; channelId: string; mode: string }>;
+          } | null) ?? null;
+        const routes = (routing?.routes ?? []).map(r => ({
+          channelLabel: `#${r.channelId}`,
+          description: ROUTE_FALLBACKS[r.eventClass] ?? r.eventClass,
+          mode: r.mode as 'route' | 'filter' | 'silent',
+        }));
+        const scopeCount = install.scope ? install.scope.split(',').filter(Boolean).length : 0;
         return (
-          <ChannelStatusPanel
+          <SlackConnectedPanel
             key={install.id}
-            brand="slack"
-            status={'active' as ChannelStatusKind}
-            identifier={identifier}
-            lastHealthyAt={install.updatedAt.toISOString()}
-            lastErrorMessage={null}
-            connectHref="/onboarding/corporate"
-            onProbe={async () => probe(installId)}
+            teamName={install.teamName}
+            enterpriseLabel={enterpriseLabel}
+            botUserId={install.botUserId}
+            scopeCount={scopeCount}
+            routes={routes}
+            weeklyEscalations={0}
           />
         );
       })}
