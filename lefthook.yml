@@ -26,7 +26,13 @@ pre-commit:
     biome:
       glob: "*.{ts,tsx,js,jsx,json,jsonc,css}"
       run: bunx biome format --write --no-errors-on-unmatched {staged_files}
-      stage_fixed: true
+      # stage_fixed: false (default) — biome rewrites files on disk but
+      # we don't auto-stage. Author re-stages explicitly. Prevents a race
+      # where a parallel agent's `git add -A` sweeps another agent's
+      # staged-but-unfinished files into their commit. Hit this 3x in
+      # one session before flipping the default. Author opts in with
+      # `git add` post-format.
+      stage_fixed: false
 
     # Typecheck only packages affected since the last commit. `...[HEAD^1]`
     # expands to changed workspace + downstream deps. Uses turbo daemon + cache.
