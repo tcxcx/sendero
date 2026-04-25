@@ -18,6 +18,7 @@
  * multiple recipients without re-rendering.
  */
 
+import { buildShareImageUrl } from '@/lib/og/share-url';
 import type {
   ChannelCta,
   ChannelMessage,
@@ -233,28 +234,50 @@ function renderCardLike(card: CardLike): RenderedForChannel<WhatsAppPayload> {
   };
 }
 
-function renderCard(msg: ChannelMessageCard): RenderedForChannel<WhatsAppPayload> {
+async function renderCard(msg: ChannelMessageCard): Promise<RenderedForChannel<WhatsAppPayload>> {
+  // Image precedence: explicit imageUrl wins (export_route_map static-map
+  // links, restaurant photos), otherwise fall back to the canonical
+  // Satori OG card so the WhatsApp interactive header carries the same
+  // brand frame the operator/email/web sees.
+  const imageUrl =
+    msg.imageUrl ??
+    (await buildShareImageUrl({
+      title: msg.title,
+      body: msg.body,
+      bullets: msg.bullets,
+      primaryCta: msg.ctas?.[0] ? { label: msg.ctas[0].label } : undefined,
+    })) ??
+    undefined;
   return renderCardLike({
     title: msg.title,
     body: msg.body,
     bullets: msg.bullets,
-    imageUrl: msg.imageUrl,
+    imageUrl,
     ctas: msg.ctas,
   });
 }
 
-function renderToolResult(
+async function renderToolResult(
   msg: ChannelMessageToolResult
-): RenderedForChannel<WhatsAppPayload> | null {
+): Promise<RenderedForChannel<WhatsAppPayload> | null> {
   if (!msg.share) return null;
   const ctas = [msg.share.primaryCta, ...(msg.share.secondaryCtas ?? [])].filter(
     (c): c is ChannelCta => Boolean(c)
   );
+  const imageUrl =
+    msg.share.imageUrl ??
+    (await buildShareImageUrl({
+      title: msg.share.title,
+      body: msg.share.body,
+      bullets: msg.share.bullets,
+      primaryCta: msg.share.primaryCta ? { label: msg.share.primaryCta.label } : undefined,
+    })) ??
+    undefined;
   return renderCardLike({
     title: msg.share.title,
     body: msg.share.body,
     bullets: msg.share.bullets,
-    imageUrl: msg.share.imageUrl,
+    imageUrl,
     ctas,
   });
 }
@@ -282,18 +305,18 @@ function renderSources(msg: ChannelMessageSources): RenderedForChannel<WhatsAppP
  * Returns null when the canonical kind is intentionally not relayed
  * (reasoning, raw tool_invocation, operator approval cards).
  */
-export const renderForWhatsApp: ChannelRenderer<WhatsAppPayload> = (
+export const renderForWhatsApp: ChannelRenderer<WhatsAppPayload> = async (
   msg: ChannelMessage
-): RenderedForChannel<WhatsAppPayload> | null => {
+): Promise<RenderedForChannel<WhatsAppPayload> | null> => {
   switch (msg.kind) {
     case 'text':
       return renderText(msg);
     case 'card':
-      return renderCard(msg);
+      return await renderCard(msg);
     case 'tool_invocation':
       return null;
     case 'tool_result':
-      return renderToolResult(msg);
+      return await renderToolResult(msg);
     case 'approval_request':
       return null;
     case 'reasoning':

@@ -13,6 +13,7 @@
  * Reasoning or raw ToolInvocation.
  */
 
+import { buildShareImageUrl } from '@/lib/og/share-url';
 import type {
   ChannelAuthor,
   ChannelCta,
@@ -94,15 +95,26 @@ function renderText(
   };
 }
 
-function renderCard(
+async function renderCard(
   msg: ChannelMessageCard,
   author: WebTravelerPayload['author']
-): RenderedForChannel<WebTravelerPayload> {
+): Promise<RenderedForChannel<WebTravelerPayload>> {
+  // Web bubble fall-back chain mirrors Slack/WhatsApp: tool-supplied image
+  // wins, otherwise the canonical Satori OG card fills the visual slot.
+  const imageUrl =
+    msg.imageUrl ??
+    (await buildShareImageUrl({
+      title: msg.title,
+      body: msg.body,
+      bullets: msg.bullets,
+      primaryCta: msg.ctas?.[0] ? { label: msg.ctas[0].label } : undefined,
+    })) ??
+    undefined;
   const content: WebCardContent = {
     title: msg.title,
     body: msg.body,
     bullets: msg.bullets,
-    imageUrl: msg.imageUrl,
+    imageUrl,
     ctas: msg.ctas,
   };
   return {
@@ -111,19 +123,28 @@ function renderCard(
   };
 }
 
-function renderToolResult(
+async function renderToolResult(
   msg: ChannelMessageToolResult,
   author: WebTravelerPayload['author']
-): RenderedForChannel<WebTravelerPayload> | null {
+): Promise<RenderedForChannel<WebTravelerPayload> | null> {
   if (!msg.share) return null;
   const ctas = [msg.share.primaryCta, ...(msg.share.secondaryCtas ?? [])].filter(
     (c): c is ChannelCta => Boolean(c)
   );
+  const imageUrl =
+    msg.share.imageUrl ??
+    (await buildShareImageUrl({
+      title: msg.share.title,
+      body: msg.share.body,
+      bullets: msg.share.bullets,
+      primaryCta: msg.share.primaryCta ? { label: msg.share.primaryCta.label } : undefined,
+    })) ??
+    undefined;
   const content: WebCardContent = {
     title: msg.share.title,
     body: msg.share.body,
     bullets: msg.share.bullets,
-    imageUrl: msg.share.imageUrl,
+    imageUrl,
     ctas: ctas.length > 0 ? ctas : undefined,
   };
   return {
@@ -144,9 +165,9 @@ function renderSources(
   };
 }
 
-export const renderForWeb: ChannelRenderer<WebTravelerPayload> = (
+export const renderForWeb: ChannelRenderer<WebTravelerPayload> = async (
   msg: ChannelMessage
-): RenderedForChannel<WebTravelerPayload> | null => {
+): Promise<RenderedForChannel<WebTravelerPayload> | null> => {
   const author = mapAuthor(msg.author);
   if (!author) return null;
 
@@ -154,11 +175,11 @@ export const renderForWeb: ChannelRenderer<WebTravelerPayload> = (
     case 'text':
       return renderText(msg, author);
     case 'card':
-      return renderCard(msg, author);
+      return await renderCard(msg, author);
     case 'tool_invocation':
       return null;
     case 'tool_result':
-      return renderToolResult(msg, author);
+      return await renderToolResult(msg, author);
     case 'approval_request':
       return null;
     case 'reasoning':
