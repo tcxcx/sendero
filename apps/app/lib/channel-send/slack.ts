@@ -35,9 +35,7 @@ export type SendSlackResult =
   | { sent: false; reason: string }
   | { sent: true; channel: string; ts: string; degraded?: boolean };
 
-export async function sendChannelMessageSlack(
-  args: SendSlackArgs
-): Promise<SendSlackResult> {
+export async function sendChannelMessageSlack(args: SendSlackArgs): Promise<SendSlackResult> {
   const rendered = await renderForSlack(args.message);
   if (!rendered) {
     return { sent: false, reason: 'kind-not-relayed-to-slack' };
