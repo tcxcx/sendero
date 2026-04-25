@@ -206,12 +206,14 @@ function CancelResultBanner({ result }: { result: CancelSweepResult }) {
         }}
       >
         ✓ Cancelled + swept · cancel tx {result.cancelledTxHash.slice(0, 12)}… · sweep tx{' '}
-        {result.sweptTxHash.slice(0, 12)}… · recovered{' '}
-        {(Number(result.recoveredMicroUsdc) / 1_000_000).toFixed(2)} USDC
+        {result.sweptTxHash.slice(0, 12)}…
+        {result.recoveredMicroUsdc
+          ? ` · recovered ${(Number(result.recoveredMicroUsdc) / 1_000_000).toFixed(2)} USDC`
+          : ''}
       </div>
     );
   }
-  if (result.kind === 'msca_submitter_pending') {
+  if (result.kind === 'operator_unavailable') {
     return (
       <div
         style={{
@@ -225,9 +227,9 @@ function CancelResultBanner({ result }: { result: CancelSweepResult }) {
           gap: 6,
         }}
         className="t-mono"
-        data-testid="msca-pending-banner"
+        data-testid="operator-unavailable-banner"
       >
-        <span style={{ fontWeight: 600 }}>Manual fallback required</span>
+        <span style={{ fontWeight: 600 }}>Operator infra not configured</span>
         <span style={{ opacity: 0.85 }}>{result.message}</span>
         <span style={{ opacity: 0.85 }}>{result.manualInstructions}</span>
       </div>
@@ -253,9 +255,11 @@ function CancelResultBanner({ result }: { result: CancelSweepResult }) {
       </div>
     );
   }
+  // result.kind === 'failed' — distinguishes which step failed so the
+  // user can retry the right one (sweep can run on its own after cancel).
   return (
     <div className="t-mono" style={{ fontSize: 11, color: 'var(--vermillion)' }}>
-      ✗ {result.message}
+      ✗ {result.step === 'cancel' ? 'Cancel failed' : 'Sweep failed (cancel succeeded)'}: {result.reason}
     </div>
   );
 }
