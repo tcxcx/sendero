@@ -178,17 +178,14 @@ async function sendSlack(
  *
  * **Meta 24-hour rule:** free-form messages (`type: 'text'`) only
  * work when the recipient has messaged the business within the past
- * 24 hours. Outside that window Meta requires a pre-approved HSM
- * template (see `packages/whatsapp/src/templates.ts → SENDERO_TEMPLATES`).
- * For lockout alerts we expect the buyer to be in-session via the
- * Sendero agent thread, so free-form is the right default. If you see
- * `(#131047)` errors in production, register a `sendero_security_alert`
- * template in the WABA and use `client.sendTemplate(...)` here.
+ * 24 hours. Outside that window Meta returns `(#131047)` and we fall
+ * back to the pre-approved `sendero_security_alert` HSM template
+ * (see `packages/whatsapp/templates/sendero_security_alert.json`).
  *
- * TODO(security-alerts-whatsapp-template): register a
- * `sendero_security_alert` HSM template (subject = header var, body =
- * body var) and prefer it over free-form. Free-form stays as the
- * fallback for the in-session 24-hour window.
+ * The free-form path stays primary because (a) inside the 24-hour
+ * window it's instant + cheaper, (b) the message can be richer
+ * (newlines, *bold*), and (c) Meta charges per template send under
+ * the per-conversation pricing model.
  */
 async function sendWhatsapp(
   phoneE164: string,
@@ -204,38 +201,64 @@ async function sendWhatsapp(
   if (!phoneE164) {
     return { ok: false, error: 'whatsapp_phone_missing' };
   }
+  const {
+    WhatsAppClient,
+    SENDERO_TEMPLATES,
+    buildSecurityAlertComponents,
+    isOutsideSessionWindowError,
+  } = await import('@sendero/whatsapp');
+  const client = new WhatsAppClient({
+    phoneNumberId,
+    accessToken,
+    ...(apiBaseUrl ? { apiBaseUrl } : {}),
+  });
+  // Strip the leading '+' if present — Cloud API accepts both, but
+  // some upstream proxies normalize to digits-only. Keep digits +
+  // optional leading '+' to match the existing whatsapp/webhook path.
+  const to = phoneE164.replace(/[^\d+]/g, '');
+  // Free-form text. Subject becomes the first line; body follows
+  // after a blank line so screen readers + WA clients render the
+  // hierarchy. WA itself doesn't support Markdown headers in
+  // free-form — `*bold*` is the only formatting available.
+  const message = `*${subject}*\n\n${body}`;
   try {
-    const { WhatsAppClient } = await import('@sendero/whatsapp');
-    const client = new WhatsAppClient({
-      phoneNumberId,
-      accessToken,
-      ...(apiBaseUrl ? { apiBaseUrl } : {}),
-    });
-    // Strip the leading '+' if present — Cloud API accepts both, but
-    // some upstream proxies normalize to digits-only. Keep digits +
-    // optional leading '+' to match the existing whatsapp/webhook path.
-    const to = phoneE164.replace(/[^\d+]/g, '');
-    // Free-form text. Subject becomes the first line; body follows
-    // after a blank line so screen readers + WA clients render the
-    // hierarchy. WA itself doesn't support Markdown headers in
-    // free-form — `*bold*` is the only formatting available.
-    const message = `*${subject}*\n\n${body}`;
     const result = await client.sendText(to, message);
-    // Cloud API returns `{ messages: [{ id }] }` on success. The
-    // `WhatsAppClient.request` helper throws on !ok, so reaching here
-    // means the API accepted the send. Defensively check for the
-    // expected shape.
     const wamid = (result as { messages?: Array<{ id?: string }> })?.messages?.[0]?.id;
     if (!wamid) {
       return { ok: false, error: 'whatsapp_no_message_id' };
     }
     return { ok: true };
   } catch (err) {
-    // Meta returns useful error codes inside the response body which
-    // `WhatsAppClient.request` includes in the thrown message. Surface
-    // it directly so ops can grep for `(#131047)` (24-hour window) or
-    // `(#131026)` (number not found) in the SecurityAlert audit rows.
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    if (!isOutsideSessionWindowError(err)) {
+      // Real failure (auth, malformed payload, recipient unreachable).
+      // Surface verbatim so ops can grep the SecurityAlert audit row.
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+    // Outside the 24-hour window — fall back to the pre-approved HSM
+    // template. Truncate body to Meta's 1024-char cap so the template
+    // send doesn't bounce on (#132012) (parameter too long).
+    const tpl = SENDERO_TEMPLATES.SECURITY_ALERT;
+    try {
+      const result = await client.sendTemplate({
+        to,
+        templateName: tpl.name,
+        languageCode: tpl.defaultLocale,
+        components: buildSecurityAlertComponents(
+          subject.slice(0, 60),
+          body.slice(0, 1024)
+        ),
+      });
+      const wamid = (result as { messages?: Array<{ id?: string }> })?.messages?.[0]?.id;
+      if (!wamid) {
+        return { ok: false, error: 'whatsapp_template_no_message_id' };
+      }
+      return { ok: true };
+    } catch (tplErr) {
+      const detail = tplErr instanceof Error ? tplErr.message : String(tplErr);
+      // (#132000) = template not found / not approved — surface clearly
+      // so ops know to check the WABA template approval state.
+      return { ok: false, error: `whatsapp_template_fallback:${detail}` };
+    }
   }
 }
 

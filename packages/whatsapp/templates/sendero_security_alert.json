@@ -1,0 +1,30 @@
+{
+  "name": "sendero_security_alert",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "HEADER",
+      "format": "TEXT",
+      "text": "{{1}}",
+      "example": {
+        "header_text": ["Trip lockout triggered"]
+      }
+    },
+    {
+      "type": "BODY",
+      "text": "{{1}}",
+      "example": {
+        "body_text": [
+          [
+            "Trip 0xabcd1234… has been locked after 3 failed claim attempts. The buyer can cancel to recover unspent funds."
+          ]
+        ]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "Sendero · do not reply to this number"
+    }
+  ]
+}
