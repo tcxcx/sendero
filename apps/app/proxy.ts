@@ -24,6 +24,7 @@ const isPublicRoute = createRouteMatcher([
   '/g(.*)', // guest claim (self-auth via URL fragment)
   '/glass-debug',
   '/invoice/(.*)', // public invoice viewer (JWT-gated)
+  '/pay/(.*)', // hosted magic-link payment page for off-app travelers (BookingPayToken-gated)
   '/stamps/(.*)', // public NFT stamp viewer + OG unfurl target (Slack/WhatsApp)
   '/agents/(.*)', // public ERC-8004 agent metadata + reputation profile (org + user)
   '/sign-in(.*)',
@@ -41,6 +42,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/og/share', // canonical Satori share-image generator — needs to be publicly fetchable so Slack/WhatsApp/email unfurl bots can render the image. Token signature gates payload integrity.
   '/api/webhooks/(.*)', // Duffel, Clerk, etc. — signature-verified per route
   '/api/agent/dispatch', // internal fan-in — protected by AGENT_DISPATCH_SECRET / CRON_SECRET in-route
+  '/api/pay-link/(.*)', // pay-link dispatch — protected by AGENT_DISPATCH_SECRET in-route
   '/api/workflows/stamps/(.*)', // stamp WDK fan-in — same secret/session auth as dispatch, in-route
   '/api/workflows/reputation/(.*)', // reputation WDK fan-in — same secret/session auth, in-route
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
