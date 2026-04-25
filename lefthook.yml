@@ -92,6 +92,17 @@ pre-push:
         - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
       run: bun run deploy:edge:dry-run
 
+    # Stopgap drift check: while the root wrangler.toml exists (mirroring
+    # apps/edge/wrangler.toml so CF Workers Builds preview deploys can find
+    # a config), keep them in sync. Once the CF dashboard's preview deploy
+    # command is updated to `bun run deploy:edge:preview`, delete the root
+    # wrangler.toml + this hook + scripts/check-wrangler-sync.sh.
+    wrangler-sync:
+      glob: "wrangler.toml"
+      skip:
+        - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
+      run: bash scripts/check-wrangler-sync.sh
+
 commit-msg:
   commands:
     non-empty:
