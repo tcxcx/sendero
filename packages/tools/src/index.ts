@@ -59,6 +59,7 @@ import { checkTravelEligibilityTool } from './check-travel-eligibility';
 import { scanDocumentTool } from './scan-document';
 import { searchFlightsTool } from './search-flights';
 import { searchHotelsTool } from './search-hotels';
+import { sendPayLinkTool } from './send-pay-link';
 import { sendTokensTool } from './send-tokens';
 import {
   slackCheckInstallTool,
@@ -238,6 +239,7 @@ export {
   listFlightAncillaries,
   listFlightAncillariesTool,
 } from './list-flight-ancillaries';
+export { sendPayLinkTool } from './send-pay-link';
 export { settleBookingTool } from './settle-booking';
 export {
   type TimezoneBriefInput,
@@ -299,6 +301,8 @@ export const toolList: ToolDef[] = [
   confirmFlightTool,
   settleBookingTool,
   cancelBookingTool,
+  // Wallet flow — pay-link dispatch (Step 5 agent surface)
+  sendPayLinkTool,
   generateBookingInvoiceTool,
   // Tenant pricing policy agent surface (E1 + E2)
   getPricingPolicyTool,
