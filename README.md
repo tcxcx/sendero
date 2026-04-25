@@ -247,6 +247,8 @@ Implementation lives in [`packages/llms`](./packages/llms) (generator + shared c
 
 Direct HTTP clients can call **`/tools/:name`** on the edge origin with **x402 `Payment-Signature`** headers. Use safe identifiers such as `tenantId`, `userId`, `tripId`, `bookingId`, and `runId`. Never persist guest private-link fragments, plaintext claim codes, raw card data, seed phrases, or API secrets.
 
+<img align="right" width="56" src="./apps/marketing/public/brand/signature/12-binoculars.png" alt="" />
+
 ## Trip companion (not only flights and hotels)
 
 Sendero’s tools are meant to support the **whole trip**, not just the flight lifecycle and accommodation booking. That is why we integrated the **Google Places API**—to help with restaurants, local context, and practical guidance so **tourists and business travelers** are supported from first quote through **getting home safely**.
@@ -302,6 +304,8 @@ The next major product step is a **proper on- and off-ramp**: credit card, bank 
 
 **WhatsApp** and **Slack** are first-class client surfaces for many agencies, TMCs, and road warriors. Meeting people there means a dedicated **mobile or web trip app is optional**, not mandatory, for day-to-day trip management—as long as the agent, tools, and settlement layer stay reliable behind the scenes.
 
+<img align="right" width="56" src="./apps/marketing/public/brand/signature/02-north-star.png" alt="" />
+
 ## Why we built this
 
 We decided to build this inspired by Y Combinator’s thesis that **vertical AI agents may become larger businesses than SaaS**.
@@ -331,6 +335,8 @@ Sendero is not a chat on top of a booking tool — it is a **workflow engine wit
 ### One share, many channels
 
 A traveler-facing step produces a single `share` payload. The same shape renders as a **WhatsApp** interactive message, a **Slack** block kit card (for operators), an **email** via [`@sendero/notifications`](./packages/notifications), and a **web** card in [`apps/app/components/ai-elements/`](./apps/app/components/ai-elements). If a field matters to the UX, it lives in `share` — never hard-coded in one adapter. This is how the same flow can start on WhatsApp, resume on the web, and mail a receipt — all one run.
+
+<img align="right" width="56" src="./apps/marketing/public/brand/signature/04-courier-profile.png" alt="" />
 
 ### Stakeholders and role-tailored UX
 
@@ -375,6 +381,8 @@ Canonical workflows: `guestPrefundWorkflow` (single seat) and `agencyCohortWorkf
 - A traveler can switch from web to WhatsApp mid-flow — the run is keyed by traveler + tripId, not by session.
 
 Consequences for design: never ask the traveler to "stay on this page"; every pending state is reachable from their inbox with a live link (no spinners); timeout values are product copy ("we'll follow up by Friday"); resume tokens are shareable URLs for ops handoff, WhatsApp CTAs, and Slack buttons.
+
+<img align="right" width="56" src="./apps/marketing/public/brand/signature/14-bird.png" alt="" />
 
 ### Confirmations must persist via email
 
@@ -616,3 +624,33 @@ sendero-arc/
 - [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) — tool-aware LLM integration.
 - [Ponder](https://ponder.sh/) — Arc Testnet smart contract indexer for escrow and trip state.
 - [Next Forge 6](https://www.next-forge.com/) — monorepo starter template .
+
+<br />
+
+---
+
+<p align="center">
+  <img
+    src="./apps/marketing/public/brand/signature/motion-passport-tomas-cordero.png"
+    alt="Motion passport — Tomas Cordero"
+    width="520"
+  />
+</p>
+
+<p align="center">
+  <strong>Built by Tomas Cordero</strong><br />
+  <sub>indie hacker · design engineer · blockchain & AI developer · full stack · TypeScript maniac</sub>
+</p>
+
+<p align="center">
+  <a href="https://x.com/criptopoeta">X · @criptopoeta</a> ·
+  <a href="https://github.com/tcxcx">GitHub · @tcxcx</a> ·
+  <a href="https://www.linkedin.com/in/tomas-cordero-b601452a7/">LinkedIn</a>
+</p>
+
+<p align="center">
+  <sub>
+    Design-engineering polish on this repo owes a lot to <a href="https://emilkowal.ski/">Emil Kowalski</a> and the broader design-engineering community for sharing how to make software feel right — the invisible details, the motion, the typography, the restraint. Thank you.
+  </sub>
+</p>
+
