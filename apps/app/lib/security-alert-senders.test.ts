@@ -41,7 +41,7 @@ afterEach(() => {
 describe('sendSecurityAlertSlack', () => {
   it('returns slack_not_configured when SLACK_BOT_TOKEN is missing', async () => {
     const senders = buildSecurityAlertSenders();
-    const result = await senders.sendSecurityAlertSlack('C0XYZ', 'Subject', 'Body');
+    const result = await senders.sendSecurityAlertSlack('ten_test', 'C0XYZ', 'Subject', 'Body');
     expect(result.ok).toBe(false);
     expect(result.error).toBe('slack_not_configured');
   });
@@ -49,7 +49,7 @@ describe('sendSecurityAlertSlack', () => {
   it('returns slack_channel_missing when channelId is empty', async () => {
     process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
     const senders = buildSecurityAlertSenders();
-    const result = await senders.sendSecurityAlertSlack('', 'Subject', 'Body');
+    const result = await senders.sendSecurityAlertSlack('ten_test', '', 'Subject', 'Body');
     expect(result.ok).toBe(false);
     expect(result.error).toBe('slack_channel_missing');
   });
@@ -68,6 +68,7 @@ describe('sendSecurityAlertSlack', () => {
 
     const senders = buildSecurityAlertSenders();
     const result = await senders.sendSecurityAlertSlack(
+      'ten_test',
       'C0XYZ',
       '[Sendero] Suspicious activity',
       'Body line.\nMore body.'
@@ -96,7 +97,7 @@ describe('sendSecurityAlertSlack', () => {
     }));
 
     const senders = buildSecurityAlertSenders();
-    const result = await senders.sendSecurityAlertSlack('C0XYZ', 'Subject', 'Body');
+    const result = await senders.sendSecurityAlertSlack('ten_test', 'C0XYZ', 'Subject', 'Body');
     expect(result.ok).toBe(false);
     expect(result.error).toBe('slack:channel_not_found');
   });
@@ -114,9 +115,65 @@ describe('sendSecurityAlertSlack', () => {
     }));
 
     const senders = buildSecurityAlertSenders();
-    const result = await senders.sendSecurityAlertSlack('C0XYZ', 'Subject', 'Body');
+    const result = await senders.sendSecurityAlertSlack('ten_test', 'C0XYZ', 'Subject', 'Body');
     expect(result.ok).toBe(false);
     expect(result.error).toContain('rate_limited');
+  });
+
+  // Per-tenant routing: when SlackInstall exists for the tenant, the
+  // sender uses THAT install's botToken — NOT the env fallback. This
+  // is the production property that lets alerts land in the customer's
+  // own Slack workspace instead of Sendero's.
+  it('prefers per-tenant SlackInstall.botToken over env SLACK_BOT_TOKEN', async () => {
+    process.env.SLACK_BOT_TOKEN = 'xoxb-env-token';
+    let capturedToken: string | null = null;
+    mock.module('@sendero/database', () => ({
+      prisma: {
+        slackInstall: {
+          findFirst: async () => ({ botToken: 'xoxb-tenant-token' }),
+        },
+      },
+    }));
+    mock.module('@sendero/slack', () => ({
+      createSlackClient: (token: string) => {
+        capturedToken = token;
+        return { chat: { postMessage: async () => ({ ok: true }) } };
+      },
+    }));
+
+    const senders = buildSecurityAlertSenders();
+    const result = await senders.sendSecurityAlertSlack('ten_test', 'C0XYZ', 'Subject', 'Body');
+    expect(result.ok).toBe(true);
+    // Per-tenant token wins; env value is the fallback for single-tenant deploys only.
+    expect(capturedToken).toBe('xoxb-tenant-token');
+  });
+
+  it('falls back to env SLACK_BOT_TOKEN when no SlackInstall exists for the tenant', async () => {
+    process.env.SLACK_BOT_TOKEN = 'xoxb-env-token';
+    let capturedToken: string | null = null;
+    mock.module('@sendero/database', () => ({
+      prisma: {
+        slackInstall: {
+          findFirst: async () => null,
+        },
+      },
+    }));
+    mock.module('@sendero/slack', () => ({
+      createSlackClient: (token: string) => {
+        capturedToken = token;
+        return { chat: { postMessage: async () => ({ ok: true }) } };
+      },
+    }));
+
+    const senders = buildSecurityAlertSenders();
+    const result = await senders.sendSecurityAlertSlack(
+      'ten_no_install',
+      'C0XYZ',
+      'Subject',
+      'Body'
+    );
+    expect(result.ok).toBe(true);
+    expect(capturedToken).toBe('xoxb-env-token');
   });
 });
 

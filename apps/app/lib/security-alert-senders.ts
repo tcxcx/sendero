@@ -65,29 +65,64 @@ async function sendEmail(to: string, subject: string, body: string): Promise<Ale
  * expose colored borders). The headline lives in the section block
  * (rendered as a Slack header) and the prose body sits beneath it.
  *
- * Token resolution:
- *   - Reads `SLACK_BOT_TOKEN` from env (matches the ops-alert pattern in
- *     `@sendero/slack/alerts`). For per-tenant routing we'd need to
- *     extend the `AlertSenders` port shape with a `tenantId` arg and
- *     resolve the bot token via `prisma.slackInstall.findFirst({ tenantId })`.
- *     Tracked as a follow-up — see TODO below.
- *   - The buyer-tenant must have the Sendero Slack app installed in
- *     the workspace whose `notificationSlackChannelId` is configured,
- *     OR the env-level bot must be in that workspace. Operator wins
- *     for ops-broadcast use cases; per-tenant works only when the env
- *     bot is the one installed (i.e. the development case + Sendero's
- *     own workspace).
+ * Token resolution (per-tenant first, env fallback):
+ *   1. Look up the tenant's Sendero Slack install via
+ *      `prisma.slackInstall.findFirst({ tenantId })`. Use that
+ *      install's `botToken` so the message lands in the tenant's
+ *      OWN workspace under the channel id they configured. This is
+ *      the production path — alerts are tenant-scoped.
+ *   2. Fall back to env `SLACK_BOT_TOKEN` for dev / single-tenant
+ *      deployments where the env bot is the one installed in the
+ *      workspace whose channel id is configured. Operator broadcasts
+ *      (ops dashboards) keep using this path too.
  *
- * TODO(security-alerts-slack-per-tenant): once the alerts port grows
- * a tenantId arg, swap to `prisma.slackInstall.findFirst({ tenantId })`
- * and use that install's `botToken` instead of the env token.
+ * Alert routing failure modes:
+ *   - Tenant has no SlackInstall AND no env token configured →
+ *     `slack_not_configured`. Audit row still written upstream.
+ *   - Channel id not in the resolved workspace → Slack returns
+ *     `channel_not_found`; surfaced as `slack:channel_not_found`.
  */
+/**
+ * Resolve the Slack bot token for a tenant. Per-tenant install takes
+ * precedence over the env fallback. Returns null when neither is
+ * configured — caller emits `slack_not_configured`.
+ *
+ * Uses `findFirst` (not `findUnique`) because Enterprise Grid installs
+ * carry an `enterpriseId` that breaks any single-tenant unique key;
+ * sorting by `installedAt desc` picks the latest install, matching how
+ * the events route resolves its install.
+ */
+async function resolveSlackBotToken(tenantId: string): Promise<string | null> {
+  // Lazy-import Prisma so this module doesn't drag the DB client into
+  // the @sendero/notifications dep graph (it lives in @sendero/app).
+  try {
+    const { prisma } = await import('@sendero/database');
+    const install = await prisma.slackInstall.findFirst({
+      where: { tenantId },
+      orderBy: { installedAt: 'desc' },
+      select: { botToken: true },
+    });
+    if (install?.botToken) return install.botToken;
+  } catch (err) {
+    // Don't let a transient DB error block the env fallback. The fallback
+    // only works for single-tenant deploys where it's the right path
+    // anyway; logging the failure surfaces a real misconfiguration in
+    // ops triage.
+    console.warn('[security-alerts] slack install lookup failed (falling back to env)', {
+      tenantId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return process.env.SLACK_BOT_TOKEN ?? null;
+}
+
 async function sendSlack(
+  tenantId: string,
   channelId: string,
   subject: string,
   body: string
 ): Promise<AlertSendResult> {
-  const botToken = process.env.SLACK_BOT_TOKEN;
+  const botToken = await resolveSlackBotToken(tenantId);
   if (!botToken) {
     return { ok: false, error: 'slack_not_configured' };
   }

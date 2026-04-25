@@ -22,11 +22,12 @@ function eventFixture(): ClaimLockoutEvent {
 
 function makeSenders(overrides?: Partial<AlertSenders>): AlertSenders & {
   emailCalls: Array<[string, string]>;
-  slackCalls: Array<[string, string]>;
+  /** Captures (tenantId, channelId, subject) — tenantId added 2026-04-25 for per-tenant routing. */
+  slackCalls: Array<[string, string, string]>;
   whatsappCalls: Array<[string, string]>;
 } {
   const emailCalls: Array<[string, string]> = [];
-  const slackCalls: Array<[string, string]> = [];
+  const slackCalls: Array<[string, string, string]> = [];
   const whatsappCalls: Array<[string, string]> = [];
   return {
     emailCalls,
@@ -40,8 +41,8 @@ function makeSenders(overrides?: Partial<AlertSenders>): AlertSenders & {
       }),
     sendSecurityAlertSlack:
       overrides?.sendSecurityAlertSlack ??
-      (async (channel, subject) => {
-        slackCalls.push([channel, subject]);
+      (async (tenantId, channel, subject) => {
+        slackCalls.push([tenantId, channel, subject]);
         return { ok: true };
       }),
     sendSecurityAlertWhatsapp:
