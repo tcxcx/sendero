@@ -223,40 +223,55 @@ function contactProofMatches(proof: string, contacts: { email?: string; phone?: 
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// Operator-MSCA call — TODO submitter
+// Operator-MSCA call — wired via apps/app/lib/operator-submit.ts
 //
-// TODO(track-G-operator-submit): There is no `submitOperatorCall(...)`
-// helper in the codebase yet. Other on-chain ops (cancel_booking,
-// settle_booking) return encoded calls and rely on the caller to
-// submit via the operator MSCA `executeBatch`. For a guest-facing
-// resend endpoint we need a server-side submitter that:
-//   1. Holds the operator MSCA's signing material (Circle DCW or a
-//      bonded EOA — TBD; the operator address on-chain is in
-//      `escrow.operator()`).
-//   2. Encodes setClaimCodeHash(tripId, newHash).
-//   3. Sends the userOp / tx and waits for confirmation.
-//   4. Returns the tx hash.
+// The operator address is the bonded EOA whose private key lives in
+// OPERATOR_PRIVATE_KEY (env). Same wallet pattern smoke-guest-escrow
+// uses; this just wraps it as a server-side helper so we don't have
+// to re-derive viem clients per call.
 //
-// Until that exists, this route encodes the call and returns it
-// alongside a `pendingOperatorSubmit: true` flag so the operator
-// dashboard / cron can pick it up. NOT a viable production path —
-// the operator-submit primitive is the open infra dependency.
+// Failure modes the helper distinguishes:
+//   - 'operator_key_unavailable' → env not set; route should 500.
+//   - 'escrow_unconfigured'      → ARC_ESCROW_ADDRESS missing; route should 500.
+//   - 'reverted'                 → contract refused (e.g. trip already
+//                                  claimed). Surface the contract's
+//                                  errorName into the audit row.
+//   - 'rpc_error'                → transient. Caller can retry.
 // ──────────────────────────────────────────────────────────────────────
+
+import { submitSetClaimCodeHash } from '@/lib/operator-submit';
 
 interface OperatorRotationResult {
   txHash?: `0x${string}`;
+  /** True when the operator submitter is unconfigured (dev env). */
   pendingOperatorSubmit: boolean;
+  /** Contract-named revert (e.g. 'TripExpired') for the audit row. */
+  failureReason?: string;
 }
 
 async function submitClaimCodeRotation(
-  _onchainTripId: `0x${string}`,
-  _newHash: `0x${string}`
+  onchainTripId: `0x${string}`,
+  newHash: `0x${string}`
 ): Promise<OperatorRotationResult> {
-  // TODO(track-G-operator-submit): wire a real operator-MSCA submitter.
-  // For now leave the contract write to a downstream worker so this
-  // route can ship behind a feature flag without blocking on the
-  // operator-wallet build.
-  return { pendingOperatorSubmit: true };
+  const result = await submitSetClaimCodeHash({ onchainTripId, newCodeHash: newHash });
+  if (result.ok) {
+    return { txHash: result.txHash, pendingOperatorSubmit: false };
+  }
+  // Repo tsconfig has `strict: false`, so negation-narrow on a
+  // discriminated union is unreliable — explicit cast to the failure
+  // variant keeps the rest of the branch readable.
+  const fail = result as Extract<typeof result, { ok: false }>;
+  // Soft-fail on missing operator key in dev so the smoke harness can
+  // exercise the route end-to-end without an operator EOA. Production
+  // env always sets OPERATOR_PRIVATE_KEY (config-doctor checks).
+  if (fail.reason === 'operator_key_unavailable' && !process.env.VERCEL_ENV) {
+    console.warn('[otp-resend] operator key unavailable in dev — skipping on-chain rotation');
+    return { pendingOperatorSubmit: true };
+  }
+  return {
+    pendingOperatorSubmit: false,
+    failureReason: fail.errorName ?? `${fail.reason}:${fail.message}`,
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────

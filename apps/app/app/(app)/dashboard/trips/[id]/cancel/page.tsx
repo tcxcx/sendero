@@ -35,7 +35,7 @@ import { CancelActionsCard } from './cancel-actions-card';
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
-  params: Promise<{ tripId: string }>;
+  params: Promise<{ id: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
@@ -84,7 +84,7 @@ async function loadLatestLockoutAlert(onchainTripId: string) {
 }
 
 export default async function CancelTripPage({ params, searchParams }: PageProps) {
-  const { tripId: tripIdParam } = await params;
+  const { id: tripIdParam } = await params;
   const sp = await searchParams;
   const reason = searchReason(sp.reason);
 
