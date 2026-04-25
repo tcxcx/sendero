@@ -31,5 +31,21 @@ export interface ToolDef<I = any, O = any> {
   inputSchema: ZodTypeAny;
   /** Hand-authored JSON Schema — served to MCP clients via tools/list. */
   jsonSchema: JsonSchemaObject;
+  /**
+   * Operator-only tool — never exposed to external API keys, MCP
+   * clients, customer-facing channels (WhatsApp / Slack / email),
+   * or the public OpenAPI spec.  Defaults to `false` (public).
+   *
+   * Mark `internal: true` for:
+   *   - Channel provisioning (kapso_*, slack_persist_channel_routes,
+   *     slack_invite_bot_to_channels, …)
+   *   - Tenant-admin actions that move org-level config
+   *   - Anything an operator dashboard runs that a customer agent
+   *     should never trigger by accident or via prompt injection
+   *
+   * The web console (Clerk-authed operator) still sees every tool;
+   * filtering happens at the channel + API-key boundary.
+   */
+  internal?: boolean;
   handler(input: I, ctx?: ToolContext): Promise<O>;
 }
