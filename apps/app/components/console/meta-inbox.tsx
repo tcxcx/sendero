@@ -174,9 +174,9 @@ export function MetaInbox({
                     {channel.icon(10)} {channel.name.toUpperCase()}
                   </span>
                 </div>
-                <div className="t-h1" style={{ marginTop: 6 }}>
+                <h1 className="t-h1" style={{ marginTop: 6 }}>
                   Trip inbox
-                </div>
+                </h1>
                 <div className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '58ch' }}>
                   You're talking to <strong>{focused.who.split(' ')[0]}</strong> through{' '}
                   {channel.name}. Anything you send here goes to their phone.
@@ -205,9 +205,9 @@ export function MetaInbox({
                     🛡 PRIVATE · SENDERO AI
                   </span>
                 </div>
-                <div className="t-h1" style={{ marginTop: 6 }}>
+                <h1 className="t-h1" style={{ marginTop: 6 }}>
                   Console
-                </div>
+                </h1>
                 <div className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '62ch' }}>
                   Your private workspace with Sendero. Investigate trips, change policy, run reports
                   — none of this reaches a customer.
