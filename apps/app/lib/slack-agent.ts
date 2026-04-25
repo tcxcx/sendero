@@ -46,6 +46,12 @@ import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 
 import { createSlackClient, type SlackEventEnvelope } from '@sendero/slack';
 
+import {
+  gatewayErrorAllowsDirectRetry,
+  resolveDirectModels,
+  resolveModel,
+  type ModelTier,
+} from './agent-models';
 import { senderoSlackTools } from './slack-agent-tools';
 
 /**
@@ -108,9 +114,21 @@ export interface RunSlackAgentTurnArgs {
   orgName?: string;
   /** Plan tier label — surfaced verbatim in the persona. */
   planTier?: string;
-  /** AI SDK model — gateway string (`'anthropic/claude-opus-4.6'`) or `LanguageModel`. */
-  model: RunAgentTurnArgs['model'];
-  /** Tier hint for `runAgentTurn`. Defaults to `smart`. */
+  /**
+   * AI SDK model handle. Optional — when omitted, the function resolves the
+   * model via `resolveModel(tier)` from `@/lib/agent-models`, which honors
+   * the canonical Sendero policy:
+   *
+   *   1. Gateway-first (Gemini-first via `providerOptions.gateway.order =
+   *      google → anthropic → openai`).
+   *   2. Direct-provider fallback in the same cascade order on gateway-wide
+   *      failure (see `gatewayErrorAllowsDirectRetry`).
+   *
+   * Pass an explicit model only for tests or one-off overrides — production
+   * callers should NOT pin a single provider/model.
+   */
+  model?: RunAgentTurnArgs['model'];
+  /** Tier hint for `runAgentTurn` + the model resolver. Defaults to `smart`. */
   tier?: RunAgentTurnArgs['tier'];
   /** Injected stores — same shapes as `apps/app/api/agent/dispatch`. */
   capStore: CapStore;
@@ -195,19 +213,66 @@ export async function runSlackAgentTurn(
     },
   };
 
-  const result = await runAgentTurn({
-    input,
-    model: args.model,
-    tier: args.tier,
-    tools,
-    capStore: args.capStore,
-    meterStore: args.meterStore,
-    sessionStore: args.sessionStore,
-    resolveSegment: args.resolveSegment,
-    ...(args.pricingOverrides ? { pricingOverrides: args.pricingOverrides } : {}),
-    ...(args.loadTrip ? { loadTrip: args.loadTrip } : {}),
-    persona,
-  });
+  // Resolve the model via the canonical policy (Gemini-first gateway →
+  // direct-provider cascade) unless the caller explicitly pins one.
+  // NEVER hardcode a single model here — the gateway IS the redundancy.
+  const tier: ModelTier = args.tier ?? 'smart';
+  const initialModel = args.model ?? resolveModel(tier);
+  if (!initialModel) {
+    throw new Error(
+      'No AI model available — set AI_GATEWAY_API_KEY (preferred) or one of ' +
+        'GOOGLE_GENERATIVE_AI_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY.'
+    );
+  }
+
+  let result: Awaited<ReturnType<typeof runAgentTurn>>;
+  try {
+    result = await runAgentTurn({
+      input,
+      model: initialModel,
+      tier,
+      tools,
+      capStore: args.capStore,
+      meterStore: args.meterStore,
+      sessionStore: args.sessionStore,
+      resolveSegment: args.resolveSegment,
+      ...(args.pricingOverrides ? { pricingOverrides: args.pricingOverrides } : {}),
+      ...(args.loadTrip ? { loadTrip: args.loadTrip } : {}),
+      persona,
+    });
+  } catch (err) {
+    // Gateway-wide failure → cascade to direct providers in
+    // google → anthropic → openai order. Match dispatch route's policy
+    // exactly so customers see consistent fallback regardless of channel.
+    const retryModels = gatewayErrorAllowsDirectRetry(err) ? resolveDirectModels(tier) : [];
+    if (retryModels.length === 0) throw err;
+    let retryErr: unknown = null;
+    let retryResult: Awaited<ReturnType<typeof runAgentTurn>> | null = null;
+    for (const candidate of retryModels) {
+      try {
+        // eslint-disable-next-line no-console
+        console.warn(`[slack.agent] gateway failed; retrying direct provider ${candidate.label}`);
+        retryResult = await runAgentTurn({
+          input,
+          model: candidate.model,
+          tier,
+          tools,
+          capStore: args.capStore,
+          meterStore: args.meterStore,
+          sessionStore: args.sessionStore,
+          resolveSegment: args.resolveSegment,
+          ...(args.pricingOverrides ? { pricingOverrides: args.pricingOverrides } : {}),
+          ...(args.loadTrip ? { loadTrip: args.loadTrip } : {}),
+          persona,
+        });
+        break;
+      } catch (innerErr) {
+        retryErr = innerErr;
+      }
+    }
+    if (!retryResult) throw retryErr ?? err;
+    result = retryResult;
+  }
 
   // Surface meter events at debug level — the engine already persisted
   // them via the injected meterStore, this is just for the adapter's

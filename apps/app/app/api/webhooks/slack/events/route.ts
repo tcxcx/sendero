@@ -112,9 +112,10 @@ export async function POST(req: NextRequest) {
         // userId. For now, use the install's authedUserId as a stand-in so
         // turn telemetry attributes back to the workspace admin who installed.
         senderoUserId: install.authedUserId,
-        // Gateway model — production dispatch resolves model via tier; the
-        // Slack route uses the gateway string form directly.
-        model: 'anthropic/claude-sonnet-4.6',
+        // Model intentionally omitted — slack-agent resolves via the
+        // canonical Sendero policy: Gateway-first (Gemini-first cascade
+        // google→anthropic→openai), direct-provider fallback on gateway
+        // failure. Same path as the dispatch route.
         capStore: makeCapStore(),
         meterStore: makeMeterStore(),
         sessionStore: makeSessionStore(),
