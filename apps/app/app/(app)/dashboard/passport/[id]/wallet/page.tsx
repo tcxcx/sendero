@@ -51,7 +51,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
     select: { id: true, address: true, circleWalletId: true, createdAt: true },
   });
 
-  const [deposits, spends, balance] = await Promise.all([
+  const [deposits, spends, balance, pendingBookings] = await Promise.all([
     prisma.transferAttempt.findMany({
       where: { tenantId: tenant.id, travelerId: id, kind: 'deposit' },
       orderBy: { createdAt: 'desc' },
@@ -79,6 +79,25 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
       },
     }),
     wallet ? fetchUnifiedBalance(tenant.id, wallet.address) : Promise.resolve(null),
+    prisma.booking.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: 'pending',
+        trip: {
+          travelerId: id,
+          status: { notIn: ['canceled', 'failed', 'completed'] },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      select: {
+        id: true,
+        kind: true,
+        totalUsd: true,
+        currency: true,
+        supplier: { select: { name: true } },
+      },
+    }),
   ]);
 
   const treasury = getTenantTreasury(tenant.id);
@@ -149,7 +168,18 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
             className="sd-card-flat"
             style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
           >
-            <PrefundForm travelerId={id} travelerAddress={wallet.address} defaultAmount="50" />
+            <PrefundForm
+              travelerId={id}
+              travelerAddress={wallet.address}
+              defaultAmount="50"
+              pendingBookings={pendingBookings.map(b => ({
+                id: b.id,
+                kind: b.kind,
+                supplierName: b.supplier?.name ?? null,
+                amount: b.totalUsd.toFixed(2),
+                currency: b.currency,
+              }))}
+            />
             <hr
               aria-hidden
               style={{
