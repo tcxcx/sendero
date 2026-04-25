@@ -60,17 +60,17 @@ pre-push:
 
     build:
       skip:
-        - ref: $SKIP_PUSH_CHECKS
+        - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
       run: NEXT_DIST_DIR=${NEXT_DIST_DIR:-.next-turbo} bunx turbo run build --cache-dir=.turbo
 
     typecheck:
       skip:
-        - ref: $SKIP_PUSH_CHECKS
+        - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
       run: bunx turbo run typecheck --cache-dir=.turbo
 
     lint:
       skip:
-        - ref: $SKIP_PUSH_CHECKS
+        - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
       run: bunx turbo run lint --cache-dir=.turbo
 
     # Cloudflare Worker deploy validation. Catches config drift (missing
@@ -89,7 +89,7 @@ pre-push:
     edge-deploy-check:
       glob: "{apps/edge/**/*.{ts,toml,jsonc,json},packages/{tools,agent,arc,circle,duffel,guest,llms,nanopayments,seo}/src/**/*.ts}"
       skip:
-        - ref: $SKIP_PUSH_CHECKS
+        - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
       run: bun run deploy:edge:dry-run
 
 commit-msg:
