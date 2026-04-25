@@ -7,10 +7,10 @@ const HERO_TITLE_HIGHLIGHTS: Record<
   SupportedLocale,
   readonly [travelToken: string, aiToken: string]
 > = {
-  'en-US': ['travel', 'AI'],
-  'es-MX': ['viajes', 'IA'],
-  'es-AR': ['viajes', 'IA'],
-  'pt-BR': ['viagens', 'IA'],
+  'en-US': ['Travel', 'agent'],
+  'es-MX': ['viajes', 'agentes'],
+  'es-AR': ['viajes', 'agentes'],
+  'pt-BR': ['viagens', 'agentes'],
 };
 
 function rangesForTitle(title: string, locale: SupportedLocale): { start: number; end: number }[] {
