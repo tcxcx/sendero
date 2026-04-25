@@ -253,6 +253,7 @@ model Tenant {
   whatsappInstall     WhatsAppInstall?
   whatsappLinkTokens  WhatsAppLinkToken[]
   spendCaps           TenantSpendCap[]
+  transferPolicies    TransferPolicy[]
   nanopayBatches      NanopayBatch[]
   invoices            Invoice[]
   circleWallets       CircleWallet[]
@@ -302,6 +303,7 @@ model User {
   airlineCredits     AirlineCredit[]
   passportVaults     PassportVault[]
   tripEligibilityRuns TripEligibilityRun[]
+  transferPolicies   TransferPolicy[]    @relation("TravelerPolicies")
 
   @@index([createdAt])
   @@map("users")
@@ -961,6 +963,62 @@ model TenantSpendCap {
   @@unique([tenantId, period])
   @@index([tenantId])
   @@map("tenant_spend_caps")
+}
+
+/// Composable policy guard rows for `@sendero/transfer-policy`. One row =
+/// one guard. Compose multiple rows into a `PolicyChain` at runtime via
+/// `apps/app/lib/transfer-policy/load.ts::loadPolicyChain()`.
+///
+/// Polymorphic by design — `guardKind` discriminates the JSON `config`
+/// shape. Validation lives in the runtime adapter so a runaway migration
+/// can't break agent dispatch silently.
+///
+///   guardKind   config shape
+///   ─────────   ────────────────────────────────────────────────────────
+///   budget      { period: 'daily' | 'weekly' | 'monthly',
+///                 capMicroUsdc: string }   // bigint stored as string
+///   single_tx   { maxMicroUsdc: string }
+///   recipient   { mode: 'allow' | 'deny', addresses: string[] }
+///   rate_limit  { maxCount: number, windowMs: number }
+///   confirm     { triggerAtMicroUsdc?: string, reason?: string }
+///
+/// Scope tuple drives which subject the guard binds to:
+///   - tenant   → applies to every payment for tenantId.
+///   - traveler → applies only when ctx.travelerId matches.
+///   - tool     → applies only when ctx.toolName matches.
+///
+/// `priority ASC` is the chain order; lower runs first. Default 100 keeps
+/// the table mostly flat — operators only set priority when ordering
+/// matters (e.g. SingleTx before Budget so denial messages are accurate).
+model TransferPolicy {
+  id              String   @id @default(cuid())
+  tenantId        String
+  /// "tenant" | "traveler" | "tool"
+  scope           String
+  /// User.id when scope='traveler', else null.
+  travelerId      String?
+  /// Tool name when scope='tool', else null.
+  toolName        String?
+  /// "budget" | "single_tx" | "recipient" | "rate_limit" | "confirm"
+  guardKind       String
+  config          Json
+  /// Hard caps reject; soft caps annotate + fire `alertWebhookUrl`.
+  /// Only meaningful for budget / rate_limit guards.
+  hardCap         Boolean  @default(true)
+  alertWebhookUrl String?
+  enabled         Boolean  @default(true)
+  /// Lower runs first in the chain.
+  priority        Int      @default(100)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  traveler User?  @relation("TravelerPolicies", fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scope, enabled])
+  @@index([tenantId, travelerId, enabled])
+  @@index([tenantId, toolName, enabled])
+  @@map("transfer_policies")
 }
 
 /// Generic webhook dedupe ledger. Every inbound webhook (Duffel, Slack,
