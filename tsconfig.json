@@ -50,6 +50,8 @@
       "@sendero/locale/*": ["./packages/locale/src/*"],
       "@sendero/llms": ["./packages/llms/src/index.ts"],
       "@sendero/llms/*": ["./packages/llms/src/*"],
+      "@sendero/fonts": ["./packages/fonts/src/index.ts"],
+      "@sendero/fonts/css": ["./packages/fonts/src/css.ts"],
       "@sendero/intelligence": ["./packages/intelligence/src/index.ts"],
       "@sendero/intelligence/*": ["./packages/intelligence/src/*"],
       "@sendero/billing": ["./packages/billing/src/index.ts"],

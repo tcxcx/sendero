@@ -8,10 +8,18 @@
   --accent: #fb542b;
   --accent-alt: #ff6a45;
   --border: #d8c1a7;
-  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* @sendero/fonts canonical face. The next/font className applied to <html>
+     in app/layout.tsx populates --font-geist-sans, --font-geist-mono,
+     --font-display, --font-mono-x; the system stacks below stay as
+     fallbacks for SSR style-only contexts and for browsers blocking the
+     font network requests. */
   --sans:
-    "Inter Tight", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --display: var(--font-display), ui-serif, Georgia, "Times New Roman", serif;
+  --mono-x: var(--font-mono-x), var(--mono);
 }
 
 @media (prefers-color-scheme: dark) {

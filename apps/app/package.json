@@ -60,6 +60,7 @@
     "@sendero/env": "workspace:*",
     "@sendero/erc8183": "workspace:*",
     "@sendero/guest": "workspace:*",
+    "@sendero/fonts": "workspace:*",
     "@sendero/intelligence": "workspace:*",
     "@sendero/invoicing": "workspace:*",
     "@sendero/kapso": "workspace:*",

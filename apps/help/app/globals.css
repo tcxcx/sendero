@@ -7,8 +7,12 @@
   --ink: #fb542b;
   --accent: #fb542b;
   --border: #e6e6e6;
-  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  /* @sendero/fonts canonical face — see apps/marketing/app/globals.css. */
+  --sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --display: var(--font-display), ui-serif, Georgia, "Times New Roman", serif;
+  --mono-x: var(--font-mono-x), var(--mono);
 }
 @media (prefers-color-scheme: dark) {
   :root {
