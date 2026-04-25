@@ -68,6 +68,14 @@ interface PersonaProps {
   onStop?: RiveParameters['onStop'];
   className?: string;
   variant?: keyof typeof sources;
+  /**
+   * Override the auto theme-derived color of the Rive halo. Accepts
+   * any CSS color string (`#fb542b`, `rgb(251 84 43)`, `var(--ink)`)
+   * and gets parsed to an RGB triple before being pushed into the
+   * Rive view-model's `color` instance. Only applies to variants
+   * with `dynamicColor: true` (halo, command, glint, obsidian).
+   */
+  color?: string;
 }
 
 // The state machine name is always 'default' for Elements AI visuals
@@ -162,10 +170,52 @@ const useTheme = (enabled: boolean) => {
 interface PersonaWithModelProps {
   rive: ReturnType<typeof useRive>['rive'];
   source: (typeof sources)[keyof typeof sources];
+  /** Optional CSS-color override; takes precedence over the theme-default. */
+  color?: string;
   children: React.ReactNode;
 }
 
-const PersonaWithModel = memo(({ rive, source, children }: PersonaWithModelProps) => {
+/**
+ * Resolve a CSS color string to an [r, g, b] triple in 0-255 space.
+ * Returns null when the browser can't parse it (server-side render or
+ * malformed input). The trick: paint into a 1x1 canvas and read back
+ * the computed pixel — handles named colors, hex, rgb(), oklch, etc.
+ */
+function cssColorToRgb(color: string): [number, number, number] | null {
+  if (typeof document === 'undefined') return null;
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = probe.height = 1;
+    const ctx = probe.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return [r ?? 0, g ?? 0, b ?? 0];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read a CSS custom property's resolved value off the document root,
+ * then push it through `cssColorToRgb`. Lets callers pass `var(--ink)`
+ * or any other token name and have the actual value reach Rive.
+ */
+function resolveColorToken(value: string): [number, number, number] | null {
+  if (typeof document === 'undefined') return null;
+  const trimmed = value.trim();
+  if (trimmed.startsWith('var(')) {
+    const tokenName = trimmed.slice(4, -1).split(',')[0]?.trim();
+    if (!tokenName) return null;
+    const resolved = getComputedStyle(document.documentElement).getPropertyValue(tokenName).trim();
+    if (!resolved) return null;
+    return cssColorToRgb(resolved);
+  }
+  return cssColorToRgb(trimmed);
+}
+
+const PersonaWithModel = memo(({ rive, source, color, children }: PersonaWithModelProps) => {
   const theme = useTheme(source.dynamicColor);
   const viewModel = useViewModel(rive, { useDefault: true });
   const viewModelInstance = useViewModelInstance(viewModel, {
@@ -179,9 +229,17 @@ const PersonaWithModel = memo(({ rive, source, children }: PersonaWithModelProps
       return;
     }
 
+    if (color) {
+      const rgb = resolveColorToken(color);
+      if (rgb) {
+        viewModelInstanceColor.setRgb(rgb[0], rgb[1], rgb[2]);
+        return;
+      }
+    }
+
     const [r, g, b] = theme === 'dark' ? [255, 255, 255] : [0, 0, 0];
     viewModelInstanceColor.setRgb(r, g, b);
-  }, [viewModelInstanceColor, theme, source.dynamicColor]);
+  }, [viewModelInstanceColor, theme, source.dynamicColor, color]);
 
   return children;
 });
@@ -190,6 +248,10 @@ PersonaWithModel.displayName = 'PersonaWithModel';
 
 interface PersonaWithoutModelProps {
   children: ReactNode;
+  /** Ignored — kept so PersonaInner can pass it uniformly. */
+  rive?: ReturnType<typeof useRive>['rive'];
+  source?: (typeof sources)[keyof typeof sources];
+  color?: string;
 }
 
 const PersonaWithoutModel = memo(({ children }: PersonaWithoutModelProps) => children);
@@ -208,9 +270,10 @@ interface PersonaInnerProps {
     onStop: RiveParameters['onStop'];
   };
   className?: string;
+  color?: string;
 }
 
-const PersonaInner: FC<PersonaInnerProps> = ({ source, state, callbacks, className }) => {
+const PersonaInner: FC<PersonaInnerProps> = ({ source, state, callbacks, className, color }) => {
   const { rive, RiveComponent } = useRive({
     autoplay: true,
     onLoad: callbacks.onLoad,
@@ -248,7 +311,7 @@ const PersonaInner: FC<PersonaInnerProps> = ({ source, state, callbacks, classNa
   const Component = source.hasModel ? PersonaWithModel : PersonaWithoutModel;
 
   return (
-    <Component rive={rive} source={source}>
+    <Component rive={rive} source={source} color={color}>
       <RiveComponent className={cn('size-16 shrink-0', className)} />
     </Component>
   );
@@ -265,6 +328,7 @@ export const Persona: FC<PersonaProps> = memo(
     onPlay,
     onStop,
     className,
+    color,
   }) => {
     const source = sources[variant];
 
@@ -326,6 +390,7 @@ export const Persona: FC<PersonaProps> = memo(
         state={state}
         callbacks={stableCallbacks}
         className={className}
+        color={color}
       />
     );
   }

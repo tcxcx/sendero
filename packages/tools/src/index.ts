@@ -16,7 +16,15 @@ import { checkPolicyTool } from './check-policy';
 import { checkTreasuryTool } from './check-treasury';
 import { confirmBookingTool } from './confirm-booking';
 import { confirmFlightTool } from './confirm-flight';
+import { createPassengerTool } from './create-passenger';
+import { createTripTool } from './create-trip';
 import { displayOfferConditionsTool } from './display-offer-conditions';
+import {
+  addPassengerToGroupTripTool,
+  createGroupTripTool,
+  removePassengerFromGroupTripTool,
+  removePassengerTool,
+} from './group-trips';
 import { elevationRiskBriefTool } from './elevation-risk-brief';
 import { ensureFlightCustomerTool } from './ensure-flight-customer';
 import { exportRouteMapTool } from './export-route-map';
@@ -57,6 +65,7 @@ import { recommendRestaurantsTool } from './recommend-restaurants';
 import { restaurantRouteCardTool } from './restaurant-route-card';
 import { checkTravelEligibilityTool } from './check-travel-eligibility';
 import { scanDocumentTool } from './scan-document';
+import { scanDocumentAutoTool } from './scan-document-auto';
 import { searchFlightsTool } from './search-flights';
 import { searchHotelsTool } from './search-hotels';
 import { sendPayLinkTool } from './send-pay-link';
@@ -159,6 +168,7 @@ export { checkTravelEligibilityTool } from './check-travel-eligibility';
 export type { OpenApiDocInput } from './openapi';
 export { buildOpenApiDoc } from './openapi';
 export { scanDocumentTool } from './scan-document';
+export { scanDocumentAutoTool } from './scan-document-auto';
 export type { KeyScope } from './scopes';
 export {
   DEFAULT_PROD_SCOPES,
@@ -341,8 +351,21 @@ export const toolList: ToolDef[] = [
   manageStaysNegotiatedRateTool,
   // Ops helpers
   faucetDripTool,
+  // Inbox seeding — create a passenger row (User) for testing the
+  // MetaInbox; channel binding is optional so the agent can collect
+  // phone/Slack id in a follow-up turn.
+  createPassengerTool,
+  // Trip primitives — open a regular Trip (lightweight), distinct
+  // from prefund_trip (escrow + claim link).
+  createTripTool,
+  // Group trips — multi-passenger journeys with capacity ceilings.
+  createGroupTripTool,
+  addPassengerToGroupTripTool,
+  removePassengerFromGroupTripTool,
+  removePassengerTool,
   // Multimodal OCR / document extraction
   scanDocumentTool,
+  scanDocumentAutoTool,
   checkTravelEligibilityTool,
   // Channel-provisioning (WhatsApp via Kapso, Slack OAuth + routing)
   kapsoListNumbersTool,

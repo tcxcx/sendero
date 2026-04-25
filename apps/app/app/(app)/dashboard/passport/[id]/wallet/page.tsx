@@ -114,7 +114,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Workspace', 'Passport', label, 'Wallet']} />
+      <Crumb trail={['Passport', label, 'Wallet']} />
 
       <div>
         <h1 className="t-h1">{label}</h1>

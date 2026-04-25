@@ -262,7 +262,8 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
           letterSpacing: 'var(--label-meta-tracking, 0.12em)',
         }}
       >
-        Step 2 · {boundTraveler ? `Claim for ${boundTraveler.displayName} via DCW` : 'Send the link'}
+        Step 2 ·{' '}
+        {boundTraveler ? `Claim for ${boundTraveler.displayName} via DCW` : 'Send the link'}
       </div>
 
       {boundTraveler ? (
@@ -273,8 +274,8 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
           {claimPhase !== 'claimed' ? (
             <>
               <p className="text-sm text-muted-foreground">
-                {boundTraveler.displayName} already has a Circle DCW on Arc-Testnet
-                (<span className="font-mono text-xs">{shortAddr(boundTraveler.dcwAddress)}</span>).
+                {boundTraveler.displayName} already has a Circle DCW on Arc-Testnet (
+                <span className="font-mono text-xs">{shortAddr(boundTraveler.dcwAddress)}</span>).
                 Claim on their behalf — no link share, no passkey ceremony. Peanut sig comes from
                 the URL fragment; the DCW just submits.
               </p>

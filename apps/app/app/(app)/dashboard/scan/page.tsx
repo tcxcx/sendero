@@ -14,7 +14,10 @@
  * ground truth.
  */
 
+import { CheckIcon, CopyIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
+
+import { toast } from '@sendero/ui/sonner';
 
 import { Crumb } from '@/components/console/crumb';
 
@@ -149,7 +152,7 @@ export default function ScanPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Workspace', 'Scan document']} />
+      <Crumb trail={['Scan document']} />
 
       <header>
         <h1 className="t-h1">Scan a document</h1>
@@ -603,25 +606,76 @@ function ExtractionTable({ data }: { data: Record<string, unknown> }) {
       }}
     >
       {entries.map(([k, v]) => (
-        <div
-          key={k}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(140px, auto) 1fr',
-            gap: 12,
-            padding: '4px 0',
-            borderTop: '1px solid var(--hairline-color-soft)',
-            alignItems: 'baseline',
-          }}
-        >
-          <span className="ink-60" style={{ fontSize: 11 }}>
-            {k}
-          </span>
-          <span style={{ wordBreak: 'break-word', color: 'var(--midnight)' }}>
-            {renderValue(v)}
-          </span>
-        </div>
+        <ExtractionRow key={k} field={k} value={v} />
       ))}
+    </div>
+  );
+}
+
+function ExtractionRow({ field, value }: { field: string; value: unknown }) {
+  const [copied, setCopied] = useState(false);
+  const display = renderValue(value);
+  const onCopy = async () => {
+    if (!navigator?.clipboard?.writeText) {
+      toast.error('Clipboard unavailable');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(display);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      toast.success(`Copied ${field}`);
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+  const Icon = copied ? CheckIcon : CopyIcon;
+  return (
+    <div
+      className="group/row"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(140px, auto) 1fr auto',
+        gap: 12,
+        padding: '4px 0',
+        borderTop: '1px solid var(--hairline-color-soft)',
+        alignItems: 'baseline',
+      }}
+    >
+      <span className="ink-60" style={{ fontSize: 11 }}>
+        {field}
+      </span>
+      <span style={{ wordBreak: 'break-word', color: 'var(--midnight)' }}>{display}</span>
+      <button
+        type="button"
+        onClick={onCopy}
+        aria-label={copied ? 'Copied' : `Copy ${field}`}
+        title={copied ? 'Copied' : `Copy ${field}`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 22,
+          height: 22,
+          background: 'transparent',
+          border: 0,
+          borderRadius: 4,
+          cursor: 'pointer',
+          color: 'var(--midnight)',
+          opacity: 0.4,
+          transition: 'opacity 120ms ease, background-color 120ms ease',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.opacity = '1';
+          e.currentTarget.style.backgroundColor = 'color-mix(in oklab, var(--ink) 8%, transparent)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.opacity = '0.4';
+          e.currentTarget.style.backgroundColor = 'transparent';
+        }}
+      >
+        <Icon width={12} height={12} />
+      </button>
     </div>
   );
 }

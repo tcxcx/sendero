@@ -104,7 +104,7 @@ export function ChannelSetupWizard(props: WizardShellProps) {
         width: '100%',
       }}
     >
-      <Crumb trail={['Channels', channelName, 'Connect']} />
+      <Crumb trail={[channelName, 'Connect']} />
 
       <div
         style={{

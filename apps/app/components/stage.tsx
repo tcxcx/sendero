@@ -25,9 +25,9 @@ export function Stage() {
   const selectedOfferId = useSendero(s => s.selectedOfferId);
 
   return (
-    <div className="col" style={{ background: 'var(--bg)' }}>
+    <div className="col" style={{ background: 'transparent' }}>
       <div className="col-body">
-        <div className="stage">
+        <div className="stage pl-1 pr-3 mr-4">
           <StepRail />
           <ErrorBanner />
 
@@ -57,18 +57,6 @@ export function Stage() {
           <SettlePanel />
 
           <HotelsCard />
-
-          <div
-            style={{
-              fontFamily: 'var(--font-sans)',
-              fontSize: 12,
-              color: 'var(--text-faint)',
-              textAlign: 'center',
-              padding: '16px 0',
-            }}
-          >
-            Settled on Arc · Circle CCTP v2
-          </div>
         </div>
       </div>
     </div>

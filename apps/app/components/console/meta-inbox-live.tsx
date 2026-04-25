@@ -1,31 +1,57 @@
 'use client';
 
 /**
- * MetaInboxLive — client wrapper around MetaInbox that wires the
- * composer to real APIs.
+ * MetaInboxLive — client wrapper around MetaInbox.
  *
- *   - Internal mode (no scopedTripId): @ai-sdk/react's `useChat` pointed
- *     at /api/chat. The agent reply streams back. Messages are mapped
- *     into ConversationEntry shape so MetaInbox can render them as
- *     op/ai/tool bubbles.
+ * Two modes routed by `?tripId=`:
  *
- *   - Scoped mode (scopedTripId): operator reply posts to
- *     /api/inbox/[tripId]/reply, optimistically appends the message
- *     to the rendered conversation, then router.refresh()'s so the
- *     server-side event log is the source of truth on the next render.
+ *   - Internal (no scopedTripId): operator chats with Sendero AI via
+ *     `useChat` → `/api/chat`. We render through the AI Elements stack
+ *     (Conversation / Message / Tool / Reasoning / MessageResponse) —
+ *     same render path the working `/dashboard/agent-chat` uses, so
+ *     streaming text + tool calls + reasoning all surface live.
  *
- * The conversation prop from the page is treated as the initial
- * server-rendered baseline; live messages stack on top.
+ *   - Channel (scopedTripId set): operator messages relay to the
+ *     traveler over the trip's primary channel via
+ *     `/api/inbox/[tripId]/reply`. Rendered as the existing customer /
+ *     operator bubbles (server log is the source of truth on refresh).
+ *
+ * Tool calls coming back from useChat are also pushed into the
+ * workflow store (`useSendero.logEvent`) so the right-column
+ * WorkflowLog ticks live as the agent runs — same component the `/`
+ * shell uses.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+
+import { useRouter } from 'next/navigation';
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import { useRouter } from 'next/navigation';
+import { Maximize2, Minimize2 } from 'lucide-react';
+
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+import { Persona, type PersonaState } from '@/components/ai-elements/persona';
+import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning';
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from '@/components/ai-elements/tool';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { useChatStoreSync } from '@/components/use-chat-store-sync';
+import { useSendero } from '@/components/store';
 
 import { asChannelKey, type ChannelKey } from './channels';
-import { type ConversationEntry, type LiveMeterEvent, MetaInbox } from './meta-inbox';
+import { DemoConversation, type DemoMessage, runDemoTripScript } from './demo-trip';
+import { type ComposerMode, type ConversationEntry, MetaInbox } from './meta-inbox';
 import type { TripRowData } from './trip-rail';
 
 interface MetaInboxLiveProps {
@@ -46,80 +72,158 @@ export function MetaInboxLive({
   pendingBooking,
 }: MetaInboxLiveProps) {
   const router = useRouter();
-  const isInternal = !scopedTripId;
-
-  // Resolve the focused trip's channel for scoped mode.
   const focusedChannel: ChannelKey = scopedTripId
     ? asChannelKey(trips.find(t => t.id === scopedTripId)?.channel)
     : 'internal';
 
-  // Internal mode: live agent stream. Body callback so the trip
-  // scope flows on every turn — `/api/chat` records it on the
-  // MeterEvent metadata, and `/api/meter/stream` filters by it so the
-  // NanopayPanel reads as "Trip cost" inside `/dashboard/inbox/[id]`.
-  const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({
-      api: '/api/chat',
-      body: () => ({
-        channel: 'web' as const,
-        tripId: scopedTripId ?? undefined,
-      }),
-    }),
-  });
+  // Composer mode. Unscoped is locked to 'internal'; scoped defaults to
+  // 'channel' (replies go to the traveler) but the operator can flip to
+  // 'internal' to take a private aside with Sendero AI without
+  // interrupting the autonomous customer conversation.
+  const [composerMode, setComposerMode] = useState<ComposerMode>(
+    scopedTripId ? 'channel' : 'internal'
+  );
+  // Operator can pop the SENDERO AI conversation into a full-screen dialog
+  // (same component, same useChat instance, just a wider canvas).
+  const [expanded, setExpanded] = useState(false);
 
-  // Server-confirmed meter events. Subscribed in both unscoped console
-  // and scoped trip mode — the SSE filter (?tripId=…) narrows the
-  // stream when scoped so we only see events for the focused trip.
-  const [meterEvents, setMeterEvents] = useState<LiveMeterEvent[]>([]);
+  // Scripted "demo trip" — autonomous customer↔agent simulation. Activated
+  // by typing `/demo trip` in the SENDERO AI composer. See demo-trip.tsx
+  // for the full script + WhatsApp-style rendering.
+  const [demoActive, setDemoActive] = useState(false);
+  const [demoMessages, setDemoMessages] = useState<DemoMessage[]>([]);
+
+  // If the route changes scope, reset the default sensibly.
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (scopedTripId) params.set('tripId', scopedTripId);
-    const url = `/api/meter/stream${params.toString() ? `?${params.toString()}` : ''}`;
-    const es = new EventSource(url);
-    const onMeter = (e: MessageEvent) => {
-      try {
-        const evt = JSON.parse(e.data) as LiveMeterEvent;
-        setMeterEvents(prev => {
-          // Idempotent: pg_notify can deliver same id twice if a turn
-          // is retried (see meter idempotencyKey contract).
-          if (prev.some(r => r.id === evt.id)) return prev;
-          // Keep the last 60 — enough for any session, bounded for
-          // memory.
-          const next = [...prev, evt];
-          return next.length > 60 ? next.slice(-60) : next;
-        });
-      } catch {
-        /* malformed payload */
-      }
-    };
-    es.addEventListener('meter', onMeter as EventListener);
-    return () => {
-      es.removeEventListener('meter', onMeter as EventListener);
-      es.close();
-      // Reset on scope change so a stale list doesn't bleed across
-      // trips when the operator navigates from one inbox to another.
-      setMeterEvents([]);
-    };
+    setComposerMode(scopedTripId ? 'channel' : 'internal');
   }, [scopedTripId]);
 
-  // Scoped mode: optimistic operator messages awaiting the next refresh.
+  // Stable client-side chat session id. Generated once per
+  // MetaInboxLive mount and threaded into /api/chat so the server
+  // upserts a `ChatSession` row + appends every UIMessage as a
+  // `ChatMessage`. Lets the CHAT MODE tab list past sessions and
+  // re-view them later.
+  const [chatSessionId] = useState(
+    () => `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  );
+
+  // Memoize the transport so re-renders don't reset useChat state.
+  // The body callback closes over scopedTripId so we re-create when
+  // the trip scope changes.
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/chat',
+        body: () => ({
+          channel: 'web' as const,
+          tripId: scopedTripId ?? undefined,
+          chatSessionId,
+        }),
+      }),
+    [scopedTripId, chatSessionId]
+  );
+
+  // useChat drives the internal-mode AI Elements stream. It mounts
+  // regardless of mode so the agent remains running in the background
+  // even while the operator is typing into the channel composer.
+  const { messages, sendMessage, status, error, stop } = useChat({
+    transport,
+    onError: err => {
+      console.error('[meta-inbox-live] useChat onError:', err);
+    },
+    onFinish: ({ message }) => {
+      console.log(
+        '[meta-inbox-live] useChat onFinish:',
+        message.id,
+        'parts=',
+        message.parts?.length ?? 0
+      );
+      // Tell the CHAT MODE rail to refetch immediately. Sub-100ms in
+      // the same tab — the SSE round-trip from /api/chats/stream is
+      // the cross-tab fallback.
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          const bc = new BroadcastChannel('sendero.chat-session.updated');
+          bc.postMessage({ chatSessionId, at: new Date().toISOString() });
+          bc.close();
+        } catch {
+          /* unsupported — SSE picks it up */
+        }
+      }
+    },
+  });
+
+  // Mirror status into a ref so the demo-trip runner can poll the
+  // current value without subscribing to re-renders.
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Diagnostic logs — surface chat status, message count, and any
+  // streaming error in the console so we can see at a glance whether
+  // the agent reply is in flight, failed, or simply not arriving.
+  useEffect(() => {
+    console.log('[meta-inbox-live] status:', status, 'messages:', messages.length);
+  }, [status, messages.length]);
+  useEffect(() => {
+    if (error) console.error('[meta-inbox-live] useChat error state:', error);
+  }, [error]);
+
+  // Pump every tool call into the SenderoApp store so:
+  //   · Stage renders the right artifact (offer cards / hold card /
+  //     hotels / settlement panel) — same flow the `/` shell does.
+  //   · WorkflowLog ticks active → done with proper labels.
+  //   · FooterRail balances refresh after treasury-mutating tools.
+  // Shared with ChatCol via `useChatStoreSync` so behavior never
+  // drifts across the two surfaces.
+  useChatStoreSync(messages);
+
+  // ── scoped (channel) mode ─────────────────────────────────────────
   const [optimistic, setOptimistic] = useState<ConversationEntry[]>([]);
   const [posting, setPosting] = useState(false);
 
-  const conversation = useMemo<ConversationEntry[]>(() => {
-    if (isInternal) {
-      const live = aiMessagesToEntries(messages);
-      // Hide the seed system intro once the operator starts a real turn.
-      return live.length > 0 ? live : initialConversation;
-    }
-    return [...initialConversation, ...optimistic];
-  }, [isInternal, messages, initialConversation, optimistic]);
+  const scopedConversation = useMemo<ConversationEntry[]>(
+    () => [...initialConversation, ...optimistic],
+    [initialConversation, optimistic]
+  );
 
   const handleSubmit = async (text: string) => {
-    if (isInternal) {
+    console.log('[meta-inbox-live] submit:', {
+      mode: composerMode,
+      scopedTripId,
+      focusedChannel,
+      length: text.length,
+    });
+
+    // ── /demo trip slash command — autonomous REAL-agent run ─────────
+    // Drives the existing useChat → /api/agent/chat pipeline through a
+    // queue of customer prompts. Real Duffel sandbox + real Arc-Testnet
+    // settlement + real NFT mints. See demo-trip.tsx.
+    const trimmed = text.trim().toLowerCase();
+    if (trimmed === '/demo trip' || trimmed === '/demo_trip' || trimmed.startsWith('/demo ')) {
+      setDemoActive(true);
+      setDemoMessages([]);
+      void runDemoTripScript({
+        sendMessage: msg => sendMessage(msg),
+        getStatus: () => statusRef.current,
+        onProgress: (current, total) => console.log(`[demo-trip] turn ${current}/${total}`),
+      })
+        .catch(err => console.error('[demo-trip] script error:', err))
+        .finally(() => setDemoActive(false));
+      return;
+    }
+
+    // Internal turns always go through useChat so the AI Elements
+    // stream renders the agent reply inline. Works even when scoped to
+    // a trip — the message is private; only the operator sees it.
+    if (composerMode === 'internal') {
       sendMessage({ text });
       return;
     }
+    // Channel turns relay to the traveler over the trip's primary
+    // channel. Optimistically append, fetch reply, then re-fetch the
+    // canonical event log on success.
     if (!scopedTripId) return;
     const id = `optim_${Date.now().toString(36)}`;
     const stamp = new Date().toTimeString().slice(0, 5);
@@ -136,8 +240,6 @@ export function MetaInboxLive({
         }),
       });
       if (res.ok) {
-        // Server now has the canonical event; refetch the page so the
-        // server-rendered conversation absorbs the optimistic entry.
         router.refresh();
         setOptimistic([]);
       }
@@ -148,61 +250,340 @@ export function MetaInboxLive({
 
   const isStreaming = status === 'streaming' || status === 'submitted';
 
-  return (
-    <MetaInbox
-      trips={trips}
-      scopedTripId={scopedTripId}
-      conversation={conversation}
-      traveler={traveler}
-      holdExpires={holdExpires}
-      pendingBooking={pendingBooking}
-      meterEvents={meterEvents}
-      onSubmit={handleSubmit}
-      disabled={posting || isStreaming}
+  // ── Persona state mapping (Rive avatar) ────────────────────────────
+  // useChat status → Persona animation. The Persona mounts ONCE in
+  // the sticky header above the conversation; per-message Personas
+  // would each spin up a Rive WebGL2 context (~190KB + a GPU
+  // context) which is wasteful. Single instance, status-driven.
+  const personaState: PersonaState = (() => {
+    if (status === 'submitted') return 'thinking';
+    if (status === 'streaming') return 'speaking';
+    if (messages.length === 0) return 'asleep';
+    return 'idle';
+  })();
+  const personaLabel = (() => {
+    if (status === 'submitted') return 'Thinking — running tools';
+    if (status === 'streaming') return 'Streaming response';
+    if (messages.length === 0) return 'Tap a prompt to wake the agent';
+    return 'Ready';
+  })();
+
+  // ── internal-mode AI Elements slot ─────────────────────────────────
+  // Render the AI Elements conversation when the active composer mode
+  // is internal. In channel mode we fall back to MetaInbox's built-in
+  // ConversationEntry render so the operator sees the trip log.
+  // The same body renders in two contexts: the narrow inline column
+  // (380px in MetaInbox.cols) and a full-screen dialog the operator
+  // toggles via the expand button on the SENDERO AI header.
+  const renderHeader = (variant: 'inline' | 'dialog') => (
+    <header
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 4px',
+        marginBottom: 6,
+        flexShrink: 0,
+      }}
+    >
+      <Persona
+        className="size-14 shrink-0"
+        state={personaState}
+        variant="halo"
+        color="var(--ink)"
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+        <div
+          className="t-mono"
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: 'var(--ink)',
+            fontWeight: 600,
+          }}
+        >
+          Sendero AI
+        </div>
+        <div
+          className="t-mono"
+          style={{
+            fontSize: 11,
+            color: 'var(--text-dim)',
+          }}
+        >
+          {personaLabel}
+        </div>
+      </div>
+    </header>
+  );
+
+  const conversationBody = (
+    <Conversation className="flex-1">
+      <ConversationContent>
+        {messages.length === 0 ? (
+          <div
+            style={{
+              padding: 24,
+              textAlign: 'center',
+              color: 'rgba(31,42,68,0.55)',
+            }}
+          >
+            <div className="t-h2" style={{ fontSize: 22, marginBottom: 8 }}>
+              Ask Sendero anything
+            </div>
+            <div
+              className="t-body ink-70"
+              style={{ fontSize: 13, maxWidth: '42ch', margin: '0 auto' }}
+            >
+              Run a report, change policy, or investigate a trip. None of this reaches a customer.
+            </div>
+          </div>
+        ) : (
+          messages.map(m => (
+            <Message key={m.id} from={m.role}>
+              <UIMessageBody message={m} />
+            </Message>
+          ))
+        )}
+        {error ? (
+          <div
+            role="alert"
+            style={{
+              margin: '8px auto',
+              maxWidth: '72ch',
+              padding: '10px 14px',
+              background: 'rgba(199,89,77,0.08)',
+              border: '1px solid var(--vermillion)',
+              borderRadius: 8,
+              color: 'var(--vermillion)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12,
+              lineHeight: 1.55,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
+            <strong style={{ fontWeight: 600 }}>chat error:</strong>
+            <span style={{ flex: 1 }}>{String(error.message ?? error)}</span>
+            <button
+              type="button"
+              onClick={stop}
+              style={{
+                padding: '3px 8px',
+                background: 'var(--vermillion)',
+                color: '#fdfbf7',
+                border: 0,
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontSize: 10,
+              }}
+            >
+              stop
+            </button>
+          </div>
+        ) : null}
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
+  );
+
+  // Demo-trip slot — when /demo trip is active we replace the AI Elements
+  // Demo banner sits ABOVE the AI Elements stream (does NOT replace it).
+  // The real conversation keeps rendering — operator sees customer prompts,
+  // agent text, tool blocks, reasoning. The banner just signals "demo run
+  // in progress" + lets the operator bail out early.
+  const demoBanner = demoActive ? (
+    <DemoConversation
+      messages={demoMessages}
+      onReset={() => {
+        setDemoActive(false);
+        setDemoMessages([]);
+        useSendero.getState().resetBooking();
+        useSendero.getState().clearLog();
+      }}
     />
+  ) : null;
+
+  // Inline slot — collapses to nothing when expanded so the conversation
+  // doesn't render twice (avoids two stick-to-bottom contexts fighting).
+  const conversationSlot =
+    composerMode === 'internal' ? (
+      expanded ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            height: '100%',
+            color: 'var(--text-dim)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+          }}
+        >
+          <span>Sendero AI · expanded</span>
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="sd-pill sd-pill-outline"
+            style={{ padding: '6px 12px', fontSize: 11 }}
+          >
+            ↩ Collapse
+          </button>
+        </div>
+      ) : (
+        <>
+          {demoBanner}
+          {renderHeader('inline')}
+          {conversationBody}
+        </>
+      )
+    ) : undefined;
+
+  return (
+    <>
+      <MetaInbox
+        trips={trips}
+        scopedTripId={scopedTripId}
+        conversation={scopedConversation}
+        conversationSlot={conversationSlot}
+        traveler={traveler}
+        holdExpires={holdExpires}
+        pendingBooking={pendingBooking}
+        composerMode={composerMode}
+        onComposerModeChange={setComposerMode}
+        onSubmit={handleSubmit}
+        disabled={posting || isStreaming}
+      />
+
+      {/* Full-screen Sendero AI conversation. Shares the same useChat
+          state — sending from either canvas hits the same backend. */}
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent
+          className="flex flex-col gap-3 p-6"
+          style={{
+            width: 'min(100vw, 1280px)',
+            maxWidth: 'calc(100vw - 48px)',
+            height: 'calc(100vh - 64px)',
+            maxHeight: 'calc(100vh - 64px)',
+            background: 'var(--surface-base, #fdfbf7)',
+            borderRadius: 12,
+            overflow: 'hidden',
+          }}
+        >
+          {/* Visually-hidden DialogTitle keeps Radix's a11y contract
+              (screen readers announce the dialog name); the visible
+              header below replaces it for sighted users. */}
+          <DialogTitle className="sr-only">Sendero AI conversation</DialogTitle>
+          {renderHeader('dialog')}
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+              overflow: 'hidden',
+            }}
+          >
+            {conversationBody}
+          </div>
+          {/* Composer is in the parent app shell. The dialog is a wider
+              read+monitor canvas; sending still happens from the inbox
+              composer below. We could mount a duplicate composer here
+              later, but two composers wired to the same useChat would
+              just race for the same input string. */}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
-// ── useChat → ConversationEntry mapping ────────────────────────
+// ── UIMessage → AI Elements parts ────────────────────────────────────
 
-interface ToolPart {
-  type: string;
+interface ToolPartShape {
+  type?: string;
+  text?: string;
+  state?: string;
+  input?: unknown;
+  output?: unknown;
+  errorText?: string;
   toolCallId?: string;
   toolName?: string;
-  input?: unknown;
-  state?: string;
+  toolInvocation?: {
+    toolCallId?: string;
+    toolName?: string;
+    state?: string;
+    input?: unknown;
+    result?: unknown;
+  };
 }
 
-function aiMessagesToEntries(messages: UIMessage[]): ConversationEntry[] {
-  const out: ConversationEntry[] = [];
-  for (const m of messages) {
-    const role: ConversationEntry['role'] = m.role === 'user' ? 'op' : 'ai';
-    const parts = (m.parts ?? []) as Array<{ type: string; text?: string } & ToolPart>;
-    for (const part of parts) {
-      if (part.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
-        out.push({
-          id: `${m.id}_text_${out.length}`,
-          role,
-          body: part.text,
-        });
-        continue;
-      }
-      if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-        const toolName = part.toolName ?? part.type.replace('tool-', '');
-        const input = part.input;
-        out.push({
-          id: `${m.id}_tool_${part.toolCallId ?? out.length}`,
-          role: 'tool',
-          toolName,
-          toolArgs:
-            typeof input === 'string'
-              ? input
-              : input && typeof input === 'object'
-                ? JSON.stringify(input).slice(0, 80)
-                : undefined,
-        });
-      }
-    }
-  }
-  return out;
+function UIMessageBody({ message }: { message: UIMessage }) {
+  const parts = (message.parts ?? []) as Array<ToolPartShape>;
+  return (
+    <MessageContent>
+      {parts.map((part, i) => {
+        const key = `${message.id}-${i}`;
+        const t = part.type ?? '';
+
+        if (t === 'text' && typeof part.text === 'string' && part.text.length > 0) {
+          return <MessageResponse key={key}>{part.text}</MessageResponse>;
+        }
+
+        if (t === 'reasoning' && typeof part.text === 'string' && part.text.length > 0) {
+          return (
+            <Reasoning key={key} className="w-full">
+              <ReasoningTrigger />
+              <ReasoningContent>{part.text}</ReasoningContent>
+            </Reasoning>
+          );
+        }
+
+        if (t.startsWith('tool-') || t === 'dynamic-tool') {
+          const toolName =
+            part.toolName ??
+            part.toolInvocation?.toolName ??
+            (t.startsWith('tool-') ? t.slice('tool-'.length) : 'tool');
+          const state = part.state ?? part.toolInvocation?.state ?? 'input-streaming';
+          const input = (part.input ?? part.toolInvocation?.input ?? {}) as Record<string, unknown>;
+          const output = part.output ?? part.toolInvocation?.result;
+          const aiElementState =
+            state === 'output-available' || state === 'result'
+              ? 'output-available'
+              : state === 'output-error'
+                ? 'output-error'
+                : state === 'input-available'
+                  ? 'input-available'
+                  : 'input-streaming';
+          // Tool block defaults CLOSED. While running (input-streaming
+          // or input-available), the header shows the pulsing ink
+          // north-star — that's the only motion the operator needs.
+          // The block stays collapsed even after the result lands;
+          // operators can open any tool to inspect inputs/outputs.
+          return (
+            <Tool key={key}>
+              <ToolHeader type={`tool-${toolName}` as `tool-${string}`} state={aiElementState} />
+              <ToolContent>
+                <ToolInput input={input} />
+                {(state === 'output-available' || state === 'result') && (
+                  <ToolOutput output={output} errorText={undefined} />
+                )}
+                {state === 'output-error' && (
+                  <ToolOutput output={undefined} errorText={part.errorText ?? 'Tool failed'} />
+                )}
+              </ToolContent>
+            </Tool>
+          );
+        }
+
+        return null;
+      })}
+    </MessageContent>
+  );
 }

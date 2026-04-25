@@ -15,12 +15,12 @@ import { Check, Loader2 } from 'lucide-react';
 
 import type { WizardPaneProps, WizardPaneRenderer } from './types';
 
-const COUNTRIES = [
-  { iso: 'US', label: 'United States' },
-  { iso: 'BR', label: 'Brazil' },
-  { iso: 'MX', label: 'Mexico' },
-  { iso: 'GB', label: 'United Kingdom' },
-];
+// Sendero provisions only US numbers via Kapso's pool. Non-US countries
+// require custom Twilio credentials and the embedded-signup flow falls
+// back to manual SMS verification (which the operator can't satisfy
+// because Sendero owns the SIM). Locking to US keeps the flow fully
+// automated end-to-end.
+const COUNTRIES = [{ iso: 'US', label: 'United States' }];
 
 const TEMPLATE_DEFS = [
   {

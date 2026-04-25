@@ -1247,24 +1247,32 @@ a[role="button"]:active,
   letter-spacing: 0;
 }
 
-/* Horizontal step rail — pill cells on parchment (DESIGN.md §19). */
+/* Horizontal step rail — pill cells on parchment (DESIGN.md §19).
+   Sized tight so the six phases (Intake / Search / Review / Hold /
+   Pay / Settle) fit in a single row inside the console Stage column. */
 .step-rail {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
+  gap: 4px;
+  padding: 4px 0;
   background: transparent;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.step-rail::-webkit-scrollbar {
+  display: none;
 }
 .step-cell {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
+  gap: 5px;
+  padding: 3px 7px;
   border-radius: 999px;
   transition: var(--surface-transition);
   min-width: 0;
   background: transparent;
+  flex-shrink: 0;
 }
 .step-cell.active {
   background: var(--tint-vermillion-soft);
@@ -1307,7 +1315,7 @@ a[role="button"]:active,
 }
 .step-name {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0;
   color: var(--text-dim);
@@ -2806,5 +2814,63 @@ hr.rule {
   .app-loading-spinner__bar {
     animation: none;
     opacity: 0.6;
+  }
+}
+
+/* Tool-block running pulse — used by ai-elements/tool.tsx's RunningStar
+   while a tool call is in flight. Ink-tinted opacity bob + the
+   smallest visible scale nudge so the operator feels the tool
+   working without the chrome of a spinner. */
+@keyframes tool-running {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+.animate-tool-running {
+  animation: tool-running 1.2s ease-in-out infinite;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-tool-running {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* WorkflowLog "▣ RUN · STREAM" tag — pulses ink ⇆ darker-ink when a
+   tool / stream / nanopayment workflow is active. Used by
+   workflow-log.tsx whenever any event is bullet='active'. */
+@keyframes wf-tag-pulse {
+  0%,
+  100% {
+    background: var(--ink);
+    color: #fdfbf7;
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--ink) 40%, transparent);
+  }
+  50% {
+    background: color-mix(in oklab, var(--ink) 80%, #000 20%);
+    color: #fdfbf7;
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--ink) 20%, transparent);
+  }
+}
+.wf-tag-running {
+  background: var(--ink);
+  color: #fdfbf7;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  animation: wf-tag-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wf-tag-running {
+    animation: none;
   }
 }

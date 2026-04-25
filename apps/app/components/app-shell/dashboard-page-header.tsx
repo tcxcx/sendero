@@ -136,7 +136,7 @@ export function DashboardPageHeader() {
   if (!copy) return null;
 
   return (
-    <div className="px-6 pt-2">
+    <div className="px-6 pt-0">
       <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-normal">{copy.title}</h1>

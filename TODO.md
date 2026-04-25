@@ -621,6 +621,35 @@ none block the submission demo.
 
 ### P2 — hardening, schedule when convenient
 
+- [ ] **Console NanopayPanel: per-tool MeterEvent granularity** —
+  `/api/chat`, `/api/agent/chat`, and `runAgentTurn` all write ONE
+  `chat_reply` row per turn. The console's NanopayWorkflowsPanel
+  surfaces per-tool ledger rows from the `useChat` stream as a
+  visual proxy (heuristic prices via `PRICE_HINT_USD` in
+  `apps/app/components/console/meta-inbox.tsx`). For truly
+  authoritative per-tool prices, write one MeterEvent per
+  `finish.toolCalls[]` step in `@sendero/billing/meter` +
+  `runAgentTurn`. Schema already supports it via `toolName`. After
+  this lands, drop `PRICE_HINT_USD` and source the ledger directly
+  from `meterEvents`.
+
+- [ ] **`/api/chat` flat $0.001 placeholder price** —
+  `apps/app/app/api/chat/route.ts::onFinish` writes
+  `priceMicroUsdc: 1_000n` per turn. Should match `/api/agent/chat`:
+  resolve `segment = await resolveSegment(tenantId)`, call
+  `priceFor({ action: 'chat_reply', segment, overrides: buildPlanOverrides(tier) })`,
+  use the resolved micro-USDC. Also wire `preflight()` for cap
+  enforcement so console turns can't blow through the same plan
+  cap dispatch respects.
+
+- [ ] **`/api/meter/stream` EventSource cookie-only auth** —
+  `apps/app/app/api/meter/stream/route.ts` reads the Clerk session
+  from cookies (browser EventSource sends them automatically). Fine
+  for `/dashboard/*` use, but any non-browser consumer (CLI, Node
+  test harness) needs a cookie jar. Document or accept an API key
+  via query param as a fallback if we ever surface this stream
+  outside the dashboard.
+
 - [ ] **Share-image token has no TTL** —
   `apps/app/lib/og/share-url.ts`. Once signed, valid forever. JSDoc
   explicitly accepts this for unfurl-bot caching. Add a `signedAt`

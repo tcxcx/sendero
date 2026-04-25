@@ -202,7 +202,7 @@ export default async function CancelTripPage({ params, searchParams }: PageProps
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Workspace', 'Trips', view.shortId, 'Cancel']} />
+      <Crumb trail={['Trips', view.shortId, 'Cancel']} />
 
       <div style={{ maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div>
