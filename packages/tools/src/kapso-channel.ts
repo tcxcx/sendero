@@ -190,14 +190,22 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
           countryIsos: [input.countryIso.toUpperCase()],
         });
         // Stamp the pending row so the wizard can resume from a refresh.
+        // The webhook secret is project-wide (set via
+        // `bun scripts/register-kapso-webhook.ts`), so we stamp the env
+        // value here for parity with the inbound handler. The column
+        // is NOT NULL on the schema; falling back to a marker string
+        // when the env isn't populated yet keeps reservations working
+        // in dev.
         const previewE164 = input.preferredE164 ?? `+${input.countryIso.toLowerCase()}-pending`;
+        const webhookSecret =
+          env.kapsoWebhookSecret() ?? 'configure-via-scripts/register-kapso-webhook.ts';
         await prisma.whatsAppInstall.upsert({
           where: { tenantId: input.tenantId },
           update: {
             kapsoCustomerId: onboarding.customer.id,
             displayPhoneNumber: previewE164,
             status: 'pending',
-            webhookSecret: 'pending-webhook-secret',
+            webhookSecret,
             metadata: {
               setupLinkUrl: onboarding.setupLink.url,
               setupLinkExpiresAt: onboarding.setupLink.expires_at,
@@ -209,7 +217,7 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
             kapsoCustomerId: onboarding.customer.id,
             displayPhoneNumber: previewE164,
             status: 'pending',
-            webhookSecret: 'pending-webhook-secret',
+            webhookSecret,
             metadata: {
               setupLinkUrl: onboarding.setupLink.url,
               setupLinkExpiresAt: onboarding.setupLink.expires_at,

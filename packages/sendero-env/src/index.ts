@@ -113,6 +113,13 @@ export const env = {
   /** Public URL Kapso posts BYO WhatsApp events to. Override in dev (ngrok). */
   kapsoWebhookBaseUrl: () =>
     process.env.KAPSO_WEBHOOK_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || null,
+  /**
+   * Project-scope webhook secret returned by Kapso when we register the
+   * Sendero webhook. One value across all tenants — the Sendero project
+   * is the unit Kapso signs against, not per-customer. Populate via
+   * `bun scripts/register-kapso-webhook.ts` (one-shot).
+   */
+  kapsoWebhookSecret: () => process.env.KAPSO_WEBHOOK_SECRET || null,
 
   slackSigningSecret: () => process.env.SLACK_SIGNING_SECRET || null,
   slackClientId: () => process.env.SLACK_CLIENT_ID || null,
