@@ -98,8 +98,6 @@ contract SenderoGuestEscrow is
     // ERC-7201 namespaced storage
     // ------------------------------------------------------------------
 
-    /// @custom:storage-location erc7201:sendero.storage.GuestEscrow
-    ///
     /// Storage upgrade history:
     ///   v2.0.0 — fields up to and including `bookings`.
     ///   v3.0.0 — appended `failedClaimAttempts` + `claimLockoutUntil`
@@ -107,6 +105,12 @@ contract SenderoGuestEscrow is
     ///            append makes this upgrade-safe (see
     ///            test_storage_append_legacyTripsHaveZeroLockoutState
     ///            and the storage-layout regression gate).
+    ///
+    /// OZ upgrades-core requires the storage-location annotation to be
+    /// the LAST natspec line above the struct — placing it earlier and
+    /// following with a description is parsed as multiple annotation
+    /// arguments and ValidateUpgrade fails.
+    /// @custom:storage-location erc7201:sendero.storage.GuestEscrow
     struct GuestEscrowStorage {
         IERC20                     usdc;      // Circle USDC on Arc
         address                    operator;  // Sendero backend signer
