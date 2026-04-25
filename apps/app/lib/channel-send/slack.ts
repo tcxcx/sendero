@@ -20,7 +20,10 @@
 import type { SlackInstall } from '@prisma/client';
 import type { KnownBlock } from '@slack/web-api';
 import { createSlackClient, sendBlocks } from '@sendero/slack';
-import { renderForSlack } from '@/lib/channel-render';
+// renderForSlack pulls @sendero/slack which loads @slack/web-api (node:fs).
+// Import direct from the per-channel module to keep the client bundle
+// safe — never via the @/lib/channel-render barrel.
+import { renderForSlack } from '@/lib/channel-render/channels/slack';
 import type { ChannelMessage } from '@/lib/channel-render';
 
 export interface SendSlackArgs {

@@ -1,12 +1,17 @@
 /**
- * @sendero apps/app channel-render package
+ * @sendero apps/app channel-render package — CLIENT-SAFE entrypoint.
  *
- * Single source of truth for cross-channel message rendering.
- * Operator console (web) consumes via `renderForOperator`; traveler-
- * side WhatsApp / Slack / web / email each consume via their own
- * renderer in `channels/`. All renderers receive the same canonical
- * `ChannelMessage` so the operator preview and the traveler's actual
- * native channel UI render the same content.
+ * Re-exports only the canonical types + the operator (web) renderer.
+ * Web/operator client bundles can import this without dragging in
+ * Node-only packages.
+ *
+ * Server-side channel renderers live in `channels/` and import server-
+ * only deps (e.g. `@sendero/slack` → `@slack/web-api` → `node:fs`).
+ * Import them DIRECTLY from `./channels/{slack|whatsapp|web}` in
+ * server-side code (route handlers, channel-send orchestrators, edge/
+ * webhook routes). NEVER re-export them from this index — doing so
+ * leaks Node-only modules into the client bundle and crashes Next.js
+ * with `Cannot find module 'node:fs'`.
  */
 
 export type {
@@ -27,6 +32,9 @@ export type {
 } from './types';
 
 export { renderForOperator } from './operator';
-export { renderForWhatsApp } from './channels/whatsapp';
-export { renderForSlack } from './channels/slack';
-export { renderForWeb } from './channels/web';
+
+// Channel renderers intentionally NOT re-exported. Import them from
+// the per-channel module directly in server-only code:
+//   import { renderForSlack } from '@/lib/channel-render/channels/slack';
+//   import { renderForWhatsApp } from '@/lib/channel-render/channels/whatsapp';
+//   import { renderForWeb } from '@/lib/channel-render/channels/web';
