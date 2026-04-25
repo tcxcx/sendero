@@ -135,6 +135,26 @@ export const env = {
 
   // ── Invoicing (Phase 11b) ─────────────────────────────────────────
   invoiceSigningSecret: () => process.env.INVOICE_SIGNING_SECRET || null,
+
+  // ── Pinata IPFS (NFT stamps — image + manifest pinning) ──────────
+  // JWT is the full scoped-key bearer token from Pinata Console; SDK
+  // needs only this. API key is kept for log/UI display so ops can
+  // identify which scoped key is in use without printing the secret.
+  // Gateway override for paid plans (custom subdomain) — defaults to
+  // the public Pinata gateway.
+  pinataJwt: () => process.env.PINATA_JWT || null,
+  pinataApiKey: () => process.env.PINATA_API_KEY || null,
+  pinataGateway: () => process.env.PINATA_GATEWAY || 'gateway.pinata.cloud',
+
+  // ── App Kit · Unified Balance Kit (DCW outbound spends) ───────────
+  /**
+   * Hex private key for the Sendero delegate wallet that signs
+   * `kit.unifiedBalance.spend()` calls on a traveler's behalf.  When
+   * unset, `/api/transfer/spend` returns 503 with a "configure
+   * delegate" message.  In production this should resolve from a
+   * KMS-backed secret rather than an env var.
+   */
+  unifiedBalanceDelegateKey: () => process.env.SENDERO_UB_DELEGATE_PRIVATE_KEY || null,
 };
 
 export * from './require';
