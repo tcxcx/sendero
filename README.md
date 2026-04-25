@@ -441,6 +441,20 @@ Further tools we can add include **eSIM sales** (QR install in chat), **travel i
 
 MOAT: The more Sendero can absorb “my flight changed, now what?” the more defensible it becomes.
 
+## Roadmap — kernel ideas (post-validation)
+
+> **Nothing below ships until we have initial traction or product validation with design partners.** These are kernels meant to change. See [`ROADMAP.md`](./ROADMAP.md) for the full doc — scaffold references, starter code blocks, audience + prerequisites + kill-criteria per kernel, and the design-partner discovery questions.
+
+Five tool kernels distilled from four Vercel reference templates ([call-summary](https://vercel.com/templates/other/call-summary-agent) · [slack-agent](https://vercel.com/templates/other/slack-agent-template) · [lead-agent](https://vercel.com/templates/other/lead-processing-agent) · [knowledge-agent](https://vercel.com/templates/template/chat-sdk-knowledge-agent)), each extending the existing `@sendero/tools` registry, MCP surface, OpenAPI spec, and x402 dispatch layer without rewriting any of them:
+
+1. **HITL Slack approvals** — `request_approval` + `evaluate_travel_policy` as workflow primitives, signed-envelope resume via existing Slack interactions route.
+2. **Disruption-recovery (IROPS) agent** — composes `cancel_booking` + `request_approval` + new `propose_rebook_options` for the 22:30 "your flight just cancelled" loop.
+3. **Inbound qualification + travel research** — schema-pinned triage (lead-agent style) + Exa web research; ship traveler-intake half before the GTM lift.
+4. **Docs-grounded chat without a vector store** — knowledge-agent pattern: `grep`/`find`/`cat` over a git-cloned snapshot inside Vercel Sandbox, smart-model routing, sandbox pool reused by Kernel 1.
+5. **Concierge call intelligence** — webhook → Vercel Sandbox transcript grep → structured action items + supplier commitments + objection scoring; Kernel 4's sandbox infra unlocks this.
+
+**Step 0 (cross-cutting prereq):** extract `assertFetchableUrl` + `fetchDocument` from `packages/tools/src/scan-document.ts` into `@sendero/tools/safe-fetch` — Kernels 1, 3, 4 all need it.
+
 ## Google Maps Platform travel intelligence
 
 Sendero uses Google Maps Platform as travel operations infrastructure, not just a visual layer. The new canonical travel tools live in `@sendero/tools` and are available to the AI SDK surfaces, MCP, and workflow runner:
