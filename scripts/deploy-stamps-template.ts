@@ -11,8 +11,12 @@
  *   - Pre-audited by Circle (no Sendero security surface).
  *   - Auto-routes through Circle Gas Station on the SCA treasury wallet
  *     (gas paid in fiat, not from the wallet's USDC balance).
- *   - One-call deploy, automatic Arcscan verification, and the contract
- *     becomes manageable from the Circle Console out of the box.
+ *   - One-call deploy + the contract becomes manageable from the
+ *     Circle Console out of the box. The deployed proxy is an EIP-1167
+ *     minimal clone of the verified TokenERC1155 impl — Arcscan
+ *     recognizes it via `proxy_type: "eip1167"` and surfaces the
+ *     impl's ABI on the proxy's "Read/Write Contract" tab. Run
+ *     `bun scripts/verify-deployments.ts` after deploy to audit.
  *
  * Prereq:
  *   - CIRCLE_API_KEY        (set)

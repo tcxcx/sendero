@@ -71,6 +71,7 @@ Live contract: `0xcc0fa83535675a856d773cfbc71232c3d7b71a03` (proxy) → `0xCCf28
 2. CIRCLE_TX_ID=<id> bun scripts/check-stamps-deploy.ts --watch  # poll until COMPLETE
 3. CIRCLE_CONTRACT_ID=<id> bun scripts/get-stamps-contract.ts    # read proxy address
 4. SENDERO_STAMPS_ADDRESS=<addr> bun scripts/register-stamps-event-monitor.ts  # 4 monitors
+5. bun scripts/verify-deployments.ts                              # audit Arcscan verification
 ```
 
 After step 4: register the receiver URL in Circle Console once per env. Circle Event Monitors fire to **all** webhook URLs registered project-wide:
@@ -86,6 +87,16 @@ Distinct from the existing `/api/webhooks/circle` (wallet balance sync) — that
 Env contract: `SENDERO_STAMPS_ADDRESS`, `SENDERO_STAMPS_CONTRACT_ID`, `SENDERO_STAMPS_DEPLOY_BLOCK`, `SENDERO_STAMPS_DEPLOY_TX` — write to `.env.local` (root + `apps/app`) AND push to Vercel Production + Preview + Development.
 
 ABI gotcha: thirdweb's `mintTo(address, uint256, string, uint256)` requires `tokenId == type(uint256).max` (auto-increment) OR an existing tokenId (`< nextTokenIdToMint`). Custom keccak tokenIds don't work — use sequential ids from the contract, idempotency from a Postgres `NftStamp` UNIQUE on `(kind, primaryKey)`.
+
+### Contract verification model (Arcscan / Blockscout)
+
+Every Sendero contract on Arc-Testnet is verified-equivalent — `bun scripts/verify-deployments.ts` audits all six in one shot and exits 1 on a real gap. Three verification shapes to know:
+
+- **Full-source contracts** (SenderoGuestEscrow proxy, ERC-8004 registries, thirdweb TokenERC1155 impl) → `is_verified: true` on Arcscan, source matches deployed bytecode.
+- **EIP-1167 minimal proxies** (the Circle SCP-deployed SenderoStamps proxy at `0xcc0f…1a03`) → `is_verified: false` is **expected and correct**. A minimal proxy is 45 bytes of bytecode that delegates every call to its impl; there is no source to verify. Arcscan auto-detects via `proxy_type: "eip1167"` + `implementations[0]` linking to the verified TokenERC1155 impl. The proxy's "Read/Write Contract" tab works through the impl's ABI. Treat as functionally verified.
+- **ERC1967 proxies** (GuestEscrow, ERC-8004 registries) → both proxy AND impl must be verified separately; `is_verified: true` + `proxy_type: "eip1967"` + linked impl.
+
+`scripts/verify-deployments.ts` encodes each contract's `expect` ('full-source' / 'eip1167-proxy' / 'erc1967-proxy') and pass/fails accordingly. Add new addresses there whenever a deploy lands so the audit stays comprehensive.
 
 ## API keys
 
