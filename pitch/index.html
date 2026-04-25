@@ -1,0 +1,1135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Sendero — The Travel Agent, Not The Software</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23EEDCC7'/%3E%3Ccircle cx='11' cy='17' r='5' fill='none' stroke='%23D65438' stroke-width='1.5'/%3E%3Ccircle cx='21' cy='17' r='5' fill='none' stroke='%23D65438' stroke-width='1.5'/%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,450;9..144,500;9..144,600&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="assets/boarding-pass-stamp.jpg">
+<link rel="preload" as="image" href="assets/passport-spread.png">
+<style>
+  :root {
+    --bg: #EEDCC7; --bg-2: #E8DFD2; --surface-card: #FDFBF7;
+    --ink: #1F2A44; --ink-80: rgba(31,42,68,0.80); --ink-60: rgba(31,42,68,0.60);
+    --ink-40: rgba(31,42,68,0.40); --ink-20: rgba(31,42,68,0.18);
+    --vermillion: #D65438; --vermillion-soft: #F4DDD4; --vermillion-medium: rgba(214,84,56,0.18);
+    --sea: #0F7C82; --sea-soft: rgba(15,124,130,0.10); --sand: #B6844E; --sand-soft: rgba(182,132,78,0.12);
+    --hairline-color: #D8C1A7; --line: rgba(31,42,68,0.10);
+    --shadow-xs: 0 1px 2px rgba(31,42,68,0.04);
+    --shadow-sm: 0 1px 2px rgba(31,42,68,0.04), 0 4px 12px -6px rgba(31,42,68,0.06);
+    --shadow-md: 0 1px 2px rgba(31,42,68,0.04), 0 8px 24px -12px rgba(31,42,68,0.10);
+    --shadow-lg: 0 2px 4px rgba(31,42,68,0.06), 0 16px 40px -16px rgba(31,42,68,0.16);
+    --shadow-xl: 0 2px 4px rgba(31,42,68,0.06), 0 24px 48px -20px rgba(31,42,68,0.18);
+    --display: "Fraunces", ui-serif, "Iowan Old Style", Georgia, serif;
+    --sans: "Geist", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: "Geist Mono", ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-strong: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-snap: cubic-bezier(0.87, 0, 0.13, 1); --ease-inout: cubic-bezier(0.77, 0, 0.175, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+  }
+  html, body { margin: 0; padding: 0; background: #000; }
+  body { font-family: var(--sans); color: var(--ink); }
+  deck-stage > section {
+    color: var(--ink); font-family: var(--sans); letter-spacing: -0.005em;
+    background-image:
+      url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.122 0 0 0 0 0.165 0 0 0 0 0.267 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      radial-gradient(ellipse at 12% 8%, rgba(15,124,130,0.05), transparent 55%),
+      radial-gradient(ellipse at 92% 96%, rgba(182,132,78,0.07), transparent 55%),
+      var(--bg);
+  }
+  .frame { position: absolute; inset: 0; padding: 60px 80px; display: flex; flex-direction: column; box-sizing: border-box; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 12px; color: var(--ink-60); letter-spacing: 0.18em; text-transform: uppercase; }
+  .topbar .brand { color: var(--ink); font-weight: 600; letter-spacing: 0.26em; }
+  .topbar .meta { display: flex; gap: 28px; }
+  .topbar .meta .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background: var(--vermillion); margin-right: 8px; vertical-align: middle; box-shadow: 0 0 0 4px rgba(214,84,56,0.12); }
+  .botbar { margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 11px; color: var(--ink-40); letter-spacing: 0.20em; text-transform: uppercase; padding-top: 22px; border-top: 1px solid var(--hairline-color); }
+  .botbar .page { color: var(--ink); }
+  .eyebrow { font-family: var(--mono); font-size: 12px; color: var(--vermillion); letter-spacing: 0.20em; text-transform: uppercase; font-weight: 500; }
+  .section-label { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+  .section-label .tick { width: 28px; height: 1px; background: var(--vermillion); }
+
+  .title { font-family: var(--display); font-weight: 450; font-size: 84px; line-height: 1.0; letter-spacing: -0.018em; color: var(--ink); margin: 0; text-wrap: balance; font-feature-settings: "ss01" on; }
+  .title .accent { color: var(--vermillion); font-style: italic; font-weight: 400; }
+  .title .line { display: inline-block; overflow: hidden; line-height: 1.04; padding-bottom: 0.04em; margin-bottom: -0.04em; vertical-align: top; }
+  .title .line > span { display: inline-block; transform: translateY(110%); will-change: transform; }
+  section.is-active .title .line > span { animation: titleRise 900ms var(--ease-strong) both; }
+  section.is-active .title .line:nth-child(1) > span { animation-delay: 60ms; }
+  section.is-active .title .line:nth-child(2) > span { animation-delay: 140ms; }
+  section.is-active .title .line:nth-child(3) > span { animation-delay: 220ms; }
+  section.is-active .title .line:nth-child(4) > span { animation-delay: 300ms; }
+  @keyframes titleRise { from { transform: translateY(110%); } to { transform: translateY(0); } }
+
+  section.is-active .stagger > * { animation: rise 600ms var(--ease-out) both; }
+  section.is-active .stagger > *:nth-child(1) { animation-delay: 380ms; }
+  section.is-active .stagger > *:nth-child(2) { animation-delay: 460ms; }
+  section.is-active .stagger > *:nth-child(3) { animation-delay: 540ms; }
+  section.is-active .stagger > *:nth-child(4) { animation-delay: 620ms; }
+  section.is-active .stagger > *:nth-child(5) { animation-delay: 700ms; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; background: var(--vermillion); color: #FDFBF7; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; border-radius: 999px; box-shadow: var(--shadow-sm); }
+  .chip.outline { background: transparent; color: var(--ink); border: 1px solid var(--ink-20); box-shadow: none; }
+  .chip.soft { background: var(--vermillion-soft); color: var(--vermillion); box-shadow: none; }
+  .chip.sea { background: var(--sea-soft); color: var(--sea); box-shadow: none; }
+
+  /* S1 */
+  .s1 .hero { flex: 1; display: grid; grid-template-columns: 1.05fr 1fr; gap: 60px; align-items: center; padding-top: 12px; }
+  .s1 .left { display: flex; flex-direction: column; gap: 26px; }
+  .s1 .title { font-size: 116px; letter-spacing: -0.025em; line-height: 0.92; }
+  .s1 .pitch { font-family: var(--sans); font-size: 24px; line-height: 1.42; color: var(--ink-80); max-width: 760px; margin: 0; letter-spacing: -0.005em; }
+  .s1 .pitch em { font-style: normal; color: var(--vermillion); font-weight: 500; }
+  .s1 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .globe-wrap { position: relative; width: 680px; height: 680px; justify-self: end; }
+  .globe-wrap .coord { position: absolute; font-family: var(--mono); font-size: 11px; color: var(--ink-40); letter-spacing: 0.20em; text-transform: uppercase; }
+  .globe-wrap .coord.tl { top: 0; left: 0; } .globe-wrap .coord.tr { top: 0; right: 0; text-align: right; }
+  .globe-wrap .coord.bl { bottom: 0; left: 0; } .globe-wrap .coord.br { bottom: 0; right: 0; text-align: right; }
+  .city-tag { position: absolute; background: var(--vermillion); color: #FDFBF7; font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; padding: 5px 9px; font-weight: 600; white-space: nowrap; border-radius: 3px; box-shadow: var(--shadow-sm); opacity: 0; transform: translateY(4px); transition: opacity 400ms var(--ease-out), transform 400ms var(--ease-out); }
+  section.is-active .city-tag { opacity: 1; transform: none; }
+  section.is-active .city-tag:nth-of-type(1) { transition-delay: 1200ms; }
+  section.is-active .city-tag:nth-of-type(2) { transition-delay: 1380ms; }
+  section.is-active .city-tag:nth-of-type(3) { transition-delay: 1560ms; }
+  section.is-active .city-tag:nth-of-type(4) { transition-delay: 1740ms; }
+  .city-tag::after { content: ""; position: absolute; width: 6px; height: 6px; background: var(--vermillion); border-radius: 50%; left: 50%; top: 100%; transform: translate(-50%, 4px); }
+  .route { position: absolute; font-family: var(--mono); font-size: 11px; color: var(--vermillion); letter-spacing: 0.10em; text-transform: uppercase; white-space: nowrap; opacity: 0; transition: opacity 600ms var(--ease-out) 1900ms; }
+  section.is-active .route { opacity: 1; }
+  .route-anim { stroke-dasharray: 600; stroke-dashoffset: 600; }
+  section.is-active .route-anim { animation: drawroute 1600ms var(--ease-strong) 700ms forwards; }
+  section.is-active .route-anim.r2 { animation-delay: 1200ms; }
+  @keyframes drawroute { to { stroke-dashoffset: 0; } }
+
+  /* S2 */
+  .s2 .title { font-size: 64px; }
+  .s2 .body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 56px; padding-top: 22px; align-items: start; }
+  .s2 .stack { margin-top: 26px; background: var(--surface-card); border-radius: 12px; box-shadow: var(--shadow-md); overflow: hidden; }
+  .s2 .stack-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 18px; padding: 16px 22px; align-items: center; border-bottom: 1px solid var(--line); }
+  .s2 .stack-row:last-child { border-bottom: 0; }
+  .s2 .stack-row .n { font-family: var(--mono); font-size: 11px; color: var(--ink-40); letter-spacing: 0.18em; }
+  .s2 .stack-row .name { font-size: 18px; font-weight: 500; letter-spacing: -0.005em; font-family: var(--sans); }
+  .s2 .stack-row .name em { font-style: normal; color: var(--ink-60); font-size: 13px; display: block; margin-top: 3px; letter-spacing: 0; }
+  .s2 .stack-row .tag { font-family: var(--mono); font-size: 11px; color: var(--ink-60); letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; }
+  .s2 .stack-row.bad .tag { color: var(--vermillion); }
+  .s2 .right .quote { font-family: var(--display); font-weight: 450; font-size: 30px; line-height: 1.25; letter-spacing: -0.012em; color: var(--ink); }
+  .s2 .right .quote b { color: var(--vermillion); font-weight: 500; }
+  .s2 .right .quote em { font-style: italic; display: block; margin-top: 14px; color: var(--ink-60); font-size: 20px; font-weight: 400; }
+  .s2 .right .losses { margin-top: 26px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .s2 .right .loss { background: var(--surface-card); padding: 18px 20px; border-radius: 10px; box-shadow: var(--shadow-sm); }
+  .s2 .right .loss .k { font-family: var(--mono); font-size: 10px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; margin-bottom: 8px; }
+  .s2 .right .loss .v { font-family: var(--display); font-weight: 500; font-size: 38px; color: var(--vermillion); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .s2 .right .loss .sub { font-size: 12px; color: var(--ink-60); margin-top: 8px; line-height: 1.4; }
+
+  /* S3 */
+  .s3 .title { font-size: 56px; }
+  .s3 .body { flex: 1; display: flex; flex-direction: column; gap: 22px; padding-top: 16px; }
+  .s3 .lifecycle { display: grid; grid-template-columns: repeat(9, 1fr); gap: 8px; }
+  .s3 .step { background: var(--surface-card); border-radius: 10px; padding: 14px 13px 16px; min-height: 130px; display: flex; flex-direction: column; box-shadow: var(--shadow-sm); transition: transform 240ms var(--ease-out), box-shadow 240ms var(--ease-out), opacity 400ms var(--ease-out); opacity: 0; transform: translateY(8px); }
+  section.s3.is-active .step { opacity: 1; transform: none; }
+  section.s3.is-active .step:nth-child(1) { transition-delay: 350ms; }
+  section.s3.is-active .step:nth-child(2) { transition-delay: 410ms; }
+  section.s3.is-active .step:nth-child(3) { transition-delay: 470ms; }
+  section.s3.is-active .step:nth-child(4) { transition-delay: 530ms; }
+  section.s3.is-active .step:nth-child(5) { transition-delay: 590ms; }
+  section.s3.is-active .step:nth-child(6) { transition-delay: 650ms; }
+  section.s3.is-active .step:nth-child(7) { transition-delay: 710ms; }
+  section.s3.is-active .step:nth-child(8) { transition-delay: 770ms; }
+  section.s3.is-active .step:nth-child(9) { transition-delay: 830ms; }
+  @media (hover: hover) and (pointer: fine) { .s3 .step:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); } }
+  .s3 .step.accent { background: var(--vermillion-soft); box-shadow: var(--shadow-md); }
+  .s3 .step .num { font-family: var(--mono); font-size: 10px; color: var(--ink-40); letter-spacing: 0.20em; }
+  .s3 .step.accent .num { color: var(--vermillion); }
+  .s3 .step .name { margin-top: 8px; font-family: var(--display); font-weight: 500; font-size: 18px; line-height: 1.15; letter-spacing: -0.01em; }
+  .s3 .step .detail { margin-top: auto; font-family: var(--mono); font-size: 10px; color: var(--ink-60); letter-spacing: 0.02em; line-height: 1.45; padding-top: 8px; }
+  .s3 .replaces { margin-top: 6px; border-top: 1px solid var(--hairline-color); padding-top: 18px; display: grid; grid-template-columns: 220px 1fr; gap: 28px; }
+  .s3 .replaces .lbl { font-family: var(--mono); font-size: 11px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s3 .replaces .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .s3 .replaces .bar span { font-family: var(--mono); font-size: 12px; color: var(--ink); letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 12px; background: var(--surface-card); border-radius: 999px; box-shadow: var(--shadow-xs); }
+  .s3 .replaces .bar span.strike { text-decoration: line-through; color: var(--ink-40); background: transparent; box-shadow: none; }
+  .s3 .replaces .bar .plus { color: var(--ink-40); padding: 0; background: transparent; box-shadow: none; }
+  .s3 .headline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; margin-top: 4px; }
+  .s3 .headline .h .k { font-family: var(--mono); font-size: 10px; color: var(--vermillion); letter-spacing: 0.20em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+  .s3 .headline .h .k::before { content: ""; width: 8px; height: 1px; background: var(--vermillion); display: inline-block; }
+  .s3 .headline .h .v { font-family: var(--display); font-size: 19px; font-weight: 450; margin-top: 6px; letter-spacing: -0.012em; line-height: 1.3; }
+
+  /* S4 */
+  .s4 .title { font-size: 56px; }
+  .s4 .body { flex: 1; display: grid; grid-template-columns: 1.4fr 1fr; gap: 32px; padding-top: 18px; align-items: stretch; }
+  .s4 .hero-shot { position: relative; background: var(--surface-card); border-radius: 14px; box-shadow: var(--shadow-lg); overflow: hidden; }
+  .s4 .hero-shot::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 0%, transparent 70%, rgba(31,42,68,0.04) 100%); pointer-events: none; }
+  .s4 .hero-shot img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+  .s4 .hero-shot .pin { position: absolute; top: 14px; left: 14px; z-index: 2; background: var(--surface-card); padding: 6px 12px; font-family: var(--mono); font-size: 10px; color: var(--vermillion); letter-spacing: 0.18em; text-transform: uppercase; border-radius: 999px; box-shadow: var(--shadow-sm); }
+  .s4 .right { display: flex; flex-direction: column; gap: 14px; }
+  .s4 .small-shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .s4 .small-shot { position: relative; background: var(--surface-card); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow-md); aspect-ratio: 1.05; }
+  .s4 .small-shot img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+  .s4 .small-shot .lbl { position: absolute; bottom: 8px; left: 8px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; background: rgba(253,251,247,0.94); color: var(--ink); padding: 4px 9px; border-radius: 4px; }
+  .s4 .stat-block { background: var(--vermillion-soft); border-radius: 10px; padding: 14px; text-align: center; aspect-ratio: 1.05; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .s4 .stat-block .lbl { font-family: var(--mono); font-size: 9px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--vermillion); margin-bottom: 4px; }
+  .s4 .stat-block .v { font-family: var(--display); font-size: 56px; font-weight: 500; color: var(--vermillion); letter-spacing: -0.04em; line-height: 0.92; font-variant-numeric: tabular-nums; }
+  .s4 .stat-block .v small { font-size: 26px; vertical-align: top; }
+  .s4 .stat-block .sub { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-60); margin-top: 6px; }
+  .s4 .pillars { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 16px 18px; background: var(--surface-card); border-radius: 12px; box-shadow: var(--shadow-md); }
+  .s4 .pillar { display: grid; grid-template-columns: 140px 1fr; gap: 14px; padding: 6px 0; align-items: baseline; }
+  .s4 .pillar:not(:last-child) { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+  .s4 .pillar .k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--vermillion); white-space: nowrap; }
+  .s4 .pillar .v { font-family: var(--sans); font-size: 13px; color: var(--ink); line-height: 1.45; }
+  .s4 .pillar .v b { color: var(--vermillion); font-weight: 500; }
+
+  /* S5 */
+  .s5 { position: relative; }
+  .s5 .body { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr; gap: 56px; padding-top: 18px; align-items: stretch; }
+  .s5 .left { display: flex; flex-direction: column; gap: 18px; }
+  .s5 .title { font-size: 60px; }
+  .s5 .lede { font-family: var(--sans); font-size: 18px; line-height: 1.5; color: var(--ink-80); max-width: 640px; margin: 0; }
+  .s5 .lede b { color: var(--vermillion); font-weight: 500; }
+  .s5 .timeline { background: var(--surface-card); border-radius: 12px; padding: 20px 24px; box-shadow: var(--shadow-md); }
+  .s5 .timeline-head { font-family: var(--mono); font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--vermillion); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .s5 .timeline-head::before { content: ""; width: 14px; height: 1px; background: var(--vermillion); display: inline-block; }
+  .s5 .beats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; align-items: stretch; }
+  .s5 .beat { background: var(--bg); padding: 12px 12px; border-radius: 8px; min-height: 100px; display: flex; flex-direction: column; gap: 6px; position: relative; }
+  .s5 .beat .n { font-family: var(--mono); font-size: 9px; letter-spacing: 0.20em; color: var(--ink-40); text-transform: uppercase; }
+  .s5 .beat .name { font-family: var(--display); font-size: 17px; font-weight: 500; line-height: 1.15; letter-spacing: -0.01em; color: var(--ink); }
+  .s5 .beat .when { margin-top: auto; font-family: var(--mono); font-size: 9px; letter-spacing: 0.10em; color: var(--ink-60); text-transform: uppercase; line-height: 1.4; }
+  .s5 .pillars { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .s5 .pillar { background: var(--surface-card); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm); }
+  .s5 .pillar .v { font-family: var(--display); font-size: 28px; font-weight: 500; color: var(--vermillion); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .s5 .pillar .v small { font-size: 15px; vertical-align: top; }
+  .s5 .pillar .k { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-60); margin-top: 6px; }
+  .s5 .pillar .sub { font-size: 12px; color: var(--ink-60); margin-top: 4px; line-height: 1.4; }
+  .s5 .punchline { background: var(--vermillion-soft); padding: 16px 20px; border-radius: 10px; box-shadow: var(--shadow-sm); font-family: var(--display); font-size: 19px; font-weight: 450; line-height: 1.4; letter-spacing: -0.01em; }
+  .s5 .punchline b { color: var(--vermillion); font-weight: 500; }
+  .s5 .punchline em { display: block; font-style: normal; font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-60); margin-top: 8px; }
+
+  .s5 .stamp-stage { position: relative; min-height: 600px; }
+  .s5 .stamp { position: absolute; border-radius: 8px; box-shadow: var(--shadow-xl); overflow: hidden; transform-origin: center; }
+  .s5 .stamp img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .s5 .stamp.hero { width: 60%; aspect-ratio: 1; left: 22%; top: 6%; z-index: 4; transform: rotate(-3.5deg); }
+  .s5 .stamp.s2   { width: 38%; aspect-ratio: 1; left: 0%;  top: 28%; z-index: 3; transform: rotate(7deg); }
+  .s5 .stamp.s3   { width: 36%; aspect-ratio: 1.15; right: 0%; top: 50%; z-index: 3; transform: rotate(-6deg); }
+  .s5 .stamp.s4   { width: 44%; aspect-ratio: 1.2; left: 18%; bottom: 0%; z-index: 2; transform: rotate(4deg); }
+  section.s5.is-active .stamp.hero { animation: floatA 6s var(--ease-inout) infinite; }
+  section.s5.is-active .stamp.s2   { animation: floatB 7s var(--ease-inout) infinite; animation-delay: -2s; }
+  section.s5.is-active .stamp.s3   { animation: floatC 8s var(--ease-inout) infinite; animation-delay: -4s; }
+  section.s5.is-active .stamp.s4   { animation: floatD 7.5s var(--ease-inout) infinite; animation-delay: -1s; }
+  @keyframes floatA { 0%, 100% { transform: rotate(-3.5deg) translateY(0); } 50% { transform: rotate(-3.1deg) translateY(-6px); } }
+  @keyframes floatB { 0%, 100% { transform: rotate(7deg) translateY(0); } 50% { transform: rotate(7.4deg) translateY(-5px); } }
+  @keyframes floatC { 0%, 100% { transform: rotate(-6deg) translateY(0); } 50% { transform: rotate(-5.6deg) translateY(-7px); } }
+  @keyframes floatD { 0%, 100% { transform: rotate(4deg) translateY(0); } 50% { transform: rotate(4.4deg) translateY(-4px); } }
+  .s5 .stamp .stamp-tag { position: absolute; bottom: 8px; left: 8px; background: rgba(253,251,247,0.94); color: var(--ink); font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; padding: 4px 9px; border-radius: 4px; }
+  .s5 .gemini-tag { position: absolute; top: 12px; right: 8px; background: var(--vermillion); color: #FDFBF7; padding: 5px 11px; border-radius: 999px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 600; box-shadow: var(--shadow-sm); z-index: 5; }
+  .s5 .stamp.hero::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.84 0 0 0 0 0.33 0 0 0 0 0.22 0 0 0 0.10 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
+  }
+
+  /* S6 */
+  .s6 .title { font-size: 70px; max-width: 1640px; }
+  .s6 .body { flex: 1; display: flex; flex-direction: column; gap: 26px; padding-top: 14px; }
+  .s6 .vs { display: grid; grid-template-columns: 1fr 80px 1fr; gap: 0; align-items: stretch; }
+  .s6 .vs .col { padding: 26px 30px; background: var(--surface-card); border-radius: 12px; box-shadow: var(--shadow-md); }
+  .s6 .vs .col.b { background: var(--vermillion-soft); box-shadow: var(--shadow-lg); }
+  .s6 .vs .arrow { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 26px; color: var(--vermillion); font-weight: 500; }
+  .s6 .vs .cap { font-family: var(--mono); font-size: 11px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--ink-60); margin-bottom: 12px; }
+  .s6 .vs .col.b .cap { color: var(--vermillion); }
+  .s6 .vs .label { font-family: var(--display); font-weight: 500; font-size: 26px; line-height: 1.18; letter-spacing: -0.012em; margin-bottom: 16px; }
+  .s6 .vs .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-family: var(--sans); font-size: 14px; color: var(--ink); line-height: 1.5; }
+  .s6 .vs .list li::before { content: "·  "; color: var(--ink-40); }
+  .s6 .vs .list b { color: var(--vermillion); font-weight: 600; }
+  .s6 .yc-callout { background: var(--vermillion-soft); padding: 22px 28px; border-radius: 12px; box-shadow: var(--shadow-md); display: grid; grid-template-columns: auto 1fr auto; gap: 28px; align-items: center; }
+  .s6 .yc-callout .quote { font-family: var(--display); font-size: 22px; font-weight: 450; letter-spacing: -0.012em; line-height: 1.35; color: var(--ink); }
+  .s6 .yc-callout .quote b { color: var(--vermillion); font-weight: 500; }
+  .s6 .yc-callout .src { font-family: var(--mono); font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--ink-60); }
+  .s6 .yc-callout .num { font-family: var(--display); font-size: 60px; font-weight: 500; color: var(--vermillion); letter-spacing: -0.04em; line-height: 0.9; font-variant-numeric: tabular-nums; }
+  .s6 .examples { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+  .s6 .ex { padding-top: 14px; border-top: 1px solid var(--hairline-color); }
+  .s6 .ex.accent { border-top-color: var(--vermillion); border-top-width: 2px; }
+  .s6 .ex .seg { font-family: var(--mono); font-size: 10px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s6 .ex .co { font-family: var(--display); font-weight: 500; font-size: 24px; margin-top: 6px; letter-spacing: -0.01em; }
+  .s6 .ex.accent .co { color: var(--vermillion); }
+  .s6 .ex .note { font-size: 13px; color: var(--ink-60); margin-top: 6px; line-height: 1.4; }
+
+  /* S7 */
+  .s7 .title { font-size: 54px; }
+  .s7 .multi-note { font-family: var(--sans); font-size: 16px; color: var(--ink-60); margin-top: 10px; max-width: 1400px; line-height: 1.5; }
+  .s7 .multi-note b { color: var(--ink); font-weight: 500; }
+  .s7 .body { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding-top: 18px; }
+  .s7 .seg { background: var(--surface-card); border-radius: 12px; padding: 22px 22px 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow-md); transition: transform 240ms var(--ease-out), box-shadow 240ms var(--ease-out); }
+  @media (hover: hover) and (pointer: fine) { .s7 .seg:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); } }
+  .s7 .seg.accent { background: var(--vermillion-soft); box-shadow: var(--shadow-lg); }
+  .s7 .seg .cap { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--hairline-color); padding-bottom: 10px; }
+  .s7 .seg .n { font-family: var(--mono); font-size: 11px; color: var(--ink-40); letter-spacing: 0.18em; }
+  .s7 .seg.accent .n { color: var(--vermillion); }
+  .s7 .seg .code { font-family: var(--mono); font-size: 10px; color: var(--vermillion); letter-spacing: 0.20em; font-weight: 600; text-transform: uppercase; }
+  .s7 .seg h3 { margin: 0; font-family: var(--display); font-size: 22px; font-weight: 500; letter-spacing: -0.012em; line-height: 1.15; }
+  .s7 .seg .who { font-size: 14px; color: var(--ink-60); line-height: 1.45; margin: 0; }
+  .s7 .seg .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
+  .s7 .seg .kpi { border-top: 1px solid var(--hairline-color); padding-top: 8px; }
+  .s7 .seg .kpi .k { font-family: var(--mono); font-size: 9px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s7 .seg .kpi .v { font-family: var(--display); font-weight: 500; font-size: 18px; color: var(--ink); margin-top: 5px; letter-spacing: -0.012em; }
+  .s7 .seg.accent .kpi .v { color: var(--vermillion); }
+  .s7 .seg .channel { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--hairline-color); font-family: var(--mono); font-size: 12px; color: var(--ink); letter-spacing: 0.02em; line-height: 1.5; }
+  .s7 .seg .channel .lbl { display: block; color: var(--ink-40); font-size: 9px; letter-spacing: 0.20em; text-transform: uppercase; margin-bottom: 5px; }
+
+  /* S8 */
+  .s8 .title { font-size: 56px; }
+  .s8 .body { flex: 1; display: grid; grid-template-columns: 1fr 1.3fr; gap: 48px; padding-top: 18px; align-items: start; }
+  .s8 .hook { background: var(--vermillion-soft); padding: 22px 26px; border-radius: 12px; margin-top: 18px; box-shadow: var(--shadow-sm); }
+  .s8 .hook .big { font-family: var(--display); font-size: 32px; font-weight: 450; line-height: 1.18; letter-spacing: -0.018em; color: var(--ink); }
+  .s8 .hook .big b { color: var(--vermillion); font-weight: 500; }
+  .s8 .hook .small { margin-top: 12px; font-size: 16px; color: var(--ink-60); line-height: 1.5; }
+  .s8 .compare { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .s8 .compare .box { padding: 16px 18px; background: var(--surface-card); border-radius: 10px; box-shadow: var(--shadow-sm); }
+  .s8 .compare .box.bad { background: var(--bg-2); box-shadow: none; }
+  .s8 .compare .box .k { font-family: var(--mono); font-size: 10px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s8 .compare .box .v { font-family: var(--display); font-weight: 500; font-size: 24px; color: var(--ink); margin-top: 8px; letter-spacing: -0.012em; }
+  .s8 .compare .box.good .v { color: var(--vermillion); }
+  .s8 .compare .box .note { font-size: 12px; color: var(--ink-60); margin-top: 6px; line-height: 1.4; }
+  .s8 .price-table { background: var(--surface-card); border-radius: 12px; box-shadow: var(--shadow-md); overflow: hidden; }
+  .s8 .price-head { display: grid; grid-template-columns: 1.3fr 0.6fr 1.3fr; padding: 14px 22px; border-bottom: 1px solid var(--hairline-color); font-family: var(--mono); font-size: 10px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s8 .price-row { display: grid; grid-template-columns: 1.3fr 0.6fr 1.3fr; padding: 11px 22px; border-bottom: 1px solid var(--line); align-items: baseline; transition: background 160ms var(--ease-out); }
+  @media (hover: hover) and (pointer: fine) { .s8 .price-row:hover { background: var(--vermillion-soft); } }
+  .s8 .price-row:last-child { border-bottom: 0; }
+  .s8 .price-row.accent { background: var(--vermillion-soft); }
+  .s8 .price-row .evt { font-family: var(--sans); font-size: 14px; font-weight: 500; color: var(--ink); }
+  .s8 .price-row .price { font-family: var(--mono); font-size: 16px; color: var(--vermillion); font-weight: 600; letter-spacing: -0.005em; font-variant-numeric: tabular-nums; }
+  .s8 .price-row .pitch-txt { font-size: 12px; color: var(--ink-60); line-height: 1.4; }
+  .s8 .multi-tenant { margin-top: 14px; padding: 14px 18px; background: var(--surface-card); border-radius: 10px; box-shadow: var(--shadow-sm); display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; }
+  .s8 .multi-tenant .lbl { font-family: var(--mono); font-size: 10px; color: var(--vermillion); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s8 .multi-tenant .text { font-family: var(--sans); font-size: 13px; color: var(--ink-60); line-height: 1.5; }
+  .s8 .multi-tenant b { color: var(--ink); }
+
+  /* S9 */
+  .s9 .title { font-size: 50px; }
+  .s9 .body { flex: 1; display: flex; flex-direction: column; gap: 16px; padding-top: 12px; }
+  .s9 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: stretch; }
+  .s9 .case { background: var(--surface-card); border-radius: 12px; padding: 22px 26px; box-shadow: var(--shadow-md); display: flex; flex-direction: column; gap: 14px; }
+  .s9 .case.accent { background: var(--vermillion-soft); box-shadow: var(--shadow-lg); }
+  .s9 .case .cap { font-family: var(--mono); font-size: 11px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s9 .case.accent .cap { color: var(--vermillion); }
+  .s9 .case h3 { margin: 0; font-family: var(--display); font-size: 22px; font-weight: 500; letter-spacing: -0.012em; line-height: 1.2; }
+  .s9 .swap { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; padding: 8px 0; }
+  .s9 .swap .from { background: var(--bg-2); padding: 12px 16px; border-radius: 8px; }
+  .s9 .swap .to { background: #FFFFFF; padding: 12px 16px; border-radius: 8px; box-shadow: var(--shadow-sm); }
+  .s9 .swap .lbl { font-family: var(--mono); font-size: 9px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--ink-60); margin-bottom: 4px; }
+  .s9 .swap .val { font-family: var(--display); font-size: 26px; font-weight: 500; color: var(--ink); letter-spacing: -0.018em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .s9 .swap .to .val { color: var(--vermillion); }
+  .s9 .swap .arrow { font-family: var(--mono); font-size: 18px; color: var(--vermillion); padding: 0 6px; }
+  .s9 .case .stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .s9 .case .stat { padding: 10px 12px; border-top: 1px solid var(--hairline-color); }
+  .s9 .case.accent .stat { border-top-color: rgba(214,84,56,0.30); }
+  .s9 .case .stat .k { font-family: var(--mono); font-size: 9px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s9 .case .stat .v { font-family: var(--display); font-size: 22px; font-weight: 500; color: var(--ink); letter-spacing: -0.012em; margin-top: 4px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .s9 .case.accent .stat .v { color: var(--vermillion); }
+  .s9 .case .copy { font-family: var(--sans); font-size: 13px; color: var(--ink); line-height: 1.5; margin: 0; }
+  .s9 .case .copy b { color: var(--vermillion); font-weight: 500; }
+  .s9 .savings { background: var(--surface-card); padding: 22px 30px; display: grid; grid-template-columns: auto 1fr auto; gap: 32px; align-items: center; border-radius: 12px; box-shadow: var(--shadow-lg); }
+  .s9 .savings .huge { font-family: var(--display); font-size: 88px; font-weight: 500; color: var(--vermillion); letter-spacing: -0.04em; line-height: 0.9; font-variant-numeric: tabular-nums; }
+  .s9 .savings .caption { font-family: var(--display); font-size: 22px; font-weight: 450; color: var(--ink); line-height: 1.3; letter-spacing: -0.012em; }
+  .s9 .savings .caption b { font-weight: 500; color: var(--vermillion); }
+  .s9 .savings .side { text-align: right; font-family: var(--mono); font-size: 11px; color: var(--ink-60); letter-spacing: 0.18em; text-transform: uppercase; line-height: 1.7; }
+
+  /* S10 */
+  .s10 .title { font-size: 58px; max-width: 1700px; }
+  .s10 .body { flex: 1; display: grid; grid-template-columns: 1.05fr 1fr; gap: 44px; padding-top: 16px; align-items: start; }
+  .s10 .pitch { font-size: 18px; line-height: 1.5; color: var(--ink); max-width: 780px; }
+  .s10 .pitch b { color: var(--vermillion); font-weight: 500; }
+  .s10 .diagram { background: var(--surface-card); padding: 22px 24px; margin-top: 18px; border-radius: 12px; box-shadow: var(--shadow-md); }
+  .s10 .diagram h4 { margin: 0 0 14px; font-family: var(--mono); font-size: 11px; color: var(--vermillion); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s10 .agents { display: flex; flex-direction: column; gap: 6px; }
+  .s10 .agent-row { display: grid; grid-template-columns: 1fr 40px 1fr; gap: 8px; align-items: center; }
+  .s10 .agent-box { background: var(--bg-2); padding: 9px 14px; font-family: var(--mono); font-size: 12px; color: var(--ink); letter-spacing: 0.04em; border-radius: 6px; }
+  .s10 .agent-box.hub { background: var(--vermillion); color: #FDFBF7; font-weight: 600; text-align: center; grid-row: span 5; display: flex; align-items: center; justify-content: center; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; box-shadow: var(--shadow-md); }
+  .s10 .agent-arrow { font-family: var(--mono); font-size: 14px; color: var(--vermillion); text-align: center; }
+  .s10 .side h3 { margin: 0 0 12px; font-family: var(--display); font-size: 22px; font-weight: 500; letter-spacing: -0.012em; }
+  .s10 .tools { background: var(--surface-card); font-family: var(--mono); font-size: 13px; border-radius: 12px; box-shadow: var(--shadow-md); overflow: hidden; }
+  .s10 .tool-head { padding: 12px 20px; border-bottom: 1px solid var(--hairline-color); color: var(--vermillion); font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; font-size: 10px; }
+  .s10 .tool { display: grid; grid-template-columns: 1fr auto; padding: 10px 20px; border-bottom: 1px solid var(--line); }
+  .s10 .tool:last-child { border-bottom: 0; }
+  .s10 .tool .call { color: var(--ink); font-weight: 500; }
+  .s10 .tool .tag { color: var(--ink-40); font-size: 11px; letter-spacing: 0.14em; }
+  .s10 .moat { margin-top: 16px; padding: 22px 26px; background: var(--vermillion-soft); border-radius: 12px; font-family: var(--display); font-size: 18px; line-height: 1.45; letter-spacing: -0.008em; box-shadow: var(--shadow-sm); }
+  .s10 .moat .moat-eyebrow { font-family: var(--mono); font-size: 10px; color: var(--vermillion); letter-spacing: 0.20em; text-transform: uppercase; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .s10 .moat .moat-eyebrow::before { content: ""; width: 14px; height: 1px; background: var(--vermillion); display: inline-block; }
+  .s10 .moat b { color: var(--vermillion); font-weight: 500; }
+  .s10 .moat em { font-style: normal; display: block; font-family: var(--mono); font-size: 11px; color: var(--ink-60); margin-top: 8px; letter-spacing: 0.16em; text-transform: uppercase; }
+
+  /* S11 */
+  .s11 .title { font-size: 54px; }
+  .s11 .body { flex: 1; display: flex; flex-direction: column; gap: 22px; padding-top: 14px; }
+  .s11 .setup { font-size: 16px; color: var(--ink-60); line-height: 1.55; max-width: 1200px; }
+  .s11 .setup b { color: var(--ink); }
+  .s11 .tam-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .s11 .tam { background: var(--surface-card); padding: 24px 28px; display: flex; flex-direction: column; gap: 6px; border-radius: 12px; box-shadow: var(--shadow-md); }
+  .s11 .tam.accent { background: var(--vermillion-soft); box-shadow: var(--shadow-lg); }
+  .s11 .tam .badge { font-family: var(--mono); font-size: 10px; color: var(--ink-40); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s11 .tam.accent .badge { color: var(--vermillion); }
+  .s11 .tam .num { font-family: var(--display); font-size: 78px; font-weight: 500; letter-spacing: -0.04em; line-height: 0.95; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .s11 .tam.accent .num { color: var(--vermillion); }
+  .s11 .tam .label { font-family: var(--mono); font-size: 12px; color: var(--ink); letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
+  .s11 .tam .note { font-size: 12px; color: var(--ink-60); line-height: 1.45; margin-top: 4px; }
+  .s11 .stack-row { display: grid; grid-template-columns: 220px 1fr; gap: 28px; padding-top: 16px; border-top: 1px solid var(--hairline-color); align-items: start; }
+  .s11 .stack-row .lbl { font-family: var(--mono); font-size: 11px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; padding-top: 8px; }
+  .s11 .stack-row .lbl small { display: block; color: var(--vermillion); font-size: 9px; letter-spacing: 0.18em; margin-top: 4px; }
+  .s11 .stack-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .s11 .stack-item { background: var(--surface-card); padding: 11px 14px; border-radius: 8px; box-shadow: var(--shadow-xs); }
+  .s11 .stack-item.sponsor { background: var(--vermillion-soft); }
+  .s11 .stack-item .k { font-family: var(--mono); font-size: 9px; color: var(--ink-40); letter-spacing: 0.20em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: baseline; }
+  .s11 .stack-item.sponsor .k { color: var(--vermillion); }
+  .s11 .stack-item .k .badge-mini { font-family: var(--mono); font-size: 8px; padding: 2px 6px; background: var(--vermillion); color: #FDFBF7; border-radius: 999px; letter-spacing: 0.14em; }
+  .s11 .stack-item .v { font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 500; margin-top: 4px; letter-spacing: -0.005em; line-height: 1.35; }
+
+  /* S12 */
+  .s12 .title { font-size: 54px; max-width: 1700px; }
+  .s12 .body { flex: 1; display: flex; flex-direction: column; gap: 18px; padding-top: 14px; }
+  .s12 .credit-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 16px; }
+  .s12 .credit { background: var(--surface-card); padding: 22px 26px; border-radius: 12px; box-shadow: var(--shadow-md); }
+  .s12 .credit.accent { background: var(--vermillion-soft); box-shadow: var(--shadow-lg); }
+  .s12 .credit .cap { font-family: var(--mono); font-size: 10px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s12 .credit.accent .cap { color: var(--vermillion); }
+  .s12 .credit h3 { margin: 8px 0 8px; font-family: var(--display); font-size: 22px; font-weight: 500; letter-spacing: -0.012em; line-height: 1.2; }
+  .s12 .credit p { margin: 0; font-size: 13px; color: var(--ink-60); line-height: 1.5; }
+  .s12 .credit .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .s12 .credit .badges span { font-family: var(--mono); font-size: 9px; padding: 4px 9px; color: var(--ink); letter-spacing: 0.16em; text-transform: uppercase; background: var(--bg); border-radius: 999px; }
+  .s12 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+  .s12 .kpi { padding-top: 12px; border-top: 1px solid var(--hairline-color); }
+  .s12 .kpi.accent { border-top-color: var(--vermillion); border-top-width: 2px; }
+  .s12 .kpi .k { font-family: var(--mono); font-size: 10px; color: var(--ink-60); letter-spacing: 0.20em; text-transform: uppercase; }
+  .s12 .kpi .v { font-family: var(--display); font-size: 42px; font-weight: 500; color: var(--ink); letter-spacing: -0.025em; line-height: 1; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .s12 .kpi.accent .v { color: var(--vermillion); }
+  .s12 .kpi .sub { font-size: 12px; color: var(--ink-60); margin-top: 6px; line-height: 1.45; }
+  .s12 .ask { display: grid; grid-template-columns: 1.2fr 1fr; gap: 48px; align-items: end; margin-top: auto; padding-top: 18px; border-top: 1px solid var(--hairline-color); }
+  .s12 .ask .cta { font-family: var(--display); font-size: 32px; font-weight: 450; line-height: 1.18; letter-spacing: -0.018em; }
+  .s12 .ask .cta .accent { color: var(--vermillion); font-style: italic; font-weight: 400; }
+  .s12 .ask .contact { display: flex; flex-direction: column; gap: 5px; text-align: right; font-family: var(--mono); font-size: 13px; color: var(--ink); letter-spacing: 0.06em; }
+  .s12 .ask .contact .label { color: var(--ink-60); font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; margin-bottom: 4px; }
+  .s12 .ask .contact a { color: var(--vermillion); text-decoration: none; }
+
+  /* Password gate */
+  #pw-gate { position: fixed; inset: 0; z-index: 99999; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 32px; font-family: var(--sans); color: var(--ink); }
+  #pw-gate.hidden { display: none; }
+  #pw-gate .frame-mark { font-family: var(--mono); font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ink-60); display: flex; align-items: center; gap: 12px; }
+  #pw-gate .frame-mark .dot { width: 6px; height: 6px; background: var(--vermillion); border-radius: 50%; box-shadow: 0 0 0 4px rgba(214,84,56,0.12); }
+  #pw-gate h1 { font-family: var(--display); font-weight: 450; font-size: 64px; letter-spacing: -0.022em; line-height: 1.0; margin: 0; max-width: 720px; text-align: center; text-wrap: balance; }
+  #pw-gate h1 em { font-style: italic; color: var(--vermillion); font-weight: 400; }
+  #pw-gate .meta { font-family: var(--sans); font-size: 16px; color: var(--ink-60); max-width: 500px; text-align: center; line-height: 1.5; }
+  #pw-gate form { display: flex; gap: 8px; align-items: center; }
+  #pw-gate input { font-family: var(--mono); font-size: 14px; padding: 13px 18px; border: 1px solid var(--ink-20); border-radius: 8px; background: var(--surface-card); color: var(--ink); outline: none; min-width: 280px; letter-spacing: 0.05em; transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out); }
+  #pw-gate input:focus { border-color: rgba(214,84,56,0.5); box-shadow: 0 0 0 4px rgba(214,84,56,0.10); }
+  #pw-gate button { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; padding: 13px 22px; background: var(--vermillion); color: #FDFBF7; border: 0; border-radius: 8px; cursor: pointer; transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out); box-shadow: var(--shadow-sm); }
+  @media (hover: hover) and (pointer: fine) { #pw-gate button:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); } }
+  #pw-gate button:active { transform: scale(0.97); box-shadow: var(--shadow-sm); }
+  #pw-gate .err { font-family: var(--mono); font-size: 11px; color: var(--vermillion); letter-spacing: 0.16em; text-transform: uppercase; min-height: 14px; }
+  #pw-gate .footer { position: absolute; bottom: 32px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 40px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--ink-40); }
+
+  .notes-launcher { position: fixed; top: 16px; right: 16px; z-index: 9000; display: flex; gap: 8px; opacity: 0.35; transition: opacity 200ms var(--ease-out); }
+  body:hover .notes-launcher, .notes-launcher:hover, .notes-launcher:focus-within { opacity: 1; }
+  .notes-launcher button { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; padding: 9px 14px; background: var(--surface-card); color: var(--ink); border: 0; border-radius: 999px; cursor: pointer; box-shadow: var(--shadow-md); transition: transform 160ms var(--ease-out), background 160ms var(--ease-out), color 160ms var(--ease-out); }
+  @media (hover: hover) and (pointer: fine) { .notes-launcher button:hover { background: var(--vermillion); color: #FDFBF7; } }
+  .notes-launcher button:active { transform: scale(0.97); }
+
+  [data-count] { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div id="pw-gate">
+  <div class="frame-mark"><span class="dot"></span>SENDERO · PITCH · Q2 2026</div>
+  <h1>The agent that does the <em>work</em>.</h1>
+  <div class="meta">Private preview. Enter the access phrase to view the deck.</div>
+  <form id="pw-form" autocomplete="off">
+    <input id="pw-input" type="password" placeholder="access phrase" autofocus />
+    <button type="submit">Open deck</button>
+  </form>
+  <div class="err" id="pw-err">&nbsp;</div>
+  <div class="footer">
+    <span>SENDERO.TRAVEL</span>
+    <span>FANTASMITA LLC · DELAWARE</span>
+  </div>
+</div>
+
+<div class="notes-launcher" id="notes-launcher">
+  <button type="button" id="open-notes">Speaker notes ↗</button>
+</div>
+
+<deck-stage width="1920" height="1080">
+
+  <section data-label="01 Title" class="s1">
+    <div class="frame">
+      <div class="topbar">
+        <div class="brand">SENDERO</div>
+        <div class="meta"><span><span class="dot"></span>PITCH · Q2 2026</span><span>01 / 12</span></div>
+      </div>
+      <div class="hero">
+        <div class="left">
+          <div class="section-label"><span class="tick"></span><span class="eyebrow">Vertical AI agent · travel operations</span></div>
+          <h1 class="title">
+            <span class="line"><span>The agent</span></span><br/>
+            <span class="line"><span>that does</span></span><br/>
+            <span class="line"><span>the <span class="accent">work.</span></span></span>
+          </h1>
+          <p class="pitch">Sendero isn't software that helps humans book travel. It's an <em>AI agent that does travel work</em> — end to end. Charged per action. Not per seat.</p>
+          <div class="chips stagger">
+            <span class="chip">PAY-PER-ACTION</span>
+            <span class="chip">WHATSAPP · SLACK · TEAMS</span>
+            <span class="chip soft">MCP-READY</span>
+            <span class="chip sea">CLAUDE × GEMINI</span>
+            <span class="chip outline">CIRCLE ALLIANCE</span>
+          </div>
+        </div>
+        <div class="globe-wrap">
+          <span class="coord tl">LAT −0.18° S</span><span class="coord tr">LON 78.47° W</span>
+          <span class="coord bl">AGENT · SENDERO</span><span class="coord br">LIVE · APR 2026</span>
+          <svg viewBox="0 0 680 680" width="680" height="680" style="position:absolute; inset:0;">
+            <defs>
+              <radialGradient id="gradShade" cx="40%" cy="35%" r="70%">
+                <stop offset="0%" stop-color="#1F2A44" stop-opacity="0.0"/>
+                <stop offset="70%" stop-color="#1F2A44" stop-opacity="0.05"/>
+                <stop offset="100%" stop-color="#1F2A44" stop-opacity="0.20"/>
+              </radialGradient>
+              <clipPath id="sphere"><circle cx="340" cy="340" r="275"/></clipPath>
+            </defs>
+            <circle cx="340" cy="340" r="275" fill="#F7EFE4"/>
+            <g clip-path="url(#sphere)" id="dotfield"></g>
+            <circle cx="340" cy="340" r="275" fill="url(#gradShade)"/>
+            <circle cx="340" cy="340" r="275" fill="none" stroke="rgba(31,42,68,0.18)" stroke-width="1"/>
+            <path class="route-anim" d="M 160 320 Q 340 100 530 310" fill="none" stroke="#D65438" stroke-width="1.5" stroke-dasharray="3 4"/>
+            <path class="route-anim r2" d="M 210 470 Q 370 300 550 460" fill="none" stroke="#D65438" stroke-width="1.5" stroke-dasharray="3 4"/>
+            <circle cx="160" cy="320" r="4" fill="#D65438"/><circle cx="530" cy="310" r="4" fill="#D65438"/>
+            <circle cx="210" cy="470" r="4" fill="#D65438"/><circle cx="550" cy="460" r="4" fill="#D65438"/>
+            <ellipse cx="340" cy="340" rx="275" ry="82" fill="none" stroke="rgba(31,42,68,0.10)" stroke-width="1"/>
+            <ellipse cx="340" cy="340" rx="275" ry="165" fill="none" stroke="rgba(31,42,68,0.08)" stroke-width="1"/>
+          </svg>
+          <div class="city-tag" style="left: 120px; top: 280px;">UIO</div>
+          <div class="city-tag" style="left: 500px; top: 260px;">MAD</div>
+          <div class="city-tag" style="left: 170px; top: 420px;">BOG</div>
+          <div class="city-tag" style="left: 520px; top: 410px;">MEX</div>
+          <div class="route" style="left: 230px; top: 160px;">QUITO → MADRID · $812</div>
+          <div class="route" style="left: 240px; top: 570px;">BOGOTÁ → MEX CITY · $318</div>
+        </div>
+      </div>
+      <div class="botbar"><span>SENDERO.TRAVEL</span><span class="page">01 — TITLE</span><span>FANTASMITA LLC · DELAWARE</span></div>
+    </div>
+  </section>
+
+  <section data-label="02 Problem" class="s2">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>THE PROBLEM</span><span>02 / 12</span></div></div>
+      <div class="body">
+        <div>
+          <div class="section-label"><span class="tick"></span><span class="eyebrow">Travel ops today is 7 tools + humans</span></div>
+          <h2 class="title">
+            <span class="line"><span>A broken stack.</span></span><br/>
+            <span class="line"><span>Six vendors.</span></span><br/>
+            <span class="line"><span>One workflow.</span></span>
+          </h2>
+          <div class="stack">
+            <div class="stack-row bad"><div class="n">L6</div><div class="name">Expense &amp; reconciliation<em>SAP Concur, Expensify</em></div><div class="tag">$15–40/USER</div></div>
+            <div class="stack-row bad"><div class="n">L5</div><div class="name">Travel management firm<em>BCD · Amex GBT · CWT</em></div><div class="tag">$35–60/TRIP</div></div>
+            <div class="stack-row bad"><div class="n">L4</div><div class="name">CRM + channel manager<em>Salesforce, channel tools</em></div><div class="tag">SEATS/MONTH</div></div>
+            <div class="stack-row bad"><div class="n">L3</div><div class="name">Airline distribution<em>Amadeus · Sabre</em></div><div class="tag">5–7% COMMISSION</div></div>
+            <div class="stack-row bad"><div class="n">L2</div><div class="name">Payments<em>cards · bank wires</em></div><div class="tag">FEES + 3–5 DAYS</div></div>
+            <div class="stack-row bad"><div class="n">L1</div><div class="name">Humans gluing it together<em>night shifts · manual quotes</em></div><div class="tag">$800/MO · QUITS IN 18MO</div></div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="section-label"><span class="tick"></span><span class="eyebrow">What it actually costs</span></div>
+          <p class="quote">60–70% of a travel budget <b>isn't the flights</b> — it's the fees, the licenses, and the humans stitching the stack together. <em>The software doesn't do the work. Humans do. You pay for both.</em></p>
+          <div class="losses">
+            <div class="loss"><div class="k">Manual flight quote</div><div class="v">20–<span data-count="40" data-suffix="min">40min</span></div><div class="sub">Per request, per human, per trip</div></div>
+            <div class="loss"><div class="k">Night coverage</div><div class="v"><span data-count="18" data-suffix="h">18h</span></div><div class="sub">No one answers WhatsApp after 6pm</div></div>
+            <div class="loss"><div class="k">Avg. agent tenure</div><div class="v"><span data-count="18" data-suffix="mo">18mo</span></div><div class="sub">Then you retrain from scratch</div></div>
+            <div class="loss"><div class="k">Corporate TMC fee</div><div class="v"><span data-count="28.5" data-prefix="$" data-suffix="K" data-decimals="1">$28.5K</span></div><div class="sub">80 employees · 200 trips/yr</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="botbar"><span>THE PROBLEM</span><span class="page">02 — FRAGMENTED STACK</span><span>GBTA · PHOCUSWRIGHT · DELOITTE 2025</span></div>
+    </div>
+  </section>
+
+  <section data-label="03 Solution" class="s3">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>THE AGENT · ONE WORKFLOW</span><span>03 / 12</span></div></div>
+      <div class="section-label" style="margin-top: 16px;"><span class="tick"></span><span class="eyebrow">What Sendero does — end to end</span></div>
+      <h2 class="title"><span class="line"><span>Search → Book → Pay → Support → <span class="accent">Sell more</span> → Report.</span></span></h2>
+      <div class="body">
+        <div class="lifecycle">
+          <div class="step"><div class="num">01</div><div class="name">Search</div><div class="detail">Duffel · 500+ airlines · hotels · ground</div></div>
+          <div class="step"><div class="num">02</div><div class="name">Quote</div><div class="detail">60-second response · policy-aware</div></div>
+          <div class="step accent"><div class="num">03</div><div class="name">Book</div><div class="detail">Auto-approve below threshold</div></div>
+          <div class="step"><div class="num">04</div><div class="name">Pay</div><div class="detail">USDC · Arc · sub-6s settlement</div></div>
+          <div class="step"><div class="num">05</div><div class="name">In-trip help</div><div class="detail">WhatsApp companion · 24/7</div></div>
+          <div class="step"><div class="num">06</div><div class="name">Change</div><div class="detail">Auto-resolves most refund/rebook</div></div>
+          <div class="step accent"><div class="num">07</div><div class="name">Ancillaries</div><div class="detail">Visa · insurance · cars · seats · stays</div></div>
+          <div class="step"><div class="num">08</div><div class="name">Expense</div><div class="detail">Gemini OCR · auto-match policy</div></div>
+          <div class="step"><div class="num">09</div><div class="name">Report</div><div class="detail">Live CFO dashboard</div></div>
+        </div>
+        <div class="replaces">
+          <div class="lbl">Replaces</div>
+          <div class="bar">
+            <span class="strike">Amadeus / Sabre</span><span class="plus">+</span>
+            <span class="strike">Salesforce / CRM</span><span class="plus">+</span>
+            <span class="strike">BCD · Amex GBT · CWT</span><span class="plus">+</span>
+            <span class="strike">SAP Concur · Expensify</span><span class="plus">+</span>
+            <span class="strike">Zendesk · call centers</span><span class="plus">+</span>
+            <span class="strike">Night-shift agents</span>
+          </div>
+        </div>
+        <div class="headline">
+          <div class="h"><div class="k">Response</div><div class="v">60s — 24/7</div></div>
+          <div class="h"><div class="k">Channels</div><div class="v">WhatsApp · Slack · Teams · Web</div></div>
+          <div class="h"><div class="k">Ancillary lift</div><div class="v">+31% AOV · 14.6% conv</div></div>
+          <div class="h"><div class="k">Coverage</div><div class="v">Zero handoffs · zero night gaps</div></div>
+        </div>
+      </div>
+      <div class="botbar"><span>SOLUTION</span><span class="page">03 — ONE AGENT · FULL LIFECYCLE</span><span>IN PRODUCTION · APR 2026</span></div>
+    </div>
+  </section>
+
+  <section data-label="04 Live" class="s4">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>WHAT'S LIVE · APR 2026</span><span>04 / 12</span></div></div>
+      <div class="section-label" style="margin-top: 16px;"><span class="tick"></span><span class="eyebrow">In production today — not a deck demo</span></div>
+      <h2 class="title"><span class="line"><span>Already <span class="accent">shipped</span>. Verifiable. Live.</span></span></h2>
+      <div class="body">
+        <div class="hero-shot">
+          <span class="pin">Operator dashboard · live</span>
+          <img src="assets/dashboard-home.jpg" alt="Sendero operator dashboard — live home view with workspace, plan, recent trips"/>
+        </div>
+        <div class="right">
+          <div class="small-shots">
+            <div class="small-shot"><img src="assets/arcscan-stamps-proxy.png" alt="SenderoStamps proxy verified on Arcscan"/><span class="lbl">Arcscan · Stamps</span></div>
+            <div class="small-shot"><img src="assets/arcscan-erc8004-identity.png" alt="ERC-8004 IdentityRegistry on Arcscan with 5,000+ transactions"/><span class="lbl">ERC-8004 Identity</span></div>
+            <div class="small-shot"><img src="assets/sendero-banner.jpg" alt="Sendero brand banner"/><span class="lbl">Brand · marketing</span></div>
+            <div class="stat-block">
+              <div class="lbl">End-to-end</div>
+              <div class="v"><span data-count="90">90</span><small>s</small></div>
+              <div class="sub">Quito → Madrid · $812</div>
+            </div>
+          </div>
+          <div class="pillars">
+            <div class="pillar"><span class="k">Contracts</span><span class="v"><b>6 / 6 verified</b> on Arcscan — escrow, stamps, ERC-8004 identity / reputation / validation</span></div>
+            <div class="pillar"><span class="k">Channels</span><span class="v">WhatsApp · Slack · Teams · web — all wired to one agent runtime</span></div>
+            <div class="pillar"><span class="k">Settlement</span><span class="v">USDC on Arc · sub-6s · webhooks dedup'd by signature + freshness</span></div>
+            <div class="pillar"><span class="k">MCP + llms.txt</span><span class="v">Discoverable agent surface — 7 tools live, x402 nanopayment metered per call</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="botbar"><span>PRODUCT · LIVE</span><span class="page">04 — SHIPPED · APR 2026</span><span>ARC TESTNET · CIRCLE ALLIANCE</span></div>
+    </div>
+  </section>
+
+  <section data-label="05 Stamps" class="s5">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>LIVING NFTs · GOOGLE × ARC</span><span>05 / 12</span></div></div>
+      <div class="body">
+        <div class="left">
+          <div class="section-label"><span class="tick"></span><span class="eyebrow">Proof-of-trip — painted by Gemini</span></div>
+          <h2 class="title"><span class="line"><span>The <span class="accent">collectible</span></span></span><br/><span class="line"><span>passport.</span></span></h2>
+          <p class="lede">Every meaningful moment of a trip mints an <b>ERC-1155 stamp</b> into the traveler's wallet on Arc. Boarding pass at confirmation. Settlement receipt at payment. Itinerary map as legs land. A two-page passport spread when the trip closes.</p>
+          <div class="timeline">
+            <div class="timeline-head">Lifecycle · 4 stamps · 1 trip</div>
+            <div class="beats">
+              <div class="beat"><span class="n">01</span><span class="name">Boarding pass</span><span class="when">on confirm_flight · 1960s jet-age cardstock</span></div>
+              <div class="beat"><span class="n">02</span><span class="name">Settlement</span><span class="when">on settle_booking · vintage railway-ticket</span></div>
+              <div class="beat"><span class="n">03</span><span class="name">Itinerary</span><span class="when">on book_flight · WPA-poster · setTokenURI as legs add</span></div>
+              <div class="beat"><span class="n">04</span><span class="name">Trip passport</span><span class="when">on last settle_booking · two-page spread</span></div>
+            </div>
+          </div>
+          <div class="pillars">
+            <div class="pillar"><div class="v"><span data-count="14">14</span><small>s</small></div><div class="k">Wall-clock</div><div class="sub">Gemini paints + GPT writes + IPFS pins</div></div>
+            <div class="pillar"><div class="v"><span data-count="2.5" data-decimals="1">2.5</span></div><div class="k">Gemini Flash</div><div class="sub">Image · OCR · captions · in parallel</div></div>
+            <div class="pillar"><div class="v">6 / 6</div><div class="k">Verified on Arc</div><div class="sub">SenderoStamps via Circle SCP</div></div>
+          </div>
+          <div class="punchline">
+            Paste a stamp link in Slack or WhatsApp — the art renders inline as the unfurl preview. <b>The collectible is the marketing surface.</b>
+            <em>idempotent on (kind, primaryKey) · canonical on IPFS · hot OG via Vercel Blob</em>
+          </div>
+        </div>
+        <div class="stamp-stage">
+          <span class="gemini-tag">Painted by Gemini 2.5</span>
+          <div class="stamp s2"><img src="assets/passport-spread.png" alt="Sendero trip passport NFT — two-page closed-trip spread"/><span class="stamp-tag">Trip passport</span></div>
+          <div class="stamp s3"><img src="assets/route-map.jpg" alt="Sendero itinerary map NFT — WPA-poster style trip route"/><span class="stamp-tag">Itinerary map</span></div>
+          <div class="stamp s4"><img src="assets/escrow-receipt.jpg" alt="Sendero settlement receipt NFT — vintage railway ticket"/><span class="stamp-tag">Settlement receipt</span></div>
+          <div class="stamp hero"><img src="assets/boarding-pass-stamp.jpg" alt="Sendero boarding pass NFT painted by Gemini 2.5 Flash Image — JFK to GRU"/><span class="stamp-tag">Boarding pass · JFK→GRU</span></div>
+        </div>
+      </div>
+      <div class="botbar"><span>SIGNATURE FEATURE</span><span class="page">05 — LIVING NFTs · GEMINI × ARC</span><span>SENDEROSTAMPS 0xCC0F…1A03</span></div>
+    </div>
+  </section>
+
+  <section data-label="06 Thesis" class="s6">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>THESIS · VERTICAL AI AGENTS</span><span>06 / 12</span></div></div>
+      <div class="section-label" style="margin-top: 14px;"><span class="tick"></span><span class="eyebrow">YC's call · the next ten years</span></div>
+      <h2 class="title">
+        <span class="line"><span>Vertical AI agents</span></span><br/>
+        <span class="line"><span>replace the <span class="accent">software stack</span> — and the humans running it.</span></span>
+      </h2>
+      <div class="body">
+        <div class="vs">
+          <div class="col">
+            <div class="cap">The last 20 years</div><div class="label">Software as a Service</div>
+            <ul class="list"><li>Humans do the work</li><li>Software provides tools</li><li>Priced per seat / per month</li><li>You pay whether or not it's used</li><li>Multiple vendors per workflow</li></ul>
+          </div>
+          <div class="arrow">⟶</div>
+          <div class="col b">
+            <div class="cap">The next 10 years</div><div class="label">Vertical AI agents</div>
+            <ul class="list"><li><b>The agent does the work</b></li><li>Humans review &amp; set policy</li><li>Priced per action / per outcome</li><li>Zero usage = zero cost</li><li>One agent per workflow</li></ul>
+          </div>
+        </div>
+        <div class="yc-callout">
+          <div class="num"><span data-count="300">300</span>×</div>
+          <div class="quote">YC: there are <b>three hundred billion-dollar opportunities</b> for the team that ships the vertical AI agent first.<br/><span class="src" style="margin-top:8px; display:block;">YC · Lightcone Podcast · 2025</span></div>
+          <div class="src">Travel agencies = $1.9T workflow,<br/>still mostly human.</div>
+        </div>
+        <div class="examples">
+          <div class="ex"><div class="seg">Legal</div><div class="co">Harvey</div><div class="note">Collapses associate + research tooling</div></div>
+          <div class="ex"><div class="seg">Customer service</div><div class="co">Sierra</div><div class="note">Replaces agents + Zendesk</div></div>
+          <div class="ex"><div class="seg">Sales development</div><div class="co">Clay / 11x</div><div class="note">Collapses SDRs + enrichment tools</div></div>
+          <div class="ex accent"><div class="seg">Travel operations</div><div class="co">Sendero</div><div class="note">Collapses GDS + TMC + expense + humans</div></div>
+        </div>
+      </div>
+      <div class="botbar"><span>THESIS</span><span class="page">06 — VERTICAL AI AGENTS</span><span>YC LIGHTCONE · 300 × $1B OPPORTUNITIES</span></div>
+    </div>
+  </section>
+
+  <section data-label="07 Segments" class="s7">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>WHO WE SELL TO · FOUR SEGMENTS</span><span>07 / 12</span></div></div>
+      <div class="section-label" style="margin-top: 16px;"><span class="tick"></span><span class="eyebrow">Multi-tenant · one product · four customers</span></div>
+      <h2 class="title"><span class="line"><span>One agent. <span class="accent">Four paying customers.</span></span></span></h2>
+      <p class="multi-note">Every customer becomes a <b>tenant</b> with their own workspace, team, API keys, and MCP server — running on the same agent runtime. <b>One codebase, white-labeled per tenant.</b> Agencies brand it as theirs. Corporates pin it to their policy. Other AI agents just call our tools. Same product underneath.</p>
+      <div class="body">
+        <div class="seg">
+          <div class="cap"><span class="n">01</span><span class="code">B2C</span></div>
+          <h3>Consumers.</h3>
+          <p class="who">Individuals &amp; groups who get a personal travel agent over WhatsApp. No app, no signup.</p>
+          <div class="kpis"><div class="kpi"><div class="k">Pricing</div><div class="v">Fee/booking</div></div><div class="kpi"><div class="k">Channel</div><div class="v">WhatsApp</div></div></div>
+          <div class="channel"><span class="lbl">Positioning</span>Personal agent that remembers preferences across trips.</div>
+        </div>
+        <div class="seg">
+          <div class="cap"><span class="n">02</span><span class="code">B2B · AGENCIES</span></div>
+          <h3>Small &amp; mid-size agencies.</h3>
+          <p class="who">LATAM PyMEs. Sendero deploys as white-label sub-agent on their WhatsApp number in &lt; 24h.</p>
+          <div class="kpis"><div class="kpi"><div class="k">$ / month</div><div class="v">~$280</div></div><div class="kpi"><div class="k">vs. one human</div><div class="v">$800/mo</div></div></div>
+          <div class="channel"><span class="lbl">Positioning</span>"Your best travel agent. Never quits. 24/7."</div>
+        </div>
+        <div class="seg accent">
+          <div class="cap"><span class="n">03</span><span class="code">B2B · CORPORATE</span></div>
+          <h3>Companies, 50–500 employees.</h3>
+          <p class="who">Replaces the travel management firm. Employees request trips in Slack/Teams; CFO gets a live dashboard.</p>
+          <div class="kpis"><div class="kpi"><div class="k">Year-1 savings</div><div class="v">91%</div></div><div class="kpi"><div class="k">Policy adherence</div><div class="v">100%</div></div></div>
+          <div class="channel"><span class="lbl">Positioning</span>"Your TMC, minus $26K a year. Plus real-time data."</div>
+        </div>
+        <div class="seg">
+          <div class="cap"><span class="n">04</span><span class="code">B2B2AI · AGENTS</span></div>
+          <h3>Other AI agents.</h3>
+          <p class="who">LLMs &amp; copilots that need travel capability. MCP tools + llms.txt. We're the travel backend.</p>
+          <div class="kpis"><div class="kpi"><div class="k">CAC</div><div class="v">$0</div></div><div class="kpi"><div class="k">Margin</div><div class="v">Pure take</div></div></div>
+          <div class="channel"><span class="lbl">Positioning</span>Every connected agent is a distribution channel we don't pay for.</div>
+        </div>
+      </div>
+      <div class="botbar"><span>SEGMENTS</span><span class="page">07 — MULTI-TENANT · ONE PRODUCT</span><span>B2C · AGENCIES · CORPORATE · AGENTS</span></div>
+    </div>
+  </section>
+
+  <section data-label="08 Pricing" class="s8">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>BUSINESS MODEL · TWO LEGS</span><span>08 / 12</span></div></div>
+      <div class="body">
+        <div>
+          <div class="section-label"><span class="tick"></span><span class="eyebrow">The pricing shift</span></div>
+          <h2 class="title">
+            <span class="line"><span>If nobody</span></span><br/>
+            <span class="line"><span>travels,</span></span><br/>
+            <span class="line"><span><span class="accent">nobody pays.</span></span></span>
+          </h2>
+          <div class="hook">
+            <div class="big">When AI does the work, <b>you price the work</b> — not the software.</div>
+            <div class="small">SaaS shell on top (Free / Basic / Pro / Enterprise) for workspace, channels, MCP. Per-action nanopayments underneath for everything the agent does. Both legs from day one.</div>
+          </div>
+          <div class="compare">
+            <div class="box bad"><div class="k">Legacy SaaS</div><div class="v">$<span data-count="24">24</span>K / yr</div><div class="note">Flat, whether used or not.</div></div>
+            <div class="box good"><div class="k">Sendero</div><div class="v">$0 setup</div><div class="note">First action billed, not the software.</div></div>
+          </div>
+        </div>
+        <div>
+          <div class="section-label"><span class="tick"></span><span class="eyebrow">Per-action price list · settled in USDC</span></div>
+          <div class="price-table">
+            <div class="price-head"><span>ACTION</span><span>PRICE</span><span>NOTES</span></div>
+            <div class="price-row"><span class="evt">Flight / hotel search</span><span class="price">$0.02</span><span class="pitch-txt">Cents per search</span></div>
+            <div class="price-row"><span class="evt">Chat / WhatsApp reply</span><span class="price">$0.01</span><span class="pitch-txt">Replaces a night-shift human</span></div>
+            <div class="price-row"><span class="evt">Policy compliance check</span><span class="price">$0.10</span><span class="pitch-txt">Every trip, auto-validated</span></div>
+            <div class="price-row"><span class="evt">Booking hold (15 min)</span><span class="price">$0.15</span><span class="pitch-txt">Inventory lock</span></div>
+            <div class="price-row accent"><span class="evt">Completed booking</span><span class="price">$1.00</span><span class="pitch-txt">Flat fee, no % markup</span></div>
+            <div class="price-row"><span class="evt">Change / refund resolved</span><span class="price">$1.50</span><span class="pitch-txt">Fully automated, no call center</span></div>
+            <div class="price-row"><span class="evt">MCP context retrieval</span><span class="price">$0.05</span><span class="pitch-txt">For other AI agents calling us</span></div>
+            <div class="price-row accent"><span class="evt">Take rate on GMV</span><span class="price">0.5%</span><span class="pitch-txt">vs. 5–7% GDS commission</span></div>
+          </div>
+          <div class="multi-tenant">
+            <span class="lbl">Multi-tenant</span>
+            <div class="text">Each tenant gets a Clerk-billed subscription <b>and</b> a metered nanopayment ledger. Pro+ tiers earn 30–50% off nanopay rates. <b>Trials still monetize</b> — leg 2 keeps flowing while leg 1 is $0.</div>
+          </div>
+        </div>
+      </div>
+      <div class="botbar"><span>BUSINESS MODEL</span><span class="page">08 — SAAS + NANOPAY</span><span>ZERO USAGE = ZERO COST</span></div>
+    </div>
+  </section>
+
+  <section data-label="09 Unit economics" class="s9">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>UNIT ECONOMICS · TWO CASES</span><span>09 / 12</span></div></div>
+      <div class="section-label" style="margin-top: 14px;"><span class="tick"></span><span class="eyebrow">The CFO + the agency owner — same math</span></div>
+      <h2 class="title"><span class="line"><span>The math is <span class="accent">not close</span>.</span></span></h2>
+      <div class="body">
+        <div class="columns">
+          <div class="case accent">
+            <div class="cap">Corporate · 80 employees · 200 trips/yr</div>
+            <h3>Replace the TMC.</h3>
+            <div class="swap">
+              <div class="from"><div class="lbl">BCD · Amex · CWT</div><div class="val">$<span data-count="28.5" data-decimals="1">28.5</span>K</div></div>
+              <div class="arrow">→</div>
+              <div class="to"><div class="lbl">Sendero, year 1</div><div class="val">$<span data-count="2.4" data-decimals="1">2.4</span>K</div></div>
+            </div>
+            <div class="stat-row">
+              <div class="stat"><div class="k">Year-1 savings</div><div class="v"><span data-count="91" data-suffix="%">91%</span></div></div>
+              <div class="stat"><div class="k">Policy adherence</div><div class="v"><span data-count="100" data-suffix="%">100%</span></div></div>
+              <div class="stat"><div class="k">Coverage</div><div class="v">24 / 7</div></div>
+            </div>
+            <p class="copy">Transaction fees, monthly management, Concur, after-hours premium, implementation — gone. Replaced by per-action nanopayments and a 0.5% GMV take. <b>$26K back in year one</b>, plus real-time data the TMC never gave you.</p>
+          </div>
+          <div class="case">
+            <div class="cap">Agency · LATAM PyME · $50k GMV/mo</div>
+            <h3>Replace the human you can't keep.</h3>
+            <div class="swap">
+              <div class="from"><div class="lbl">One human agent</div><div class="val">$<span data-count="800">800</span>/mo</div></div>
+              <div class="arrow">→</div>
+              <div class="to"><div class="lbl">Sendero, white-labeled</div><div class="val">$<span data-count="280">280</span>/mo</div></div>
+            </div>
+            <div class="stat-row">
+              <div class="stat"><div class="k">Coverage</div><div class="v">8h → 24/7</div></div>
+              <div class="stat"><div class="k">Quote time</div><div class="v">20m → 60s</div></div>
+              <div class="stat"><div class="k">Deploy time</div><div class="v">&lt; 24h</div></div>
+            </div>
+            <p class="copy">Your best agent <b>quits in eighteen months</b>. Sendero starts Monday on your WhatsApp number, never sleeps, scales without hiring, sells ancillaries you didn't have time to upsell.</p>
+          </div>
+        </div>
+        <div class="savings">
+          <div class="huge"><span data-count="91" data-suffix="%">91%</span></div>
+          <div class="caption">Year-1 corporate savings.<br/><b>$26,120 back</b> + real-time data. Agencies cut human cost by 65%, keep margin.</div>
+          <div class="side">POLICY ADHERENCE · 100%<br/>RESPONSE TIME · 60s<br/>COVERAGE · 24/7</div>
+        </div>
+      </div>
+      <div class="botbar"><span>UNIT ECONOMICS</span><span class="page">09 — CORP + AGENCY</span><span>YEAR 1 · REAL NUMBERS</span></div>
+    </div>
+  </section>
+
+  <section data-label="10 Moat" class="s10">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>DISTRIBUTION MOAT · MCP + GOOGLE × CIRCLE</span><span>10 / 12</span></div></div>
+      <div class="section-label" style="margin-top: 14px;"><span class="tick"></span><span class="eyebrow">Zero-CAC distribution</span></div>
+      <h2 class="title"><span class="line"><span>Every AI agent that <span class="accent">connects to us</span> becomes our sales channel.</span></span></h2>
+      <div class="body">
+        <div>
+          <p class="pitch">AI agents need travel capability — personal assistants, corporate copilots, concierge bots. They shouldn't rebuild Amadeus. They shouldn't negotiate with airlines. They shouldn't run KYC. <b>They call Sendero.</b></p>
+          <p class="pitch" style="margin-top: 12px;">We expose the full toolkit as MCP tools with stateful sessions and policy-as-code. Discoverable at <b>sendero.travel/.well-known/llms.txt</b>. <b>Claude runs the loop. Gemini reads receipts, passports, boarding passes</b> and paints the trip stamps. Sendero does the work and takes the fee.</p>
+          <div class="diagram">
+            <h4>How it plays</h4>
+            <div class="agents">
+              <div class="agent-row"><div class="agent-box">ChatGPT · personal assistant</div><div class="agent-arrow">→</div><div class="agent-box hub">Sendero<br/>MCP server</div></div>
+              <div class="agent-row"><div class="agent-box">Claude · corporate copilot</div><div class="agent-arrow">→</div></div>
+              <div class="agent-row"><div class="agent-box">Fintech concierge bot</div><div class="agent-arrow">→</div></div>
+              <div class="agent-row"><div class="agent-box">Enterprise Slack agent</div><div class="agent-arrow">→</div></div>
+              <div class="agent-row"><div class="agent-box">New agent (tomorrow)</div><div class="agent-arrow">→</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="side">
+          <h3>MCP tool surface</h3>
+          <div class="tools">
+            <div class="tool-head">7 TOOLS · STATEFUL SESSIONS · POLICY-AS-CODE</div>
+            <div class="tool"><span class="call">search_flights</span><span class="tag">$0.02</span></div>
+            <div class="tool"><span class="call">search_hotels</span><span class="tag">$0.02</span></div>
+            <div class="tool"><span class="call">hold_booking</span><span class="tag">$0.15</span></div>
+            <div class="tool"><span class="call">confirm_booking</span><span class="tag">$1.00</span></div>
+            <div class="tool"><span class="call">modify_booking</span><span class="tag">$1.50</span></div>
+            <div class="tool"><span class="call">scan_document</span><span class="tag">$0.05 · Gemini</span></div>
+            <div class="tool"><span class="call">check_policy</span><span class="tag">$0.10</span></div>
+          </div>
+          <div class="moat">
+            <div class="moat-eyebrow">The moat</div>
+            Every agent that integrates is a customer, a distribution channel, and a switching cost — all at once. Network effects compound with every new caller.<em>Google × Circle Alliance · zero-CAC distribution</em>
+          </div>
+        </div>
+      </div>
+      <div class="botbar"><span>MOAT</span><span class="page">10 — MCP + GOOGLE × CIRCLE</span><span>ZERO-CAC DISTRIBUTION</span></div>
+    </div>
+  </section>
+
+  <section data-label="11 Market" class="s11">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>MARKET · STACK</span><span>11 / 12</span></div></div>
+      <div class="section-label" style="margin-top: 14px;"><span class="tick"></span><span class="eyebrow">The size of the prize</span></div>
+      <h2 class="title">
+        <span class="line"><span>$1.9T travel industry.</span></span><br/>
+        <span class="line"><span>Travel agencies are <span class="accent">huge</span> — and still mostly human.</span></span>
+      </h2>
+      <div class="body">
+        <p class="setup">Even after a decade of OTAs, travel agencies still capture <b>over half of complex itineraries</b> globally — corporate, group, multi-leg, visa-sensitive. The tech behind them is forty years old. <b>YC's vertical-AI thesis applies directly:</b> the agency role <em>is</em> the workflow Sendero collapses.</p>
+        <div class="tam-row">
+          <div class="tam"><div class="badge">TOTAL · GLOBAL TRAVEL</div><div class="num">$<span data-count="1.9" data-decimals="1">1.9</span>T</div><div class="label">All travel spend</div><div class="note">GBTA 2025 · the workflow we're collapsing, end-to-end.</div></div>
+          <div class="tam"><div class="badge">WEDGE · LATAM + SPAIN</div><div class="num">$<span data-count="180">180</span>B</div><div class="label">Spanish-speaking mid-market</div><div class="note">Agencies + corporates. Underserved, WhatsApp-native, USDC-growing.</div></div>
+          <div class="tam accent"><div class="badge">3-YEAR TARGET</div><div class="num">$<span data-count="540">540</span>M</div><div class="label">GMV through the agent</div><div class="note">At 1–3% take = <b>$5–16M ARR</b>. 1,500 tenants across 4 segments.</div></div>
+        </div>
+        <div class="stack-row">
+          <div class="lbl">Technology stack<br/><small>↗ Google × Circle</small></div>
+          <div class="stack-grid">
+            <div class="stack-item"><div class="k">Inventory</div><div class="v">Duffel API · 500+ airlines</div></div>
+            <div class="stack-item sponsor"><div class="k">AI · vision <span class="badge-mini">GOOGLE</span></div><div class="v">Gemini 2.5 Flash · OCR + image gen</div></div>
+            <div class="stack-item"><div class="k">AI · reasoning</div><div class="v">Claude · tool-calling loop</div></div>
+            <div class="stack-item"><div class="k">Settlement</div><div class="v">Circle Arc · USDC · sub-6s</div></div>
+            <div class="stack-item"><div class="k">Identity</div><div class="v">ERC-8004 · KYC / KYB</div></div>
+            <div class="stack-item"><div class="k">Visa + docs</div><div class="v">Sherpa · pgcrypto vault · ZDR</div></div>
+            <div class="stack-item"><div class="k">Channels</div><div class="v">WhatsApp · Slack · Teams · Web</div></div>
+            <div class="stack-item"><div class="k">Agent-to-agent</div><div class="v">MCP · llms.txt · x402</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="botbar"><span>MARKET · STACK</span><span class="page">11 — $1.9T · GOOGLE × CIRCLE</span><span>GBTA · WTTC · CIRCLE · DUFFEL · GEMINI</span></div>
+    </div>
+  </section>
+
+  <section data-label="12 Close" class="s12">
+    <div class="frame">
+      <div class="topbar"><div class="brand">SENDERO</div><div class="meta"><span>COMPANY · TRACTION · ASK</span><span>12 / 12</span></div></div>
+      <div class="section-label" style="margin-top: 14px;"><span class="tick"></span><span class="eyebrow">Who's building this</span></div>
+      <h2 class="title">
+        <span class="line"><span>Fantasmita LLC.</span></span><br/>
+        <span class="line"><span>The team behind <span class="accent">Pasillo</span> and <span class="accent">BUFI</span>.</span></span>
+      </h2>
+      <div class="body">
+        <div class="credit-row">
+          <div class="credit accent">
+            <div class="cap">Parent company</div><h3>Fantasmita LLC · Delaware</h3>
+            <p>Circle Alliance member. Founded by Tomás Cordero. Building the stablecoin-native operating stack for Latin America.</p>
+            <div class="badges"><span>Circle Alliance</span><span>500 LATAM</span><span>Odisea</span><span>Acelera</span><span>Pygma PY8</span></div>
+          </div>
+          <div class="credit">
+            <div class="cap">Sister product · 01</div><h3>Pasillo</h3>
+            <p>USD ↔ USDC settlement API for Ecuador's $7B remittance corridor. In production.</p>
+            <div class="badges"><span>Live</span><span>$7B corridor</span></div>
+          </div>
+          <div class="credit">
+            <div class="cap">Sister product · 02</div><h3>BUFI</h3>
+            <p>Stablecoin-native financial workspace. Treasury + payroll + invoices in USDC.</p>
+            <div class="badges"><span>Live</span><span>B2B</span></div>
+          </div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi accent"><div class="k">Contracts verified</div><div class="v"><span data-count="6">6</span> / 6</div><div class="sub">All Sendero contracts on Arcscan</div></div>
+          <div class="kpi"><div class="k">End-to-end time</div><div class="v"><span data-count="90">90</span>s</div><div class="sub">Real $812 ticket via Duffel</div></div>
+          <div class="kpi"><div class="k">Pilot pipeline</div><div class="v"><span data-count="3">3</span></div><div class="sub">Agencies in Quito · Pichincha</div></div>
+          <div class="kpi accent"><div class="k">MCP callers</div><div class="v">+OPEN</div><div class="sub">llms.txt published · first calls live</div></div>
+        </div>
+        <div class="ask">
+          <div class="cta">The ask: <span class="accent">3 paid pilots</span><br/>and intros to finance leaders at mid-market LATAM companies.</div>
+          <div class="contact">
+            <span class="label">Contact</span>
+            <span><a href="mailto:hola@sendero.travel">hola@sendero.travel</a></span>
+            <span>sendero.travel · @sendero_ai</span>
+            <span style="color:var(--ink-60);">Quito · Madrid · CDMX</span>
+          </div>
+        </div>
+      </div>
+      <div class="botbar"><span>CLOSE</span><span class="page">12 — COMPANY · TRACTION · ASK</span><span>THANK YOU ↗</span></div>
+    </div>
+  </section>
+
+</deck-stage>
+
+<script type="application/json" id="speaker-notes">
+[
+  "Sendero is an AI agent that does travel work end to end. Charged per action, not per seat. Powered by Claude and Gemini.",
+  "Travel ops today is seven tools and humans gluing them together. Sixty to seventy percent of any budget is fees and labor — not flights.",
+  "One agent runs the lifecycle — search, book, pay, support, change, ancillaries like visa and insurance, expense, report. Zero handoffs, sixty seconds.",
+  "Live today. Six contracts verified on Arc. Agent in production over WhatsApp, Slack, Teams. Real Duffel ticket, real USDC settlement, ninety seconds end to end.",
+  "Every trip mints collectible NFT stamps — boarding pass, settlement, itinerary, passport. Painted by Gemini in fourteen seconds. The collectible is the marketing surface.",
+  "YC: three hundred billion-dollar opportunities for vertical AI agents. Harvey did legal. Sierra did support. Sendero does travel — a $1.9T workflow still mostly human.",
+  "Multi-tenant — one product, four customers: consumers, agencies, corporates, other AI agents. Each tenant gets their own workspace, keys, and MCP server.",
+  "If nobody travels, nobody pays. SaaS shell on top, nano-payments underneath. Trials still monetize on every action from day one.",
+  "Eighty-person company: twenty-eight thousand with a TMC versus twenty-four hundred with us — ninety-one percent. Agencies replace eight-hundred-a-month humans with a two-eighty agent.",
+  "Every AI agent that integrates over MCP becomes a customer, a channel, a switching cost. Claude runs the loop. Gemini reads documents. Google × Circle Alliance.",
+  "$1.9 trillion market. Travel agencies still own half of complex itineraries, still mostly human. Three-year target: five to sixteen million ARR.",
+  "Built by Fantasmita — same team as Pasillo and BUFI. Circle Alliance member. Asking three paid pilots and intros to LATAM finance leaders."
+]
+</script>
+
+<script src="deck-stage.js"></script>
+<script>
+  (function () {
+    const g = document.getElementById('dotfield');
+    if (!g) return;
+    const ns = 'http://www.w3.org/2000/svg';
+    const cx = 340, cy = 340, R = 275, step = 13;
+    for (let y = cy - R; y <= cy + R; y += step) {
+      const dy = y - cy;
+      const rowHalfWidth = Math.sqrt(Math.max(0, R * R - dy * dy));
+      const cols = Math.max(4, Math.round((rowHalfWidth * 2) / step));
+      for (let i = 0; i <= cols; i++) {
+        const t = i / cols;
+        const x = cx - rowHalfWidth + t * rowHalfWidth * 2;
+        const dx = x - cx;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > R - 2) continue;
+        const edgeFade = 1 - Math.pow(dist / R, 2.2);
+        const size = 1.3 + edgeFade * 1.3;
+        const shade = 0.25 + 0.5 * Math.cos((x - cx) / R) * Math.cos((y - cy) / R);
+        const c = document.createElementNS(ns, 'circle');
+        c.setAttribute('cx', x.toFixed(1));
+        c.setAttribute('cy', y.toFixed(1));
+        c.setAttribute('r', size.toFixed(2));
+        c.setAttribute('fill', '#1F2A44');
+        c.setAttribute('opacity', (0.18 + shade * 0.34).toFixed(2));
+        g.appendChild(c);
+      }
+    }
+  })();
+
+  (function () {
+    const stage = document.querySelector('deck-stage');
+    if (!stage) return;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function format(value, decimals, prefix, suffix) {
+      const fixed = Number(value).toFixed(decimals);
+      const withSep = decimals ? fixed : Number(fixed).toLocaleString('en-US');
+      return (prefix || '') + withSep + (suffix || '');
+    }
+    function runCountUp(el) {
+      const target = parseFloat(el.dataset.count);
+      const decimals = parseInt(el.dataset.decimals || '0', 10);
+      const prefix = el.dataset.prefix || '';
+      const suffix = el.dataset.suffix || '';
+      if (Number.isNaN(target)) return;
+      if (reduced) { el.textContent = format(target, decimals, prefix, suffix); return; }
+      const duration = 1100;
+      const start = performance.now();
+      const ease = (t) => 1 - Math.pow(1 - t, 4);
+      function tick(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const v = target * ease(t);
+        el.textContent = format(v, decimals, prefix, suffix);
+        if (t < 1) requestAnimationFrame(tick);
+        else el.textContent = format(target, decimals, prefix, suffix);
+      }
+      requestAnimationFrame(tick);
+    }
+    function activate(slide) {
+      stage.querySelectorAll(':scope > section').forEach((s) => {
+        s.classList.remove('is-active');
+        s.querySelectorAll('[data-count]').forEach((el) => { el.textContent = ' '; });
+      });
+      void slide.offsetWidth;
+      slide.classList.add('is-active');
+      slide.querySelectorAll('[data-count]').forEach((el, i) => {
+        setTimeout(() => runCountUp(el), 450 + i * 60);
+      });
+    }
+    stage.addEventListener('slidechange', (e) => {
+      const slide = e.detail && e.detail.slide;
+      if (slide) activate(slide);
+    });
+    setTimeout(() => {
+      const visible = stage.querySelector(':scope > section[data-deck-active]') ||
+                      stage.querySelector(':scope > section.is-active') ||
+                      stage.querySelector(':scope > section');
+      if (visible && !visible.classList.contains('is-active')) activate(visible);
+    }, 100);
+  })();
+
+  (function () {
+    const STORAGE_KEY = 'sendero-pitch-unlocked-v1';
+    const PASSWORD = 'sendero-arc';
+    const gate = document.getElementById('pw-gate');
+    const form = document.getElementById('pw-form');
+    const input = document.getElementById('pw-input');
+    const err = document.getElementById('pw-err');
+    if (sessionStorage.getItem(STORAGE_KEY) === '1') gate.classList.add('hidden');
+    else document.body.style.overflow = 'hidden';
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const v = (input.value || '').trim().toLowerCase();
+      if (v === PASSWORD) {
+        sessionStorage.setItem(STORAGE_KEY, '1');
+        gate.style.transition = 'opacity 320ms cubic-bezier(0.23, 1, 0.32, 1)';
+        gate.style.opacity = '0';
+        setTimeout(() => { gate.classList.add('hidden'); document.body.style.overflow = ''; }, 320);
+      } else {
+        err.textContent = 'Try again — phrase is on the README.';
+        input.value = '';
+        input.focus();
+      }
+    });
+  })();
+
+  (function () {
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel('sendero-pitch-deck') : null;
+    let notesWin = null;
+    function publishState(detail) {
+      if (!channel) return;
+      const idx = (detail && typeof detail.index === 'number') ? detail.index : 0;
+      const total = (detail && typeof detail.total === 'number') ? detail.total : 12;
+      channel.postMessage({ type: 'state', index: idx, total });
+    }
+    document.addEventListener('slidechange', (e) => publishState(e.detail), false);
+    if (channel) {
+      channel.addEventListener('message', (msg) => {
+        const m = msg.data || {};
+        if (m.type === 'request-state') {
+          const slides = stage_slides();
+          let idx = 0;
+          slides.forEach((s, i) => { if (s.classList.contains('is-active')) idx = i; });
+          publishState({ index: idx, total: slides.length });
+        } else if (m.type === 'goto' && typeof m.index === 'number') {
+          const stage = document.querySelector('deck-stage');
+          if (stage && typeof stage.goTo === 'function') stage.goTo(m.index, 'api');
+        } else if (m.type === 'nav') {
+          const stage = document.querySelector('deck-stage');
+          if (!stage) return;
+          if (m.dir === 'next' && typeof stage.next === 'function') stage.next('api');
+          if (m.dir === 'prev' && typeof stage.prev === 'function') stage.prev('api');
+        }
+      });
+    }
+    function stage_slides() {
+      const stage = document.querySelector('deck-stage');
+      return stage ? Array.from(stage.querySelectorAll(':scope > section')) : [];
+    }
+    document.getElementById('open-notes').addEventListener('click', () => {
+      const w = window.screen.availWidth, h = window.screen.availHeight;
+      const ww = Math.min(720, Math.floor(w * 0.45));
+      const wh = Math.min(900, Math.floor(h * 0.85));
+      const left = Math.max(0, w - ww - 32);
+      const top = 64;
+      notesWin = window.open(
+        new URL('notes.html', location.href).toString(),
+        'sendero-pitch-notes',
+        `popup=yes,width=${ww},height=${wh},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no`,
+      );
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.isContentEditable)) return;
+      if (e.key === 'n' || e.key === 'N') {
+        if (notesWin && !notesWin.closed) notesWin.focus();
+        else document.getElementById('open-notes').click();
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

@@ -991,10 +991,7 @@ function NanopayWorkflowsPanel({
   // Running total. Prefer server-confirmed meter rows; if none have
   // landed yet (turn still streaming, or stream not connected), fall
   // back to the heuristic ledger sum so the operator still sees motion.
-  const confirmedTotal = (meterEvents ?? []).reduce(
-    (a, m) => a + microToUsd(m.priceMicroUsdc),
-    0
-  );
+  const confirmedTotal = (meterEvents ?? []).reduce((a, m) => a + microToUsd(m.priceMicroUsdc), 0);
   const heuristicTotal = ledger.reduce((a, r) => a + r.cost, 0);
   const total = confirmedTotal > 0 ? confirmedTotal : heuristicTotal;
   const captured = ledger.filter(r => r.status === 'captured').reduce((a, b) => a + b.cost, 0);
@@ -1004,7 +1001,9 @@ function NanopayWorkflowsPanel({
   // The display swaps from sand (#E8B98E) to whatever the channel ink
   // is so the terminal reads as part of the same conversation.
   const totalColor =
-    scope === 'trip' && channelAccent ? `color-mix(in oklab, ${channelAccent} 70%, #fdfbf7 30%)` : '#fdfbf7';
+    scope === 'trip' && channelAccent
+      ? `color-mix(in oklab, ${channelAccent} 70%, #fdfbf7 30%)`
+      : '#fdfbf7';
   const accentColor = scope === 'trip' && channelAccent ? channelAccent : '#E8B98E';
   const turnsLabel = scope === 'trip' ? 'metered turns' : 'turns';
 
@@ -1068,7 +1067,7 @@ function NanopayWorkflowsPanel({
             ${total.toFixed(4)}
           </span>
           <span className="t-mono" style={{ fontSize: 11, color: accentColor }}>
-            {(meterEvents?.length ?? 0)} {turnsLabel}
+            {meterEvents?.length ?? 0} {turnsLabel}
           </span>
         </div>
         <div
@@ -1120,8 +1119,7 @@ function NanopayWorkflowsPanel({
                   gridTemplateColumns: '1fr 60px 50px',
                   gap: 6,
                   padding: '2px 0',
-                  borderBottom:
-                    i < ledger.length - 1 ? '1px solid rgba(253,251,247,0.06)' : 'none',
+                  borderBottom: i < ledger.length - 1 ? '1px solid rgba(253,251,247,0.06)' : 'none',
                 }}
               >
                 <span style={{ color: row.status === 'held' ? '#E26B47' : '#fdfbf7' }}>
@@ -1172,7 +1170,10 @@ function NanopayWorkflowsPanel({
                       borderBottom: '1px solid rgba(253,251,247,0.04)',
                     }}
                   >
-                    <span style={{ color: 'rgba(253,251,247,0.85)' }}>{summary}{more}</span>
+                    <span style={{ color: 'rgba(253,251,247,0.85)' }}>
+                      {summary}
+                      {more}
+                    </span>
                     <span style={{ color: accentColor, textAlign: 'right' }}>
                       ${microToUsd(evt.priceMicroUsdc).toFixed(4)}
                     </span>
@@ -1304,4 +1305,3 @@ function NanopaySwitch({ open, onToggle }: { open: boolean; onToggle: () => void
     </button>
   );
 }
-
