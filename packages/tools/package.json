@@ -17,7 +17,12 @@
     "./types": "./src/types.ts",
     "./faucet": "./src/faucet.ts",
     "./mint-stamp": "./src/mint-stamp.ts",
-    "./provision-identity": "./src/provision-identity.ts"
+    "./provision-identity": "./src/provision-identity.ts",
+    "./give-feedback": "./src/give-feedback.ts",
+    "./read-reputation": "./src/read-reputation.ts",
+    "./request-validation": "./src/request-validation.ts",
+    "./submit-validation-response": "./src/submit-validation-response.ts",
+    "./read-validation": "./src/read-validation.ts"
   },
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",

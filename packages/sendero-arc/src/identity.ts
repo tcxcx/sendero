@@ -454,3 +454,124 @@ export function invalidateReputationCache(agentId?: bigint): void {
     REPUTATION_CACHE.delete(agentId.toString());
   }
 }
+
+// ─── ERC-8004 ValidationRegistry ─────────────────────────────────────────────
+
+const VALIDATION_ABI = [
+  {
+    name: 'getValidationStatus',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'requestHash', type: 'bytes32' }],
+    outputs: [
+      { name: 'validatorAddress', type: 'address' },
+      { name: 'agentId', type: 'uint256' },
+      { name: 'response', type: 'uint8' },
+      { name: 'responseHash', type: 'bytes32' },
+      { name: 'tag', type: 'string' },
+      { name: 'lastUpdate', type: 'uint256' },
+    ],
+  },
+] as const;
+
+/**
+ * Two-step validation flow per the ERC-8004 quickstart.
+ *
+ *   - Owner (any wallet) calls validationRequest(validator, agentId, requestURI, requestHash).
+ *   - Validator wallet replies with validationResponse(requestHash, response, responseURI,
+ *     responseHash, tag). 100 = passed, 0 = failed.
+ *
+ * Used for KYC/KYB checks today; the same primitive can carry suitability, eligibility,
+ * or any "this counterparty was validated by X" claim.
+ */
+export async function requestValidation(params: {
+  ownerWalletAddress: string;
+  validatorAddress: Address;
+  agentId: bigint;
+  requestURI: string;
+  requestHash: Hex;
+}): Promise<{ txId: string; txHash: Hex }> {
+  return execContract({
+    walletAddress: params.ownerWalletAddress,
+    contractAddress: VALIDATION_REGISTRY,
+    abiFunctionSignature: 'validationRequest(address,uint256,string,bytes32)',
+    abiParameters: [
+      params.validatorAddress,
+      params.agentId.toString(),
+      params.requestURI,
+      params.requestHash,
+    ],
+    label: 'validationRequest',
+  });
+}
+
+export async function submitValidationResponse(params: {
+  validatorWalletAddress: string;
+  requestHash: Hex;
+  /** 100 = passed, 0 = failed. */
+  response: 0 | 100;
+  tag: string;
+  responseURI?: string;
+}): Promise<{ txId: string; txHash: Hex }> {
+  return execContract({
+    walletAddress: params.validatorWalletAddress,
+    contractAddress: VALIDATION_REGISTRY,
+    abiFunctionSignature: 'validationResponse(bytes32,uint8,string,bytes32,string)',
+    abiParameters: [
+      params.requestHash,
+      params.response.toString(),
+      params.responseURI ?? '',
+      `0x${'0'.repeat(64)}`,
+      params.tag,
+    ],
+    label: 'validationResponse',
+  });
+}
+
+export interface ValidationStatus {
+  validatorAddress: Address;
+  agentId: bigint;
+  response: number;
+  responseHash: Hex;
+  tag: string;
+  lastUpdate: bigint;
+}
+
+export async function getValidationStatus(requestHash: Hex): Promise<ValidationStatus | null> {
+  const publicClient = getArcClient();
+  try {
+    // viem 2.x typings now require an authorizationList field; cast
+    // through any to keep the call shape compatible across versions.
+    const result = (await (publicClient.readContract as any)({
+      address: VALIDATION_REGISTRY,
+      abi: VALIDATION_ABI,
+      functionName: 'getValidationStatus',
+      args: [requestHash],
+    })) as readonly [Address, bigint, number, Hex, string, bigint];
+    return {
+      validatorAddress: result[0],
+      agentId: result[1],
+      response: result[2],
+      responseHash: result[3],
+      tag: result[4],
+      lastUpdate: result[5],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compute a deterministic requestHash for a validation flow. Mirrors the
+ * pattern in Circle's quickstart: keccak(`<tag>_request_agent_<agentId>`).
+ * Callers can override by passing a custom seed to keep multiple
+ * validations for the same agent distinct.
+ */
+export function computeValidationRequestHash(args: {
+  agentId: bigint;
+  tag: string;
+  seed?: string;
+}): Hex {
+  const seed = args.seed ?? Date.now().toString(36);
+  return keccak256(toHex(`${args.tag}_request_agent_${args.agentId}_${seed}`));
+}

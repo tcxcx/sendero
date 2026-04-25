@@ -75,7 +75,17 @@ export function toolToScope(toolName: string): KeyScope {
     return 'treasury';
   }
   if (toolName === 'scan_document' || toolName === 'generate_booking_invoice') return 'documents';
-  if (toolName === 'check_travel_eligibility') return 'compliance';
+  if (
+    toolName === 'check_travel_eligibility' ||
+    toolName === 'request_validation' ||
+    toolName === 'submit_validation_response' ||
+    toolName === 'read_validation'
+  ) {
+    return 'compliance';
+  }
+  if (toolName === 'give_feedback' || toolName === 'read_reputation') {
+    return 'trip_assistance';
+  }
   if (
     toolName.startsWith('airport_') ||
     toolName.startsWith('trip_') ||
@@ -136,6 +146,11 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   // case it's ever exposed via a future surface.
   'mint_stamp',
   'refresh_stamp_uri',
+  // ERC-8004 reputation + validation — every "write" tool moves on-chain
+  // trust state. Reads (read_reputation, read_validation) are public.
+  'give_feedback',
+  'request_validation',
+  'submit_validation_response',
 ]);
 // Note: channel-provisioning tools (kapso_*, slack_*) are NOT listed
 // here.  They're `internal: true` on their ToolDef, which strips them
