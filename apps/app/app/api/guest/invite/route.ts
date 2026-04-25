@@ -183,6 +183,48 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Channel-bound DCW lookup: when a User row exists for guestEmail AND
+  // has tenant scope here (membership OR prior traveler trip) AND has a
+  // provisioned Circle DCW on Arc-Testnet, the success card can offer
+  // "auto-claim for traveler via DCW" instead of (only) sharing the
+  // peanut link. The peanut link is still generated unconditionally —
+  // it's the canonical share artifact and the cold-guest fallback.
+  //
+  // The User table is platform-global (one email = one user); tenant
+  // scoping comes from Membership (operators) or TripTraveler (travelers).
+  // We require ONE of those so an operator can't claim on behalf of any
+  // user with a DCW across tenants.
+  const ARC_TESTNET_CHAIN_ID = 5042002;
+  const boundUser = await prisma.user.findFirst({
+    where: {
+      email: { equals: body.guestEmail, mode: 'insensitive' },
+      OR: [
+        { memberships: { some: { tenantId: tenant.id } } },
+        { travelerTrips: { some: { tenantId: tenant.id } } },
+      ],
+    },
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+      wallets: {
+        where: { provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
+        select: { circleWalletId: true, address: true },
+        take: 1,
+      },
+    },
+  });
+  const boundWallet = boundUser?.wallets[0];
+  const boundTraveler =
+    boundUser && boundWallet?.circleWalletId
+      ? {
+          userId: boundUser.id,
+          displayName: boundUser.displayName ?? boundUser.email ?? 'Traveler',
+          dcwWalletId: boundWallet.circleWalletId,
+          dcwAddress: boundWallet.address,
+        }
+      : null;
+
   capture({
     event: 'guest_invite_issued',
     distinctId: userId,
@@ -219,5 +261,5 @@ export async function POST(req: NextRequest) {
     }
   })();
 
-  return NextResponse.json(result);
+  return NextResponse.json({ ...result, boundTraveler });
 }

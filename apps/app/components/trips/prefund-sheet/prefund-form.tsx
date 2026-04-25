@@ -33,12 +33,26 @@ export type PrefundOnchainCall = {
   value: string;
 };
 
+/**
+ * Channel-bound traveler stamped on the invite response when a `User` row
+ * exists for `guestEmail` in the same tenant AND has a provisioned Circle
+ * DCW on Arc-Testnet. When non-null, the success card surfaces an
+ * "auto-claim via DCW" CTA instead of (only) the cold-guest link share.
+ */
+export type BoundTraveler = {
+  userId: string;
+  displayName: string;
+  dcwWalletId: string;
+  dcwAddress: `0x${string}`;
+};
+
 export type PrefundResult = {
   tripId: string;
   guestLink: string;
   claimCode?: string | null;
   onchainCalls: PrefundOnchainCall[];
   invite?: { ok?: boolean; skipped?: boolean; error?: string };
+  boundTraveler?: BoundTraveler | null;
 };
 
 export function PrefundForm({ onSuccess }: { onSuccess: (result: PrefundResult) => void }) {
