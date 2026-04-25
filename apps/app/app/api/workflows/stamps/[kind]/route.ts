@@ -101,21 +101,23 @@ async function dispatch(kind: Kind, body: z.infer<typeof BodySchema>) {
 }
 
 /**
- * Two-path authorization:
+ * Two-path authorization (matches the convention in `/api/agent/dispatch`):
  *
- *   - Agent dispatch path: the workflow runner inside the chat route
- *     calls us after a tool resolves. It already authenticated via
- *     Clerk-API-key + AGENT_DISPATCH_SECRET; we just verify the
- *     shared secret again so an external caller can't impersonate the
- *     runner.
- *   - Operator path: a signed-in dashboard user re-mints a stamp.
- *     Verify their active org id matches the trip's tenant.clerkOrgId.
+ *   - Shared-secret path: AGENT_DISPATCH_SECRET (preferred) or CRON_SECRET
+ *     (fallback) presented as either `Authorization: Bearer <secret>` OR
+ *     `x-sendero-dispatch-secret`. Used by the workflow runner / cron
+ *     fan-outs / channel webhooks.
+ *   - Operator path: signed-in dashboard user whose active org id maps
+ *     onto the trip's tenant.clerkOrgId. Used for re-mint from the UI.
  */
 async function authorize(args: { req: Request; tripId: string }): Promise<Response | null> {
-  const sharedSecret = process.env.AGENT_DISPATCH_SECRET;
-  const headerSecret = args.req.headers.get('x-sendero-dispatch-secret');
-  if (sharedSecret && headerSecret && constantTimeEqual(sharedSecret, headerSecret)) {
-    return null;
+  const expected = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET;
+  if (expected) {
+    const bearer = args.req.headers.get('authorization') ?? '';
+    const header = args.req.headers.get('x-sendero-dispatch-secret') ?? '';
+    if (constantTimeEqual(header, expected) || constantTimeEqual(bearer, `Bearer ${expected}`)) {
+      return null;
+    }
   }
 
   const session = await auth();
