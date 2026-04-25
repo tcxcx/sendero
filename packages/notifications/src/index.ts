@@ -16,6 +16,7 @@
 import { Resend } from 'resend';
 import { renderGuestInvite, type GuestInviteContent } from './templates';
 import { renderInvoiceEmail, type InvoiceEmailContent } from './invoice-email';
+import { renderFromShare, type ShareEmailContent } from './share-template';
 import {
   renderBookingConfirmed,
   renderHoldApproval,
@@ -28,6 +29,8 @@ import {
 export type { GuestInviteContent } from './templates';
 export { renderInvoiceEmail } from './invoice-email';
 export type { InvoiceEmailContent } from './invoice-email';
+export { renderFromShare } from './share-template';
+export type { ShareEmailContent } from './share-template';
 export {
   renderBookingConfirmed,
   renderHoldApproval,
@@ -123,6 +126,16 @@ export interface Notifier {
     to: string,
     content: Omit<BookingConfirmedContent, 'supportEmail'> & { supportEmail?: string }
   ): Promise<SendResult>;
+  /**
+   * Generic share-card email. Same canonical shape every channel uses
+   * (Slack block_image, WhatsApp interactive header, web bubble) — call
+   * site sources `imageUrl` from `apps/app/lib/og/share-url::buildShareImageUrl`
+   * so the email renders the same Satori card the other channels show.
+   */
+  sendShareCard(
+    to: string,
+    content: Omit<ShareEmailContent, 'supportEmail'> & { supportEmail?: string }
+  ): Promise<SendResult>;
 }
 
 /**
@@ -157,6 +170,9 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
         return skipped;
       },
       async sendBookingConfirmed() {
+        return skipped;
+      },
+      async sendShareCard() {
         return skipped;
       },
     };
@@ -279,6 +295,29 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
           html: rendered.html,
           text: rendered.text,
           tags: [{ name: 'surface', value: 'booking_confirmed' }],
+        });
+        if (result.error) {
+          return { ok: false, error: result.error.message ?? String(result.error) };
+        }
+        return { ok: true, id: result.data?.id };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+    async sendShareCard(to, content) {
+      const rendered = renderFromShare({
+        ...content,
+        supportEmail: content.supportEmail ?? supportEmail,
+      });
+      try {
+        const result = await client.emails.send({
+          from,
+          to: [to],
+          replyTo: replyTo ? [replyTo] : undefined,
+          subject: rendered.subject,
+          html: rendered.html,
+          text: rendered.text,
+          tags: [{ name: 'surface', value: 'share_card' }],
         });
         if (result.error) {
           return { ok: false, error: result.error.message ?? String(result.error) };

@@ -26,6 +26,7 @@
  */
 
 import { buildApprovalBlocks } from '@sendero/slack';
+import { buildShareImageUrl } from '@/lib/og/share-url';
 import type {
   ChannelCta,
   ChannelMessage,
@@ -51,18 +52,18 @@ export interface SlackPayload {
 const MAX_SECTION_TEXT = 2900;
 const MAX_BUTTONS_PER_ACTIONS_BLOCK = 5;
 
-export const renderForSlack: ChannelRenderer<SlackPayload> = (
+export const renderForSlack: ChannelRenderer<SlackPayload> = async (
   msg: ChannelMessage
-): RenderedForChannel<SlackPayload> | null => {
+): Promise<RenderedForChannel<SlackPayload> | null> => {
   switch (msg.kind) {
     case 'text':
       return renderText(msg.content);
     case 'card':
-      return renderCard(msg);
+      return await renderCard(msg);
     case 'tool_invocation':
       return renderToolInvocation(msg.toolName);
     case 'tool_result':
-      return renderToolResult(msg);
+      return await renderToolResult(msg);
     case 'approval_request':
       return renderApprovalRequest(msg);
     case 'reasoning':
@@ -96,7 +97,7 @@ function renderText(content: string): RenderedForChannel<SlackPayload> {
   };
 }
 
-function renderCard(msg: ChannelMessageCard): RenderedForChannel<SlackPayload> {
+async function renderCard(msg: ChannelMessageCard): Promise<RenderedForChannel<SlackPayload>> {
   const blocks: unknown[] = [];
 
   blocks.push({
@@ -122,10 +123,23 @@ function renderCard(msg: ChannelMessageCard): RenderedForChannel<SlackPayload> {
     });
   }
 
-  if (msg.imageUrl) {
+  // Image precedence: explicit imageUrl on the card wins (export_route_map
+  // returns a static-map URL, restaurant cards return Places photo URLs).
+  // Otherwise fall back to the canonical Satori OG card so the operator
+  // and the traveler see the same visual across channels.
+  const imageUrl =
+    msg.imageUrl ??
+    (await buildShareImageUrl({
+      title: msg.title,
+      body: msg.body,
+      bullets: msg.bullets,
+      primaryCta: msg.ctas?.[0] ? { label: msg.ctas[0].label } : undefined,
+    }));
+
+  if (imageUrl) {
     blocks.push({
       type: 'image',
-      image_url: msg.imageUrl,
+      image_url: imageUrl,
       alt_text: msg.title || 'Sendero card',
     });
   }
@@ -169,7 +183,9 @@ function renderToolInvocation(toolName: string): RenderedForChannel<SlackPayload
   };
 }
 
-function renderToolResult(msg: ChannelMessageToolResult): RenderedForChannel<SlackPayload> | null {
+async function renderToolResult(
+  msg: ChannelMessageToolResult
+): Promise<RenderedForChannel<SlackPayload> | null> {
   // Raw tool results never reach Slack verbatim. Only the agent-curated
   // `share` block is safe to surface to operator + traveler.
   if (!msg.share) return null;
@@ -199,10 +215,22 @@ function renderToolResult(msg: ChannelMessageToolResult): RenderedForChannel<Sla
     });
   }
 
-  if (msg.share.imageUrl) {
+  // Image precedence mirrors the card path: tool-supplied imageUrl wins,
+  // otherwise the canonical Satori OG fallback fills the visual slot so
+  // every channel renders the same card art.
+  const imageUrl =
+    msg.share.imageUrl ??
+    (await buildShareImageUrl({
+      title: msg.share.title,
+      body: msg.share.body,
+      bullets: msg.share.bullets,
+      primaryCta: msg.share.primaryCta ? { label: msg.share.primaryCta.label } : undefined,
+    }));
+
+  if (imageUrl) {
     blocks.push({
       type: 'image',
-      image_url: msg.share.imageUrl,
+      image_url: imageUrl,
       alt_text: msg.share.title || 'Sendero card',
     });
   }

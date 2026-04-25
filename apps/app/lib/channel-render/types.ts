@@ -251,7 +251,11 @@ export interface RenderedForChannel<TPayload = unknown> {
  * channels/{whatsapp,slack,web,email}.ts and may return null when the
  * canonical kind is intentionally not relayed to that channel
  * (reasoning never ships to whatsapp, for example).
+ *
+ * Returns a promise so renderers can lazily sign + build a fallback OG
+ * image URL via `buildShareImageUrl` when the source share has no
+ * explicit imageUrl. Synchronous callers can `await` at the call site.
  */
 export type ChannelRenderer<TPayload = unknown> = (
   msg: ChannelMessage
-) => RenderedForChannel<TPayload> | null;
+) => Promise<RenderedForChannel<TPayload> | null>;
