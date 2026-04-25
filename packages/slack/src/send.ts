@@ -26,9 +26,7 @@ export interface SendBlocksArgs {
   blocks?: KnownBlock[];
 }
 
-export async function sendBlocks(
-  args: SendBlocksArgs
-): Promise<{ channel: string; ts: string }> {
+export async function sendBlocks(args: SendBlocksArgs): Promise<{ channel: string; ts: string }> {
   const r = await args.client.chat.postMessage({
     channel: args.channel,
     thread_ts: args.threadTs,
