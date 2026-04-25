@@ -637,6 +637,13 @@
         "zod": "*",
       },
     },
+    "packages/transfer-policy": {
+      "name": "@sendero/transfer-policy",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
     "packages/ui": {
       "name": "@sendero/ui",
       "version": "0.1.0",
@@ -1619,6 +1626,8 @@
     "@sendero/storybook": ["@sendero/storybook@workspace:apps/storybook"],
 
     "@sendero/tools": ["@sendero/tools@workspace:packages/tools"],
+
+    "@sendero/transfer-policy": ["@sendero/transfer-policy@workspace:packages/transfer-policy"],
 
     "@sendero/ui": ["@sendero/ui@workspace:packages/ui"],
 

@@ -1,0 +1,19 @@
+{
+  "name": "@sendero/transfer-policy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Composable spending guards for AI agent payments — pure-logic port of omniagentpay's GuardChain. Tenant + traveler + tool scopes, daily/weekly/monthly windows, recipient allow/deny, rate limits, manual approval.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "test": "bun test src",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./guards": "./src/guards/index.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
