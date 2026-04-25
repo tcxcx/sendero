@@ -17,6 +17,7 @@ import type { Hex } from 'viem';
 import type { PrefundResult } from './prefund-form';
 
 type FundPhase = 'idle' | 'enrolling' | 'submitting' | 'funded' | 'error';
+type ClaimPhase = 'idle' | 'submitting' | 'claimed' | 'error';
 
 const ARC_EXPLORER = process.env.NEXT_PUBLIC_ARC_EXPLORER_URL ?? 'https://testnet.arcscan.app';
 
@@ -41,6 +42,12 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
   const [phase, setPhase] = useState<FundPhase>('idle');
   const [fundError, setFundError] = useState<string | null>(null);
   const [fundTxHash, setFundTxHash] = useState<Hex | null>(null);
+
+  // ── Channel-bound DCW claim state ────────────────────────────────────
+  const boundTraveler = result.boundTraveler ?? null;
+  const [claimPhase, setClaimPhase] = useState<ClaimPhase>('idle');
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimTxHash, setClaimTxHash] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +119,39 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
     } catch (err) {
       setFundError(err instanceof Error ? err.message : String(err));
       setPhase('error');
+    }
+  }
+
+  async function claimViaDcw() {
+    if (!boundTraveler) return;
+    setClaimError(null);
+    setClaimPhase('submitting');
+    try {
+      const res = await fetch('/api/guest/claim-via-dcw', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tripId: result.tripId,
+          guestLink: result.guestLink,
+          guestWallet: boundTraveler.dcwAddress,
+          signerWalletId: boundTraveler.dcwWalletId,
+          ...(result.claimCode ? { claimCode: result.claimCode } : {}),
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        txHash?: string;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.message ?? data.error ?? `claim_failed (${res.status})`);
+      }
+      setClaimTxHash(data.txHash ?? null);
+      setClaimPhase('claimed');
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : String(err));
+      setClaimPhase('error');
     }
   }
 
@@ -222,8 +262,70 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
           letterSpacing: 'var(--label-meta-tracking, 0.12em)',
         }}
       >
-        Step 2 · Send the link
+        Step 2 · {boundTraveler ? `Claim for ${boundTraveler.displayName} via DCW` : 'Send the link'}
       </div>
+
+      {boundTraveler ? (
+        <div
+          className="flex flex-col gap-3 rounded-[var(--radius-md)] p-4"
+          style={{ border: 'var(--hairline-strong)' }}
+        >
+          {claimPhase !== 'claimed' ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {boundTraveler.displayName} already has a Circle DCW on Arc-Testnet
+                (<span className="font-mono text-xs">{shortAddr(boundTraveler.dcwAddress)}</span>).
+                Claim on their behalf — no link share, no passkey ceremony. Peanut sig comes from
+                the URL fragment; the DCW just submits.
+              </p>
+              <Button
+                type="button"
+                onClick={claimViaDcw}
+                disabled={phase !== 'funded' || claimPhase === 'submitting'}
+              >
+                {claimPhase === 'submitting'
+                  ? 'Submitting claim…'
+                  : phase !== 'funded'
+                    ? 'Fund the trip first (Step 1)'
+                    : `Claim for ${boundTraveler.displayName}`}
+              </Button>
+              {claimError ? (
+                <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  {claimError}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div
+                className="font-mono uppercase text-muted-foreground"
+                style={{
+                  fontSize: 'var(--label-meta, 0.6875rem)',
+                  letterSpacing: 'var(--label-meta-tracking, 0.12em)',
+                }}
+              >
+                Claimed on Arc
+              </div>
+              <div className="break-all rounded-[var(--radius-md)] bg-[color:var(--surface-base)] p-3 font-mono text-xs">
+                {claimTxHash}
+              </div>
+              {claimTxHash ? (
+                <a
+                  href={`${ARC_EXPLORER}/tx/${claimTxHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  View on Arcscan
+                  <ExternalLink data-icon="inline-end" />
+                </a>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {/* Cold-guest fallback (or backup share when DCW path is preferred). */}
       <div className="grid gap-2 sm:grid-cols-2">
         <Button type="button" variant="outline" onClick={() => copy('invite', shareText)}>
           {copied === 'invite' ? 'Invite copied' : 'Copy traveler invite'}
@@ -239,9 +341,9 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
         className="rounded-[var(--radius-md)] bg-[color:var(--surface-floating)] p-3 text-sm text-muted-foreground"
         style={{ border: 'var(--hairline-soft)' }}
       >
-        Paste the same invite text into Slack for employee travel. The Slack app will use the
-        workspace install for approvals, while the claim link keeps traveler budget custody in the
-        escrow flow.
+        {boundTraveler
+          ? 'Backup: share the peanut link if the DCW claim fails. The traveler can still claim from the link via passkey.'
+          : 'Paste the same invite text into Slack for employee travel. The Slack app will use the workspace install for approvals, while the claim link keeps traveler budget custody in the escrow flow.'}
       </div>
       {result.invite?.ok === false ? (
         <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">

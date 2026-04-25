@@ -255,7 +255,9 @@ const claimInput = z.object({
   guestLink: z
     .string()
     .describe('The full https://sendero.travel/g#t=…&k=… link the guest received.'),
-  guestWallet: hex20.describe('Modular Wallet address that will receive the trip.'),
+  guestWallet: hex20.describe(
+    'Wallet address that will receive the trip. For browser passkey claims, this is the MSCA. For DCW-signed claims, this is the traveler EOA.'
+  ),
   chainId: z.number().int().default(5042002).describe('Arc Testnet chain id.'),
   escrowAddress: hex20.optional(),
   claimCode: z
@@ -264,12 +266,29 @@ const claimInput = z.object({
     .optional()
     .describe('6-digit OTP if the trip was created with require2fa=true.'),
   codeNonce: hex32.optional().describe('32-byte nonce returned by prefund_trip when 2FA is on.'),
+  /**
+   * Channel-bound traveler shortcut: when set, the tool ALSO submits the
+   * claimTrip tx on-chain via Circle DCW using this wallet UUID as msg.sender.
+   * The peanut signature still comes from the URL fragment privkey — the DCW
+   * just acts as the gas/submitter wallet (Circle Paymaster sponsors gas, or
+   * the DCW pays from its own balance).
+   *
+   * Omit this for the cold-guest browser path; the tool then returns calldata
+   * only, and the guest's MSCA submits via passkey.
+   */
+  signerWalletId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Circle DCW wallet UUID for the traveler. When set, the tool submits the claim on-chain (DCW pays gas) instead of returning calldata. Use only when the traveler's DCW is bound to the channel."
+    ),
 });
 
 export const guestClaimLinkTool: ToolDef = {
   name: 'guest_claim_link',
   description:
-    'Guest path: parse a Sendero guest link, sign the EIP-191 claim message with the embedded private key, and return the calldata the guest MSCA should submit to claim the trip. After this completes, the booking agent can call reserve_booking / commit_booking against the claimed trip.',
+    "Guest path: parse a Sendero guest link, sign the EIP-191 claim message with the embedded private key. Two modes — (a) cold guest: returns calldata for the guest MSCA to submit via passkey (the /g browser flow); (b) channel-bound: when signerWalletId is set, submits the claim on-chain via the traveler's Circle DCW and returns the tx hash. After this completes, the booking agent can call reserve_booking / commit_booking against the claimed trip.",
   inputSchema: claimInput,
   jsonSchema: {
     type: 'object',
@@ -281,6 +300,11 @@ export const guestClaimLinkTool: ToolDef = {
       escrowAddress: { type: 'string' },
       claimCode: { type: 'string', description: '6-digit OTP if 2FA is on.' },
       codeNonce: { type: 'string', description: '32-byte nonce returned by prefund_trip.' },
+      signerWalletId: {
+        type: 'string',
+        description:
+          "Circle DCW wallet UUID for the traveler. When set, submits the claim on-chain (DCW pays gas via Paymaster) instead of returning calldata. Use only when the traveler's DCW is bound to the channel.",
+      },
     },
   },
   async handler(input) {
@@ -316,14 +340,74 @@ export const guestClaimLinkTool: ToolDef = {
       signature,
       claimCodePreimage,
     });
-    return {
+
+    const baseResult = {
       tripId: parts.tripId,
       guestWallet: parsed.guestWallet,
       signature,
       escrowAddress: escrow,
       claimCodeProvided: hasCode,
       onchainCalls: calls.map(c => ({ to: c.to, data: c.data, value: c.value.toString() })),
-      note: 'Submit the call via the guest MSCA userOp (Circle Paymaster covers gas). MSCA may be uninitialized — include initCode in the userOp to deploy atomically.',
+    };
+
+    // Cold-guest path: return calldata, MSCA submits via passkey (the /g page).
+    if (!parsed.signerWalletId) {
+      return {
+        ...baseResult,
+        submitted: false as const,
+        note: 'Submit the call via the guest MSCA userOp (Circle Paymaster covers gas). MSCA may be uninitialized — include initCode in the userOp to deploy atomically.',
+      };
+    }
+
+    // Channel-bound DCW path: submit on-chain right here. The peanut sig still
+    // comes from the URL fragment privkey — the DCW only pays gas. We use the
+    // raw `callData` form of Circle's API so we don't have to re-encode the
+    // claimTrip ABI we already encoded above.
+    const claimCall = calls[0];
+    if (!claimCall) {
+      throw new Error('buildClaimTripCalls returned no calls — claimTrip ABI changed?');
+    }
+    const { getCircle } = await import('@sendero/circle/wallets');
+    const circle = getCircle();
+    const submitResponse = await circle.createContractExecutionTransaction({
+      walletId: parsed.signerWalletId,
+      contractAddress: escrow,
+      callData: claimCall.data,
+      fee: { type: 'level', config: { feeLevel: 'MEDIUM' as const } },
+    } as never);
+    const txId = (submitResponse.data as { id?: string } | null)?.id;
+    if (!txId) {
+      throw new Error('Circle createContractExecutionTransaction returned no tx id');
+    }
+
+    // Poll until COMPLETE or FAILED. 120s ceiling matches what the identity
+    // + stamps helpers use; Arc Testnet usually lands in <10s.
+    const startedAt = Date.now();
+    let txHash: string | null = null;
+    while (Date.now() - startedAt < 120_000) {
+      const tx = await circle.getTransaction({ id: txId });
+      const data = (tx.data as { transaction?: { state?: string; txHash?: string } } | null)
+        ?.transaction;
+      if (data?.state === 'COMPLETE' && data.txHash) {
+        txHash = data.txHash;
+        break;
+      }
+      if (data?.state === 'FAILED') {
+        throw new Error(`Circle claim tx failed on-chain (id=${txId})`);
+      }
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    if (!txHash) {
+      throw new Error(`Circle claim tx timed out after 120s (id=${txId})`);
+    }
+
+    return {
+      ...baseResult,
+      submitted: true as const,
+      txId,
+      txHash,
+      signerWalletId: parsed.signerWalletId,
+      note: 'Claim submitted via traveler DCW. The peanut signature came from the URL fragment privkey; the DCW signed only the userOp envelope.',
     };
   },
 };
