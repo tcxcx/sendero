@@ -267,6 +267,8 @@ model Tenant {
   whatsappInstall     WhatsAppInstall?
   whatsappLinkTokens  WhatsAppLinkToken[]
   spendCaps           TenantSpendCap[]
+  transferPolicies    TransferPolicy[]
+  transferAttempts    TransferAttempt[]
   nanopayBatches      NanopayBatch[]
   invoices            Invoice[]
   circleWallets       CircleWallet[]
@@ -324,6 +326,8 @@ model User {
   passportVaults      PassportVault[]
   tripEligibilityRuns TripEligibilityRun[]
   slackUserBindings   SlackUserBinding[]
+  transferPolicies    TransferPolicy[]      @relation("TravelerPolicies")
+  transferAttempts    TransferAttempt[]     @relation("TravelerTransferAttempts")
 
   @@index([createdAt])
   @@map("users")
@@ -1013,6 +1017,87 @@ model TenantSpendCap {
   @@unique([tenantId, period])
   @@index([tenantId])
   @@map("tenant_spend_caps")
+}
+
+/// Composable policy guard rows for `@sendero/transfer-policy`. One row =
+/// one guard. Compose multiple rows into a `PolicyChain` at runtime via
+/// `apps/app/lib/transfer-policy/load.ts::loadPolicyChain()`.
+///
+///   guardKind   config shape
+///   ─────────   ────────────────────────────────────────────────────────
+///   budget      { period: 'daily' | 'weekly' | 'monthly',
+///                 capMicroUsdc: string }   // bigint stored as string
+///   single_tx   { maxMicroUsdc: string }
+///   recipient   { mode: 'allow' | 'deny', addresses: string[] }
+///   rate_limit  { maxCount: number, windowMs: number }
+///   confirm     { triggerAtMicroUsdc?: string, reason?: string }
+model TransferPolicy {
+  id              String   @id @default(cuid())
+  tenantId        String
+  scope           String
+  travelerId      String?
+  toolName        String?
+  guardKind       String
+  config          Json
+  hardCap         Boolean  @default(true)
+  alertWebhookUrl String?
+  enabled         Boolean  @default(true)
+  priority        Int      @default(100)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  traveler User?  @relation("TravelerPolicies", fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scope, enabled])
+  @@index([tenantId, travelerId, enabled])
+  @@index([tenantId, toolName, enabled])
+  @@map("transfer_policies")
+}
+
+/// Per-attempt log for every Unified Balance Kit / DCW outbound spend.
+/// Written by `/api/transfer/spend` at every branch — passed, blocked,
+/// pending, executed, failed — so dashboards and budget guards have a
+/// single source of truth for what the chain has been doing.
+///
+///   passed   — chain allowed; kit call hasn't returned yet (transient).
+///   executed — kit.unifiedBalance.spend() succeeded, txHash set.
+///   blocked  — chain hard-rejected, no money moved.
+///   pending  — chain returned requiresApproval; awaiting operator click.
+///   failed   — kit call returned an error mid-execution.
+///
+/// Budget guards read this table alongside `MeterEvent` so DCW transfers
+/// count against the same windows that x402 charges do.
+model TransferAttempt {
+  id                String   @id @default(cuid())
+  tenantId          String
+  travelerId        String?
+  amountMicroUsdc   BigInt
+  /// Destination address (0x… EVM, sol… Solana, etc.).
+  recipient         String
+  /// App Kit chain name (e.g. "Arc_Testnet", "Base_Sepolia").
+  destinationChain  String
+  /// Source-chain breakdown when explicit allocations were used; null
+  /// for App-Kit-automatic-routing.
+  sourceAllocations Json?
+  status            String   @default("passed")
+  /// Returned by kit.unifiedBalance.spend() on success.
+  txHash            String?
+  /// Reason populated when status = blocked / pending / failed.
+  blockReason       String?
+  /// Trimmed PolicyChainResult.trace[] for audit / dashboard display.
+  policyTrace       Json?
+  /// Free-form metadata (App Kit fee breakdown, agent DID, etc.).
+  metadata          Json?
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  traveler User?  @relation("TravelerTransferAttempts", fields: [travelerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, travelerId, createdAt])
+  @@map("transfer_attempts")
 }
 
 /// Generic webhook dedupe ledger. Every inbound webhook (Duffel, Slack,
