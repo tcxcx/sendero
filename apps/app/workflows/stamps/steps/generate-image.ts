@@ -76,7 +76,35 @@ function pickImageProvider(): PickedProvider | null {
   return null;
 }
 
-export const generateStampImage = async (prompt: string): Promise<string> => {
+/**
+ * Image reference attached to the multimodal request. URL is fetched
+ * server-side by Vertex / Gemini — keeps the prompt token-cheap (no
+ * base64 payload) and the moodboard files small enough to round-trip
+ * without rate-limiting on the public app host.
+ */
+export interface StampImageReference {
+  url: string;
+  /** Inline guidance fed into the text portion so the model knows how to use this image. */
+  guidance: string;
+}
+
+/**
+ * Vertex AI fetches reference image URLs server-side. URLs hosted on
+ * `localhost` (or any private DNS) won't resolve from Google's
+ * network — drop the refs in dev so the text prompt still runs. The
+ * brand vocabulary in the prompt body still steers the output; we
+ * just lose the visual anchor until a public hostname is reachable.
+ */
+function refsAreReachable(refs: StampImageReference[]): boolean {
+  if (refs.length === 0) return false;
+  const first = refs[0]?.url ?? '';
+  return !/^https?:\/\/(localhost|127\.|0\.0\.0\.0|::1|\[::1\])/i.test(first);
+}
+
+export const generateStampImage = async (
+  prompt: string,
+  references: StampImageReference[] = []
+): Promise<string> => {
   'use step';
 
   const picked = pickImageProvider();
@@ -86,9 +114,43 @@ export const generateStampImage = async (prompt: string): Promise<string> => {
     );
   }
 
+  const usableRefs = refsAreReachable(references) ? references : [];
+  if (references.length > 0 && usableRefs.length === 0) {
+    console.warn(
+      '[generate-image] dropping moodboard refs — NEXT_PUBLIC_APP_URL points at a host Vertex cannot fetch (localhost). Prompt text-only.'
+    );
+  }
+
+  // Fold any reference-image guidance into the text portion so the
+  // model knows what to copy + what to ignore (especially names/PII
+  // baked into the brand assets).
+  const guidanceLines = usableRefs
+    .map((r, i) => `Reference image ${i + 1}: ${r.guidance}`)
+    .join('\n');
+  const fullText = guidanceLines ? `${prompt}\n\n${guidanceLines}` : prompt;
+
+  // Multimodal when refs are reachable; text-only when they're not.
+  // Vertex Gemini fetches URLs server-side — no base64 bloat in the
+  // request envelope.
+  const messages =
+    usableRefs.length > 0
+      ? [
+          {
+            role: 'user' as const,
+            content: [
+              { type: 'text' as const, text: fullText },
+              ...usableRefs.map((r) => ({
+                type: 'image' as const,
+                image: r.url,
+              })),
+            ],
+          },
+        ]
+      : [{ role: 'user' as const, content: fullText }];
+
   const { files } = await generateText({
     model: picked.model,
-    prompt,
+    messages,
     maxRetries: 2,
   });
 

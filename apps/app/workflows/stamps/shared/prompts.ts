@@ -1,71 +1,112 @@
 /**
- * Prompts for the four stamp kinds.
+ * Prompts for the four stamp kinds — brand-anchored per DESIGN.md.
  *
- * The image prompts are tuned to Gemini 2.5 Flash Image. They lean
- * into the brand's "vintage paper-stock travel artifact" vibe so all
- * four kinds feel like they belong to the same passport. Aspect ratio
- * is left to the model — Gemini returns variable dimensions and OG
- * unfurl bots crop gracefully (per plan v3 §13.v3).
+ * The image prompts target Gemini 2.5 Flash Image (Vertex AI). Every
+ * prompt is composed of:
  *
- * The caption prompts target GPT-5-nano via the AI Gateway. We ask
- * for a single short line (≤140 chars) suitable for the OG description
- * + collection-grid hover tooltip.
+ *   1. **Object cue**: what kind of artifact to draw (boarding pass,
+ *      receipt, map, passport spread).
+ *   2. **Trip context**: route, carrier, cabin, dates — pulled from
+ *      the live booking.
+ *   3. **Moodboard image refs**: passed in `messages[]` as multimodal
+ *      input alongside the text. Vertex fetches the image URLs
+ *      directly from `apps/app/public/brand/moodboard/`. See
+ *      `./moodboard.ts` for the per-kind picks + per-ref guidance.
+ *   4. **Brand anchor**: the universal Sendero visual rules (vermillion
+ *      linework, parchment, hand-drawn editorial — `BRAND_ANCHOR_TEXT`).
+ *
+ * The caption prompts target Gemini 2.5 Flash-Lite. Single short line
+ * (≤140 chars) suitable for the OG description + collection-grid
+ * hover tooltip. Slack truncates around 150 chars and WhatsApp around
+ * 160 — staying under 140 leaves a buffer.
  */
 
+import { BRAND_ANCHOR_TEXT, type MoodboardRef, moodboardForKind } from './moodboard';
 import type { StampContext } from './types';
 
+/**
+ * Compose the text portion of the image prompt. Pair this with the
+ * moodboard refs from `imageReferencesForKind` and pass both to
+ * Gemini via the AI SDK's multimodal `messages` API.
+ */
 export function imagePromptForKind(ctx: StampContext): string {
   const { tenant, trip, booking } = ctx;
   const brand = tenant.displayName;
-  const primary = tenant.primary ?? 'warm sepia';
-  const secondary = tenant.secondary ?? 'deep navy';
   const route =
     trip.origin && trip.destination ? `${trip.origin} → ${trip.destination}` : 'a journey';
 
-  switch (ctx.kind) {
-    case 'BoardingPass':
-      return [
-        `A vintage 1960s airline boarding pass artifact, hand-illustrated on warm cream cardstock with letterpress feel.`,
-        `Route: ${route}.`,
-        booking?.carrier ? `Carrier: ${booking.carrier}.` : '',
-        booking?.cabin ? `Cabin: ${booking.cabin}.` : '',
-        `Brand: ${brand}. Primary color ${primary}; accent ${secondary}.`,
-        `Slight wear, perforated edge, jet-age typography. No people, no plane in flight — just the ticket itself.`,
-        `Square composition, photorealistic with paper grain and ink absorption. No text-as-text larger than route codes.`,
-      ]
-        .filter(Boolean)
-        .join(' ');
+  const objectCue = (() => {
+    switch (ctx.kind) {
+      case 'BoardingPass':
+        return [
+          `Draw a vintage boarding pass ticket on cream parchment.`,
+          `Route codes: ${trip.origin ?? 'JFK'} → ${trip.destination ?? 'GRU'}.`,
+          booking?.carrier ? `Carrier code: ${booking.carrier}.` : '',
+          booking?.cabin ? `Cabin label: ${booking.cabin}.` : '',
+          `Perforated edge on the right, ticket-stub aesthetic, jet-age letterpress feel.`,
+          `One small ${brand} cartouche stamp in the upper-right corner — small, not center stage.`,
+          `No people, no plane in flight, no airport scene — just the ticket itself.`,
+        ]
+          .filter(Boolean)
+          .join(' ');
+      case 'SettlementReceipt':
+        return [
+          `Draw a vintage railway-ticket-style settlement receipt on coarse parchment.`,
+          booking?.totalUsd
+            ? `Amount stamped on it: USDC ${booking.totalUsd.toFixed(2)}.`
+            : 'Amount stamped: USDC.',
+          booking?.ref ? `Reference code visible: ${booking.ref}.` : '',
+          `Punched cancellation marks suggesting the payment cleared.`,
+          `Small ${brand} embossed seal in the lower-right corner.`,
+          `No people, no logos other than the ${brand} seal.`,
+        ]
+          .filter(Boolean)
+          .join(' ');
+      case 'ItineraryMap':
+        return [
+          `Draw a hand-illustrated travel map.`,
+          `Centerpiece: a flowing route line from ${trip.origin ?? 'origin'} to ${trip.destination ?? 'destination'} traced over a stylized landmass.`,
+          `Compass rose top-right, small ${brand} cartouche bottom-right.`,
+          `WPA-poster + Sendero map-room sensibility — no airline-website tropes.`,
+          `City names readable but small; the route line is the hero.`,
+        ].join(' ');
+      case 'TripPassport':
+        return [
+          `Draw an open passport book spread on a parchment surface.`,
+          `Both pages visible. Layered ink stamps on the right page in vermillion and midnight ink — overlapping at jaunty angles. Each stamp suggests a moment of the trip (boarding, hotel, settlement, route map).`,
+          `Left page: blank or with a generic destination silhouette in soft sand-colored linework. NO name, NO photograph, NO passport number visible — only invented placeholder marks.`,
+          `Small ${brand} brand cartouche embossed in the corner.`,
+          `Route hint: ${route}. Use it for the destination silhouette only, not for printed text.`,
+        ].join(' ');
+    }
+  })();
 
-    case 'SettlementReceipt':
-      return [
-        `A vintage railway-ticket style settlement receipt, printed on coarse off-white paper with a ${primary} ink stamp.`,
-        booking?.totalUsd ? `Amount paid: USDC ${booking.totalUsd.toFixed(2)}.` : '',
-        booking?.ref ? `Reference: ${booking.ref}.` : '',
-        `Brand: ${brand} (${secondary} embossed seal in the corner).`,
-        `Punched cancellation marks, slightly torn perforation. Square composition, paper-grain photorealism. No people.`,
-      ]
-        .filter(Boolean)
-        .join(' ');
+  return `${objectCue}\n\n${BRAND_ANCHOR_TEXT}`;
+}
 
-    case 'ItineraryMap':
-      return [
-        `A WPA-poster-style hand-drawn travel map.`,
-        `Centerpiece: a flowing route line from ${trip.origin ?? 'origin'} to ${trip.destination ?? 'destination'} traced over a stylized world.`,
-        `Palette: ${primary} for the route, ${secondary} for landmasses, cream paper background.`,
-        `Compass rose top-right, a small stamped ${brand} cartouche bottom-right.`,
-        `1930s travel-poster typography (no readable text larger than airport codes).`,
-        `Square composition, screen-print texture, slight registration offset for authenticity.`,
-      ].join(' ');
+/**
+ * Image references to attach to the Gemini multimodal request. Each
+ * ref carries `url` + `guidance` — the guidance is folded into the
+ * text prompt so the model knows what to take from the image and
+ * what to ignore (especially names/PII).
+ */
+export function imageReferencesForKind(ctx: StampContext): MoodboardRef[] {
+  return moodboardForKind(ctx.kind);
+}
 
-    case 'TripPassport':
-      return [
-        `A vintage passport spread, two facing pages on cream cardstock with marbled endpapers.`,
-        `Left page: a stylized portrait illustration of the traveler (no real likeness).`,
-        `Right page: four ink stamps — boarding pass, hotel, settlement receipt, itinerary map — overlapping at jaunty angles in ${primary} and ${secondary} ink.`,
-        `Brand cartouche: ${brand}. Route: ${route}.`,
-        `Slight page curl, embossed gold border, photorealistic paper grain. No readable text larger than country codes.`,
-      ].join(' ');
-  }
+/**
+ * Inline text describing the moodboard refs — concatenated into the
+ * prompt so the model knows what each image is for. Keeps token cost
+ * low (just one labelled line per ref) while making the image inputs
+ * intelligible.
+ */
+export function moodboardGuidanceText(ctx: StampContext): string {
+  const refs = moodboardForKind(ctx.kind);
+  if (refs.length === 0) return '';
+  const lines = refs.map(
+    (r, i) => `Reference image ${i + 1} (${r.role}): ${r.guidance}`
+  );
+  return ['Reference images attached:', ...lines].join('\n');
 }
 
 export function captionPromptForKind(ctx: StampContext): string {
@@ -76,7 +117,8 @@ export function captionPromptForKind(ctx: StampContext): string {
   const baseRules = [
     'Return ONLY one sentence, max 140 characters.',
     'No quotation marks, no emoji, no hashtags, no labels like "Caption:".',
-    'Plain text suitable for a unfurl preview.',
+    'Plain text suitable for an unfurl preview.',
+    'Sendero voice: a smart travel guide with taste — editorial, observant, slightly literary, never gimmicky.',
   ].join(' ');
 
   switch (ctx.kind) {
@@ -85,9 +127,9 @@ export function captionPromptForKind(ctx: StampContext): string {
     case 'SettlementReceipt':
       return `Write a single one-liner acknowledging that a corporate travel booking was paid in full${booking?.totalUsd ? ` for USDC ${booking.totalUsd.toFixed(2)}` : ''}. Brisk, slightly proud, ledger-clerk voice. ${baseRules}`;
     case 'ItineraryMap':
-      return `Write a single one-liner describing the route ${route} as if narrating a vintage travel poster. Sparse, evocative. ${baseRules}`;
+      return `Write a single one-liner describing the route ${route} as if narrating from a Sendero map-room — observant, sparse, evocative. ${baseRules}`;
     case 'TripPassport':
-      return `Write a single one-liner closing a completed trip ${route}, in the voice of a passport stamp. Reflective, brief. ${baseRules}`;
+      return `Write a single one-liner closing a completed trip ${route}, in the voice of a passport stamp impression. Reflective, brief, editorial. ${baseRules}`;
   }
 }
 

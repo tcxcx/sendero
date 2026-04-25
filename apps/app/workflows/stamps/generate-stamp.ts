@@ -24,7 +24,12 @@
 import { FatalError } from 'workflow';
 
 import { loadStampContext } from './shared/load-context';
-import { captionPromptForKind, imagePromptForKind, manifestNameForKind } from './shared/prompts';
+import {
+  captionPromptForKind,
+  imagePromptForKind,
+  imageReferencesForKind,
+  manifestNameForKind,
+} from './shared/prompts';
 import type { StampKind, StampManifest, StampWorkflowResult } from './shared/types';
 
 import { generateStampCaption } from './steps/generate-caption';
@@ -75,7 +80,7 @@ export const generateStamp = async (args: {
     await writeStampProgress({ type: 'progress', step: 'generate-caption', status: 'in_progress' });
 
     const [imageDataUrl, caption] = await Promise.all([
-      generateStampImage(imagePromptForKind(ctx)),
+      generateStampImage(imagePromptForKind(ctx), imageReferencesForKind(ctx)),
       generateStampCaption(captionPromptForKind(ctx)),
     ]);
 
