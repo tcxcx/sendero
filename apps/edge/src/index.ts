@@ -41,6 +41,14 @@ const edgeOrigin =
   process.env.SENDERO_EDGE_URL ??
   'https://edge.sendero.travel';
 
+/**
+ * Worker boot timestamp — captured at module load. `uptime_ms` on the
+ * health endpoint is the delta from this. Persists for the lifetime of
+ * a single Worker isolate; eviction resets it (which is fine — the
+ * health probe only cares that a fresh isolate boots and serves traffic).
+ */
+const WORKER_BOOT_AT = Date.now();
+
 function surfaceOrigins() {
   return {
     appOrigin: process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.sendero.travel',
@@ -80,6 +88,53 @@ app.get('/', c =>
     tools: toolList.map(t => t.name),
   })
 );
+
+/**
+ * Health probe — public, unauthenticated. If this function executes,
+ * the worker is alive by definition; we therefore always return `ok: true`
+ * with a 200. The probe verifies (a) status code, (b) JSON shape, and
+ * (c) latency against an external SLO — all from the caller's side.
+ *
+ * `version` reads `CF_VERSION_METADATA` (Cloudflare Workers binding) or
+ * `WORKER_VERSION_ID` (manually exposed) and falls back to `'unknown'`.
+ * `deployment` is `production` when `CF_ENV` / `WORKER_ENV` says so,
+ * `preview` otherwise — preview-alias URLs deploy with workers_dev=true.
+ */
+app.get('/health', c => {
+  const env = (c.env ?? {}) as Record<string, unknown>;
+  const versionRaw =
+    env.CF_VERSION_METADATA ??
+    env.WORKER_VERSION_ID ??
+    (globalThis as { WORKER_VERSION_ID?: string }).WORKER_VERSION_ID ??
+    process.env.CF_VERSION_METADATA ??
+    process.env.WORKER_VERSION_ID ??
+    'unknown';
+  // CF_VERSION_METADATA can be either a string SHA or a binding object
+  // ({ id, tag }). Normalize both.
+  let version = 'unknown';
+  if (typeof versionRaw === 'string' && versionRaw.length > 0) {
+    version = versionRaw;
+  } else if (versionRaw && typeof versionRaw === 'object') {
+    const obj = versionRaw as { id?: string; tag?: string };
+    version = obj.id ?? obj.tag ?? 'unknown';
+  }
+
+  const deploymentRaw =
+    env.CF_ENV ??
+    env.WORKER_ENV ??
+    process.env.CF_ENV ??
+    process.env.WORKER_ENV ??
+    process.env.NODE_ENV;
+  const deployment = deploymentRaw === 'production' ? 'production' : 'preview';
+
+  return c.json({
+    ok: true,
+    version,
+    uptime_ms: Date.now() - WORKER_BOOT_AT,
+    timestamp: new Date().toISOString(),
+    deployment,
+  });
+});
 
 app.get('/llms.txt', c => {
   c.header('Content-Type', 'text/plain; charset=utf-8');

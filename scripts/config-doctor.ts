@@ -150,7 +150,20 @@ const ENV_AUTO_INJECTED_PREFIXES = [
   'CF_',
   'TURBO_',
   'SST_',
+  // Cloudflare Workers Builds injects WORKER_VERSION_ID / WORKER_ENV /
+  // WORKER_BOOT_AT into the worker runtime — they're never set in .env.
+  'WORKER_',
 ];
+
+// Keys that legitimately appear in .env.example without a `process.env.X`
+// reference in TS code. These are consumed by tools that read env via other
+// mechanisms (Prisma reads `DATABASE_URL` / `DIRECT_URL` from the schema,
+// Clerk's middleware auto-discovers NEXT_PUBLIC_CLERK_SIGN_*_URL, etc.).
+const ENV_KNOWN_UNREFERENCED = new Set([
+  'DIRECT_URL',
+  'NEXT_PUBLIC_CLERK_SIGN_IN_URL',
+  'NEXT_PUBLIC_CLERK_SIGN_UP_URL',
+]);
 
 function isAutoInjected(name: string): boolean {
   if (ENV_AUTO_INJECTED.has(name)) return true;
@@ -217,9 +230,12 @@ async function checkEnvExample() {
     );
   }
 
-  // Declared-but-unreferenced ⇒ warn. Often legitimate (third-party
-  // injection like Clerk's NEXT_PUBLIC_CLERK_*) but worth flagging.
-  const unused = [...declared].filter(k => !referenced.has(k) && !isAutoInjected(k)).sort();
+  // Declared-but-unreferenced ⇒ warn. Skip ENV_KNOWN_UNREFERENCED — those
+  // are consumed by tools that don't go through `process.env.X` (Prisma's
+  // schema, Clerk middleware auto-discovery, etc.).
+  const unused = [...declared]
+    .filter(k => !referenced.has(k) && !isAutoInjected(k) && !ENV_KNOWN_UNREFERENCED.has(k))
+    .sort();
   for (const name of unused) {
     record(
       SECTION,

@@ -92,6 +92,18 @@ pre-push:
         - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
       run: bun run deploy:edge:dry-run
 
+    # Config-drift gate — runs `bun run config:doctor` against the repo. Catches
+    # `.env.example` / .mise.toml / wrangler.toml / vercel.json / next-env.d.ts
+    # drift before a push lands on CI. Now blocking (was theater until env-
+    # example was backfilled — see scripts/config-doctor.ts header).
+    #
+    # Glob is intentionally broad: any change touching env/config could ripple.
+    config-doctor:
+      glob: "{.env.example,.mise.toml,.nvmrc,package.json,apps/edge/wrangler.toml,apps/*/vercel.json,apps/*/next-env.d.ts,scripts/config-doctor.ts,apps/**/*.{ts,tsx},packages/**/src/**/*.ts}"
+      skip:
+        - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
+      run: bun run config:doctor
+
 commit-msg:
   commands:
     non-empty:
