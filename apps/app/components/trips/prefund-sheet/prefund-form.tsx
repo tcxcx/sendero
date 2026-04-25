@@ -20,11 +20,24 @@ export const prefundFormSchema = z.object({
 
 type FormValues = z.infer<typeof prefundFormSchema>;
 
+/**
+ * Encoded calls returned from the `prefund_trip` MCP tool. Shape mirrors
+ * `EncodedCall` from `@sendero/guest` after JSON serialization (BigInts
+ * cross the wire as decimal strings). The buyer-MSCA submitter
+ * (`prefund-success.tsx`) coerces `value` back to bigint before handing
+ * the array to `sendUserOp`.
+ */
+export type PrefundOnchainCall = {
+  to: `0x${string}`;
+  data: `0x${string}`;
+  value: string;
+};
+
 export type PrefundResult = {
   tripId: string;
   guestLink: string;
   claimCode?: string | null;
-  onchainCalls: unknown;
+  onchainCalls: PrefundOnchainCall[];
   invite?: { ok?: boolean; skipped?: boolean; error?: string };
 };
 

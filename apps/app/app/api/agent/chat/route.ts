@@ -26,6 +26,7 @@
  */
 
 import { auth } from '@clerk/nextjs/server';
+import { createVertex } from '@ai-sdk/google-vertex';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { prisma } from '@sendero/database';
@@ -320,16 +321,44 @@ export async function POST(req: NextRequest) {
   // Streaming routes can't catch in-band gateway errors (the "Free
   // credits" abuse-protection message arrives as a data event mid-
   // stream, not as a thrown error — gatewayErrorAllowsDirectRetry only
-  // helps non-streaming dispatch). Prefer direct providers here so the
-  // gateway never gates the surface. Falls back to gateway only when
-  // no direct provider is configured.
-  const modelHandle = resolveDirectModel(tier) ?? resolveModel(tier);
+  // helps non-streaming dispatch). When GOOGLE_CLOUD_PROJECT is set,
+  // construct Vertex Gemini directly here — bypass the resolver chain
+  // entirely so module-cache staleness in dev doesn't reroute through
+  // the gateway. Falls back to the resolver cascade when Vertex isn't
+  // configured.
+  const vertexProjectEnv = process.env.GOOGLE_CLOUD_PROJECT;
+  const vertexLocationEnv = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+  let modelHandle: ReturnType<typeof resolveModel> = null;
+  if (vertexProjectEnv) {
+    let googleAuthOptions: Parameters<typeof createVertex>[0]['googleAuthOptions'];
+    const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    if (saJson) {
+      try {
+        googleAuthOptions = { credentials: JSON.parse(saJson) };
+      } catch {
+        // bad JSON — fall through to resolver
+      }
+    }
+    try {
+      const vertex = createVertex({
+        project: vertexProjectEnv,
+        location: vertexLocationEnv,
+        googleAuthOptions,
+      });
+      modelHandle = vertex('gemini-2.5-flash');
+    } catch {
+      // createVertex constructor failure — fall through to resolver
+    }
+  }
+  if (!modelHandle) {
+    modelHandle = resolveDirectModel(tier) ?? resolveModel(tier);
+  }
   if (!modelHandle) {
     return NextResponse.json(
       {
         error: 'no_llm_configured',
         message:
-          'Set AI_GATEWAY_API_KEY (preferred), or GOOGLE_GENERATIVE_AI_API_KEY / GEMINI_API_KEY, or OPENAI_API_KEY, or ANTHROPIC_API_KEY before running the agent.',
+          'Set GOOGLE_CLOUD_PROJECT (Vertex), GOOGLE_GENERATIVE_AI_API_KEY (AI Studio), AI_GATEWAY_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY before running the agent.',
       },
       { status: 503 }
     );

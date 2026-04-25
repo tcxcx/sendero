@@ -18,14 +18,14 @@
  * server-rendered baseline; live messages stack on top.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useRouter } from 'next/navigation';
 
 import { asChannelKey, type ChannelKey } from './channels';
-import { type ConversationEntry, MetaInbox } from './meta-inbox';
+import { type ConversationEntry, type LiveMeterEvent, MetaInbox } from './meta-inbox';
 import type { TripRowData } from './trip-rail';
 
 interface MetaInboxLiveProps {
@@ -53,10 +53,54 @@ export function MetaInboxLive({
     ? asChannelKey(trips.find(t => t.id === scopedTripId)?.channel)
     : 'internal';
 
-  // Internal mode: live agent stream.
+  // Internal mode: live agent stream. Body callback so the trip
+  // scope flows on every turn — `/api/chat` records it on the
+  // MeterEvent metadata, and `/api/meter/stream` filters by it so the
+  // NanopayPanel reads as "Trip cost" inside `/dashboard/inbox/[id]`.
   const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: '/api/chat' }),
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+      body: () => ({
+        channel: 'web' as const,
+        tripId: scopedTripId ?? undefined,
+      }),
+    }),
   });
+
+  // Server-confirmed meter events. Subscribed in both unscoped console
+  // and scoped trip mode — the SSE filter (?tripId=…) narrows the
+  // stream when scoped so we only see events for the focused trip.
+  const [meterEvents, setMeterEvents] = useState<LiveMeterEvent[]>([]);
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (scopedTripId) params.set('tripId', scopedTripId);
+    const url = `/api/meter/stream${params.toString() ? `?${params.toString()}` : ''}`;
+    const es = new EventSource(url);
+    const onMeter = (e: MessageEvent) => {
+      try {
+        const evt = JSON.parse(e.data) as LiveMeterEvent;
+        setMeterEvents(prev => {
+          // Idempotent: pg_notify can deliver same id twice if a turn
+          // is retried (see meter idempotencyKey contract).
+          if (prev.some(r => r.id === evt.id)) return prev;
+          // Keep the last 60 — enough for any session, bounded for
+          // memory.
+          const next = [...prev, evt];
+          return next.length > 60 ? next.slice(-60) : next;
+        });
+      } catch {
+        /* malformed payload */
+      }
+    };
+    es.addEventListener('meter', onMeter as EventListener);
+    return () => {
+      es.removeEventListener('meter', onMeter as EventListener);
+      es.close();
+      // Reset on scope change so a stale list doesn't bleed across
+      // trips when the operator navigates from one inbox to another.
+      setMeterEvents([]);
+    };
+  }, [scopedTripId]);
 
   // Scoped mode: optimistic operator messages awaiting the next refresh.
   const [optimistic, setOptimistic] = useState<ConversationEntry[]>([]);
@@ -112,6 +156,7 @@ export function MetaInboxLive({
       traveler={traveler}
       holdExpires={holdExpires}
       pendingBooking={pendingBooking}
+      meterEvents={meterEvents}
       onSubmit={handleSubmit}
       disabled={posting || isStreaming}
     />
