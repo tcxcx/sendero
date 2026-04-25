@@ -71,7 +71,8 @@
     "prisma": "^5.22.0",
     "turbo": "^2.9.6",
     "typescript": "^5.8.3",
-    "viem": "^2.21.0"
+    "viem": "^2.21.0",
+    "wrangler": "^4.85.0"
   },
   "repository": {
     "type": "git",
