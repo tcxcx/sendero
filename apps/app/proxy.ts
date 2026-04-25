@@ -41,6 +41,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/webhooks/(.*)', // Duffel, Clerk, etc. — signature-verified per route
   '/api/agent/dispatch', // internal fan-in — protected by AGENT_DISPATCH_SECRET / CRON_SECRET in-route
   '/api/workflows/stamps/(.*)', // stamp WDK fan-in — same secret/session auth as dispatch, in-route
+  '/api/workflows/reputation/(.*)', // reputation WDK fan-in — same secret/session auth, in-route
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
   '/api/health',
   '/api/guest/claimed', // guest submits post-claim; no session yet
