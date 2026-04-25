@@ -13,7 +13,7 @@
  * is on a fork; this file covers the pure helper.
  */
 
-import { dispatchBookingSettledV2, dispatchClaimLockout } from './dispatch';
+import { dispatchBookingSettledV2, dispatchClaimLockout } from '../src/dispatch';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 const ORIGINAL_FETCH = globalThis.fetch;
