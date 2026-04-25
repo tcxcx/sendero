@@ -17,6 +17,7 @@ import { after, NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 import type { SlackInstall as SlackInstallRow } from '@prisma/client';
+import { notifier } from '@sendero/notifications';
 import {
   buildResolvedBlocks,
   createSlackClient,
@@ -158,8 +159,31 @@ async function handleApprovalAction(
       totalUsd: true,
       segments: true,
       tenantId: true,
+      pnr: true,
+      trip: {
+        select: {
+          id: true,
+          intent: true,
+          traveler: { select: { email: true, displayName: true } },
+        },
+      },
     },
   });
+
+  // Email parity with the Slack approval flip. On approve, the traveler
+  // gets a hold-confirmed receipt. Failures are swallowed so the Slack
+  // ack flow stays green even if Resend is down or unconfigured.
+  if (parsed.decision === 'approve' && booking?.trip?.traveler?.email) {
+    await sendHoldConfirmedEmail({
+      bookingId: parsed.bookingId,
+      tripId: parsed.tripId,
+      pnr: booking.pnr,
+      segments: booking.segments,
+      tripIntent: booking.trip.intent,
+      travelerEmail: booking.trip.traveler.email,
+      travelerName: booking.trip.traveler.displayName ?? 'Traveler',
+    }).catch(err => console.error('[slack/interactions] hold_confirmed email failed:', err));
+  }
 
   if (payload.channel && payload.message) {
     const client = createSlackClient(install.botToken);
@@ -308,4 +332,58 @@ function buildToolRegistryForTenant(ctx: { tenantId: string; userId: string }): 
       });
   }
   return registry;
+}
+
+// ─── trip-event email ─────────────────────────────────────────────────
+
+async function sendHoldConfirmedEmail(args: {
+  bookingId: string;
+  tripId: string;
+  pnr: string | null;
+  segments: unknown;
+  tripIntent: unknown;
+  travelerEmail: string;
+  travelerName: string;
+}): Promise<void> {
+  const tripUrl = buildTripUrl(args.tripId);
+  const tripSummary = summarizeTripIntent(args.tripIntent) ?? 'your upcoming trip';
+  const departureSummary = summarizeFirstSegment(args.segments) ?? tripSummary;
+  await notifier().sendHoldConfirmed(args.travelerEmail, {
+    tripSummary,
+    travelerName: args.travelerName,
+    pnr: args.pnr ?? args.bookingId,
+    departureSummary,
+    tripUrl,
+  });
+}
+
+function buildTripUrl(tripId: string): string {
+  const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ?? 'https://app.sendero.travel';
+  return `${base}/dashboard/console?tripId=${encodeURIComponent(tripId)}`;
+}
+
+function summarizeTripIntent(intent: unknown): string | null {
+  if (!intent || typeof intent !== 'object') return null;
+  const i = intent as { origin?: unknown; dest?: unknown; destination?: unknown };
+  const origin = typeof i.origin === 'string' ? i.origin : null;
+  const dest =
+    typeof i.dest === 'string' ? i.dest : typeof i.destination === 'string' ? i.destination : null;
+  if (origin && dest) return `${origin} → ${dest}`;
+  if (dest) return String(dest);
+  return null;
+}
+
+function summarizeFirstSegment(segments: unknown): string | null {
+  if (!Array.isArray(segments) || segments.length === 0) return null;
+  const first = segments[0] as Record<string, unknown>;
+  const origin = typeof first.origin === 'string' ? first.origin : null;
+  const dest = typeof first.destination === 'string' ? first.destination : null;
+  const depart =
+    typeof first.departAt === 'string'
+      ? first.departAt
+      : typeof first.departingAt === 'string'
+        ? first.departingAt
+        : null;
+  const parts = [origin && dest ? `${origin} → ${dest}` : (origin ?? dest), depart].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
 }

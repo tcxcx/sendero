@@ -1101,6 +1101,11 @@ model TransferAttempt {
   id                String   @id @default(cuid())
   tenantId          String
   travelerId        String?
+  /// Spend ('spend') vs tenant pre-fund deposit ('deposit'). Spends
+  /// originate from the traveler's DCW; deposits originate from the
+  /// tenant treasury and credit the traveler's unified balance via
+  /// `kit.depositFor`. Defaults to 'spend' for backwards compat.
+  kind              String   @default("spend")
   amountMicroUsdc   BigInt
   /// Destination address (0x… EVM, sol… Solana, etc.).
   recipient         String
@@ -1126,6 +1131,7 @@ model TransferAttempt {
 
   @@index([tenantId, status, createdAt])
   @@index([tenantId, travelerId, createdAt])
+  @@index([tenantId, kind, createdAt])
   @@map("transfer_attempts")
 }
 
