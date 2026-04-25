@@ -51,7 +51,7 @@ function operatorPrivateKey(): Hex {
   const pk = process.env.OPERATOR_PRIVATE_KEY ?? process.env.ARC_OPERATOR_PRIVATE_KEY;
   if (!pk || !/^0x[0-9a-fA-F]{64}$/.test(pk)) {
     throw new Error(
-      'OPERATOR_PRIVATE_KEY missing or malformed. Required to submit operator-gated escrow calls.',
+      'OPERATOR_PRIVATE_KEY missing or malformed. Required to submit operator-gated escrow calls.'
     );
   }
   return pk as Hex;
@@ -64,7 +64,7 @@ function escrowAddress(): Address {
     process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW;
   if (!a || !/^0x[0-9a-fA-F]{40}$/.test(a)) {
     throw new Error(
-      'ARC_ESCROW_ADDRESS missing or malformed. Required to address the SenderoGuestEscrow proxy.',
+      'ARC_ESCROW_ADDRESS missing or malformed. Required to address the SenderoGuestEscrow proxy.'
     );
   }
   return a as Address;
@@ -108,11 +108,7 @@ export type OperatorSubmitOutcome =
     }
   | {
       ok: false;
-      reason:
-        | 'operator_key_unavailable'
-        | 'escrow_unconfigured'
-        | 'reverted'
-        | 'rpc_error';
+      reason: 'operator_key_unavailable' | 'escrow_unconfigured' | 'reverted' | 'rpc_error';
       message: string;
       /** Contract-level error name when reason === 'reverted'. */
       errorName?: string;
@@ -175,9 +171,7 @@ interface WriteArgs {
   args: readonly unknown[];
 }
 
-async function submitOperatorWrite(
-  write: WriteArgs,
-): Promise<OperatorSubmitOutcome> {
+async function submitOperatorWrite(write: WriteArgs): Promise<OperatorSubmitOutcome> {
   let wallet: WalletClient;
   let escrow: Address;
   try {

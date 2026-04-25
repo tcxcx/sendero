@@ -259,7 +259,8 @@ function CancelResultBanner({ result }: { result: CancelSweepResult }) {
   // user can retry the right one (sweep can run on its own after cancel).
   return (
     <div className="t-mono" style={{ fontSize: 11, color: 'var(--vermillion)' }}>
-      ✗ {result.step === 'cancel' ? 'Cancel failed' : 'Sweep failed (cancel succeeded)'}: {result.reason}
+      ✗ {result.step === 'cancel' ? 'Cancel failed' : 'Sweep failed (cancel succeeded)'}:{' '}
+      {result.reason}
     </div>
   );
 }
