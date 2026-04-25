@@ -4,6 +4,7 @@ export * from './client';
 export * from './blocks';
 export * from './approval';
 export * from './interactions';
+export * from './send';
 export { fireBatchFailedAlert } from './alerts';
 export type { BatchFailedAlert } from './alerts';
 // Note: the AI agent loop (`runSlackAgentTurn`) and the per-tenant slack-tools

@@ -63,6 +63,28 @@ export class WhatsAppClient {
     });
   }
 
+  /**
+   * Send a pre-rendered Cloud API payload.
+   *
+   * The canonical channel-render layer in `apps/app/lib/channel-render`
+   * emits a discriminated payload shape (text / interactive / image /
+   * template). This method accepts that already-shaped envelope and
+   * POSTs it to the Cloud API verbatim, so the canonical render path is
+   * the single source of truth at the wire edge.
+   *
+   * The payload is typed as `unknown` here because the canonical
+   * `WhatsAppPayload` interface lives in `apps/app/lib/channel-render`
+   * and packages can not import from apps. The orchestrator at
+   * `apps/app/lib/channel-send/whatsapp.ts` keeps the strict type and
+   * casts at the package boundary; the contents are validated by the
+   * Cloud API on receipt.
+   *
+   * Reference: https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages
+   */
+  async send(payload: unknown) {
+    return this.request('/messages', payload);
+  }
+
   async reactToMessage(to: string, messageId: string, emoji: string) {
     return this.request('/messages', {
       messaging_product: 'whatsapp',

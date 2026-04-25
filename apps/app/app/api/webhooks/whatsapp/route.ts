@@ -281,6 +281,49 @@ async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): 
   }
 }
 
+/**
+ * Canonical reply path: send a `ChannelMessage` (any kind the WhatsApp
+ * renderer supports) to the inbound message's traveler. Mirrors
+ * `sendWhatsAppReply` for the plain-text path; this one runs the message
+ * through `renderForWhatsApp` so card / interactive / template payloads
+ * all flow through the same wire-edge primitive.
+ *
+ * Looks up the per-tenant `WhatsAppInstall` row to honor BYO Meta
+ * numbers (Phase 11h). Falls back gracefully when the install is
+ * missing or disabled.
+ */
+async function sendWhatsAppCanonical(
+  msg: NormalizedInboundMessage,
+  channelMessage: import('@/lib/channel-send').ChannelMessage,
+  tenantId: string
+): Promise<void> {
+  const install = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId },
+  });
+  if (!install || install.status === 'disabled') return;
+
+  const recipient = msg.identity.phoneRaw ?? msg.identity.phone ?? '';
+  if (!recipient) return;
+
+  const { sendChannelMessageWhatsApp } = await import('@/lib/channel-send');
+  const result = await sendChannelMessageWhatsApp({
+    install,
+    recipient,
+    message: channelMessage,
+  });
+  if (result.sent === false) {
+    console.warn('[wa/webhook] canonical send skipped:', result.reason);
+  }
+}
+
+// Intentionally not exported. Next.js route files must only export
+// HTTP method handlers + runtime config. Callers outside this route
+// should compose `sendChannelMessageWhatsApp` from
+// `@/lib/channel-send` directly. The wrapper here exists so that, when
+// this route's dispatch fan-in evolves to surface canonical messages
+// (instead of plain `text` strings), the wire-up is one line away.
+void sendWhatsAppCanonical;
+
 // ─── Helpers ───────────────────────────────────────────────────────────
 
 async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<string | null> {
