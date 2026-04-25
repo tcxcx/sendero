@@ -21,6 +21,12 @@ export interface ConsoleData {
   conversation: ConversationEntry[];
   traveler: { name: string; initials: string } | null;
   holdExpires: string | null;
+  /**
+   * Earliest pending Booking on the scoped trip — drives the "Settle
+   * this hold" header CTA. Null when nothing is pending; absent when
+   * the inbox is unscoped.
+   */
+  pendingBooking: { id: string; totalUsd: string } | null;
 }
 
 export async function loadConsoleData(
@@ -106,11 +112,23 @@ export async function loadConsoleData(
   let conversation: ConversationEntry[] = [];
   let traveler: { name: string; initials: string } | null = null;
   const holdExpires: string | null = null;
+  let pendingBooking: ConsoleData['pendingBooking'] = null;
 
   if (scopedTripId && focused) {
     conversation = eventsToConversation(focused.events);
     const name = focused.traveler?.displayName ?? focused.traveler?.email ?? 'Traveler';
     traveler = { name, initials: initials(name) };
+    const earliestPending = await prisma.booking.findFirst({
+      where: { tripId: scopedTripId, tenantId, status: 'pending' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, totalUsd: true },
+    });
+    if (earliestPending && Number(earliestPending.totalUsd.toString()) > 0) {
+      pendingBooking = {
+        id: earliestPending.id,
+        totalUsd: earliestPending.totalUsd.toString(),
+      };
+    }
   } else if (!scopedTripId) {
     conversation = [
       {
@@ -121,7 +139,7 @@ export async function loadConsoleData(
     ];
   }
 
-  return { trips, conversation, traveler, holdExpires };
+  return { trips, conversation, traveler, holdExpires, pendingBooking };
 }
 
 // ── helpers ─────────────────────────────────────────────────────

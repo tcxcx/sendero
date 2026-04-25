@@ -27,7 +27,7 @@ export default async function ConsolePage(props: ConsolePageProps) {
   const scopedTripId = params.tripId ?? null;
   const { tenant } = await requireCurrentTenant();
 
-  const { trips, conversation, traveler, holdExpires } = await loadConsoleData(
+  const { trips, conversation, traveler, holdExpires, pendingBooking } = await loadConsoleData(
     tenant.id,
     scopedTripId
   );
@@ -40,6 +40,7 @@ export default async function ConsolePage(props: ConsolePageProps) {
         initialConversation={conversation}
         traveler={traveler}
         holdExpires={holdExpires}
+        pendingBooking={pendingBooking}
       />
     </div>
   );
