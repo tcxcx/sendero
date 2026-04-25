@@ -99,25 +99,49 @@ export default async function CapsPage() {
             going but fire your alert webhook.
           </p>
         </div>
-        <Link
-          href="/dashboard/caps/new"
-          style={{
-            padding: '8px 18px',
-            background: 'var(--vermillion)',
-            color: '#fdfbf7',
-            border: 0,
-            borderRadius: 8,
-            fontSize: 12,
-            fontWeight: 600,
-            fontFamily: 'var(--font-mono-x)',
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            textDecoration: 'none',
-            cursor: 'pointer',
-          }}
-        >
-          {caps.length === 0 ? 'New cap policy' : 'Add cap'}
-        </Link>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link
+            href="/dashboard/caps/policies"
+            style={{
+              padding: '8px 14px',
+              background: 'transparent',
+              color: 'var(--midnight)',
+              border: 0,
+              boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: 'var(--font-mono-x)',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              textDecoration: 'none',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+            }}
+          >
+            Manage policies →
+          </Link>
+          <Link
+            href="/dashboard/caps/new"
+            style={{
+              padding: '8px 18px',
+              background: 'var(--vermillion)',
+              color: '#fdfbf7',
+              border: 0,
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              fontFamily: 'var(--font-mono-x)',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              textDecoration: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {caps.length === 0 ? 'New cap policy' : 'Add cap'}
+          </Link>
+        </div>
       </div>
 
       <div
