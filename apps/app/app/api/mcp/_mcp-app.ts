@@ -12,16 +12,22 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { toolList } from '@sendero/tools';
+import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildMcpCatalog, type McpToolEntry } from '@sendero/tools/adapters/mcp';
 import type { ToolContext } from '@sendero/tools/types';
 
 import type { ResolvedApiKey } from '@/lib/api-key-auth';
 
+// MCP is the external-agent protocol — operator-only tools (channel
+// provisioning, tenant-admin actions) are stripped here. The web
+// console agent at /api/chat consumes the canonical registry directly
+// and sees everything; only outward-facing surfaces filter.
+const PUBLIC_TOOLS = filterPublicTools(toolList);
+
 // Tools/list is identity-free (names + schemas only), so a single
 // module-level catalog built with no context serves every discovery.
 // tools/call rebuilds the catalog per-request with the caller's ctx.
-const discoveryCatalog = buildMcpCatalog(toolList);
+const discoveryCatalog = buildMcpCatalog(PUBLIC_TOOLS);
 
 interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -135,7 +141,7 @@ function buildRequestCatalog(resolved: ResolvedApiKey): Record<string, McpToolEn
       userId: `svc:${resolved.keyId}`,
     },
   };
-  return buildMcpCatalog(toolList, ctx);
+  return buildMcpCatalog(PUBLIC_TOOLS, ctx);
 }
 
 export const mcpApp = new Hono()

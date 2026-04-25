@@ -51,7 +51,7 @@ import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { prisma } from '@sendero/database';
 import { detectLocale, LOCALE_COOKIE_NAME } from '@sendero/locale';
-import { toolList } from '@sendero/tools';
+import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 import type { LanguageModel } from 'ai';
 import { z } from 'zod';
@@ -206,12 +206,17 @@ export async function POST(req: NextRequest) {
 
   const distinctId = hashDistinctId(body.userId);
   const locale = body.locale ?? requestLocale(req);
-  // Filter the tool registry BEFORE the LLM sees it.  A tool the caller
-  // isn't authorized for is removed, so prompt injection can't sneak
-  // the model into calling it.  Shared-secret / sandbox paths grant
-  // '*' implicitly.
+  // Filter the tool registry BEFORE the LLM sees it.  Two filters:
+  //   1. Audience — strip operator-only tools (kapso/slack channel
+  //      provisioning, etc.).  Dispatch is the channel + external-API-
+  //      key surface; only customer-facing tools belong here. The
+  //      operator agent at /api/chat skips this step.
+  //   2. Scope — drop tools the caller's API key isn't authorized for.
+  // Both filters happen pre-prompt, so prompt injection can't sneak
+  // the model into calling something it shouldn't see.
   const grantedScopes = apiKey?.scopes ?? (['*'] as const);
-  const scopedTools = filterToolsByScopes(toolList, grantedScopes);
+  const publicTools = filterPublicTools(toolList);
+  const scopedTools = filterToolsByScopes(publicTools, grantedScopes);
   const tools = buildAiSdkTools(scopedTools, {
     traveler: { userId: body.userId, tenantId: body.tenantId },
   });

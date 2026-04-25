@@ -128,7 +128,43 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   // Vault-backed + ID-sensitive
   'scan_document', // kind === 'id_document' tightens further at the tool layer
 ]);
+// Note: channel-provisioning tools (kapso_*, slack_*) are NOT listed
+// here.  They're `internal: true` on their ToolDef, which strips them
+// at every external boundary (channels, API keys, MCP, OpenAPI). The
+// operator path doesn't carry a signed-request HMAC — it runs under a
+// Clerk session — so adding them to PRIVILEGED_TOOLS would only fire
+// false-positive 401s from the dispatch route's signing gate when an
+// admin tests via curl.  `internal: true` is the right axis for them.
 
 export function requiresSignature(toolName: string): boolean {
   return PRIVILEGED_TOOLS.has(toolName);
+}
+
+// ── Audience filter ────────────────────────────────────────────────
+//
+// Some tools are operator-only (channel provisioning, tenant-admin
+// orchestrations).  They live in the same registry as customer-facing
+// tools so the web console operator agent can call them, but every
+// outward-facing surface (external API keys, MCP, WhatsApp / Slack
+// channel webhooks, public OpenAPI) must filter them out before
+// advertising.
+//
+// `tool.internal === true` is the marker; the helper below is the
+// single place every consumer calls so the filter never gets
+// duplicated wrong.
+
+import type { ToolDef } from './types';
+
+/** True when a tool is safe to expose to external integrators + customers. */
+export function isPublicTool(tool: Pick<ToolDef, 'internal'>): boolean {
+  return tool.internal !== true;
+}
+
+/**
+ * Strip operator-only tools from a registry.  Always called at
+ * the channel + external-API-key boundary; operators (web console
+ * with Clerk session) skip this filter and see everything.
+ */
+export function filterPublicTools<T extends Pick<ToolDef, 'internal'>>(tools: readonly T[]): T[] {
+  return tools.filter(isPublicTool);
 }

@@ -15,6 +15,14 @@ import { ensureFlightCustomerTool } from './ensure-flight-customer';
 import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
 import { findAirportsNearbyTool } from './find-airports-nearby';
+import {
+  kapsoActivatePhoneNumberTool,
+  kapsoListNumbersTool,
+  kapsoReserveNumberTool,
+  kapsoSendTestMessageTool,
+  kapsoSubmitMessageTemplatesTool,
+  kapsoUpdateBusinessProfileTool,
+} from './kapso-channel';
 import { listAirlineCreditsTool } from './list-airline-credits';
 import { listFlightAncillariesTool } from './list-flight-ancillaries';
 import { gatewayBalanceTool } from './gateway-balance';
@@ -39,6 +47,14 @@ import { scanDocumentTool } from './scan-document';
 import { searchFlightsTool } from './search-flights';
 import { searchHotelsTool } from './search-hotels';
 import { sendTokensTool } from './send-tokens';
+import {
+  slackCheckInstallTool,
+  slackInviteBotToChannelsTool,
+  slackListWorkspaceChannelsTool,
+  slackPersistChannelRoutesTool,
+  slackSendTestMessageTool,
+  slackStartOauthInstallTool,
+} from './slack-channel';
 import { settleBookingTool } from './settle-booking';
 import { settleSplitTool } from './settle-split';
 import { swapAndBridgeTool } from './swap-and-bridge';
@@ -87,7 +103,9 @@ export { scanDocumentTool } from './scan-document';
 export type { KeyScope } from './scopes';
 export {
   DEFAULT_PROD_SCOPES,
+  filterPublicTools,
   hasScope,
+  isPublicTool,
   KEY_SCOPES,
   PRIVILEGED_TOOLS,
   requiresSignature,
@@ -252,6 +270,19 @@ export const toolList: ToolDef[] = [
   // Multimodal OCR / document extraction
   scanDocumentTool,
   checkTravelEligibilityTool,
+  // Channel-provisioning (WhatsApp via Kapso, Slack OAuth + routing)
+  kapsoListNumbersTool,
+  kapsoReserveNumberTool,
+  kapsoUpdateBusinessProfileTool,
+  kapsoSubmitMessageTemplatesTool,
+  kapsoActivatePhoneNumberTool,
+  kapsoSendTestMessageTool,
+  slackStartOauthInstallTool,
+  slackCheckInstallTool,
+  slackListWorkspaceChannelsTool,
+  slackPersistChannelRoutesTool,
+  slackInviteBotToChannelsTool,
+  slackSendTestMessageTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */
