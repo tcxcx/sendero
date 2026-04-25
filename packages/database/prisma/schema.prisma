@@ -582,9 +582,21 @@ model Supplier {
 // WALLETS + METER
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Clerk user → MSCA address + Gateway balance snapshot.
-/// A user may have multiple wallet rows (one per chain), but MSCA address
-/// is deterministic per passkey so (userId, chainId, address) is unique.
+/// User → on-chain wallet. Polymorphic by provisioner:
+///
+///   provisioner='msca'  — passkey-controlled Circle Modular Wallet
+///                          (tenant treasury today; user-controlled in
+///                          future). circleWalletId is null.
+///   provisioner='dcw'   — Circle Developer-Controlled Wallet, EOA
+///                          account type. Server-side custodial — Circle
+///                          holds the keys, signs via entity secret.
+///                          One per User, persistent across tenants and
+///                          channels (same wallet whether they came in
+///                          via Clerk corporate, WhatsApp lead, or B2C).
+///                          circleWalletId is set.
+///
+/// A user may have multiple rows (one per chain) and rows from different
+/// provisioners. `(userId, chainId, address)` stays unique.
 model Wallet {
   id                  String    @id @default(cuid())
   userId              String
@@ -594,6 +606,17 @@ model Wallet {
   gatewayBalanceMicro BigInt    @default(0)
   /// Human label ("daily-ops", "treasury").
   label               String?
+  /// Provisioner discriminator. See model docstring for shapes.
+  provisioner         String    @default("msca")
+  /// Circle DCW wallet id (e.g. `0190fe2c…`). Null for MSCA rows.
+  circleWalletId      String?   @unique
+  /// Walletset the DCW belongs to. Platform-level for travelers.
+  circleWalletSetId   String?
+  /// 'EOA' | 'SCA' for DCW; null for MSCA.
+  accountType         String?
+  /// Free-form. Used by transfer-policy + Gateway flows to cache things
+  /// like delegate authorization status per chain.
+  metadata            Json?
   lastSeenAt          DateTime? @db.Timestamptz(6)
   createdAt           DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
@@ -602,6 +625,7 @@ model Wallet {
 
   @@unique([userId, chainId, address])
   @@index([address])
+  @@index([userId, provisioner])
   @@map("wallets")
 }
 

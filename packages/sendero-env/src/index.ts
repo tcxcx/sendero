@@ -155,6 +155,18 @@ export const env = {
    * KMS-backed secret rather than an env var.
    */
   unifiedBalanceDelegateKey: () => process.env.SENDERO_UB_DELEGATE_PRIVATE_KEY || null,
+
+  // ── Traveler DCW provisioning (lazy at hold) ──────────────────────
+  /**
+   * Platform-level Circle walletset id.  All traveler DCWs are created
+   * inside this single walletset so a wallet is permanent across the
+   * traveler's lifetime — same wallet whether they arrive via Clerk
+   * corporate invite, WhatsApp lead, or B2C signup.  Tenant context
+   * is recorded at the policy + TransferAttempt layer, not the wallet
+   * layer.  Without this set, `ensureTravelerWallet()` returns null
+   * and the booking flow logs a warning instead of crashing.
+   */
+  senderoWalletSetId: () => process.env.SENDERO_WALLETSET_ID || null,
 };
 
 export * from './require';
