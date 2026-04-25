@@ -6,6 +6,11 @@ import { bookStayTool } from './book-stay';
 import { bridgeToArcTool } from './bridge-to-arc';
 import { cancelBookingTool } from './cancel-booking';
 import { cancelOrderQuoteTool, confirmCancelOrderTool } from './cancel-order-quote';
+import {
+  confirmOrderChangeTool,
+  requestOrderChangeTool,
+  selectOrderChangeOfferTool,
+} from './order-change-quote';
 import { checkPolicyTool } from './check-policy';
 import { checkTreasuryTool } from './check-treasury';
 import { confirmFlightTool } from './confirm-flight';
@@ -97,6 +102,11 @@ export {
   requestFaucetDrip,
 } from './faucet';
 export { generateBookingInvoiceTool } from './generate-booking-invoice';
+export {
+  confirmOrderChangeTool,
+  requestOrderChangeTool,
+  selectOrderChangeOfferTool,
+} from './order-change-quote';
 export { checkTravelEligibilityTool } from './check-travel-eligibility';
 export type { OpenApiDocInput } from './openapi';
 export { buildOpenApiDoc } from './openapi';
@@ -264,6 +274,9 @@ export const toolList: ToolDef[] = [
   bookStayTool,
   cancelOrderQuoteTool,
   confirmCancelOrderTool,
+  requestOrderChangeTool,
+  selectOrderChangeOfferTool,
+  confirmOrderChangeTool,
   listAirlineCreditsTool,
   manageStaysNegotiatedRateTool,
   // Ops helpers

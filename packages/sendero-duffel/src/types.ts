@@ -423,6 +423,93 @@ export interface DuffelOrderCancellationWire {
   airline_credits?: DuffelCancellationAirlineCreditWire[];
 }
 
+// ─── Order changes (reschedule) ────────────────────────────────────────
+
+export type DuffelOrderChangeRequestId = `ocr_${string}`;
+export type DuffelOrderChangeOfferId = `oco_${string}`;
+export type DuffelOrderChangeId = `oce_${string}`;
+
+/** Add-slice payload for an order change — same shape as offer-request slices. */
+export interface DuffelOrderChangeSliceAdd {
+  origin: string;
+  destination: string;
+  departure_date: string;
+  cabin_class?: 'economy' | 'premium_economy' | 'business' | 'first';
+}
+
+/** Remove-slice payload — references an existing slice id on the order. */
+export interface DuffelOrderChangeSliceRemove {
+  slice_id: string;
+}
+
+/**
+ * Fully expanded slice as returned on order_change_offers (includes
+ * routing, segments, duration). Kept loose because Duffel mirrors the
+ * offer-slice shape and we don't surface every nested field.
+ */
+export interface DuffelOrderChangeSliceFullWire {
+  id: string;
+  origin: { iata_code: string; name?: string; city_name?: string };
+  destination: { iata_code: string; name?: string; city_name?: string };
+  duration: string | null;
+  segments: Array<{
+    id: string;
+    origin: { iata_code: string };
+    destination: { iata_code: string };
+    departing_at: string;
+    arriving_at: string;
+    marketing_carrier: { iata_code: string; name?: string };
+    operating_carrier?: { iata_code: string; name?: string };
+    marketing_carrier_flight_number: string;
+    aircraft?: { iata_code?: string; name?: string } | null;
+    duration?: string | null;
+  }>;
+}
+
+export interface DuffelOrderChangeOfferWire {
+  id: DuffelOrderChangeOfferId;
+  order_change_request_id: DuffelOrderChangeRequestId;
+  change_total_amount: string;
+  change_total_currency: DuffelCurrencyCode;
+  new_total_amount: string;
+  new_total_currency: DuffelCurrencyCode;
+  refund_to: DuffelRefundDestination;
+  penalty_total_amount: string | null;
+  penalty_total_currency: DuffelCurrencyCode | null;
+  expires_at: string;
+  slices: {
+    add: DuffelOrderChangeSliceFullWire[];
+    remove: DuffelOrderChangeSliceFullWire[];
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DuffelOrderChangeRequestWire {
+  id: DuffelOrderChangeRequestId;
+  order_id: DuffelOrderId;
+  live_mode: boolean;
+  slices: {
+    add: DuffelOrderChangeSliceAdd[];
+    remove: DuffelOrderChangeSliceRemove[];
+  };
+  order_change_offers: DuffelOrderChangeOfferWire[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DuffelOrderChangeWire {
+  id: DuffelOrderChangeId;
+  order_id: DuffelOrderId;
+  change_total_amount: string;
+  change_total_currency: DuffelCurrencyCode;
+  refund_to: DuffelRefundDestination;
+  expires_at: string;
+  confirmed_at: string | null;
+  live_mode: boolean;
+  created_at: string;
+}
+
 // ─── Stays (hotels): quotes, bookings, loyalty, cancellation timeline ─
 
 export type DuffelStaysSearchResultId = `res_${string}`;

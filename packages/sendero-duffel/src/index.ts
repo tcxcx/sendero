@@ -34,6 +34,14 @@ import type {
   DuffelOfferWireMinimal,
   DuffelOrderCancellationId,
   DuffelOrderCancellationWire,
+  DuffelOrderChangeId,
+  DuffelOrderChangeOfferId,
+  DuffelOrderChangeOfferWire,
+  DuffelOrderChangeRequestId,
+  DuffelOrderChangeRequestWire,
+  DuffelOrderChangeSliceAdd,
+  DuffelOrderChangeSliceRemove,
+  DuffelOrderChangeWire,
   DuffelOrderId,
   DuffelPlaceSuggestionWire,
   DuffelPrivateFaresMap,
@@ -1093,6 +1101,135 @@ export async function confirmOrderCancellation(
     throw new Error(`duffel.order_cancellations.confirm ${res.status}: ${body.slice(0, 400)}`);
   }
   const json = (await res.json()) as { data: DuffelOrderCancellationWire };
+  return json.data;
+}
+
+// ============================================================================
+// Order changes — request, select offer, create + confirm
+// ============================================================================
+
+export async function createOrderChangeRequest(args: {
+  orderId: DuffelOrderId | string;
+  slices: {
+    add: DuffelOrderChangeSliceAdd[];
+    remove: DuffelOrderChangeSliceRemove[];
+  };
+}): Promise<DuffelOrderChangeRequestWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch('https://api.duffel.com/air/order_change_requests', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ data: { order_id: args.orderId, slices: args.slices } }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.order_change_requests.create ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelOrderChangeRequestWire };
+  return json.data;
+}
+
+export async function getOrderChangeRequest(
+  id: DuffelOrderChangeRequestId | string
+): Promise<DuffelOrderChangeRequestWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch(
+    `https://api.duffel.com/air/order_change_requests/${encodeURIComponent(id)}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Duffel-Version': 'v2',
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.order_change_requests.get ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelOrderChangeRequestWire };
+  return json.data;
+}
+
+export async function getOrderChangeOffer(
+  id: DuffelOrderChangeOfferId | string
+): Promise<DuffelOrderChangeOfferWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch(
+    `https://api.duffel.com/air/order_change_offers/${encodeURIComponent(id)}`,
+    {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Duffel-Version': 'v2',
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.order_change_offers.get ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelOrderChangeOfferWire };
+  return json.data;
+}
+
+export async function createOrderChange(
+  offerId: DuffelOrderChangeOfferId | string
+): Promise<DuffelOrderChangeWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch('https://api.duffel.com/air/order_changes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ data: { selected_order_change_offer: offerId } }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.order_changes.create ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelOrderChangeWire };
+  return json.data;
+}
+
+export async function confirmOrderChange(args: {
+  changeId: DuffelOrderChangeId | string;
+  payment: { type: 'balance' | 'arc' | 'card'; amount: string; currency: string };
+}): Promise<DuffelOrderChangeWire> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const res = await fetch(
+    `https://api.duffel.com/air/order_changes/${encodeURIComponent(args.changeId)}/actions/confirm`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Duffel-Version': 'v2',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ data: { payment: args.payment } }),
+    }
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`duffel.order_changes.confirm ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const json = (await res.json()) as { data: DuffelOrderChangeWire };
   return json.data;
 }
 
