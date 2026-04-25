@@ -490,6 +490,98 @@ This is how the agent gets better over time and reduces repetitive ops work.
 
 ---
 
+## Tech debt — post-hackathon (traveler-wallet flow, Steps 1–6, 2026-04-25)
+
+Items deferred during the hackathon push. Surfaced by `/review` + `/browse` e2e on
+`ship/2026-04-24-platform-release` after Steps 3–6 + connection layer landed.
+None are demo-blocking; all are real follow-ups before this flow goes to mainnet.
+
+### Pay-link bearer credential — referrer leak
+
+- [ ] Add `<meta name="referrer" content="no-referrer" />` to
+  `apps/app/app/pay/[bookingId]/page.tsx` head, OR set
+  `Referrer-Policy: same-origin` on the response. The single-use `?t=<token>`
+  in the URL would otherwise leak via `Referer` header if the success state
+  ever links out to an external page (it doesn't today, but the audit trail
+  surfaces an explorer link in `result.txHash` rendering).
+
+### Pay-link rotation tooling
+
+- [ ] Build an admin "revoke this pay link" action (operator dashboard or
+  internal tool) instead of leaving it as manual SQL
+  (`UPDATE booking_pay_tokens SET consumedAt = now() WHERE id = …`).
+  Bearer token, 30-min TTL, single-use — the surface is small but rotation
+  on a leak should be a tool, not a runbook step.
+
+### Booking reconcile retry queue
+
+- [ ] `apps/app/lib/booking-reconcile/reconcile.ts` is fire-and-forget from
+  `executeTransferSpend` with only `console.warn` on failure. If the booking
+  flip throws (DB blip, tenant cascade race) the spend stays settled on-chain
+  but `Booking.status` stays `pending`, and operators have to flip via Slack.
+  Wire a retry queue (Trigger.dev task or Vercel Workflow) that re-runs the
+  reconciler on `TransferAttempt(status='executed', metadata.bookingId NOT NULL)`
+  rows whose booking is still `pending` after N minutes.
+
+### Step 3 commit message attribution
+
+- [ ] Step 3 of the wallet queue (treasury pre-fund + `kit.depositFor`) landed
+  under commit subject `fix(agent-chat): prefer direct provider over gateway
+  for streaming surface` (`bfb768c`) because a parallel Claude session's
+  `git commit` swept up the staged files. The diff is correct; only the
+  message lies. Fix via `git notes add bfb768c -m "Actually: Step 3 …"` or a
+  follow-up `chore(notes)` empty commit pointing at it. Won't change behavior;
+  just makes `git log --oneline` honest.
+
+### TransferAttempt double-spend defense (defense-in-depth)
+
+- [x] Pay-link path: race-safe token consume before spend (commit `1e94af7`).
+- [ ] Add a unique partial index on `transfer_attempts (tenantId,
+  metadata->>'bookingId') WHERE status IN ('executed', 'passed', 'pending')`
+  so the database itself rejects duplicate in-flight spends for the same
+  booking, regardless of which surface (settle-action, pay-action, agent
+  dispatch, future) tries to create the row. Belt-and-suspenders with the
+  per-surface idempotency checks already in place.
+
+### Slack rebroadcast on spend-driven booking-confirmed
+
+- [ ] When `reconcileBookingAfterSpend` flips a booking to `confirmed`, the
+  Slack approval thread (if it exists for this booking) doesn't get an
+  update. Operators see the email + WhatsApp confirmation but the original
+  Slack approval card stays as "awaiting approval". Mirror the
+  `chat.update` call from `slack/interactions/route.ts` so the spend-driven
+  path closes the Slack card too.
+
+### `prefund_traveler_balance` agent tool
+
+- [ ] We shipped `send_pay_link` so the agent can dispatch the magic link.
+  We did NOT ship a tool for the pre-fund step itself — operators can
+  pre-fund only via the wallet-page UI. Mirror the same shape:
+  internal route `/api/wallet/prefund` (auth: `AGENT_DISPATCH_SECRET`),
+  tool `prefund_traveler_balance` in `@sendero/tools`, scope `treasury`,
+  add to `PRIVILEGED_TOOLS`. Agent gains a fully programmatic
+  end-to-end pre-fund + dispatch + reconcile loop.
+
+### WhatsApp `cta_url` test coverage
+
+- [ ] The fix in `apps/app/lib/channel-render/channels/whatsapp.ts` to
+  render single `open_link` CTAs as `interactive.type: 'cta_url'` (instead
+  of broken `reply` buttons) doesn't have unit-test coverage in the
+  parallel session's new `__tests__/whatsapp.test.ts`. Add a snapshot
+  test for the `cta_url` branch and the mixed-CTA inline-fallback branch.
+
+### E2E test infrastructure for authenticated wallet UI
+
+- [ ] The headless `/browse` e2e couldn't drive the operator wallet UI
+  because the dev-mode `Agentation` overlay (rendered when
+  `NODE_ENV === 'development'` in `apps/app/app/layout.tsx`) intercepts
+  clicks. Either gate Agentation behind a separate env flag
+  (`NEXT_PUBLIC_ENABLE_AGENTATION`) so QA can disable it, or move the
+  e2e harness to `/open-gstack-browser` (real Chrome via the
+  setup-browser-cookies skill).
+
+---
+
 ## Open questions
 
 - [ ] Which WhatsApp BSP should we standardize on?
