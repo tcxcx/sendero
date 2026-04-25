@@ -87,6 +87,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
+    "@circle-fin/developer-controlled-wallets": "^8.0.0",
+    "@circle-fin/smart-contract-platform": "^10.3.0",
     "@vercel/blob": "^2.3.3",
     "@turbo/gen": "^2.9.6",
     "@types/node": "^22.9.0",

@@ -6,6 +6,8 @@
       "name": "sendero-arc",
       "devDependencies": {
         "@biomejs/biome": "2.3.8",
+        "@circle-fin/developer-controlled-wallets": "^8.0.0",
+        "@circle-fin/smart-contract-platform": "^10.3.0",
         "@turbo/gen": "^2.9.6",
         "@types/node": "^22.9.0",
         "@types/react": "^19.2.14",
@@ -470,6 +472,7 @@
       },
       "peerDependencies": {
         "@circle-fin/developer-controlled-wallets": "^8.0.0",
+        "@circle-fin/smart-contract-platform": "^10.3.0",
         "viem": "^2.21.0",
       },
     },
@@ -868,7 +871,7 @@
 
     "@circle-fin/provider-stablecoin-service-swap": ["@circle-fin/provider-stablecoin-service-swap@1.1.0", "", { "dependencies": { "@solana/web3.js": "^1.98.4", "abitype": "^1.1.0", "zod": "3.25.67" } }, "sha512-Laatoy66+1m2aeXZvfktHcOnlpQPZqlpQJEgSg9+MaAWXCEQuWSbT1B0xroPwgHrsoIohLcgSeeCe1S28pTjEQ=="],
 
-    "@circle-fin/smart-contract-platform": ["@circle-fin/smart-contract-platform@9.6.0", "", { "dependencies": { "axios": "^1.12.2" } }, "sha512-3Xk2a5YX0fG2rEebiKFsWdj+gtdjN+leRocYsA0zNJrTnzPPnnRKUeCYdbFB5QCDqZC+94N4lPQHYUj0P8SN5g=="],
+    "@circle-fin/smart-contract-platform": ["@circle-fin/smart-contract-platform@10.3.0", "", { "dependencies": { "axios": "^1.15.0" } }, "sha512-Ghrqj9gasR/EeyIdpQxAkejQhD2a/yTfKUI7vLrBqmyIJLhpq2RVs/xEdML6COqvc3uSuqKlEHfDiyE0dTgj2w=="],
 
     "@circle-fin/swap-kit": ["@circle-fin/swap-kit@1.1.0", "", { "dependencies": { "@circle-fin/provider-stablecoin-service-swap": "^1.1.0", "@ethersproject/address": "^5.8.0", "@ethersproject/bytes": "^5.8.0", "@ethersproject/units": "^5.8.0", "@solana/web3.js": "^1.98.4", "abitype": "^1.1.0", "bs58": "6.0.0", "zod": "3.25.67" } }, "sha512-7t39mfpJKyZ/v/No8jPxHTf41WGRNzsZGbqVKRRUH0d5erJgo9nP8N4TP0d8M1V9kShfDW07JMKdq6c6H6XcfQ=="],
 
@@ -4198,13 +4201,13 @@
 
     "@circle-fin/adapter-circle-wallets/@circle-fin/developer-controlled-wallets": ["@circle-fin/developer-controlled-wallets@9.6.0", "", { "dependencies": { "axios": "^1.12.2" } }, "sha512-DTmXKtBG7De21W6Kf8BNm5Cd27s4Rl73RItABjYkvlaEJSYpkkaS1hTeJGGewWh3C3LiROimNm0q+HAPneGmZw=="],
 
+    "@circle-fin/adapter-circle-wallets/@circle-fin/smart-contract-platform": ["@circle-fin/smart-contract-platform@9.6.0", "", { "dependencies": { "axios": "^1.12.2" } }, "sha512-3Xk2a5YX0fG2rEebiKFsWdj+gtdjN+leRocYsA0zNJrTnzPPnnRKUeCYdbFB5QCDqZC+94N4lPQHYUj0P8SN5g=="],
+
     "@circle-fin/bridge-kit/pino": ["pino@10.1.0", "", { "dependencies": { "@pinojs/redact": "^0.4.0", "atomic-sleep": "^1.0.0", "on-exit-leak-free": "^2.1.0", "pino-abstract-transport": "^2.0.0", "pino-std-serializers": "^7.0.0", "process-warning": "^5.0.0", "quick-format-unescaped": "^4.0.3", "real-require": "^0.2.0", "safe-stable-stringify": "^2.3.1", "sonic-boom": "^4.0.1", "thread-stream": "^3.0.0" }, "bin": { "pino": "bin.js" } }, "sha512-0zZC2ygfdqvqK8zJIr1e+wT1T/L+LF6qvqvbzEQ6tiMAoTqEVK9a1K3YRu8HEUvGEvNqZyPJTtb2sNIoTkB83w=="],
 
     "@circle-fin/provider-gateway-v1/@noble/curves": ["@noble/curves@1.4.2", "", { "dependencies": { "@noble/hashes": "1.4.0" } }, "sha512-TavHr8qycMChk8UwMld0ZDRvatedkzWfH8IiaeGCfymOP5i0hSCozz9vHOL0nkwk7HRMlFnAiKpS2jrUmSybcw=="],
 
     "@circle-fin/usdckit/@circle-fin/developer-controlled-wallets": ["@circle-fin/developer-controlled-wallets@10.3.0", "", { "dependencies": { "axios": "^1.15.0" } }, "sha512-vuwqSFgOWv21FQnFssJ4ZvUNlxcqE4es9fV/CzP4o9vF628SJMughCVssw8PyQtyWjBHmuWGr2Ex44VFCCxVwg=="],
-
-    "@circle-fin/usdckit/@circle-fin/smart-contract-platform": ["@circle-fin/smart-contract-platform@10.3.0", "", { "dependencies": { "axios": "^1.15.0" } }, "sha512-Ghrqj9gasR/EeyIdpQxAkejQhD2a/yTfKUI7vLrBqmyIJLhpq2RVs/xEdML6COqvc3uSuqKlEHfDiyE0dTgj2w=="],
 
     "@circle-fin/usdckit/@solana/kit": ["@solana/kit@2.3.0", "", { "dependencies": { "@solana/accounts": "2.3.0", "@solana/addresses": "2.3.0", "@solana/codecs": "2.3.0", "@solana/errors": "2.3.0", "@solana/functional": "2.3.0", "@solana/instructions": "2.3.0", "@solana/keys": "2.3.0", "@solana/programs": "2.3.0", "@solana/rpc": "2.3.0", "@solana/rpc-parsed-types": "2.3.0", "@solana/rpc-spec-types": "2.3.0", "@solana/rpc-subscriptions": "2.3.0", "@solana/rpc-types": "2.3.0", "@solana/signers": "2.3.0", "@solana/sysvars": "2.3.0", "@solana/transaction-confirmation": "2.3.0", "@solana/transaction-messages": "2.3.0", "@solana/transactions": "2.3.0" }, "peerDependencies": { "typescript": ">=5.3.3" } }, "sha512-sb6PgwoW2LjE5oTFu4lhlS/cGt/NB3YrShEyx7JgWFWysfgLdJnhwWThgwy/4HjNsmtMrQGWVls0yVBHcMvlMQ=="],
 

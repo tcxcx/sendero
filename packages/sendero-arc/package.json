@@ -17,6 +17,7 @@
   },
   "peerDependencies": {
     "@circle-fin/developer-controlled-wallets": "^8.0.0",
+    "@circle-fin/smart-contract-platform": "^10.3.0",
     "viem": "^2.21.0"
   }
 }
