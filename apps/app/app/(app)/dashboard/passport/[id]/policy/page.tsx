@@ -51,7 +51,7 @@ export default async function TravelerPolicyPage({ params }: { params: Promise<{
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Workspace', 'Passport', label, 'Policy']} />
+      <Crumb trail={['Passport', label, 'Policy']} />
 
       <div
         style={{

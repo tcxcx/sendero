@@ -7,6 +7,7 @@ import { Crumb } from '@/components/console/crumb';
 import { PageActions } from '@/components/dashboard/page-actions';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
+import { NewTripButton } from '@/components/trips/new-trip-button';
 import { PrefundSheet } from '@/components/trips/prefund-sheet/prefund-sheet';
 import { TripsCardGrid } from '@/components/trips/trips-card-grid';
 import { getAppCopy } from '@/lib/app-copy';
@@ -91,7 +92,7 @@ export default async function TripsPage({
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Workspace', 'Trips']} />
+      <Crumb trail={['Trips']} />
 
       <div
         style={{
@@ -109,6 +110,10 @@ export default async function TripsPage({
           </p>
         </div>
         <PageActions>
+          {/* Lightweight "new trip" — opens a draft Trip row only. The
+              operator can mint a prepaid claim link later from the
+              trip detail surface. */}
+          <NewTripButton label={copy.createTripCta} />
           <Button asChild>
             <Link href="/dashboard/trips?sheet=new">{copy.createCta}</Link>
           </Button>

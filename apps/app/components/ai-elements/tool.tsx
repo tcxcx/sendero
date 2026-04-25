@@ -5,14 +5,7 @@ import { isValidElement } from 'react';
 
 import { cn } from '@sendero/ui/cn';
 import type { DynamicToolUIPart, ToolUIPart } from 'ai';
-import {
-  CheckCircleIcon,
-  ChevronDownIcon,
-  CircleIcon,
-  ClockIcon,
-  WrenchIcon,
-  XCircleIcon,
-} from 'lucide-react';
+import { CheckCircleIcon, ChevronDownIcon, CircleIcon, XCircleIcon } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -52,10 +45,25 @@ const statusLabels: Record<ToolPart['state'], string> = {
   'output-error': 'Error',
 };
 
+// Pulsating ink-tinted Sendero north-star — used while a tool is in
+// flight (input-streaming / input-available / awaiting approval). The
+// `animate-tool-running` keyframes (in globals.css) pulse opacity +
+// nudge scale so the operator can feel the tool working without the
+// hard wrench/clock affordance.
+const RunningStar = () => (
+  // eslint-disable-next-line @next/next/no-img-element
+  <img
+    src="/brand/icons/02-north-star.png"
+    alt=""
+    aria-hidden
+    className="size-4 animate-tool-running [filter:drop-shadow(0_0_4px_var(--ink))]"
+  />
+);
+
 const statusIcons: Record<ToolPart['state'], ReactNode> = {
-  'approval-requested': <ClockIcon className="size-4 text-yellow-600" />,
+  'approval-requested': <RunningStar />,
   'approval-responded': <CheckCircleIcon className="size-4 text-blue-600" />,
-  'input-available': <ClockIcon className="size-4 animate-pulse" />,
+  'input-available': <RunningStar />,
   'input-streaming': <CircleIcon className="size-4" />,
   'output-available': <CheckCircleIcon className="size-4 text-green-600" />,
   'output-denied': <XCircleIcon className="size-4 text-orange-600" />,
@@ -85,7 +93,10 @@ export const ToolHeader = ({
       {...props}
     >
       <div className="flex items-center gap-2">
-        <WrenchIcon className="size-4 text-muted-foreground" />
+        {/* Sendero north-star — replaces the generic wrench affordance.
+            No bg, no rounded chrome, just the ink-toned mark. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/icons/02-north-star.png" alt="" aria-hidden className="size-4" />
         <span className="font-medium text-sm">{title ?? derivedName}</span>
         {getStatusBadge(state)}
       </div>

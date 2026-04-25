@@ -34,6 +34,8 @@ import { createHash } from 'node:crypto';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { ensureUserRow } from '@/lib/ensure-user';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -54,30 +56,52 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const t0 = Date.now();
+  console.log('[passport/upload] ▶ POST received');
   try {
     const { userId, orgId } = await auth();
+    console.log('[passport/upload] auth()', {
+      hasUserId: Boolean(userId),
+      hasOrgId: Boolean(orgId),
+    });
     if (!userId || !orgId) {
+      console.warn('[passport/upload] ✕ unauthorized');
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
 
-    const payload = BodySchema.safeParse(await req.json().catch(() => null));
+    const rawBody = await req.json().catch(() => null);
+    const payload = BodySchema.safeParse(rawBody);
     if (!payload.success) {
+      console.warn('[passport/upload] ✕ invalid_body', { issues: payload.error.flatten() });
       return NextResponse.json(
         { error: 'invalid_body', issues: payload.error.flatten() },
         { status: 400 }
       );
     }
-
-    const user = await prisma.user.findUnique({
-      where: { clerkUserId: userId },
-      select: { id: true },
+    console.log('[passport/upload] body parsed', {
+      mrz1Len: payload.data.mrzLine1.length,
+      mrz2Len: payload.data.mrzLine2.length,
+      hasImageHash: Boolean(payload.data.imageSha256),
+      filename: payload.data.filename ?? null,
     });
+
     const tenant = await prisma.tenant.findUnique({
       where: { clerkOrgId: orgId },
       select: { id: true },
     });
-    if (!user || !tenant) {
-      return NextResponse.json({ error: 'tenant_or_user_not_found' }, { status: 404 });
+    if (!tenant) {
+      console.warn('[passport/upload] ✕ tenant_not_found', { clerkOrgId: orgId });
+      return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
+    }
+    let user: { id: string };
+    try {
+      user = await ensureUserRow(userId);
+    } catch (err) {
+      console.error('[passport/upload] ✕ ensureUserRow failed', {
+        clerkUserId: userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return NextResponse.json({ error: 'user_provision_failed' }, { status: 500 });
     }
 
     const imageSha256 =
@@ -86,6 +110,7 @@ export async function POST(req: NextRequest) {
         .update(`${payload.data.mrzLine1}\n${payload.data.mrzLine2}`)
         .digest('hex');
 
+    console.log('[passport/upload] → extractPassportFromMrz');
     const extracted = extractPassportFromMrz({
       mrzLine1: payload.data.mrzLine1,
       mrzLine2: payload.data.mrzLine2,
@@ -93,6 +118,7 @@ export async function POST(req: NextRequest) {
       filename: payload.data.filename ?? null,
     });
     if (!extracted) {
+      console.warn('[passport/upload] ✕ mrz_parse_failed (checksum or shape)');
       return NextResponse.json(
         {
           error: 'mrz_parse_failed',
@@ -102,6 +128,11 @@ export async function POST(req: NextRequest) {
         { status: 422 }
       );
     }
+    console.log('[passport/upload] mrz parsed', {
+      nationality: extracted.nationality ?? null,
+      expirationDate: extracted.expirationDate ?? null,
+      mrzChecksumValid: extracted.mrzChecksumValid,
+    });
 
     const signals = await upsertPassportVault(prisma, {
       tenantId: tenant.id,
@@ -129,6 +160,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    console.log('[passport/upload] ✓ ok', {
+      vaultId: signals.id,
+      tenantId: tenant.id,
+      userId: user.id,
+      totalMs: Date.now() - t0,
+    });
+
     // Return ONLY sanitized signals.  No MRZ, no name, no passport#.
     return NextResponse.json({
       vaultId: signals.id,
@@ -140,7 +178,10 @@ export async function POST(req: NextRequest) {
       extractedAt: signals.extractedAt.toISOString(),
     });
   } catch (err) {
-    console.error('[passport/upload] failed:', err);
+    console.error('[passport/upload] ✕ failed', {
+      error: err instanceof Error ? err.message : String(err),
+      totalMs: Date.now() - t0,
+    });
     return NextResponse.json(
       {
         error: 'vault_upload_failed',

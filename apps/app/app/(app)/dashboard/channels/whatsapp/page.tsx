@@ -95,7 +95,7 @@ export default async function WhatsAppChannelPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Channels', 'WhatsApp']} />
+      <Crumb trail={['WhatsApp']} />
 
       {status === 'active' && install ? (
         <ConnectedView install={install} />

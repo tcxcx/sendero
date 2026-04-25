@@ -36,7 +36,15 @@ interface VaultSignals {
   extractedAt: string;
 }
 
-type Status = 'loading' | 'empty' | 'on_file' | 'uploading' | 'error';
+type Status = 'loading' | 'empty' | 'extracting' | 'on_file' | 'uploading' | 'error';
+
+interface TripSummary {
+  id: string;
+  status: string;
+  destination: string | null;
+  travelerLabel: string | null;
+  createdAt: string;
+}
 
 interface AuditEntry {
   id: string;
@@ -53,13 +61,20 @@ export default function PassportPage() {
   const [error, setError] = useState<string | null>(null);
   const [mrzLine1, setMrzLine1] = useState('');
   const [mrzLine2, setMrzLine2] = useState('');
-  const [tesseractBusy, setTesseractBusy] = useState(false);
+  const [extractionMeta, setExtractionMeta] = useState<{
+    provider: string;
+    model: string;
+    latencyMs: number;
+  } | null>(null);
+  const [activeTrips, setActiveTrips] = useState<TripSummary[] | null>(null);
   const [localAudit, setLocalAudit] = useState<AuditEntry[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadVault = useCallback(async () => {
+    console.log('[passport] → GET /api/passport/self');
     try {
       const res = await fetch('/api/passport/self', { cache: 'no-store' });
+      console.log('[passport] ← /api/passport/self', { status: res.status, ok: res.ok });
       const body = (await res.json()) as {
         error?: string;
         message?: string;
@@ -68,9 +83,11 @@ export default function PassportPage() {
       if (!res.ok || body.error) {
         throw new Error(body.message ?? body.error ?? 'Failed to load vault state');
       }
-      setVault(body.vault);
+      console.log('[passport] vault state', { hasVault: Boolean(body.vault) });
+      setVault(body.vault ?? null);
       setStatus(body.vault ? 'on_file' : 'empty');
     } catch (err) {
+      console.error('[passport] loadVault failed', err);
       setError(err instanceof Error ? err.message : 'Failed to load vault state');
       setStatus('error');
     }
@@ -82,6 +99,12 @@ export default function PassportPage() {
 
   const submit = useCallback(
     async (line1: string, line2: string, filename: string | null, imageSha256?: string) => {
+      console.log('[passport] → POST /api/passport/upload', {
+        mrz1Len: line1.length,
+        mrz2Len: line2.length,
+        filename,
+        hasImageHash: Boolean(imageSha256),
+      });
       setStatus('uploading');
       setError(null);
       try {
@@ -95,6 +118,7 @@ export default function PassportPage() {
             imageSha256,
           }),
         });
+        console.log('[passport] ← /api/passport/upload', { status: res.status, ok: res.ok });
         const body = (await safeJson(res)) as
           | { vaultId: string; [k: string]: unknown }
           | { error: string; message?: string };
@@ -116,27 +140,69 @@ export default function PassportPage() {
 
   const onFile = useCallback(
     async (file: File) => {
-      const buf = await file.arrayBuffer();
-      const digest = await crypto.subtle.digest('SHA-256', buf);
-      const hex = Array.from(new Uint8Array(digest))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-      if (mrzLine1.trim() && mrzLine2.trim()) {
-        await submit(mrzLine1, mrzLine2, file.name, hex);
-      } else {
-        setError('Saved the image hash. Paste both MRZ lines below, then Submit.');
+      console.log('[passport] file picked', {
+        name: file.name,
+        type: file.type,
+        bytes: file.size,
+      });
+      setStatus('extracting');
+      setError(null);
+      setExtractionMeta(null);
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        console.log('[passport] → POST /api/passport/extract-mrz');
+        const tStart = Date.now();
+        const res = await fetch('/api/passport/extract-mrz', { method: 'POST', body: form });
+        console.log('[passport] ← /api/passport/extract-mrz', {
+          status: res.status,
+          ok: res.ok,
+          wallClockMs: Date.now() - tStart,
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          mrzLine1?: string;
+          mrzLine2?: string;
+          imageSha256?: string;
+          provider?: string;
+          model?: string;
+          latencyMs?: number;
+          error?: string;
+          message?: string;
+        };
+        if (!res.ok || !body.mrzLine1 || !body.mrzLine2 || !body.imageSha256) {
+          console.warn('[passport] extract failed', {
+            status: res.status,
+            error: body.error,
+            message: body.message,
+          });
+          setError(body.message ?? body.error ?? 'Could not read the MRZ from this image.');
+          setStatus('empty');
+          return;
+        }
+        console.log('[passport] extract ok', {
+          provider: body.provider,
+          model: body.model,
+          latencyMs: body.latencyMs,
+          mrz1Len: body.mrzLine1.length,
+          mrz2Len: body.mrzLine2.length,
+        });
+        setMrzLine1(body.mrzLine1);
+        setMrzLine2(body.mrzLine2);
+        if (body.provider && body.model && typeof body.latencyMs === 'number') {
+          setExtractionMeta({
+            provider: body.provider,
+            model: body.model,
+            latencyMs: body.latencyMs,
+          });
+        }
+        await submit(body.mrzLine1, body.mrzLine2, file.name, body.imageSha256);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Network error during extraction');
+        setStatus('empty');
       }
     },
-    [mrzLine1, mrzLine2, submit]
+    [submit]
   );
-
-  const onTesseract = useCallback(async () => {
-    setTesseractBusy(true);
-    setError(
-      'Tesseract-based auto-extraction is stubbed — paste both MRZ lines manually for now. Client-side MRZ OCR lands in a follow-up PR.'
-    );
-    setTesseractBusy(false);
-  }, []);
 
   const revokeVault = useCallback(async () => {
     if (
@@ -157,6 +223,32 @@ export default function PassportPage() {
       setError(err instanceof Error ? err.message : 'Failed to revoke');
     }
   }, []);
+
+  // Once the vault is on file, fetch open trips so the user can see
+  // where the passport will be used. Empty list → CTA to /dashboard/trips.
+  useEffect(() => {
+    if (status !== 'on_file') return;
+    let cancelled = false;
+    void (async () => {
+      console.log('[passport] → GET /api/passport/active-trips');
+      try {
+        const res = await fetch('/api/passport/active-trips', { cache: 'no-store' });
+        console.log('[passport] ← /api/passport/active-trips', {
+          status: res.status,
+          ok: res.ok,
+        });
+        const body = (await res.json().catch(() => ({}))) as { trips?: TripSummary[] };
+        console.log('[passport] active trips', { count: body.trips?.length ?? 0 });
+        if (!cancelled) setActiveTrips(body.trips ?? []);
+      } catch (err) {
+        console.error('[passport] active-trips fetch failed', err);
+        if (!cancelled) setActiveTrips([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, vault?.vaultId]);
 
   const reveal = useCallback(async () => {
     try {
@@ -188,35 +280,40 @@ export default function PassportPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Workspace', 'Passport']} />
+      <Crumb trail={['Passport']} />
 
       {status === 'on_file' && vault ? (
-        <PassportOnFile
-          vault={vault}
-          revealedExtraction={revealedExtraction}
-          localAudit={localAudit}
-          onReveal={reveal}
-          onHide={() => setRevealedExtraction(null)}
-          onReplace={() => {
-            setStatus('empty');
-            setError(null);
-          }}
-          onRevoke={revokeVault}
-        />
+        <>
+          <PassportOnFile
+            vault={vault}
+            revealedExtraction={revealedExtraction}
+            localAudit={localAudit}
+            onReveal={reveal}
+            onHide={() => setRevealedExtraction(null)}
+            onReplace={() => {
+              setStatus('empty');
+              setError(null);
+            }}
+            onRevoke={revokeVault}
+          />
+          <PassportTripAssignment trips={activeTrips} />
+        </>
       ) : null}
 
-      {(status === 'empty' || status === 'uploading' || status === 'error') && (
+      {(status === 'empty' ||
+        status === 'extracting' ||
+        status === 'uploading' ||
+        status === 'error') && (
         <PassportUpload
           status={status}
           error={error}
+          extractionMeta={extractionMeta}
           mrzLine1={mrzLine1}
           mrzLine2={mrzLine2}
-          tesseractBusy={tesseractBusy}
           fileInputRef={fileInputRef}
           onMrz1={setMrzLine1}
           onMrz2={setMrzLine2}
           onChooseImage={() => fileInputRef.current?.click()}
-          onTesseract={onTesseract}
           onSubmit={() => {
             if (!mrzLine1.trim() || !mrzLine2.trim()) return;
             void submit(mrzLine1, mrzLine2, null);
@@ -476,43 +573,168 @@ function PassportOnFile({
   );
 }
 
+// ── post-save trip assignment ─────────────────────────────────
+//
+// After the vault is on file, surface where the passport will be
+// used. Empty trip list → redirect CTA to /dashboard/trips so the
+// user can create one. Non-empty → list up to six open trips with
+// "Apply to trip" links. The link itself doesn't write a relation
+// (PassportVault is per-User, not per-Trip — it's discovered by the
+// agent at eligibility-check time); it just navigates to the trip
+// detail page where the traveler/passport binding becomes visible.
+
+function PassportTripAssignment({ trips }: { trips: TripSummary[] | null }) {
+  if (trips === null) {
+    return (
+      <div
+        className="sd-card-flat"
+        style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
+      >
+        <span className="t-mono ink-60" style={{ fontSize: 11 }}>
+          Loading trips…
+        </span>
+      </div>
+    );
+  }
+
+  if (trips.length === 0) {
+    return (
+      <div
+        className="sd-card-raised"
+        style={{
+          padding: '20px 22px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
+        <div className="t-meta">Use this passport</div>
+        <div className="t-h3">No open trips yet</div>
+        <p className="t-body ink-70" style={{ margin: 0, fontSize: 13, maxWidth: '52ch' }}>
+          Your passport is sealed and ready. Create a trip to attach it to a traveler — the agent
+          uses your vault automatically at eligibility-check time.
+        </p>
+        <div>
+          <a href="/dashboard/trips" style={{ ...primaryBtnStyle, textDecoration: 'none' }}>
+            Create a trip →
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="sd-card-raised"
+      style={{
+        padding: '20px 22px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+        <div>
+          <div className="t-meta">Use this passport</div>
+          <div className="t-h3" style={{ marginTop: 4 }}>
+            Apply to a trip
+          </div>
+        </div>
+        <a
+          href="/dashboard/trips"
+          className="t-mono ink-60"
+          style={{ fontSize: 11, textDecoration: 'underline' }}
+        >
+          All trips →
+        </a>
+      </div>
+      <ul
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}
+      >
+        {trips.map(trip => (
+          <li
+            key={trip.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '12px 14px',
+              borderRadius: 'var(--radius-md, 8px)',
+              background: 'var(--surface-base)',
+              boxShadow: 'inset 0 0 0 1px var(--hairline-color-soft)',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              <div className="t-body" style={{ fontSize: 13, fontWeight: 500 }}>
+                {trip.destination ?? `Trip ${trip.id.slice(0, 8)}`}
+              </div>
+              <div className="t-mono ink-60" style={{ fontSize: 11 }}>
+                {trip.travelerLabel ?? 'unassigned traveler'} · {trip.status}
+              </div>
+            </div>
+            <a
+              href={`/dashboard/trips/${trip.id}`}
+              style={{
+                ...ghostBtnStyle,
+                padding: '6px 12px',
+                fontSize: 11,
+                textDecoration: 'none',
+              }}
+            >
+              Apply →
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // ── upload (PassportB) ────────────────────────────────────────
 
 function PassportUpload({
   status,
   error,
+  extractionMeta,
   mrzLine1,
   mrzLine2,
-  tesseractBusy,
   fileInputRef,
   onMrz1,
   onMrz2,
   onChooseImage,
-  onTesseract,
   onSubmit,
   onFile,
 }: {
   status: Status;
   error: string | null;
+  extractionMeta: { provider: string; model: string; latencyMs: number } | null;
   mrzLine1: string;
   mrzLine2: string;
-  tesseractBusy: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onMrz1: (v: string) => void;
   onMrz2: (v: string) => void;
   onChooseImage: () => void;
-  onTesseract: () => void;
   onSubmit: () => void;
   onFile: (file: File) => Promise<void>;
 }) {
-  const busy = status === 'uploading';
+  const extracting = status === 'extracting';
+  const uploading = status === 'uploading';
+  const busy = extracting || uploading;
   return (
     <>
       <header>
         <h1 className="t-h1">Add your passport</h1>
         <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          The image never leaves your browser. We hash it locally and store only the two MRZ lines,
-          encrypted with a per-tenant key.
+          Drop a photo of the photo page. We extract the MRZ on the server, encrypt it with a
+          per-tenant key, and discard the image. Only the two MRZ lines are persisted.
         </p>
       </header>
 
@@ -576,9 +798,13 @@ function PassportUpload({
             >
               🔒
             </div>
-            <div className="t-h2">{busy ? 'Encrypting…' : 'Drop your passport image'}</div>
+            <div className="t-h2">
+              {extracting ? 'Reading MRZ…' : uploading ? 'Encrypting…' : 'Drop your passport image'}
+            </div>
             <div className="t-body ink-70" style={{ fontSize: 13 }}>
-              Or choose a file · Or paste MRZ below
+              {extracting
+                ? 'Vision model is transcribing the two machine-readable lines.'
+                : 'Drag in a JPEG, PNG, or HEIC of the photo page — or pick a file.'}
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
               <button
@@ -591,21 +817,7 @@ function PassportUpload({
                   cursor: busy ? 'not-allowed' : 'pointer',
                 }}
               >
-                Choose image
-              </button>
-              <button
-                type="button"
-                onClick={onTesseract}
-                disabled={tesseractBusy || busy}
-                style={{
-                  ...ghostBtnStyle,
-                  padding: '8px 18px',
-                  fontSize: 12,
-                  opacity: tesseractBusy || busy ? 0.5 : 1,
-                  cursor: tesseractBusy || busy ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {tesseractBusy ? 'Scanning…' : 'Scan from image (beta)'}
+                {extracting ? 'Reading…' : uploading ? 'Encrypting…' : 'Choose image'}
               </button>
             </div>
             <input
@@ -621,62 +833,103 @@ function PassportUpload({
             />
           </div>
 
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              onSubmit();
-            }}
-            style={{
-              padding: '24px 28px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 14,
-            }}
-          >
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span className="t-meta">MRZ line 1 · 44 characters</span>
-              <input
-                value={mrzLine1}
-                onChange={e => onMrz1(e.target.value)}
-                maxLength={50}
-                placeholder="P<USASMITH<<JOHN<MICHAEL<<<<<<<<<<<<<<<<<<<<"
-                disabled={busy}
-                className="t-mono"
-                style={mrzInputStyle}
-              />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span className="t-meta">MRZ line 2 · 44 characters</span>
-              <input
-                value={mrzLine2}
-                onChange={e => onMrz2(e.target.value)}
-                maxLength={50}
-                placeholder="L898902C36USA7408122M1204159ZE184226B<<<<<10"
-                disabled={busy}
-                className="t-mono"
-                style={mrzInputStyle}
-              />
-            </label>
-            {error ? (
+          {error ? (
+            <div
+              style={{
+                padding: '12px 28px 0',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}
+            >
               <p className="t-mono" style={{ color: 'var(--vermillion)', fontSize: 11, margin: 0 }}>
                 {error}
               </p>
-            ) : null}
-            <div>
-              <button
-                type="submit"
-                disabled={!mrzLine1.trim() || !mrzLine2.trim() || busy}
-                style={{
-                  ...primaryBtnStyle,
-                  alignSelf: 'flex-start',
-                  opacity: !mrzLine1.trim() || !mrzLine2.trim() || busy ? 0.5 : 1,
-                  cursor: !mrzLine1.trim() || !mrzLine2.trim() || busy ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {busy ? 'Encrypting…' : 'Save encrypted'}
-              </button>
             </div>
-          </form>
+          ) : null}
+
+          {extractionMeta && busy ? (
+            <div
+              style={{
+                padding: '12px 28px 0',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
+              <div className="t-meta">
+                Read by {extractionMeta.provider}/{extractionMeta.model} ·{' '}
+                {extractionMeta.latencyMs}ms
+              </div>
+            </div>
+          ) : null}
+
+          <details
+            style={{
+              padding: '20px 28px 24px',
+              borderTop: '1px solid var(--hairline-color-soft)',
+              marginTop: 12,
+            }}
+          >
+            <summary
+              className="t-meta"
+              style={{ cursor: 'pointer', userSelect: 'none', listStyle: 'none' }}
+            >
+              ▸ Paste MRZ manually (fallback)
+            </summary>
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                onSubmit();
+              }}
+              style={{
+                marginTop: 14,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14,
+              }}
+            >
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span className="t-meta">MRZ line 1 · 44 characters</span>
+                <input
+                  value={mrzLine1}
+                  onChange={e => onMrz1(e.target.value)}
+                  maxLength={50}
+                  placeholder="P<USASMITH<<JOHN<MICHAEL<<<<<<<<<<<<<<<<<<<<"
+                  disabled={busy}
+                  className="t-mono"
+                  style={mrzInputStyle}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span className="t-meta">MRZ line 2 · 44 characters</span>
+                <input
+                  value={mrzLine2}
+                  onChange={e => onMrz2(e.target.value)}
+                  maxLength={50}
+                  placeholder="L898902C36USA7408122M1204159ZE184226B<<<<<10"
+                  disabled={busy}
+                  className="t-mono"
+                  style={mrzInputStyle}
+                />
+              </label>
+              <div>
+                <button
+                  type="submit"
+                  disabled={!mrzLine1.trim() || !mrzLine2.trim() || busy}
+                  style={{
+                    ...primaryBtnStyle,
+                    alignSelf: 'flex-start',
+                    opacity: !mrzLine1.trim() || !mrzLine2.trim() || busy ? 0.5 : 1,
+                    cursor:
+                      !mrzLine1.trim() || !mrzLine2.trim() || busy ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {busy ? 'Encrypting…' : 'Save encrypted'}
+                </button>
+              </div>
+            </form>
+          </details>
         </div>
 
         {/* RIGHT — privacy explainers */}

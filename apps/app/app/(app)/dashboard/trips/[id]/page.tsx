@@ -70,7 +70,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Workspace', 'Trips', `${shortId} · ${destination}`]} />
+      <Crumb trail={['Trips', `${shortId} · ${destination}`]} />
 
       <div
         style={{

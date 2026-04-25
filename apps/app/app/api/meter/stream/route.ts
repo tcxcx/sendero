@@ -18,7 +18,7 @@
  * close after 4 minutes; EventSource reconnects client-side.
  */
 
-import { type NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@sendero/database';

@@ -60,7 +60,7 @@ export default async function SlackChannelPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Channels', 'Slack']} />
+      <Crumb trail={['Slack']} />
 
       {installs.length === 0 ? (
         <DisconnectedView />

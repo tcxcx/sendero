@@ -253,5 +253,5 @@ function unwrap(body: unknown, key: string): unknown {
   if (body && typeof body === 'object' && key in body) {
     return (body as Record<string, unknown>)[key];
   }
-  return body;
+  return undefined;
 }

@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    return NextResponse.redirect(new URL('/dashboard/settings/slack?installed=1', req.url));
+    return NextResponse.redirect(new URL('/dashboard/channels/slack/connect?installed=1', req.url));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[slack/oauth] exchange failed:', msg);
