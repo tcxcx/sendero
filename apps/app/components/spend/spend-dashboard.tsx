@@ -76,7 +76,6 @@ export function SpendDashboard({
   caps: CapRow[];
   recentBatches: BatchRow[];
 }) {
-  const totalNum = Number(summary.totalMicro) / 1_000_000;
   const avgMicro = summary.totalCalls > 0 ? summary.totalMicro / BigInt(summary.totalCalls) : 0n;
   const capCeilingMicro = capCeilingForRange(range, caps);
   const utilizationPct =
@@ -158,12 +157,7 @@ export function SpendDashboard({
           </div>
         </div>
         {summary.timeseries.length === 0 ? (
-          <div
-            className="t-body ink-60"
-            style={{ padding: '36px 0', textAlign: 'center', fontSize: 13 }}
-          >
-            No paid meter events in this window.
-          </div>
+          <SpendEmpty range={range} />
         ) : (
           <Sparkline points={summary.timeseries} />
         )}
@@ -560,6 +554,44 @@ function ToolBars({ perTool }: { perTool: SpendSummary['perTool'] }) {
             {row.toolName}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function SpendEmpty({ range }: { range: SpendRange }) {
+  return (
+    <div
+      style={{
+        padding: '36px 24px',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        alignItems: 'center',
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          background: 'var(--tint-vermillion-soft)',
+          color: 'var(--vermillion)',
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: 20,
+        }}
+      >
+        ⌁
+      </div>
+      <div className="t-h3">No paid meter events yet</div>
+      <div className="t-body ink-70" style={{ fontSize: 13, maxWidth: '52ch', lineHeight: 1.55 }}>
+        Tools you call from <code className="t-mono">/api/agent/dispatch</code> or the MCP server
+        write a metered event for this tenant. Once the first call lands inside the{' '}
+        {RANGE_LABEL[range].toLowerCase()} window, the chart fills in automatically — no manual
+        ingest, no daily cron.
       </div>
     </div>
   );

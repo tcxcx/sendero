@@ -31,8 +31,7 @@ const DASHBOARD_PAGE_COPY: Record<string, Copy> = {
   },
   '/dashboard/scan': {
     title: 'Scan document',
-    description:
-      'Extract structured fields from receipts, invoices, and boarding passes.',
+    description: 'Extract structured fields from receipts, invoices, and boarding passes.',
   },
   '/dashboard/trips': {
     title: 'Trips',
@@ -105,7 +104,15 @@ const DYNAMIC_MATCHERS: Array<{ re: RegExp; copy: Copy }> = [
 
 // Routes that own their own hero / full-bleed layout. The shared
 // header stays off these to avoid two headers on one page.
-const SUPPRESS_PREFIXES = ['/dashboard/console', '/dashboard/inbox'];
+const SUPPRESS_PREFIXES = [
+  '/dashboard/console',
+  '/dashboard/inbox',
+  '/dashboard/scan',
+  '/dashboard/passport',
+  '/dashboard/trips',
+  '/dashboard/billing/invoices',
+  '/dashboard/spend',
+];
 
 function resolveCopy(pathname: string): Copy | null {
   const exact = DASHBOARD_PAGE_COPY[pathname];
@@ -123,12 +130,6 @@ export function DashboardPageHeader() {
   if (!pathname.startsWith('/dashboard')) return null;
   if (SUPPRESS_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))) return null;
 
-  // Inbox root (/dashboard/inbox with no id) should still show a header.
-  // Only suppress thread views where the conversation UI owns the viewport.
-  if (pathname === '/dashboard/inbox') {
-    // keep inbox root header — fall through to copy lookup
-  }
-
   const copy = resolveCopy(pathname);
   if (!copy) return null;
 
@@ -141,9 +142,7 @@ export function DashboardPageHeader() {
             <p className="text-sm text-muted-foreground">{copy.description}</p>
           ) : null}
         </div>
-        {actions ? (
-          <div className="flex flex-wrap items-center gap-2">{actions}</div>
-        ) : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
     </div>
   );

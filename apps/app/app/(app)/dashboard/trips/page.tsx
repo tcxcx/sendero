@@ -71,7 +71,7 @@ export default async function TripsPage({
   const totalPages = Math.max(1, Math.ceil(total / query.per));
 
   const inflight = countOf(summary, ['booked', 'in_progress']);
-  const holds = countOf(summary, ['awaiting_approval']);
+  const awaiting = countOf(summary, ['awaiting_approval']);
   const settledThisWeek = await prisma.trip.count({
     where: {
       tenantId: tenant.id,
@@ -105,8 +105,7 @@ export default async function TripsPage({
         <div>
           <h1 className="t-h1">Trips</h1>
           <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-            {inflight} in flight, {holds} hold{holds === 1 ? '' : 's'}, {settledThisWeek} settled
-            this week.
+            {inflight} in flight, {awaiting} awaiting approval, {settledThisWeek} settled this week.
           </p>
         </div>
         <PageActions>
