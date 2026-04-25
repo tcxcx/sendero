@@ -38,19 +38,22 @@ export async function generateMetadata({
   return {
     title: `${stamp.name} · Sendero`,
     description: stamp.caption,
+    // No explicit openGraph.images / twitter.images here — Next.js auto-
+    // injects /stamps/[tokenId]/opengraph-image (Satori-rendered card
+    // that embeds the NFT art inside a Sendero brand frame). Slack +
+    // WhatsApp + X all unfurl with the framed version, which beats the
+    // bare Pinata gateway URL we used to advertise.
     openGraph: {
       title: stamp.name,
       description: stamp.caption,
       url,
       siteName: 'Sendero',
-      images: [{ url: stamp.blobUrl, width: 1200, height: 1200, alt: stamp.name }],
       type: 'website',
     },
     twitter: {
       card: 'summary_large_image',
       title: stamp.name,
       description: stamp.caption,
-      images: [stamp.blobUrl],
     },
     other: {
       'eth:nft:contract': stamp.contract,
