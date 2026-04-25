@@ -25,6 +25,7 @@ import { z } from 'zod';
 import { giveFeedback } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
 
+import { resolveWalletUuidByAddress } from './resolve-wallet';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -116,9 +117,18 @@ export const giveFeedbackTool: ToolDef<Input, GiveFeedbackResult> = {
       );
     }
 
+    // Circle DCW signs by walletId UUID, not on-chain address. Resolve the
+    // rater's holder address back to its Circle wallet UUID before signing.
+    const raterWalletUuid = await resolveWalletUuidByAddress(rater.holderAddress);
+    if (!raterWalletUuid) {
+      throw new Error(
+        `No Circle wallet UUID for rater ${input.fromKind} holder ${rater.holderAddress} — provision the wallet first.`
+      );
+    }
+
     const score = input.stars * 20;
     const result = await giveFeedback({
-      validatorWalletAddress: rater.holderAddress,
+      validatorWalletAddress: raterWalletUuid,
       agentId: BigInt(input.subjectAgentId),
       score,
       tag: input.tag,

@@ -311,7 +311,8 @@ async function main() {
     const metadataURI = env.SENDERO_METADATA_URI || METADATA_URI_DEFAULT;
     console.log(`  metadata: ${metadataURI}`);
     const { agentId: newAgentId, txHash } = await registerAgent({
-      ownerWalletAddress: wallets.provider.address,
+      // Circle DCW signs by walletId UUID, not on-chain address.
+      ownerWalletAddress: wallets.provider.id,
       ownerAddress: wallets.provider.address as any,
       metadataURI,
     });
@@ -323,14 +324,17 @@ async function main() {
   // ─── 5. Seed reputation (50 feedback events, 3 validators) ───────────────
   console.log('\n── Seeding reputation (~50 events, ~3 min) ──');
   const progress = loadSeedProgress();
+  // walletAddress is the Circle DCW UUID (passed straight to Circle's
+  // `walletId` field), NOT the on-chain 0x address. Keep the address
+  // separately for the progress journal key.
   const validators: { address: string; walletAddress: string; label: string }[] = [
     {
       address: wallets.demoClient.address,
-      walletAddress: wallets.demoClient.address,
+      walletAddress: wallets.demoClient.id,
       label: 'demo-client',
     },
-    { address: wallets.aux1.address, walletAddress: wallets.aux1.address, label: 'aux-1' },
-    { address: wallets.aux2.address, walletAddress: wallets.aux2.address, label: 'aux-2' },
+    { address: wallets.aux1.address, walletAddress: wallets.aux1.id, label: 'aux-1' },
+    { address: wallets.aux2.address, walletAddress: wallets.aux2.id, label: 'aux-2' },
   ];
   const tags = ['on_time', 'clean_pnr', 'responsive', 'accurate', 'professional'];
   const targetPerValidator = [17, 17, 16]; // ~50 total, spread

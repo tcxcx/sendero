@@ -39,7 +39,8 @@ export async function POST(req: NextRequest) {
     const body = BodySchema.parse(await req.json());
     const deliverableHash = hashDeliverable(body.pnr);
     const { txHash } = await submitDeliverable({
-      providerWalletAddress: providerAddress,
+      // Circle DCW signs by walletId UUID, not on-chain address.
+      providerWalletAddress: providerWalletId,
       jobId: BigInt(body.jobId),
       deliverableHash,
     });

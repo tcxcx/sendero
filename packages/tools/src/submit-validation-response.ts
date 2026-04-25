@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { submitValidationResponse } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
 
+import { resolveWalletUuidByAddress } from './resolve-wallet';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -64,8 +65,16 @@ export const submitValidationResponseTool: ToolDef<Input, SubmitValidationResult
       throw new Error(`No ValidationCheck row for requestHash ${input.requestHash}`);
     }
 
+    // Circle DCW signs by walletId UUID, not on-chain address.
+    const validatorWalletUuid = await resolveWalletUuidByAddress(input.validatorWalletAddress);
+    if (!validatorWalletUuid) {
+      throw new Error(
+        `No Circle wallet UUID for validatorWalletAddress ${input.validatorWalletAddress} — provision the wallet first.`
+      );
+    }
+
     const result = await submitValidationResponse({
-      validatorWalletAddress: input.validatorWalletAddress,
+      validatorWalletAddress: validatorWalletUuid,
       requestHash: input.requestHash as `0x${string}`,
       response: input.response,
       tag: input.tag,

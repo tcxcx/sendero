@@ -43,6 +43,12 @@ const need = (k: string): string => {
 
 const providerAddress = need('SENDERO_PROVIDER_ADDRESS');
 const clientAddress = need('DEMO_CLIENT_ADDRESS');
+// Circle DCW signs by walletId UUID, not on-chain address — the helpers
+// in @sendero/arc/jobs route their `*WalletAddress` arg straight into
+// Circle's `walletId` field. The 0x address vars stay around for log /
+// explorer URLs only.
+const providerWalletId = need('SENDERO_PROVIDER_WALLET_ID');
+const clientWalletId = need('DEMO_CLIENT_WALLET_ID');
 const agentId = BigInt(need('SENDERO_AGENT_ID'));
 const explorerBase = process.env.ARC_EXPLORER_URL || 'https://testnet.arcscan.app';
 
@@ -62,7 +68,7 @@ console.log(`  Expires:   ${new Date(Number(expiredAt) * 1000).toISOString()}`);
 
 console.log(`\n[1/7] createJob...`);
 const created = await createJob({
-  clientWalletAddress: clientAddress,
+  clientWalletAddress: clientWalletId,
   providerAddress: providerAddress as any,
   evaluatorAddress: clientAddress as any,
   expiredAt,
@@ -72,7 +78,7 @@ console.log(`      job #${created.jobId} · ${arcscan(created.txHash)}`);
 
 console.log(`[2/7] setBudget(${amountUsd} USDC)...`);
 const budgetTx = await setBudget({
-  providerWalletAddress: providerAddress,
+  providerWalletAddress: providerWalletId,
   jobId: created.jobId,
   amount: amountUnits,
 });
@@ -80,14 +86,14 @@ console.log(`      ${arcscan(budgetTx.txHash)}`);
 
 console.log(`[3/7] approve USDC...`);
 const approveTx = await approveUsdc({
-  clientWalletAddress: clientAddress,
+  clientWalletAddress: clientWalletId,
   amount: amountUnits,
 });
 console.log(`      ${arcscan(approveTx.txHash)}`);
 
 console.log(`[4/7] fund (escrow locked)...`);
 const fundTx = await fundJob({
-  clientWalletAddress: clientAddress,
+  clientWalletAddress: clientWalletId,
   jobId: created.jobId,
 });
 console.log(`      ${arcscan(fundTx.txHash)}`);
@@ -95,7 +101,7 @@ console.log(`      ${arcscan(fundTx.txHash)}`);
 console.log(`[5/7] submit (deliverable = keccak256(PNR))...`);
 const deliverableHash = hashDeliverable(pnr);
 const submitTx = await submitDeliverable({
-  providerWalletAddress: providerAddress,
+  providerWalletAddress: providerWalletId,
   jobId: created.jobId,
   deliverableHash,
 });
@@ -105,7 +111,7 @@ console.log(`      ${arcscan(submitTx.txHash)}`);
 console.log(`[6/7] complete (escrow released)...`);
 const reasonHash = hashDeliverable('ticket_issued');
 const completeTx = await completeJob({
-  evaluatorWalletAddress: clientAddress,
+  evaluatorWalletAddress: clientWalletId,
   jobId: created.jobId,
   reasonHash,
 });
@@ -113,7 +119,7 @@ console.log(`      ${arcscan(completeTx.txHash)}`);
 
 console.log(`[7/7] giveFeedback (reputation +1)...`);
 const feedbackTx = await giveFeedback({
-  validatorWalletAddress: clientAddress,
+  validatorWalletAddress: clientWalletId,
   agentId,
   score: 95,
   tag: 'ticket_delivered',
