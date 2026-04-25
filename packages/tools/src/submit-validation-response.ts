@@ -50,7 +50,15 @@ export const submitValidationResponseTool: ToolDef<Input, SubmitValidationResult
     required: ['requestHash', 'response', 'tag', 'validatorWalletAddress'],
     properties: {
       requestHash: { type: 'string', pattern: '^0x[a-fA-F0-9]{64}$' },
-      response: { type: 'integer', enum: [0, 100] },
+      // Vertex AI's tool-declaration validator rejects non-string enum
+      // values; AI Gateway is more lenient. Drop the enum constraint
+      // and document the allowed integers in the description so the
+      // schema works with both routing paths. Runtime validation still
+      // happens via Zod (z.union([z.literal(100), z.literal(0)])).
+      response: {
+        type: 'integer',
+        description: 'Validator verdict. 100 = passed, 0 = failed. No other values are accepted.',
+      },
       tag: { type: 'string', minLength: 1, maxLength: 64 },
       validatorWalletAddress: { type: 'string', pattern: '^0x[a-fA-F0-9]{40}$' },
       responseUri: { type: 'string' },

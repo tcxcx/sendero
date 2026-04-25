@@ -29,6 +29,33 @@ const useStrictModeSafeInit = () => {
   return ready;
 };
 
+// WebGL2 isn't universal — headless browsers, older Safari, locked-down
+// VMs, and machines that have exhausted their context budget all return
+// null from getContext('webgl2'). Without this guard, Rive's makeRenderer
+// blows up with `Cannot read properties of null (reading 'T')`. Detect
+// once on mount and short-circuit to a static placeholder when missing.
+const useWebGL2Available = () => {
+  const [available, setAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    try {
+      const probe = document.createElement("canvas");
+      const gl = probe.getContext("webgl2");
+      if (gl) {
+        const lose = gl.getExtension("WEBGL_lose_context");
+        lose?.loseContext();
+        setAvailable(true);
+      } else {
+        setAvailable(false);
+      }
+    } catch {
+      setAvailable(false);
+    }
+  }, []);
+
+  return available;
+};
+
 export type PersonaState =
   | "idle"
   | "listening"
@@ -310,14 +337,16 @@ export const Persona: FC<PersonaProps> = memo(
       []
     );
 
-    // Gate the entire Rive subtree behind a one-frame delay. The canvas
-    // only ever mounts once, with real params — Strict Mode's throw-away
-    // first mount never creates a WebGL2 context, and useRive is never
-    // called with null. This avoids the `makeRenderer` null-runtime crash
-    // we saw on dev refreshes (`Cannot read properties of null (reading 'T')`).
+    // Gate the entire Rive subtree behind a one-frame delay AND a WebGL2
+    // capability probe. The canvas only ever mounts once, with real params,
+    // and only when WebGL2 is actually available — Strict Mode's throw-away
+    // first mount never creates a context, useRive is never called with
+    // null, and headless / WebGL1-only browsers degrade to a static
+    // placeholder instead of crashing in `makeRenderer`.
     const ready = useStrictModeSafeInit();
+    const webgl2 = useWebGL2Available();
 
-    if (!ready) {
+    if (!ready || webgl2 !== true) {
       return (
         <div
           aria-hidden="true"

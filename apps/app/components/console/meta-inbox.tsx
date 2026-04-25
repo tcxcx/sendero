@@ -48,6 +48,17 @@ export interface ConversationEntry {
   rows?: Array<Record<string, unknown>>;
 }
 
+/** Server-confirmed MeterEvent row, streamed from `/api/meter/stream`. */
+export interface LiveMeterEvent {
+  id: string;
+  toolName: string;
+  toolNames?: string[];
+  tripId?: string | null;
+  priceMicroUsdc: string;
+  status: 'paid' | 'free' | 'rejected' | 'sandbox';
+  at: string;
+}
+
 interface MetaInboxProps {
   trips: TripRowData[];
   scopedTripId: string | null;
@@ -66,6 +77,13 @@ interface MetaInboxProps {
    * in unscoped console mode.
    */
   pendingBooking?: { id: string; totalUsd: string } | null;
+  /**
+   * Real, server-confirmed MeterEvents for this tenant (and the
+   * focused trip when scoped). Populated by an SSE subscription in
+   * MetaInboxLive; drives the running total + ledger of the
+   * NanopayWorkflowsPanel. Empty until the first turn finishes.
+   */
+  meterEvents?: LiveMeterEvent[];
   /** Composer submit handler. When omitted, the composer is read-only. */
   onSubmit?: (text: string) => void | Promise<void>;
   /** When true, the composer is disabled (turn in flight). */
@@ -79,6 +97,7 @@ export function MetaInbox({
   traveler,
   holdExpires,
   pendingBooking,
+  meterEvents,
   onSubmit,
   disabled,
 }: MetaInboxProps) {
@@ -92,14 +111,19 @@ export function MetaInbox({
   const channelKey: ChannelKey = isTrip ? asChannelKey(focused?.channel) : 'internal';
   const channel = CHANNELS[channelKey];
 
-  // In unscoped console mode the right column is the live nanopay/workflow
-  // feed and lives there permanently — the footer toggle is suppressed.
-  // In scoped (trip) mode the right column toggles between Customer cards
-  // and a hidden state, and the nanopay terminal can still expand from the
-  // footer as a fourth panel.
+  // Column layout per mode:
+  //   Unscoped:  rail · convo · NanopayPanel (always visible).
+  //   Scoped:    rail · convo · Customer (toggleable) · NanopayPanel
+  //              (toggleable via the footer switch). When both are
+  //              open the panel sits as a 4th column instead of an
+  //              inline footer expansion — that's the "trip-cost"
+  //              terminal the design's NanopaymentPanel describes.
   const sidePanelOpen = isTrip ? customerPanelOpen : true;
   const baseCols = isTrip ? '260px 1fr' : '300px 1fr';
-  const cols = baseCols + (sidePanelOpen ? (isTrip ? ' 320px' : ' 340px') : '');
+  const cols =
+    baseCols +
+    (sidePanelOpen ? (isTrip ? ' 300px' : ' 340px') : '') +
+    (isTrip && nanopayOpen ? ' 320px' : '');
 
   return (
     <div
@@ -379,8 +403,25 @@ export function MetaInbox({
                 {focused ? <TripContextCards trip={focused} channel={channel} /> : null}
               </div>
             ) : (
-              <NanopayWorkflowsPanel conversation={conversation} />
+              <NanopayWorkflowsPanel
+                conversation={conversation}
+                meterEvents={meterEvents}
+                scope="session"
+              />
             )
+          ) : null}
+
+          {/* 4th column — trip-scoped Nanopay panel. Footer switch
+              opens it; while closed the trip view stays at 3 columns
+              like before. */}
+          {isTrip && nanopayOpen ? (
+            <NanopayWorkflowsPanel
+              conversation={conversation}
+              meterEvents={meterEvents}
+              scope="trip"
+              tripId={scopedTripId}
+              channelAccent={channel.accent}
+            />
           ) : null}
         </div>
 
@@ -450,18 +491,10 @@ export function MetaInbox({
               <NanopaySwitch open={nanopayOpen} onToggle={() => setNanopayOpen(o => !o)} />
             ) : null}
           </div>
-          {isTrip && nanopayOpen ? (
-            <div
-              style={{
-                padding: '0 18px 14px',
-                borderTop: '1px solid var(--hairline-color)',
-              }}
-            >
-              <div style={{ paddingTop: 12 }}>
-                <NanopayTerminal />
-              </div>
-            </div>
-          ) : null}
+          {/* Inline footer terminal retired — the trip-scoped Nanopay
+              panel now mounts as a real 4th column above so the
+              ledger sits next to the conversation rather than
+              squeezing the chat vertically. */}
         </div>
       </div>
     </div>
@@ -881,47 +914,99 @@ function ConsoleHeroBand({ trips }: { trips: TripRowData[] }) {
   );
 }
 
-// Nanopay + Workflows live feed — the V2 right column. Builds a ledger
-// from the conversation's tool entries (drives off the same useChat
-// stream the center conversation renders) so any tool call shows up
-// here in real time. Workflows are surfaced as the recent dispatch
-// trail. Visual treatment borrows from the design's NanopaymentPanel
-// (terminal-skinned, vermillion + sand accents on midnight).
-function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEntry[] }) {
-  // The conversation entries are already ordered oldest → newest from
-  // useChat; reverse for the ledger so the most recent call is at the
-  // top, matching the design.
+// Nanopay + Workflows live feed.
+//
+// Two complementary data sources merge here:
+//   · `conversation` tool entries — the in-flight per-tool calls
+//     streamed from useChat. These give the panel its real-time feel:
+//     a `book_flight` row appears the instant the tool starts.
+//   · `meterEvents` — server-confirmed MeterEvent rows fanned out via
+//     the `/api/meter/stream` SSE endpoint. One row per agent turn
+//     (`chat_reply` with `metadata.toolNames`). These carry the
+//     authoritative price.
+//
+// Running total prefers the real meter sum when present and falls
+// back to a heuristic per-tool estimate while the turn is still
+// streaming. Per-tool ledger rows always come from the conversation
+// so the operator sees what's happening, not just what's settled.
+//
+// `scope` flips the framing: 'session' for the unscoped console
+// (running total = whole session), 'trip' for `/dashboard/inbox/[id]`
+// (running total = trip cost). When scoped, `channelAccent` bleeds
+// through the running-total color so the terminal feels like part of
+// the channel (whatsapp green, slack purple, sms midnight…).
+const PRICE_HINT_USD: Record<string, number> = {
+  search_flights: 0.02,
+  search_hotels: 0.02,
+  check_policy: 0.001,
+  quote_fx: 0.01,
+  hold_booking: 0.15,
+  book_flight: 1.0,
+  confirm_booking: 1.0,
+  modify_booking: 1.5,
+  cancel_booking: 1.5,
+  // legacy / friendlier display names that may appear from older tool
+  // shapes — kept so the panel never falls back to the floor price for
+  // recognizable calls during the migration window.
+  'duffel.search': 0.084,
+  'duffel.hold': 0.15,
+  'duffel.book': 1.0,
+  'policy.check': 0.001,
+  'trips.query': 0.001,
+};
+const PRICE_FLOOR_USD = 0.0008;
+const microToUsd = (micro: string): number => Number(BigInt(micro)) / 1_000_000;
+
+function NanopayWorkflowsPanel({
+  conversation,
+  meterEvents,
+  scope,
+  tripId,
+  channelAccent,
+}: {
+  conversation: ConversationEntry[];
+  meterEvents?: LiveMeterEvent[];
+  scope: 'session' | 'trip';
+  tripId?: string | null;
+  channelAccent?: string;
+}) {
   const toolEntries = conversation.filter(e => e.role === 'tool' && e.toolName);
+  const isHold = (name: string) =>
+    name === 'hold_booking' || name === 'duffel.hold' || /\bhold\b/i.test(name);
 
-  // Heuristic per-tool cost. Real x402 prices come from the meter
-  // store; until we wire SSE, we keep the visualization honest by
-  // anchoring rare/expensive operations (book/hold) higher than
-  // free-tier reads.
-  const PRICE_HINT: Record<string, number> = {
-    'duffel.search': 0.084,
-    'duffel.hold': 2.184,
-    'duffel.book': 4.2,
-    'policy.check': 0.001,
-    'trips.query': 0.001,
-    'spend.rollup': 0.004,
-    'finance.breakdown': 0.001,
-    'trip.summary': 0.004,
-  };
-  const priceFor = (tool?: string) => (tool && PRICE_HINT[tool]) ?? 0.0008;
-
+  // Per-tool ledger rows — always from the live conversation.
   const ledger = toolEntries
     .slice(-12)
-    .map(e => ({
-      id: e.id,
-      tool: e.toolName ?? 'unknown',
-      cost: priceFor(e.toolName),
-      status: e.toolName === 'duffel.hold' ? 'held' : 'captured',
-    }))
+    .map(e => {
+      const tool = e.toolName ?? 'unknown';
+      return {
+        id: e.id,
+        tool,
+        cost: PRICE_HINT_USD[tool] ?? PRICE_FLOOR_USD,
+        status: isHold(tool) ? 'held' : 'captured',
+      };
+    })
     .reverse();
 
+  // Running total. Prefer server-confirmed meter rows; if none have
+  // landed yet (turn still streaming, or stream not connected), fall
+  // back to the heuristic ledger sum so the operator still sees motion.
+  const confirmedTotal = (meterEvents ?? []).reduce(
+    (a, m) => a + microToUsd(m.priceMicroUsdc),
+    0
+  );
+  const heuristicTotal = ledger.reduce((a, r) => a + r.cost, 0);
+  const total = confirmedTotal > 0 ? confirmedTotal : heuristicTotal;
   const captured = ledger.filter(r => r.status === 'captured').reduce((a, b) => a + b.cost, 0);
   const held = ledger.filter(r => r.status === 'held').reduce((a, b) => a + b.cost, 0);
-  const total = captured + held;
+
+  // Channel accent bleed — only meaningful when scoped to a channel.
+  // The display swaps from sand (#E8B98E) to whatever the channel ink
+  // is so the terminal reads as part of the same conversation.
+  const totalColor =
+    scope === 'trip' && channelAccent ? `color-mix(in oklab, ${channelAccent} 70%, #fdfbf7 30%)` : '#fdfbf7';
+  const accentColor = scope === 'trip' && channelAccent ? channelAccent : '#E8B98E';
+  const turnsLabel = scope === 'trip' ? 'metered turns' : 'turns';
 
   return (
     <div
@@ -957,8 +1042,8 @@ function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEnt
             width: 6,
             height: 6,
             borderRadius: 3,
-            background: '#9ED6BB',
-            boxShadow: '0 0 6px #9ED6BB',
+            background: accentColor,
+            boxShadow: `0 0 6px ${accentColor}`,
           }}
         />
         <span className="t-mono" style={{ fontSize: 10, color: 'rgba(253,251,247,0.5)' }}>
@@ -969,21 +1054,21 @@ function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEnt
       {/* running total */}
       <div>
         <div className="t-meta" style={{ color: 'rgba(253,251,247,0.5)' }}>
-          Session spend · x402
+          {scope === 'trip' ? `Trip cost${tripId ? ` · ${tripId}` : ''}` : 'Session spend · x402'}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 4 }}>
           <span
             className="t-num-lg"
             style={{
               fontSize: 30,
-              color: '#fdfbf7',
+              color: totalColor,
               fontFamily: 'var(--font-display, var(--font-serif, serif))',
             }}
           >
             ${total.toFixed(4)}
           </span>
-          <span className="t-mono" style={{ fontSize: 11, color: '#E8B98E' }}>
-            {ledger.length} call{ledger.length === 1 ? '' : 's'}
+          <span className="t-mono" style={{ fontSize: 11, color: accentColor }}>
+            {(meterEvents?.length ?? 0)} {turnsLabel}
           </span>
         </div>
         <div
@@ -998,14 +1083,19 @@ function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEnt
           <span className="t-mono">captured ${captured.toFixed(4)}</span>
           <span className="t-mono">held ${held.toFixed(4)}</span>
         </div>
+        {confirmedTotal === 0 && heuristicTotal > 0 ? (
+          <div
+            className="t-mono"
+            style={{ fontSize: 9, color: 'rgba(253,251,247,0.4)', marginTop: 6 }}
+          >
+            estimate · settles when turn finishes
+          </div>
+        ) : null}
       </div>
 
       {/* live ledger — fed by useChat tool parts */}
       <div>
-        <div
-          className="t-meta"
-          style={{ color: 'rgba(253,251,247,0.5)', marginBottom: 8 }}
-        >
+        <div className="t-meta" style={{ color: 'rgba(253,251,247,0.5)', marginBottom: 8 }}>
           Live ledger
         </div>
         {ledger.length === 0 ? (
@@ -1018,8 +1108,7 @@ function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEnt
               lineHeight: 1.55,
             }}
           >
-            No tool calls yet. Ask Sendero anything — every call meters here as
-            it streams.
+            No tool calls yet. Ask Sendero anything — every call meters here as it streams.
           </div>
         ) : (
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, lineHeight: 1.7 }}>
@@ -1038,7 +1127,7 @@ function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEnt
                 <span style={{ color: row.status === 'held' ? '#E26B47' : '#fdfbf7' }}>
                   {row.tool}
                 </span>
-                <span style={{ color: '#E8B98E', textAlign: 'right' }}>
+                <span style={{ color: accentColor, textAlign: 'right' }}>
                   ${row.cost.toFixed(4)}
                 </span>
                 <span
@@ -1057,17 +1146,66 @@ function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEnt
         )}
       </div>
 
+      {/* settled turns — server-confirmed history. Only renders once
+          the SSE stream has delivered at least one row. */}
+      {(meterEvents?.length ?? 0) > 0 ? (
+        <div>
+          <div className="t-meta" style={{ color: 'rgba(253,251,247,0.5)', marginBottom: 8 }}>
+            Settled turns
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, lineHeight: 1.7 }}>
+            {(meterEvents ?? [])
+              .slice(-6)
+              .reverse()
+              .map(evt => {
+                const tools = evt.toolNames ?? [];
+                const summary = tools.length > 0 ? tools.slice(0, 2).join(', ') : 'chat_reply';
+                const more = tools.length > 2 ? ` +${tools.length - 2}` : '';
+                return (
+                  <div
+                    key={evt.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 64px 56px',
+                      gap: 6,
+                      padding: '2px 0',
+                      borderBottom: '1px solid rgba(253,251,247,0.04)',
+                    }}
+                  >
+                    <span style={{ color: 'rgba(253,251,247,0.85)' }}>{summary}{more}</span>
+                    <span style={{ color: accentColor, textAlign: 'right' }}>
+                      ${microToUsd(evt.priceMicroUsdc).toFixed(4)}
+                    </span>
+                    <span
+                      style={{
+                        color: evt.status === 'sandbox' ? '#E26B47' : 'rgba(253,251,247,0.5)',
+                        fontSize: 9,
+                        textTransform: 'uppercase',
+                        textAlign: 'right',
+                      }}
+                    >
+                      {evt.status}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      ) : null}
+
       {/* workflow trail — settlement timeline keyed off the ledger */}
       <div>
-        <div
-          className="t-meta"
-          style={{ color: 'rgba(253,251,247,0.5)', marginBottom: 8 }}
-        >
+        <div className="t-meta" style={{ color: 'rgba(253,251,247,0.5)', marginBottom: 8 }}>
           Workflow
         </div>
         {[
           { k: 'Dispatch', t: 'agent.turn', done: ledger.length > 0 },
-          { k: 'Tool calls', t: `${ledger.length} metered`, done: ledger.length > 0 },
+          { k: 'Tool calls', t: `${ledger.length} streamed`, done: ledger.length > 0 },
+          {
+            k: 'Settled',
+            t: `${meterEvents?.length ?? 0} turn${(meterEvents?.length ?? 0) === 1 ? '' : 's'}`,
+            done: (meterEvents?.length ?? 0) > 0,
+          },
           { k: 'Settle batch', t: 'on cron', done: false },
         ].map((s, i, arr) => (
           <div
@@ -1093,7 +1231,7 @@ function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEnt
                 borderRadius: 6,
                 marginTop: 4,
                 flexShrink: 0,
-                background: s.done ? '#E8B98E' : 'transparent',
+                background: s.done ? accentColor : 'transparent',
                 boxShadow: s.done ? 'none' : 'inset 0 0 0 1px rgba(253,251,247,0.3)',
               }}
             />
@@ -1167,37 +1305,3 @@ function NanopaySwitch({ open, onToggle }: { open: boolean; onToggle: () => void
   );
 }
 
-function NanopayTerminal() {
-  return (
-    <div
-      style={{
-        background: 'var(--surface-terminal)',
-        color: '#f7efe4',
-        borderRadius: 12,
-        padding: '14px 16px',
-        fontFamily: 'var(--font-mono-x)',
-        fontSize: 11.5,
-        lineHeight: 1.55,
-      }}
-    >
-      <div className="t-meta" style={{ color: 'rgba(247,239,228,0.5)', marginBottom: 8 }}>
-        x402 ledger · live
-      </div>
-      <div>
-        <span style={{ color: '#9ed6bb' }}>$0.0010</span> trips.query · 14:00
-      </div>
-      <div>
-        <span style={{ color: '#9ed6bb' }}>$0.0840</span> duffel.search · 12:14
-      </div>
-      <div>
-        <span style={{ color: '#e8ba67' }}>$0.0050</span> check_policy · 12:14
-      </div>
-      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(247,239,228,0.1)' }}>
-        Total ·{' '}
-        <span className="t-num-md" style={{ color: '#fdfbf7', fontSize: 13 }}>
-          $2.39
-        </span>
-      </div>
-    </div>
-  );
-}

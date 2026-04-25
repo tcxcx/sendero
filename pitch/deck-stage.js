@@ -55,7 +55,7 @@
   const OVERLAY_HIDE_MS = 1800;
   const VALIDATE_ATTR = 'no_overflowing_text,no_overlapping_text,slide_sized_text';
 
-  const pad2 = (n) => String(n).padStart(2, '0');
+  const pad2 = n => String(n).padStart(2, '0');
 
   const stylesheet = `
     :host {
@@ -266,7 +266,9 @@
   `;
 
   class DeckStage extends HTMLElement {
-    static get observedAttributes() { return ['width', 'height', 'noscale']; }
+    static get observedAttributes() {
+      return ['width', 'height', 'noscale'];
+    }
 
     constructor() {
       super();
@@ -373,8 +375,12 @@
         <button class="btn reset" type="button" aria-label="Reset to first slide" title="Reset (R)">Reset<span class="kbd">R</span></button>
       `;
 
-      overlay.querySelector('.prev').addEventListener('click', () => this._go(this._index - 1, 'click'));
-      overlay.querySelector('.next').addEventListener('click', () => this._go(this._index + 1, 'click'));
+      overlay
+        .querySelector('.prev')
+        .addEventListener('click', () => this._go(this._index - 1, 'click'));
+      overlay
+        .querySelector('.next')
+        .addEventListener('click', () => this._go(this._index + 1, 'click'));
       overlay.querySelector('.reset').addEventListener('click', () => this._go(0, 'click'));
 
       this._root.append(style, stage, tapzones, overlay);
@@ -398,7 +404,11 @@
         document.head.appendChild(tag);
       }
       tag.textContent =
-        '@page { size: ' + this.designWidth + 'px ' + this.designHeight + 'px; margin: 0; } ' +
+        '@page { size: ' +
+        this.designWidth +
+        'px ' +
+        this.designHeight +
+        'px; margin: 0; } ' +
         '@media print { html, body { margin: 0 !important; padding: 0 !important; background: none !important; overflow: visible !important; height: auto !important; } ' +
         '* { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }';
     }
@@ -412,7 +422,7 @@
 
     _collectSlides() {
       const assigned = this._slot.assignedElements({ flatten: true });
-      this._slides = assigned.filter((el) => {
+      this._slides = assigned.filter(el => {
         // Skip template/style/script nodes even if someone slots them.
         const tag = el.tagName;
         return tag !== 'TEMPLATE' && tag !== 'SCRIPT' && tag !== 'STYLE';
@@ -451,7 +461,10 @@
 
     _loadNotes() {
       const tag = document.getElementById('speaker-notes');
-      if (!tag) { this._notes = []; return; }
+      if (!tag) {
+        this._notes = [];
+        return;
+      }
       try {
         const parsed = JSON.parse(tag.textContent || '[]');
         if (Array.isArray(parsed)) this._notes = parsed;
@@ -470,12 +483,17 @@
             this._index = n;
           }
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
 
     _persistIndex() {
-      try { localStorage.setItem(this._storageKey, String(this._index)); }
-      catch (e) { /* ignore */ }
+      try {
+        localStorage.setItem(this._storageKey, String(this._index));
+      } catch (e) {
+        /* ignore */
+      }
     }
 
     _applyIndex({ showOverlay = true, broadcast = true, reason = 'init' } = {}) {
@@ -491,7 +509,9 @@
 
       if (broadcast) {
         // (1) Legacy: host-window postMessage for speaker-notes renderers.
-        try { window.postMessage({ slideIndexChanged: curr }, '*'); } catch (e) {}
+        try {
+          window.postMessage({ slideIndexChanged: curr }, '*');
+        } catch (e) {}
 
         // (2) In-page CustomEvent on the <deck-stage> element itself.
         //     Bubbles and composes out of shadow DOM so slide code can listen:
@@ -503,14 +523,16 @@
           previousIndex: prev,
           total: this._slides.length,
           slide: this._slides[curr] || null,
-          previousSlide: prev >= 0 ? (this._slides[prev] || null) : null,
+          previousSlide: prev >= 0 ? this._slides[prev] || null : null,
           reason: reason, // 'init' | 'keyboard' | 'click' | 'tap' | 'api'
         };
-        this.dispatchEvent(new CustomEvent('slidechange', {
-          detail,
-          bubbles: true,
-          composed: true,
-        }));
+        this.dispatchEvent(
+          new CustomEvent('slidechange', {
+            detail,
+            bubbles: true,
+            composed: true,
+          })
+        );
       }
 
       this._prevIndex = curr;
@@ -541,7 +563,9 @@
       this._canvas.style.transform = `scale(${s})`;
     }
 
-    _onResize() { this._fit(); }
+    _onResize() {
+      this._fit();
+    }
 
     _onMouseMove() {
       // Keep overlay visible while mouse moves; hide after idle.
@@ -605,14 +629,26 @@
     // Public API ------------------------------------------------------------
 
     /** Current slide index (0-based). */
-    get index() { return this._index; }
+    get index() {
+      return this._index;
+    }
     /** Total slide count. */
-    get length() { return this._slides.length; }
+    get length() {
+      return this._slides.length;
+    }
     /** Programmatically navigate. */
-    goTo(i) { this._go(i, 'api'); }
-    next() { this._go(this._index + 1, 'api'); }
-    prev() { this._go(this._index - 1, 'api'); }
-    reset() { this._go(0, 'api'); }
+    goTo(i) {
+      this._go(i, 'api');
+    }
+    next() {
+      this._go(this._index + 1, 'api');
+    }
+    prev() {
+      this._go(this._index - 1, 'api');
+    }
+    reset() {
+      this._go(0, 'api');
+    }
   }
 
   if (!customElements.get('deck-stage')) {
