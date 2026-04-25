@@ -53,6 +53,8 @@
     "deploy:edge:dry-run": "bun run --cwd apps/edge deploy:dry-run",
     "config:doctor": "bun run scripts/config-doctor.ts",
     "cache:setup": "bash scripts/setup-turbo-cache.sh",
+    "defect-escape:report": "bun run scripts/defect-escape-report.ts",
+    "edge:health": "bash scripts/edge-health-check.sh",
     "smoke:retry": "bun run scripts/smoke-nanopay-retry.ts",
     "smoke:resume-settle": "bun run scripts/smoke-webhook-resume-settle.ts",
     "smoke:resume-cancel": "bun run scripts/smoke-webhook-resume-cancel.ts",
