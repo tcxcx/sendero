@@ -1,0 +1,116 @@
+---
+title: Claim codes — guest 2FA, lockout, and recovery
+description: How Sendero protects funds in the guest-link flow with a knowledge-factor OTP, on-chain brute-force lockout, and one-click resend / cancel-sweep recovery.
+---
+
+The Sendero guest-link flow is **two-factor by design**. The link itself carries an ephemeral private key in the URL fragment — that's the **possession** factor. The OTP (one-time claim code) is delivered out-of-band — that's the **knowledge** factor. Compromise of one factor without the other should not allow a claim. Compromise of both is total loss (the floor of any 2FA system).
+
+This page covers how the OTP is generated, how the contract defends against brute force, and how guests + buyers recover from a bad attempt.
+
+> Full design rationale + threat model:
+> `.gstack/projects/tcxcx-sendero/ship-2026-04-24-platform-release-otp-design-20260425-040506.md`
+
+## Generation — server-side, never persisted
+
+The OTP cleartext is generated server-side using Node's CSPRNG (`crypto.randomBytes`). The format is **13 characters from the Crockford base32 alphabet, grouped 4-4-5** for transcription friendliness:
+
+```
+K8N4-7XM2-PQ3WR
+```
+
+The alphabet excludes `0`, `O`, `1`, `I`, `L` — the characters that get mistyped most often when relayed through WhatsApp, SMS, or read off a screen. With 64 bits of entropy the search space is ~10^19, large enough that brute force is irrelevant even without rate limits.
+
+The cleartext **never touches persistent storage**. It lives:
+
+| Stage | Where the cleartext exists | Duration |
+| --- | --- | --- |
+| Generation | Operator process memory | < 1 ms |
+| On-chain hash write | Operator memory + on-chain hash | < 5 sec until tx confirms |
+| Channel delivery | Operator memory + outbound provider (Resend / Twilio / Meta WABA) | < 30 sec until provider confirms |
+| Guest device | Guest's phone or inbox | Until guest deletes the message |
+| Operator persistent storage | **Never.** | Zero |
+
+Source: [`packages/notifications/src/otp.ts`](https://github.com/tcxcx/sendero/blob/main/packages/notifications/src/otp.ts)
+
+## On-chain hash — per-trip salted
+
+The hash that lives on-chain at `Trip.claimCodeHash` is salted with the `tripId`:
+
+```ts
+keccak256(abi.encodePacked(tripId, preimage))
+```
+
+If two trips happen to be issued the same random preimage, the on-chain hashes still differ. An attacker holding link A cannot try the OTP from trip B and succeed by colliding on the cleartext. v3 enforces this convention off-chain (the operator is the gatekeeper); v4 will move the salting into `claimTrip` itself so the protection is structural.
+
+## Brute-force protection — three strikes, 15-minute lockout
+
+A 6-digit OTP is brute-forceable in minutes if the attacker can hammer the contract. Sendero's escrow defends against this directly on-chain:
+
+- **3 failed attempts** in the same trip → contract triggers a **15-minute lockout**.
+- The lockout precondition reverts (`ClaimLocked()`); within the lockout window even the correct code is rejected.
+- Wrong-code attempts no longer revert before the lockout fires — they emit `ClaimAttemptFailed(tripId, attemptCount)` and return early. The caller distinguishes success from failure via the receipt's events.
+- Successful claim resets the counter (natural state transition since `claimTrip` can succeed only once).
+
+Constants on the contract:
+
+- `MAX_CLAIM_ATTEMPTS = 3`
+- `CLAIM_LOCKOUT_DURATION = 15 minutes`
+
+Events emitted:
+
+- `ClaimAttemptFailed(bytes32 indexed tripId, uint8 attemptCount)`
+- `ClaimLockoutTriggered(bytes32 indexed tripId, uint64 lockedUntil)`
+- `ClaimCodeRotated(bytes32 indexed tripId, bytes32 oldCodeHash, bytes32 newCodeHash)`
+
+Source: [`contracts/src/SenderoGuestEscrow.sol`](https://github.com/tcxcx/sendero/blob/main/contracts/src/SenderoGuestEscrow.sol)
+
+## Channel selection — different medium when possible
+
+When dispatching the OTP we prefer a **different channel** from the one that carried the link. Priority order: **WhatsApp > SMS > email**.
+
+- WhatsApp is end-to-end encrypted, has the best deliverability for travel agencies, and supports rich confirmation flows.
+- SMS is universal but unencrypted in transit; SS7 attacks are real but rare for B2C travel.
+- Email is the lowest-friction fallback but has the worst latency + spam filtering.
+
+If the guest has only one verified contact, link + OTP travel through the same medium as separate messages — degraded 2FA, but better than nothing. If no verified contact exists at all, the resend endpoint returns `no_verified_contact` and the operator must reach the guest manually.
+
+Source: [`selectOtpChannel(...)` in `packages/notifications/src/otp.ts`](https://github.com/tcxcx/sendero/blob/main/packages/notifications/src/otp.ts)
+
+## How a guest recovers — request a resend
+
+If the guest mistypes the code three times the trip locks. To recover:
+
+1. The guest opens the claim link again (or hits the "resend code" button on the failed-claim page).
+2. The page POSTs to `/api/trip/[tripId]/claim-code/resend` with the verified contact (email or phone) the buyer registered. This proves the caller knows the guest's identity, not just the link.
+3. The operator throttles via Upstash Redis: **3 resends / 10 min / trip** and **5 / hour**. If exceeded, returns `429 rate_limited` with a `Retry-After` header.
+4. The operator generates a fresh preimage, hashes it with the trip salt, and submits `setClaimCodeHash(tripId, newHash)` via the operator MSCA. The contract resets the failed-attempt counter on rotation.
+5. The cleartext is sent via the channel selector (WhatsApp first, then SMS, then email).
+
+The 15-minute lockout still applies until it expires — rotation does **not** clear the lockout. This is intentional: the lockout is the cooldown against brute force, separate from OTP rotation.
+
+## How a buyer recovers — cancel and sweep
+
+When the contract emits `ClaimLockoutTriggered`, the off-chain alert pipeline ([`packages/notifications/src/security-alerts.ts`](https://github.com/tcxcx/sendero/blob/main/packages/notifications/src/security-alerts.ts)) fans out a high-severity alert to every notification channel the buyer configured (email + Slack + WhatsApp by default). The alert lands within 60 seconds of the on-chain event and includes two deep links:
+
+- **Send a fresh code** — opens the resend flow above. Use this if the lockout was an honest typo.
+- **Cancel + reclaim funds** — single-click flow that calls `cancelTrip(tripId)` followed by `sweepUnspent(tripId)`. Use this if the lockout looks like an attack.
+
+The cancel path works because a locked-out trip has `reserved == 0` by construction (the lockout fires only on failed claims; successful claims set `guestWallet` and exit before the lockout check). `cancelTrip` requires `reserved == 0` and so always succeeds on a locked-out trip; `sweepUnspent` returns the entire `t.budget` to the buyer's MSCA. **No new contract function is needed for the recovery path.**
+
+If the buyer is not a known Sendero tenant (e.g. an external integrator using the contract directly), the alert is logged to the internal ops dashboard with `kind = 'claim_lockout_unknown_buyer'` instead.
+
+## Why not Chainlink VRF for the OTP
+
+VRF returns its random output **publicly on-chain via callback**. If we used VRF as the OTP source, the OTP would be readable by anyone watching the chain. Game over.
+
+VRF is the right tool for **verifiably-fair public randomness** — lotteries, validator selection, NFT trait assignment. The property you want there is "no one biased the result." For OTPs the property you want is "the result stays secret." Different problem, different tool.
+
+The right primitive for OTP randomness is server-side `crypto.randomBytes` from the OS CSPRNG. This is what every reputable OTP system uses — Twilio Authy, Auth0, Stripe Verify, Google Authenticator. Adding VRF on top would be security theater (and would actively weaken the security model by publishing the secret).
+
+## v4 follow-ups
+
+The following improvements are deferred to v4.0.0 and would each justify their own audit window:
+
+1. **Contract-enforced per-trip salt** — move the `keccak256(abi.encodePacked(tripId, preimage))` into `claimTrip` itself so the off-chain convention can't be bypassed.
+2. **EIP-712 typed-data signing for the OTP** — phishing-resistant, ledger-compatible, but heavier UX for non-crypto-native travelers.
+3. **Channel-of-record commitment** — at trip creation the buyer commits to which channel will deliver the OTP. The on-chain `claimTrip` then takes a channel attestation as a fourth factor.

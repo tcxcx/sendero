@@ -1,0 +1,221 @@
+---
+title: Markup error codes — full catalog
+description: Every typed error the markup pipeline can return, with cause, fix, and the exact JSON envelope shape so an SDK or agent can switch on `code`.
+---
+
+Every Sendero JSON route raises errors via the [standard envelope](../api-conventions/errors):
+
+```json
+{
+  "code": "MARKUP_OVER_CEILING",
+  "message": "Markup 75000000 micro-USDC exceeds tenant ceiling 50000000.",
+  "details": { },
+  "docsUrl": "https://docs.sendero.travel/docs/pricing/markup-error-codes#markup_over_ceiling",
+  "agentInstruction": "Tell the human...",
+  "traceId": "trace_01HKX..."
+}
+```
+
+The `code` is the stable API contract. `message` and `agentInstruction` may evolve; the code never silently changes meaning.
+
+## `POLICY_INACTIVE`
+
+**HTTP:** 412 (CRUD route returns 409 — both are intentional; the tool surface uses 412 "precondition failed" because the policy precondition for confirm hasn't been met).
+
+**Cause:** the tenant has no `TenantPricingPolicy` row with `activated = true`. Either no row exists, or only the sandbox seed row exists.
+
+**Fix:** the tenant admin publishes a policy at `/dashboard/settings/pricing`, OR an admin agent calls `activate_tenant_pricing_policy`.
+
+```json
+{
+  "code": "POLICY_INACTIVE",
+  "message": "Tenant has no activated TenantPricingPolicy. Bookings cannot be confirmed until a human (or admin agent) activates one.",
+  "agentInstruction": "Tell the human their pricing policy isn't active yet. Direct them to https://app.sendero.travel/dashboard/settings/pricing to publish a policy, or call activate_tenant_pricing_policy via MCP if you have admin scope.",
+  "traceId": "trace_..."
+}
+```
+
+## `POLICY_PARTIAL_FOR_KIND`
+
+**HTTP:** 412.
+
+**Cause:** the policy is activated but `markupConfig` doesn't define a row for the booking kind being confirmed (e.g. tenant set up `flight` and `hotel` but the agent is confirming a `rail` booking).
+
+**Fix:** add the missing kind to the policy. Re-publishing inserts a new policy version; in-flight quotes already snapshotted the old version and continue to fail until they're re-quoted.
+
+```json
+{
+  "code": "POLICY_PARTIAL_FOR_KIND",
+  "message": "Tenant pricing policy is activated but does not configure markup for kind=\"rail\".",
+  "agentInstruction": "Tell the human they need to configure markup for \"rail\" bookings at https://app.sendero.travel/dashboard/settings/pricing. The current policy is active but missing this kind.",
+  "traceId": "trace_..."
+}
+```
+
+## `TREASURY_NOT_PROVISIONED`
+
+**HTTP:** 409 on activate, 412 on confirm (`TREASURY_ADDRESS_MISSING`).
+
+**Cause:** the tenant's `CircleWallet.address` is unset or the zero address. Without a payout address the agency leg of `commitBookingV2` would revert.
+
+**Fix:** wait a few seconds for the `organization.created` Clerk webhook to finish, or hit `/api/tenant/wallet/sync` to force a re-provision.
+
+```json
+{
+  "code": "TREASURY_NOT_PROVISIONED",
+  "message": "Cannot activate pricing policy until tenant CircleWallet.address is set.",
+  "agentInstruction": "The tenant's Circle treasury wallet hasn't been provisioned yet. Wait a minute and retry, or hit /api/tenant/wallet/sync to force a re-provision.",
+  "traceId": "trace_..."
+}
+```
+
+## `MARKUP_OVER_CEILING`
+
+**HTTP:** 422.
+
+**Cause:** the computed `markupMicroUsdc` exceeds the tenant's self-set `ceilingMicroUsdc`. Either the agent passed an explicit `markupBps` / `markupMicroUsdc` higher than the ceiling, or the policy default itself overshoots after re-evaluation.
+
+**Fix:** lower the markup, raise the ceiling at `/dashboard/settings/pricing`, or supply a privileged `override` (see [markup-scopes](./markup-scopes)).
+
+```json
+{
+  "code": "MARKUP_OVER_CEILING",
+  "message": "Markup 75000000 micro-USDC exceeds tenant ceiling 50000000.",
+  "agentInstruction": "Tell the human their markup exceeds the tenant ceiling. Either reduce the markup or update the policy ceiling at https://app.sendero.travel/dashboard/settings/pricing. To override anyway, mint an API key with scope \"tenant:pricing:override\" and pass override.acknowledgedMicroUsdc.",
+  "traceId": "trace_..."
+}
+```
+
+## `MARKUP_UNDER_FLOOR`
+
+**HTTP:** 422.
+
+**Cause:** the computed `markupMicroUsdc` is below the tenant's self-set `floorMicroUsdc`. Common when an agent explicitly overrides with a small number.
+
+**Fix:** raise the markup, or lower the floor at `/dashboard/settings/pricing`.
+
+```json
+{
+  "code": "MARKUP_UNDER_FLOOR",
+  "message": "Markup 1000000 micro-USDC is under tenant floor 5000000.",
+  "agentInstruction": "Tell the human the markup is below their tenant floor. Raise the markup or lower the floor at https://app.sendero.travel/dashboard/settings/pricing.",
+  "traceId": "trace_..."
+}
+```
+
+## `MARKUP_UNDER_TAKE_FLOOR`
+
+**HTTP:** 422.
+
+**Cause:** in `senderoTakeBehavior: 'deduct_from_markup'` mode, the Sendero take exceeds the agency markup — the agency leg would clamp to zero. The tool refuses to settle this rather than silently produce a $0 agency leg.
+
+**Fix:** raise the markup, switch the policy to `add_to_customer` (the customer absorbs the fee instead), or pick a smaller booking.
+
+```json
+{
+  "code": "MARKUP_UNDER_TAKE_FLOOR",
+  "message": "Sendero take exceeds tenant markup in deduct_from_markup mode; agency leg would be 0.",
+  "agentInstruction": "Sendero take exceeds the markup in absorb mode — agency leg would clamp to zero. Raise the markup, switch the policy to \"add_to_customer\", or pick a smaller booking.",
+  "traceId": "trace_..."
+}
+```
+
+## `MARKUP_AMBIGUOUS_INPUT`
+
+**HTTP:** 400.
+
+**Cause:** both `markupBps` and `markupMicroUsdc` were passed on the same `confirm_booking` call. They're mutually exclusive — pick one.
+
+**Fix:** drop one of the fields.
+
+```json
+{
+  "code": "MARKUP_AMBIGUOUS_INPUT",
+  "message": "markupBps and markupMicroUsdc are mutually exclusive — pass one or the other.",
+  "traceId": "trace_..."
+}
+```
+
+## `OVERRIDE_REQUIRES_SCOPE`
+
+**HTTP:** 403.
+
+**Cause:** the caller passed `override.acknowledgedMicroUsdc` to bypass the ceiling, but the API key does not carry the `tenant:pricing:override` scope (or is a sandbox key — sandboxes are blocked unconditionally even with `'*'`).
+
+**Fix:** mint a production API key with the override scope from `/dashboard/settings/api-keys`, OR drop the override and price within the ceiling. See [markup-scopes](./markup-scopes).
+
+```json
+{
+  "code": "OVERRIDE_REQUIRES_SCOPE",
+  "message": "override requires API key scope \"tenant:pricing:override\"; sandbox keys never carry it.",
+  "agentInstruction": "Tell the human this booking requires a privileged \"tenant:pricing:override\" scope. Mint an admin API key from /dashboard/settings/api-keys with the override checkbox enabled, OR drop the override and price within the ceiling.",
+  "traceId": "trace_..."
+}
+```
+
+## `OVERRIDE_UNNECESSARY`
+
+**HTTP:** 400.
+
+**Cause:** the caller passed `override` but the markup is already within the ceiling. Treated as a code smell — we don't want sandbox runs silently exercising the privileged path.
+
+**Fix:** drop the `override` field.
+
+```json
+{
+  "code": "OVERRIDE_UNNECESSARY",
+  "message": "override.acknowledgedMicroUsdc must exceed the policy ceiling; otherwise no override is needed and you should drop the field.",
+  "agentInstruction": "Drop the override field — the markup fits within policy ceiling without it.",
+  "traceId": "trace_..."
+}
+```
+
+## `MARKUP_CONFIG_INVALID`
+
+**HTTP:** 422.
+
+**Cause:** the `markupConfig` payload to `activate_tenant_pricing_policy` (or the CRUD route) failed Zod validation. v1 only honors `{ strategy: 'static', bps: <int 0..10000> }`. v2-style strategies (e.g. `tiered`, `volume_curve`) parse but throw `MarkupStrategyNotSupportedV1` at confirm time.
+
+**Fix:** fix the offending kind and retry. The `details.zodIssues` field surfaces the per-field issues.
+
+```json
+{
+  "code": "MARKUP_CONFIG_INVALID",
+  "message": "The markup configuration failed validation.",
+  "details": { "zodIssues": [{ "path": ["hotel", "bps"], "message": "Expected number, received string" }] },
+  "docsUrl": "https://docs.sendero.travel/docs/pricing/markup-error-codes#markup_config_invalid",
+  "agentInstruction": "The markupConfig failed validation. Check that every kind uses { strategy: \"static\", bps: <int 0..10000> } (v1 only honors \"static\"). Drop unsupported fields and retry.",
+  "traceId": "trace_..."
+}
+```
+
+## Switching on `code` — recommended SDK shape
+
+```ts
+import { dispatch } from '@sendero/sdk';
+
+try {
+  const result = await dispatch({
+    tool: 'confirm_booking',
+    args: { bookingId, costMicroUsdc, itineraryHash, vendorAddress },
+  });
+  return result;
+} catch (err) {
+  switch (err.code) {
+    case 'POLICY_INACTIVE':
+    case 'POLICY_PARTIAL_FOR_KIND':
+      return promptUser(err.agentInstruction); // surface verbatim
+    case 'MARKUP_OVER_CEILING':
+      return offerOverride(err.details);       // dashboard CTA
+    case 'MARKUP_UNDER_TAKE_FLOOR':
+      return raiseMarkupOrSwitchMode();
+    case 'TREASURY_NOT_PROVISIONED':
+    case 'TREASURY_ADDRESS_MISSING':
+      return retryAfter(60_000);               // wait for webhook
+    default:
+      throw err;                                // unexpected — escalate
+  }
+}
+```
+
+The `traceId` is the one field every support ticket should quote — we key our audit log on it.

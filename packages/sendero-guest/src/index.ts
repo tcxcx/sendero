@@ -50,6 +50,20 @@ export const AGENT_ACTION = {
 // ABI (subset — enough for client calls)
 // ──────────────────────────────────────────────────────────────────────
 
+// SenderoGuestEscrow ABI subset — kept in sync with contracts/src/SenderoGuestEscrow.sol.
+//
+// v3.0.0 added the three-recipient settlement path:
+//   - commitBookingV2 — accepts agencyAmount + agencyAddress
+//   - BookingCommittedV2 — emitted by commitBookingV2 (legacy commitBooking
+//     still emits BookingCommitted)
+//   - BookingSettledV2 — emitted by settleBooking when agencyAmount > 0;
+//     legacy bookings (committed via v1 commitBooking) continue to emit
+//     BookingSettled. Off-chain indexers should subscribe to BOTH events
+//     during the transition window.
+//
+// The Booking struct's regression test (testFuzz_storageAppend_v1AndV2BookingsCoexist)
+// is the load-bearing invariant for the upgrade. ABI changes here must
+// match the Solidity interface exactly.
 export const SENDERO_GUEST_ESCROW_ABI = parseAbi([
   'struct TripInput { bytes32 tripId; address claimPubKey20; uint256 budget; uint64 expiresAt; bytes32 metadataHash; string metadataCID; uint256 agentTokenId; bytes32 claimCodeHash; }',
   'function createTrip(bytes32 tripId, address claimPubKey20, uint256 budget, uint64 expiresAt, bytes32 metadataHash, string metadataCID, uint256 agentTokenId, bytes32 claimCodeHash)',
@@ -57,6 +71,7 @@ export const SENDERO_GUEST_ESCROW_ABI = parseAbi([
   'function claimTrip(bytes32 tripId, address guestWallet, bytes signature, bytes claimCodePreimage)',
   'function reserveForBooking(bytes32 tripId, bytes32 bookingId, uint256 upperBound)',
   'function commitBooking(bytes32 bookingId, uint256 vendorAmount, uint256 feeAmount, address vendor, bytes32 itineraryHash, string itineraryCID)',
+  'function commitBookingV2(bytes32 bookingId, uint256 vendorAmount, uint256 feeAmount, uint256 agencyAmount, address vendor, address agencyAddress, bytes32 itineraryHash, string itineraryCID)',
   'function confirmDuffel(bytes32 bookingId, bytes32 duffelOrderHash)',
   'function settleBooking(bytes32 bookingId)',
   'function refundBooking(bytes32 bookingId)',
@@ -64,17 +79,30 @@ export const SENDERO_GUEST_ESCROW_ABI = parseAbi([
   'function cancelTrip(bytes32 tripId)',
   'function sweepUnspent(bytes32 tripId)',
   'function logAgentAction(bytes32 tripId, uint8 actionType, uint256 feeMicro)',
+  'function setClaimCodeHash(bytes32 tripId, bytes32 newCodeHash)',
   'function available(bytes32 tripId) view returns (uint256)',
+  'function version() view returns (string)',
+  'function MAX_CLAIM_ATTEMPTS() view returns (uint8)',
+  'function CLAIM_LOCKOUT_DURATION() view returns (uint64)',
   'event TripCreated(bytes32 indexed tripId, address indexed buyer, address claimPubKey20, uint256 budget, uint64 expiresAt, bytes32 metadataHash, string metadataCID, uint256 agentTokenId)',
   'event TripClaimed(bytes32 indexed tripId, address indexed guestWallet)',
   'event BookingReserved(bytes32 indexed tripId, bytes32 indexed bookingId, uint256 upperBound)',
   'event BookingCommitted(bytes32 indexed bookingId, uint256 vendorAmount, uint256 fee, address vendor, bytes32 itineraryHash, string itineraryCID, uint256 slackReleased)',
+  'event BookingCommittedV2(bytes32 indexed bookingId, uint256 vendorAmount, uint256 fee, uint256 agencyAmount, address vendor, address agencyAddress, bytes32 itineraryHash, string itineraryCID, uint256 slackReleased)',
   'event DuffelConfirmed(bytes32 indexed bookingId, bytes32 duffelOrderHash)',
   'event BookingSettled(bytes32 indexed bookingId, address vendor, uint256 vendorAmount, uint256 feeAmount)',
+  'event BookingSettledV2(bytes32 indexed bookingId, address vendor, uint256 vendorAmount, address agencyAddress, uint256 agencyAmount, uint256 feeAmount)',
   'event BookingRefunded(bytes32 indexed bookingId, uint256 amount)',
   'event BookingReclaimed(bytes32 indexed bookingId, uint256 amount, uint8 priorStatus)',
   'event Swept(bytes32 indexed tripId, uint256 returned)',
   'event AgentActionLogged(bytes32 indexed tripId, uint256 indexed agentTokenId, uint8 actionType, uint256 feeMicro)',
+  // v3.0.0 — OTP brute-force protection event stream. The off-chain
+  // alert pipeline subscribes to ClaimLockoutTriggered to notify the
+  // trip's buyer. ClaimAttemptFailed gives early warning before the
+  // lockout threshold. ClaimCodeRotated tracks resends.
+  'event ClaimAttemptFailed(bytes32 indexed tripId, uint8 attemptCount)',
+  'event ClaimLockoutTriggered(bytes32 indexed tripId, uint64 lockedUntil)',
+  'event ClaimCodeRotated(bytes32 indexed tripId, bytes32 oldCodeHash, bytes32 newCodeHash)',
 ]);
 
 export const USDC_ABI = parseAbi([
@@ -172,6 +200,133 @@ export async function signClaim(params: {
     guestWallet: params.guestWallet,
   });
   return account.signMessage({ message: { raw } });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Resend auth token (track-G-auth)
+//
+// Goal: prove that the resend caller actually has the link before
+// rotating the on-chain claim code. Without this, anyone who knows
+// the guest's phone or email could trigger an OTP rotation — defeats
+// the resend's whole purpose.
+//
+// Mechanism: the guest's claim page (which has the privkey from the
+// URL fragment) signs a short-lived nonce + tripId message. The server
+// recovers the signer via viem `recoverMessageAddress` and compares
+// against the on-chain `trip.claimPubKey20`. The same key already
+// signs the actual claim — reusing it for resend auth means no extra
+// key distribution and no extra persistence.
+//
+// Wire format: base64url-encoded JSON `{ signature, nonce, exp }`.
+// The server rebuilds the canonical message from `tripId, nonce, exp`
+// (deterministic), recovers the signer, and compares.
+//
+// Replay defense:
+//   - exp caps the window (5 min default).
+//   - nonce is dedup'd via Upstash SETNX EX(exp - now) on the server.
+// ──────────────────────────────────────────────────────────────────────
+
+/** Default TTL for a resend auth token. 5 min — long enough for the
+ *  human to find their phone, short enough to limit replay. */
+export const RESEND_AUTH_TTL_SEC = 300;
+
+export interface ResendAuthTokenPayload {
+  /** EIP-191 personal_sign signature over `resendAuthMessage(...)`. */
+  signature: Hex;
+  /** Server-checked nonce (Upstash dedup). 16 hex bytes (128 bits). */
+  nonce: Hex;
+  /** Unix seconds. Server rejects when `now > exp`. */
+  exp: number;
+}
+
+/** Canonical message bytes the guest signs / the server verifies. */
+export function resendAuthMessage(params: { tripId: Hex; nonce: Hex; exp: number }): string {
+  return [
+    'Sendero resend auth v1',
+    `tripId=${params.tripId}`,
+    `nonce=${params.nonce}`,
+    `exp=${params.exp}`,
+  ].join('\n');
+}
+
+/**
+ * Sign a resend auth token. Called CLIENT-SIDE on the claim page —
+ * the privkey lives in the URL fragment and never leaves the browser.
+ * Returns a base64url-encoded string ready to ship in the resend
+ * request body.
+ */
+export async function signResendAuthToken(params: {
+  claimPrivateKey: Hex;
+  tripId: Hex;
+  /** Random 16-byte nonce, hex-encoded. Server dedups via Upstash. */
+  nonce: Hex;
+  /** Optional override; defaults to now + RESEND_AUTH_TTL_SEC. */
+  expSec?: number;
+}): Promise<string> {
+  const exp = params.expSec ?? Math.floor(Date.now() / 1000) + RESEND_AUTH_TTL_SEC;
+  const account = privateKeyToAccount(params.claimPrivateKey);
+  const message = resendAuthMessage({
+    tripId: params.tripId,
+    nonce: params.nonce,
+    exp,
+  });
+  const signature = (await account.signMessage({ message })) as Hex;
+  const payload: ResendAuthTokenPayload = { signature, nonce: params.nonce, exp };
+  return base64UrlEncode(JSON.stringify(payload));
+}
+
+/**
+ * Decode the wire-format token back into the structured payload.
+ * Returns null on malformed input — callers should treat that as
+ * a bad-token verdict, not throw.
+ */
+export function decodeResendAuthToken(token: string): ResendAuthTokenPayload | null {
+  try {
+    const json = base64UrlDecode(token);
+    const parsed = JSON.parse(json) as Partial<ResendAuthTokenPayload>;
+    if (
+      typeof parsed.signature !== 'string' ||
+      typeof parsed.nonce !== 'string' ||
+      typeof parsed.exp !== 'number'
+    ) {
+      return null;
+    }
+    if (!parsed.signature.startsWith('0x') || !parsed.nonce.startsWith('0x')) return null;
+    return parsed as ResendAuthTokenPayload;
+  } catch {
+    return null;
+  }
+}
+
+/** Generate a fresh 16-byte hex nonce. Caller-side helper for the claim page. */
+export function generateResendAuthNonce(): Hex {
+  // Browser crypto path — `globalThis.crypto.getRandomValues` is
+  // present in every modern browser AND in Node 19+. No node:crypto
+  // import so this stays bundleable client-side.
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  let out = '0x';
+  for (const b of bytes) out += b.toString(16).padStart(2, '0');
+  return out as Hex;
+}
+
+function base64UrlEncode(input: string): string {
+  // Browser-friendly base64url encode without Buffer dep.
+  const utf8 = new TextEncoder().encode(input);
+  let bin = '';
+  for (const b of utf8) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlDecode(input: string): string {
+  const padded = input
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(input.length + ((4 - (input.length % 4)) % 4), '=');
+  const bin = atob(padded);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -438,7 +593,9 @@ export const NO_CLAIM_CODE: Hex =
 export function generateNonce32(): Hex {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return `0x${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')}` as Hex;
+  return `0x${Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')}` as Hex;
 }
 
 /**
@@ -460,7 +617,9 @@ export function generateClaimCode(): string {
 export function buildClaimCodePreimage(code: string, nonce: Hex): Hex {
   const text = `${code}|${nonce}`;
   const bytes = new TextEncoder().encode(text);
-  return `0x${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')}` as Hex;
+  return `0x${Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')}` as Hex;
 }
 
 /**
@@ -500,5 +659,7 @@ function hexToBytes(hex: Hex): Uint8Array {
 }
 
 function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 }

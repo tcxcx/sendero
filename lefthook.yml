@@ -43,6 +43,16 @@ pre-commit:
       glob: "packages/database/prisma/migrations/*/migration.sql"
       run: bun run scripts/check-prisma-migrations.ts
 
+    # Storage upgrade-safety gate for SenderoGuestEscrow. The contract
+    # uses ERC-7201 namespaced storage exclusively — any field added at
+    # a regular slot would shift slots in the next UUPS upgrade and
+    # corrupt every existing Booking/Trip in storage. The script asserts
+    # `forge inspect ... storage --json` reports `{"storage":[],"types":{}}`.
+    # Glob narrows to pushes that actually touch contract source.
+    escrow-storage-layout:
+      glob: "contracts/src/**/*.sol"
+      run: ./scripts/check-escrow-storage-layout.sh
+
 pre-push:
   parallel: true
   commands:

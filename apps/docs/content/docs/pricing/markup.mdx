@@ -1,0 +1,125 @@
+---
+title: Tenant markup — agency margin on supplier cost
+description: How Sendero layers a tenant agency's own margin over the raw supplier cost, splits the customer total three ways on Arc (vendor + agency + Sendero fee), and lets the policy be edited without ever retro-pricing an open quote.
+---
+
+Sendero is the rail. Tenant agencies are the operators. Suppliers are the inventory. Markup is how the operator gets paid.
+
+Every customer-facing total is the sum of three legs:
+
+```
+customerTotal = supplierCost + agencyMarkup + senderoTake
+```
+
+The split is enforced **on Arc** at commit time via `commitBookingV2(...)` on `SenderoGuestEscrow` v3. Three recipients get paid in one transaction. No wire transfers. No reconciliation. No "we'll true up at end of month."
+
+## The three actors
+
+| Actor | Pays | Receives | Address |
+| --- | --- | --- | --- |
+| **Supplier** | nothing | `costMicroUsdc` (raw rate) | `vendorAddress` (per booking) |
+| **Tenant agency** | nothing | `markupMicroUsdc - senderoTake` (when `deduct_from_markup`) or `markupMicroUsdc` (when `add_to_customer`) | `tenant.circleWallet.address` |
+| **Sendero** | nothing | `senderoTake` (50bps base, tier-discounted) | operator multisig |
+| **Customer** | `customerTotal` | the trip | n/a |
+
+The agency sets its own markup policy. Sendero sets the take rate. Both are deterministic at confirm time.
+
+## Activation flow
+
+1. **Sandbox seed.** On tenant creation, a `TenantPricingPolicy` row is inserted with `sandboxOnly = true` and a default markup config so first-time bookings can be quoted immediately. The seed never settles real USDC.
+2. **Wizard.** The tenant admin walks `/dashboard/settings/pricing` and configures per-`BookingKind` markup, an optional floor, and an optional ceiling.
+3. **Activated.** Hit publish (or call [`activate_tenant_pricing_policy`](#activate-via-agent) from an admin agent). The wizard runs the treasury preflight (refuses if no Circle wallet has been provisioned for the tenant) and inserts a new policy row with `activated = true`. From this moment, `confirm_booking` will price live customer totals against the new policy.
+
+A tenant edit between confirms always inserts a **new policy version**. Open quotes carry a `BookingPolicySnapshot` taken at confirm time, so an in-flight booking is never retro-priced when the policy changes mid-trip.
+
+### Activate via agent
+
+```ts
+await dispatch({
+  tool: 'activate_tenant_pricing_policy',
+  args: {
+    markupConfig: {
+      flight: { strategy: 'static', bps: 800 },
+      hotel:  { strategy: 'static', bps: 1100 },
+      rail:   { strategy: 'static', bps: 600 },
+      car:    { strategy: 'static', bps: 800 },
+      other:  { strategy: 'static', bps: 1000 },
+    },
+    floorMicroUsdc:   '5000000',    // $5.00
+    ceilingMicroUsdc: '500000000',  // $500.00
+    senderoTakeBehavior: 'deduct_from_markup',
+  },
+});
+```
+
+The tool requires an admin/operator key (scope `'*'`, `effectiveKeyType: 'production'`). Sandbox keys are blocked unconditionally — see [markup-scopes](./markup-scopes).
+
+## Plan-tier discount table
+
+Sendero's base take is **50 basis points** of the booking GMV with a **$0.50** floor at the small end. Both the bps and the floor scale with the tenant's plan tier so the discount is visible at every booking size, not just above the floor.
+
+| Plan | Take bps | Take floor | Effective on $1,000 booking |
+| --- | --- | --- | --- |
+| Free | 50.0 | $0.500 | $5.00 |
+| Basic | 47.5 | $0.475 | $4.75 |
+| Pro | 45.0 | $0.450 | $4.50 |
+| Enterprise | 42.5 | $0.425 | $4.25 |
+
+The Sendero take and the per-call x402 nanopayment fee are charged together in one `MeterEvent` row at confirm time. The on-chain `commitBookingV2` userOp encodes the split.
+
+Source: [`packages/billing/src/markup.ts`](https://github.com/tcxcx/sendero/blob/main/packages/billing/src/markup.ts) · [`packages/billing/src/plans.ts`](https://github.com/tcxcx/sendero/blob/main/packages/billing/src/plans.ts)
+
+## Worked example — $1,000 hotel, 11% markup, Pro plan
+
+Inputs:
+
+- `costMicroUsdc = 1_000_000_000` ($1,000)
+- Policy: `{ hotel: { strategy: 'static', bps: 1100 } }`
+- `senderoTakeBehavior: 'deduct_from_markup'`
+- Tenant plan tier: Pro
+
+Math:
+
+```
+markup       = 1000 × 11%     = $110.00
+senderoTake  = 1000 × 45 bps  = $4.50  (Pro tier scaled)
+agencyLeg    = markup - take  = $105.50
+supplierLeg  = cost           = $1000.00
+customerTotal                 = $1110.00
+```
+
+The encoded userOp passes three amounts to `commitBookingV2`:
+
+| Field | Amount | Recipient |
+| --- | --- | --- |
+| `vendorAmount` | $1,000.00 | `vendorAddress` (supplier) |
+| `agencyAmount` | $105.50 | `tenant.circleWallet.address` |
+| `feeAmount` | $4.50 | operator MSCA |
+
+When the operator submits the userOp, all three legs settle atomically. A revert anywhere reverts everything — no partial release.
+
+## `add_to_customer` vs `deduct_from_markup`
+
+The `senderoTakeBehavior` knob decides who absorbs Sendero's fee:
+
+- **`deduct_from_markup` (default)** — the agency keeps `markup - take`. Customer total is `cost + markup`. Sendero is invisible to the buyer.
+- **`add_to_customer`** — the agency keeps the full markup. Customer total is `cost + markup + take`. Use when the agency wants to advertise a clean margin and pass platform cost through.
+
+In `deduct_from_markup` mode, if `senderoTake > markup` the agency leg would clamp to zero. The `confirm_booking` tool catches this case and throws [`MARKUP_UNDER_TAKE_FLOOR`](./markup-error-codes#markup_under_take_floor) rather than silently corrupt the split.
+
+## On-chain contract
+
+The split is enforced by `commitBookingV2(bookingId, vendorAmount, feeAmount, agencyAmount, vendorAddress, agencyAddress, itineraryHash, itineraryCID)` on `SenderoGuestEscrow` v3.
+
+- Address (testnet): set in `ARC_ESCROW_ADDRESS` / `NEXT_PUBLIC_SENDERO_GUEST_ESCROW`.
+- ABI: [`packages/guest`](https://github.com/tcxcx/sendero/blob/main/packages/guest/src/abi.ts).
+- Three recipients, one transaction. Reverts atomically.
+- Pairs with `BookingSettledV2(bookingId, vendor, agency, fee, vendorAmount, agencyAmount, feeAmount)` — the off-chain indexer writes three `SettlementLeg` rows from a single event.
+
+For the OTP brute-force protection that ships in the same v3 contract, see [security/claim-code](../security/claim-code).
+
+## Next
+
+- [markup-error-codes](./markup-error-codes) — every error the confirm path can throw.
+- [markup-scopes](./markup-scopes) — how to acquire `tenant:pricing:override` and sign privileged requests.
+- [agents/markup-eval-recipes](../agents/markup-eval-recipes) — six named scenarios for evaluating an agent against the markup pipeline.

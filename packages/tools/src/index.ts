@@ -1,3 +1,4 @@
+import { activatePricingPolicyTool } from './activate-pricing-policy';
 import { airQualityBriefTool } from './air-quality-brief';
 import { airportArrivalPlaybookTool } from './airport-arrival-playbook';
 import { airportTransferCoordinatorTool } from './airport-transfer-coordinator';
@@ -13,6 +14,7 @@ import {
 } from './order-change-quote';
 import { checkPolicyTool } from './check-policy';
 import { checkTreasuryTool } from './check-treasury';
+import { confirmBookingTool } from './confirm-booking';
 import { confirmFlightTool } from './confirm-flight';
 import { displayOfferConditionsTool } from './display-offer-conditions';
 import { elevationRiskBriefTool } from './elevation-risk-brief';
@@ -37,6 +39,7 @@ import { quoteStayTool } from './quote-stay';
 import { gatewayTransferTool } from './gateway-transfer';
 import { generateBookingInvoiceTool } from './generate-booking-invoice';
 import { geocodeTripStopTool } from './geocode-trip-stop';
+import { getPricingPolicyTool } from './get-pricing-policy';
 import {
   commitBookingTool,
   guestClaimLinkTool,
@@ -84,6 +87,46 @@ export {
   airQualityBriefTool,
 } from './air-quality-brief';
 export { cancelBookingTool } from './cancel-booking';
+export {
+  confirmBookingTool,
+  runConfirmBooking,
+  dbDependencies as confirmBookingDbDependencies,
+  type ConfirmBookingDeps,
+  type ConfirmBookingInput,
+  type ConfirmBookingOutput,
+  PolicyInactiveError,
+  PolicyMissingKindError,
+  MarkupOverCeilingError,
+  MarkupUnderFloorError,
+  MarkupUnderTakeFloorError,
+  OverrideRequiresScopeError,
+  OverrideUnnecessaryError,
+  TreasuryAddressMissingError,
+} from './confirm-booking';
+export {
+  getPricingPolicyTool,
+  runGetPricingPolicy,
+  dbDependencies as getPricingPolicyDbDependencies,
+  type GetPricingPolicyDeps,
+  type GetPricingPolicyInput,
+  type GetPricingPolicyOutput,
+  type PolicyRow,
+  type PolicyStatus,
+  TenantContextMissingError as GetPricingPolicyTenantMissingError,
+} from './get-pricing-policy';
+export {
+  activatePricingPolicyTool,
+  runActivatePricingPolicy,
+  dbDependencies as activatePricingPolicyDbDependencies,
+  type ActivatePricingPolicyDeps,
+  type ActivatePricingPolicyInput,
+  type ActivatePricingPolicyOutput,
+  TenantContextMissingError as ActivatePricingPolicyTenantMissingError,
+  OperatorOnlyError,
+  TreasuryNotProvisionedError,
+  MarkupConfigInvalidError,
+  PolicyVersionConflictError,
+} from './activate-pricing-policy';
 export { confirmFlightTool } from './confirm-flight';
 export {
   type ElevationRiskBriefInput,
@@ -252,10 +295,14 @@ export const toolList: ToolDef[] = [
   guestClaimLinkTool,
   reserveBookingTool,
   commitBookingTool,
+  confirmBookingTool,
   confirmFlightTool,
   settleBookingTool,
   cancelBookingTool,
   generateBookingInvoiceTool,
+  // Tenant pricing policy agent surface (E1 + E2)
+  getPricingPolicyTool,
+  activatePricingPolicyTool,
   logAgentActionTool,
   // Concierge / in-trip companion
   geocodeTripStopTool,

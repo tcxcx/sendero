@@ -8,13 +8,17 @@
   "exports": {
     ".": "./src/index.ts",
     "./templates": "./src/templates.ts",
-    "./trip-event-templates": "./src/trip-event-templates.ts"
+    "./trip-event-templates": "./src/trip-event-templates.ts",
+    "./otp": "./src/otp.ts",
+    "./security-alerts": "./src/security-alerts.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
-    "resend": "^4.0.1"
+    "resend": "^4.0.1",
+    "viem": "^2.21.0"
   },
   "peerDependencies": {
     "@sendero/invoicing": "workspace:*"

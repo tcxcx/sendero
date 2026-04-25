@@ -19,8 +19,12 @@ const valueStyle: CSSProperties = {
   marginBottom: 12,
 };
 
+// Mobile-first: each block claims at least 180px and wraps to its own
+// row under 320px viewports rather than squishing into unreadable
+// columns. The 0 minWidth is the magic that lets the email client
+// reflow without picking a horizontal-scrollbar layout.
 const blockStyle: CSSProperties = {
-  flex: 1,
+  flex: '1 1 180px',
   minWidth: 0,
 };
 
@@ -43,6 +47,7 @@ export function Meta({ invoice, template }: TemplateProps) {
       style={{
         display: 'flex',
         flexDirection: 'row',
+        flexWrap: 'wrap',
         gap: 24,
         marginBottom: 8,
       }}
@@ -57,9 +62,7 @@ export function Meta({ invoice, template }: TemplateProps) {
         ) : null}
         <span style={labelStyle}>{template.from_label}</span>
         <span style={{ ...valueStyle, fontWeight: 600 }}>{invoice.from.name}</span>
-        {invoice.from.taxId ? (
-          <span style={valueStyle}>{invoice.from.taxId}</span>
-        ) : null}
+        {invoice.from.taxId ? <span style={valueStyle}>{invoice.from.taxId}</span> : null}
       </div>
       <div style={blockStyle}>
         <h1
@@ -94,9 +97,7 @@ export function Meta({ invoice, template }: TemplateProps) {
         <span style={labelStyle}>{template.customer_label}</span>
         <span style={{ ...valueStyle, fontWeight: 600 }}>{invoice.to.name}</span>
         <span style={valueStyle}>{invoice.to.email}</span>
-        {invoice.to.taxId ? (
-          <span style={valueStyle}>{invoice.to.taxId}</span>
-        ) : null}
+        {invoice.to.taxId ? <span style={valueStyle}>{invoice.to.taxId}</span> : null}
       </div>
     </div>
   );

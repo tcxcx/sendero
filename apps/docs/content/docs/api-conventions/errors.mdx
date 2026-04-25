@@ -1,0 +1,157 @@
+---
+title: Error envelope — the Sendero contract
+description: Every Sendero JSON route returns the same error envelope — `{ code, message, details, docsUrl, agentInstruction, traceId }`. This page is the source of truth for the shape, the naming convention, and the `agentInstruction` field that lets an LLM surface canonical recovery copy without hallucinating.
+---
+
+The Sendero error envelope exists so an SDK can switch on `code`, a human can read `message`, an LLM can surface `agentInstruction` to a customer verbatim, and a support ticket can quote `traceId` for our audit log to find the request.
+
+```json
+{
+  "code": "MARKUP_OVER_CEILING",
+  "message": "Markup 75000000 micro-USDC exceeds tenant ceiling 50000000.",
+  "details": { },
+  "docsUrl": "https://docs.sendero.travel/docs/pricing/markup-error-codes#markup_over_ceiling",
+  "agentInstruction": "Tell the human their markup exceeds the tenant ceiling...",
+  "traceId": "trace_01HKX..."
+}
+```
+
+Every field is surfaced via `apiError(...)` / `apiErrorResponse(...)` from [`apps/app/lib/api-errors.ts`](https://github.com/tcxcx/sendero/blob/main/apps/app/lib/api-errors.ts). The HTTP status mirrors the failure family (4xx for caller, 5xx for us). The `x-sendero-trace-id` header echoes the `traceId` field so log-correlation tools see it without parsing the body.
+
+## Field-by-field
+
+### `code` — the stable contract
+
+Machine-readable, `ALL_CAPS_SNAKE_CASE`, family-prefixed. **Stable across versions** — once a code is documented it never silently changes meaning. New codes are additive.
+
+Family prefixes in production today:
+
+| Prefix | Meaning |
+| --- | --- |
+| `MARKUP_` | tenant markup math, ceiling, floor, and override gates |
+| `POLICY_` | tenant pricing policy lifecycle (inactive, partial, missing, version conflict) |
+| `TREASURY_` | Circle wallet provisioning + on-chain treasury preconditions |
+| `OVERRIDE_` | privileged override gate failures |
+| `BOOKING_` | booking-row lookup + state errors |
+| `TENANT_` | tenant resolution + context errors |
+| `OPERATOR_` | admin-only gates (e.g. `OPERATOR_ONLY` on `activate_tenant_pricing_policy`) |
+
+Add a new family by adding a new builder cluster in `apps/app/lib/api-errors.ts` rather than scattering raw `apiErrorResponse({ code: 'FOO_BAR' })` calls — keeps the catalog grep-able.
+
+### `message` — human, terse, no PII
+
+Short. Imperative when an action is required. Quotes the failing values when they help the human diagnose (e.g. "Markup 75000000 micro-USDC exceeds tenant ceiling 50000000.").
+
+Never contains: customer email, payment card numbers, raw passport fields, claim-code cleartext, signed-link fragments, or any other PII / secret. The error path is logged; treat it as if it'll be screenshotted into a public ticket.
+
+### `details` — free-form JSON
+
+Optional. Used to surface validation issues (`zodIssues`), retry hints, or out-of-band identifiers the SDK can use to recover. Stable per-`code` — if you add a new `details` shape under an existing code, it's a breaking change for anyone parsing it.
+
+### `docsUrl` — deep link to the failure mode
+
+Resolves to a section anchor under `/docs/<family>/error-codes#<code-lowercased>`. Built from `process.env.NEXT_PUBLIC_DOCS_URL` so a tenant running their own docs mirror can repoint. Optional but recommended on every code.
+
+### `agentInstruction` — LLM-friendly recovery copy
+
+The killer field. When an LLM-driven agent receives this envelope, it should surface `agentInstruction` to the human verbatim instead of paraphrasing.
+
+Why verbatim?
+
+- **Recovery copy is canonical.** We've thought about exactly what the human should hear; the agent paraphrasing it loses precision.
+- **It's grep-able for QA.** When the eval harness runs scenario 5 (`inactive_policy_graceful_handoff`), it asserts the agent's output contains the `agentInstruction` string. No paraphrase passes.
+- **It's actionable.** Every `agentInstruction` ends with what the human should DO ("publish a policy at /dashboard/settings/pricing", "mint a key with the override scope"), not just what's wrong.
+
+Tone guide for new errors:
+
+> Tell the human {what's wrong}. Direct them to {fix path}, OR {alternative recovery}.
+
+Always second-person, always actionable, always names the dashboard URL or the alternate recovery path. See [`MarkupOverCeilingError`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/confirm-booking.ts) for the canonical exemplar.
+
+### `traceId` — request-scoped correlation
+
+Pulled from inbound `x-sendero-trace-id` if present; otherwise generated as a fresh UUID. Echoed in the `x-sendero-trace-id` response header. Every log line in the request scope carries it.
+
+This is the one field every support ticket should quote. Our audit log keys on it; given a `traceId` we can rebuild the full request → tool → DB → response timeline in seconds.
+
+## Sample responses
+
+### `401 UNAUTHORIZED`
+
+```json
+{
+  "code": "UNAUTHORIZED",
+  "message": "Authentication required.",
+  "traceId": "trace_..."
+}
+```
+
+### `403 FORBIDDEN`
+
+```json
+{
+  "code": "FORBIDDEN",
+  "message": "You do not have permission for this action.",
+  "traceId": "trace_..."
+}
+```
+
+### `409 POLICY_INACTIVE`
+
+```json
+{
+  "code": "POLICY_INACTIVE",
+  "message": "This tenant's pricing policy is not activated yet.",
+  "docsUrl": "https://docs.sendero.travel/docs/pricing/markup#activation",
+  "agentInstruction": "Tell the human to activate their pricing policy at https://app.sendero.travel/dashboard/settings/pricing before retrying this booking.",
+  "traceId": "trace_..."
+}
+```
+
+### `422 MARKUP_CONFIG_INVALID`
+
+```json
+{
+  "code": "MARKUP_CONFIG_INVALID",
+  "message": "The markup configuration failed validation.",
+  "details": {
+    "zodIssues": [
+      { "path": ["hotel", "bps"], "message": "Expected integer, received string" }
+    ]
+  },
+  "docsUrl": "https://docs.sendero.travel/docs/pricing/markup-error-codes#markup_config_invalid",
+  "traceId": "trace_..."
+}
+```
+
+## SDK pattern
+
+```ts
+try {
+  const result = await dispatch({ tool: '…', args: {…} });
+  return result;
+} catch (err) {
+  // err.code is the stable contract. err.agentInstruction is canonical recovery copy.
+  switch (err.code) {
+    case 'POLICY_INACTIVE':
+    case 'POLICY_PARTIAL_FOR_KIND':
+    case 'TREASURY_NOT_PROVISIONED':
+      return showAgentInstruction(err.agentInstruction); // surface verbatim
+    case 'MARKUP_OVER_CEILING':
+      return offerOverride(err.details);
+    default:
+      logError({ traceId: err.traceId, code: err.code });
+      throw err;
+  }
+}
+```
+
+## Adding a new error
+
+1. Add (or extend) a builder cluster in `apps/app/lib/api-errors.ts`. Don't open-code `apiErrorResponse({ code: '...' })` in route files.
+2. Pick a family prefix. Reuse an existing one when the failure mode lives in the same domain.
+3. Write the `agentInstruction` in second person, ending with an action the human should take. Quote URLs.
+4. Add a section to `/docs/<family>/error-codes.mdx` with the JSON envelope shape so SDK authors can copy-paste their handler.
+5. Cross-link from the relevant concept page (`/docs/<family>/<concept>.mdx`).
+
+The convention exists so a customer's first encounter with an error is not their first encounter with our recovery copy.

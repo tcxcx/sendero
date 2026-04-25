@@ -377,4 +377,147 @@ contract SenderoGuestEscrowFuzzTest is Test {
         vm.expectRevert(IGuestEscrow.InsufficientBudget.selector);
         escrow.reserveForBooking(tripId, keccak256("b"), budget + excess);
     }
+
+    // ------------------------------------------------------------------
+    // v3.0.0 — three-way conservation invariant
+    // ------------------------------------------------------------------
+
+    address internal agency = address(0xA6E47);
+
+    /// @notice Conservation under arbitrary 3-way splits: for any
+    ///         (vendorAmount, feeAmount, agencyAmount) summing to ≤ upperBound
+    ///         the sum of on-chain transfers must equal actualAmount, no
+    ///         USDC minted, none burned. This is the single most important
+    ///         invariant in the v3 upgrade — it proves the new agency leg
+    ///         doesn't break the legacy conservation guarantee.
+    function testFuzz_settlementV2_conservesAcrossArbitrarySplits(
+        uint256 budget,
+        uint256 upperBound,
+        uint256 vendorAmt,
+        uint256 feeAmt,
+        uint256 agencyAmt
+    ) public {
+        budget     = bound(budget,     MIN_BUDGET * 10, MAX_BUDGET);
+        upperBound = bound(upperBound, MIN_BUDGET,      budget);
+        // Each leg up to a third of upperBound — guarantees the sum can't
+        // overflow the upper bound but still produces meaningful spreads.
+        vendorAmt  = bound(vendorAmt, 1, upperBound / 3);
+        feeAmt     = bound(feeAmt,    0, upperBound / 3);
+        agencyAmt  = bound(agencyAmt, 0, upperBound / 3);
+
+        uint256 actual = vendorAmt + feeAmt + agencyAmt;
+        // Edge case: if all three got bounded to zero or the sum is zero,
+        // commitBookingV2 reverts ZeroValue — skip that draw.
+        vm.assume(actual >= 1);
+        vm.assume(actual <= upperBound);
+
+        bytes32 tripId    = keccak256(abi.encode("fuzz-v2", budget, vendorAmt, feeAmt, agencyAmt));
+        bytes32 bookingId = keccak256(abi.encode("b", tripId));
+
+        _createTrip(tripId, budget, 30 days);
+        _claim(tripId, guest);
+
+        vm.prank(guest);
+        escrow.reserveForBooking(tripId, bookingId, upperBound);
+
+        // commitBookingV2 enforces agencyAddress != 0 when agencyAmount > 0.
+        // Use a sentinel zero address for the zero-agency case so we exercise
+        // that branch too.
+        address agencyAddr = agencyAmt > 0 ? agency : address(0);
+
+        vm.prank(guest);
+        escrow.commitBookingV2(
+            bookingId, vendorAmt, feeAmt, agencyAmt, vendor, agencyAddr, bytes32(0), ""
+        );
+
+        vm.prank(operator);
+        escrow.confirmDuffel(bookingId, keccak256("d-v2"));
+
+        uint256 escrowBefore   = usdc.balanceOf(address(escrow));
+        uint256 vendorBefore   = usdc.balanceOf(vendor);
+        uint256 agencyBefore   = usdc.balanceOf(agency);
+        uint256 operatorBefore = usdc.balanceOf(operator);
+
+        vm.prank(operator);
+        escrow.settleBooking(bookingId);
+
+        uint256 escrowDelta   = escrowBefore - usdc.balanceOf(address(escrow));
+        uint256 vendorDelta   = usdc.balanceOf(vendor)   - vendorBefore;
+        uint256 agencyDelta   = usdc.balanceOf(agency)   - agencyBefore;
+        uint256 operatorDelta = usdc.balanceOf(operator) - operatorBefore;
+
+        // Each recipient got exactly what was committed for them.
+        assertEq(vendorDelta,   vendorAmt, "vendor exact");
+        assertEq(agencyDelta,   agencyAmt, "agency exact");
+        assertEq(operatorDelta, feeAmt,    "operator exact");
+
+        // Conservation: sum of outflows == escrow delta == actualAmount.
+        assertEq(vendorDelta + agencyDelta + operatorDelta, actual, "sum equals actual");
+        assertEq(escrowDelta, actual, "escrow drained by exactly actual");
+
+        // Trip accounting: spent moved by actual, reserved drained.
+        (uint256 tripBudget, uint256 tripReserved, uint256 tripSpent) = _tripSummary(tripId);
+        assertEq(tripBudget,   budget, "budget unchanged");
+        assertEq(tripReserved, 0,      "reserved drained");
+        assertEq(tripSpent,    actual, "spent equals actual");
+    }
+
+    /// @notice Storage append-safety under fuzz: legacy v1 commit + v2
+    ///         commit on different bookings within the same trip never
+    ///         collide. The mapping(bytes32 => Booking) layout is keyed
+    ///         on bookingId, so two commits to different ids must persist
+    ///         independently — and the v3 fields on the v1 booking must
+    ///         remain zero across the second write.
+    function testFuzz_storageAppend_v1AndV2BookingsCoexist(
+        uint256 budget,
+        uint256 v1Actual,
+        uint256 v2Vendor,
+        uint256 v2Fee,
+        uint256 v2Agency,
+        bytes32 idSeed
+    ) public {
+        budget   = bound(budget, MIN_BUDGET * 100, MAX_BUDGET);
+        v1Actual = bound(v1Actual, 1, budget / 4);
+        v2Vendor = bound(v2Vendor, 1, budget / 8);
+        v2Fee    = bound(v2Fee,    0, budget / 8);
+        v2Agency = bound(v2Agency, 0, budget / 8);
+
+        uint256 v2Actual = v2Vendor + v2Fee + v2Agency;
+        vm.assume(v2Actual >= 1);
+
+        bytes32 tripId = keccak256(abi.encode("fuzz-coexist", idSeed, budget));
+        bytes32 b1     = keccak256(abi.encode("legacy", idSeed));
+        bytes32 b2     = keccak256(abi.encode("v2",     idSeed));
+
+        _createTrip(tripId, budget, 30 days);
+        _claim(tripId, guest);
+
+        // Legacy v1 commit (no agency).
+        vm.prank(guest);
+        escrow.reserveForBooking(tripId, b1, v1Actual);
+        vm.prank(guest);
+        escrow.commitBooking(b1, v1Actual, 0, vendor, bytes32(0), "");
+
+        // v3 commit on a different booking (with or without agency).
+        vm.prank(guest);
+        escrow.reserveForBooking(tripId, b2, v2Actual);
+        address aAddr = v2Agency > 0 ? agency : address(0);
+        vm.prank(guest);
+        escrow.commitBookingV2(b2, v2Vendor, v2Fee, v2Agency, vendor, aAddr, bytes32(0), "");
+
+        // Read both bookings back. Legacy must still have zero agency
+        // fields; v3 must have the agency fields exactly as written.
+        IGuestEscrow.Booking memory leg = escrow.bookings(b1);
+        IGuestEscrow.Booking memory n3  = escrow.bookings(b2);
+
+        assertEq(leg.actualAmount,  v1Actual,    "legacy actual preserved");
+        assertEq(leg.fee,           0,           "legacy fee preserved");
+        assertEq(leg.agencyAmount,  0,           "legacy agencyAmount stays zero");
+        assertEq(leg.agencyAddress, address(0),  "legacy agencyAddress stays zero");
+
+        assertEq(n3.actualAmount,   v2Actual,    "v3 actual matches sum");
+        assertEq(n3.fee,            v2Fee,       "v3 fee preserved");
+        assertEq(n3.agencyAmount,   v2Agency,    "v3 agencyAmount preserved");
+        assertEq(n3.agencyAddress,  aAddr,       "v3 agencyAddress preserved");
+    }
 }
