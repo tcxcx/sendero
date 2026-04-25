@@ -15,6 +15,7 @@ import { ensureFlightCustomerTool } from './ensure-flight-customer';
 import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
 import { findAirportsNearbyTool } from './find-airports-nearby';
+import { mintStampTool, refreshStampUriTool } from './mint-stamp';
 import {
   kapsoActivatePhoneNumberTool,
   kapsoListNumbersTool,
@@ -283,6 +284,9 @@ export const toolList: ToolDef[] = [
   slackPersistChannelRoutesTool,
   slackInviteBotToChannelsTool,
   slackSendTestMessageTool,
+  // NFT stamps (Arc-Testnet ERC-1155 souvenirs via Circle SCP template)
+  mintStampTool,
+  refreshStampUriTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */
