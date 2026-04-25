@@ -187,6 +187,69 @@ const PersonaWithoutModel = memo(
 
 PersonaWithoutModel.displayName = "PersonaWithoutModel";
 
+interface PersonaInnerProps {
+  source: (typeof sources)[keyof typeof sources];
+  state: PersonaState;
+  callbacks: {
+    onLoad: RiveParameters["onLoad"];
+    onLoadError: RiveParameters["onLoadError"];
+    onPause: RiveParameters["onPause"];
+    onPlay: RiveParameters["onPlay"];
+    onReady: () => void;
+    onStop: RiveParameters["onStop"];
+  };
+  className?: string;
+}
+
+const PersonaInner: FC<PersonaInnerProps> = ({
+  source,
+  state,
+  callbacks,
+  className,
+}) => {
+  const { rive, RiveComponent } = useRive({
+    autoplay: true,
+    onLoad: callbacks.onLoad,
+    onLoadError: callbacks.onLoadError,
+    onPause: callbacks.onPause,
+    onPlay: callbacks.onPlay,
+    onRiveReady: callbacks.onReady,
+    onStop: callbacks.onStop,
+    src: source.source,
+    stateMachines: stateMachine,
+  });
+
+  const listeningInput = useStateMachineInput(rive, stateMachine, "listening");
+  const thinkingInput = useStateMachineInput(rive, stateMachine, "thinking");
+  const speakingInput = useStateMachineInput(rive, stateMachine, "speaking");
+  const asleepInput = useStateMachineInput(rive, stateMachine, "asleep");
+
+  // Rive state machine inputs are mutable objects that must be set via direct
+  // property assignment — this is the intended Rive API, not a React anti-pattern.
+  useEffect(() => {
+    if (listeningInput) {
+      listeningInput.value = state === "listening";
+    }
+    if (thinkingInput) {
+      thinkingInput.value = state === "thinking";
+    }
+    if (speakingInput) {
+      speakingInput.value = state === "speaking";
+    }
+    if (asleepInput) {
+      asleepInput.value = state === "asleep";
+    }
+  }, [state, listeningInput, thinkingInput, speakingInput, asleepInput]);
+
+  const Component = source.hasModel ? PersonaWithModel : PersonaWithoutModel;
+
+  return (
+    <Component rive={rive} source={source}>
+      <RiveComponent className={cn("size-16 shrink-0", className)} />
+    </Component>
+  );
+};
+
 export const Persona: FC<PersonaProps> = memo(
   ({
     variant = "obsidian",
@@ -247,58 +310,29 @@ export const Persona: FC<PersonaProps> = memo(
       []
     );
 
-    // Delay initialisation by one frame to avoid creating (and leaking)
-    // a WebGL2 context during React Strict Mode's first throw-away mount.
+    // Gate the entire Rive subtree behind a one-frame delay. The canvas
+    // only ever mounts once, with real params — Strict Mode's throw-away
+    // first mount never creates a WebGL2 context, and useRive is never
+    // called with null. This avoids the `makeRenderer` null-runtime crash
+    // we saw on dev refreshes (`Cannot read properties of null (reading 'T')`).
     const ready = useStrictModeSafeInit();
 
-    const { rive, RiveComponent } = useRive(
-      ready
-        ? {
-            autoplay: true,
-            onLoad: stableCallbacks.onLoad,
-            onLoadError: stableCallbacks.onLoadError,
-            onPause: stableCallbacks.onPause,
-            onPlay: stableCallbacks.onPlay,
-            onRiveReady: stableCallbacks.onReady,
-            onStop: stableCallbacks.onStop,
-            src: source.source,
-            stateMachines: stateMachine,
-          }
-        : null
-    );
-
-    const listeningInput = useStateMachineInput(
-      rive,
-      stateMachine,
-      "listening"
-    );
-    const thinkingInput = useStateMachineInput(rive, stateMachine, "thinking");
-    const speakingInput = useStateMachineInput(rive, stateMachine, "speaking");
-    const asleepInput = useStateMachineInput(rive, stateMachine, "asleep");
-
-    // Rive state machine inputs are mutable objects that must be set via direct
-    // property assignment — this is the intended Rive API, not a React anti-pattern.
-    useEffect(() => {
-      if (listeningInput) {
-        listeningInput.value = state === "listening";
-      }
-      if (thinkingInput) {
-        thinkingInput.value = state === "thinking";
-      }
-      if (speakingInput) {
-        speakingInput.value = state === "speaking";
-      }
-      if (asleepInput) {
-        asleepInput.value = state === "asleep";
-      }
-    }, [state, listeningInput, thinkingInput, speakingInput, asleepInput]);
-
-    const Component = source.hasModel ? PersonaWithModel : PersonaWithoutModel;
+    if (!ready) {
+      return (
+        <div
+          aria-hidden="true"
+          className={cn("size-16 shrink-0", className)}
+        />
+      );
+    }
 
     return (
-      <Component rive={rive} source={source}>
-        <RiveComponent className={cn("size-16 shrink-0", className)} />
-      </Component>
+      <PersonaInner
+        source={source}
+        state={state}
+        callbacks={stableCallbacks}
+        className={className}
+      />
     );
   }
 );

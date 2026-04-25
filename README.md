@@ -33,6 +33,24 @@
 
 <br />
 
+## 2-minute pitch deck
+
+The same narrative compressed into 12 slides + a Google-Slides-style speaker-notes window. Live online (private preview):
+
+> **🔗 [sendero-pitch.vercel.app](https://sendero-pitch.vercel.app)** &nbsp;·&nbsp; passphrase **`sendero-arc`**
+>
+> Press **`N`** inside the deck (or click *Speaker notes ↗* in the top-right) to open the notes window in a separate tab — it stays in sync with the slide you're on.
+
+Run it locally:
+
+```bash
+bun dev:pitch     # → http://localhost:4000
+```
+
+Source lives in [`./pitch/`](./pitch/) — single static project, deployed standalone to Vercel from that directory. Brand language follows [`DESIGN.md`](./DESIGN.md) (parchment + vermillion + Fraunces).
+
+<br />
+
 ## Verified on-chain — every Sendero contract is auditable on Arcscan
 
 Every contract Sendero deploys to Arc-Testnet is verified on Arcscan (Blockscout). Run `bun scripts/verify-deployments.ts` to audit all six in one shot — exits 1 on any real gap so CI can wire it as a post-deploy guard. Latest live audit:

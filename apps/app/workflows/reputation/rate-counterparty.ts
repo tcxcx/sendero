@@ -148,6 +148,7 @@ interface BookingContext {
 }
 
 async function loadBookingContext(bookingId: string): Promise<BookingContext | null> {
+  'use step';
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
     select: {

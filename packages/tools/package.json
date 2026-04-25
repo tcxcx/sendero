@@ -18,6 +18,7 @@
     "./faucet": "./src/faucet.ts",
     "./mint-stamp": "./src/mint-stamp.ts",
     "./provision-identity": "./src/provision-identity.ts",
+    "./ensure-traveler-wallet": "./src/ensure-traveler-wallet.ts",
     "./give-feedback": "./src/give-feedback.ts",
     "./read-reputation": "./src/read-reputation.ts",
     "./request-validation": "./src/request-validation.ts",
