@@ -70,6 +70,14 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
     process.env.NEXT_PUBLIC_APP_URL,
     'https://www.sendero.travel'
   );
+  // Marketing site lives on a different host from the app. Resolve any
+  // app-relative path (/dashboard, /onboarding) to the app origin so it
+  // works in dev (3010) AND prod (app.sendero.travel) without hardcoding.
+  const APP_PATHS = ['/dashboard', '/onboarding'];
+  const toAppHref = (href: string) =>
+    APP_PATHS.some(p => href === p || href.startsWith(`${p}/`) || href.startsWith(`${p}?`))
+      ? `${appOrigin.replace(/\/$/, '')}${href}`
+      : href;
 
   return (
     <main className="mk-root">
@@ -98,10 +106,16 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
                 currentLocale={normalized}
                 hrefs={buildLocaleApiHrefs('/')}
               />
-              <a href={content.hero.primaryCta.href} className="mk-cta mk-nav-waitlist s-press">
+              <a
+                href={toAppHref(content.hero.primaryCta.href)}
+                className="mk-cta mk-nav-waitlist s-press"
+              >
                 {content.hero.primaryCta.label}
               </a>
-              <a href={content.hero.secondaryCta.href} className="mk-nav-secondary s-press">
+              <a
+                href={toAppHref(content.hero.secondaryCta.href)}
+                className="mk-nav-secondary s-press"
+              >
                 {content.hero.secondaryCta.label}
               </a>
             </div>
@@ -131,10 +145,13 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           </h1>
           <p className="mk-subtitle s-enter s-enter-3">{content.hero.subtitle}</p>
           <div className="mk-hero-ctas s-enter s-enter-4">
-            <a href={content.hero.primaryCta.href} className="mk-cta mk-cta-lg s-press">
+            <a href={toAppHref(content.hero.primaryCta.href)} className="mk-cta mk-cta-lg s-press">
               {content.hero.primaryCta.label}
             </a>
-            <a href={content.hero.secondaryCta.href} className="mk-cta mk-cta-ghost s-press">
+            <a
+              href={toAppHref(content.hero.secondaryCta.href)}
+              className="mk-cta mk-cta-ghost s-press"
+            >
               {content.hero.secondaryCta.label}
             </a>
           </div>
@@ -165,7 +182,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           {content.audiences.items.map((tile, i) => (
             <a
               key={tile.id}
-              href={tile.cta.href}
+              href={toAppHref(tile.cta.href)}
               className="mk-audience"
               style={{ ['--mk-audience-i' as never]: i }}
             >
@@ -320,7 +337,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
                   <li key={`${tier.id}-${i}`}>{f}</li>
                 ))}
               </ul>
-              <a href={tier.cta.href} className="mk-cta mk-cta-full">
+              <a href={toAppHref(tier.cta.href)} className="mk-cta mk-cta-full">
                 {tier.cta.label}
               </a>
             </article>
@@ -338,7 +355,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           {SYMBOL_ATLAS.map(symbol => (
             <img alt="" decoding="async" key={symbol} src={`/brand/icons/${symbol}`} />
           ))}
-          <MarketingBrandHoverCard locale={normalized} />
+          <MarketingBrandHoverCard locale={normalized} appOrigin={appOrigin} />
         </div>
       </section>
 
@@ -363,7 +380,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
               <strong>{group.label}</strong>
               <nav aria-label={group.label}>
                 {group.links.map(link => (
-                  <a key={`${group.label}-${link.label}`} href={link.href}>
+                  <a key={`${group.label}-${link.label}`} href={toAppHref(link.href)}>
                     {link.label}
                   </a>
                 ))}

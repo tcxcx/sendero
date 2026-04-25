@@ -629,7 +629,7 @@ const ES_MX: MarketingContent = {
       {
         id: 'travelers',
         label: 'Viajeros',
-        headline: 'Reservá desde el chat que ya tenés abierto.',
+        headline: 'Reserva desde el chat que ya tienes abierto.',
         body: 'WhatsApp, web, opciones reales, presupuestos prepagados, recibos.',
         cta: { label: 'Empezar gratis', href: '/dashboard' },
       },
@@ -643,23 +643,23 @@ const ES_MX: MarketingContent = {
       {
         id: 'companies',
         label: 'Empresas',
-        headline: 'Prepagá el viaje. Mantené política y auditoría.',
+        headline: 'Prepaga el viaje. Mantén política y auditoría.',
         body: 'Aprobaciones en Slack, límites por tenant, conciliación en USDC.',
         cta: { label: 'Hablar con ventas', href: 'mailto:sales@sendero.travel' },
       },
       {
         id: 'agents',
         label: 'Agentes IA',
-        headline: 'Llamá al back office de viajes.',
+        headline: 'Llama al back office de viajes.',
         body: 'MCP descubrible. x402 con precio. llms.txt publicado.',
         cta: { label: 'Leer llms.txt', href: '/llms.txt' },
       },
     ],
   },
   waitlist: {
-    eyebrow: 'Onda mainnet',
-    title: 'Reservá tu lugar en producción.',
-    body: 'Agencias, empresas y builders de IA entran por etapas. Sumate para presupuestos prepagados, herramientas MCP y operaciones white-label.',
+    eyebrow: 'Mainnet en camino',
+    title: 'Aparta tu lugar en producción.',
+    body: 'Agencias, empresas y desarrolladores de IA entran por etapas. Regístrate para acceso temprano a presupuestos prepagados, herramientas MCP y operaciones white-label.',
   },
   routeMurals: {
     eyebrow: 'Inteligencia de ruta',
@@ -697,19 +697,19 @@ const ES_MX: MarketingContent = {
       {
         ...EN_US.story.paths[0],
         eyebrow: 'Viajero individual',
-        title: 'Reservá desde el hilo que ya tenés abierto.',
+        title: 'Reserva desde el hilo que ya tienes abierto.',
         body: 'WhatsApp o web, opciones reales, presupuesto prepagado, mismo agente para cambios y soporte.',
       },
       {
         ...EN_US.story.paths[1],
         eyebrow: 'Agencia',
         title: 'Un link de reserva que opera como mostrador atendido.',
-        body: 'Vos mantenés al cliente. Sendero hace cotización, política, hold, emisión, pago, factura y soporte.',
+        body: 'Tú mantienes al cliente. Sendero hace cotización, política, hold, emisión, pago, factura y soporte.',
       },
       {
         ...EN_US.story.paths[2],
         eyebrow: 'Viaje corporativo',
-        title: 'Prepagá. Mantené política y auditoría.',
+        title: 'Prepaga. Mantén política y auditoría.',
         body: 'Links prepagados, excepciones a Slack, límites por tenant, conciliación de cada acción.',
       },
       {
@@ -734,10 +734,10 @@ const ES_MX: MarketingContent = {
       feature.id === 'consumer'
         ? 'Preferencias, contexto, presupuesto, fechas, recibos y cambios — en una sola conversación.'
         : feature.id === 'agency'
-          ? 'Traé tu WhatsApp y la relación. Nosotros traemos reserva, escrow, liquidación y soporte.'
+          ? 'Trae tu WhatsApp y la relación con el cliente. Nosotros aportamos reserva, escrow, liquidación y soporte.'
           : feature.id === 'corporate'
             ? 'Política, aprobaciones, presupuestos prepagados, límites, facturas y auditoría — dentro del viaje.'
-            : 'MCP, llms.txt, llamadas con precio y workflows. Delegá acciones reales de viaje sin riesgo.',
+            : 'MCP, llms.txt, llamadas con precio y workflows. Delega acciones reales de viaje sin riesgo.',
   })),
   assetShowcase: {
     ...EN_US.assetShowcase,
@@ -782,9 +782,9 @@ const ES_MX: MarketingContent = {
     })),
   },
   pricing: {
-    heading: 'Gratis para empezar. Escala con vos.',
+    heading: 'Gratis para empezar. Crece a tu ritmo.',
     subheading:
-      'Medido por acción de viaje. Los planes pagos desbloquean workspaces, descuentos en nano + take rate, y keys de producción.',
+      'Cobramos por acción de viaje. Los planes de paga desbloquean más workspaces, descuentos en nanopagos + take rate, y llaves de producción.',
     tiers: EN_US.pricing.tiers.map(t => ({
       ...t,
       name: t.id === 'free' ? 'Gratis' : t.id === 'enterprise' ? 'Empresa' : t.name,
@@ -1023,12 +1023,69 @@ const ES_AR: MarketingContent = {
     primaryCta: { label: 'Empezar gratis', href: '/dashboard' },
     secondaryCta: { label: 'Para agentes IA', href: '/llms.txt' },
   },
-  waitlist: {
-    eyebrow: 'Onda mainnet',
-    title: 'Sumate a la lista de mainnet.',
-    body: 'Agencias, empresas y builders de IA entran por etapas. Sumate para acceso temprano a presupuestos prepagados, herramientas MCP y operaciones white-label.',
+  audiences: {
+    ...ES_MX.audiences,
+    items: ES_MX.audiences.items.map(item =>
+      item.id === 'travelers'
+        ? { ...item, headline: 'Reservá desde el chat que ya tenés abierto.' }
+        : item.id === 'companies'
+          ? { ...item, headline: 'Prepagá el viaje. Mantené política y auditoría.' }
+          : item.id === 'agents'
+            ? { ...item, headline: 'Llamá al back office de viajes.' }
+            : item
+    ),
   },
-  pricing: ES_MX.pricing,
+  waitlist: {
+    eyebrow: 'Mainnet en camino',
+    title: 'Sumate a la lista de producción.',
+    body: 'Agencias, empresas y desarrolladores de IA entran por etapas. Sumate para acceso temprano a presupuestos prepagados, herramientas MCP y operaciones white-label.',
+  },
+  routeMurals: {
+    ...ES_MX.routeMurals,
+    items: ES_MX.routeMurals.items.map(item =>
+      item.label === 'Handoff map'
+        ? { ...item, title: 'Preguntás una vez. El sistema coordina el resto.' }
+        : item
+    ),
+  },
+  story: {
+    ...ES_MX.story,
+    paths: ES_MX.story.paths.map((p, i) =>
+      i === 0
+        ? { ...p, title: 'Reservá desde el hilo que ya tenés abierto.' }
+        : i === 1
+          ? {
+              ...p,
+              body: 'Vos mantenés al cliente. Sendero hace cotización, política, hold, emisión, pago, factura y soporte.',
+            }
+          : i === 2
+            ? {
+                ...p,
+                title: 'Prepagá. Mantené política y auditoría.',
+                body: 'Links prepagados, excepciones a Slack, límites por tenant, conciliación de cada acción.',
+              }
+            : p
+    ),
+  },
+  features: ES_MX.features.map(feature =>
+    feature.id === 'agency'
+      ? {
+          ...feature,
+          body: 'Traé tu WhatsApp y la relación con el cliente. Nosotros aportamos reserva, escrow, liquidación y soporte.',
+        }
+      : feature.id === 'agents'
+        ? {
+            ...feature,
+            body: 'MCP, llms.txt, llamadas con precio y workflows. Delegá acciones reales de viaje sin riesgo.',
+          }
+        : feature
+  ),
+  pricing: {
+    ...ES_MX.pricing,
+    heading: 'Gratis para empezar. Crecé a tu ritmo.',
+    subheading:
+      'Cobramos por acción de viaje. Los planes pagos te desbloquean más workspaces, descuentos en nanopagos + take rate, y llaves de producción.',
+  },
 };
 
 const FALLBACK_CONTENT: Record<string, MarketingContent> = {

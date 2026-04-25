@@ -17,11 +17,18 @@ function readDotenvValue(value) {
   return trimmed;
 }
 
-function loadLocalClerkEnv() {
+function loadLocalRootEnv() {
   if (!existsSync(repoEnvPath)) return;
 
+  // Marketing reads NEXT_PUBLIC_APP_URL / NEXT_PUBLIC_SITE_URL to build links
+  // into the app + canonical metadata. Without these the dev site falls back
+  // to the production origin and CTAs leave localhost. Clerk keys are loaded
+  // here too so dev sign-in works without an apps/marketing/.env.local.
+  const ROOT_KEYS =
+    /^\s*(NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY|CLERK_SECRET_KEY|NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_SITE_URL)\s*=\s*(.*)\s*$/;
+
   for (const line of readFileSync(repoEnvPath, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*(NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY|CLERK_SECRET_KEY)\s*=\s*(.*)\s*$/);
+    const match = line.match(ROOT_KEYS);
     if (!match) continue;
 
     const [, key, rawValue] = match;
@@ -29,7 +36,7 @@ function loadLocalClerkEnv() {
   }
 }
 
-loadLocalClerkEnv();
+loadLocalRootEnv();
 
 const publicClerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
