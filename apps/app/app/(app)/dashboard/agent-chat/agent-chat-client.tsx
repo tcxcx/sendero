@@ -35,6 +35,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input';
+import { AgentPersona } from '@/components/agent-chat/agent-persona';
 
 import { renderForOperator, type ChannelMessage } from '@/lib/channel-render';
 
@@ -79,13 +80,12 @@ export function AgentChatClient({ tenantId }: Props) {
           response streams → idle when settled). */}
       <header className="flex items-center gap-3 border-b border-border bg-card/40 px-4 py-3">
         <Persona className="size-10 shrink-0" state={personaState} variant="halo" />
+        <AgentPersona className="size-10" state={personaState} />
         <div className="flex flex-col gap-0.5">
           <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             Sendero AI
           </div>
-          <div className="text-xs text-muted-foreground">
-            {personaStateLabel(personaState)}
-          </div>
+          <div className="text-xs text-muted-foreground">{personaStateLabel(personaState)}</div>
         </div>
       </header>
 
