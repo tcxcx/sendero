@@ -20,6 +20,7 @@
 
 import { anthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createVertex } from '@ai-sdk/google-vertex';
 import { openai } from '@ai-sdk/openai';
 import {
   directProviderCascade,
@@ -30,6 +31,9 @@ import {
   googleGenerativeAiKey,
   selectModel,
   type ModelTier,
+  vertexConfigured,
+  vertexLocation,
+  vertexProject,
 } from '@sendero/agent';
 import type { LanguageModel } from 'ai';
 
@@ -76,6 +80,26 @@ export function resolveDirectModels(
 
 export function directModelFromString(direct: string): LanguageModel | null {
   const [provider, modelId] = direct.split('/') as [string, string];
+  if (provider === 'vertex') {
+    // Vertex AI auth via ADC locally (~/.config/gcloud/...) and via
+    // GOOGLE_APPLICATION_CREDENTIALS_JSON in deployed envs. The
+    // @ai-sdk/google-vertex SDK auto-discovers when googleAuthOptions
+    // is omitted; we only pass credentials when the SA JSON env is set.
+    if (!vertexConfigured()) return null;
+    const project = vertexProject();
+    if (!project) return null;
+    let googleAuthOptions: Parameters<typeof createVertex>[0]['googleAuthOptions'];
+    const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    if (saJson) {
+      try {
+        googleAuthOptions = { credentials: JSON.parse(saJson) };
+      } catch {
+        return null;
+      }
+    }
+    const vertex = createVertex({ project, location: vertexLocation(), googleAuthOptions });
+    return vertex(geminiDirectModelId(direct));
+  }
   if (provider === 'google') {
     const key = googleGenerativeAiKey();
     if (!key) return null;
