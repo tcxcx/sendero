@@ -284,6 +284,9 @@ model Tenant {
   nftStamps           NftStamp[]
   onchainIdentities   OnchainIdentity[]
   reputationPolicy    ReputationPolicy?
+  pricingPolicies     TenantPricingPolicy[]
+  otpDeliveryAttempts OtpDeliveryAttempt[]
+  securityAlerts      SecurityAlert[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -315,25 +318,26 @@ model User {
   updatedAt            DateTime   @updatedAt @db.Timestamptz(6)
   lastSeenAt           DateTime?  @db.Timestamptz(6)
 
-  memberships         Membership[]
-  wallets             Wallet[]
-  travelerTrips       Trip[]               @relation("TripTraveler")
-  createdTrips        Trip[]               @relation("TripCreatedBy")
-  bookings            Booking[]            @relation("BookingCreatedBy")
-  suppliers           Supplier[]           @relation("SupplierCreatedBy")
-  meterEvents         MeterEvent[]
-  sessions            Session[]
-  channelIdentities   ChannelIdentity[]
-  whatsappLinkTokens  WhatsAppLinkToken[]
-  airlineCredits      AirlineCredit[]
-  passportVaults      PassportVault[]
-  tripEligibilityRuns TripEligibilityRun[]
-  slackUserBindings   SlackUserBinding[]
-  transferPolicies    TransferPolicy[]      @relation("TravelerPolicies")
-  transferAttempts    TransferAttempt[]     @relation("TravelerTransferAttempts")
-  nftStamps           NftStamp[]            @relation("StampTraveler")
-  nftStampOwnerships  NftStampOwnership[]   @relation("StampOwner")
-  onchainIdentities   OnchainIdentity[]
+  memberships            Membership[]
+  wallets                Wallet[]
+  travelerTrips          Trip[]                @relation("TripTraveler")
+  createdTrips           Trip[]                @relation("TripCreatedBy")
+  bookings               Booking[]             @relation("BookingCreatedBy")
+  suppliers              Supplier[]            @relation("SupplierCreatedBy")
+  meterEvents            MeterEvent[]
+  sessions               Session[]
+  channelIdentities      ChannelIdentity[]
+  whatsappLinkTokens     WhatsAppLinkToken[]
+  airlineCredits         AirlineCredit[]
+  passportVaults         PassportVault[]
+  tripEligibilityRuns    TripEligibilityRun[]
+  slackUserBindings      SlackUserBinding[]
+  transferPolicies       TransferPolicy[]      @relation("TravelerPolicies")
+  transferAttempts       TransferAttempt[]     @relation("TravelerTransferAttempts")
+  nftStamps              NftStamp[]            @relation("StampTraveler")
+  nftStampOwnerships     NftStampOwnership[]   @relation("StampOwner")
+  onchainIdentities      OnchainIdentity[]
+  pricingPoliciesCreated TenantPricingPolicy[] @relation("TenantPricingPolicyCreatedBy")
 
   @@index([createdAt])
   @@map("users")
@@ -458,20 +462,20 @@ model Policy {
 
 /// A persistent conversational thread for one trip. Core object.
 model Trip {
-  id              String     @id @default(cuid())
-  tenantId        String
-  policyId        String?
-  travelerId      String? // User.id — may be guest
-  createdById     String? // booking agent
-  intent          Json // parsed intent: {origin,dest,dates,pax,purpose}
-  status          TripStatus @default(draft)
+  id                    String     @id @default(cuid())
+  tenantId              String
+  policyId              String?
+  travelerId            String? // User.id — may be guest
+  createdById           String? // booking agent
+  intent                Json // parsed intent: {origin,dest,dates,pax,purpose}
+  status                TripStatus @default(draft)
   /// Append-only event log (agent turns, tool calls, approvals).
-  events          Json       @default("[]")
-  settlementRef   String? // convenience pointer to latest Settlement
-  cfdiRef         String? // MX fiscal invoice reference
-  reputationScore Int? // 0-100, mirrored from Attestation
-  totalUsdc       Decimal?   @db.Decimal(18, 6) // denormalized from bookings
-  metadata        Json?
+  events                Json       @default("[]")
+  settlementRef         String? // convenience pointer to latest Settlement
+  cfdiRef               String? // MX fiscal invoice reference
+  reputationScore       Int? // 0-100, mirrored from Attestation
+  totalUsdc             Decimal?   @db.Decimal(18, 6) // denormalized from bookings
+  metadata              Json?
   /// Per-trip channel routing override. Shape (see TripChannelBindings
   /// in `apps/app/lib/channel-routing.ts`):
   ///   { primary: 'whatsapp'|'slack'|'email'|'web',
@@ -479,20 +483,27 @@ model Trip {
   ///     slack?: { channelId, threadTs? },
   ///     notifyChannels?: Array<...> }
   /// Nudge emitters read this before each share; null = use tenant default.
-  channelBindings Json?
-  createdAt       DateTime   @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime   @updatedAt @db.Timestamptz(6)
+  channelBindings       Json?
+  /// First-class verified contact channels for the guest, set at
+  /// prefund_trip time by the buyer (and re-verified out-of-band).
+  /// Shape: `{ phone?: string, email?: string }`. Read by the OTP
+  /// resend route (`/api/trip/[tripId]/claim-code/resend`) to gate
+  /// resend requests against the actual contacts the buyer attached.
+  /// Backed by `migrations/20260425133807_trip_guest_verified_contacts`.
+  guestVerifiedContacts Json?
+  createdAt             DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime   @updatedAt @db.Timestamptz(6)
 
   tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   policy    Policy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
   traveler  User?   @relation("TripTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
   createdBy User?   @relation("TripCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  bookings     Booking[]
-  settlements  Settlement[]
-  attestations Attestation[]
-  sessions     Session[]
-  nftStamps    NftStamp[]
+  bookings           Booking[]
+  settlements        Settlement[]
+  attestations       Attestation[]
+  sessions           Session[]
+  nftStamps          NftStamp[]
   reputationFeedback ReputationFeedback[]
 
   @@index([tenantId, createdAt])
@@ -520,6 +531,21 @@ model Booking {
   duffelOrderId        String?       @unique
   pnr                  String?
   totalUsd             Decimal       @db.Decimal(12, 2)
+  /// Supplier net rate, in micro-USDC. Backfilled from totalUsd × 1e6 for
+  /// rows that pre-date markup v1 (metadata.markupSource flags those).
+  costMicroUsdc        BigInt?
+  /// Tenant GMV slice (the "agency markup"), in micro-USDC. Null on
+  /// pre-v1 rows; 0 when the tenant explicitly priced cost-plus.
+  markupMicroUsdc      BigInt?
+  /// When markup was set as a percentage of cost. Null when set as an
+  /// absolute amount or when pre-v1.
+  markupBps            Int?
+  /// Sendero's take, in micro-USDC. Denormalized from the markup snapshot
+  /// for fast GMV reporting.
+  senderoTakeMicroUsdc BigInt?
+  /// Human-readable audit pointer to TenantPricingPolicy.version. The
+  /// actual race-protected pin lives at metadata.policySnapshot (Eng A2).
+  pricingPolicyVersion Int?
   currency             String        @default("USD") @db.Char(3)
   /// Raw provider payload (Duffel offer / order), kept for reconciliation.
   rawDuffel            Json?
@@ -542,13 +568,14 @@ model Booking {
   supplier  Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   createdBy User?     @relation("BookingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  settlements Settlement[]
-  invoice     Invoice?
-  nftStamps   NftStamp[]
+  settlements        Settlement[]
+  invoice            Invoice?
+  nftStamps          NftStamp[]
   reputationFeedback ReputationFeedback[]
 
   @@unique([tenantId, externalId])
   @@index([tenantId, createdAt])
+  @@index([tenantId, kind, createdAt])
   @@index([tripId])
   @@index([supplierId])
   @@index([status])
@@ -705,21 +732,32 @@ model MeterEvent {
 
 /// One on-chain settlement per Booking (ERC-8183 fan-out). Append-only.
 model Settlement {
-  id             String           @id @default(cuid())
-  tenantId       String
-  tripId         String?
-  bookingId      String?
+  id                   String           @id @default(cuid())
+  tenantId             String
+  tripId               String?
+  bookingId            String?
   /// Gross USDC amount distributed, in micro-USDC.
-  grossMicroUsdc BigInt
-  chain          String // "arc-testnet", "arc-mainnet", "base", etc.
-  chainId        Int?
-  status         SettlementStatus @default(pending)
-  txHashes       String[]         @default([])
-  initiatedAt    DateTime         @default(now()) @db.Timestamptz(6)
-  confirmedAt    DateTime?        @db.Timestamptz(6)
-  metadata       Json?
-  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime         @updatedAt @db.Timestamptz(6)
+  grossMicroUsdc       BigInt
+  /// Denormalized from Booking.costMicroUsdc for fast reconciliation
+  /// against the on-chain supplier-leg transfer. Null on legacy rows.
+  costMicroUsdc        BigInt?
+  /// Sum of legs where kind='agency'. Denormalized for tenant GMV.
+  tenantTakeMicroUsdc  BigInt?
+  /// Sum of legs where kind='fee'. Denormalized for Sendero revenue.
+  senderoTakeMicroUsdc BigInt?
+  /// Human-readable status reason — e.g., 'pending_treasury' when the
+  /// agency leg is held because tenant.circleWallet.address is null
+  /// (Eng A1). Surfaces verbatim in the tenant dashboard.
+  statusReason         String?
+  chain                String // "arc-testnet", "arc-mainnet", "base", etc.
+  chainId              Int?
+  status               SettlementStatus @default(pending)
+  txHashes             String[]         @default([])
+  initiatedAt          DateTime         @default(now()) @db.Timestamptz(6)
+  confirmedAt          DateTime?        @db.Timestamptz(6)
+  metadata             Json?
+  createdAt            DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime         @updatedAt @db.Timestamptz(6)
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   trip    Trip?    @relation(fields: [tripId], references: [id], onDelete: SetNull)
@@ -1729,49 +1767,49 @@ model TripEligibilityRun {
 /// → tokenId here. Refreshable kinds (ItineraryMap) update `uri`
 /// in place; everything else is append-only.
 model NftStamp {
-  id           String   @id @default(cuid())
-  tenantId     String
-  tripId       String?
-  bookingId    String?
-  travelerId   String?
+  id         String    @id @default(cuid())
+  tenantId   String
+  tripId     String?
+  bookingId  String?
+  travelerId String?
   /// One of: BoardingPass | SettlementReceipt | ItineraryMap | TripPassport
-  kind         String
+  kind       String
   /// Domain key for idempotency: bookingId for BoardingPass / Receipt,
   /// tripId for ItineraryMap / TripPassport. Used in the unique pair
   /// with `kind` so a re-attempt finds the existing tokenId rather
   /// than minting a duplicate.
-  primaryKey   String
+  primaryKey String
   /// On-chain class id assigned by the contract (auto-increment).
   /// Stored as decimal string to fit uint256.
-  tokenId      String
-  contract     String
+  tokenId    String
+  contract   String
   /// Tenant slug copied at mint time so off-chain queries can fan
   /// out by tenant without a join.
-  tenantSlug   String
+  tenantSlug String
   /// IPFS metadata URI (canonical) — the contract's tokenURI value.
-  uri          String
+  uri        String
   /// Vercel Blob URL for hot UI rendering. Mirrors the manifest's
   /// image_blob field.
-  blobUrl      String?
+  blobUrl    String?
   /// GPT-5-nano caption shown on the stamp page + OG description.
-  caption      String?
+  caption    String?
   /// Free-form: brand snapshot at mint time, source meter event ids,
   /// recipients[] for TripPassport, prior CIDs after refresh.
-  metadata     Json?
-  mintTxHash   String?
-  mintTxId     String?
+  metadata   Json?
+  mintTxHash String?
+  mintTxId   String?
   /// `pending` (workflow started, mint not confirmed) | `minted` |
   /// `failed` (workflow terminal failure) | `refreshed` (URI updated).
-  status       String   @default("pending")
-  mintedAt     DateTime?  @db.Timestamptz(6)
-  createdAt    DateTime   @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
+  status     String    @default("pending")
+  mintedAt   DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
 
-  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trip        Trip?               @relation(fields: [tripId], references: [id], onDelete: SetNull)
-  booking     Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  traveler    User?               @relation("StampTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
-  ownerships  NftStampOwnership[]
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip       Trip?               @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  booking    Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  traveler   User?               @relation("StampTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
+  ownerships NftStampOwnership[]
 
   @@unique([kind, primaryKey])
   @@unique([contract, tokenId])
@@ -1826,7 +1864,7 @@ model NftStampOwnership {
 /// RPC is only the fallback for external counterparties not yet in
 /// our index.
 model OnchainIdentity {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   /// 'org' | 'user' — drives FK + holderAddress source resolution.
   kind                  String
   tenantId              String? // populated when kind='org'
@@ -1848,21 +1886,21 @@ model OnchainIdentity {
   mintedAt              DateTime? @db.Timestamptz(6)
   /// 'pending' (mint submitted) | 'minted' (NFT exists on-chain) |
   /// 'failed' (terminal — sweeper gave up).
-  status                String   @default("pending")
+  status                String    @default("pending")
   /// Denormalized aggregations — written by Circle Event Monitor
   /// webhook for sub-50ms reads. cachedAt is null until first event.
   cachedStars           Float?
-  cachedFeedbackCount   Int      @default(0)
-  cachedValidatorCount  Int      @default(0)
-  cachedValidationCount Int      @default(0)
+  cachedFeedbackCount   Int       @default(0)
+  cachedValidatorCount  Int       @default(0)
+  cachedValidationCount Int       @default(0)
   cachedAt              DateTime? @db.Timestamptz(6)
   /// Number of provisioning attempts. After N attempts the sweeper
   /// flips status='failed' and stops retrying.
-  attemptCount          Int      @default(0)
+  attemptCount          Int       @default(0)
   lastAttemptAt         DateTime? @db.Timestamptz(6)
   lastError             String?
-  createdAt             DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt             DateTime @updatedAt @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(6)
 
   tenant      Tenant?              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user        User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1962,4 +2000,123 @@ model ReputationPolicy {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("reputation_policies")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT PRICING POLICY (markup v1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Per-tenant markup policy. Versioned + append-only — new edits insert
+/// a new row with the next monotonic version. The Booking pins both
+/// the version int (human-readable audit) AND the resolved snapshot to
+/// metadata.policySnapshot so policy edits do not retro-price open
+/// quotes (Eng A3).
+///
+/// `markupConfig` is a discriminated-union JSON keyed by BookingKind.
+/// Validated by `MarkupConfigSchema` (Zod) in `@sendero/billing/markup`
+/// AND by a Postgres CHECK that the column is a JSON object — Eng A7
+/// defense-in-depth.
+model TenantPricingPolicy {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  version             Int
+  markupConfig        Json
+  /// Floor on tenant markup itself ($1 USDC default). Below this the
+  /// agency is not running a business — separate from the Sendero take
+  /// floor, which is computed in code per tier.
+  floorMicroUsdc      BigInt   @default(1000000)
+  /// Self-imposed tenant ceiling (NOT platform policy). Null = no ceiling.
+  ceilingMicroUsdc    BigInt?
+  /// 'add_to_customer' | 'deduct_from_markup' (DX D7 — self-documenting
+  /// replacements for the original 'passthrough' / 'absorb' values).
+  senderoTakeBehavior String   @default("add_to_customer")
+  /// Activation gate. Quote API rejects writes until true; Clerk webhook
+  /// seeds an `activated=true, sandboxOnly=true` row at org.created so
+  /// sandbox keys can call confirm_booking immediately (DX D1).
+  activated           Boolean  @default(false)
+  /// Sandbox-only seed flag. Production keys ignore sandboxOnly rows
+  /// and still hit policy_inactive until a human activates a real one.
+  sandboxOnly         Boolean  @default(false)
+  createdById         String?
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("TenantPricingPolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, version])
+  @@index([tenantId, createdAt])
+  @@map("tenant_pricing_policies")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OTP DELIVERY (guest-claim)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Audit trail for guest-claim OTP sends. Per OTP design: never store
+/// the OTP preimage. Only records THAT we sent something via channel X
+/// at time T, with the on-chain claimCodeHash that was rotated to.
+/// providerMessageId lets us reconcile delivery webhooks later.
+model OtpDeliveryAttempt {
+  id                String   @id @default(cuid())
+  tenantId          String
+  /// Off-chain Trip.id (cuid). Cross-references onchainTripId for the
+  /// on-chain hex32 form because event observers see the latter first.
+  tripId            String
+  /// On-chain bytes32 trip id, hex-encoded (`0x…`).
+  onchainTripId     String
+  /// 'whatsapp' | 'email' | 'sms'.
+  channel           String
+  sentAt            DateTime @default(now()) @db.Timestamptz(6)
+  /// 'sent' | 'delivered' | 'failed' | 'rate_limited'.
+  deliveryStatus    String
+  /// Provider-specific id (Resend message id, Twilio sid, Meta wamid).
+  /// Useful for receipt webhook reconciliation. Never PII.
+  providerMessageId String?
+  /// Non-PII reason — 'invalid_phone', 'no_verified_contact',
+  /// 'throttled', etc.
+  failureReason     String?
+  /// Hex32 of the new claim code hash written on-chain.
+  rotatedHash       String
+  /// Tx hash of the setClaimCodeHash call. Null until receipt lands.
+  rotatedTxHash     String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, sentAt])
+  @@index([tenantId, sentAt])
+  @@map("otp_delivery_attempts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY ALERTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Operator inbox for high-severity security events. Per OTP design:
+/// claim_lockout fans out to email + Slack + WhatsApp at < 60s and
+/// persists an alert here for the dashboard inbox. tenantId is
+/// nullable for the unknown-buyer case (lockout fired against an
+/// address we have no Tenant row for — still useful to log for ops
+/// triage).
+model SecurityAlert {
+  id             String    @id @default(cuid())
+  tenantId       String?
+  /// 'claim_lockout' | 'claim_lockout_unknown_buyer' | future kinds.
+  kind           String
+  /// 'low' | 'medium' | 'high' | 'critical'.
+  severity       String
+  /// Hex32 on-chain tripId for trip-related alerts; null for non-trip.
+  onchainTripId  String?
+  /// Free-form context — addresses, timestamps, deep-link URLs.
+  /// NEVER contains PII; the OTP design doc is explicit about this.
+  payload        Json
+  /// Operator acknowledgement state for the dashboard inbox.
+  acknowledgedAt DateTime? @db.Timestamptz(6)
+  acknowledgedBy String?
+  createdAt      DateTime  @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([kind, severity, createdAt])
+  @@map("security_alerts")
 }

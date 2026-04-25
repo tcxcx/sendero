@@ -19,7 +19,9 @@
       "@sendero/circle": ["../../packages/sendero-circle/src/index.ts"],
       "@sendero/circle/*": ["../../packages/sendero-circle/src/*"],
       "@sendero/arc": ["../../packages/sendero-arc/src/index.ts"],
-      "@sendero/arc/*": ["../../packages/sendero-arc/src/*"]
+      "@sendero/arc/*": ["../../packages/sendero-arc/src/*"],
+      "@sendero/billing": ["../../packages/billing/src/index.ts"],
+      "@sendero/billing/*": ["../../packages/billing/src/*"]
     }
   },
   "include": [

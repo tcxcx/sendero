@@ -270,6 +270,51 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     },
   });
 
+  // Markup v1 — sandbox-default policy seed (DX D1 + V3b).
+  //
+  // Insert a `TenantPricingPolicy v0` flagged `sandboxOnly=true` so a
+  // freshly-provisioned org can call `confirm_booking` from a sandbox
+  // API key WITHOUT first filling out the activation wizard. Production
+  // keys ignore sandboxOnly rows and require a tenant-set policy via
+  // POST /api/tenant/pricing-policy.
+  //
+  // Idempotent on `(tenantId, version=0)` unique constraint — re-runs
+  // (svix retries) are no-ops.
+  //
+  // Numbers are demo defaults for sandbox bookings only. Production
+  // tenants are NEVER auto-seeded; they pick their own per the plan's
+  // "no platform-anchored defaults" decision (Phase 1 user gate).
+  try {
+    await prisma.tenantPricingPolicy.upsert({
+      where: { tenantId_version: { tenantId: tenant.id, version: 0 } },
+      create: {
+        tenantId: tenant.id,
+        version: 0,
+        markupConfig: {
+          flight: { strategy: 'static', bps: 500 },
+          hotel: { strategy: 'static', bps: 1000 },
+          rail: { strategy: 'static', bps: 800 },
+          car: { strategy: 'static', bps: 1000 },
+          other: { strategy: 'static', bps: 1500 },
+        },
+        floorMicroUsdc: 1_000_000n, // $1
+        senderoTakeBehavior: 'add_to_customer',
+        activated: true,
+        sandboxOnly: true,
+      },
+      update: {}, // no-op on retry
+    });
+  } catch (err) {
+    // Non-fatal: the seed is for sandbox ergonomics. If it fails,
+    // production flow is unaffected; the tenant just sets up their
+    // policy via the wizard before sandbox testing.
+    console.warn('[webhooks/clerk] sandbox policy seed failed (non-fatal)', {
+      id,
+      tenantId: tenant.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Best-effort Duffel CustomerUserGroup creation on org provision.
   // Non-blocking; if Duffel is down the first booking path fills it in
   // via ensure_flight_customer. We log but don't fail the Clerk

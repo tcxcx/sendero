@@ -40,6 +40,28 @@ export type {
   ItinerarySegment,
 } from './trip-event-templates';
 
+// OTP cleartext + on-chain hash + channel selector for the
+// SenderoGuestEscrow guest-claim flow (v3.0.0+). See ./otp.ts.
+export { generateOtpPreimage, otpClaimCodeHash, selectOtpChannel } from './otp';
+export type {
+  DeliveryChannel,
+  GuestVerifiedContacts,
+  OtpDeliveryRequest,
+} from './otp';
+
+// Buyer-alert pipeline for ClaimLockoutTriggered events. See ./security-alerts.ts.
+export { handleClaimLockoutTriggered } from './security-alerts';
+export type {
+  AlertSenders,
+  AlertSendResult,
+  ClaimLockoutEvent,
+  HandleClaimLockoutResult,
+  SecurityAlertDeps,
+  SecurityAlertInput,
+  TenantNotificationContacts,
+  TenantRow,
+} from './security-alerts';
+
 export interface NotificationsConfig {
   /** Resend API key. Falls back to process.env.RESEND_API_KEY. */
   apiKey?: string;

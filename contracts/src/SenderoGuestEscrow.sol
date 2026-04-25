@@ -15,7 +15,7 @@ import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/ut
 import {IGuestEscrow} from "./interfaces/IGuestEscrow.sol";
 
 /// @title  SenderoGuestEscrow
-/// @custom:version 2.0.0
+/// @custom:version 3.0.0
 /// @notice Pre-funded guest-link travel escrow on Circle Arc.
 ///
 ///         Corporate buyer pre-funds USDC for a named guest. Guest claims
@@ -79,16 +79,51 @@ contract SenderoGuestEscrow is
     ///         pollution events at 1 USDC per log.
     uint256 public constant AGENT_FEE_MAX = 1_000_000;
 
+    /// @notice v3.0.0 — number of consecutive failed claim attempts
+    ///         before the trip locks for `CLAIM_LOCKOUT_DURATION`.
+    ///         Three strikes is the same threshold most consumer 2FA
+    ///         flows use (Stripe, Auth0). Below this an attacker would
+    ///         need ~10^19 / 3 ≈ 3.3 × 10^18 trips and 3 attempts each
+    ///         to brute the 64-bit OTP — economically infeasible.
+    uint8 public constant MAX_CLAIM_ATTEMPTS = 3;
+
+    /// @notice v3.0.0 — cooldown after `MAX_CLAIM_ATTEMPTS` consecutive
+    ///         failures. Long enough to deter scripted brute force,
+    ///         short enough that a guest who fat-fingered isn't locked
+    ///         out for the whole trip. Pairs with the off-chain alert
+    ///         flow that notifies the buyer to cancel + sweep.
+    uint64 public constant CLAIM_LOCKOUT_DURATION = 15 minutes;
+
     // ------------------------------------------------------------------
     // ERC-7201 namespaced storage
     // ------------------------------------------------------------------
 
     /// @custom:storage-location erc7201:sendero.storage.GuestEscrow
+    ///
+    /// Storage upgrade history:
+    ///   v2.0.0 — fields up to and including `bookings`.
+    ///   v3.0.0 — appended `failedClaimAttempts` + `claimLockoutUntil`
+    ///            for OTP brute-force protection. ERC-7201 + struct-tail
+    ///            append makes this upgrade-safe (see
+    ///            test_storage_append_legacyTripsHaveZeroLockoutState
+    ///            and the storage-layout regression gate).
     struct GuestEscrowStorage {
         IERC20                     usdc;      // Circle USDC on Arc
         address                    operator;  // Sendero backend signer
         mapping(bytes32 => Trip)    trips;
         mapping(bytes32 => Booking) bookings;
+        // ──── v3.0.0 additions — APPEND ONLY ────
+        /// @notice tripId → consecutive failed claim attempts since the
+        ///         last successful claim or lockout reset. Caps at
+        ///         MAX_CLAIM_ATTEMPTS, then resets to 0 when the lockout
+        ///         is set.
+        mapping(bytes32 => uint8)  failedClaimAttempts;
+        /// @notice tripId → unix ts when the trip becomes claimable
+        ///         again. Zero means "no lockout active." Set on the
+        ///         MAX_CLAIM_ATTEMPTS-th failed claim; consulted on
+        ///         every subsequent `claimTrip` call before any preimage
+        ///         hashing happens.
+        mapping(bytes32 => uint64) claimLockoutUntil;
     }
 
     /// @dev keccak256(abi.encode(uint256(keccak256("sendero.storage.GuestEscrow")) - 1)) & ~bytes32(uint256(0xff))
@@ -236,15 +271,58 @@ contract SenderoGuestEscrow is
         bytes calldata signature,
         bytes calldata claimCodePreimage
     ) external nonReentrant whenNotPaused {
-        Trip storage t = _getStorage().trips[tripId];
+        GuestEscrowStorage storage $ = _getStorage();
+        Trip storage t = $.trips[tripId];
         if (t.buyer == address(0))          revert TripNotFound();
         if (t.guestWallet != address(0))    revert AlreadyClaimed();
         if (t.cancelled)                    revert TripIsCancelled();
         if (block.timestamp >= t.expiresAt) revert TripExpired();
         if (guestWallet == address(0))      revert ZeroAddress();
 
+        // v3.0.0: lockout gate runs BEFORE any preimage hashing or
+        //         signature recovery. Even with the correct code, a
+        //         locked trip rejects all attempts until the cooldown
+        //         passes. This is the brute-force defense + the trigger
+        //         that off-chain alerts react to.
+        //
+        //         The lockout itself is a PRECONDITION revert — the
+        //         caller hasn't tried yet, so there's no per-attempt
+        //         state to persist; revert is the right signal.
+        if (block.timestamp < $.claimLockoutUntil[tripId]) revert ClaimLocked();
+
         if (t.claimCodeHash != bytes32(0)) {
-            if (keccak256(claimCodePreimage) != t.claimCodeHash) revert InvalidClaimCode();
+            if (keccak256(claimCodePreimage) != t.claimCodeHash) {
+                // v3.0.0: failed-attempt accounting + lockout trigger.
+                //
+                //         IMPORTANT: this branch must NOT revert. EVM
+                //         revert undoes both state changes (the counter
+                //         increment) and event emissions, which would
+                //         silently drop our brute-force defense.
+                //
+                //         Instead we emit + persist + return early.
+                //         The caller distinguishes success from failure
+                //         by reading the tx receipt:
+                //           • TripClaimed event       → success
+                //           • ClaimAttemptFailed      → wrong code, retry
+                //           • ClaimLockoutTriggered   → wrong code + you're now locked
+                //           • ClaimLocked revert      → you were already locked
+                //
+                //         The lockout fires deterministically at attempt
+                //         #MAX_CLAIM_ATTEMPTS. Counter resets on lockout
+                //         so the post-cooldown window has its own fresh
+                //         budget — no stacked-cooldown abuse.
+                uint8 nextCount = $.failedClaimAttempts[tripId] + 1;
+                if (nextCount >= MAX_CLAIM_ATTEMPTS) {
+                    uint64 lockedUntil = uint64(block.timestamp) + CLAIM_LOCKOUT_DURATION;
+                    $.claimLockoutUntil[tripId] = lockedUntil;
+                    $.failedClaimAttempts[tripId] = 0;
+                    emit ClaimLockoutTriggered(tripId, lockedUntil);
+                } else {
+                    $.failedClaimAttempts[tripId] = nextCount;
+                    emit ClaimAttemptFailed(tripId, nextCount);
+                }
+                return;
+            }
         }
 
         bytes32 hash = _claimHash(tripId, guestWallet);
@@ -252,7 +330,48 @@ contract SenderoGuestEscrow is
         if (signer != t.claimPubKey20) revert InvalidSignature();
 
         t.guestWallet = guestWallet;
+        // v3.0.0: a successful claim implicitly retires the failed-
+        //         attempt counter. The trip is single-claim
+        //         (AlreadyClaimed gate above), so no future caller can
+        //         exhaust the counter on a claimed trip — but resetting
+        //         here keeps the storage tidy for indexers.
+        if ($.failedClaimAttempts[tripId] != 0) {
+            $.failedClaimAttempts[tripId] = 0;
+        }
         emit TripClaimed(tripId, guestWallet);
+    }
+
+    /// @inheritdoc IGuestEscrow
+    /// @dev v3.0.0 — operator-only. Used by the off-chain resend flow
+    ///      when a guest requests a fresh OTP. The off-chain caller is
+    ///      responsible for rate-limiting resends (see the OTP design
+    ///      doc); the contract enforces only the safety properties:
+    ///        • trip must exist, be unclaimed, not cancelled, not expired
+    ///        • newCodeHash != bytes32(0) (would silently disable 2FA)
+    ///      The lockout (if any) is intentionally NOT cleared by rotation
+    ///      — that's the brute-force cooldown, separate from the rotation.
+    ///      The failed-attempt counter IS reset because a fresh OTP
+    ///      deserves a fresh budget (the legitimate guest entering the
+    ///      new code shouldn't inherit a near-lockout from the prior).
+    function setClaimCodeHash(bytes32 tripId, bytes32 newCodeHash)
+        external
+        onlyOperator
+        whenNotPaused
+    {
+        GuestEscrowStorage storage $ = _getStorage();
+        Trip storage t = $.trips[tripId];
+        if (t.buyer == address(0))          revert TripNotFound();
+        if (t.guestWallet != address(0))    revert AlreadyClaimed();
+        if (t.cancelled)                    revert TripIsCancelled();
+        if (block.timestamp >= t.expiresAt) revert TripExpired();
+        if (newCodeHash == bytes32(0))      revert ZeroValue();
+
+        bytes32 oldHash = t.claimCodeHash;
+        t.claimCodeHash = newCodeHash;
+        if ($.failedClaimAttempts[tripId] != 0) {
+            $.failedClaimAttempts[tripId] = 0;
+        }
+        emit ClaimCodeRotated(tripId, oldHash, newCodeHash);
     }
 
     function _claimHash(bytes32 tripId, address guestWallet) private view returns (bytes32) {
@@ -298,7 +417,11 @@ contract SenderoGuestEscrow is
             duffelOrderHash: bytes32(0),
             status:          STATUS_RESERVED,
             reservedAt:      uint64(block.timestamp),
-            committedAt:     0
+            committedAt:     0,
+            // v3.0.0: agency leg defaults to zero on reservation; written
+            //         by commitBookingV2 (and left zero by legacy commit).
+            agencyAmount:    0,
+            agencyAddress:   address(0)
         });
 
         emit BookingReserved(tripId, bookingId, upperBound);
@@ -343,8 +466,75 @@ contract SenderoGuestEscrow is
         b.itineraryCID  = itineraryCID;
         b.status        = STATUS_COMMITTED;
         b.committedAt   = uint64(block.timestamp);
+        // v3.0.0: legacy commits leave agency fields zero. settleBooking
+        //         branches on b.agencyAmount > 0, so legacy bookings settle
+        //         exactly as before.
 
         emit BookingCommitted(bookingId, vendorAmount, feeAmount, vendor, itineraryHash, itineraryCID, slack);
+    }
+
+    /// @inheritdoc IGuestEscrow
+    /// @dev Guest-only, three-recipient variant. Same auth model as
+    ///      `commitBooking` — compromised operator cannot commit on the
+    ///      guest's behalf. Persists the agency leg in the Booking struct
+    ///      so `settleBooking` can fan out atomically.
+    function commitBookingV2(
+        bytes32 bookingId,
+        uint256 vendorAmount,
+        uint256 feeAmount,
+        uint256 agencyAmount,
+        address vendor,
+        address agencyAddress,
+        bytes32 itineraryHash,
+        string calldata itineraryCID
+    ) external nonReentrant whenNotPaused {
+        GuestEscrowStorage storage $ = _getStorage();
+        Booking storage b = $.bookings[bookingId];
+
+        if (b.tripId == bytes32(0))      revert BookingBadStatus();
+        if (b.status != STATUS_RESERVED) revert BookingBadStatus();
+        if (vendor == address(0))        revert ZeroAddress();
+
+        // Defense-in-depth: if there is an agency leg, the agency address
+        // MUST be set. Without this the settle path would silently fall
+        // back to a 2-way split and the markup USDC would route to the
+        // operator instead of the tenant treasury — a real fund-loss bug.
+        if (agencyAmount > 0 && agencyAddress == address(0)) revert ZeroAddress();
+
+        uint256 actual = vendorAmount + feeAmount + agencyAmount;
+        if (actual == 0)        revert ZeroValue();
+        if (actual > b.amount)  revert AmountExceedsUpperBound();
+
+        Trip storage t = $.trips[b.tripId];
+        if (msg.sender != t.guestWallet) revert NotAuthorized();
+
+        uint256 slack = b.amount - actual;
+        if (slack > 0) {
+            t.reserved -= slack;
+            b.amount = actual;
+        }
+
+        b.actualAmount   = actual;
+        b.fee            = feeAmount;
+        b.vendor         = vendor;
+        b.itineraryHash  = itineraryHash;
+        b.itineraryCID   = itineraryCID;
+        b.status         = STATUS_COMMITTED;
+        b.committedAt    = uint64(block.timestamp);
+        b.agencyAmount   = agencyAmount;
+        b.agencyAddress  = agencyAddress;
+
+        emit BookingCommittedV2(
+            bookingId,
+            vendorAmount,
+            feeAmount,
+            agencyAmount,
+            vendor,
+            agencyAddress,
+            itineraryHash,
+            itineraryCID,
+            slack
+        );
     }
 
     /// @inheritdoc IGuestEscrow
@@ -363,6 +553,15 @@ contract SenderoGuestEscrow is
     }
 
     /// @inheritdoc IGuestEscrow
+    /// @dev v3.0.0 — branches on `b.agencyAmount`:
+    ///        • zero  → legacy 2-way split (vendor + operator), emits
+    ///                   `BookingSettled` for backward-compatible indexers.
+    ///        • non-zero → 3-way split (vendor + agency + operator), emits
+    ///                   `BookingSettledV2`. ONE atomic on-chain transaction.
+    ///
+    ///      Conservation invariant (both branches):
+    ///        sum_of_transfers_out == b.actualAmount
+    ///        b.actualAmount       == vendorAmount + agencyAmount + feeAmount
     function settleBooking(bytes32 bookingId)
         external
         nonReentrant
@@ -376,10 +575,14 @@ contract SenderoGuestEscrow is
         if (b.duffelOrderHash == bytes32(0))  revert BookingBadStatus();
 
         Trip storage t = $.trips[b.tripId];
-        uint256 vendorAmount = b.actualAmount - b.fee;
         uint256 settleAmount = b.actualAmount;
-        uint256 feeAmount = b.fee;
-        address vendor = b.vendor;
+        uint256 feeAmount    = b.fee;
+        uint256 agencyAmount = b.agencyAmount;
+        // vendorAmount is the residual of actualAmount after fee + agency.
+        // For legacy bookings agencyAmount == 0 so this equals (actual - fee).
+        uint256 vendorAmount = b.actualAmount - b.fee - agencyAmount;
+        address vendor       = b.vendor;
+        address agencyAddr   = b.agencyAddress;
 
         // Effects
         t.reserved -= settleAmount;
@@ -388,9 +591,19 @@ contract SenderoGuestEscrow is
 
         // Interactions
         $.usdc.safeTransfer(vendor, vendorAmount);
+        if (agencyAmount > 0) {
+            // commitBookingV2 enforced agencyAddress != 0 when agencyAmount > 0
+            // — but defensive belt-and-suspenders is cheap on a settle path.
+            if (agencyAddr == address(0)) revert ZeroAddress();
+            $.usdc.safeTransfer(agencyAddr, agencyAmount);
+        }
         if (feeAmount > 0) $.usdc.safeTransfer($.operator, feeAmount);
 
-        emit BookingSettled(bookingId, vendor, vendorAmount, feeAmount);
+        if (agencyAmount > 0) {
+            emit BookingSettledV2(bookingId, vendor, vendorAmount, agencyAddr, agencyAmount, feeAmount);
+        } else {
+            emit BookingSettled(bookingId, vendor, vendorAmount, feeAmount);
+        }
     }
 
     /// @inheritdoc IGuestEscrow
@@ -551,6 +764,6 @@ contract SenderoGuestEscrow is
 
     /// @notice Current implementation version string.
     function version() external pure returns (string memory) {
-        return "2.0.0";
+        return "3.0.0";
     }
 }

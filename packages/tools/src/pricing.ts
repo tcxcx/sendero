@@ -94,6 +94,13 @@ export const TOOL_PRICING: Record<string, string> = {
   // LLM, no external API (until Sherpa is wired). Priced minimal so
   // workflows can call it on every booking without budget pressure.
   check_travel_eligibility: '0.0005',
+
+  // Tenant pricing policy agent surface (E1 + E2).
+  // E1 = read-only metadata (one SELECT). E2 = privileged write that
+  // flips the activated row + runs treasury preflight; priced at the
+  // settlement-tier per-call rate ($1.00 micro) to mirror confirm_booking.
+  get_tenant_pricing_policy: '0.0005',
+  activate_tenant_pricing_policy: '1.00',
 };
 
 /** USDC has 6 decimals on every chain. */

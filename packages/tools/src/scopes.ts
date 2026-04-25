@@ -53,11 +53,16 @@ export function toolToScope(toolName: string): KeyScope {
   if (
     toolName === 'reserve_booking' ||
     toolName === 'commit_booking' ||
+    toolName === 'confirm_booking' ||
     toolName === 'prefund_trip' ||
     toolName === 'settle_booking' ||
     toolName === 'settle_split' ||
     toolName === 'guest_claim_link' ||
     toolName === 'confirm_flight' ||
+    // E2 — flipping the activated pricing policy row is an admin write
+    // that unlocks the entire settlement pipeline. Lives in the same
+    // 'settlement' scope so a leaked read-mostly key can't enable it.
+    toolName === 'activate_tenant_pricing_policy' ||
     toolName.includes('cancel') ||
     toolName.includes('order_change')
   ) {
@@ -120,6 +125,7 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   // Settlement — any USDC movement
   'reserve_booking',
   'commit_booking',
+  'confirm_booking',
   'settle_booking',
   'settle_split',
   'prefund_trip',

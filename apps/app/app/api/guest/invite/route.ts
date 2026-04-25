@@ -102,6 +102,21 @@ export async function POST(req: NextRequest) {
     onchainCalls?: Array<unknown>;
   };
 
+  // Stamp `linkChannel` so the OTP resend route can prefer a DIFFERENT
+  // medium for the resend (channel-routing 2FA — see
+  // `selectOtpChannel` in `@sendero/notifications/otp`). For this
+  // route the link is always emailed (Resend), so 'email' is the
+  // canonical value. WhatsApp / Slack-driven prefund flows stamp
+  // their own value via the same metadata key.
+  const linkChannel: 'whatsapp' | 'email' | 'sms' = 'email';
+
+  // Verified contacts the buyer attached to the trip. Phone is null
+  // here because /api/guest/invite is the email-only entry point;
+  // phone-bearing flows (WhatsApp wizard, dashboard form with phone
+  // field) populate `phone` directly. The OTP resend route prefers
+  // this column over the legacy `metadata.invite.guestEmail` shape.
+  const guestVerifiedContacts = { email: body.guestEmail };
+
   await prisma.trip.upsert({
     where: { id: safeResult.tripId },
     create: {
@@ -117,8 +132,14 @@ export async function POST(req: NextRequest) {
         tripSummary: body.tripSummary ?? null,
         source: 'buyer_ui_prefund',
       },
+      guestVerifiedContacts,
       metadata: {
         tripSummary: body.tripSummary ?? null,
+        // Stamped only when the notify call returned ok — failed sends
+        // shouldn't influence the resend channel selector. Falls back
+        // to 'email' on the read side for legacy rows so consumers
+        // never see undefined.
+        ...(safeResult.invite?.ok ? { linkChannel } : {}),
         invite: {
           guestEmail: body.guestEmail,
           guestName: body.guestName ?? null,
@@ -139,8 +160,10 @@ export async function POST(req: NextRequest) {
     update: {
       status: 'awaiting_approval',
       totalUsdc: safeResult.budgetUsdc,
+      guestVerifiedContacts,
       metadata: {
         tripSummary: body.tripSummary ?? null,
+        ...(safeResult.invite?.ok ? { linkChannel } : {}),
         invite: {
           guestEmail: body.guestEmail,
           guestName: body.guestName ?? null,

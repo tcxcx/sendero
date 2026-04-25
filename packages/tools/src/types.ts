@@ -22,6 +22,34 @@ export interface ToolContext {
     userId?: string;
     tenantId?: string;
   };
+  /**
+   * Caller identity derived server-side from the API key (or absent
+   * for in-app operator sessions). Tools that gate on scopes / key type
+   * read from here so the LLM can never spoof either value via the
+   * tool input. Populated by the dispatch route from
+   * `resolveTenantFromApiKey`.
+   *
+   * Tools that don't need these fields can ignore them. Tools that DO
+   * need them (e.g., `confirm_booking` for the markup override gate)
+   * should treat `ctx.caller` as the source of truth and fall back
+   * gracefully when absent (test fixtures, in-process callers, etc.).
+   */
+  caller?: {
+    scopes?: readonly string[];
+    /**
+     * The on-key type from the API key claims — `'sandbox'` for the
+     * auto-minted org sandbox key, `'production'` for user-minted keys.
+     * Distinct from `effectiveKeyType` because testnet-beta downgrades
+     * production keys to behave as sandbox at runtime.
+     */
+    keyType?: 'sandbox' | 'production';
+    /**
+     * Effective type after any testnet-beta downgrade. Use this for
+     * security gates (e.g., the markup override rejection); use
+     * `keyType` only for accounting / audit display.
+     */
+    effectiveKeyType?: 'sandbox' | 'production';
+  };
 }
 
 export interface ToolDef<I = any, O = any> {

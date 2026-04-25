@@ -1,0 +1,128 @@
+---
+title: Markup scopes — `tenant:pricing:override` acquisition + signing
+description: How to mint a production API key carrying the privileged `tenant:pricing:override` scope, sign the request, and pass `override.acknowledgedMicroUsdc` so a confirm above the tenant ceiling lands cleanly.
+---
+
+The tenant ceiling is a self-set spend guardrail — it stops a hallucinating agent from booking a $50,000 hotel at a 200% markup. Some flows legitimately need to exceed it: a Pro tenant paying for a customer's Black Card upgrade, a corporate desk overriding a strict default for VIP travel, an emergency trip on a strict policy.
+
+The `tenant:pricing:override` scope is the escape hatch. It is **never granted to sandbox keys**, signing is **always required** when it's present, and the `confirm_booking` tool requires the agent to acknowledge the exact micro-USDC amount it's bypassing — no wildcards.
+
+## Acquiring the scope
+
+The scope is a privileged extension on top of the standard scope set. Two acquisition paths:
+
+1. **Mint a new key with the override checkbox.** From `/dashboard/settings/api-keys`, an admin (Clerk org role = admin) can mint a key with the override scope checked. The Clerk webhook picks up the new key and stamps `tenant.metadata.apiKeyScopes[keyId]` server-side; the LLM never sees the scope grant on the response body.
+2. **Promote an existing key.** A tenant admin updates `tenant.metadata.apiKeyScopes[keyId]` to add `'tenant:pricing:override'` alongside the key's other scopes. This is the path used when a service account graduates from read-mostly to override-capable.
+
+**Sandbox keys never get the scope.** Sandbox keys default to `['*']` (all scopes) by convention — but the `confirm_booking` runtime gate checks `effectiveKeyType === 'sandbox'` BEFORE checking scopes and rejects unconditionally. Wildcard alone is not a sufficient gate. See [`runConfirmBooking` in `packages/tools/src/confirm-booking.ts`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/confirm-booking.ts).
+
+## Why signing is required
+
+Every privileged-scope call must carry an HMAC signature. The full signing recipe lives in the [edge security guide](../security#hmac-request-signing--privileged-tools-only); this page covers only the markup-specific concerns.
+
+The override is a privileged write — it bypasses a tenant guardrail. Bearer-only auth is insufficient because:
+
+- A leaked override-capable key would let an attacker drain budget at any markup the agency configured.
+- The signing requirement gives us per-request idempotency (via the nonce) and per-request replay protection (via the timestamp).
+- The signature ties the override amount to the exact request body, so a man-in-the-middle proxy can't swap `acknowledgedMicroUsdc` mid-flight.
+
+`requiresSignature(toolName)` returns `true` for every tool in `PRIVILEGED_TOOLS`, which includes `confirm_booking`. The dispatch route gates the call before any DB read happens.
+
+## The override input
+
+```ts
+override: {
+  reason: 'ceiling_acknowledged',          // literal — only allowed value in v1
+  acknowledgedMicroUsdc: '75000000',       // must EXACTLY match the computed markup
+}
+```
+
+Two protections built into the gate:
+
+1. **`acknowledgedMicroUsdc` must equal the computed markup.** A stale acknowledgement from a previous call cannot be replayed against a smaller booking. If they disagree, the tool throws `MARKUP_OVER_CEILING` (not a separate "stale ack" error — the gate treats it as if no override was passed).
+2. **`OVERRIDE_UNNECESSARY` blocks dead overrides.** If the markup fits within the ceiling, passing an override anyway throws. Forces explicit intent — no silent privileged-path runs.
+
+## End-to-end example — override at $75 markup on a $50 ceiling
+
+Tenant has set `ceilingMicroUsdc: 50_000_000` ($50). The agent needs to book a hotel with $75 markup. It holds a key carrying `['settlement', 'tenant:pricing:override']`.
+
+```ts
+import { createHash, createHmac } from 'node:crypto';
+
+const bearer = process.env.SENDERO_API_KEY!; // ak_live_… with override scope
+const body = JSON.stringify({
+  tenantId: 'tenant_…',          // pinned by the dispatch route to the key's tenant
+  tool: 'confirm_booking',
+  args: {
+    bookingId: '0x…',
+    costMicroUsdc: '1000000000',     // $1000 supplier rate
+    markupMicroUsdc: '75000000',     // $75 absolute markup
+    override: {
+      reason: 'ceiling_acknowledged',
+      acknowledgedMicroUsdc: '75000000',
+    },
+    itineraryHash: '0x…',
+    vendorAddress: '0x…',
+  },
+});
+
+const ts = Math.floor(Date.now() / 1000);
+const nonce = crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+
+const canonical = [
+  'v1',
+  String(ts),
+  nonce,
+  'POST',
+  '/api/agent/dispatch',
+  'confirm_booking',
+  `sha256:${createHash('sha256').update(body).digest('hex')}`,
+].join('\n');
+
+const hmacKey = createHash('sha256').update(bearer).digest();
+const sig = 'v1=' + createHmac('sha256', hmacKey).update(canonical).digest('hex');
+
+const res = await fetch('https://www.sendero.travel/api/agent/dispatch', {
+  method: 'POST',
+  headers: {
+    'authorization':   `Bearer ${bearer}`,
+    'content-type':    'application/json',
+    'x-sendero-ts':    String(ts),
+    'x-sendero-nonce': nonce,
+    'x-sendero-sig':   sig,
+  },
+  body,
+});
+
+const json = await res.json();
+// {
+//   ok: true,
+//   result: {
+//     breakdown: { markupMicroUsdc: '75000000', senderoTakeMicroUsdc: '...' },
+//     onchainCall: { to: '0x...', data: '0x...', value: '0' },
+//   },
+// }
+```
+
+The response carries the standard signed envelope:
+
+```
+x-sendero-trace-id:  trace_01HKX4A2BC…
+x-sendero-meter-id:  confirm_booking
+x-sendero-ts:        1714060801
+x-sendero-sig:       v1=<hex>
+```
+
+Verify it before treating the booking as paid. See [security#signed-response-envelopes--every-reply](../security#signed-response-envelopes--every-reply).
+
+## Failure modes
+
+| What you did | Error |
+| --- | --- |
+| Passed `override` from a sandbox key | `OVERRIDE_REQUIRES_SCOPE` |
+| Passed `override` without the scope on a production key | `OVERRIDE_REQUIRES_SCOPE` |
+| Passed `override` with the scope but no signature | `401 signature_required` (caught by the dispatch signing gate before the tool runs) |
+| Passed `override.acknowledgedMicroUsdc` that doesn't match the computed markup | `MARKUP_OVER_CEILING` (defense against replay) |
+| Passed `override` when markup is within ceiling | `OVERRIDE_UNNECESSARY` |
+
+Source: [`packages/tools/src/confirm-booking.ts`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/confirm-booking.ts) · [`packages/tools/src/scopes.ts`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/scopes.ts) · [`packages/auth/src/dispatch-auth.ts`](https://github.com/tcxcx/sendero/blob/main/packages/auth/src/dispatch-auth.ts)
