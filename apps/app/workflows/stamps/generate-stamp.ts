@@ -33,7 +33,19 @@ import { execMintExtend, execMintFirst } from './steps/exec-mint';
 import { persistStampMetadata } from './steps/persist-stamp-row';
 import { pinStampImageToIpfs, pinStampManifestToIpfs } from './steps/pin-to-ipfs';
 import { closeStampProgress, writeStampProgress } from './steps/stream-progress';
-import { uploadStampToBlob } from './steps/upload-to-blob';
+
+/**
+ * Pinata gateway URL the OG unfurler / dashboard reads. We use the
+ * public Pinata gateway by default (works for any unfurl bot) and let
+ * `PINATA_GATEWAY` override to a paid sub-domain when latency matters.
+ * Vercel Blob is intentionally NOT in this path — the Sendero Blob
+ * store is private (signed-URL only), and the OG unfurl path needs
+ * unauthenticated HTTPS. IPFS via Pinata gives us that for free.
+ */
+function pinataGatewayUrl(cid: string): string {
+  const host = process.env.PINATA_GATEWAY || 'gateway.pinata.cloud';
+  return `https://${host}/ipfs/${cid}`;
+}
 
 export const generateStamp = async (args: {
   kind: StampKind;
@@ -80,33 +92,27 @@ export const generateStamp = async (args: {
       caption,
     });
 
-    await writeStampProgress({ type: 'progress', step: 'upload-blob', status: 'in_progress' });
-    const blobUrl = await uploadStampToBlob({
-      imageDataUrl,
-      kind: ctx.kind,
-      primaryKey: ctx.primaryKey,
-    });
-    await writeStampProgress({
-      type: 'progress',
-      step: 'upload-blob',
-      status: 'completed',
-      blobUrl,
-    });
-
     await writeStampProgress({ type: 'progress', step: 'pin-image', status: 'in_progress' });
     const imageCid = await pinStampImageToIpfs(imageDataUrl);
+    const gatewayUrl = pinataGatewayUrl(imageCid);
     await writeStampProgress({
       type: 'progress',
       step: 'pin-image',
       status: 'completed',
       imageCid,
     });
+    await writeStampProgress({
+      type: 'progress',
+      step: 'gateway-url',
+      status: 'completed',
+      gatewayUrl,
+    });
 
     const manifest: StampManifest = {
       name: manifestNameForKind(ctx),
       description: caption,
       image: `ipfs://${imageCid}`,
-      image_blob: blobUrl,
+      image_https: gatewayUrl,
       external_url: `https://app.sendero.travel/stamps/${ctx.primaryKey}`,
       attributes: buildAttributes(ctx),
     };
@@ -129,7 +135,7 @@ export const generateStamp = async (args: {
       uri: ipfsUri,
       to: ctx.travelers[0].address,
       caption,
-      blobUrl,
+      blobUrl: gatewayUrl,
     });
 
     // Group passport (or any future multi-recipient kind): extend the
@@ -152,7 +158,7 @@ export const generateStamp = async (args: {
     // Persist the manifest CID + caption (mint_stamp wrote the row
     // with the on-chain URI placeholder during pending → minted; this
     // updates the off-chain mirror to match).
-    await persistStampMetadata({ ctx, blobUrl, manifestCid, caption });
+    await persistStampMetadata({ ctx, blobUrl: gatewayUrl, manifestCid, caption });
 
     return {
       kind: ctx.kind,
@@ -160,7 +166,7 @@ export const generateStamp = async (args: {
       tokenId: firstMint.tokenId,
       contract: firstMint.contract,
       txHash: firstMint.txHash,
-      blobUrl,
+      gatewayUrl,
       ipfsUri,
       caption,
     };

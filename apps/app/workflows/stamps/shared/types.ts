@@ -74,16 +74,18 @@ export interface StampContext {
 
 /**
  * ERC-1155 metadata schema (OpenSea-compatible) emitted to IPFS as
- * the manifest payload. Keep the `image_blob` non-standard tag so
- * the OG renderer can serve hot art without an IPFS round-trip.
+ * the manifest payload. The `image_https` non-standard tag mirrors
+ * the canonical IPFS pointer through the Pinata HTTPS gateway so
+ * unfurl bots (Slack, WhatsApp) and OG meta pickers can render the
+ * art without an IPFS-aware client.
  */
 export interface StampManifest {
   name: string;
   description: string;
   /** `ipfs://<imageCid>` — canonical, deterministic. */
   image: string;
-  /** Vercel Blob URL — hot path for OG previews + dashboard cards. */
-  image_blob: string;
+  /** Pinata gateway URL mirror — `https://<gateway>/ipfs/<imageCid>`. */
+  image_https: string;
   external_url: string;
   attributes: Array<{ trait_type: string; value: string | number }>;
 }
@@ -107,7 +109,12 @@ export type StampProgressEvent =
       status: 'in_progress' | 'completed';
       caption?: string;
     }
-  | { type: 'progress'; step: 'upload-blob'; status: 'in_progress' | 'completed'; blobUrl?: string }
+  | {
+      type: 'progress';
+      step: 'gateway-url';
+      status: 'in_progress' | 'completed';
+      gatewayUrl?: string;
+    }
   | { type: 'progress'; step: 'pin-image'; status: 'in_progress' | 'completed'; imageCid?: string }
   | {
       type: 'progress';
@@ -130,7 +137,9 @@ export interface StampWorkflowResult {
   tokenId: string;
   contract: string;
   txHash: string | null;
-  blobUrl: string;
+  /** Pinata HTTPS gateway URL — what the OG / dashboard renders. */
+  gatewayUrl: string;
+  /** `ipfs://<manifestCid>` — the on-chain tokenURI. */
   ipfsUri: string;
   caption: string;
 }
