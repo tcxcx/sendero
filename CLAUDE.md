@@ -60,6 +60,33 @@ Notes:
 - Arc testnet USDC reports `decimals: 18` but amount strings are human-readable (`"5"` = 5 USDC). Always normalize to 6-decimal micro-USDC on ingest. See `packages/sendero-circle/src/balance-sync.ts::toMicro`.
 - Zero address (`0x0…0`) means `organization.publicMetadata.arcWalletAddress` hasn't been stamped yet. The WalletDropdown renders a "Provisioning" state in that case and skips balance fetches.
 
+## SenderoStamps deployment runbook (Circle SCP, Arc-Testnet)
+
+Live contract: `0xcc0fa83535675a856d773cfbc71232c3d7b71a03` (proxy) → `0xCCf28A443e35F8bD982b8E8651bE9f6caFEd4672` (thirdweb TokenERC1155 impl). Deployed via Circle's pre-audited ERC-1155 template (`aea21da6-0aa2-4971-9a1a-5098842b1248`). Auto-routes through Circle Gas Station — gas paid in fiat by Sendero, not from treasury USDC.
+
+**Re-deploys + new envs MUST run all four scripts in order. Skipping the event-monitor + webhook steps means mints fire but the indexer never learns about them — empty `/dashboard/stamps`, no OG previews, no return-for-service loop.**
+
+```
+1. bun scripts/deploy-stamps-template.ts                    # POST template, get contractId
+2. CIRCLE_TX_ID=<id> bun scripts/check-stamps-deploy.ts --watch  # poll until COMPLETE
+3. CIRCLE_CONTRACT_ID=<id> bun scripts/get-stamps-contract.ts    # read proxy address
+4. SENDERO_STAMPS_ADDRESS=<addr> bun scripts/register-stamps-event-monitor.ts  # 4 monitors
+```
+
+After step 4: register the receiver URL in Circle Console once per env. Circle Event Monitors fire to **all** webhook URLs registered project-wide:
+
+| Env | Webhook URL to register in Circle Console → Webhooks → Add a webhook |
+|---|---|
+| Production | `https://<production-app-host>/api/webhooks/circle/events` |
+| Preview (optional) | branch-stable alias, e.g. `https://sendero-arc-web-git-<branch>-tcxcxs-projects.vercel.app/api/webhooks/circle/events` |
+| Development | ngrok URL from `bun webhooks:ngrok`: `https://<subdomain>.ngrok-free.app/api/webhooks/circle/events` |
+
+Distinct from the existing `/api/webhooks/circle` (wallet balance sync) — that one stays registered too.
+
+Env contract: `SENDERO_STAMPS_ADDRESS`, `SENDERO_STAMPS_CONTRACT_ID`, `SENDERO_STAMPS_DEPLOY_BLOCK`, `SENDERO_STAMPS_DEPLOY_TX` — write to `.env.local` (root + `apps/app`) AND push to Vercel Production + Preview + Development.
+
+ABI gotcha: thirdweb's `mintTo(address, uint256, string, uint256)` requires `tokenId == type(uint256).max` (auto-increment) OR an existing tokenId (`< nextTokenIdToMint`). Custom keccak tokenIds don't work — use sequential ids from the contract, idempotency from a Postgres `NftStamp` UNIQUE on `(kind, primaryKey)`.
+
 ## API keys
 
 Uses Clerk's native API keys (GA'd 2026-04-17). We don't mint/hash/revoke; Clerk does.
