@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Viewport } from 'next';
 import Script from 'next/script';
 
+import { senderoFontVars } from '@sendero/fonts';
 import {
   buildMetadata,
   organizationJsonLd,
@@ -10,8 +11,6 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
-import { GeistMono } from 'geist/font/mono';
-import { GeistSans } from 'geist/font/sans';
 import 'fumadocs-ui/style.css';
 
 import { DocsRootProvider } from '@/app/docs-root-provider';
@@ -84,11 +83,7 @@ const structuredData = [
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${GeistSans.variable} ${GeistMono.variable}`}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={senderoFontVars} suppressHydrationWarning>
       <head>
         {process.env.NODE_ENV === 'development' && (
           <Script

@@ -49,9 +49,17 @@
   --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --font-pixel: "Departure Mono", ui-monospace, monospace;
-  --font-sans: "Geist", ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* @sendero/fonts — variables wired through `senderoFontVars` className on
+     <html>. Geist is the canonical UI face; Fraunces drives editorial
+     headlines; IoskeleyMono is the Berkeley-Mono-alternative display mono.
+     The fallbacks below mean the CSS still works in Storybook / SSR
+     stylesheet-only contexts where the next/font className isn't applied. */
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: var(--font-display, "Fraunces"), ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono-x: var(--font-mono-x, "IoskeleyMono"), var(--font-mono);
+  --font-pixel: "Departure Mono", var(--font-mono-x);
 
   /* Sidebar palette — aligned to DESIGN.md: Parchment surfaces,
      Vermillion primary, warm editorial accents. Shadcn's default
