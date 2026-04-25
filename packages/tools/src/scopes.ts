@@ -58,7 +58,8 @@ export function toolToScope(toolName: string): KeyScope {
     toolName === 'settle_split' ||
     toolName === 'guest_claim_link' ||
     toolName === 'confirm_flight' ||
-    toolName.includes('cancel')
+    toolName.includes('cancel') ||
+    toolName.includes('order_change')
   ) {
     return 'settlement';
   }
@@ -115,6 +116,9 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   'cancel_booking',
   'cancel_order_quote',
   'confirm_cancel_order',
+  'confirm_order_change',
+  'request_order_change',
+  'select_order_change_offer',
   // Treasury — balance-changing ops
   'swap_tokens',
   'send_tokens',
