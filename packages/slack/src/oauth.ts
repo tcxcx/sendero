@@ -134,44 +134,22 @@ export async function exchangeCode(config: ExchangeCodeConfig): Promise<SlackIns
 }
 
 /**
- * Default bot scopes for Sendero's corporate travel flows AND the
- * agent-driven Slack tool surface (vercel/slack-tools, see
- * `./agent-tools`).
+ * Default bot scopes for Sendero's corporate travel flows.
  *
- * Scopes added for agent tools (alongside the original corporate-travel set):
- *   - `mpim:history`        — `slack_read_channel` / `slack_read_thread` in
- *                             group DMs (the AI SDK Slack tools support all
- *                             conversation surfaces, not just public channels).
- *   - `canvases:read`,
- *     `canvases:write`      — `slack_create_canvas`.
- *   - `channels:join`       — `slack_join_channel`.
- *
- * Scopes already covered by the corporate-travel defaults:
- *   - `chat:write`          — `slack_send_message`, `slack_schedule_message`,
- *                             `slack_delete_message` (delete also requires
- *                             that the bot authored the message).
- *   - `chat:write.public`   — post to non-member channels (`slack_send_message`).
- *   - `channels:history`,
- *     `groups:history`,
- *     `im:history`          — `slack_read_channel` / `slack_read_thread`.
- *   - `users:read`          — `slack_read_user_profile`.
- *
- * USER-token scopes (`search:read`, etc) are intentionally NOT requested.
- * The 4 `slack_search_*` tools that need an `xoxp-…` token are stripped
- * out of the agent registry inside `./agent-tools`. If we later want
- * search, add the matching `user_scope` query-string set to
- * `buildInstallUrl` and persist `authed_user.access_token` on
- * `SlackInstall.userToken`.
- *
- * NOTE on existing installs: scope additions require admins to re-authorize
- * the app from Slack workspace settings. Existing rows continue to work
- * for the scopes they originally granted; new tools (canvas / join /
- * group-DM history) will fail with `missing_scope` until the admin
- * re-consents. Surface a re-install banner in the dashboard for any
- * `SlackInstall.scope` that doesn't include the new strings.
+ * `users:read.email` is REQUIRED — it's how the Slack→Sendero user
+ * mapper (`apps/app/lib/slack-user-mapping.ts`) reads `profile.email`
+ * from `users.info` to bind the Slack member to the right Sendero User
+ * row. Without it, every Slack-driven agent turn would either fall
+ * back to the workspace admin (breaking per-user spend caps + audit
+ * trails) or auto-provision a placeholder User that can never claim
+ * itself by email match. Existing installs predating this change
+ * keep working — fallback path stamps the bot installer's User —
+ * but admins should re-install the Sendero app to grant the new scope
+ * if they want correct per-user attribution. Surface a banner in
+ * /dashboard/channels/slack when the install scope string lacks
+ * `users:read.email` (TODO: sibling agent — UI banner).
  */
 export const DEFAULT_BOT_SCOPES = [
-  // Original corporate-travel scopes
   'chat:write',
   'chat:write.public',
   'commands',
@@ -184,9 +162,4 @@ export const DEFAULT_BOT_SCOPES = [
   'users:read.email',
   'reactions:write',
   'files:read',
-  // Added for vercel/slack-tools agent surface
-  'mpim:history',
-  'channels:join',
-  'canvases:read',
-  'canvases:write',
 ];

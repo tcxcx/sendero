@@ -24,6 +24,7 @@ import {
 } from '@sendero/slack';
 import { runSlackAgentTurn } from '@/lib/slack-agent';
 import { makeCapStore, makeMeterStore, makeSessionStore, resolveSegment } from '@/lib/agent-stores';
+import { resolveSenderoUser } from '@/lib/slack-user-mapping';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -95,9 +96,34 @@ export async function POST(req: NextRequest) {
   const threadTs = (ev?.thread_ts as string | undefined) ?? (ev?.ts as string | undefined);
 
   // Defer the agent turn past the ack — Slack only needs `{ ok: true }`
-  // within 3s; the LLM call can take much longer on cold paths.
+  // within 3s; the LLM call can take much longer on cold paths. The Slack
+  // user → Sendero user resolve also runs inside `after()` because on
+  // cache miss it hits `slack.users.info` (slow path).
   after(async () => {
     try {
+      // Resolve the actual Slack user → Sendero User per webhook. Caches in
+      // SlackUserBinding so repeat messages from the same person don't keep
+      // hitting slack.users.info. Auto-provisions a Sendero User when the
+      // Slack user has no existing match (provisional row, can be claimed
+      // later via Clerk sign-up with the same email). When the inbound
+      // event has no `user.id` (system events, channel-renames, etc.) we
+      // fall back to the install admin's userId — there's no message author
+      // to resolve.
+      const resolvedSenderoUserId = userId
+        ? (
+            await resolveSenderoUser({
+              tenantId: install.tenantId,
+              slackTeamId: install.teamId,
+              slackUserId: userId,
+              botToken: install.botToken,
+              // meter_events.userId is FK'd to User.id — the resolver MUST
+              // return a non-null id even on total failure. authedUserId is
+              // the install admin's id, so it's a known-good User row.
+              fallbackUserId: install.authedUserId,
+            })
+          ).senderoUserId
+        : install.authedUserId;
+
       await runSlackAgentTurn({
         // Prisma's `routing: JsonValue` is structurally compatible with
         // SlackRoutingConfig | null at runtime; the agent's prompt-builder
@@ -108,10 +134,7 @@ export async function POST(req: NextRequest) {
         threadTs,
         channelId,
         userId,
-        // TODO(slack-user-mapping): resolve a Sendero user ID from the Slack
-        // userId. For now, use the install's authedUserId as a stand-in so
-        // turn telemetry attributes back to the workspace admin who installed.
-        senderoUserId: install.authedUserId,
+        senderoUserId: resolvedSenderoUserId,
         // Model intentionally omitted — slack-agent resolves via the
         // canonical Sendero policy: Gateway-first (Gemini-first cascade
         // google→anthropic→openai), direct-provider fallback on gateway
