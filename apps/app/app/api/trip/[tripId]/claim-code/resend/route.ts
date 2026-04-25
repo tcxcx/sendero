@@ -437,31 +437,31 @@ async function dispatchOtp(
     if (!accessToken || !phoneNumberId) {
       return { ok: false, failureReason: 'whatsapp_not_configured' };
     }
+    const {
+      WhatsAppClient,
+      SENDERO_TEMPLATES,
+      buildOtpComponents,
+      isOutsideSessionWindowError,
+    } = await import('@sendero/whatsapp');
+    const client = new WhatsAppClient({
+      phoneNumberId,
+      accessToken,
+      ...(apiBaseUrl ? { apiBaseUrl } : {}),
+    });
+    const recipient = to.replace(/[^\d+]/g, '');
+    // Free-form path — preferred inside Meta's 24-hour session window.
+    // Cheaper, instant, and lets us include the trip prefix + expiry
+    // copy that the AUTHENTICATION template can't carry.
+    const message = [
+      `*${subject}*`,
+      ``,
+      `Trip ${tripPrefix}:`,
+      ``,
+      `*${preimage}*`,
+      ``,
+      expiryNote,
+    ].join('\n');
     try {
-      // Free-form message — only valid inside Meta's 24-hour customer
-      // service window (an inbound message from the recipient within
-      // the past 24 hours). Outside that window Meta returns
-      // (#131047) and the caller must use a registered HSM template.
-      // TODO(track-G-whatsapp-template): register a `sendero_otp` HSM
-      // template (one body var = preimage) and prefer it over free-form
-      // for first-touch resends.
-      const { WhatsAppClient } = await import('@sendero/whatsapp');
-      const client = new WhatsAppClient({
-        phoneNumberId,
-        accessToken,
-        ...(apiBaseUrl ? { apiBaseUrl } : {}),
-      });
-      const recipient = to.replace(/[^\d+]/g, '');
-      // *bold* is the only WA format token that renders consistently.
-      const message = [
-        `*${subject}*`,
-        ``,
-        `Trip ${tripPrefix}:`,
-        ``,
-        `*${preimage}*`,
-        ``,
-        expiryNote,
-      ].join('\n');
       const result = await client.sendText(recipient, message);
       const wamid = (result as { messages?: Array<{ id?: string }> })?.messages?.[0]?.id;
       if (!wamid) {
@@ -469,13 +469,36 @@ async function dispatchOtp(
       }
       return { ok: true, providerMessageId: wamid };
     } catch (err) {
-      // Meta's error body is included in the thrown message — surfaces
-      // (#131047) outside the 24-hour window, which the operator
-      // console can use to escalate to template registration.
-      return {
-        ok: false,
-        failureReason: err instanceof Error ? err.message : String(err),
-      };
+      if (!isOutsideSessionWindowError(err)) {
+        return {
+          ok: false,
+          failureReason: err instanceof Error ? err.message : String(err),
+        };
+      }
+      // Outside the 24-hour window — fall back to `sendero_otp` HSM
+      // template. Meta auto-renders the body copy ("{{1}} is your
+      // verification code…") + COPY_CODE button. We lose the trip
+      // prefix + expiry note in the template body, but the AUTHENTICATION
+      // category gets a higher Meta approval rate + auto-fill on Android.
+      const tpl = SENDERO_TEMPLATES.OTP_RESEND;
+      try {
+        const result = await client.sendTemplate({
+          to: recipient,
+          templateName: tpl.name,
+          languageCode: tpl.defaultLocale,
+          components: buildOtpComponents(preimage),
+        });
+        const wamid = (result as { messages?: Array<{ id?: string }> })?.messages?.[0]?.id;
+        if (!wamid) {
+          return { ok: false, failureReason: 'whatsapp_template_no_message_id' };
+        }
+        return { ok: true, providerMessageId: wamid };
+      } catch (tplErr) {
+        // (#132000) here means `sendero_otp` isn't approved yet —
+        // ops needs to chase the WABA template review.
+        const detail = tplErr instanceof Error ? tplErr.message : String(tplErr);
+        return { ok: false, failureReason: `whatsapp_template_fallback:${detail}` };
+      }
     }
   }
 
