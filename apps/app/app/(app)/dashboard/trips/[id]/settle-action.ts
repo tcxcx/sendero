@@ -169,6 +169,17 @@ export async function settleHoldAction(args: {
   revalidatePath(`/dashboard/trips/${args.tripId}`);
   revalidatePath(`/dashboard/inbox/${args.tripId}`);
 
+  // Fire the bidirectional rate_counterparty workflow on a successful
+  // settle. Fire-and-forget — the workflow has its own 72h SLA + WDK
+  // checkpointing; if the start call fails, the operator can replay
+  // from the dashboard. Throws are swallowed because the user-visible
+  // settle outcome should not be poisoned by reputation infra hiccups.
+  if (result.kind === 'executed') {
+    triggerRateCounterparty(booking.id).catch(err => {
+      console.warn('[settle-action] rate_counterparty trigger failed (non-fatal)', err);
+    });
+  }
+
   switch (result.kind) {
     case 'executed':
       return {
@@ -195,5 +206,43 @@ export async function settleHoldAction(args: {
       return { kind: 'delegate_missing', attemptId: result.attemptId };
     case 'failed':
       return { kind: 'failed', attemptId: result.attemptId, message: result.message };
+  }
+}
+
+/**
+ * Server-side fire-and-forget kick of the rate_counterparty workflow
+ * via its own HTTP route. We hit the route (rather than calling
+ * `start(rateCounterparty, …)` directly) so the workflow runtime
+ * lives behind one boundary — easier to swap to a queue / replay
+ * surface later.
+ *
+ * The route uses AGENT_DISPATCH_SECRET / CRON_SECRET; we forward
+ * whichever is present. NEXT_PUBLIC_APP_URL must point at the same
+ * deployment so localhost↔prod don't get confused.
+ */
+async function triggerRateCounterparty(bookingId: string): Promise<void> {
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET;
+  if (!secret) {
+    console.warn(
+      '[settle-action] no AGENT_DISPATCH_SECRET / CRON_SECRET — skipping rate_counterparty trigger'
+    );
+    return;
+  }
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+  const url = `${base.replace(/\/$/, '')}/api/workflows/reputation/rate-counterparty`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${secret}`,
+    },
+    body: JSON.stringify({ bookingId }),
+    // 5s ceiling — workflow start should be sub-second; anything
+    // longer means a deeper problem worth surfacing.
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`rate_counterparty trigger ${res.status}: ${body.slice(0, 200)}`);
   }
 }

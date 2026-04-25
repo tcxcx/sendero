@@ -49,6 +49,7 @@ import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
+import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { prisma } from '@sendero/database';
 import { detectLocale, LOCALE_COOKIE_NAME } from '@sendero/locale';
@@ -229,6 +230,40 @@ export async function POST(req: NextRequest) {
   });
   if (verdict.kind !== 'pass') {
     return verdict.response;
+  }
+
+  // Reputation gate: per-tenant ReputationPolicy (commit 5) gates
+  // engagement with the inbound counterparty (the user, in the
+  // typical agency→user direction). Cache-only read, sub-50ms.
+  // Default enforcement='warn' surfaces violations without blocking.
+  // Service-account callers skip the gate (their userId is
+  // `svc:<keyId>` and has no on-chain identity).
+  if (!isServiceAccount) {
+    const gate = await reputationGate({
+      tenantId: body.tenantId,
+      counterpartyKind: 'user',
+      counterpartyUserId: body.userId,
+    });
+    if (gate.ok === false && gate.enforcement === 'block') {
+      return NextResponse.json(
+        {
+          error: 'reputation_policy_blocked',
+          message: gateDeclineMessage(gate),
+          violations: gate.violations,
+        },
+        { status: 403 }
+      );
+    }
+    if (gate.ok === 'unknown' && gate.enforcement === 'block' && gate.reason !== 'no_policy') {
+      return NextResponse.json(
+        {
+          error: 'reputation_policy_blocked',
+          message: gateDeclineMessage(gate),
+          reason: gate.reason,
+        },
+        { status: 403 }
+      );
+    }
   }
 
   const distinctId = hashDistinctId(body.userId);
