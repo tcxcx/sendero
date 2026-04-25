@@ -237,3 +237,59 @@ The Sendero tool surface ships as a single OpenAPI 3.1 doc generated from the ca
 - `llms.txt` advertises every surface: `packages/llms/src/catalog.ts → buildSenderoDocsLlms` surfaces OpenAPI URL, Scalar viewer, self-serve key path, per-page `.md` pattern.
 
 When you add a new tool, the OpenAPI doc + the MCP manifest + the docs sidebar all pick it up with no extra edits — the canonical registry is the single source of truth. Don't hand-maintain separate spec files.
+
+## Canonical channel-render layer
+
+`apps/app/lib/channel-render/` is the single source of truth for cross-channel message rendering. Every agent message — text, card, tool call, tool result, approval request, reasoning, sources — passes through the canonical `ChannelMessage` discriminated union before any surface paints it. One canonical input, four native outputs (operator web, Slack, WhatsApp, web traveler).
+
+- **Type**: `apps/app/lib/channel-render/types.ts` exports `ChannelMessage = text | card | tool_invocation | tool_result | approval_request | reasoning | sources`. `ChannelCta.kind` covers `approve / reject / cancel / confirm_change / select_offer / confirm_cancel / open_link / tool_invoke / reply`. `ChannelRenderer<T>` is `async` (Promise-returning) so renderers can mint OG image URLs via HMAC-signed tokens.
+- **Operator renderer (web)**: `operator.tsx` exhaustively switches on `kind` and emits AI Elements primitives (`Tool`, `Reasoning`, `MessageContent`) plus inline `CardBlock` / `ApprovalCard` / `SourcesBlock`. The compiler enforces switch completeness via the `exhaustive(_: never)` pattern.
+- **Per-channel renderers (server-only)**: `channels/slack.ts`, `channels/whatsapp.ts`, `channels/web.ts`. Each maps the canonical kind to its native shape (Slack Block Kit, WhatsApp Cloud API interactive, web bubble JSON). Operator-only kinds (`reasoning`, raw `tool_invocation`) return `null` from traveler-side channels by design.
+- **Barrel discipline**: `channel-render/index.ts` is **client-safe** — exports types + `renderForOperator` only. Per-channel renderers import `@sendero/slack` → `@slack/web-api` → `node:fs` and CANNOT be in the client bundle. Server code imports them directly: `import { renderForSlack } from '@/lib/channel-render/channels/slack'`. The `__tests__/bundle-leak.test.ts` static import-graph guard catches regressions.
+- **Tests**: `apps/app/lib/channel-render/__tests__/` — exhaustive operator coverage + Slack/WhatsApp/Web snapshot tests + the bundle-leak guard. Run via `bun test`.
+
+When adding a new ChannelMessage kind: extend the union in `types.ts`, add a case in `operator.tsx`'s switch, add a case in each `channels/*.ts` (return `null` if intentionally not relayed), update `__fixtures__/messages.ts`, write the snapshot tests. The compiler will refuse to build until all four switches handle the new kind.
+
+## Channel-send orchestrators
+
+Apps composes; packages don't import back. The dependency direction stays clean by routing through `apps/app/lib/channel-send/`:
+
+```
+apps caller
+  ├─ const rendered = await renderForSlack(channelMsg)      // canonical → native
+  └─ await sendBlocks({ client, channel, text, blocks })    // package primitive
+```
+
+- **Slack orchestrator**: `apps/app/lib/channel-send/slack.ts` — composes `renderForSlack` with `createSlackClient` + `sendBlocks` (both from `@sendero/slack/send`).
+- **WhatsApp orchestrator**: `apps/app/lib/channel-send/whatsapp.ts` — composes `renderForWhatsApp` with `WhatsAppClient.send` (added to `packages/whatsapp/src/client.ts` for this purpose).
+- **Public surface**: `apps/app/lib/channel-send/index.ts`.
+- **Returns** `{ sent: false, reason: 'kind-not-relayed-to-X' }` when the renderer returns `null`, plus surface-specific reasons for missing install fields (`'install-missing-phone-number-id'`, `'access-token-unavailable'`).
+- **Tests**: `apps/app/lib/channel-send/__tests__/` — mocked `@sendero/slack` + `@sendero/whatsapp` boundaries via `bun:test`'s `mock.module`.
+
+The package primitives (`sendBlocks`, `WhatsAppClient.send`) take **already-rendered native payloads** — they don't see `ChannelMessage`. That's how the apps/app → packages dependency direction is enforced by construction.
+
+## Operator agent chat surface
+
+`/dashboard/agent-chat` is the operator-facing AI Elements test bench. It exclusively renders messages through the canonical channel-render layer, so the operator preview shows what the traveler will receive on whatever channel they use.
+
+- **Page**: `apps/app/app/(app)/dashboard/agent-chat/page.tsx` (server) + `agent-chat-client.tsx` (client). Mounts `Conversation`, `Message`, `PromptInput` from `apps/app/components/ai-elements/` plus `Persona` (Rive halo variant) and the Sendero-custom `AgentPersona` (motion-driven brand mark) side-by-side in the chat header.
+- **Persona state mapping**: `useChat`'s `status` (`submitted | streaming | error | ready`) → `PersonaState` (`thinking | speaking | asleep | idle/listening`). When the agent starts streaming, both Personas animate.
+- **Backend**: `POST /api/agent/chat` — streaming sibling of `/api/agent/dispatch`. Three auth modes: API key, `AGENT_DISPATCH_SECRET`/`CRON_SECRET` shared secret, **OR Clerk session cookies** (operator-side use case). All three resolve `tenantId + userId` server-side and pass through the same `agent-auth` cap/meter/scope plumbing.
+- **Cap + meter behavior is identical** to dispatch via the shared `apps/app/lib/agent-auth.ts` helpers (`makeCapStore`, `makeMeterStore`, `resolveSegment`, `buildPlanOverrides`, `preflight`, `buildIdempotencyKey`). One `MeterEvent` per turn, idempotent on `turnId`. Sandbox keys still skip `NanopayBatch`.
+- **Model resolution**: `apps/app/lib/agent-models.ts::resolveDirectModel ?? resolveModel`. Streaming routes prefer **direct providers first** (Vertex when `GOOGLE_CLOUD_PROJECT` set → Gemini API → Anthropic → OpenAI) because in-band gateway errors arrive as data events and can't be caught for retry. Vertex direct is the canonical path; gateway is the fallback.
+- **Streaming protocol**: `streamText` → `result.toUIMessageStreamResponse()`. Client maps `UIMessage.parts` (text, reasoning, source-url, tool-*) to `ChannelMessage[]` via `uiMessageToChannelMessages` for `renderForOperator`.
+
+Don't touch `/dashboard/console` — it still ships `MetaInboxLive` and is the production operator surface. `/dashboard/agent-chat` is the next-gen test bench.
+
+## Satori share-image generator
+
+Single source of truth for cross-channel share images. When a tool's `share` payload has no explicit `imageUrl`, every channel falls back to the same Satori-generated card — Slack `image` block, WhatsApp `image+caption`, web `card.imageUrl`, and the email `<img>` at the top of the body.
+
+- **Generator route**: `apps/app/app/api/og/share/route.tsx` — Edge runtime `ImageResponse`, Satori-rendered. Public (in the `proxy.ts` `isPublicRoute` allowlist) so Slack/WhatsApp/email unfurl bots can fetch without auth. **HMAC token signature is the integrity gate, not Clerk auth.** Falls back to a generic Sendero card on any verify failure so unfurl bots never see 4xx.
+- **Card layout**: `apps/app/lib/og/share-card.tsx` — pure JSX-for-Satori. Brand palette matches `apps/app/app/stamps/[tokenId]/opengraph-image.tsx` (parchment + vermillion + midnight). Title scales by length; max 3 bullets; optional CTA pill; right-edge accent bar.
+- **URL builder**: `apps/app/lib/og/share-url.ts::buildShareImageUrl(share, baseUrl?)`. HMAC-SHA256 via Web Crypto + `INVOICE_SIGNING_SECRET` (re-uses the existing key — rotation cost is bounded by the SignedSharePayload TTL handling). Returns `null` when secret unset so dev falls through cleanly.
+- **Channel renderers** call `buildShareImageUrl(msg.share)` to fill `imageUrl` when not provided. Tools that already emit explicit `imageUrl` (e.g. `export_route_map`'s static-map URL) keep that; the OG generator only fills the gap.
+- **Email**: `packages/notifications/src/share-template.ts::renderFromShare(share)` is the canonical share-email template. `notifier().sendShareCard()` is the Resend wrapper. Embeds the OG image at 600×315 above the headline.
+- **Tests**: `apps/app/lib/og/__tests__/share-url.test.ts` — HMAC roundtrip, payload tamper, signature tamper, wrong-secret rejection, malformed token, secret-unset fail-soft, weak-secret rejection.
+
+The canonical `share` contract: any tool can return a `share` block on `tool_result` (`{ title, body, bullets, primaryCta, secondaryCtas, imageUrl? }`). That single shape renders as a Slack block kit card, a WhatsApp interactive message, an email body card, and a web card. **If a field matters to the UX, it lives in `share` — never hard-coded in one adapter.**
