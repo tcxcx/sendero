@@ -37,6 +37,11 @@ import { processDurableWebhook } from '@sendero/webhooks/inbound';
 import { gateCircleWebhook } from '@/lib/circle-webhook-verify';
 import { webhookEventStore } from '@/lib/webhook-events';
 
+import { handleIdentityEvent } from './handlers/identity';
+import { handleReputationEvent } from './handlers/reputation';
+import { handleValidationEvent } from './handlers/validation';
+import { classifyContract } from './topics';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -69,7 +74,10 @@ interface EventLogNotification {
 
 interface DispatchResult {
   matched: boolean;
-  kind?: 'minted' | 'transfer' | 'uri';
+  // String, not narrow enum: per-handler modules (identity, reputation,
+  // validation) emit their own kind labels; widening here keeps the
+  // dispatch return type uniform without leaking into the response body.
+  kind?: string;
   reason?: string;
 }
 
@@ -128,11 +136,22 @@ async function dispatchEventLog(log: EventLogNotification): Promise<DispatchResu
     return { matched: false, reason: 'missing_signature_or_address' };
   }
 
-  const expectedContract = process.env.SENDERO_STAMPS_ADDRESS?.toLowerCase();
-  if (expectedContract && contractAddress !== expectedContract) {
-    // Event from a different contract on the same Circle project.
-    // Other handlers (or none) own it; we 200 and move on.
-    return { matched: false, reason: 'other_contract' };
+  // Route by contract address: stamps stay in this file (legacy
+  // shape, in-line handlers below). Identity / reputation / validation
+  // contracts dispatch to per-module handlers under ./handlers/*.
+  const classification = classifyContract(contractAddress);
+  switch (classification.kind) {
+    case 'identity':
+      return handleIdentityEvent(log);
+    case 'reputation':
+      return handleReputationEvent(log);
+    case 'validation':
+      return handleValidationEvent(log);
+    case 'unknown':
+      return { matched: false, reason: 'other_contract' };
+    case 'stamps':
+      // fall through to the local stamp-event switch
+      break;
   }
 
   switch (sigHash) {
