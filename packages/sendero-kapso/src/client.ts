@@ -16,10 +16,8 @@
 
 import {
   CreateSetupLinkRequest,
-  CreateWebhookRequest,
   KapsoCustomer,
   KapsoSetupLink,
-  KapsoWebhookRegistration,
   KapsoWhatsAppPhoneNumber,
   SendTemplateRequest,
   SendTextRequest,
@@ -184,20 +182,20 @@ export class KapsoClient {
   }
 
   // ── Webhooks ──────────────────────────────────────────────────────
-  async registerWebhook(
-    input: Parameters<typeof CreateWebhookRequest.parse>[0]
-  ): Promise<KapsoWebhookRegistration> {
-    const body = CreateWebhookRequest.parse(input);
-    const raw = await this.request<unknown>('/webhooks', {
-      method: 'POST',
-      body: JSON.stringify({ webhook: body }),
-    });
-    return KapsoWebhookRegistration.parse(unwrap(raw, 'webhook'));
-  }
-
-  async deleteWebhook(webhookId: string): Promise<void> {
-    await this.request<unknown>(`/webhooks/${webhookId}`, { method: 'DELETE' });
-  }
+  //
+  // Project-scope webhooks (the kind Sendero needs for
+  // `whatsapp.phone_number.created`) are dashboard-only on Kapso —
+  // verified Apr 2026 against
+  // https://docs.kapso.ai/docs/platform/webhooks/overview. Register
+  // via the Kapso dashboard, paste the secret into KAPSO_WEBHOOK_SECRET,
+  // and use `bun scripts/register-kapso-webhook.ts` to print the steps.
+  //
+  // WhatsApp number-scoped webhooks DO have an API surface
+  // (POST /platform/v1/whatsapp/phone_numbers/:id/webhooks) — wire
+  // those here when we need per-number webhook control. We don't need
+  // them today: connection events come through the project-scope
+  // webhook, and inbound messages flow through Meta → Kapso proxy
+  // → /api/webhooks/whatsapp.
 
   // ── Outbound messages (Kapso's higher-level send helper) ──────────
   /**
