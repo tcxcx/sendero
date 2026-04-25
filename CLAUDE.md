@@ -116,6 +116,22 @@ Signed via `apps/app/lib/slack-oauth-state.ts`. Wire format is `<payload>.<signa
 - **Secret:** `SLACK_STATE_SECRET` env (preferred), falls back to `CLERK_SECRET_KEY`. Set the dedicated env in production.
 - **Never** hand-roll `base64(JSON(state))` anywhere else — it's the install-CSRF footgun.
 
+### Slack user mapping
+
+Slack-driven agent turns resolve `meter_events.userId` to the actual Slack
+member who triggered the message via `apps/app/lib/slack-user-mapping.ts`.
+Cached in the `SlackUserBinding` table by `(tenantId, teamId, slackUserId)`.
+On cache miss, calls `slack.users.info` (requires the `users:read.email`
+scope — added to `DEFAULT_BOT_SCOPES`), looks up the matching `User` row
+by email within the tenant, or auto-provisions a `User` with `source =
+'slack'` if no match. Provisional rows are claimed later when the same
+email signs in via Clerk.
+
+Never use `install.authedUserId` as a stand-in for the message author —
+that's the workspace admin who installed the bot, not the active user.
+The events route falls back to `authedUserId` only when the inbound
+event has no `user.id` (system events, channel-renames, etc.).
+
 ### Slack webhook routes (apps/app)
 
 All three Slack endpoints live on the Next.js app — Vercel Fluid Compute is the only runtime that can hit Prisma + Workflow DevKit. The CF Workers edge adapter was retired.

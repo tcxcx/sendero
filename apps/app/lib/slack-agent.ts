@@ -251,7 +251,9 @@ export async function runSlackAgentTurn(
     for (const candidate of retryModels) {
       try {
         // eslint-disable-next-line no-console
-        console.warn(`[slack.agent] gateway failed; retrying direct provider ${candidate.label}`);
+        console.warn(
+          `[slack.agent] gateway failed; retrying direct provider ${candidate.label}`
+        );
         retryResult = await runAgentTurn({
           input,
           model: candidate.model,

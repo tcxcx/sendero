@@ -134,6 +134,12 @@ async function handleApprovalAction(
   // Flip the booking status + persist the approver's decision. The
   // actual booking + settlement is async (Phase 3) — here we just
   // record the signal and swap the card.
+  //
+  // TODO(slack-user-mapping): resolve `payload.user.id` → Sendero User via
+  // `resolveSenderoUser()` so approval audit rows can reference the
+  // canonical Sendero userId alongside the Slack-side `approvedBy`. The
+  // Slack-side ID stays — it's load-bearing for `chat.update` attribution
+  // and for the `approverSlackUserId` field on workflow resume.
   await prisma.booking.update({
     where: { id: parsed.bookingId },
     data: {

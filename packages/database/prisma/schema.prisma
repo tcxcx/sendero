@@ -202,6 +202,19 @@ enum InvoiceStatus {
   void
 }
 
+/// How a User row originated.
+///   - native:   claimed via Clerk sign-up (clerkUserId is set).
+///   - slack:    auto-provisioned from a Slack message (clerkUserId may
+///               be null until the user signs up with the same email).
+///   - whatsapp: future — auto-provisioned from a WhatsApp message.
+///   - guest:    future — guest-link claim flow (escrow trips).
+enum UserSource {
+  native
+  slack
+  whatsapp
+  guest
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TENANCY
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,10 +263,10 @@ model Tenant {
   preferenceLogs      PreferenceLog[]
   channelIdentities   ChannelIdentity[]
   slackInstalls       SlackInstall[]
+  slackUserBindings   SlackUserBinding[]
   whatsappInstall     WhatsAppInstall?
   whatsappLinkTokens  WhatsAppLinkToken[]
   spendCaps           TenantSpendCap[]
-  transferPolicies    TransferPolicy[]
   nanopayBatches      NanopayBatch[]
   invoices            Invoice[]
   circleWallets       CircleWallet[]
@@ -274,36 +287,43 @@ model Tenant {
 
 /// Human user. Identified by Clerk; cached MSCA address is deterministic
 /// from the passkey (Circle Modular Wallets).
+///
+/// `clerkUserId` is nullable so we can auto-provision a User from a
+/// Slack / WhatsApp message before the human ever signs up via Clerk.
+/// When they do sign up with the same email, the Clerk webhook upserts
+/// the existing row and stamps `clerkUserId`. `source` records origin.
 model User {
-  id                   String    @id @default(cuid())
-  clerkUserId          String    @unique
-  email                String    @unique
+  id                   String     @id @default(cuid())
+  clerkUserId          String?    @unique
+  email                String     @unique
   displayName          String?
   imageUrl             String?
-  mscaAddress          String?   @unique // 0x…, nullable until first passkey link
+  mscaAddress          String?    @unique // 0x…, nullable until first passkey link
   phone                String?
   /// Duffel CustomerUser id (`icu_…`) — unlocks Travel Support Assistant.
-  duffelCustomerUserId String?   @unique
+  duffelCustomerUserId String?    @unique
+  /// Provenance of this row. See UserSource enum for values.
+  source               UserSource @default(native)
   /// Free-form user metadata (preferred language, locale, etc.).
   metadata             Json?
-  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
-  lastSeenAt           DateTime? @db.Timestamptz(6)
+  createdAt            DateTime   @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime   @updatedAt @db.Timestamptz(6)
+  lastSeenAt           DateTime?  @db.Timestamptz(6)
 
-  memberships        Membership[]
-  wallets            Wallet[]
-  travelerTrips      Trip[]              @relation("TripTraveler")
-  createdTrips       Trip[]              @relation("TripCreatedBy")
-  bookings           Booking[]           @relation("BookingCreatedBy")
-  suppliers          Supplier[]          @relation("SupplierCreatedBy")
-  meterEvents        MeterEvent[]
-  sessions           Session[]
-  channelIdentities  ChannelIdentity[]
-  whatsappLinkTokens WhatsAppLinkToken[]
-  airlineCredits     AirlineCredit[]
-  passportVaults     PassportVault[]
+  memberships         Membership[]
+  wallets             Wallet[]
+  travelerTrips       Trip[]               @relation("TripTraveler")
+  createdTrips        Trip[]               @relation("TripCreatedBy")
+  bookings            Booking[]            @relation("BookingCreatedBy")
+  suppliers           Supplier[]           @relation("SupplierCreatedBy")
+  meterEvents         MeterEvent[]
+  sessions            Session[]
+  channelIdentities   ChannelIdentity[]
+  whatsappLinkTokens  WhatsAppLinkToken[]
+  airlineCredits      AirlineCredit[]
+  passportVaults      PassportVault[]
   tripEligibilityRuns TripEligibilityRun[]
-  transferPolicies   TransferPolicy[]    @relation("TravelerPolicies")
+  slackUserBindings   SlackUserBinding[]
 
   @@index([createdAt])
   @@map("users")
@@ -861,9 +881,12 @@ model SlackInstall {
   installedAt         DateTime @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @db.Timestamptz(6)
   raw                 Json?
-  /// Channel routing config set in the Slack setup wizard:
+  /// Channel routing config from the Slack setup wizard:
   /// { defaultChannel, routes: [{ eventClass, channel, mode }] }.
-  /// Read by the channel-event dispatcher to decide where to post.
+  /// Read by the channel-event dispatcher + agent persona to decide where
+  /// to post each Sendero event class (trip events, settlements, cap
+  /// warnings, escalations, silent).
+  /// Backed by `migrations/20260424_slack_routing/migration.sql`.
   routing             Json?
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -871,6 +894,33 @@ model SlackInstall {
   @@unique([enterpriseId, teamId])
   @@index([tenantId])
   @@map("slack_installs")
+}
+
+/// Maps a Slack member to their Sendero User. Cached so we don't call
+/// `slack.users.info` on every webhook. One row per (tenantId, slackTeamId,
+/// slackUserId). Refreshed when the Slack user's email changes (rare).
+///
+/// Used by the Slack webhook routes (`apps/app/lib/slack-user-mapping.ts`)
+/// to resolve `meter_events.userId` to the Slack user who actually
+/// triggered the agent turn — instead of the workspace admin who
+/// installed the bot. Critical for per-user spend caps + analytics.
+model SlackUserBinding {
+  id            String   @id @default(cuid())
+  tenantId      String
+  slackTeamId   String // Slack workspace, e.g. T08X5JKLM
+  slackUserId   String // Slack member, e.g. U09H4WXZ7
+  senderoUserId String // links to User.id within this tenant
+  email         String? // last seen Slack email; informational
+  resolvedAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [senderoUserId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, slackTeamId, slackUserId])
+  @@index([tenantId])
+  @@index([senderoUserId])
+  @@map("slack_user_bindings")
 }
 
 /// Short-lived token bridging a web-signed-in user to a WhatsApp number.
@@ -905,32 +955,32 @@ model WhatsAppLinkToken {
 /// deferred list. Re-onboarding overwrites the row with a new
 /// `kapsoConnectionId`.
 model WhatsAppInstall {
-  id                  String   @id @default(uuid()) @db.Uuid
-  tenantId            String   @unique
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @unique
   /// Kapso's customer id (scoped to Sendero's Kapso project). Used for
   /// setup-link re-issue and health pings.
-  kapsoCustomerId     String   @unique
+  kapsoCustomerId     String    @unique
   /// Kapso's internal connection id for the WhatsApp number. Distinct
   /// from Meta's `phone_number_id` — Kapso exposes both.
-  kapsoConnectionId   String?  @unique
+  kapsoConnectionId   String?   @unique
   businessDisplayName String?
   /// Meta Graph API id — used for outbound sends + webhook routing.
-  phoneNumberId       String?  @unique
+  phoneNumberId       String?   @unique
   /// Meta WABA id — used when creating / submitting templates.
   businessAccountId   String?
   displayPhoneNumber  String?
   /// Per-install webhook secret, Kapso-issued on registration. Stored
   /// plaintext pending `@sendero/crypto` — see v1 deferred list.
   webhookSecret       String
-  status              String   @default("pending") // pending | active | disabled | error
+  status              String    @default("pending") // pending | active | disabled | error
   /// Last `status: error` cause, for ops surface debugging.
   lastErrorMessage    String?
   connectedByUserId   String?
   /// Last time the cron health ping succeeded.
   lastHealthyAt       DateTime? @db.Timestamptz(6)
   metadata            Json?
-  createdAt           DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -963,62 +1013,6 @@ model TenantSpendCap {
   @@unique([tenantId, period])
   @@index([tenantId])
   @@map("tenant_spend_caps")
-}
-
-/// Composable policy guard rows for `@sendero/transfer-policy`. One row =
-/// one guard. Compose multiple rows into a `PolicyChain` at runtime via
-/// `apps/app/lib/transfer-policy/load.ts::loadPolicyChain()`.
-///
-/// Polymorphic by design — `guardKind` discriminates the JSON `config`
-/// shape. Validation lives in the runtime adapter so a runaway migration
-/// can't break agent dispatch silently.
-///
-///   guardKind   config shape
-///   ─────────   ────────────────────────────────────────────────────────
-///   budget      { period: 'daily' | 'weekly' | 'monthly',
-///                 capMicroUsdc: string }   // bigint stored as string
-///   single_tx   { maxMicroUsdc: string }
-///   recipient   { mode: 'allow' | 'deny', addresses: string[] }
-///   rate_limit  { maxCount: number, windowMs: number }
-///   confirm     { triggerAtMicroUsdc?: string, reason?: string }
-///
-/// Scope tuple drives which subject the guard binds to:
-///   - tenant   → applies to every payment for tenantId.
-///   - traveler → applies only when ctx.travelerId matches.
-///   - tool     → applies only when ctx.toolName matches.
-///
-/// `priority ASC` is the chain order; lower runs first. Default 100 keeps
-/// the table mostly flat — operators only set priority when ordering
-/// matters (e.g. SingleTx before Budget so denial messages are accurate).
-model TransferPolicy {
-  id              String   @id @default(cuid())
-  tenantId        String
-  /// "tenant" | "traveler" | "tool"
-  scope           String
-  /// User.id when scope='traveler', else null.
-  travelerId      String?
-  /// Tool name when scope='tool', else null.
-  toolName        String?
-  /// "budget" | "single_tx" | "recipient" | "rate_limit" | "confirm"
-  guardKind       String
-  config          Json
-  /// Hard caps reject; soft caps annotate + fire `alertWebhookUrl`.
-  /// Only meaningful for budget / rate_limit guards.
-  hardCap         Boolean  @default(true)
-  alertWebhookUrl String?
-  enabled         Boolean  @default(true)
-  /// Lower runs first in the chain.
-  priority        Int      @default(100)
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
-
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  traveler User?  @relation("TravelerPolicies", fields: [travelerId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, scope, enabled])
-  @@index([tenantId, travelerId, enabled])
-  @@index([tenantId, toolName, enabled])
-  @@map("transfer_policies")
 }
 
 /// Generic webhook dedupe ledger. Every inbound webhook (Duffel, Slack,
@@ -1477,8 +1471,8 @@ model PassportVault {
   /// row so access logs remain joinable, but decrypt requests fail fast.
   revokedAt DateTime? @db.Timestamptz(6)
 
-  tenant     Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessLogs PassportVaultAccessLog[]
 
   @@unique([tenantId, userId, documentVariant])
@@ -1541,7 +1535,7 @@ model PassportVaultAccessLog {
 // replay.  We don't expose it to the LLM — the verdict alone is what
 // tools and workflows see.
 model TripEligibilityRun {
-  id         String @id @default(cuid())
+  id         String  @id @default(cuid())
   tenantId   String
   /// Optional — runs can be started for a draft trip not yet persisted
   /// (client-side dry-run on flight search).  Real trip FKs are set
@@ -1565,7 +1559,7 @@ model TripEligibilityRun {
   /// lets us re-run without walking the Trip graph.
   originIso3      String
   destinationIso3 String
-  departureDate   DateTime @db.Date
+  departureDate   DateTime  @db.Date
   returnDate      DateTime? @db.Date
   purpose         String    @default("business")
 
@@ -1586,9 +1580,9 @@ model TripEligibilityRun {
 
   requestedByActor String? // clerkUserId / svc:keyId / wf:id:step
 
-  requestedAt  DateTime  @default(now()) @db.Timestamptz(6)
-  startedAt    DateTime? @db.Timestamptz(6)
-  completedAt  DateTime? @db.Timestamptz(6)
+  requestedAt DateTime  @default(now()) @db.Timestamptz(6)
+  startedAt   DateTime? @db.Timestamptz(6)
+  completedAt DateTime? @db.Timestamptz(6)
 
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   traveler User   @relation(fields: [travelerId], references: [id], onDelete: Cascade)
@@ -1598,8 +1592,3 @@ model TripEligibilityRun {
   @@index([status, requestedAt])
   @@map("trip_eligibility_runs")
 }
-
-// Note: the legacy `workflow_runs` table from migration 20260424_workflow_runs
-// has been superseded by `Session.threadContext` for paused-workflow
-// persistence (see /api/workflows/{run,resume,list}). The table is left
-// in place as dead state; drop it in a future cleanup migration.
