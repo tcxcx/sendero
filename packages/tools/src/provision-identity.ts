@@ -97,11 +97,16 @@ export async function ensureOrgIdentity(args: {
 
   const treasury = await prisma.circleWallet.findFirst({
     where: { tenantId, kind: 'treasury', chain: 'ARC-TESTNET' },
-    select: { address: true },
+    select: { address: true, circleWalletId: true },
   });
   if (!treasury) {
     throw new Error(
       `Cannot mint org identity for tenant ${tenantId} — no treasury CircleWallet on ARC-TESTNET. Provision the wallet first via provisionTenantWallet.`
+    );
+  }
+  if (!treasury.circleWalletId) {
+    throw new Error(
+      `Cannot mint org identity for tenant ${tenantId} — treasury CircleWallet has no circleWalletId (UUID). Re-provision via the Clerk org webhook.`
     );
   }
 
@@ -113,6 +118,7 @@ export async function ensureOrgIdentity(args: {
     tenantId,
     userId: null,
     holderAddress,
+    walletUuid: treasury.circleWalletId,
     metadataUri,
     existingId: existing?.id ?? null,
   });
@@ -157,11 +163,16 @@ export async function ensureUserIdentity(args: {
 
   const wallet = await prisma.wallet.findFirst({
     where: { userId, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
-    select: { address: true },
+    select: { address: true, circleWalletId: true },
   });
   if (!wallet) {
     throw new Error(
       `Cannot mint user identity for user ${userId} — no DCW Wallet on ARC-TESTNET. Provision the wallet first via ensureTravelerWallet.`
+    );
+  }
+  if (!wallet.circleWalletId) {
+    throw new Error(
+      `Cannot mint user identity for user ${userId} — DCW Wallet has no circleWalletId (UUID). Re-run ensureTravelerWallet.`
     );
   }
 
@@ -173,6 +184,7 @@ export async function ensureUserIdentity(args: {
     tenantId: null,
     userId,
     holderAddress,
+    walletUuid: wallet.circleWalletId,
     metadataUri,
     existingId: existing?.id ?? null,
   });
@@ -190,6 +202,13 @@ async function mintAndPersist(args: {
   tenantId: string | null;
   userId: string | null;
   holderAddress: string;
+  /**
+   * Circle DCW wallet UUID (e.g. `4cbcd349-…`). Routed into Circle's
+   * `walletId` field on the contract execution. NOT the same as
+   * `holderAddress` — that's the on-chain 0x address that becomes the
+   * agent NFT owner.
+   */
+  walletUuid: string;
   metadataUri: string;
   existingId: string | null;
 }): Promise<ProvisionIdentityResult> {
@@ -224,7 +243,7 @@ async function mintAndPersist(args: {
   let result: { agentId: bigint; txHash: `0x${string}` };
   try {
     result = await registerAgent({
-      ownerWalletAddress: args.holderAddress,
+      ownerWalletAddress: args.walletUuid,
       ownerAddress: args.holderAddress as Address,
       metadataURI: args.metadataUri,
     });
