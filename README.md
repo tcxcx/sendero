@@ -162,6 +162,88 @@ Agents, workflow scratchpads, and log lines only ever see enum codes + non-PII `
 
 A new traveler signs in → dashboard shows the 10-second onboarding card → every flight search from that moment runs visa-aware, async via Sherpa in the background. **USA → CAN** business trip → verdict `ok` in under 400 ms, "visa-free" badge on the offer, one-tap book. **BRA → USA** 5-day business trip → verdict `warn` with `visa_required_not_on_file` + a Sherpa B2 eVisa `ancillary` hint → offer card sprouts *"Add B2 visa assistance — $185"*, tap adds it to the Arc-settled booking cart alongside the flight. WhatsApp a passport photo at any point → the agent refuses, logs the attempt, and replies *"passports go in the secure vault — here's a link"*. Upload, MRZ validates, vault encrypts. **Same rigor as on-chain escrow, applied to identity documents — and the same rigor applied to ancillary revenue.**
 
+### Living NFT stamps — Gemini generates trip art across the journey
+
+The same Gemini stack that reads documents (OCR above) also **paints them**. Every time a Sendero trip crosses a meaningful state boundary, a Vercel Workflow fires Gemini 2.5 Flash Image and a GPT-5-nano caption *in parallel*, pins both to IPFS, and mints an ERC-1155 stamp into the traveler's Developer Controlled Wallet on Arc-Testnet. By trip end the user owns a small **collectible passport** — every stamp is a moment in the journey, the art is generated specifically for that trip, and the OpenGraph payload makes Slack and WhatsApp render the art when the link is shared. **Proof-of-trip you can put in your pocket.**
+
+Pattern lifted directly from Vercel's [`birthday-card-generator`](https://github.com/vercel/workflow/tree/main/examples/birthday-card-generator) example — the *parallel art + text → durable upload → on-chain mint* shape generalizes beautifully from "card a friend can RSVP to" to "NFT a traveler keeps." Everything runs on Vercel Workflow DevKit; every step is `'use step'` so a transient Gemini 5xx, a Pinata timeout, or a redeploy doesn't burn tokens or re-mint on Arc.
+
+#### Four kind-specific entrypoints — one for each beat in the trip
+
+```
+apps/app/workflows/stamps/
+├── generate-boarding-pass.ts       ← BoardingPass
+├── generate-settlement-receipt.ts  ← SettlementReceipt
+├── generate-itinerary-map.ts       ← ItineraryMap
+└── generate-trip-passport.ts       ← TripPassport
+```
+
+**🛫 BoardingPass** — fires the moment `confirm_flight` lands a Duffel order. Gemini draws a **vintage 1960s jet-age boarding pass** on cream cardstock — perforated edge, route codes typeset like jet-age letterpress, carrier and cabin baked into the prompt. Caption is GPT-5-nano in journal-entry voice: *"Gate B22, flight booked — JFK to GRU, the long way home."* Mints to the traveler's DCW the second the supplier confirms.
+
+**🧾 SettlementReceipt** — fires on `settle_booking` after USDC moves on Arc. Gemini draws a **vintage railway-ticket receipt** with the actual amount stamped on it in the tenant's brand color, the Arc transaction hash baked into the punched cancellation marks. Caption is brisk, ledger-clerk voice: *"Paid in full, USDC 4,287.50 — booked, settled, ledger closed."* The art *is* the proof of payment.
+
+**🗺️ ItineraryMap** — fires on `book_flight` and refreshes as legs are added (the contract supports `setTokenURI` so the same NFT updates in place). Gemini draws a **WPA-poster travel map** — flowing route line, stylized landmasses in tenant-brand `oklch()`, compass rose top-right, brand cartouche bottom-right. As more legs land, the map redraws without minting a new token — your *single* itinerary stamp deepens through the trip.
+
+**📔 TripPassport** — fires on the **last** `settle_booking`, when the trip closes. Gemini draws a **two-page passport spread** with overlapping ink stamps for every tool the agent used during the trip — boarding passes, hotel chops, settlement receipts, itinerary map. The capstone NFT. For multi-traveler trips, the same class id is minted with `quantity = N` and distributed via the contract's group-mint extension — every traveler walks away with a copy of the same shared passport.
+
+#### The technical magic that makes it actually work
+
+```ts
+// apps/app/workflows/stamps/generate-stamp.ts — the shared engine
+'use workflow';
+
+const ctx = await loadStampContext({ kind, tripId, bookingId });
+
+// Parallel: Gemini paints, GPT-5-nano writes — saves ~2s per stamp.
+const [imageDataUrl, caption] = await Promise.all([
+  generateStampImage(imagePromptForKind(ctx)),    // 'use step'
+  generateStampCaption(captionPromptForKind(ctx)) // 'use step'
+]);
+
+// Hot path (Vercel Blob) AND cold path (IPFS via Pinata).
+const blobUrl    = await uploadStampToBlob(...);   // 'use step'
+const imageCid   = await pinStampImageToIpfs(...); // 'use step'
+const manifestCid = await pinStampManifestToIpfs({
+  ...manifest,
+  image:      `ipfs://${imageCid}`, // canonical
+  image_blob: blobUrl,              // hot OG / dashboard
+});
+
+// Mint via the existing mint_stamp x402 tool — idempotent on (kind, primaryKey).
+const { tokenId, txHash } = await execMintFirst({
+  ctx,
+  uri: `ipfs://${manifestCid}`,
+  to:  ctx.travelers[0].address,
+});
+```
+
+- **Parallel image + caption** — Gemini 2.5 Flash Image and GPT-5-nano hit the AI Gateway simultaneously. ~2 s saved per stamp.
+- **Two homes for the art** — the canonical URI on-chain is `ipfs://<manifestCid>`, but the manifest also carries `image_blob: <Vercel Blob URL>` so the OG unfurl renders in <100 ms instead of waiting on an IPFS gateway. Best of both worlds: decentralized truth, centralized speed.
+- **Idempotent everywhere** — Pinata is content-addressed (re-uploading identical bytes returns the same CID), the `mint_stamp` tool is `UNIQUE(kind, primaryKey)` in Postgres, the contract assigns sequential token ids. Re-run the workflow with the same `(tripId, bookingId)` → same CID, same row, same token id, no double-spend, no double-mint.
+- **WDK retries are surgical** — Gemini 5xx? Just that step retries. Pinata 502? Just that step. Mint reverts? Image + manifest already pinned, the workflow re-attempts mint without re-spending Gemini tokens.
+- **One on-chain tx, one URI, one event** — no placeholder URI, no second `setTokenURI` call, no extra event for indexers to special-case. Art-first, then mint.
+- **Live progress stream** — every `'use step'` writes a JSON event onto the WDK readable. The dashboard StampCard subscribes via [`/api/workflows/stamps/runs/[runId]/stream`](./apps/app/app/api/workflows/stamps/runs/%5BrunId%5D/stream/route.ts) and replaces a shimmering passport-cover skeleton in real time as each step completes.
+
+#### Why the OG unfurl is a feature, not an afterthought
+
+The public stamp page at [`/stamps/[tokenId]`](./apps/app/app/stamps/%5BtokenId%5D/page.tsx) lives outside the auth-gated `(app)` segment so Slackbot, WhatsApp, and X can fetch it without a session. `generateMetadata` returns `og:image` (the hot Vercel Blob URL — not IPFS, because unfurl bots have a ~3 s budget), `twitter:summary_large_image`, and `eth:nft:contract` / `eth:nft:token_id` / `eth:nft:chain` hints for NFT-aware bots. **Paste a stamp link in any chat → the art renders inline.** Recipients see the trip, click through, discover Sendero. The collectible *is* the marketing surface.
+
+#### The return-for-service loop
+
+Signed-in travelers see their full collection at [`/dashboard/stamps`](./apps/app/app/(app)/dashboard/stamps/page.tsx) — a 4-column responsive grid backed by [`NftStampOwnership`](./packages/database/prisma/schema.prisma). The Postgres table is populated by **Circle Event Monitors** (registered via [`scripts/register-stamps-event-monitor.ts`](./scripts/register-stamps-event-monitor.ts) — `TransferSingle` / `TransferBatch` / `TokensMinted` / `URI`) hitting [`/api/webhooks/circle/events`](./apps/app/app/api/webhooks/circle/events/route.ts), which means **no separate indexer to operate** — Circle's infra is the source of truth, our webhook is just a thin reducer. A future iteration adds *"re-book this route"* CTAs hovered off each stamp's `attributes` so the collection literally drives repeat travel — every stamp is a return-for-service hook.
+
+#### Why this stack, not another one
+
+- **Gemini 2.5 Flash Image** — handles the four distinct prompt aesthetics (boarding-pass, railway-receipt, WPA-poster, passport-spread) with one model. No prompt-juggling across providers.
+- **Vercel Workflow DevKit** — `'use workflow'` + `'use step'` is the cleanest way we've seen to express "one durable graph spanning Gemini, Pinata, Postgres, and an EVM RPC." Birthday-card-generator was the proof; we just generalized the shape.
+- **Pinata for IPFS** — content-addressed pinning makes retries free. JSON + image upload from the same SDK.
+- **Circle Smart Contract Platform** — pre-audited ERC-1155 template, automatic Gas Station sponsorship — the treasury wallet signs `mintTo(...)` and Circle bills Sendero in fiat. Travelers never see gas.
+- **Vercel Blob** — the hot path for OG previews + dashboard cards. IPFS is the canonical truth; Blob is the speed.
+
+**End-to-end, in numbers.** ~6 s wall-clock from the supplier confirming a flight to a minted NFT in the traveler's wallet. ~$0.0003 of Pinata storage per stamp. Zero gas to the user. Zero ops surface to maintain — Circle's Event Monitors keep our Postgres in sync without a Ponder node, an Etherscan subscription, or a cron job.
+
+> The pitch in one line: Gemini paints a vintage travel artifact for every meaningful moment of your trip, Vercel Workflows guarantees the pipeline is durable + idempotent, Circle handles the on-chain mint without gas friction, and the OG unfurl turns every stamp into a marketing surface that actually moves bookings. **NFT mania of 2020, redone in the age of agentic AI — but this time the artwork has a job.**
+
 ## Developer experience — the docs surface we wanted when we started
 
 Sherpa's docs set the B2B API bar: top-nav API access, Postman import, "Trips LLM Friendly" endpoint. We matched it and closed two gaps they don't — **self-service key issuance** (they gate behind a form; we Clerk-native it) and **per-page markdown exports** for every docs page (they have one LLM endpoint; we automate the pattern across the whole tree).
