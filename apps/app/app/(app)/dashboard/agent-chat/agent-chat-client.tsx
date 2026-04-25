@@ -7,17 +7,18 @@
  * also a valid `ChannelMessage` that other channel renderers will
  * emit faithfully on WhatsApp / Slack / web.
  *
- * Backend: POST /api/agent/dispatch (channel='web') with the operator
- * persona's tenant + user id. Returns text + tool trail; we synthesize
- * a `tool_invocation` + `tool_result` pair per trail entry plus the
- * agent's text reply.
- *
- * Streaming endpoint comes later. Today this renders the full reply
- * in one shot once the dispatch resolves — same UX shape the existing
- * /dashboard/console operator surface has today.
+ * Backend: streaming POST /api/agent/chat (channel='web') via the AI
+ * SDK v6 UI-message stream. We use `useChat` from `@ai-sdk/react`
+ * with `DefaultChatTransport`, then map each streaming `UIMessage`
+ * onto a fan-out of canonical `ChannelMessage` rows so the same
+ * operator render path keeps working. Tool invocations, results, and
+ * reasoning all surface token-by-token.
  */
 
-import { useCallback, useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
+
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport, type UIMessage, type UIMessagePart } from 'ai';
 
 import {
   Conversation,
@@ -36,87 +37,24 @@ import {
 
 import { renderForOperator, type ChannelMessage } from '@/lib/channel-render';
 
-interface DispatchTrailItem {
-  toolName: string;
-  ok: boolean;
-  latencyMs: number;
-  priceMicroUsdc: string;
-}
-
-interface DispatchResponse {
-  text?: string;
-  trail?: DispatchTrailItem[];
-  latencyMs?: number;
-  billed?: boolean;
-  error?: string;
-  message?: string;
-}
-
 interface Props {
   tenantId: string;
 }
 
 export function AgentChatClient({ tenantId }: Props) {
-  const [messages, setMessages] = useState<ChannelMessage[]>([]);
-  const [busy, setBusy] = useState(false);
   const [input, setInput] = useState('');
 
-  const submit = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed || busy) return;
-      setBusy(true);
-
-      const operatorMsg: ChannelMessage = {
-        kind: 'text',
-        id: `op-${Date.now()}`,
-        author: { role: 'operator', name: 'You' },
-        content: trimmed,
-        createdAt: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, operatorMsg]);
-      setInput('');
-
-      try {
-        const r = await fetch('/api/agent/dispatch', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            tenantId,
-            channel: 'web',
-            text: trimmed,
-          }),
-        });
-        const json = (await r.json()) as DispatchResponse;
-        if (!r.ok) {
-          const errMsg: ChannelMessage = {
-            kind: 'text',
-            id: `err-${Date.now()}`,
-            author: { role: 'system', name: 'Sendero AI' },
-            content: `Error: ${json.error ?? r.status} - ${json.message ?? 'unknown'}`,
-            createdAt: new Date().toISOString(),
-          };
-          setMessages(prev => [...prev, errMsg]);
-          return;
-        }
-
-        const synthesized = synthesizeFromDispatch(json);
-        setMessages(prev => [...prev, ...synthesized]);
-      } catch (err) {
-        const errMsg: ChannelMessage = {
-          kind: 'text',
-          id: `err-${Date.now()}`,
-          author: { role: 'system', name: 'Sendero AI' },
-          content: `Network error: ${err instanceof Error ? err.message : String(err)}`,
-          createdAt: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, errMsg]);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [busy, tenantId]
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/agent/chat',
+        body: { tenantId, channel: 'web' },
+      }),
+    [tenantId]
   );
+
+  const { messages, sendMessage, status } = useChat({ transport });
+  const busy = status === 'submitted' || status === 'streaming';
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
@@ -125,22 +63,15 @@ export function AgentChatClient({ tenantId }: Props) {
           {messages.length === 0 ? (
             <EmptyState />
           ) : (
-            messages.map(msg => (
-              <Message
-                key={msg.id}
-                from={
-                  msg.author.role === 'operator'
-                    ? 'user'
-                    : msg.author.role === 'agent'
-                      ? 'assistant'
-                      : msg.author.role === 'traveler'
-                        ? 'user'
-                        : 'system'
-                }
-              >
-                {renderForOperator(msg)}
-              </Message>
-            ))
+            messages.flatMap(uiMessage => {
+              const channelMessages = uiMessageToChannelMessages(uiMessage);
+              const role = mapRole(uiMessage.role);
+              return channelMessages.map(msg => (
+                <Message key={msg.id} from={role}>
+                  {renderForOperator(msg)}
+                </Message>
+              ));
+            })
           )}
         </ConversationContent>
         <ConversationScrollButton />
@@ -149,7 +80,10 @@ export function AgentChatClient({ tenantId }: Props) {
       <PromptInput
         onSubmit={(message, evt) => {
           evt.preventDefault();
-          void submit(message.text || input);
+          const text = (message.text || input).trim();
+          if (!text || busy) return;
+          void sendMessage({ text });
+          setInput('');
         }}
         className="border-t border-border"
       >
@@ -189,54 +123,201 @@ function EmptyState(): JSX.Element {
 }
 
 /**
- * Convert a single dispatch response into a sequence of canonical
- * channel messages: one tool_invocation + one tool_result per trail
- * entry, then the final text reply.
- *
- * Today the dispatch route doesn't return per-tool inputs/outputs in
- * the trail (privacy + payload size). When streaming dispatch lands,
- * those bodies populate the synthesized tool_result entries.
+ * Map AI SDK UIMessage roles to the AI Elements `<Message from>` enum.
+ * The renderer-side roles are a wider union (operator/traveler/system)
+ * because canonical ChannelMessages flow across channels; the AI
+ * Elements wrapper only cares about user / assistant / system bubbles.
  */
-function synthesizeFromDispatch(resp: DispatchResponse): ChannelMessage[] {
+function mapRole(role: UIMessage['role']): 'user' | 'assistant' | 'system' {
+  if (role === 'user') return 'user';
+  if (role === 'system') return 'system';
+  return 'assistant';
+}
+
+/**
+ * Fan a single AI SDK `UIMessage` out into the canonical
+ * `ChannelMessage[]` the operator renderer consumes. One UIMessage
+ * may carry many parts: a streaming text body, several tool calls
+ * each with their own state machine (`input-streaming` -> `input-
+ * available` -> `output-available` | `output-error`), reasoning
+ * blocks, and source citations. We emit one ChannelMessage per
+ * surface so renderForOperator can paint each part with the right
+ * AI Elements primitive (text bubble, Tool block, Reasoning, etc.).
+ *
+ * The mapping is one-way and stateless: the same UIMessage produces
+ * the same ChannelMessage[] each render. Streaming updates flow
+ * through because parts mutate in place inside useChat's state.
+ */
+export function uiMessageToChannelMessages(message: UIMessage): ChannelMessage[] {
+  const author =
+    message.role === 'user'
+      ? ({ role: 'operator', name: 'You' } as const)
+      : message.role === 'system'
+        ? ({ role: 'system', name: 'Sendero AI' } as const)
+        : ({ role: 'agent', name: 'Sendero AI' } as const);
+  const baseTime = new Date().toISOString();
   const out: ChannelMessage[] = [];
-  const now = Date.now();
-  const trail = resp.trail ?? [];
+  const parts = message.parts ?? [];
+  // Aggregate sources across the whole message into one canonical
+  // sources block so we don't fragment citations across the rendered
+  // bubbles when the model emits them interspersed.
+  const sources: Array<{ title: string; url: string; snippet?: string }> = [];
 
-  for (let i = 0; i < trail.length; i++) {
-    const t = trail[i];
-    if (!t) continue;
-    out.push({
-      kind: 'tool_invocation',
-      id: `inv-${now}-${i}`,
-      author: { role: 'agent', name: 'Sendero AI' },
-      toolName: t.toolName,
-      input: {},
-      status: t.ok ? 'done' : 'error',
-      errorMessage: t.ok ? undefined : 'tool returned not-ok',
-      latencyMs: t.latencyMs,
-      createdAt: new Date(now + i).toISOString(),
-    });
-    if (t.ok) {
+  parts.forEach((part, i) => {
+    const partId = `${message.id}-${i}`;
+    const t = part.type;
+    if (t === 'text') {
+      const text = (part as { text?: string }).text ?? '';
+      if (!text) return;
       out.push({
-        kind: 'tool_result',
-        id: `res-${now}-${i}`,
-        author: { role: 'agent', name: 'Sendero AI' },
-        toolName: t.toolName,
-        result: { ok: true, latencyMs: t.latencyMs },
-        createdAt: new Date(now + i).toISOString(),
+        kind: 'text',
+        id: partId,
+        author,
+        content: text,
+        createdAt: baseTime,
       });
+      return;
     }
-  }
+    if (t === 'reasoning') {
+      const text = (part as { text?: string }).text ?? '';
+      if (!text) return;
+      out.push({
+        kind: 'reasoning',
+        id: partId,
+        author,
+        content: text,
+        collapsedByDefault: true,
+        createdAt: baseTime,
+      });
+      return;
+    }
+    if (t === 'source-url') {
+      const url = (part as { url?: string }).url ?? '';
+      if (!url) return;
+      sources.push({
+        title: (part as { title?: string }).title ?? url,
+        url,
+      });
+      return;
+    }
+    if (t === 'source-document') {
+      sources.push({
+        title: (part as { title?: string }).title ?? 'Document',
+        url: (part as { url?: string }).url ?? '#',
+      });
+      return;
+    }
+    if (typeof t === 'string' && t.startsWith('tool-')) {
+      pushToolMessages({
+        out,
+        author,
+        baseTime,
+        partId,
+        toolName: t.slice('tool-'.length),
+        part,
+      });
+      return;
+    }
+    if (t === 'dynamic-tool') {
+      pushToolMessages({
+        out,
+        author,
+        baseTime,
+        partId,
+        toolName: (part as { toolName?: string }).toolName ?? 'tool',
+        part,
+      });
+      return;
+    }
+    // step-start / file / data-* parts are intentionally not surfaced
+    // through the canonical message shape today; operator renderer
+    // would have nothing meaningful to paint.
+  });
 
-  if (resp.text) {
+  if (sources.length > 0) {
     out.push({
-      kind: 'text',
-      id: `agent-${now}`,
-      author: { role: 'agent', name: 'Sendero AI' },
-      content: resp.text,
-      createdAt: new Date(now + trail.length).toISOString(),
+      kind: 'sources',
+      id: `${message.id}-sources`,
+      author,
+      items: sources,
+      createdAt: baseTime,
     });
   }
 
   return out;
+}
+
+/**
+ * Map a single tool UI part (typed `tool-<name>` or `dynamic-tool`)
+ * into the canonical invocation/result pair. State machine:
+ *   - input-streaming / input-available  -> tool_invocation only
+ *   - output-available                    -> invocation + result
+ *   - output-error                        -> invocation only, error
+ *   - approval-requested / -responded     -> invocation, treated as
+ *     pending so the operator sees the in-flight state.
+ */
+function pushToolMessages(args: {
+  out: ChannelMessage[];
+  author: ChannelMessage['author'];
+  baseTime: string;
+  partId: string;
+  toolName: string;
+  part: UIMessagePart<Record<string, unknown>, Record<string, never>> | unknown;
+}): void {
+  const { out, author, baseTime, partId, toolName } = args;
+  const part = args.part as {
+    state?: string;
+    input?: unknown;
+    output?: unknown;
+    errorText?: string;
+    toolCallId?: string;
+  };
+  const state = part.state ?? 'input-streaming';
+  const input = (part.input ?? {}) as Record<string, unknown>;
+
+  if (state === 'output-available') {
+    out.push({
+      kind: 'tool_invocation',
+      id: `${partId}-inv`,
+      author,
+      toolName,
+      input,
+      status: 'done',
+      createdAt: baseTime,
+    });
+    out.push({
+      kind: 'tool_result',
+      id: `${partId}-res`,
+      author,
+      toolName,
+      result: part.output ?? null,
+      createdAt: baseTime,
+    });
+    return;
+  }
+  if (state === 'output-error') {
+    out.push({
+      kind: 'tool_invocation',
+      id: `${partId}-inv`,
+      author,
+      toolName,
+      input,
+      status: 'error',
+      errorMessage: part.errorText ?? 'tool error',
+      createdAt: baseTime,
+    });
+    return;
+  }
+  // input-streaming, input-available, approval-requested,
+  // approval-responded, output-denied — all surface as a pending
+  // invocation so the operator sees activity until terminal state.
+  out.push({
+    kind: 'tool_invocation',
+    id: `${partId}-inv`,
+    author,
+    toolName,
+    input,
+    status: state === 'input-available' ? 'streaming' : 'pending',
+    createdAt: baseTime,
+  });
 }
