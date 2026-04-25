@@ -22,6 +22,13 @@ import {
 } from '@/components/ai-elements/tool';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning';
 import { MessageContent, MessageResponse } from '@/components/ai-elements/message';
+import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai-elements/sources';
+
+// `@/components/ai-elements/confirmation` and `@/components/ai-elements/task`
+// are dropped in alongside but not imported here yet. See the JSDoc on
+// ApprovalCard for the prop-shape mismatch that's blocking direct adoption
+// of Confirmation, and the `tool_invocation` case below for why Task is
+// held until the canonical shape exposes a multi-step orchestration kind.
 
 import type { ChannelMessage, ChannelCta } from './types';
 
@@ -53,6 +60,10 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
       );
 
     case 'tool_invocation':
+      // Renders single-call invocations via Tool. The AI Elements `Task`
+      // primitive is a richer fit when the agent surfaces a multi-step
+      // orchestration (e.g. plan + sub-tools); revisit when the canonical
+      // ChannelMessage union grows an orchestration kind.
       return (
         <Tool>
           <ToolHeader
@@ -125,9 +136,19 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
       );
 
     case 'sources':
+      if (msg.items.length === 0) {
+        return <MessageContent>{null}</MessageContent>;
+      }
       return (
         <MessageContent>
-          <SourcesBlock items={msg.items} />
+          <Sources>
+            <SourcesTrigger count={msg.items.length} />
+            <SourcesContent>
+              {msg.items.map(s => (
+                <Source key={s.url} href={s.url} title={s.title} />
+              ))}
+            </SourcesContent>
+          </Sources>
         </MessageContent>
       );
 
@@ -210,6 +231,14 @@ interface ApprovalCardProps {
   reviewUrl?: string;
 }
 
+/**
+ * Inline approval card. Kept distinct from the AI Elements Confirmation
+ * primitive: Confirmation expects a ToolUIPart-shaped `state` plus an
+ * `approval` object keyed by id, while ChannelMessageApprovalRequest
+ * carries traveler / route / amount / reason. Swap once the canonical
+ * shape exposes a confirmation kind that maps id + approved + reason
+ * directly.
+ */
 function ApprovalCard(props: ApprovalCardProps) {
   return (
     <div className="flex flex-col gap-2 rounded-md border border-[color:var(--accent-amber)] bg-card p-3">
@@ -241,43 +270,6 @@ function ApprovalCard(props: ApprovalCardProps) {
           </a>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-interface SourcesBlockProps {
-  items: Array<{ title: string; url: string; snippet?: string; faviconUrl?: string }>;
-}
-
-function SourcesBlock({ items }: SourcesBlockProps) {
-  if (items.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3">
-      <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-        Sources
-      </div>
-      <ul className="flex flex-col gap-1.5">
-        {items.map((s, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm">
-            {s.faviconUrl ? (
-              <img src={s.faviconUrl} alt="" className="mt-0.5 size-3 rounded-sm" />
-            ) : (
-              <span className="mt-1 size-1.5 rounded-full bg-muted-foreground" aria-hidden />
-            )}
-            <a
-              href={s.url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-foreground hover:text-[color:var(--ink)] hover:underline"
-            >
-              {s.title}
-            </a>
-            {s.snippet ? (
-              <span className="ml-1 text-xs text-muted-foreground">— {s.snippet}</span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
