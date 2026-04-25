@@ -24,6 +24,7 @@ const isPublicRoute = createRouteMatcher([
   '/g(.*)', // guest claim (self-auth via URL fragment)
   '/glass-debug',
   '/invoice/(.*)', // public invoice viewer (JWT-gated)
+  '/stamps/(.*)', // public NFT stamp viewer + OG unfurl target (Slack/WhatsApp)
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/sso-callback(.*)',
