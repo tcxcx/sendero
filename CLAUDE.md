@@ -116,6 +116,14 @@ Signed via `apps/app/lib/slack-oauth-state.ts`. Wire format is `<payload>.<signa
 - **Secret:** `SLACK_STATE_SECRET` env (preferred), falls back to `CLERK_SECRET_KEY`. Set the dedicated env in production.
 - **Never** hand-roll `base64(JSON(state))` anywhere else — it's the install-CSRF footgun.
 
+### Slack webhook routes (apps/app)
+
+All three Slack endpoints live on the Next.js app — Vercel Fluid Compute is the only runtime that can hit Prisma + Workflow DevKit. The CF Workers edge adapter was retired.
+
+- `apps/app/app/api/webhooks/slack/events/route.ts` — Events API (`event_callback`, `app_mention`, DMs, `url_verification`). Verifies HMAC + 5-min replay window, looks up the install via `(teamId, enterpriseId)`, re-validates the resolved row matches the envelope, then defers `runSlackAgentTurn()` from `@sendero/slack/agent` past the 3-second ack via `after()` from `next/server`. 401 on signature failure, 404 on unknown install (NOT 200 — surfaces onboarding misconfig).
+- `apps/app/app/api/webhooks/slack/interactions/route.ts` — Block Kit interactivity (`payload=…` form-urlencoded). Same verify + install-resolve hardening as events; the approval-card flow (`sendero_approval.{approve,reject}`) flips `Booking.status`, swaps the card via `chat.update`, and resumes any paused workflow run waiting on the booking. All handler work runs in `after()` so the Slack ack stays sub-second.
+- `apps/app/app/api/webhooks/slack/oauth-callback/route.ts` — OAuth v2 install callback (Enterprise Grid aware). Verifies signed state (`verifySlackState`), exchanges `code` via `@sendero/slack::exchangeCode`, upserts `SlackInstall` keyed on `(enterpriseId, teamId)`.
+
 ## Circle webhook gates
 
 `apps/app/app/api/webhooks/circle/route.ts` enforces three gates in order: signature (ECDSA SHA256 via Circle pubkey) → freshness (`timestamp` must fall in `[now − 10min, now + 5min]`) → dedup (via `processDurableWebhook` on `notificationId`).

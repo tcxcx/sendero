@@ -928,7 +928,6 @@ export function buildSenderoEdgeLlms(options: SurfaceOptions = {}): LlmsTxtConfi
           },
           { label: 'MCP', href: '/mcp', description: 'Primary Streamable HTTP MCP endpoint.' },
           { label: 'WhatsApp', href: '/whatsapp', description: 'Meta Cloud API webhook adapter.' },
-          { label: 'Slack', href: '/slack', description: 'Slack adapter surface.' },
           { label: 'Discord', href: '/discord', description: 'Discord interactions adapter.' },
           { label: 'Tools', href: '/tools', description: 'Paid tool adapter surface.' },
         ]),

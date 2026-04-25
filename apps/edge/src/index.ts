@@ -4,10 +4,13 @@
  *
  *   GET/POST  /mcp        — MCP JSON-RPC 2.0 for Claude Desktop / ChatGPT Apps / etc.
  *   POST      /whatsapp   — Meta Cloud API webhook for WhatsApp Business
- *   POST      /slack      — Slack slash-command / events webhook
  *   POST      /discord    — Discord interactions webhook
  *   GET       /           — health + surface manifest
  *   GET       /llms.txt   — mirrored for agents that discover edge directly
+ *
+ * Slack webhook handling moved to the Next.js app — Vercel Fluid Compute
+ * gives us full Node.js + Prisma + Workflow DevKit there. See
+ * `apps/app/app/api/webhooks/slack/{events,interactions,oauth-callback}`.
  *
  * Tool execution reuses `@sendero/tools`; agent discovery reuses
  * `@sendero/llms` so web and edge manifests stay aligned.
@@ -32,7 +35,6 @@ import { cors } from 'hono/cors';
 import { mountDiscord } from './adapters/discord';
 import { mountMcp } from './adapters/mcp';
 import { mountPaidTools } from './adapters/paid-tools';
-import { mountSlack } from './adapters/slack';
 import { mountWhatsApp } from './adapters/whatsapp';
 
 const app = new Hono();
@@ -40,14 +42,6 @@ const edgeOrigin =
   process.env.NEXT_PUBLIC_SENDERO_EDGE_URL ??
   process.env.SENDERO_EDGE_URL ??
   'https://edge.sendero.travel';
-
-/**
- * Worker boot timestamp — captured at module load. `uptime_ms` on the
- * health endpoint is the delta from this. Persists for the lifetime of
- * a single Worker isolate; eviction resets it (which is fine — the
- * health probe only cares that a fresh isolate boots and serves traffic).
- */
-const WORKER_BOOT_AT = Date.now();
 
 function surfaceOrigins() {
   return {
@@ -67,8 +61,6 @@ app.use(
       'Content-Type',
       'Authorization',
       'Mcp-Session-Id',
-      'X-Slack-Signature',
-      'X-Slack-Request-Timestamp',
       'X-Hub-Signature-256',
       'X-Signature-Ed25519',
       'X-Signature-Timestamp',
@@ -82,59 +74,12 @@ app.get('/', c =>
     name: '@sendero/edge',
     version: '0.1.0',
     description:
-      'Sendero multi-surface edge worker. MCP + WhatsApp + Slack + Discord from one tool registry.',
-    surfaces: ['/mcp', '/whatsapp', '/slack', '/discord', '/tools'],
+      'Sendero multi-surface edge worker. MCP + WhatsApp + Discord from one tool registry. Slack lives on apps/app.',
+    surfaces: ['/mcp', '/whatsapp', '/discord', '/tools'],
     toolCount: toolList.length,
     tools: toolList.map(t => t.name),
   })
 );
-
-/**
- * Health probe — public, unauthenticated. If this function executes,
- * the worker is alive by definition; we therefore always return `ok: true`
- * with a 200. The probe verifies (a) status code, (b) JSON shape, and
- * (c) latency against an external SLO — all from the caller's side.
- *
- * `version` reads `CF_VERSION_METADATA` (Cloudflare Workers binding) or
- * `WORKER_VERSION_ID` (manually exposed) and falls back to `'unknown'`.
- * `deployment` is `production` when `CF_ENV` / `WORKER_ENV` says so,
- * `preview` otherwise — preview-alias URLs deploy with workers_dev=true.
- */
-app.get('/health', c => {
-  const env = (c.env ?? {}) as Record<string, unknown>;
-  const versionRaw =
-    env.CF_VERSION_METADATA ??
-    env.WORKER_VERSION_ID ??
-    (globalThis as { WORKER_VERSION_ID?: string }).WORKER_VERSION_ID ??
-    process.env.CF_VERSION_METADATA ??
-    process.env.WORKER_VERSION_ID ??
-    'unknown';
-  // CF_VERSION_METADATA can be either a string SHA or a binding object
-  // ({ id, tag }). Normalize both.
-  let version = 'unknown';
-  if (typeof versionRaw === 'string' && versionRaw.length > 0) {
-    version = versionRaw;
-  } else if (versionRaw && typeof versionRaw === 'object') {
-    const obj = versionRaw as { id?: string; tag?: string };
-    version = obj.id ?? obj.tag ?? 'unknown';
-  }
-
-  const deploymentRaw =
-    env.CF_ENV ??
-    env.WORKER_ENV ??
-    process.env.CF_ENV ??
-    process.env.WORKER_ENV ??
-    process.env.NODE_ENV;
-  const deployment = deploymentRaw === 'production' ? 'production' : 'preview';
-
-  return c.json({
-    ok: true,
-    version,
-    uptime_ms: Date.now() - WORKER_BOOT_AT,
-    timestamp: new Date().toISOString(),
-    deployment,
-  });
-});
 
 app.get('/llms.txt', c => {
   c.header('Content-Type', 'text/plain; charset=utf-8');
@@ -157,9 +102,9 @@ app.get('/robots.txt', c => {
       buildRobots({
         siteUrl: edgeOrigin,
         allow: ['/', '/llms.txt', '/.well-known/llms.txt', '/mcp', '/tools'],
-        disallow: ['/whatsapp', '/slack', '/discord', '/api/webhooks/', '/admin/'],
+        disallow: ['/whatsapp', '/discord', '/api/webhooks/', '/admin/'],
         agentAllow: ['/', '/llms.txt', '/.well-known/llms.txt', '/mcp', '/tools'],
-        agentDisallow: ['/whatsapp', '/slack', '/discord', '/api/webhooks/', '/admin/'],
+        agentDisallow: ['/whatsapp', '/discord', '/api/webhooks/', '/admin/'],
       })
     )
   );
@@ -183,7 +128,6 @@ app.get('/sitemap.xml', c => {
 
 mountMcp(app);
 mountWhatsApp(app);
-mountSlack(app);
 mountDiscord(app);
 mountPaidTools(app);
 
@@ -194,6 +138,6 @@ mountPaidTools(app);
  * package which uses `@hono/node-server` compat under the hood.
  */
 // eslint-disable-next-line no-console
-console.log(`[sendero/edge] ready · surfaces: / · /mcp · /whatsapp · /slack · /discord · /tools`);
+console.log(`[sendero/edge] ready · surfaces: / · /mcp · /whatsapp · /discord · /tools`);
 
 export default app;

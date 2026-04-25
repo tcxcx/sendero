@@ -81,6 +81,7 @@
     "@sendero/whatsapp": "workspace:*",
     "@sendero/workflows": "workspace:*",
     "@slack/web-api": "^7.0.0",
+    "slack-tools": "^1.2.0",
     "@streamdown/cjk": "^1.0.3",
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
