@@ -25,7 +25,10 @@
  *      dispatch passes them to `runAgentTurn`.
  */
 
+import { auth } from '@clerk/nextjs/server';
 import { type NextRequest, NextResponse } from 'next/server';
+
+import { prisma } from '@sendero/database';
 
 import {
   buildSystemPrompt,
@@ -96,12 +99,41 @@ const BodySchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  // Auth: API key OR shared-secret. Same two-mode contract as
-  // /api/agent/dispatch.
+  // Three auth modes — API key, shared secret, or Clerk session. The
+  // first two mirror /api/agent/dispatch; the Clerk path exists so the
+  // operator's own browser (e.g. /dashboard/agent-chat) can call this
+  // streaming endpoint with just session cookies. Clerk-resolved tenant
+  // pins tenantId server-side, ignoring any body.tenantId.
   const apiKey = await resolveTenantFromApiKey(req);
+  let clerkSession: { userId: string; orgId: string; tenantId: string } | null = null;
   if (!apiKey) {
     const authError = authorizeDispatch(req);
-    if (authError) return authError;
+    if (authError) {
+      // Try Clerk session as a third auth path before rejecting.
+      const a = await auth();
+      if (!a.userId || !a.orgId) {
+        return authError;
+      }
+      const tenant = await prisma.tenant.findUnique({
+        where: { clerkOrgId: a.orgId },
+        select: { id: true },
+      });
+      if (!tenant) {
+        return NextResponse.json(
+          { error: 'tenant_not_found', message: 'Clerk org has no Sendero tenant.' },
+          { status: 404 }
+        );
+      }
+      const u = await prisma.user.findUnique({
+        where: { clerkUserId: a.userId },
+        select: { id: true },
+      });
+      clerkSession = {
+        userId: u?.id ?? a.userId,
+        orgId: a.orgId,
+        tenantId: tenant.id,
+      };
+    }
   }
 
   // Read body as text first so request-signature HMAC can hash the
@@ -139,9 +171,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Tenant + user resolution. API-key auth pins both; shared-secret
-  // path trusts body.tenantId + body.userId by design (internal
-  // channel webhooks).
+  // Tenant + user resolution. API-key auth pins both; Clerk session
+  // pins tenant via the active org and user via the Clerk user; shared-
+  // secret path trusts body.tenantId + body.userId (internal webhooks).
   let tenantId: string;
   let userId: string;
   if (apiKey) {
@@ -157,6 +189,9 @@ export async function POST(req: NextRequest) {
     }
     tenantId = apiKey.tenantId;
     userId = `svc:${apiKey.keyId}`;
+  } else if (clerkSession) {
+    tenantId = clerkSession.tenantId;
+    userId = clerkSession.userId;
   } else {
     if (!body.tenantId || !body.userId) {
       return NextResponse.json(
