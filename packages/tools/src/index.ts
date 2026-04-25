@@ -45,7 +45,11 @@ import {
   reserveBookingTool,
 } from './guest-escrow';
 import { quoteFxTool } from './quote-fx';
-import { rateAgentTool } from './rate-agent';
+import { giveFeedbackTool } from './give-feedback';
+import { readReputationTool } from './read-reputation';
+import { readValidationTool } from './read-validation';
+import { requestValidationTool } from './request-validation';
+import { submitValidationResponseTool } from './submit-validation-response';
 import { recommendRestaurantsTool } from './recommend-restaurants';
 import { restaurantRouteCardTool } from './restaurant-route-card';
 import { checkTravelEligibilityTool } from './check-travel-eligibility';
@@ -237,7 +241,12 @@ export const toolList: ToolDef[] = [
   settleSplitTool,
   checkPolicyTool,
   quoteFxTool,
-  rateAgentTool,
+  // ERC-8004 reputation + validation (replaces the in-memory rate_agent mock)
+  giveFeedbackTool,
+  readReputationTool,
+  requestValidationTool,
+  submitValidationResponseTool,
+  readValidationTool,
   // Guest escrow — prefund-then-share (Peanut-style)
   prefundTripTool,
   guestClaimLinkTool,
