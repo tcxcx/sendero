@@ -144,6 +144,117 @@ export async function registerAgent(params: {
   throw new Error(`No Transfer event to owner found in tx ${result.txHash}`);
 }
 
+// ─── SenderoStamps (ERC-1155 souvenirs via Circle SCP template) ─────────────
+
+/// Sentinel: thirdweb's TokenERC1155.mintTo accepts type(uint256).max as a
+/// "create new tokenId" signal — the contract auto-increments and emits the
+/// real assigned tokenId on the TokensMinted event. Any other value must
+/// be an existing tokenId (`< nextTokenIdToMint`) for "add quantity to
+/// existing class id" semantics (used for group TripPassport — N units to N
+/// distinct recipients of the same class id).
+export const STAMP_NEW_TOKEN_ID = (1n << 256n) - 1n;
+
+/**
+ * Topic0 of TokensMinted(address indexed mintedTo, uint256 indexed tokenIdMinted, string uri, uint256 quantityMinted).
+ * Used by mint_stamp to extract the assigned tokenId from the deployment
+ * tx receipt when the sentinel was passed.
+ */
+const TOKENS_MINTED_EVENT = {
+  type: 'event',
+  name: 'TokensMinted',
+  inputs: [
+    { indexed: true, name: 'mintedTo', type: 'address' },
+    { indexed: true, name: 'tokenIdMinted', type: 'uint256' },
+    { indexed: false, name: 'uri', type: 'string' },
+    { indexed: false, name: 'quantityMinted', type: 'uint256' },
+  ],
+} as const;
+
+/**
+ * Mint into the SenderoStamps ERC-1155 collection (Circle SCP template,
+ * thirdweb TokenERC1155 implementation). Treasury wallet signs; gas is
+ * sponsored by Circle Gas Station per the project policy.
+ *
+ *   - Pass `tokenId = STAMP_NEW_TOKEN_ID` for a fresh class id (the
+ *     contract auto-increments and the real id is parsed from the
+ *     TokensMinted event).
+ *   - Pass an existing `tokenId` to add `amount` units to that class
+ *     (used for group TripPassport — same passport id distributed to
+ *     multiple traveler DCWs via repeated mintTo calls).
+ *
+ * Returns `{ tokenId, txHash, txId }` where `tokenId` is the canonical
+ * class id (assigned or echoed back).
+ */
+export async function mintStamp(params: {
+  treasuryWalletId: string;
+  contractAddress: Address;
+  to: Address;
+  tokenId: bigint;
+  uri: string;
+  amount: bigint;
+}): Promise<{ tokenId: bigint; txHash: Hex; txId: string }> {
+  const result = await execContract({
+    walletAddress: params.treasuryWalletId,
+    contractAddress: params.contractAddress,
+    abiFunctionSignature: 'mintTo(address,uint256,string,uint256)',
+    abiParameters: [params.to, params.tokenId.toString(), params.uri, params.amount.toString()],
+    label: `mintStamp:${params.tokenId === STAMP_NEW_TOKEN_ID ? 'new' : params.tokenId.toString()}`,
+  });
+
+  // For "add quantity to existing tokenId", we already know the id —
+  // skip the receipt parse.
+  if (params.tokenId !== STAMP_NEW_TOKEN_ID) {
+    return { tokenId: params.tokenId, txHash: result.txHash, txId: result.txId };
+  }
+
+  // Sentinel mint — read the assigned tokenId off the TokensMinted event.
+  const publicClient = getArcClient();
+  const receipt = await publicClient.getTransactionReceipt({ hash: result.txHash });
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== params.contractAddress.toLowerCase()) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi: [TOKENS_MINTED_EVENT],
+        data: (log as any).data,
+        topics: (log as any).topics,
+      }) as any;
+      if (decoded.eventName === 'TokensMinted') {
+        const { mintedTo, tokenIdMinted } = decoded.args as {
+          mintedTo: Address;
+          tokenIdMinted: bigint;
+        };
+        if (mintedTo.toLowerCase() === params.to.toLowerCase()) {
+          return { tokenId: tokenIdMinted, txHash: result.txHash, txId: result.txId };
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  throw new Error(`mintStamp: no TokensMinted event found in tx ${result.txHash}`);
+}
+
+/**
+ * Update the tokenURI for an existing SenderoStamps class id. Used by
+ * the ItineraryMap kind as new flight legs are added — the same class
+ * id stays, the IPFS manifest CID changes.
+ */
+export async function refreshStampUri(params: {
+  treasuryWalletId: string;
+  contractAddress: Address;
+  tokenId: bigint;
+  newUri: string;
+}): Promise<{ txHash: Hex; txId: string }> {
+  const result = await execContract({
+    walletAddress: params.treasuryWalletId,
+    contractAddress: params.contractAddress,
+    abiFunctionSignature: 'setTokenURI(uint256,string)',
+    abiParameters: [params.tokenId.toString(), params.newUri],
+    label: `refreshStampUri:${params.tokenId.toString()}`,
+  });
+  return { txHash: result.txHash, txId: result.txId };
+}
+
 /**
  * Read agent identity from the registry + fetch metadata from URI.
  */
