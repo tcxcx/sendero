@@ -198,19 +198,25 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
     label: 'confirm_booking',
     href: 'https://docs.sendero.travel/docs/pricing/markup',
     description:
-      'Snapshot tenant pricing policy, compute three-leg breakdown (cost + agency markup + Sendero take), persist onto the Booking, and encode the on-chain commitBookingV2 userOp. Settlement scope. Optional `tenant:pricing:override` for ceiling escapes (signed). Per-call $0.003 + Sendero take metered as one MeterEvent.',
+      'Snapshot tenant pricing policy, compute three-leg breakdown (cost + agency markup + Sendero take), persist onto the Booking, and encode the on-chain commitBookingV2 userOp. Sendero take is metered alongside the per-call price as one MeterEvent.',
+    requiredScopes: ['settlement'],
+    optionalScopes: ['tenant:pricing:override'],
+    pricingMicroUsdc: 3_000,
   },
   {
     label: 'get_tenant_pricing_policy',
     href: 'https://docs.sendero.travel/docs/pricing/markup#activation',
     description:
-      'Read the active markup policy for the calling tenant. Returns status (active / inactive / partial / sandbox_seed / not_initialized), missing kinds, floor, ceiling, and the optional historical-median recommendation. No required scope (read-mostly). Per-call $0.0005.',
+      'Read the active markup policy for the calling tenant. Returns status (active / inactive / partial / sandbox_seed / not_initialized), missing kinds, floor, ceiling, and the optional historical-median recommendation.',
+    pricingMicroUsdc: 500,
   },
   {
     label: 'activate_tenant_pricing_policy',
     href: 'https://docs.sendero.travel/docs/pricing/markup#activation',
     description:
-      'Admin-only. Activate a new TenantPricingPolicy version (settlement scope, production keys only — sandboxes blocked). Runs treasury preflight before flipping `activated=true`. Per-call $1.00 (admin-priced — same tier as confirm_booking).',
+      'Admin-only. Activate a new TenantPricingPolicy version (production keys only — sandboxes blocked). Runs treasury preflight before flipping `activated=true`.',
+    requiredScopes: ['settlement'],
+    pricingMicroUsdc: 1_000_000,
   },
   {
     label: 'settle_booking',

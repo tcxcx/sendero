@@ -59,7 +59,19 @@ export interface AlertSendResult {
  */
 export interface AlertSenders {
   sendSecurityAlertEmail(to: string, subject: string, body: string): Promise<AlertSendResult>;
+  /**
+   * Send a Slack alert. `tenantId` is REQUIRED so the production
+   * implementation can look up the tenant's installed bot token via
+   * `prisma.slackInstall.findFirst({ tenantId })`. Single-tenant /
+   * dev environments fall through to env-level `SLACK_BOT_TOKEN`.
+   *
+   * Per-tenant routing matters because alert channels live in the
+   * tenant's own Slack workspace; the env bot is only installed in
+   * Sendero's own workspace and would silently no-op on a customer
+   * channel id (channel_not_found from the API).
+   */
   sendSecurityAlertSlack(
+    tenantId: string,
     channelId: string,
     subject: string,
     body: string
@@ -218,7 +230,7 @@ export async function handleClaimLockoutTriggered(
   if (meta.notificationSlackChannelId) {
     sends.push(
       deps.senders
-        .sendSecurityAlertSlack(meta.notificationSlackChannelId, subject, body)
+        .sendSecurityAlertSlack(tenant.id, meta.notificationSlackChannelId, subject, body)
         .then(r => ({
           channel: 'slack' as const,
           ok: r.ok,
