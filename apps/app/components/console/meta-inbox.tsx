@@ -28,6 +28,7 @@ import Link from 'next/link';
 import { asChannelKey, CHANNELS, type ChannelKey } from './channels';
 import { ChannelHeader } from './channel-header';
 import { ConsoleComposer } from './composer';
+import { Crumb } from './crumb';
 import { TripRail, type TripRowData } from './trip-rail';
 
 export interface ConversationEntry {
@@ -57,6 +58,10 @@ interface MetaInboxProps {
   } | null;
   /** Hold-expires countdown ("59:48") when status === 'awaiting hold'. */
   holdExpires?: string | null;
+  /** Composer submit handler. When omitted, the composer is read-only. */
+  onSubmit?: (text: string) => void | Promise<void>;
+  /** When true, the composer is disabled (turn in flight). */
+  disabled?: boolean;
 }
 
 export function MetaInbox({
@@ -65,6 +70,8 @@ export function MetaInbox({
   conversation,
   traveler,
   holdExpires,
+  onSubmit,
+  disabled,
 }: MetaInboxProps) {
   const [customerPanelOpen, setCustomerPanelOpen] = useState(true);
   const [nanopayOpen, setNanopayOpen] = useState(false);
@@ -76,9 +83,9 @@ export function MetaInbox({
   const channelKey: ChannelKey = isTrip ? asChannelKey(focused?.channel) : 'internal';
   const channel = CHANNELS[channelKey];
 
-  // Column template adapts to which side panels are open.
+  // Column template adapts to which side panel is open.
   const baseCols = isTrip ? '260px 1fr' : '320px 1fr';
-  const cols = baseCols + (customerPanelOpen ? ' 320px' : '') + (nanopayOpen ? ' 340px' : '');
+  const cols = baseCols + (customerPanelOpen ? ' 320px' : '');
 
   return (
     <div
@@ -304,9 +311,8 @@ export function MetaInbox({
                   ? ['Hold confirmed', 'Need traveler approval', 'Send invoice']
                   : ['/spend last 30d', '/policy mei', '@trp-3392 status']
               }
-              onSubmit={async () => {
-                /* Wire to /api/inbox/[tripId]/reply (scoped) or /api/chat (internal). */
-              }}
+              disabled={disabled || !onSubmit}
+              onSubmit={onSubmit ?? (() => {})}
             />
           </div>
 
@@ -347,103 +353,80 @@ export function MetaInbox({
               )}
             </div>
           ) : null}
-
-          {/* OPTIONAL — nanopay terminal */}
-          {nanopayOpen ? (
-            <div
-              style={{
-                borderLeft: '1px solid var(--hairline-color)',
-                paddingLeft: 18,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-                overflow: 'auto',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'baseline' }}>
-                <span className="t-meta">Nanopay terminal</span>
-                <span style={{ flex: 1 }} />
-                <button
-                  type="button"
-                  onClick={() => setNanopayOpen(false)}
-                  className="t-mono ink-60"
-                  style={{ fontSize: 10, cursor: 'pointer', background: 'transparent', border: 0 }}
-                >
-                  hide ✕
-                </button>
-              </div>
-              <NanopayTerminal />
-            </div>
-          ) : null}
         </div>
 
-        {/* Footer status bar */}
+        {/* Footer — status row plus the nanopay terminal panel that
+            toggles open via the switch on the right.  Both pieces
+            share the same footer container so the terminal expands
+            in place rather than reflowing the layout. */}
         <div
           style={{
-            padding: '10px 18px',
             borderTop: '1px solid var(--hairline-color)',
             background: 'var(--surface-floating)',
             display: 'flex',
-            alignItems: 'center',
-            gap: 14,
+            flexDirection: 'column',
           }}
         >
-          <span
+          <div
             style={{
-              width: 6,
-              height: 6,
-              borderRadius: 3,
-              background: 'var(--accent-green)',
-              boxShadow: '0 0 5px var(--accent-green)',
+              padding: '10px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
             }}
-          />
-          <span className="t-mono ink-60" style={{ fontSize: 10.5 }}>
-            live · {isTrip ? scopedTripId : 'all trips'}
-          </span>
-          <span className="ink-50">·</span>
-          <span className="t-mono ink-60" style={{ fontSize: 10.5 }}>
-            x402 settlement:{' '}
-            <span className="t-num-md" style={{ color: 'var(--midnight)', fontSize: 11 }}>
-              $2.39
-            </span>{' '}
-            running
-          </span>
-          <span style={{ flex: 1 }} />
-          {!customerPanelOpen ? (
-            <button
-              type="button"
-              onClick={() => setCustomerPanelOpen(true)}
-              className="t-mono"
+          >
+            <span
               style={{
-                padding: '5px 12px',
-                background: 'var(--midnight)',
-                color: '#fdfbf7',
-                border: 0,
-                borderRadius: 5,
-                fontSize: 10.5,
-                cursor: 'pointer',
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                background: 'var(--accent-green)',
+                boxShadow: '0 0 5px var(--accent-green)',
+              }}
+            />
+            <span className="t-mono ink-60" style={{ fontSize: 10.5 }}>
+              live · {isTrip ? scopedTripId : 'all trips'}
+            </span>
+            <span className="ink-50">·</span>
+            <span className="t-mono ink-60" style={{ fontSize: 10.5 }}>
+              x402 settlement:{' '}
+              <span className="t-num-md" style={{ color: 'var(--midnight)', fontSize: 11 }}>
+                $2.39
+              </span>{' '}
+              running
+            </span>
+            <span style={{ flex: 1 }} />
+            {!customerPanelOpen ? (
+              <button
+                type="button"
+                onClick={() => setCustomerPanelOpen(true)}
+                className="t-mono"
+                style={{
+                  padding: '5px 12px',
+                  background: 'var(--midnight)',
+                  color: '#fdfbf7',
+                  border: 0,
+                  borderRadius: 5,
+                  fontSize: 10.5,
+                  cursor: 'pointer',
+                }}
+              >
+                ◧ Show {isTrip ? 'customer' : 'workspace'} panel
+              </button>
+            ) : null}
+            <NanopaySwitch open={nanopayOpen} onToggle={() => setNanopayOpen(o => !o)} />
+          </div>
+          {nanopayOpen ? (
+            <div
+              style={{
+                padding: '0 18px 14px',
+                borderTop: '1px solid var(--hairline-color)',
               }}
             >
-              ◧ Show {isTrip ? 'customer' : 'workspace'} panel
-            </button>
-          ) : null}
-          {!nanopayOpen ? (
-            <button
-              type="button"
-              onClick={() => setNanopayOpen(true)}
-              className="t-mono"
-              style={{
-                padding: '5px 12px',
-                background: 'var(--midnight)',
-                color: '#fdfbf7',
-                border: 0,
-                borderRadius: 5,
-                fontSize: 10.5,
-                cursor: 'pointer',
-              }}
-            >
-              ▸ Show nanopay terminal
-            </button>
+              <div style={{ paddingTop: 12 }}>
+                <NanopayTerminal />
+              </div>
+            </div>
           ) : null}
         </div>
       </div>
@@ -452,32 +435,6 @@ export function MetaInbox({
 }
 
 // ─── atoms ────────────────────────────────────────────────────────
-
-function Crumb({ trail }: { trail: string[] }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      {trail.map((segment, i) => (
-        <span
-          key={`${segment}-${i}`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-        >
-          {i > 0 ? (
-            <span
-              aria-hidden
-              style={{ width: 3, height: 3, borderRadius: 2, background: 'rgba(31,42,68,0.3)' }}
-            />
-          ) : null}
-          <span
-            className="t-meta"
-            style={{ color: i === trail.length - 1 ? 'var(--midnight)' : undefined }}
-          >
-            {segment}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-}
 
 function ConversationRow({
   entry,
@@ -812,6 +769,55 @@ function ConsoleSummaryCards() {
         </div>
       ))}
     </div>
+  );
+}
+
+function NanopaySwitch({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={open}
+      onClick={onToggle}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        background: 'transparent',
+        border: 0,
+        padding: '4px 6px',
+        cursor: 'pointer',
+      }}
+    >
+      <span className="t-mono ink-60" style={{ fontSize: 10.5 }}>
+        Nanopay terminal
+      </span>
+      <span
+        aria-hidden
+        style={{
+          position: 'relative',
+          width: 26,
+          height: 14,
+          borderRadius: 7,
+          background: open ? 'var(--vermillion)' : 'rgba(31,42,68,0.2)',
+          transition: 'background 120ms ease',
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            top: 2,
+            left: open ? 14 : 2,
+            width: 10,
+            height: 10,
+            borderRadius: 5,
+            background: '#fdfbf7',
+            transition: 'left 120ms ease',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+          }}
+        />
+      </span>
+    </button>
   );
 }
 
