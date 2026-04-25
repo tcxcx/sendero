@@ -77,16 +77,19 @@ async function waitForCircleTx(txId: string, label: string, timeoutMs = 120_000)
 }
 
 async function execContract(params: {
-  walletAddress: string;
+  walletId: string;
   contractAddress: Address;
   abiFunctionSignature: string;
   abiParameters: unknown[];
   label: string;
 }): Promise<{ txId: string; txHash: Hex }> {
   const circle = getCircle();
+  // Circle's `createContractExecutionTransaction` accepts EITHER `walletId`
+  // (UUID, requires no `blockchain`) OR `walletAddress` (0x… on-chain address,
+  // requires `blockchain`). We pass UUIDs everywhere — sending a UUID into
+  // `walletAddress` produces "Cannot find target wallet" (code 156001).
   const response = await circle.createContractExecutionTransaction({
-    walletAddress: params.walletAddress,
-    blockchain: 'ARC-TESTNET' as any,
+    walletId: params.walletId,
     contractAddress: params.contractAddress,
     abiFunctionSignature: params.abiFunctionSignature,
     abiParameters: params.abiParameters as any,
@@ -110,7 +113,7 @@ export async function registerAgent(params: {
   metadataURI: string;
 }): Promise<{ agentId: bigint; txHash: Hex }> {
   const result = await execContract({
-    walletAddress: params.ownerWalletAddress,
+    walletId: params.ownerWalletAddress,
     contractAddress: IDENTITY_REGISTRY,
     abiFunctionSignature: 'register(string)',
     abiParameters: [params.metadataURI],
@@ -194,7 +197,7 @@ export async function mintStamp(params: {
   amount: bigint;
 }): Promise<{ tokenId: bigint; txHash: Hex; txId: string }> {
   const result = await execContract({
-    walletAddress: params.treasuryWalletId,
+    walletId: params.treasuryWalletId,
     contractAddress: params.contractAddress,
     abiFunctionSignature: 'mintTo(address,uint256,string,uint256)',
     abiParameters: [params.to, params.tokenId.toString(), params.uri, params.amount.toString()],
@@ -246,7 +249,7 @@ export async function refreshStampUri(params: {
   newUri: string;
 }): Promise<{ txHash: Hex; txId: string }> {
   const result = await execContract({
-    walletAddress: params.treasuryWalletId,
+    walletId: params.treasuryWalletId,
     contractAddress: params.contractAddress,
     abiFunctionSignature: 'setTokenURI(uint256,string)',
     abiParameters: [params.tokenId.toString(), params.newUri],
@@ -314,7 +317,7 @@ export async function giveFeedback(params: {
 }): Promise<{ txId: string; txHash: Hex }> {
   const feedbackHash = keccak256(toHex(params.tag));
   return execContract({
-    walletAddress: params.validatorWalletAddress,
+    walletId: params.validatorWalletAddress,
     contractAddress: REPUTATION_REGISTRY,
     abiFunctionSignature: 'giveFeedback(uint256,int128,uint8,string,string,string,string,bytes32)',
     abiParameters: [
@@ -492,7 +495,7 @@ export async function requestValidation(params: {
   requestHash: Hex;
 }): Promise<{ txId: string; txHash: Hex }> {
   return execContract({
-    walletAddress: params.ownerWalletAddress,
+    walletId: params.ownerWalletAddress,
     contractAddress: VALIDATION_REGISTRY,
     abiFunctionSignature: 'validationRequest(address,uint256,string,bytes32)',
     abiParameters: [
@@ -514,7 +517,7 @@ export async function submitValidationResponse(params: {
   responseURI?: string;
 }): Promise<{ txId: string; txHash: Hex }> {
   return execContract({
-    walletAddress: params.validatorWalletAddress,
+    walletId: params.validatorWalletAddress,
     contractAddress: VALIDATION_REGISTRY,
     abiFunctionSignature: 'validationResponse(bytes32,uint8,string,bytes32,string)',
     abiParameters: [
