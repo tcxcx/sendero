@@ -113,6 +113,7 @@ const SUPPRESS_PREFIXES = [
   '/dashboard/billing/invoices',
   '/dashboard/spend',
   '/dashboard/caps',
+  '/dashboard/channels',
 ];
 
 function resolveCopy(pathname: string): Copy | null {

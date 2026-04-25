@@ -3,17 +3,24 @@
 /**
  * Two-pane channel setup wizard.
  *
- * Left pane: ordered step rail with status pills (active/done/pending).
- * Right pane: per-step form rendered by the channel's pane map.
- * Footer:    Back · Save & exit · Continue → POST to resume endpoint.
+ * Mirrors `route-artboards.jsx::WhatsappB` / `SlackB`. Left rail:
+ * vertical step ladder with vermillion-glow on the active dot and
+ * sea-green ✓ on completed dots. Right pane: per-step form rendered
+ * by the channel's pane map. Footer: Back · autosaved · Save & exit ·
+ * Continue.
  *
- * The shell is generic — bind it to any WorkflowRun whose pause steps
- * carry `{ promptId, stepIndex, totalSteps, helpText, … }` payloads.
+ * The shell is generic and visual-only — bind it to any WorkflowRun
+ * whose pause steps carry `{ promptId, stepIndex, totalSteps,
+ * helpText, … }` payloads. Kapso plumbing lives in the pane
+ * implementations and `/api/channels/wizard/resume`; nothing here
+ * touches the integration directly.
  */
 
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { Check, ChevronLeft, Loader2 } from 'lucide-react';
+
+import { Crumb } from '@/components/console/crumb';
 
 import type {
   WizardPaneRenderer,
@@ -39,18 +46,13 @@ interface WizardShellProps {
   doneHref: string;
 }
 
-const RAIL_TITLE_CLASSES =
-  'font-serif text-[clamp(28px,3.4vw,38px)] leading-[1.05] tracking-[-0.01em] text-[color:var(--ink)]';
-const RAIL_SUB_CLASSES = 'text-sm leading-snug text-[color:var(--text-dim)]';
-const PILL_FONT_CLASSES =
-  'font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--text-faint)]';
-
 export function ChannelSetupWizard(props: WizardShellProps) {
   const router = useRouter();
   const [run, setRun] = useState<WizardRunSnapshot>(props.initialRun);
   const [resolution, setResolution] = useState<WizardResolution | null>(null);
   const [pending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   const isComplete = run.status === 'completed';
   const isFailed = run.status === 'failed';
@@ -75,6 +77,7 @@ export function ChannelSetupWizard(props: WizardShellProps) {
         const next = (await res.json()) as WizardRunSnapshot;
         setRun(next);
         setResolution(null);
+        setSavedAt(Date.now());
         if (next.status === 'completed') {
           router.refresh();
           router.push(props.doneHref);
@@ -87,69 +90,81 @@ export function ChannelSetupWizard(props: WizardShellProps) {
 
   const exit = () => router.push(props.doneHref);
 
-  return (
-    <div className="flex w-full max-w-[1080px] flex-col gap-3">
-      <Breadcrumb channel={props.channel} runStatus={run.status} />
-      <section className="flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[color:color-mix(in_oklab,var(--accent-rose)_45%,transparent)] bg-[color:var(--surface-raised)] shadow-[var(--shadow-md)]">
-        <div className="grid grid-cols-1 gap-0 lg:grid-cols-[300px_1fr]">
-          <StepRail
-            headline={props.headline}
-            sublineHtml={props.sublineHtml}
-            steps={run.steps}
-            activeStepId={run.activeStep?.id ?? null}
-            helpHref={props.helpHref}
-            helpLabel={props.helpLabel}
-          />
-          <div className="flex min-h-[460px] flex-col bg-[color:color-mix(in_oklab,var(--surface)_82%,white_18%)] p-7">
-            {isComplete ? (
-              <CompletionPanel onExit={exit} />
-            ) : isFailed ? (
-              <FailurePanel error={run.error} onRestart={exit} />
-            ) : run.activeStep && activePane ? (
-              <ActivePane
-                step={run.activeStep}
-                payload={run.activePayload ?? {}}
-                scratchpad={run.scratchpad}
-                pending={pending}
-                renderer={activePane}
-                setResolution={setResolution}
-              />
-            ) : (
-              <PendingPanel />
-            )}
-            {!isComplete && !isFailed ? (
-              <Footer
-                pending={pending}
-                resolutionReady={resolution !== null}
-                onBack={() => router.back()}
-                onSaveExit={exit}
-                onContinue={submitContinue}
-                continueLabel={
-                  run.activeStep?.id === 'await_oauth_callback' ? 'I have installed it' : 'Continue'
-                }
-                errorMsg={errorMsg}
-              />
-            ) : null}
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
+  const channelName = props.channel === 'whatsapp' ? 'WhatsApp' : 'Slack';
 
-function Breadcrumb({
-  channel,
-  runStatus,
-}: {
-  channel: 'whatsapp' | 'slack';
-  runStatus: WizardRunSnapshot['status'];
-}) {
   return (
-    <div className="flex items-center justify-between px-1">
-      <span className={PILL_FONT_CLASSES}>
-        Channels · {channel === 'whatsapp' ? 'WhatsApp' : 'Slack'} · Connect
-      </span>
-      <span className={PILL_FONT_CLASSES}>Setup wizard · v2 · {runStatus}</span>
+    <div
+      style={{
+        padding: '24px 28px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        flex: 1,
+        minHeight: 0,
+        width: '100%',
+      }}
+    >
+      <Crumb trail={['Channels', channelName, 'Connect']} />
+
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'grid',
+          gridTemplateColumns: '320px 1fr',
+          gap: 0,
+        }}
+      >
+        <StepRail
+          headline={props.headline}
+          sublineHtml={props.sublineHtml}
+          steps={run.steps}
+          activeStepId={run.activeStep?.id ?? null}
+          helpHref={props.helpHref}
+          helpLabel={props.helpLabel}
+        />
+        <div
+          style={{
+            paddingLeft: 32,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 18,
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          {isComplete ? (
+            <CompletionPanel onExit={exit} />
+          ) : isFailed ? (
+            <FailurePanel error={run.error} onRestart={exit} />
+          ) : run.activeStep && activePane ? (
+            <ActivePane
+              step={run.activeStep}
+              payload={run.activePayload ?? {}}
+              scratchpad={run.scratchpad}
+              pending={pending}
+              renderer={activePane}
+              setResolution={setResolution}
+            />
+          ) : (
+            <PendingPanel />
+          )}
+          {!isComplete && !isFailed ? (
+            <Footer
+              pending={pending}
+              resolutionReady={resolution !== null}
+              onBack={() => router.back()}
+              onSaveExit={exit}
+              onContinue={submitContinue}
+              continueLabel={
+                run.activeStep?.id === 'await_oauth_callback' ? 'I have installed it' : 'Continue'
+              }
+              errorMsg={errorMsg}
+              savedAt={savedAt}
+            />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -170,21 +185,54 @@ function StepRail({
   helpLabel: string;
 }) {
   return (
-    <aside className="flex flex-col gap-6 border-r border-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] p-6">
-      <div className="flex flex-col gap-2">
-        <h2 className={RAIL_TITLE_CLASSES}>{headline}</h2>
-        <p className={RAIL_SUB_CLASSES} dangerouslySetInnerHTML={{ __html: sublineHtml }} />
-      </div>
-      <ol className="flex flex-col gap-1.5">
-        {steps.map(step => (
-          <StepRailItem key={step.id} step={step} isActive={step.id === activeStepId} />
+    <aside
+      style={{
+        borderRight: '1px solid var(--hairline-color)',
+        paddingRight: 28,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0,
+        minWidth: 0,
+      }}
+    >
+      <div className="t-meta">Connect</div>
+      <h2 className="t-h2" style={{ marginTop: 8 }}>
+        {headline}
+      </h2>
+      <p
+        className="t-body ink-70"
+        style={{ marginTop: 10, lineHeight: 1.55, fontSize: 13 }}
+        dangerouslySetInnerHTML={{ __html: sublineHtml }}
+      />
+      <hr aria-hidden style={hairlineSoft} />
+      <ol
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          margin: 0,
+          padding: 0,
+          listStyle: 'none',
+        }}
+      >
+        {steps.map((step, i) => (
+          <StepRailItem
+            key={step.id}
+            step={step}
+            isActive={step.id === activeStepId}
+            isLast={i === steps.length - 1}
+          />
         ))}
       </ol>
-      <div className="mt-auto flex flex-col gap-1.5 pt-2">
-        <span className={PILL_FONT_CLASSES}>Need help?</span>
+      <hr aria-hidden style={{ ...hairlineSoft, margin: '4px 0 18px' }} />
+      <div className="t-meta">Need help</div>
+      <div className="t-body ink-70" style={{ marginTop: 6, lineHeight: 1.55, fontSize: 13 }}>
         <a
           href={helpHref}
-          className="text-sm text-[color:var(--text)] underline-offset-2 hover:underline"
+          style={{
+            color: 'var(--vermillion)',
+            textDecoration: 'none',
+            fontWeight: 500,
+          }}
         >
           {helpLabel}
         </a>
@@ -193,40 +241,80 @@ function StepRail({
   );
 }
 
-function StepRailItem({ step, isActive }: { step: WizardStepDef; isActive: boolean }) {
-  const tone =
-    step.status === 'completed'
-      ? 'border-[color:var(--accent-green,#16a34a)] bg-[color:var(--accent-green,#16a34a)] text-white'
-      : isActive
-        ? 'border-[color:var(--accent-rose)] bg-[color:var(--accent-rose)] text-white'
-        : 'border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] bg-transparent text-[color:var(--text-dim)]';
-  const labelTone =
-    step.status === 'completed'
-      ? 'text-[color:var(--text-dim)]'
-      : isActive
-        ? 'text-[color:var(--ink)]'
-        : 'text-[color:var(--text)]';
+function StepRailItem({
+  step,
+  isActive,
+  isLast,
+}: {
+  step: WizardStepDef;
+  isActive: boolean;
+  isLast: boolean;
+}) {
+  const done = step.status === 'completed';
+  const dotBg = done ? '#2EA876' : isActive ? 'var(--vermillion)' : 'var(--surface-base)';
+  const dotColor = done || isActive ? '#fdfbf7' : 'rgba(31,42,68,0.5)';
+  const dotShadow = isActive
+    ? '0 0 0 4px var(--tint-vermillion-soft)'
+    : 'inset 0 0 0 1px var(--hairline-color)';
+  const labelColor = isActive || done ? 'var(--midnight)' : 'rgba(31,42,68,0.6)';
   return (
     <li
-      className={
-        'flex items-start gap-3 rounded-md px-2 py-1.5 transition-colors ' +
-        (isActive ? 'bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)]' : '')
-      }
+      style={{
+        display: 'flex',
+        gap: 14,
+        paddingBottom: 18,
+        position: 'relative',
+        margin: 0,
+      }}
     >
-      <span
-        className={
-          'mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border font-mono text-[11px] tracking-[0.04em] transition-colors ' +
-          tone
-        }
+      {!isLast ? (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: 13,
+            top: 30,
+            bottom: 0,
+            width: 2,
+            background: done ? '#2EA876' : 'var(--hairline-color)',
+          }}
+        />
+      ) : null}
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          flexShrink: 0,
+          position: 'relative',
+          zIndex: 1,
+          background: dotBg,
+          color: dotColor,
+          display: 'grid',
+          placeItems: 'center',
+          fontFamily: 'var(--font-sans)',
+          fontSize: 12,
+          fontWeight: 600,
+          boxShadow: dotShadow,
+        }}
       >
-        {step.status === 'completed' ? <Check className="h-3.5 w-3.5" /> : step.index}
-      </span>
-      <div className="flex flex-col gap-0">
-        <span className={'text-[13px] font-medium leading-snug ' + labelTone}>{step.label}</span>
+        {done ? <Check className="h-3.5 w-3.5" /> : step.index}
+      </div>
+      <div style={{ paddingTop: 3, minWidth: 0 }}>
+        <div
+          className="t-body"
+          style={{
+            fontWeight: isActive ? 600 : 500,
+            color: labelColor,
+            fontSize: 13,
+          }}
+        >
+          {step.label}
+        </div>
         {step.sublabel ? (
-          <span className="text-[11px] leading-tight text-[color:var(--text-faint)]">
+          <div className="t-mono ink-60" style={{ marginTop: 2, fontSize: 11 }}>
             {step.sublabel}
-          </span>
+          </div>
         ) : null}
       </div>
     </li>
@@ -252,22 +340,22 @@ function ActivePane({
   const totalSteps = (payload.totalSteps as number | undefined) ?? null;
   const helpText = (payload.helpText as string | undefined) ?? null;
   return (
-    <div className="flex flex-1 flex-col gap-5">
-      <header className="flex flex-col gap-1.5">
-        <span className={PILL_FONT_CLASSES}>
+    <div style={{ display: 'flex', flex: 1, flexDirection: 'column', gap: 18, minHeight: 0 }}>
+      <header style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="t-meta">
           Step {stepIndex}
           {totalSteps ? ` of ${totalSteps}` : ''}
-        </span>
-        <h3 className="font-serif text-[clamp(24px,2.4vw,30px)] leading-[1.1] tracking-[-0.01em] text-[color:var(--ink)]">
+        </div>
+        <h1 className="t-h1" style={{ marginTop: 6 }}>
           {step.label}
-        </h3>
+        </h1>
         {helpText ? (
-          <p className="max-w-[60ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
+          <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '58ch', fontSize: 14 }}>
             {helpText}
           </p>
         ) : null}
       </header>
-      <div className="flex flex-1 flex-col">
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <PaneSlot
           renderer={renderer}
           stepId={step.id}
@@ -323,6 +411,7 @@ function Footer({
   onContinue,
   continueLabel,
   errorMsg,
+  savedAt,
 }: {
   pending: boolean;
   resolutionReady: boolean;
@@ -331,41 +420,59 @@ function Footer({
   onContinue: () => void;
   continueLabel: string;
   errorMsg: string | null;
+  savedAt: number | null;
 }) {
   return (
-    <div className="mt-6 flex flex-col gap-2 border-t border-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] pt-4">
+    <div
+      style={{
+        marginTop: 6,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        borderTop: '1px solid var(--hairline-color-soft)',
+        paddingTop: 12,
+      }}
+    >
       {errorMsg ? (
-        <div className="rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
+        <div
+          style={{
+            padding: '8px 12px',
+            background: 'var(--tint-vermillion-soft)',
+            color: 'var(--vermillion)',
+            fontFamily: 'var(--font-mono-x)',
+            fontSize: 11,
+            borderRadius: 6,
+          }}
+        >
           {errorMsg}
         </div>
       ) : null}
-      <div className="flex items-center justify-between gap-3">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={onBack} style={ghostBtnStyle}>
+          <ChevronLeft className="h-3 w-3" /> Back
+        </button>
+        {savedAt ? (
+          <span className="t-mono ink-60" style={{ fontSize: 10.5 }}>
+            autosaved · {Math.max(1, Math.round((Date.now() - savedAt) / 1000))}s ago
+          </span>
+        ) : null}
+        <span style={{ flex: 1 }} />
+        <button type="button" onClick={onSaveExit} style={ghostBtnStyle}>
+          Save & exit
+        </button>
         <button
           type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1 rounded-md border border-transparent px-2 py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--text-dim)] transition-colors hover:text-[color:var(--ink)]"
+          onClick={onContinue}
+          disabled={pending || !resolutionReady}
+          style={{
+            ...primaryBtnStyle,
+            opacity: pending || !resolutionReady ? 0.5 : 1,
+            cursor: pending || !resolutionReady ? 'not-allowed' : 'pointer',
+          }}
         >
-          <ChevronLeft className="h-3 w-3" />
-          Back
+          {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+          {continueLabel}
         </button>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onSaveExit}
-            className="rounded-md border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--text)] transition-colors hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
-          >
-            Save & exit
-          </button>
-          <button
-            type="button"
-            onClick={onContinue}
-            disabled={pending || !resolutionReady}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[color:var(--accent-rose)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-            {continueLabel}
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -373,22 +480,37 @@ function Footer({
 
 function CompletionPanel({ onExit }: { onExit: () => void }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--accent-green,#16a34a)] text-white">
-        <Check className="h-6 w-6" />
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 14,
+        textAlign: 'center',
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          background: '#2EA876',
+          color: '#fdfbf7',
+          display: 'grid',
+          placeItems: 'center',
+        }}
+      >
+        <Check className="h-7 w-7" />
       </span>
-      <h3 className="font-serif text-[clamp(22px,2.4vw,28px)] leading-tight tracking-[-0.01em] text-[color:var(--ink)]">
-        You are connected.
-      </h3>
-      <p className="max-w-[42ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
+      <h2 className="t-h2">You are connected.</h2>
+      <p className="t-body ink-70" style={{ maxWidth: '46ch', fontSize: 14, lineHeight: 1.55 }}>
         Sendero will route trip events here from now on. The connected status panel shows live
         traffic.
       </p>
-      <button
-        type="button"
-        onClick={onExit}
-        className="mt-3 rounded-md bg-[color:var(--ink)] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-white transition-opacity hover:opacity-90"
-      >
+      <button type="button" onClick={onExit} style={primaryBtnStyle}>
         Open channel page
       </button>
     </div>
@@ -403,18 +525,24 @@ function FailurePanel({
   onRestart: () => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <h3 className="font-serif text-[clamp(22px,2.4vw,28px)] leading-tight tracking-[-0.01em] text-[color:var(--accent-rose)]">
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 14,
+        textAlign: 'center',
+      }}
+    >
+      <h2 className="t-h2" style={{ color: 'var(--vermillion)' }}>
         Something stalled.
-      </h3>
-      <p className="max-w-[60ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
+      </h2>
+      <p className="t-body ink-70" style={{ maxWidth: '60ch', fontSize: 14, lineHeight: 1.55 }}>
         {error?.message ?? 'The workflow did not complete. Restart the wizard or contact support.'}
       </p>
-      <button
-        type="button"
-        onClick={onRestart}
-        className="mt-3 rounded-md border border-[color:var(--ink)] bg-transparent px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--ink)] transition-colors hover:bg-[color:var(--ink)] hover:text-white"
-      >
+      <button type="button" onClick={onRestart} style={ghostBtnStyle}>
         Back to channel
       </button>
     </div>
@@ -423,8 +551,52 @@ function FailurePanel({
 
 function PendingPanel() {
   return (
-    <div className="flex flex-1 items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-[color:var(--text-dim)]" />
+    <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
+      <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'rgba(31,42,68,0.55)' }} />
     </div>
   );
 }
+
+// ── styles ─────────────────────────────────────────────────────
+
+const primaryBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '8px 18px',
+  background: 'var(--vermillion)',
+  color: '#fdfbf7',
+  border: 0,
+  borderRadius: 8,
+  fontSize: 12,
+  fontWeight: 600,
+  fontFamily: 'var(--font-mono-x)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+};
+
+const ghostBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '6px 14px',
+  background: 'transparent',
+  color: 'var(--midnight)',
+  border: 0,
+  boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+  borderRadius: 8,
+  fontSize: 11,
+  fontWeight: 600,
+  fontFamily: 'var(--font-mono-x)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+};
+
+const hairlineSoft: React.CSSProperties = {
+  border: 0,
+  height: 1,
+  background: 'var(--hairline-color-soft)',
+  margin: '18px 0',
+};

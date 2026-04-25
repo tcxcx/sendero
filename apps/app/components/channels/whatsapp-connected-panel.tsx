@@ -1,13 +1,16 @@
 /**
- * Rich connected-status panel for the WhatsApp channel page. Shown
- * when WhatsAppInstall.status === 'active'. Reads:
- *   - Display name + display number from WhatsAppInstall
- *   - Brand profile (about, photo, greeting) from metadata.profile
- *   - Templates from metadata.templates
- *   - Recent conversations + this-week stats from ChannelIdentity / Trip
+ * WhatsappConnectedPanel — design-canvas WhatsappA layout.
  *
- * The metric strip + recent-conversations layout matches the design
- * in the channels:WhatsApp wireframe.
+ *   3-card metric strip (Status / Number / Display name) above a
+ *   1.2fr/1fr grid: recent conversations on the left, templates +
+ *   weekly KPIs on the right. Reads only the fields we already
+ *   compute for this tenant — no hardcoded counts or sample threads.
+ *
+ * Kapso plumbing is unchanged: the channel page server-renders this
+ * with `displayName` + `displayPhoneNumber` from `WhatsAppInstall`,
+ * `templates` from the `metadata.templates` JSON, real recent threads
+ * from `ChannelIdentity` + `Trip`, and weekly aggregates from
+ * `MeterEvent` + `Trip` counts.
  */
 
 import Link from 'next/link';
@@ -27,11 +30,6 @@ interface WhatsappConnectedProps {
   weeklyStats: { trips: number; messages: number; deliveryRate: number };
 }
 
-const PILL =
-  'inline-flex items-center rounded-full border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--text-dim)]';
-const TITLE_PILL =
-  'font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--text-faint)]';
-
 export function WhatsappConnectedPanel({
   displayName,
   displayPhoneNumber,
@@ -41,104 +39,197 @@ export function WhatsappConnectedPanel({
   weeklyStats,
 }: WhatsappConnectedProps) {
   return (
-    <section className="flex flex-col gap-5 overflow-hidden rounded-[var(--radius-lg)] border border-[color:color-mix(in_oklab,var(--accent-rose)_45%,transparent)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <span className={TITLE_PILL}>Channels · WhatsApp</span>
-          <h2 className="font-serif text-[clamp(36px,4vw,48px)] leading-[1] tracking-[-0.01em] text-[color:var(--ink)]">
-            WhatsApp
-          </h2>
-          <p className="text-sm text-[color:var(--text-dim)]">
-            Connected via Kapso · {recentThreads.length} active threads · {weeklyStats.trips} trips
-            this week
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 24,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <h1 className="t-h1">WhatsApp</h1>
+          <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
+            Connected via Kapso · {recentThreads.length} active thread
+            {recentThreads.length === 1 ? '' : 's'} · {weeklyStats.trips} trip
+            {weeklyStats.trips === 1 ? '' : 's'} this week
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="rounded-md border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--text)] transition-colors hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
-          >
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" style={ghostBtnStyle}>
             Disconnect
           </button>
-          <Link
-            href="/dashboard/channels/whatsapp/connect"
-            className="rounded-md bg-[color:var(--accent-rose)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-white transition-opacity hover:opacity-90"
-          >
+          <Link href="/dashboard/channels/whatsapp/connect" style={primaryBtnStyle}>
             Open settings
           </Link>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <MetricCard label="Status" value={status} pill="LIVE" tone="ok" />
-        <MetricCard label="Number" value={displayPhoneNumber ?? '—'} pill="SET" mono />
-        <MetricCard label="Display name" value={displayName ?? '—'} pill="SET" />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 18,
+        }}
+      >
+        <MetricCard label="Status" value={status} pillTone="sea" pillLabel="LIVE" />
+        <MetricCard
+          label="Number"
+          value={displayPhoneNumber ?? '—'}
+          pillTone="outline"
+          pillLabel="SET"
+          mono
+        />
+        <MetricCard
+          label="Display name"
+          value={displayName ?? '—'}
+          pillTone="outline"
+          pillLabel="SET"
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <article className="flex flex-col gap-3 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] bg-[color:var(--surface)] p-4">
-          <header className="flex items-baseline justify-between">
-            <h3 className="text-[14px] font-semibold text-[color:var(--ink)]">
-              Recent conversations
-            </h3>
-            <span className={TITLE_PILL}>last 24h</span>
-          </header>
-          <ul className="flex flex-col divide-y divide-[color:color-mix(in_oklab,var(--ink)_8%,transparent)]">
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'grid',
+          gridTemplateColumns: '1.2fr 1fr',
+          gap: 20,
+        }}
+      >
+        <article
+          className="sd-card-raised"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div className="t-h3">Recent conversations</div>
+            <span className="t-mono ink-60" style={{ fontSize: 11 }}>
+              last 24h
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
             {recentThreads.length === 0 ? (
-              <li className="py-4 text-sm text-[color:var(--text-dim)]">
+              <div className="t-body ink-60" style={{ fontSize: 13, padding: '8px 0' }}>
                 No threads yet. Travelers&rsquo; first messages will appear here.
-              </li>
+              </div>
             ) : (
-              recentThreads.map(t => (
-                <li key={`${t.name}:${t.timeAgo}`} className="flex items-center gap-3 py-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color:color-mix(in_oklab,var(--ink)_8%,transparent)] font-mono text-[11px] text-[color:var(--ink)]">
+              recentThreads.map((t, i) => (
+                <div
+                  key={`${t.name}-${i}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    padding: '10px 0',
+                    borderBottom:
+                      i < recentThreads.length - 1
+                        ? '1px solid var(--hairline-color-soft)'
+                        : 'none',
+                  }}
+                >
+                  <div
+                    aria-hidden
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      background: 'var(--surface-floating)',
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontFamily: 'var(--font-display)',
+                      fontWeight: 500,
+                      color: 'var(--midnight)',
+                      flexShrink: 0,
+                    }}
+                  >
                     {t.initial}
-                  </span>
-                  <div className="flex flex-1 flex-col gap-0">
-                    <span className="text-[13px] font-medium text-[color:var(--ink)]">
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="t-body" style={{ fontWeight: 500, fontSize: 13 }}>
                       {t.name}
-                    </span>
-                    <span className="text-[12px] text-[color:var(--text-dim)]">{t.snippet}</span>
+                    </div>
+                    <div className="t-body ink-70" style={{ fontSize: 13 }}>
+                      {t.snippet}
+                    </div>
                   </div>
                   {t.badge ? (
-                    <span className="inline-flex items-center rounded-full bg-[color:var(--accent-rose)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-white">
+                    <span
+                      className="sd-pill sd-pill-verm"
+                      style={{ fontSize: 9, padding: '2px 7px', fontWeight: 700 }}
+                    >
                       {t.badge}
                     </span>
                   ) : null}
-                  <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
+                  <div
+                    className="t-mono ink-60"
+                    style={{ fontSize: 11, width: 36, textAlign: 'right' }}
+                  >
                     {t.timeAgo}
-                  </span>
-                </li>
+                  </div>
+                </div>
               ))
             )}
-          </ul>
+          </div>
         </article>
 
-        <div className="flex flex-col gap-3">
-          <article className="flex flex-col gap-2 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] bg-[color:var(--surface)] p-4">
-            <header className="flex items-baseline justify-between">
-              <h3 className="text-[14px] font-semibold text-[color:var(--ink)]">Templates</h3>
-            </header>
-            <ul className="flex flex-col gap-1">
-              {templates.length === 0 ? (
-                <li className="text-[12px] text-[color:var(--text-dim)]">
-                  No templates submitted.
-                </li>
-              ) : (
-                templates.map(t => (
-                  <li key={t.name} className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[12px] text-[color:var(--ink)]">{t.name}</span>
-                    <span className={PILL}>{t.status}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <article
+            className="sd-card-flat"
+            style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
+          >
+            <div className="t-meta">Templates</div>
+            {templates.length === 0 ? (
+              <div className="t-body ink-60" style={{ fontSize: 12, marginTop: 8 }}>
+                No templates submitted.
+              </div>
+            ) : (
+              <ul
+                className="t-body ink-70"
+                style={{ margin: '10px 0 0', paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}
+              >
+                {templates.map(t => (
+                  <li
+                    key={t.name}
+                    style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}
+                  >
+                    <span className="t-mono" style={{ fontSize: 12 }}>
+                      {t.name}
+                    </span>
+                    <span
+                      className="sd-pill sd-pill-outline"
+                      style={{ fontSize: 9, padding: '2px 7px', fontWeight: 700 }}
+                    >
+                      {t.status}
+                    </span>
                   </li>
-                ))
-              )}
-            </ul>
+                ))}
+              </ul>
+            )}
           </article>
 
-          <article className="grid grid-cols-3 gap-3 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] bg-[color:var(--surface)] p-4">
-            <Stat label="Trips" value={weeklyStats.trips} />
-            <Stat label="Messages" value={weeklyStats.messages} />
-            <Stat label="Delivery" value={`${weeklyStats.deliveryRate}%`} />
+          <article
+            className="sd-card-flat"
+            style={{
+              boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+              padding: '14px 16px',
+              flex: 1,
+            }}
+          >
+            <div className="t-meta">This week</div>
+            <div
+              style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, gap: 12 }}
+            >
+              <Stat label="Trips" value={weeklyStats.trips} />
+              <Stat label="Messages" value={weeklyStats.messages} />
+              <Stat label="Delivery" value={`${weeklyStats.deliveryRate}%`} />
+            </div>
           </article>
         </div>
       </div>
@@ -149,48 +240,94 @@ export function WhatsappConnectedPanel({
 function MetricCard({
   label,
   value,
-  pill,
-  tone,
+  pillTone,
+  pillLabel,
   mono,
 }: {
   label: string;
   value: string;
-  pill: string;
-  tone?: 'ok';
+  pillTone: 'sea' | 'outline';
+  pillLabel: string;
   mono?: boolean;
 }) {
-  const pillCls =
-    tone === 'ok'
-      ? 'inline-flex items-center rounded-full bg-[color:var(--accent-green,#16a34a)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-white'
-      : 'inline-flex items-center rounded-full border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--text-dim)]';
   return (
-    <div className="flex flex-col gap-1.5 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] bg-[color:var(--surface)] p-4">
-      <div className="flex items-center justify-between">
-        <span className={TITLE_PILL}>{label}</span>
-        <span className={pillCls}>{pill}</span>
-      </div>
-      <span
-        className={
-          mono
-            ? 'font-mono text-[18px] tracking-tight text-[color:var(--ink)]'
-            : 'font-serif text-[20px] leading-tight text-[color:var(--ink)]'
-        }
+    <div
+      className="sd-card-flat"
+      style={{
+        boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+        padding: '14px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
+      <div className="t-meta">{label}</div>
+      <div
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
       >
-        {value}
-      </span>
+        <div
+          className="t-h3"
+          style={mono ? { fontFamily: 'var(--font-mono-x)', fontSize: 16 } : undefined}
+        >
+          {value}
+        </div>
+        <span
+          className={`sd-pill sd-pill-${pillTone}`}
+          style={{ fontSize: 9, padding: '2px 7px', fontWeight: 700 }}
+        >
+          {pillLabel}
+        </span>
+      </div>
     </div>
   );
 }
 
 function Stat({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="flex flex-col items-start">
-      <span className="font-serif text-[clamp(22px,2.4vw,28px)] leading-tight text-[color:var(--ink)]">
+    <div
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}
+    >
+      <span
+        className="t-num-md"
+        style={{ fontSize: 24, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}
+      >
         {value}
       </span>
-      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--text-dim)]">
-        {label}
-      </span>
+      <span className="t-meta">{label}</span>
     </div>
   );
 }
+
+const primaryBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '8px 18px',
+  background: 'var(--vermillion)',
+  color: '#fdfbf7',
+  border: 0,
+  borderRadius: 8,
+  fontSize: 12,
+  fontWeight: 600,
+  fontFamily: 'var(--font-mono-x)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+  textDecoration: 'none',
+};
+
+const ghostBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '8px 14px',
+  background: 'transparent',
+  color: 'var(--midnight)',
+  border: 0,
+  boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+  borderRadius: 8,
+  fontSize: 11,
+  fontWeight: 600,
+  fontFamily: 'var(--font-mono-x)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+};
