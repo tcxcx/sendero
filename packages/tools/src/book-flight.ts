@@ -9,6 +9,7 @@ import {
 } from '@sendero/duffel';
 import type { ToolDef, ToolContext } from './types';
 import { ensureFlightCustomer } from './ensure-flight-customer';
+import { ensureTravelerWallet } from './ensure-traveler-wallet';
 
 const serviceSchema = z.object({
   id: z.string().min(1),
@@ -82,6 +83,7 @@ export const bookFlightTool: ToolDef = {
     const travelerPhone = ctx?.traveler?.phone || undefined;
 
     const customerUserIds: string[] = [];
+    let travelerUserRowId: string | null = null;
     if (ctx?.traveler?.userId) {
       try {
         const identity = await ensureFlightCustomer(
@@ -89,6 +91,7 @@ export const bookFlightTool: ToolDef = {
           ctx
         );
         customerUserIds.push(identity.supplierTravelerId);
+        travelerUserRowId = identity.userId;
       } catch (err) {
         console.warn('[book_flight] ensure_flight_customer failed, continuing without link', err);
       }
@@ -176,6 +179,20 @@ export const bookFlightTool: ToolDef = {
       paymentStatus = payment.status;
     }
 
+    // Lazy DCW provisioning. The hold succeeded → real intent → it's
+    // worth a wallet. Idempotent on userId: subsequent holds for the
+    // same traveler reuse the existing DCW. Failures are logged (env
+    // missing, Circle 5xx, race) but never block the hold itself.
+    let walletAddress: string | null = null;
+    if (travelerUserRowId) {
+      try {
+        const wallet = await ensureTravelerWallet({ userId: travelerUserRowId });
+        walletAddress = wallet?.address ?? null;
+      } catch (err) {
+        console.warn('[book_flight] ensureTravelerWallet failed, hold still confirmed', err);
+      }
+    }
+
     return {
       orderId: hold.orderId,
       pnr: hold.bookingReference,
@@ -186,6 +203,7 @@ export const bookFlightTool: ToolDef = {
       customerUserIds,
       airlineCreditRedeemed: Boolean(input.airlineCreditId) && Boolean(paymentBreakdown),
       paymentBreakdown,
+      ...(walletAddress ? { travelerWalletAddress: walletAddress } : {}),
     };
   },
 };
