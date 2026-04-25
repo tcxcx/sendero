@@ -92,9 +92,16 @@ describe('renderForSlack', () => {
 
   test('approval_request reuses buildApprovalBlocks (sendero_approval action_ids)', async () => {
     const out = await renderForSlack(fixtures.approvalRequest());
-    const blocks = out?.payload.blocks as Array<{ type: string; elements?: Array<{ action_id?: string }> }>;
+    // buildApprovalBlocks emits the @slack/web-api SDK shape which uses
+    // camelCase `actionId`. The Block Kit wire form is `action_id`; the
+    // SDK serializes one to the other on send. Accept either field name
+    // so the test stays green if upstream Slack types switch.
+    const blocks = out?.payload.blocks as Array<{
+      type: string;
+      elements?: Array<{ action_id?: string; actionId?: string }>;
+    }>;
     const actions = blocks.find(b => b.type === 'actions');
-    const actionIds = actions?.elements?.map(e => e.action_id) ?? [];
+    const actionIds = actions?.elements?.map(e => e.action_id ?? e.actionId) ?? [];
     expect(actionIds.some(id => id?.startsWith('sendero_approval.'))).toBe(true);
     expect(out).toMatchSnapshot();
   });
