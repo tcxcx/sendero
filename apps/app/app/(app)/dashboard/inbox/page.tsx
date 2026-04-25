@@ -1,21 +1,30 @@
-import Link from 'next/link';
+/**
+ * /dashboard/inbox — MetaInbox in unscoped mode.
+ *
+ * The sidebar's "Trip inboxes" entry lands here. With no `tripId` the
+ * MetaInbox shows operator ↔ Sendero AI (internal mode) plus the
+ * left rail of recent trips for click-into.
+ */
 
-import { Button } from '@sendero/ui/button';
+import { MetaInboxLive } from '@/components/console/meta-inbox-live';
+import { loadConsoleData } from '@/lib/console-data';
+import { requireCurrentTenant } from '@/lib/tenant-context';
 
-export default function InboxIndexPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function InboxIndexPage() {
+  const { tenant } = await requireCurrentTenant();
+  const { trips, conversation, traveler, holdExpires } = await loadConsoleData(tenant.id, null);
+
   return (
-    <div className="flex min-h-[min(24rem,50vh)] flex-col gap-4 p-6">
-      <p className="max-w-xl text-sm text-muted-foreground">
-        When a trip is selected, you’ll see conversation context and actions here. Connect WhatsApp
-        or Slack from{' '}
-        <Link href="/dashboard/channels/whatsapp" className="underline underline-offset-2">
-          Channels
-        </Link>{' '}
-        so inbox events map to the right place.
-      </p>
-      <Button asChild variant="outline" size="sm" className="w-fit">
-        <Link href="/dashboard/trips">Create or view trips</Link>
-      </Button>
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+      <MetaInboxLive
+        trips={trips}
+        scopedTripId={null}
+        initialConversation={conversation}
+        traveler={traveler}
+        holdExpires={holdExpires}
+      />
     </div>
   );
 }

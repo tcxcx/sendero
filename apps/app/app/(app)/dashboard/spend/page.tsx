@@ -1,25 +1,55 @@
+/**
+ * /dashboard/spend — design-canvas Spend route.
+ *
+ * Range is controlled by `?range=W|M|Y` (W=7d, M=30d, Y=365d). Legacy
+ * `?days=` still resolves so old saved links keep working. Role gate
+ * stays admin|finance.  Data plumbing (`tenantSpendSummary`,
+ * `tenantSpendCap`, `nanopayBatch`) is unchanged — only the rendering
+ * has been redesigned.
+ */
+
 import { auth } from '@clerk/nextjs/server';
-import { RetryButton } from '@/components/admin/retry-button';
-import { PageActions } from '@/components/dashboard/page-actions';
-import { SpendDashboard } from '@/components/spend/spend-dashboard';
-import { requireAnyRole } from '@/lib/require-role';
-import { requireCurrentTenant } from '@/lib/tenant-context';
+
 import { tenantSpendSummary } from '@sendero/billing/analytics';
 import { prisma } from '@sendero/database';
 
+import { RetryButton } from '@/components/admin/retry-button';
+import { PageActions } from '@/components/dashboard/page-actions';
+import { SpendDashboard, type SpendRange } from '@/components/spend/spend-dashboard';
+import { requireAnyRole } from '@/lib/require-role';
+import { requireCurrentTenant } from '@/lib/tenant-context';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+const RANGE_DAYS: Record<SpendRange, number> = {
+  W: 7,
+  M: 30,
+  Y: 365,
+};
+
+function parseRange(value: string | undefined, fallbackDays: number | undefined): SpendRange {
+  if (value === 'W' || value === 'M' || value === 'Y') return value;
+  if (typeof fallbackDays === 'number') {
+    if (fallbackDays >= 180) return 'Y';
+    if (fallbackDays >= 21) return 'M';
+  }
+  return 'W';
+}
 
 export default async function SpendPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{ range?: string; days?: string }>;
 }) {
   await requireAnyRole(['org:admin', 'org:finance']);
   const { tenant } = await requireCurrentTenant();
   const { has } = await auth();
   const canRetry = has({ role: 'org:admin' });
   const params = await searchParams;
-  const days = Math.min(Math.max(Number(params.days ?? 7), 1), 90);
+  const legacyDays = params.days ? Math.min(Math.max(Number(params.days), 1), 365) : undefined;
+  const range = parseRange(params.range, legacyDays);
+  const days = RANGE_DAYS[range];
+
   const now = new Date();
   const from = new Date(now.getTime() - days * DAY_MS);
 
@@ -56,7 +86,7 @@ export default async function SpendPage({
       <SpendDashboard
         tenantName={tenant.displayName}
         tier={tenant.billingTier}
-        days={days}
+        range={range}
         summary={summary}
         caps={caps}
         recentBatches={recentBatches}
