@@ -16,7 +16,8 @@
     "./scopes": "./src/scopes.ts",
     "./types": "./src/types.ts",
     "./faucet": "./src/faucet.ts",
-    "./mint-stamp": "./src/mint-stamp.ts"
+    "./mint-stamp": "./src/mint-stamp.ts",
+    "./provision-identity": "./src/provision-identity.ts"
   },
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",
