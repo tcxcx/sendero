@@ -20,7 +20,10 @@
 import type { WhatsAppInstall } from '@prisma/client';
 import { WhatsAppClient } from '@sendero/whatsapp';
 import { env } from '@sendero/env';
-import { renderForWhatsApp } from '@/lib/channel-render';
+// Import direct from the per-channel module so we never reach for the
+// @/lib/channel-render barrel here — that barrel is the client-safe
+// surface (operator renderer + types only).
+import { renderForWhatsApp } from '@/lib/channel-render/channels/whatsapp';
 import type { ChannelMessage } from '@/lib/channel-render';
 
 export interface SendWhatsAppArgs {
