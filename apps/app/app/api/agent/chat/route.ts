@@ -59,6 +59,7 @@ import {
   makeMeterStore,
   makeSessionStore,
   requestLocale,
+  resolveDirectModel,
   resolveModel,
   resolveSegment,
   resolveTenantPlan,
@@ -316,7 +317,13 @@ export async function POST(req: NextRequest) {
   // could swap in a /api/chat-style cascade probe, but that's
   // strictly a robustness upgrade, not a billing concern.
   const tier: ModelTier = 'smart';
-  const modelHandle = resolveModel(tier);
+  // Streaming routes can't catch in-band gateway errors (the "Free
+  // credits" abuse-protection message arrives as a data event mid-
+  // stream, not as a thrown error — gatewayErrorAllowsDirectRetry only
+  // helps non-streaming dispatch). Prefer direct providers here so the
+  // gateway never gates the surface. Falls back to gateway only when
+  // no direct provider is configured.
+  const modelHandle = resolveDirectModel(tier) ?? resolveModel(tier);
   if (!modelHandle) {
     return NextResponse.json(
       {
