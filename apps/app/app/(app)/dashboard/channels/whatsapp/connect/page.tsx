@@ -10,13 +10,13 @@
 import { ChannelSetupWizard } from '@/components/channels/setup-wizard/wizard-shell';
 import { whatsappPanes } from '@/components/channels/setup-wizard/whatsapp-panes';
 import { requireCurrentTenant } from '@/lib/tenant-context';
-import { loadOrStartRun } from '@/lib/workflow-run';
+import { loadOrStartWizardSession } from '@/lib/wizard-session';
 
 export const dynamic = 'force-dynamic';
 
 export default async function WhatsAppConnectPage() {
   const { tenant, userId } = await requireCurrentTenant();
-  const run = await loadOrStartRun({
+  const run = await loadOrStartWizardSession({
     tenantId: tenant.id,
     workflowId: 'sendero.whatsapp_provision',
     surfaceKey: 'channels:whatsapp',

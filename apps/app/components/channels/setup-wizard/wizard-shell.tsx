@@ -62,10 +62,10 @@ export function ChannelSetupWizard(props: WizardShellProps) {
     const payload = resolution ?? {};
     startTransition(async () => {
       try {
-        const res = await fetch(`/api/workflows/${run.runId}/resume`, {
+        const res = await fetch('/api/channels/wizard/resume', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ resolution: payload }),
+          body: JSON.stringify({ sessionId: run.sessionId, resolution: payload }),
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };

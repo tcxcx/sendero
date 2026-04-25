@@ -38,9 +38,9 @@ export async function startOnboarding(
   kapso: KapsoClient,
   input: StartOnboardingInput
 ): Promise<StartOnboardingResult> {
-  const customer = await kapso.createCustomer({
+  const customer = await kapso.findOrCreateCustomer({
     name: input.tenantName,
-    external_id: input.tenantId,
+    externalCustomerId: input.tenantId,
   });
 
   const setupLinkInput: Partial<CreateSetupLinkRequest> = {
