@@ -26,6 +26,7 @@ import {
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation';
 import { Message } from '@/components/ai-elements/message';
+import { Persona, type PersonaState } from '@/components/ai-elements/persona';
 import {
   PromptInput,
   PromptInputBody,
@@ -56,8 +57,38 @@ export function AgentChatClient({ tenantId }: Props) {
   const { messages, sendMessage, status } = useChat({ transport });
   const busy = status === 'submitted' || status === 'streaming';
 
+  // Map AI SDK chat status → Persona state. The Persona is mounted
+  // ONCE in the sticky header (Rive WebGL2 context is ~190KB gzipped
+  // and a single GPU context — never per-message). idle/listening/
+  // thinking/speaking/asleep are the variants that ship with the
+  // halo Persona; we use them as a tactile indicator the operator
+  // can feel without watching token counters.
+  const personaState: PersonaState = (() => {
+    if (status === 'submitted') return 'thinking';
+    if (status === 'streaming') return 'speaking';
+    if (input.length > 0) return 'listening';
+    if (messages.length === 0) return 'asleep';
+    return 'idle';
+  })();
+
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+      {/* Sticky agent persona header — Rive WebGL2 mounted once.
+          Reflects chat lifecycle (asleep at empty → listening as the
+          operator types → thinking on submit → speaking while the
+          response streams → idle when settled). */}
+      <header className="flex items-center gap-3 border-b border-border bg-card/40 px-4 py-3">
+        <Persona className="size-10 shrink-0" state={personaState} variant="halo" />
+        <div className="flex flex-col gap-0.5">
+          <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            Sendero AI
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {personaStateLabel(personaState)}
+          </div>
+        </div>
+      </header>
+
       <Conversation className="flex-1">
         <ConversationContent>
           {messages.length === 0 ? (
@@ -320,4 +351,24 @@ function pushToolMessages(args: {
     status: state === 'input-available' ? 'streaming' : 'pending',
     createdAt: baseTime,
   });
+}
+
+/**
+ * Tiny human-readable status under the persona avatar. Matches the
+ * Persona state machine 1:1 — the eyebrow/copy never lies about what
+ * the underlying chat status is.
+ */
+function personaStateLabel(state: PersonaState): string {
+  switch (state) {
+    case 'asleep':
+      return 'Tap a prompt to wake the agent';
+    case 'listening':
+      return 'Listening…';
+    case 'thinking':
+      return 'Thinking — running tools';
+    case 'speaking':
+      return 'Streaming response';
+    case 'idle':
+      return 'Ready';
+  }
 }
