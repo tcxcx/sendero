@@ -27,8 +27,12 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
 import { type LanguageModel, generateText } from 'ai';
 
-const GATEWAY_MODEL = 'google/gemini-2.5-flash-image-preview' as const;
-const DIRECT_MODEL = 'gemini-2.5-flash-image-preview' as const;
+// As of Apr 2026: AI Studio renamed the public image model from
+// `gemini-2.5-flash-image-preview` → `gemini-2.5-flash-image`. The
+// gateway alias keeps working for back-compat, but direct AI Studio
+// 404s on the old name. Use the un-suffixed canonical id everywhere.
+const GATEWAY_MODEL = 'google/gemini-2.5-flash-image' as const;
+const DIRECT_MODEL = 'gemini-2.5-flash-image' as const;
 
 interface PickedProvider {
   provider: 'gateway' | 'vertex' | 'google';
