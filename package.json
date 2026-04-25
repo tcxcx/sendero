@@ -51,6 +51,8 @@
     "deploy:edge": "bun run --cwd apps/edge deploy",
     "deploy:edge:preview": "bun run --cwd apps/edge deploy:preview",
     "deploy:edge:dry-run": "bun run --cwd apps/edge deploy:dry-run",
+    "config:doctor": "bun run scripts/config-doctor.ts",
+    "cache:setup": "bash scripts/setup-turbo-cache.sh",
     "smoke:retry": "bun run scripts/smoke-nanopay-retry.ts",
     "smoke:resume-settle": "bun run scripts/smoke-webhook-resume-settle.ts",
     "smoke:resume-cancel": "bun run scripts/smoke-webhook-resume-cancel.ts",

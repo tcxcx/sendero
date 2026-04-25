@@ -1,3 +1,21 @@
+// Sendero ship metadata check.
+//
+// Runs from the lefthook `commit-msg` hook. Inspects the staged diff and the
+// commit message, then either warns (advisory) or blocks the commit (error).
+//
+// Hard errors (exit 1):
+//   - XL commit without a `QA-Route:` trailer.
+//   - L or XL commit without a `Change-Size:` trailer matching the bucket.
+//
+// Everything else stays advisory (printed but exit 0).
+//
+// Bypass for genuine emergencies:
+//   LEFTHOOK=0 git commit ...    # skips ALL hooks
+//   git commit --no-verify ...   # ditto
+//
+// Do NOT add a per-script env-var escape hatch — that creates pressure to use
+// it routinely, which defeats the gate.
+
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
@@ -48,8 +66,25 @@ const inferredSize =
         : 'S';
 
 const warnings: string[] = [];
+const errors: { msg: string; fix: string }[] = [];
 
-if (!/^Change-Size:\s*(S|M|L|XL)\b/im.test(message)) {
+// Change-Size: required (and must match bucket) for L and XL. Advisory below L.
+const changeSizeMatch = message.match(/^Change-Size:\s*(S|M|L|XL)\b/im);
+const declaredSize = changeSizeMatch ? changeSizeMatch[1].toUpperCase() : null;
+
+if (inferredSize === 'L' || inferredSize === 'XL') {
+  if (!declaredSize) {
+    errors.push({
+      msg: `${inferredSize} commit missing Change-Size trailer`,
+      fix: `add "Change-Size: ${inferredSize}" to the commit body`,
+    });
+  } else if (declaredSize !== inferredSize) {
+    errors.push({
+      msg: `Change-Size: ${declaredSize} mislabels a ${inferredSize}-bucket commit (${totalLines} lines, ${files.length} files)`,
+      fix: `update trailer to "Change-Size: ${inferredSize}"`,
+    });
+  }
+} else if (!changeSizeMatch) {
   warnings.push(`add Change-Size: ${inferredSize}`);
 }
 
@@ -57,8 +92,14 @@ if (!/^PR-ID:\s*(#?\d+|pending|n\/a)\b/im.test(message)) {
   warnings.push('add PR-ID: pending, n/a, or #123');
 }
 
-if ((inferredSize === 'XL' || totalLines >= 600) && !/^QA-Route:\s*.+/im.test(message)) {
-  warnings.push('XL commit should include QA-Route: /route -> pass/fail');
+// QA-Route: required for XL. Accepts any token after `->`.
+const qaRouteRequired = inferredSize === 'XL' || totalLines >= 600;
+const hasQaRoute = /^QA-Route:\s*\S.*->\s*\S+/im.test(message);
+if (qaRouteRequired && !hasQaRoute) {
+  errors.push({
+    msg: 'XL commit missing QA-Route trailer',
+    fix: 'add "QA-Route: /your/route -> pass" (or fail) to the commit body',
+  });
 }
 
 if ((inferredSize === 'XL' || totalLines >= 600) && testFiles.length === 0) {
@@ -75,6 +116,17 @@ if (
   );
 }
 
+if (errors.length > 0) {
+  console.log('\n✘ Sendero ship metadata error');
+  console.log(
+    `  Staged size: ${inferredSize} (${totalLines} changed lines, ${files.length} files)`
+  );
+  for (const error of errors) {
+    console.log(`  ✘ ERROR: ${error.msg}`);
+    console.log(`    fix: ${error.fix}`);
+  }
+}
+
 if (warnings.length > 0) {
   console.log('\n! Sendero ship metadata advisory');
   console.log(
@@ -83,9 +135,19 @@ if (warnings.length > 0) {
   for (const warning of warnings) {
     console.log(`  - ${warning}`);
   }
+}
+
+if (errors.length > 0 || warnings.length > 0) {
   console.log('\n  Suggested commit body trailers:');
   console.log(`  PR-ID: pending`);
   console.log(`  Change-Size: ${inferredSize}`);
   console.log(`  Test: <focused check or smoke/e2e spec>`);
   console.log(`  QA-Route: <route tested> -> <pass/fail>`);
+  console.log(
+    `\n  Bypass for emergencies: LEFTHOOK=0 git commit ...   |   git commit --no-verify ...`
+  );
 }
+
+console.log(`\ncommit-metadata: ${errors.length} error(s), ${warnings.length} warning(s)`);
+
+process.exit(errors.length > 0 ? 1 : 0);
