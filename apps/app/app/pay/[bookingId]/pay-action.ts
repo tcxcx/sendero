@@ -130,6 +130,22 @@ export async function payByLinkAction(args: {
 
   const amount = booking.totalUsd.toFixed(2);
 
+  // Race-safe consume: claim the token BEFORE running the spend via a
+  // conditional update. Two simultaneous taps (e.g. flaky mobile WA
+  // tap, fast double-click) both pass `verifyBookingPayToken` because
+  // it reads consumedAt then later updates it. Without a conditional
+  // update here, both calls reach `kit.spend` and double-charge the
+  // traveler. `updateMany` returning count=0 means another tap already
+  // claimed the token; reject this one as `consumed` so the user sees
+  // the friendly already-used state, not a duplicate spend.
+  const claimed = await prisma.bookingPayToken.updateMany({
+    where: { id: tokenId, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
+  if (claimed.count === 0) {
+    return { kind: 'rejected', code: 'consumed', message: 'Pay link has already been used.' };
+  }
+
   const result = await executeTransferSpend({
     tenantId: tenant.id,
     travelerId: booking.trip.travelerId,
@@ -144,14 +160,24 @@ export async function payByLinkAction(args: {
     },
   });
 
-  // Single-use semantics: consume on success only. Failures stay
-  // retryable within the TTL window so a transient policy block or
-  // network blip doesn't strand the traveler.
   if (result.kind === 'executed') {
+    // Stamp the audit pointer post-spend. consumedAt was already set
+    // by the race-safe claim above; this update only attaches the
+    // attemptId so /dashboard surfaces can join token → attempt.
     await prisma.bookingPayToken.update({
       where: { id: tokenId },
-      data: { consumedAt: new Date(), attemptId: result.attemptId },
+      data: { attemptId: result.attemptId },
     });
+  } else {
+    // Spend didn't move money (blocked / pending / delegate_missing /
+    // failed). Roll the consume back so the traveler can retry within
+    // the TTL window; otherwise a transient policy hiccup strands them
+    // with a now-dead link.
+    await prisma.bookingPayToken
+      .update({ where: { id: tokenId }, data: { consumedAt: null } })
+      .catch(err => {
+        console.warn('[pay-action] rollback of token consume failed', err);
+      });
   }
 
   revalidatePath(`/pay/${args.bookingId}`);
