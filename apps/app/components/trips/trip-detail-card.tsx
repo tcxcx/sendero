@@ -14,6 +14,7 @@
 
 import type { Booking, Prisma, Trip } from '@sendero/database';
 
+import { SettleHoldButton } from '@/components/trips/settle-hold-button';
 import { formatDateTime, objectFromJson, stringFromJson } from '@/lib/format';
 
 type TripWithBookings = Trip & { bookings: Booking[] };
@@ -55,6 +56,15 @@ export function TripDetailCard({ trip }: { trip: TripWithBookings }) {
             {flightBookings.map((b, i) => (
               <div key={b.id}>
                 <FlightBlock booking={b} />
+                {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
+                  <div style={{ marginTop: 10 }}>
+                    <SettleHoldButton
+                      tripId={trip.id}
+                      bookingId={b.id}
+                      amountUsd={b.totalUsd.toString()}
+                    />
+                  </div>
+                ) : null}
                 {i < flightBookings.length - 1 ? (
                   <hr
                     aria-hidden
@@ -91,7 +101,18 @@ export function TripDetailCard({ trip }: { trip: TripWithBookings }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {hotelBookings.map(b => (
-              <StayBlock key={b.id} booking={b} />
+              <div key={b.id}>
+                <StayBlock booking={b} />
+                {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
+                  <div style={{ marginTop: 10 }}>
+                    <SettleHoldButton
+                      tripId={trip.id}
+                      bookingId={b.id}
+                      amountUsd={b.totalUsd.toString()}
+                    />
+                  </div>
+                ) : null}
+              </div>
             ))}
           </div>
         )}

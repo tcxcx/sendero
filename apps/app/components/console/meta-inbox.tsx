@@ -30,6 +30,7 @@ import { ChannelHeader } from './channel-header';
 import { ConsoleComposer } from './composer';
 import { Crumb } from './crumb';
 import { TripRail, type TripRowData } from './trip-rail';
+import { SettleHoldButton } from '@/components/trips/settle-hold-button';
 
 export interface ConversationEntry {
   id: string;
@@ -58,6 +59,13 @@ interface MetaInboxProps {
   } | null;
   /** Hold-expires countdown ("59:48") when status === 'awaiting hold'. */
   holdExpires?: string | null;
+  /**
+   * Earliest pending booking on the scoped trip. When set, the
+   * "Approve hold" header slot renders the operator settle CTA wired
+   * to that booking. Null on trips with nothing to settle, undefined
+   * in unscoped console mode.
+   */
+  pendingBooking?: { id: string; totalUsd: string } | null;
   /** Composer submit handler. When omitted, the composer is read-only. */
   onSubmit?: (text: string) => void | Promise<void>;
   /** When true, the composer is disabled (turn in flight). */
@@ -70,6 +78,7 @@ export function MetaInbox({
   conversation,
   traveler,
   holdExpires,
+  pendingBooking,
   onSubmit,
   disabled,
 }: MetaInboxProps) {
@@ -234,22 +243,31 @@ export function MetaInbox({
                 ⌘K
               </span>
             </button>
-            <button
-              type="button"
-              style={{
-                padding: '6px 14px',
-                background: 'var(--vermillion)',
-                color: '#fdfbf7',
-                border: 0,
-                borderRadius: 8,
-                fontSize: 11,
-                fontWeight: 600,
-                fontFamily: 'var(--font-sans)',
-                cursor: 'pointer',
-              }}
-            >
-              {isTrip ? 'Approve hold' : 'Run a report'}
-            </button>
+            {isTrip && pendingBooking && scopedTripId ? (
+              <SettleHoldButton
+                tripId={scopedTripId}
+                bookingId={pendingBooking.id}
+                amountUsd={pendingBooking.totalUsd}
+                variant="inbox"
+              />
+            ) : (
+              <button
+                type="button"
+                style={{
+                  padding: '6px 14px',
+                  background: 'var(--vermillion)',
+                  color: '#fdfbf7',
+                  border: 0,
+                  borderRadius: 8,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  fontFamily: 'var(--font-sans)',
+                  cursor: 'pointer',
+                }}
+              >
+                {isTrip ? 'No hold pending' : 'Run a report'}
+              </button>
+            )}
           </div>
         </div>
 

@@ -34,6 +34,7 @@ interface MetaInboxLiveProps {
   initialConversation: ConversationEntry[];
   traveler?: { name: string; initials: string } | null;
   holdExpires?: string | null;
+  pendingBooking?: { id: string; totalUsd: string } | null;
 }
 
 export function MetaInboxLive({
@@ -42,6 +43,7 @@ export function MetaInboxLive({
   initialConversation,
   traveler,
   holdExpires,
+  pendingBooking,
 }: MetaInboxLiveProps) {
   const router = useRouter();
   const isInternal = !scopedTripId;
@@ -109,6 +111,7 @@ export function MetaInboxLive({
       conversation={conversation}
       traveler={traveler}
       holdExpires={holdExpires}
+      pendingBooking={pendingBooking}
       onSubmit={handleSubmit}
       disabled={posting || isStreaming}
     />

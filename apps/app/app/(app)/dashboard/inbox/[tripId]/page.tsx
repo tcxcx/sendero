@@ -31,7 +31,10 @@ export default async function InboxTripPage({ params }: Props) {
   });
   if (!exists) notFound();
 
-  const { trips, conversation, traveler, holdExpires } = await loadConsoleData(tenant.id, tripId);
+  const { trips, conversation, traveler, holdExpires, pendingBooking } = await loadConsoleData(
+    tenant.id,
+    tripId
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
@@ -41,6 +44,7 @@ export default async function InboxTripPage({ params }: Props) {
         initialConversation={conversation}
         traveler={traveler}
         holdExpires={holdExpires}
+        pendingBooking={pendingBooking}
       />
     </div>
   );
