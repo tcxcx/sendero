@@ -9,8 +9,15 @@
 
 import { prisma, type Prisma } from '@sendero/database';
 
+import { reconcileBookingAfterSpend } from '@/lib/booking-reconcile/reconcile';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
 import { getUnifiedBalanceDelegate } from '@/lib/transfer-policy/app-kit';
+
+function readBookingId(metadata: Record<string, unknown> | undefined): string | null {
+  if (!metadata) return null;
+  const v = metadata.bookingId;
+  return typeof v === 'string' && v ? v : null;
+}
 
 export interface ExecuteSpendArgs {
   tenantId: string;
@@ -165,6 +172,23 @@ export async function executeTransferSpend(args: ExecuteSpendArgs): Promise<Exec
       where: { id: attemptRow.id },
       data: { status: 'executed', txHash },
     });
+
+    // Step 6 — booking reconciliation. When a spend covers a specific
+    // booking (operator settle, magic-link pay, agent-driven flow with
+    // bookingId in metadata), flip Booking.status pending -> confirmed
+    // and notify the traveler. Best-effort: a reconciliation throw must
+    // not poison the spend result that already settled on-chain.
+    const bookingId = readBookingId(args.metadata);
+    if (bookingId) {
+      reconcileBookingAfterSpend({
+        tenantId: args.tenantId,
+        bookingId,
+        attemptId: attemptRow.id,
+        txHash,
+      }).catch(err => {
+        console.warn('[executeTransferSpend] booking reconciliation failed (non-fatal)', err);
+      });
+    }
 
     return { kind: 'executed', attemptId: attemptRow.id, txHash, trace, result };
   } catch (err) {
