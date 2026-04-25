@@ -21,9 +21,11 @@ import {
   renderBookingConfirmed,
   renderHoldApproval,
   renderHoldConfirmed,
+  renderPayLink,
   type BookingConfirmedContent,
   type HoldApprovalContent,
   type HoldConfirmedContent,
+  type PayLinkEmailContent,
 } from './trip-event-templates';
 
 export type { GuestInviteContent } from './templates';
@@ -35,12 +37,14 @@ export {
   renderBookingConfirmed,
   renderHoldApproval,
   renderHoldConfirmed,
+  renderPayLink,
 } from './trip-event-templates';
 export type {
   BookingConfirmedContent,
   HoldApprovalContent,
   HoldConfirmedContent,
   ItinerarySegment,
+  PayLinkEmailContent,
 } from './trip-event-templates';
 
 // OTP cleartext + on-chain hash + channel selector for the
@@ -136,6 +140,16 @@ export interface Notifier {
     to: string,
     content: Omit<ShareEmailContent, 'supportEmail'> & { supportEmail?: string }
   ): Promise<SendResult>;
+  /**
+   * Magic-link payment email. Sent to the off-app traveler (agency
+   * guest, B2C with no Clerk session) when the operator pre-funds them
+   * and dispatches a one-tap pay link. The button deep-links to
+   * `/pay/[bookingId]?t=<token>` — single-use, short TTL.
+   */
+  sendPayLink(
+    to: string,
+    content: Omit<PayLinkEmailContent, 'supportEmail'> & { supportEmail?: string }
+  ): Promise<SendResult>;
 }
 
 /**
@@ -173,6 +187,9 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
         return skipped;
       },
       async sendShareCard() {
+        return skipped;
+      },
+      async sendPayLink() {
         return skipped;
       },
     };
@@ -318,6 +335,29 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
           html: rendered.html,
           text: rendered.text,
           tags: [{ name: 'surface', value: 'share_card' }],
+        });
+        if (result.error) {
+          return { ok: false, error: result.error.message ?? String(result.error) };
+        }
+        return { ok: true, id: result.data?.id };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+    async sendPayLink(to, content) {
+      const rendered = renderPayLink({
+        ...content,
+        supportEmail: content.supportEmail ?? supportEmail,
+      });
+      try {
+        const result = await client.emails.send({
+          from,
+          to: [to],
+          replyTo: replyTo ? [replyTo] : undefined,
+          subject: rendered.subject,
+          html: rendered.html,
+          text: rendered.text,
+          tags: [{ name: 'surface', value: 'pay_link' }],
         });
         if (result.error) {
           return { ok: false, error: result.error.message ?? String(result.error) };

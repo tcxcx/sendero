@@ -356,6 +356,95 @@ export function renderBookingConfirmed(content: BookingConfirmedContent): {
   return { subject, html: shell(inner), text };
 }
 
+// ─── renderPayLink ───────────────────────────────────────────────────
+
+export interface PayLinkEmailContent {
+  /** Display name of the traveler. Used in greeting + monospace block. */
+  travelerName: string;
+  /** Operator-side display name shown in the body, e.g. tenant.displayName. */
+  operatorName: string;
+  /** Pre-formatted amount, e.g. "$1,820.00". */
+  amount: string;
+  /** ISO 4217 / display string. */
+  currency: string;
+  /** Supplier display name, e.g. "United Airlines". */
+  supplierName: string;
+  /** Trip summary, e.g. "SFO → LHR · Apr 30 – May 7". */
+  tripSummary: string;
+  /** ISO timestamp the magic link expires at. */
+  expiresAtIso: string;
+  /** Magic-link URL — `/pay/[bookingId]?t=<token>`. Single-use. */
+  payUrl: string;
+  supportEmail?: string;
+}
+
+export function renderPayLink(content: PayLinkEmailContent): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const support = content.supportEmail ?? 'hello@sendero.travel';
+  const expires = formatExpires(content.expiresAtIso);
+  const subject = `Confirm payment · ${content.tripSummary} · ${content.currency} ${content.amount}`;
+
+  const inner = `
+            <tr>
+              <td style="font-size:24px;font-weight:700;color:#0b0b0b;line-height:1.25;padding-bottom:16px;">
+                Your booking is ready to confirm
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:16px;color:#333;line-height:1.6;padding-bottom:24px;">
+                Hi ${escapeHtml(content.travelerName)} — <strong>${escapeHtml(content.operatorName)}</strong>
+                has pre-funded your travel balance. Tap the button below to confirm
+                <strong>${escapeHtml(content.currency)} ${escapeHtml(content.amount)}</strong> to
+                ${escapeHtml(content.supplierName)} and lock in your booking.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf6f0;border:1px solid #ede6db;border-radius:12px;padding:16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:#333;line-height:1.7;">
+                  <tr><td>Trip: <strong>${escapeHtml(content.tripSummary)}</strong></td></tr>
+                  <tr><td>Supplier: <strong>${escapeHtml(content.supplierName)}</strong></td></tr>
+                  <tr><td>Amount: <strong>${escapeHtml(content.currency)} ${escapeHtml(content.amount)}</strong></td></tr>
+                  <tr><td>Link expires: <strong>${escapeHtml(expires)}</strong></td></tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 0 8px 0;">
+                ${ctaButton(content.payUrl, 'Confirm payment')}
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:13px;color:#888;padding:8px 0 24px 0;">
+                Single-use link — expires shortly. If the button doesn't work, paste this URL:
+                <div style="padding-top:6px;word-break:break-all;color:#555;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;">
+                  ${escapeHtml(content.payUrl)}
+                </div>
+              </td>
+            </tr>
+            ${footer(support)}`;
+
+  const text = [
+    `Your booking is ready to confirm`,
+    ``,
+    `${content.operatorName} has pre-funded your travel balance.`,
+    `Confirm ${content.currency} ${content.amount} to ${content.supplierName}.`,
+    ``,
+    `Trip: ${content.tripSummary}`,
+    `Amount: ${content.currency} ${content.amount}`,
+    `Link expires: ${expires}`,
+    ``,
+    `Confirm payment:`,
+    content.payUrl,
+    ``,
+    `Single-use link. Questions? ${support}`,
+  ].join('\n');
+
+  return { subject, html: shell(inner), text };
+}
+
 // ─── escape helpers ──────────────────────────────────────────────────
 
 function escapeHtml(input: string): string {
