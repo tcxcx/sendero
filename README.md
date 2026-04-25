@@ -442,6 +442,55 @@ Accessibility is non-negotiable: ~1 in 5 travelers have accessibility needs. 44�
 
 [`@sendero/sendero-nanopayments`](./packages/sendero-nanopayments) settles bookings in a single Arc userOp that atomically fans traveler escrow → supplier + agency commission + Sendero fee + validator reward + reputation tip. The same rails meter per-turn agent usage (via x402). Quotes show fiat (via `quote_fx`) but commit in USDC; the invoice email shows both plus the settle tx hash; refunds via `send_tokens` surface their own tx hash. Card rails cannot do atomic multi-leg settlement — this is the Sendero-specific unlock.
 
+### Rolling releases on Vercel — gradual production rollouts
+
+Every production deploy of `apps/{app, marketing, docs, help}` rolls out in stages instead of flipping 100% of traffic at once. This is the web-tier counterpart to the Cloudflare Workers canary system on the edge worker — a bad deploy gets caught while it's only serving 5% of users, not after it's already broken everyone.
+
+Source of truth is one file per app: [`apps/<app>/.rolling-release.json`](./apps/app/.rolling-release.json). Stage shape is `{ targetPercentage, duration }` where `duration` is **minutes** until the stage auto-advances. A final 100% stage is required.
+
+| App | First stage | Subsequent stages | Total bake time |
+|---|---|---|---|
+| `apps/app` (auth, money, agent dispatch) | 5% / 15 min | 25% / 30 min → 50% / 60 min → 100% | ~1h 45m |
+| `apps/marketing` | 10% / 10 min | 50% / 30 min → 100% | ~40 min |
+| `apps/docs` | 25% / 15 min | 100% | ~15 min |
+| `apps/help` | 25% / 15 min | 100% | ~15 min |
+
+**One-time setup (per Vercel project).** Each `apps/<app>` must already be linked (`vercel link` once). Then push the JSON config to Vercel:
+
+```bash
+bun run deploy:rolling:configure          # apply all four
+bun run deploy:rolling:configure:dry      # preview the CLI calls
+bun run deploy:rolling:disable            # turn rolling releases off everywhere
+```
+
+Re-running the configure script overwrites the project's stored config — keep the JSON in git as the source of truth.
+
+**Day-to-day deploy.** Once Rolling Releases is enabled, every promotion automatically uses the configured stages — the normal git push pipeline keeps working. To deploy from a workstation:
+
+```bash
+bun run deploy:app                         # vercel deploy --prod under apps/app
+bun run deploy:marketing
+bun run deploy:docs
+bun run deploy:help
+```
+
+**Halt or finish a release in flight.**
+
+```bash
+bun run deploy:rolling:status:app          # current stage + canary deploy id
+bun run deploy:rolling:abort:app           # stop the canary, keep prod on previous deploy
+bun run deploy:rolling:approve:app         # advance to the next stage early
+bun run deploy:rolling:complete:app        # promote canary to 100% immediately
+```
+
+`abort` is also reachable as **Instant Rollback** in the Vercel dashboard.
+
+**Auto-halt on error rate.** Vercel's Rolling Releases does **not** expose an `errorRateThreshold` config field — auto-halt is not a built-in primitive. The Observability tab on the project shows canary-vs-baseline metrics (Speed Insights, error rate, Web Vitals) and `abort` is one click. For programmatic halting, wire the Vercel REST API (`POST /v1/projects/{id}/rollback/{deploymentId}`) into our existing `/health` substrate so a degraded canary triggers an abort. Tracked separately from this initial setup.
+
+**Plan tier.** Rolling Releases is a Vercel **Pro / Enterprise** feature (Sendero is on Pro). Hobby projects will reject the configure call.
+
+**Edge-tier counterpart.** The CF Workers `sendero-arc-edge` worker has its own canary system documented in [`apps/edge/README.md`](./apps/edge/README.md#canary-rollouts) — different runtime, same shape (gradient rollout, health-probe gating, manual rollback escape hatch).
+
 
 ## One-liner setup (mise)
 

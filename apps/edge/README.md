@@ -58,6 +58,59 @@ bun run vercel:deploy
 `.vercel/output`; `vercel:deploy` uploads that prebuilt output to
 `sendero-arc-edge` without asking Vercel to reinstall a partial workspace.
 
+## Canary rollouts
+
+Every change to `apps/edge/**` can be rolled out gradually with auto-rollback on health-probe failure. Three thin wrappers around `wrangler versions {upload,deploy}` handle the version-id juggling:
+
+```bash
+bun run deploy:edge:canary -- --pct 10   # upload current code, route 10%
+bun run deploy:edge:promote              # promote the canary to 100%
+bun run deploy:edge:rollback             # 100% back to the previous version
+```
+
+Default canary slice is 10%; pass `--pct 25` (etc.) to override. Each script prints new + previous version IDs.
+
+### Auto-rollout workflow
+
+`.github/workflows/edge-canary-rollout.yml` runs after every push to `main` that touches `apps/edge/**` or its workspace deps. 3-stage gradient with `scripts/edge-health-check.sh` gating each stage:
+
+| Stage | Traffic | Soak  | Probes | On fail                                      |
+|-------|---------|-------|--------|----------------------------------------------|
+| 1     | 10%     | 5 min | 3×60s  | `deploy:edge:rollback` + open incident issue |
+| 2     | 50%     | 5 min | 3×60s  | rollback + issue                             |
+| 3     | 100%    | —     | 3×60s  | rollback + issue                             |
+
+On success the workflow comments on the merged PR with the rolled-out version ID and probe count.
+
+### Skipping the canary (hotfixes)
+
+Add the `skip-canary` label to the PR before merge. The plain `wrangler deploy` path (CF Workers Builds dashboard runs `bun run deploy:edge`) still ships the change at 100% immediately.
+
+### Wrangler commands under the hood
+
+Verified against wrangler v4.85.0:
+
+```bash
+# Upload code as a new version, no traffic routed:
+wrangler versions upload --message "<intent>"
+
+# Split traffic between two versions (--yes required in CI):
+wrangler versions deploy <new>@10% <prev>@90% --yes --message "canary 10%"
+
+# Promote a single version to 100%:
+wrangler versions deploy <id>@100% --yes --message "promote"
+```
+
+If CI starts hanging on an interactive prompt, bump wrangler — `--yes` for `versions deploy` was historically broken (cloudflare/workers-sdk#5709).
+
+### Local testing
+
+`wrangler versions {upload,deploy}` need a real CF API token, so canary scripts can't be exercised end-to-end without auth. The closest local check is the dry-run:
+
+```bash
+bun run deploy:edge:dry-run
+```
+
 ## Adapter status
 
 - `mcp` — ✅ production-quality, JSON-RPC 2.0, identical protocol to the Next.js `/api/mcp`.

@@ -1,0 +1,11 @@
+{
+  "$comment": "Rolling release config for the @sendero/app project. Highest blast radius — money, auth, agent dispatch. Apply with `bun run deploy:rolling:configure` from the repo root. See https://vercel.com/docs/rolling-releases.",
+  "enabled": true,
+  "advancementType": "automatic",
+  "stages": [
+    { "targetPercentage": 5, "duration": 15 },
+    { "targetPercentage": 25, "duration": 30 },
+    { "targetPercentage": 50, "duration": 60 },
+    { "targetPercentage": 100 }
+  ]
+}

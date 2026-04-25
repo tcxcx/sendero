@@ -1,0 +1,238 @@
+name: Edge canary rollout
+
+# Triggers (chosen after weighing options):
+#
+#   * `workflow_run` — REJECTED. CF Workers Builds is an external CI; its
+#     "workflow run" doesn't surface to GitHub Actions, so workflow_run
+#     can't observe it.
+#   * `repository_dispatch` — REJECTED unless we wire CF Builds to POST
+#     into the GH API after each successful build, which we don't today.
+#   * `push` to main + `workflow_dispatch` — CHOSEN. Push fires when code
+#     lands on main (same moment CF Builds starts), and we wait inside
+#     stage 1 for the build to actually deploy before probing. Manual
+#     dispatch covers the "I want to canary an arbitrary version" case.
+#
+# Skip via PR label `skip-canary` — checked at the start of stage 1.
+# (We can't check labels from `push` directly, but the most recent commit's
+# associated PR is resolvable via gh and we honor the label there.)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/edge/**'
+      - 'packages/tools/**'
+      - 'packages/llms/**'
+      - 'packages/seo/**'
+      - 'packages/auth/**'
+      - 'apps/edge/wrangler.toml'
+      - '.github/workflows/edge-canary-rollout.yml'
+  workflow_dispatch:
+    inputs:
+      initial_pct:
+        description: 'Initial canary percentage (1-99)'
+        required: false
+        default: '10'
+
+concurrency:
+  group: edge-canary
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: 67f97ad58ab9673c26f9f5a2c27c99da
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  WORKER_NAME: sendero-arc-edge
+  # CF Workers Builds takes ~2-3 minutes from push to live. Stage 1 sleeps
+  # past that mark before probing, so we never measure the previous version.
+  CF_BUILDS_LEAD_TIME_SEC: '180'
+
+jobs:
+  rollout:
+    name: 10% → 50% → 100% with auto-rollback
+    runs-on: ubuntu-latest
+    # Wall-clock budget:
+    #   - 3 min CF Builds lead
+    #   - stage 1 wait 5 min + 3×60s probes  ≈  8 min
+    #   - stage 2 wait 5 min + 3×60s probes  ≈  8 min
+    #   - stage 3 promote   + 3×60s probes   ≈  3 min
+    #   - rollback overhead, gh issue, etc.   ≈  2 min
+    #   total minimum:                       ≈ 24 min
+    # Bumped to 35 to absorb wrangler retries and CF API jitter.
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check skip-canary label on PR (if any)
+        id: skip_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Best-effort: find a PR associated with the pushed SHA.
+          pr_number=$(gh pr list --search "${{ github.sha }}" --state merged --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [[ -z "$pr_number" ]]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "[skip-check] no PR found for ${{ github.sha }} — proceeding"
+            exit 0
+          fi
+          if gh pr view "$pr_number" --json labels --jq '.labels[].name' | grep -qx 'skip-canary'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "[skip-check] PR #${pr_number} has skip-canary label — exiting"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "[skip-check] PR #${pr_number} no skip-canary label — proceeding"
+          fi
+
+      - name: Wait for CF Workers Builds to publish current SHA
+        if: steps.skip_check.outputs.skip != 'true'
+        run: |
+          echo "[wait] sleeping ${CF_BUILDS_LEAD_TIME_SEC}s so CF Builds finishes its push deploy"
+          sleep "${CF_BUILDS_LEAD_TIME_SEC}"
+
+      # ─────────────────────────────────────────────────────────────────
+      # Stage 1 — 10% canary
+      # ─────────────────────────────────────────────────────────────────
+      - name: 'Stage 1: deploy canary at requested %'
+        id: canary
+        if: steps.skip_check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          pct="${{ github.event.inputs.initial_pct || '10' }}"
+          bun run deploy:edge:canary -- --pct "$pct" 2>&1 | tee /tmp/canary.log
+          new_id=$(grep -oE 'CANARY_NEW_VERSION_ID=[a-f0-9-]+' /tmp/canary.log | tail -1 | cut -d= -f2)
+          prev_id=$(grep -oE 'CANARY_PREV_VERSION_ID=[a-f0-9-]+' /tmp/canary.log | tail -1 | cut -d= -f2)
+          {
+            echo "new_version_id=${new_id}"
+            echo "prev_version_id=${prev_id}"
+            echo "initial_pct=${pct}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 'Stage 1: soak 5 min then 3× health probes'
+        if: steps.skip_check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          echo "[stage1] soaking 5 min on ${{ steps.canary.outputs.initial_pct }}% canary"
+          sleep 300
+          for i in 1 2 3; do
+            echo "[stage1] probe ${i}/3"
+            bash scripts/edge-health-check.sh
+            if [[ "$i" -lt 3 ]]; then sleep 60; fi
+          done
+
+      - name: 'Stage 1: rollback on failure'
+        if: failure() && steps.canary.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bun run deploy:edge:rollback || true
+          gh issue create \
+            --title "Edge canary auto-rolled-back at ${{ steps.canary.outputs.initial_pct }}%" \
+            --label "incident,edge,canary" \
+            --body "Stage 1 health probes failed for new version \`${{ steps.canary.outputs.new_version_id }}\`. Auto-rolled back to \`${{ steps.canary.outputs.prev_version_id }}\`. Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          exit 1
+
+      # ─────────────────────────────────────────────────────────────────
+      # Stage 2 — 50%
+      # ─────────────────────────────────────────────────────────────────
+      - name: 'Stage 2: bump canary to 50%'
+        id: stage2
+        if: steps.skip_check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          new_id="${{ steps.canary.outputs.new_version_id }}"
+          prev_id="${{ steps.canary.outputs.prev_version_id }}"
+          bunx wrangler versions deploy \
+            "${new_id}@50%" \
+            "${prev_id}@50%" \
+            --yes \
+            --message "canary 50% — new=${new_id}"
+
+      - name: 'Stage 2: soak 5 min then 3× health probes'
+        if: steps.skip_check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          echo "[stage2] soaking 5 min on 50% canary"
+          sleep 300
+          for i in 1 2 3; do
+            echo "[stage2] probe ${i}/3"
+            bash scripts/edge-health-check.sh
+            if [[ "$i" -lt 3 ]]; then sleep 60; fi
+          done
+
+      - name: 'Stage 2: rollback on failure'
+        if: failure() && steps.stage2.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bun run deploy:edge:rollback || true
+          gh issue create \
+            --title "Edge canary auto-rolled-back at 50%" \
+            --label "incident,edge,canary" \
+            --body "Stage 2 health probes failed for \`${{ steps.canary.outputs.new_version_id }}\`. Auto-rolled back to \`${{ steps.canary.outputs.prev_version_id }}\`. Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          exit 1
+
+      # ─────────────────────────────────────────────────────────────────
+      # Stage 3 — 100% promote
+      # ─────────────────────────────────────────────────────────────────
+      - name: 'Stage 3: promote to 100%'
+        id: promote
+        if: steps.skip_check.outputs.skip != 'true'
+        run: bun run deploy:edge:promote
+
+      - name: 'Stage 3: final 3× health probes'
+        if: steps.skip_check.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          echo "[stage3] final probes after promote"
+          for i in 1 2 3; do
+            echo "[stage3] probe ${i}/3"
+            bash scripts/edge-health-check.sh
+            if [[ "$i" -lt 3 ]]; then sleep 60; fi
+          done
+
+      - name: 'Stage 3: rollback on failure'
+        if: failure() && steps.promote.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          bun run deploy:edge:rollback || true
+          gh issue create \
+            --title "Edge canary auto-rolled-back at 100%" \
+            --label "incident,edge,canary" \
+            --body "Final probes failed after promote. Auto-rolled back to \`${{ steps.canary.outputs.prev_version_id }}\`. Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          exit 1
+
+      # ─────────────────────────────────────────────────────────────────
+      # Success — comment on the merged PR (best-effort)
+      # ─────────────────────────────────────────────────────────────────
+      - name: Comment on PR with success
+        if: success() && steps.skip_check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pr_number=$(gh pr list --search "${{ github.sha }}" --state merged --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [[ -z "$pr_number" ]]; then
+            echo "[success] no PR found for ${{ github.sha }} — skipping comment"
+            exit 0
+          fi
+          gh pr comment "$pr_number" \
+            --body "Edge canary rolled out to 100% — version \`${{ steps.canary.outputs.new_version_id }}\`, 0 health failures across 9 probes (3 per stage)."

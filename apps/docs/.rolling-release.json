@@ -1,0 +1,6 @@
+{
+  "$comment": "Rolling release config for the @sendero/docs project. Read-mostly, mostly static. Apply with `bun run deploy:rolling:configure` from the repo root.",
+  "enabled": true,
+  "advancementType": "automatic",
+  "stages": [{ "targetPercentage": 25, "duration": 15 }, { "targetPercentage": 100 }]
+}
