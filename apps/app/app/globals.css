@@ -2783,10 +2783,12 @@ hr.rule {
 }
 .app-loading-spinner__bar {
   position: absolute;
-  left: -10%;
-  top: -3.9%;
+  left: 50%;
+  top: 50%;
   width: 24%;
   height: 8%;
+  margin-left: -12%;
+  margin-top: -4%;
   background: currentColor;
   border-radius: 6px;
   animation: app-loading-fade 1.2s linear infinite;

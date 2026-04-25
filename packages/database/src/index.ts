@@ -60,6 +60,6 @@ if (process.env.NODE_ENV !== 'production') {
   g.__senderoPrisma = prisma;
 }
 
-export * from '@prisma/client';
+export { Prisma, PrismaClient } from '@prisma/client';
+export type * from '@prisma/client';
 export * as Types from './types';
-export { PrismaClient } from '@prisma/client';

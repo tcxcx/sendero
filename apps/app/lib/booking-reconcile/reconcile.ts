@@ -21,11 +21,7 @@
  */
 
 import { prisma } from '@sendero/database';
-import {
-  createNotifier,
-  notificationsConfigured,
-  type SendResult,
-} from '@sendero/notifications';
+import { createNotifier, notificationsConfigured, type SendResult } from '@sendero/notifications';
 
 import { sendChannelMessageWhatsApp } from '@/lib/channel-send/whatsapp';
 import type { ChannelMessage } from '@/lib/channel-render';
@@ -82,9 +78,7 @@ interface BookingContext {
   supplier: { name: string | null } | null;
 }
 
-export async function reconcileBookingAfterSpend(
-  args: ReconcileArgs
-): Promise<ReconcileResult> {
+export async function reconcileBookingAfterSpend(args: ReconcileArgs): Promise<ReconcileResult> {
   const ctx = await loadBooking(args.tenantId, args.bookingId);
   if (!ctx) return { kind: 'noop', bookingId: args.bookingId, reason: 'not_found' };
   if (ctx.status !== 'pending') {
@@ -94,10 +88,9 @@ export async function reconcileBookingAfterSpend(
   // Conditional flip — only the first reconciliation (per booking) wins.
   // Prisma's `updateMany` returns a count; 0 = lost the race to another
   // reconciler that already moved the row out of 'pending'.
-  const baseMetadata = (ctx.metadata && typeof ctx.metadata === 'object' ? ctx.metadata : {}) as Record<
-    string,
-    unknown
-  >;
+  const baseMetadata = (
+    ctx.metadata && typeof ctx.metadata === 'object' ? ctx.metadata : {}
+  ) as Record<string, unknown>;
   const merged = {
     ...baseMetadata,
     settledBy: 'transfer_attempt',
@@ -204,7 +197,9 @@ async function notifyWhatsApp(
     body: `Your $${amount} payment to ${supplierName} for ${tripSummary} has been settled. We'll send your itinerary as soon as ticketing completes.`,
     bullets: [
       `Reference: ${ctx.pnr ?? args.bookingId}`,
-      args.txHash ? `On-chain: ${args.txHash.slice(0, 16)}…` : `Attempt: ${args.attemptId.slice(0, 12)}`,
+      args.txHash
+        ? `On-chain: ${args.txHash.slice(0, 16)}…`
+        : `Attempt: ${args.attemptId.slice(0, 12)}`,
     ],
     createdAt: new Date().toISOString(),
   };

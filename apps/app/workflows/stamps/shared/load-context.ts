@@ -1,10 +1,12 @@
 /**
  * Load the canonical stamp context for a (kind, tripId, bookingId).
  *
- * Run once per workflow start (NOT inside a `'use step'` — the WDK
- * checkpointer would persist the entire context blob to durable
- * storage, which we don't want; we'd rather re-read on resume so
- * brand changes propagate).
+ * Marked `'use step'` because WDK forbids Prisma (or any Node-only
+ * module) inside the workflow function body — the workflow runtime
+ * is sandboxed and only steps escape into a real Node environment.
+ * The context blob this returns IS persisted by the WDK checkpointer;
+ * if you want to re-read on resume so tenant brand changes propagate,
+ * call this again from a separate step.
  *
  * For the BoardingPass / SettlementReceipt kinds, `bookingId` is
  * required and `primaryKey = bookingId`.
@@ -35,6 +37,7 @@ export async function loadStampContext(args: {
   tripId: string;
   bookingId: string | null;
 }): Promise<StampContext | null> {
+  'use step';
   const trip = await prisma.trip.findUnique({
     where: { id: args.tripId },
     select: {

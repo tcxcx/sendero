@@ -92,9 +92,14 @@ export function MetaInbox({
   const channelKey: ChannelKey = isTrip ? asChannelKey(focused?.channel) : 'internal';
   const channel = CHANNELS[channelKey];
 
-  // Column template adapts to which side panel is open.
-  const baseCols = isTrip ? '260px 1fr' : '320px 1fr';
-  const cols = baseCols + (customerPanelOpen ? ' 320px' : '');
+  // In unscoped console mode the right column is the live nanopay/workflow
+  // feed and lives there permanently — the footer toggle is suppressed.
+  // In scoped (trip) mode the right column toggles between Customer cards
+  // and a hidden state, and the nanopay terminal can still expand from the
+  // footer as a fourth panel.
+  const sidePanelOpen = isTrip ? customerPanelOpen : true;
+  const baseCols = isTrip ? '260px 1fr' : '300px 1fr';
+  const cols = baseCols + (sidePanelOpen ? (isTrip ? ' 320px' : ' 340px') : '');
 
   return (
     <div
@@ -271,6 +276,11 @@ export function MetaInbox({
           </div>
         </div>
 
+        {/* V2 hero band — KPIs + quick commands. Only in unscoped console
+            mode; scoped trip inbox keeps the title row and goes straight
+            to the columns. */}
+        {!isTrip ? <ConsoleHeroBand trips={trips} /> : null}
+
         <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 0, flex: 1, minHeight: 0 }}>
           {/* LEFT — trip rail */}
           <TripRail
@@ -334,42 +344,43 @@ export function MetaInbox({
             />
           </div>
 
-          {/* RIGHT — customer / context panel */}
-          {customerPanelOpen ? (
-            <div
-              style={{
-                borderLeft: '1px solid var(--hairline-color)',
-                paddingLeft: 18,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 14,
-                overflow: 'auto',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span className="t-meta">{isTrip ? 'Customer' : 'Workspace summary'}</span>
-                <span style={{ flex: 1 }} />
-                <button
-                  type="button"
-                  onClick={() => setCustomerPanelOpen(false)}
-                  className="t-mono ink-60"
-                  style={{
-                    fontSize: 10,
-                    cursor: 'pointer',
-                    background: 'transparent',
-                    border: 0,
-                  }}
-                >
-                  hide ✕
-                </button>
+          {/* RIGHT — customer panel (scoped) or nanopay/workflows feed
+              (unscoped). In V2 the unscoped 3rd column is the live
+              ledger; KPIs moved to the hero band above. */}
+          {sidePanelOpen ? (
+            isTrip ? (
+              <div
+                style={{
+                  borderLeft: '1px solid var(--hairline-color)',
+                  paddingLeft: 18,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                  overflow: 'auto',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span className="t-meta">Customer</span>
+                  <span style={{ flex: 1 }} />
+                  <button
+                    type="button"
+                    onClick={() => setCustomerPanelOpen(false)}
+                    className="t-mono ink-60"
+                    style={{
+                      fontSize: 10,
+                      cursor: 'pointer',
+                      background: 'transparent',
+                      border: 0,
+                    }}
+                  >
+                    hide ✕
+                  </button>
+                </div>
+                {focused ? <TripContextCards trip={focused} channel={channel} /> : null}
               </div>
-
-              {isTrip && focused ? (
-                <TripContextCards trip={focused} channel={channel} />
-              ) : (
-                <ConsoleSummaryCards />
-              )}
-            </div>
+            ) : (
+              <NanopayWorkflowsPanel conversation={conversation} />
+            )
           ) : null}
         </div>
 
@@ -414,7 +425,7 @@ export function MetaInbox({
               running
             </span>
             <span style={{ flex: 1 }} />
-            {!customerPanelOpen ? (
+            {isTrip && !customerPanelOpen ? (
               <button
                 type="button"
                 onClick={() => setCustomerPanelOpen(true)}
@@ -429,12 +440,17 @@ export function MetaInbox({
                   cursor: 'pointer',
                 }}
               >
-                ◧ Show {isTrip ? 'customer' : 'workspace'} panel
+                ◧ Show customer panel
               </button>
             ) : null}
-            <NanopaySwitch open={nanopayOpen} onToggle={() => setNanopayOpen(o => !o)} />
+            {/* In unscoped mode the nanopay/workflows feed lives in the
+                3rd column permanently; the footer terminal toggle only
+                makes sense when zoomed into a single trip. */}
+            {isTrip ? (
+              <NanopaySwitch open={nanopayOpen} onToggle={() => setNanopayOpen(o => !o)} />
+            ) : null}
           </div>
-          {nanopayOpen ? (
+          {isTrip && nanopayOpen ? (
             <div
               style={{
                 padding: '0 18px 14px',
@@ -763,29 +779,341 @@ function TripContextCards({
   );
 }
 
-function ConsoleSummaryCards() {
-  const KPIS = [
-    { label: 'Today', big: '24', sub: 'trips in flight · 4 awaiting' },
-    { label: 'Settled 30d', big: '312', sub: '$74,820 total fare' },
-    { label: 'Avg response', big: '11s', sub: 'agent latency' },
+// V2 hero band — KPIs + quick commands span the full width above the
+// 3-col body. Replaces the old V1 right-rail "Workspace summary" card
+// stack so the conversation can use the freed column for live nanopay
+// + workflow signal.
+const CONSOLE_KPIS = [
+  { label: 'Today', big: '24', sub: 'trips in flight · 4 awaiting' },
+  { label: 'Settled 30d', big: '312', sub: '$74,820 total fare' },
+  { label: 'Avg response', big: '11s', sub: 'agent latency' },
+] as const;
+
+const QUICK_COMMANDS = [
+  { k: '/spend', hint: '<period>' },
+  { k: '/policy', hint: '<name|dept>' },
+  { k: '/trip', hint: '<id>' },
+  { k: '/handoff', hint: '@user' },
+  { k: '/report', hint: '<scope>' },
+] as const;
+
+function ConsoleHeroBand({ trips }: { trips: TripRowData[] }) {
+  const liveKpis: { label: string; big: string; sub: string }[] = [
+    {
+      label: 'Today',
+      big: String(trips.length),
+      sub: `${trips.filter(t => t.state === 'AWAITING').length} awaiting · live`,
+    },
+    CONSOLE_KPIS[1],
+    CONSOLE_KPIS[2],
   ];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {KPIS.map(k => (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'auto auto auto 1fr',
+        gap: 14,
+        padding: '14px 18px',
+        background: 'linear-gradient(180deg, rgba(199,89,77,0.05) 0%, transparent 100%)',
+        borderTop: '1px solid var(--hairline-color)',
+        borderBottom: '1px solid var(--hairline-color)',
+        borderRadius: 10,
+        alignItems: 'stretch',
+      }}
+    >
+      {liveKpis.map((k, i) => (
         <div
           key={k.label}
-          className="sd-card-flat"
-          style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
+          style={{
+            padding: '0 18px',
+            borderRight: i < 2 ? '1px solid var(--hairline-color)' : 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+          }}
         >
-          <div className="t-meta">{k.label}</div>
-          <div className="t-num-lg" style={{ fontSize: 32, marginTop: 4, lineHeight: 1 }}>
+          <div className="t-meta" style={{ fontSize: 10 }}>
+            {k.label}
+          </div>
+          <div className="t-num-lg" style={{ fontSize: 30, marginTop: 4, lineHeight: 1 }}>
             {k.big}
           </div>
-          <div className="t-mono ink-60" style={{ fontSize: 10.5, marginTop: 6 }}>
+          <div className="t-mono ink-60" style={{ fontSize: 10.5, marginTop: 4 }}>
             {k.sub}
           </div>
         </div>
       ))}
+      <div
+        style={{
+          paddingLeft: 22,
+          borderLeft: '1px solid var(--hairline-color)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          gap: 8,
+          minWidth: 0,
+        }}
+      >
+        <div className="t-meta" style={{ fontSize: 10 }}>
+          Quick commands
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {QUICK_COMMANDS.map(q => (
+            <span
+              key={q.k}
+              className="t-mono"
+              style={{
+                fontSize: 10.5,
+                padding: '4px 9px',
+                background: 'var(--surface-floating)',
+                boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+                borderRadius: 14,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ color: 'var(--vermillion)', fontWeight: 600 }}>{q.k}</span>
+              <span style={{ color: 'var(--ink-60)', marginLeft: 5 }}>{q.hint}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Nanopay + Workflows live feed — the V2 right column. Builds a ledger
+// from the conversation's tool entries (drives off the same useChat
+// stream the center conversation renders) so any tool call shows up
+// here in real time. Workflows are surfaced as the recent dispatch
+// trail. Visual treatment borrows from the design's NanopaymentPanel
+// (terminal-skinned, vermillion + sand accents on midnight).
+function NanopayWorkflowsPanel({ conversation }: { conversation: ConversationEntry[] }) {
+  // The conversation entries are already ordered oldest → newest from
+  // useChat; reverse for the ledger so the most recent call is at the
+  // top, matching the design.
+  const toolEntries = conversation.filter(e => e.role === 'tool' && e.toolName);
+
+  // Heuristic per-tool cost. Real x402 prices come from the meter
+  // store; until we wire SSE, we keep the visualization honest by
+  // anchoring rare/expensive operations (book/hold) higher than
+  // free-tier reads.
+  const PRICE_HINT: Record<string, number> = {
+    'duffel.search': 0.084,
+    'duffel.hold': 2.184,
+    'duffel.book': 4.2,
+    'policy.check': 0.001,
+    'trips.query': 0.001,
+    'spend.rollup': 0.004,
+    'finance.breakdown': 0.001,
+    'trip.summary': 0.004,
+  };
+  const priceFor = (tool?: string) => (tool && PRICE_HINT[tool]) ?? 0.0008;
+
+  const ledger = toolEntries
+    .slice(-12)
+    .map(e => ({
+      id: e.id,
+      tool: e.toolName ?? 'unknown',
+      cost: priceFor(e.toolName),
+      status: e.toolName === 'duffel.hold' ? 'held' : 'captured',
+    }))
+    .reverse();
+
+  const captured = ledger.filter(r => r.status === 'captured').reduce((a, b) => a + b.cost, 0);
+  const held = ledger.filter(r => r.status === 'held').reduce((a, b) => a + b.cost, 0);
+  const total = captured + held;
+
+  return (
+    <div
+      style={{
+        background: 'var(--surface-terminal, #0E1424)',
+        color: '#fdfbf7',
+        marginLeft: 12,
+        borderRadius: 12,
+        padding: '16px 18px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        overflow: 'auto',
+      }}
+    >
+      {/* terminal title bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 5 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 5, background: '#FF5F57' }} />
+          <span style={{ width: 9, height: 9, borderRadius: 5, background: '#FEBC2E' }} />
+          <span style={{ width: 9, height: 9, borderRadius: 5, background: '#28C840' }} />
+        </div>
+        <span
+          className="t-mono"
+          style={{ fontSize: 11, color: 'rgba(253,251,247,0.5)', marginLeft: 6 }}
+        >
+          nanopay.terminal
+        </span>
+        <span style={{ flex: 1 }} />
+        <span
+          aria-hidden
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            background: '#9ED6BB',
+            boxShadow: '0 0 6px #9ED6BB',
+          }}
+        />
+        <span className="t-mono" style={{ fontSize: 10, color: 'rgba(253,251,247,0.5)' }}>
+          live
+        </span>
+      </div>
+
+      {/* running total */}
+      <div>
+        <div className="t-meta" style={{ color: 'rgba(253,251,247,0.5)' }}>
+          Session spend · x402
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 4 }}>
+          <span
+            className="t-num-lg"
+            style={{
+              fontSize: 30,
+              color: '#fdfbf7',
+              fontFamily: 'var(--font-display, var(--font-serif, serif))',
+            }}
+          >
+            ${total.toFixed(4)}
+          </span>
+          <span className="t-mono" style={{ fontSize: 11, color: '#E8B98E' }}>
+            {ledger.length} call{ledger.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginTop: 8,
+            fontSize: 10,
+            color: 'rgba(253,251,247,0.55)',
+          }}
+        >
+          <span className="t-mono">captured ${captured.toFixed(4)}</span>
+          <span className="t-mono">held ${held.toFixed(4)}</span>
+        </div>
+      </div>
+
+      {/* live ledger — fed by useChat tool parts */}
+      <div>
+        <div
+          className="t-meta"
+          style={{ color: 'rgba(253,251,247,0.5)', marginBottom: 8 }}
+        >
+          Live ledger
+        </div>
+        {ledger.length === 0 ? (
+          <div
+            className="t-mono"
+            style={{
+              fontSize: 11,
+              color: 'rgba(253,251,247,0.4)',
+              padding: '8px 0',
+              lineHeight: 1.55,
+            }}
+          >
+            No tool calls yet. Ask Sendero anything — every call meters here as
+            it streams.
+          </div>
+        ) : (
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, lineHeight: 1.7 }}>
+            {ledger.map((row, i) => (
+              <div
+                key={row.id}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 60px 50px',
+                  gap: 6,
+                  padding: '2px 0',
+                  borderBottom:
+                    i < ledger.length - 1 ? '1px solid rgba(253,251,247,0.06)' : 'none',
+                }}
+              >
+                <span style={{ color: row.status === 'held' ? '#E26B47' : '#fdfbf7' }}>
+                  {row.tool}
+                </span>
+                <span style={{ color: '#E8B98E', textAlign: 'right' }}>
+                  ${row.cost.toFixed(4)}
+                </span>
+                <span
+                  style={{
+                    color: row.status === 'held' ? '#E26B47' : 'rgba(253,251,247,0.5)',
+                    fontSize: 9,
+                    textTransform: 'uppercase',
+                    textAlign: 'right',
+                  }}
+                >
+                  {row.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* workflow trail — settlement timeline keyed off the ledger */}
+      <div>
+        <div
+          className="t-meta"
+          style={{ color: 'rgba(253,251,247,0.5)', marginBottom: 8 }}
+        >
+          Workflow
+        </div>
+        {[
+          { k: 'Dispatch', t: 'agent.turn', done: ledger.length > 0 },
+          { k: 'Tool calls', t: `${ledger.length} metered`, done: ledger.length > 0 },
+          { k: 'Settle batch', t: 'on cron', done: false },
+        ].map((s, i, arr) => (
+          <div
+            key={s.k}
+            style={{ display: 'flex', gap: 10, paddingBottom: 10, position: 'relative' }}
+          >
+            {i < arr.length - 1 ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 5,
+                  top: 14,
+                  bottom: 0,
+                  width: 1,
+                  background: 'rgba(253,251,247,0.2)',
+                }}
+              />
+            ) : null}
+            <div
+              style={{
+                width: 11,
+                height: 11,
+                borderRadius: 6,
+                marginTop: 4,
+                flexShrink: 0,
+                background: s.done ? '#E8B98E' : 'transparent',
+                boxShadow: s.done ? 'none' : 'inset 0 0 0 1px rgba(253,251,247,0.3)',
+              }}
+            />
+            <div style={{ flex: 1 }}>
+              <div
+                className="t-mono"
+                style={{ fontSize: 11, color: s.done ? '#fdfbf7' : 'rgba(253,251,247,0.6)' }}
+              >
+                {s.k}
+              </div>
+              <div
+                className="t-mono"
+                style={{ fontSize: 10, color: 'rgba(253,251,247,0.4)', marginTop: 1 }}
+              >
+                {s.t}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
