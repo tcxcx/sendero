@@ -46,7 +46,21 @@ export function SearchForm({
   // one to the other never dips both false simultaneously.
   const [triggerRef, triggerHovered] = useHover<HTMLButtonElement>();
   const [contentRef, contentHovered] = useHover<HTMLDivElement>();
-  const hoverIntent = triggerHovered || contentHovered;
+  const rawHoverIntent = triggerHovered || contentHovered;
+
+  // Only count hover as intent AFTER the user has demonstrated they
+  // know where the cursor is — i.e. after a pointer-leave on the
+  // trigger. Without this, navigating between pages while the cursor
+  // happens to be over the trigger auto-opens the palette on the new
+  // page, which feels like a UI ghost. Reset on every pathname change
+  // so each new page requires a fresh leave→enter cycle.
+  const [hasLeftSinceMount, setHasLeftSinceMount] = useState(false);
+  useEffect(() => {
+    if (!triggerHovered && !hasLeftSinceMount) {
+      setHasLeftSinceMount(true);
+    }
+  }, [triggerHovered, hasLeftSinceMount]);
+  const hoverIntent = hasLeftSinceMount && rawHoverIntent;
 
   // `manualOpen` is sticky state for ⌘K / click / focus. `hoverIntent`
   // is transient. The Radix open is `manualOpen || hoverIntent`, but
@@ -56,20 +70,17 @@ export function SearchForm({
 
   useSearchHotkey(() => setManualOpen(true));
 
-  // Close the palette on route change AND suppress hover-driven re-open
-  // for a short window. Without the suppression: when the user clicks a
-  // sidebar link, the cursor is often still over the search trigger as
-  // the new page mounts — `useHover` then reports `true` immediately,
-  // re-opening the palette uninvited over the new page. The suppress
-  // window gives the user time to either move on or actually hover.
+  // Close the palette on route change AND require a fresh hover-leave
+  // before hover-intent counts again. Without this gate, navigating
+  // between pages while the cursor happens to be over the trigger
+  // auto-opens the palette on the new page — a UI ghost. Resetting
+  // `hasLeftSinceMount` on every pathname change forces an explicit
+  // leave→enter cycle per page.
   const pathname = usePathname();
-  const [suppressHover, setSuppressHover] = useState(false);
   useEffect(() => {
     setManualOpen(false);
     setOpen(false);
-    setSuppressHover(true);
-    const timer = setTimeout(() => setSuppressHover(false), 600);
-    return () => clearTimeout(timer);
+    setHasLeftSinceMount(false);
   }, [pathname, setOpen]);
 
   // Drive the global store from local derived state. A single effect
@@ -80,11 +91,7 @@ export function SearchForm({
       clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
     }
-    // During the post-navigation suppress window, only an explicit
-    // user gesture (manualOpen via click / ⌘K) can open the palette.
-    // Stale hover state from before the navigation no longer counts.
-    const effectiveHover = suppressHover ? false : hoverIntent;
-    if (manualOpen || effectiveHover) {
+    if (manualOpen || hoverIntent) {
       setOpen(true);
       return;
     }
@@ -98,7 +105,7 @@ export function SearchForm({
         closeTimerRef.current = null;
       }
     };
-  }, [manualOpen, hoverIntent, suppressHover, setOpen]);
+  }, [manualOpen, hoverIntent, setOpen]);
 
   return (
     <SidebarGroup className={className ? `py-0 ${className}` : 'py-0'}>
