@@ -1,22 +1,26 @@
 /**
- * Scheduled batch settlement.
+ * Scheduled batch settlement — every 5 minutes via Vercel Cron.
  *
- * Runs hourly via Vercel Cron. For every tenant with unsettled paid
- * MeterEvents in the window, it builds a NanopayBatch and fires the
- * on-chain USDC transfer via @sendero/nanopayments.
+ * For every tenant with unsettled paid MeterEvents, builds a
+ * NanopayBatch and fires one on-chain USDC transfer via
+ * @sendero/nanopayments.
+ *
+ * Cheap-when-idle: a fast pre-flight count returns immediately when
+ * there are no pending events AND no stuck `settling` batches to
+ * retry. Vercel Pro's included function quota covers ~8.6k cron
+ * invocations/month at this cadence even without the early return,
+ * but the guard keeps actual compute proportional to real work.
  *
  * Auth: CRON_SECRET header match. Vercel injects this automatically
  * when the cron invokes the function; external callers are rejected.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { buildAndSettleBatch, retrySettlingBatches, type BatchStore, type SettleFn } from '@sendero/billing/batch';
+import { buildAndSettleBatch, retrySettlingBatches } from '@sendero/billing/batch';
 import { prisma } from '@sendero/database';
-import { transferUSDC } from '@sendero/nanopayments';
 import { fireBatchFailedAlert } from '@sendero/slack';
-import type { Address } from 'viem';
-// `env` previously gated the synthetic vs live settle path; real transfer
-// now owns its own env resolution inside @sendero/nanopayments.
+
+import { makeBatchStore, makeSettleFn } from '@/lib/nanopay-settle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,10 +32,38 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  // Cheap pre-flight — skip the whole settle path when there's
+  // nothing to do. Two parallel counts: any pending events at all,
+  // and any `settling` batches eligible for retry. Either being
+  // non-zero kicks off the real work.
+  const RETRY_AGE_MS = 10 * 60 * 1000;
+  const retryCutoff = new Date(Date.now() - RETRY_AGE_MS);
+  const [pendingEventCount, retryableBatchCount] = await Promise.all([
+    prisma.meterEvent.count({
+      where: { status: 'paid', settlementRef: null, tenantId: { not: null } },
+    }),
+    prisma.nanopayBatch.count({
+      where: {
+        status: 'settling',
+        updatedAt: { lte: retryCutoff },
+        retryCount: { lt: 3 },
+      },
+    }),
+  ]);
+
+  if (pendingEventCount === 0 && retryableBatchCount === 0) {
+    return NextResponse.json({
+      ran: 0,
+      skipped: 'no_pending_events',
+      pendingEventCount,
+      retryableBatchCount,
+    });
+  }
+
   const store = makeBatchStore();
   const settle = makeSettleFn();
 
-  // Find all tenants with any pending paid MeterEvents in the last day.
+  // Find all tenants with any pending paid MeterEvents.
   const tenants = await prisma.meterEvent.findMany({
     where: {
       status: 'paid',
@@ -51,7 +83,12 @@ export async function GET(req: NextRequest) {
     if (result.status === 'empty') {
       results.push({ tenantId, outcome: 'empty' });
     } else if (result.status === 'settled') {
-      results.push({ tenantId, outcome: 'settled', batchId: result.batchId, txHash: result.txHash });
+      results.push({
+        tenantId,
+        outcome: 'settled',
+        batchId: result.batchId,
+        txHash: result.txHash,
+      });
     } else if (result.status === 'retrying') {
       results.push({ tenantId, outcome: 'retrying', batchId: result.batchId });
     } else {
@@ -70,7 +107,12 @@ export async function GET(req: NextRequest) {
   const retries = await retrySettlingBatches(store, settle, { olderThanMs: 10 * 60 * 1000 });
   for (const r of retries) {
     if (r.status === 'settled') {
-      results.push({ tenantId: r.tenantId, outcome: 'settled-on-retry', batchId: r.batchId, txHash: r.txHash });
+      results.push({
+        tenantId: r.tenantId,
+        outcome: 'settled-on-retry',
+        batchId: r.batchId,
+        txHash: r.txHash,
+      });
     } else if (r.status === 'failed') {
       await fireBatchFailedAlert({
         batchId: r.batchId,
@@ -86,110 +128,4 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ ran: tenants.length, results });
-}
-
-// ─── Prisma-backed BatchStore ──────────────────────────────────────────
-
-function makeBatchStore(): BatchStore {
-  return {
-    findClaimableEvents: async ({ tenantId, windowEndedAt, limit }) => {
-      const events = await prisma.meterEvent.findMany({
-        where: {
-          tenantId,
-          status: 'paid',
-          settlementRef: null,
-          at: { lte: windowEndedAt },
-        },
-        select: { id: true, priceMicroUsdc: true },
-        orderBy: { at: 'asc' },
-        take: limit,
-      });
-      return events;
-    },
-
-    openBatch: async args => {
-      const row = await prisma.nanopayBatch.create({
-        data: {
-          tenantId: args.tenantId,
-          status: 'pending',
-          totalMicroUsdc: args.totalMicroUsdc,
-          eventCount: args.eventCount,
-          windowStartedAt: args.windowStartedAt,
-          windowEndedAt: args.windowEndedAt,
-        },
-        select: { id: true },
-      });
-      return { id: row.id };
-    },
-
-    claimEventsForBatch: async ({ batchId, eventIds }) => {
-      await prisma.meterEvent.updateMany({
-        where: { id: { in: eventIds } },
-        data: { settlementRef: batchId },
-      });
-    },
-
-    updateBatchStatus: async args => {
-      await prisma.nanopayBatch.update({
-        where: { id: args.batchId },
-        data: {
-          status: args.status,
-          txHash: args.txHash ?? undefined,
-          error: args.error ?? undefined,
-          settledAt: args.settledAt ?? undefined,
-        },
-      });
-    },
-
-    incrementRetry: async ({ batchId, lastError }) => {
-      const row = await prisma.nanopayBatch.update({
-        where: { id: batchId },
-        data: {
-          retryCount: { increment: 1 },
-          lastError,
-        },
-        select: { retryCount: true },
-      });
-      return { retryCount: row.retryCount };
-    },
-
-    findSettlingBatches: async ({ olderThan, limit, maxRetryCount }) => {
-      const rows = await prisma.nanopayBatch.findMany({
-        where: {
-          status: 'settling',
-          updatedAt: { lte: olderThan },
-          retryCount: { lt: maxRetryCount },
-        },
-        select: { id: true, tenantId: true, totalMicroUsdc: true, retryCount: true },
-        orderBy: { updatedAt: 'asc' },
-        take: limit,
-      });
-      return rows;
-    },
-  };
-}
-
-// ─── Settlement function ───────────────────────────────────────────────
-//
-// Real on-chain USDC transfer via @sendero/nanopayments. The treasury
-// EOA is resolved inside transferUSDC; the destination address is the
-// Sendero treasury receiving address (SENDERO_TREASURY_ADDRESS env).
-
-function senderoTreasuryAddress(): Address {
-  const a = process.env.SENDERO_TREASURY_ADDRESS;
-  if (!a) throw new Error('SENDERO_TREASURY_ADDRESS not configured');
-  return a as Address;
-}
-
-function makeSettleFn(): SettleFn {
-  const to = senderoTreasuryAddress();
-  return async ({ totalMicroUsdc, batchId, tenantId }) => {
-    const amount = (Number(totalMicroUsdc) / 1e6).toFixed(6);
-    const { txHash } = await transferUSDC({
-      to,
-      amount,
-      label: `nanopay-batch:${tenantId}:${batchId}`,
-    });
-    return { txHash };
-  };
 }

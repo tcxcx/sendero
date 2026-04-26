@@ -571,6 +571,13 @@ export async function POST(req: NextRequest) {
         await prisma.$executeRaw`SELECT pg_notify('meter_event', ${payload})`.catch(err =>
           console.warn('[chat] pg_notify meter_event failed (non-fatal)', err)
         );
+
+        // Settlement is intentionally batched, not inline. The cron at
+        // /api/cron/settle-nanopay-batches sweeps every 5 minutes
+        // (vercel.json) — gas-efficient, no nonce races on the
+        // treasury EOA, predictable RPC budget. The Spend dashboard
+        // surfaces pending-vs-reconciled so the operator sees what's
+        // owed at any instant without waiting on chain confirmation.
       } catch (err) {
         console.error('[chat] meter write failed (non-fatal):', err);
       }

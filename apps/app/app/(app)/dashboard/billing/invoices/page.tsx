@@ -19,7 +19,7 @@ import { Crumb } from '@/components/console/crumb';
 import { InvoicesGrid } from '@/components/invoices/invoices-card-grid';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
-import { formatMicroUsd } from '@/lib/format';
+import { formatMicroUsdPrecise } from '@/lib/format';
 import { getAppCopy } from '@/lib/app-copy';
 import { parseListQuery } from '@/lib/parse-list-query';
 import { getRequestLocale } from '@/lib/request-locale';
@@ -197,18 +197,18 @@ export default async function InvoicesPage({
         items={[
           {
             label: 'MTD billed',
-            value: formatMicroUsd(mtdSum),
+            value: formatMicroUsdPrecise(mtdSum),
             sub:
               mtdDeltaPct === null ? '—' : `${mtdDeltaPct >= 0 ? '+' : ''}${mtdDeltaPct}% vs last`,
           },
           {
             label: 'Open',
-            value: formatMicroUsd(openSum),
+            value: formatMicroUsdPrecise(openSum),
             sub: `${openCount} invoice${openCount === 1 ? '' : 's'}`,
           },
           {
             label: 'Past due',
-            value: formatMicroUsd(overdueSum),
+            value: formatMicroUsdPrecise(overdueSum),
             sub: overdueCount === 0 ? 'clean' : `${overdueCount} overdue`,
           },
           {

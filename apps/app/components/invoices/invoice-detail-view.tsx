@@ -27,7 +27,7 @@ import type {
 } from '@sendero/database';
 
 import { stateForStatus } from './invoices-card-grid';
-import { formatDate, formatMicroUsd, stringFromJson } from '@/lib/format';
+import { formatDate, formatMicroUsdPrecise, stringFromJson } from '@/lib/format';
 
 type InvoiceWithChildren = Invoice & {
   lineItems: InvoiceLineItem[];
@@ -153,7 +153,7 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
                     fontSize: 12,
                   }}
                 >
-                  {formatMicroUsd(item.unitPriceMicro)}
+                  {formatMicroUsdPrecise(item.unitPriceMicro)}
                 </td>
                 <td
                   className="t-num-md"
@@ -164,7 +164,7 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
                     fontVariantNumeric: 'tabular-nums',
                   }}
                 >
-                  {formatMicroUsd(item.amountMicro)}
+                  {formatMicroUsdPrecise(item.amountMicro)}
                 </td>
               </tr>
             ))}
@@ -183,15 +183,15 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
         </table>
 
         <div style={{ marginLeft: 'auto', width: 280 }}>
-          <Row label="Subtotal" value={formatMicroUsd(invoice.subtotalMicro)} />
+          <Row label="Subtotal" value={formatMicroUsdPrecise(invoice.subtotalMicro)} />
           {invoice.discountMicro > 0n ? (
-            <Row label="Discount" value={`−${formatMicroUsd(invoice.discountMicro)}`} />
+            <Row label="Discount" value={`−${formatMicroUsdPrecise(invoice.discountMicro)}`} />
           ) : null}
           {invoice.taxAmountMicro > 0n ? (
-            <Row label="Tax" value={formatMicroUsd(invoice.taxAmountMicro)} />
+            <Row label="Tax" value={formatMicroUsdPrecise(invoice.taxAmountMicro)} />
           ) : null}
           {invoice.vatAmountMicro > 0n ? (
-            <Row label="VAT" value={formatMicroUsd(invoice.vatAmountMicro)} />
+            <Row label="VAT" value={formatMicroUsdPrecise(invoice.vatAmountMicro)} />
           ) : null}
           <div
             style={{
@@ -203,7 +203,7 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
           >
             <span className="t-h3">Total due</span>
             <span className="t-num-md" style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
-              {formatMicroUsd(invoice.totalMicro)}
+              {formatMicroUsdPrecise(invoice.totalMicro)}
             </span>
           </div>
         </div>
@@ -236,7 +236,7 @@ export function InvoiceDetailView({ invoice }: { invoice: InvoiceWithChildren })
                       className="t-mono"
                       style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}
                     >
-                      {formatMicroUsd(p.amountMicro)}
+                      {formatMicroUsdPrecise(p.amountMicro)}
                     </span>
                   </div>
                 ))}
