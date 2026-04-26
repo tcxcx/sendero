@@ -31,10 +31,12 @@ export function AppChrome({
   children,
   headerCopy,
   locale,
+  defaultSidebarOpen = true,
 }: {
   children: React.ReactNode;
   headerCopy: ShellHeaderCopy;
   locale: string;
+  defaultSidebarOpen?: boolean;
 }) {
   const pathname = usePathname() ?? '';
 
@@ -58,7 +60,7 @@ export function AppChrome({
     <div className="app-shell-root flex h-svh w-full flex-col">
       <ClerkWalletBridge />
       <TooltipProvider delayDuration={120} skipDelayDuration={300}>
-        <SidebarProvider className="min-h-0 flex-1">
+        <SidebarProvider className="min-h-0 flex-1" defaultOpen={defaultSidebarOpen}>
           <AppSidebar />
           {/* DESIGN.md §12 — the main content surface floats as a single
             raised card on the grainy gradient. Margin on ≥lg, rounded
