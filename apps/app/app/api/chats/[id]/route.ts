@@ -63,21 +63,93 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
     }
 
-    // Reconstruct UIMessage[] for AI SDK's useChat. When `parts` was
-    // stored, prefer it (preserves tool calls, reasoning, sources).
-    // Fallback to a single text part built from the denormalized
-    // `content` column for older rows that pre-date the parts column.
-    const messages = row.messages.map(m => {
-      const partsArray = Array.isArray(m.parts) ? (m.parts as PartsLike[]) : null;
-      return {
+    // Reconstruct UIMessage[] for AI SDK's useChat.
+    //
+    // Two shape mismatches to bridge:
+    //  1. Roles — DB stores tool-results as standalone rows with
+    //     role='tool', but convertToModelMessages (v6) only accepts
+    //     user/assistant/system. We fold each tool-row onto the
+    //     preceding assistant message.
+    //  2. Parts — DB has v4-style `tool-call` + `tool-result` parts
+    //     keyed by toolCallId; v6 expects ONE merged part of type
+    //     `tool-${toolName}` carrying state, input, and output.
+    //     We rewrite each call/result pair in-place.
+    //
+    // For older rows that pre-date the parts column, fall back to a
+    // single text part built from the denormalized `content` column.
+    type OutMsg = { id: string; role: 'user' | 'assistant' | 'system'; parts: PartsLike[] };
+    const out: OutMsg[] = [];
+    for (const m of row.messages) {
+      const rawParts = Array.isArray(m.parts) ? (m.parts as PartsLike[]) : null;
+      const parts =
+        rawParts && rawParts.length > 0 ? rawParts : [{ type: 'text', text: m.content ?? '' }];
+
+      if (m.role === 'tool') {
+        const last = out[out.length - 1];
+        if (last && last.role === 'assistant') {
+          last.parts.push(...parts);
+        }
+        continue;
+      }
+      if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'system') {
+        continue;
+      }
+      out.push({
         id: m.id,
         role: m.role as 'user' | 'assistant' | 'system',
-        parts:
-          partsArray && partsArray.length > 0
-            ? partsArray
-            : [{ type: 'text', text: m.content ?? '' }],
-      };
-    });
+        parts,
+      });
+    }
+
+    // Pass 2 — merge legacy tool-call / tool-result parts into v6
+    // `tool-${name}` parts. Index by toolCallId so out-of-order pairs
+    // still resolve. A tool-call with no matching tool-result becomes
+    // a part with state='input-available' (the model treats it as a
+    // pending call); operators almost never hit this because every
+    // assistant turn writes both the call and its result before the
+    // row is persisted.
+    type CallLike = { toolCallId?: unknown; toolName?: unknown; input?: unknown };
+    type ResultLike = { toolCallId?: unknown; toolName?: unknown; output?: unknown };
+    for (const msg of out) {
+      const merged: PartsLike[] = [];
+      const seenCallIds = new Set<string>();
+      // Map tool-result parts by toolCallId for lookup.
+      const resultsById = new Map<string, ResultLike>();
+      for (const p of msg.parts) {
+        if (p.type === 'tool-result') {
+          const id = (p as ResultLike).toolCallId;
+          if (typeof id === 'string') resultsById.set(id, p as ResultLike);
+        }
+      }
+      for (const p of msg.parts) {
+        if (p.type === 'tool-call') {
+          const call = p as CallLike;
+          const id = typeof call.toolCallId === 'string' ? call.toolCallId : null;
+          const name = typeof call.toolName === 'string' ? call.toolName : null;
+          if (!id || !name) continue;
+          seenCallIds.add(id);
+          const result = resultsById.get(id);
+          merged.push({
+            type: `tool-${name}`,
+            toolCallId: id,
+            input: call.input ?? {},
+            ...(result
+              ? { state: 'output-available', output: result.output }
+              : { state: 'input-available' }),
+          });
+          continue;
+        }
+        if (p.type === 'tool-result') {
+          const id = (p as ResultLike).toolCallId;
+          if (typeof id === 'string' && seenCallIds.has(id)) continue;
+          // Orphan result (call lives on a different message) — drop it.
+          continue;
+        }
+        merged.push(p);
+      }
+      msg.parts = merged;
+    }
+    const messages = out;
 
     return NextResponse.json({
       ok: true,
