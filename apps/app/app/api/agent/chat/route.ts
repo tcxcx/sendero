@@ -65,6 +65,7 @@ import {
   resolveSegment,
   resolveTenantPlan,
 } from '@/lib/agent-auth';
+import { detectAttachmentsHint } from '@/lib/agent-attachments-hint';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
@@ -390,6 +391,7 @@ export async function POST(req: NextRequest) {
     workflowCatalog: renderWorkflowsBlock(
       listWorkflows().map(w => ({ id: w.id, label: w.label, description: w.description }))
     ),
+    attachmentsHint: detectAttachmentsHint(body.messages),
   });
 
   capture({

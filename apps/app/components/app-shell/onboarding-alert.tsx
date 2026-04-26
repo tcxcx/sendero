@@ -1,0 +1,103 @@
+'use client';
+
+/**
+ * OnboardingAlert — a header strip that surfaces when the signed-in
+ * user's org doesn't have an Arc wallet yet (i.e. organization
+ * publicMetadata.arcWalletAddress is missing or still the placeholder).
+ *
+ * Without a real wallet, on-chain settlement, USDC payments, and
+ * boarding-pass NFT mints all silently fail. This alert is the canonical
+ * way to surface that gap — it explains what's missing in plain language
+ * and routes the user straight to the onboarding flow that fixes it.
+ *
+ * The alert hydrates from Clerk org metadata (same source as
+ * ClerkWalletBridge) so it reflects the org you've actually selected, not
+ * the user's first org.
+ */
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+
+import { useOrganization, useUser } from '@clerk/nextjs';
+import { Button } from '@sendero/ui/button';
+
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const PLACEHOLDER_ADDRESS = '0x1111111111111111111111111111111111111111';
+const DISMISS_COOKIE = 'sendero.onboarding.alert.dismissed';
+
+function isMissingWallet(addr: string | null | undefined): boolean {
+  if (!addr) return true;
+  const lower = addr.toLowerCase();
+  return lower === ZERO_ADDRESS || lower === PLACEHOLDER_ADDRESS;
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(new RegExp(`(^|;\\s*)${name}=([^;]*)`));
+  return m ? decodeURIComponent(m[2]) : null;
+}
+
+function writeCookie(name: string, value: string, hours = 6) {
+  if (typeof document === 'undefined') return;
+  const exp = new Date(Date.now() + hours * 3600_000).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${exp}; path=/; SameSite=Lax`;
+}
+
+export function OnboardingAlert() {
+  const { isSignedIn, isLoaded: userLoaded } = useUser();
+  const { organization, isLoaded: orgLoaded } = useOrganization();
+  const [dismissed, setDismissed] = useState(true);
+
+  // Hydrate dismissal flag once on mount so SSR doesn't flash the alert
+  // for users who already closed it this session.
+  useEffect(() => {
+    setDismissed(readCookie(DISMISS_COOKIE) === '1');
+  }, []);
+
+  if (!userLoaded || !orgLoaded || !isSignedIn || !organization) return null;
+
+  const arcAddressRaw = organization.publicMetadata?.arcWalletAddress;
+  const arcAddress = typeof arcAddressRaw === 'string' ? arcAddressRaw : null;
+  if (!isMissingWallet(arcAddress)) return null;
+  if (dismissed) return null;
+
+  const onDismiss = () => {
+    writeCookie(DISMISS_COOKIE, '1');
+    setDismissed(true);
+  };
+
+  return (
+    <div className="px-4 sm:px-6 pt-1">
+      <Alert className="flex items-start gap-3 border-amber-500/40 bg-amber-50/60 text-foreground dark:bg-amber-950/30">
+        <span aria-hidden className="mt-[2px] text-base leading-none">⚠</span>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <AlertTitle className="text-[13px] font-semibold tracking-tight">
+            Finish setting up your wallet
+          </AlertTitle>
+          <AlertDescription className="text-[12px] leading-relaxed text-muted-foreground">
+            Your org doesn&apos;t have an Arc wallet bound yet. Until it does, you can&apos;t pay
+            for bookings in USDC, settle escrow on-chain, or mint boarding-pass NFTs. The
+            agent will skip those steps silently, which is why your demo runs stop short.
+            One-time setup, takes about 30 seconds.
+          </AlertDescription>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button asChild size="sm" className="h-7 px-3 text-[11px]">
+            <Link href="/onboarding">Finish setup →</Link>
+          </Button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dismiss"
+            title="Hide for 6 hours"
+            className="grid h-7 w-7 place-items-center rounded-md text-[12px] text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+          >
+            ✕
+          </button>
+        </div>
+      </Alert>
+    </div>
+  );
+}

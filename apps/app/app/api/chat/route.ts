@@ -41,6 +41,8 @@ import {
   streamText,
 } from 'ai';
 
+import { detectAttachmentsHint } from '@/lib/agent-attachments-hint';
+
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
@@ -381,6 +383,7 @@ export async function POST(req: NextRequest) {
     workflowCatalog: renderWorkflowsBlock(
       listWorkflows().map(w => ({ id: w.id, label: w.label, description: w.description }))
     ),
+    attachmentsHint: detectAttachmentsHint(messages),
   });
 
   const onError: Parameters<typeof streamText>[0]['onError'] = event => {
