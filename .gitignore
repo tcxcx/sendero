@@ -76,3 +76,4 @@ qa-logins.local.json
 
 # Temporary files from vercel/ops scripts
 .tmp-*.json
+.wrangler/

@@ -101,6 +101,24 @@ kbd {
   font-family: var(--font-mono);
 }
 
+/* Editorial: Fraunces drives docs h1 + h2 so the prose feels like a
+   manual / handbook, not generic API output. Body + code stay Geist. */
+.prose > h1,
+.prose > h2 {
+  font-family: var(--display);
+  font-weight: 450;
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+.prose > h1 {
+  font-size: clamp(28px, 3.5vw, 40px);
+  line-height: 1.1;
+}
+.prose > h2 {
+  font-size: clamp(22px, 2.4vw, 28px);
+  line-height: 1.2;
+}
+
 .prose {
   --tw-prose-body: var(--text);
   --tw-prose-headings: var(--text);

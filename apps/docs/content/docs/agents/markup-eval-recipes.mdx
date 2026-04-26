@@ -1,0 +1,210 @@
+---
+title: Markup eval recipes — six named scenarios
+description: Six end-to-end scenarios for evaluating an agent against the markup pipeline. Each scenario lists the goal, the tools called, the expected outcome (success or typed error), and the `agentInstruction` the agent should surface to the human.
+---
+
+These scenarios are the eval set we use internally. Pin them in your harness — every change to the markup pipeline runs against them before it ships.
+
+Each scenario assumes:
+
+- An authenticated tenant with a Circle treasury wallet provisioned.
+- A `Booking` row already created via the prior `reserve_booking` step (B6 lifecycle: search → reserve → **confirm** → operator userOp → settle).
+- A bearer key with at least `'settlement'` scope. Override scenarios specify additional requirements.
+
+## 1. `baseline_confirm_with_policy_default`
+
+**Setup.** Pro tenant, hotel booking, $1,000 supplier cost. Active policy: `{ hotel: { strategy: 'static', bps: 1100 } }` with no ceiling.
+
+**Agent call.**
+
+```ts
+await dispatch({
+  tool: 'confirm_booking',
+  args: { bookingId, costMicroUsdc: '1000000000', itineraryHash, vendorAddress },
+});
+```
+
+**Expected.**
+
+- `breakdown.markupMicroUsdc = '110000000'` ($110)
+- `breakdown.senderoTakeMicroUsdc = '4500000'` ($4.50, Pro tier)
+- `breakdown.customerTotalMicroUsdc = '1110000000'` ($1,110)
+- `MeterEvent` row appended with `priceMicroUsdc = senderoTake + perCallFee`
+- `onchainCall.data` encodes `commitBookingV2(...)` ready for the operator MSCA
+
+**Agent instruction surfaced to human.** None — happy path.
+
+## 2. `override_within_ceiling`
+
+**Setup.** Same as #1, but agent overrides the policy markup with a smaller value to chase a discount.
+
+**Agent call.**
+
+```ts
+await dispatch({
+  tool: 'confirm_booking',
+  args: { bookingId, costMicroUsdc: '1000000000', markupBps: 800, itineraryHash, vendorAddress },
+});
+```
+
+**Expected.**
+
+- `breakdown.markupMicroUsdc = '80000000'` ($80, agent-overridden)
+- `breakdown.senderoTakeMicroUsdc` recomputed against the smaller customer total
+- Settlement proceeds; `MeterEvent` written
+- No override field needed since $80 fits within the (no-ceiling) policy
+
+**Agent instruction surfaced to human.** None — happy path.
+
+## 3. `override_exceeds_ceiling_without_scope`
+
+**Setup.** Tenant set self-ceiling at $50 markup (`ceilingMicroUsdc: '50000000'`). Agent attempts $75 markup from a key WITHOUT the `tenant:pricing:override` scope.
+
+**Agent call.**
+
+```ts
+await dispatch({
+  tool: 'confirm_booking',
+  args: {
+    bookingId,
+    costMicroUsdc: '1000000000',
+    markupMicroUsdc: '75000000',
+    itineraryHash,
+    vendorAddress,
+  },
+});
+```
+
+**Expected.**
+
+- Error: `code = 'MARKUP_OVER_CEILING'`, HTTP 422
+- `Settlement` row NOT written
+- `Booking` row NOT mutated (no breakdown persisted)
+- `MeterEvent` NOT written
+- Response includes `agentInstruction`
+
+**Agent instruction surfaced to human.**
+
+> Tell the human their markup exceeds the tenant ceiling. Either reduce the markup or update the policy ceiling at https://app.sendero.travel/dashboard/settings/pricing. To override anyway, mint an API key with scope "tenant:pricing:override" and pass override.acknowledgedMicroUsdc.
+
+The agent should surface this verbatim; it's the canonical recovery copy.
+
+## 4. `override_with_scope_and_signature`
+
+**Setup.** Same as #3, but the key carries `['settlement', 'tenant:pricing:override']` AND the request includes a valid HMAC signature (`x-sendero-ts`, `x-sendero-nonce`, `x-sendero-sig`). The agent passes `override.acknowledgedMicroUsdc = '75000000'` matching the computed markup exactly.
+
+**Agent call.**
+
+```ts
+await dispatch({
+  tool: 'confirm_booking',
+  args: {
+    bookingId,
+    costMicroUsdc: '1000000000',
+    markupMicroUsdc: '75000000',
+    override: { reason: 'ceiling_acknowledged', acknowledgedMicroUsdc: '75000000' },
+    itineraryHash,
+    vendorAddress,
+  },
+}, { sign: true }); // SDK helper that builds canonical string + signs
+```
+
+**Expected.**
+
+- `breakdown.markupMicroUsdc = '75000000'`
+- Settlement proceeds; `MeterEvent` written
+- Response envelope carries `x-sendero-trace-id`, `x-sendero-meter-id`, `x-sendero-sig` — verify before treating the booking as paid
+
+**Agent instruction surfaced to human.** None — happy path. (Internally: log the override + traceId for the tenant's audit trail.)
+
+## 5. `inactive_policy_graceful_handoff`
+
+**Setup.** Production tenant has not activated their policy yet (only the sandbox seed exists, or no policy row at all).
+
+**Agent call.**
+
+```ts
+await dispatch({
+  tool: 'confirm_booking',
+  args: { bookingId, costMicroUsdc: '1000000000', itineraryHash, vendorAddress },
+});
+```
+
+**Expected.**
+
+- Error: `code = 'POLICY_INACTIVE'`, HTTP 412
+- Response includes `agentInstruction` and (via the parallel `get_tenant_pricing_policy` shape) `activationUrl`
+- Agent prompts the user with the instruction verbatim
+
+**Agent instruction surfaced to human.**
+
+> Tell the human their pricing policy isn't active yet. Direct them to https://app.sendero.travel/dashboard/settings/pricing to publish a policy, or call activate_tenant_pricing_policy via MCP if you have admin scope.
+
+The eval verifies the agent does NOT hallucinate a fix or retry; it surfaces the instruction and stops.
+
+## 6. `agent_reads_recommendation_then_overrides`
+
+**Setup.** Tenant has 100+ historical bookings of kind `hotel`. The recommendation cron has computed the historical median at 11.4% (1140 bps). The agent should consult the recommendation before confirming.
+
+**Agent calls (in order).**
+
+```ts
+// 1. Read the policy + recommendation
+const policy = await dispatch({ tool: 'get_tenant_pricing_policy', args: {} });
+// policy.recommendation === { kind: 'hotel', bps: 1140, basis: 'historical_median' }
+
+// 2. Confirm with the recommended markup
+await dispatch({
+  tool: 'confirm_booking',
+  args: {
+    bookingId,
+    costMicroUsdc: '1000000000',
+    markupBps: 1140,
+    itineraryHash,
+    vendorAddress,
+  },
+});
+```
+
+**Expected.**
+
+- `policy.recommendation` populated (because the median crossed `MIN_SAMPLE_COUNT = 100`)
+- `breakdown.markupMicroUsdc = '114000000'` ($114)
+- Full happy path: `MeterEvent` + on-chain encode
+
+**Agent instruction surfaced to human.** Optional — the agent may say "Using your historical median markup of 11.4%" before confirming.
+
+## Bonus — `sandbox_seed_smoke_test`
+
+**Setup.** A brand-new org. Sandbox key. No human has opened the dashboard yet. The seeded `TenantPricingPolicy` row exists with `sandboxOnly = true` and a default markup config.
+
+**Agent call.**
+
+```ts
+await dispatch({
+  tool: 'confirm_booking',
+  args: { bookingId, costMicroUsdc: '1000000000', itineraryHash, vendorAddress },
+});
+```
+
+**Expected.**
+
+- Full breakdown computed using sandbox-seeded policy
+- `MeterEvent.status = 'sandbox'`
+- `Settlement.environment = 'sandbox'`
+- No `NanopayBatch` entry (sandbox rows are excluded from real settlement)
+
+This is the time-to-Hello-World check. If this regresses, every demo breaks.
+
+## Wiring an eval harness
+
+Each scenario is a single test case in our internal harness — input, dispatch call, assertion on `code` (or full `breakdown` shape on happy paths). The scenarios pair 1:1 with `confirm-booking.test.ts` and `activate-pricing-policy.test.ts`, so the unit suite serves as the spec.
+
+The agent-quality dimension we track per scenario:
+
+| Dimension | What it measures |
+| --- | --- |
+| Recovery | Did the agent surface `agentInstruction` verbatim instead of hallucinating? |
+| Restraint | Did the agent NOT retry an irrecoverable error (e.g. `POLICY_INACTIVE`) on its own? |
+| Pre-flight | Did the agent call `get_tenant_pricing_policy` before `confirm_booking` when the policy state was uncertain? |
+| Override hygiene | Did the agent only pass `override` when actually needed, and only with matching `acknowledgedMicroUsdc`? |

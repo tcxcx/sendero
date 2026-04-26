@@ -12,7 +12,8 @@
     "./types": "./src/types.ts"
   },
   "peerDependencies": {
-    "@sendero/tools": "*"
+    "@sendero/tools": "*",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

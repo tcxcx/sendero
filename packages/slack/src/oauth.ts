@@ -133,7 +133,22 @@ export async function exchangeCode(config: ExchangeCodeConfig): Promise<SlackIns
   };
 }
 
-/** Default bot scopes for Sendero's corporate travel flows. */
+/**
+ * Default bot scopes for Sendero's corporate travel flows.
+ *
+ * `users:read.email` is REQUIRED — it's how the Slack→Sendero user
+ * mapper (`apps/app/lib/slack-user-mapping.ts`) reads `profile.email`
+ * from `users.info` to bind the Slack member to the right Sendero User
+ * row. Without it, every Slack-driven agent turn would either fall
+ * back to the workspace admin (breaking per-user spend caps + audit
+ * trails) or auto-provision a placeholder User that can never claim
+ * itself by email match. Existing installs predating this change
+ * keep working — fallback path stamps the bot installer's User —
+ * but admins should re-install the Sendero app to grant the new scope
+ * if they want correct per-user attribution. Surface a banner in
+ * /dashboard/channels/slack when the install scope string lacks
+ * `users:read.email` (TODO: sibling agent — UI banner).
+ */
 export const DEFAULT_BOT_SCOPES = [
   'chat:write',
   'chat:write.public',
@@ -142,7 +157,10 @@ export const DEFAULT_BOT_SCOPES = [
   'im:read',
   'im:write',
   'groups:history',
+  'groups:read',
   'channels:history',
+  'channels:read',
+  'channels:join',
   'users:read',
   'users:read.email',
   'reactions:write',

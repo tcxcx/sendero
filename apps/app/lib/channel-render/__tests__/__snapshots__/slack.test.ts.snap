@@ -1,0 +1,304 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`renderForSlack text 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "text": "Booked *AA 100* JFK to LHR. See <https://sendero.travel/i/abc|itinerary>.",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+    ],
+    "channel": "",
+    "text": "Booked AA 100 JFK to LHR. See itinerary.",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack card 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "Itinerary held",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "text": {
+          "text": "JFK to LHR on Apr 30. Hold expires in 15 minutes.",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"• Departs 21:30 EDT
+• Economy Plus
+• Refundable"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "sendero_approve.booking-1",
+            "style": "primary",
+            "text": {
+              "emoji": true,
+              "text": "Confirm",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "booking-1",
+          },
+          {
+            "action_id": "sendero_reject.booking-1",
+            "text": {
+              "emoji": true,
+              "text": "Cancel",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "booking-1",
+          },
+        ],
+        "type": "actions",
+      },
+    ],
+    "channel": "",
+    "text": "Itinerary held",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack tool_invocation marks degraded:true with a fallback line 1`] = `
+{
+  "channel": "slack",
+  "degraded": true,
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "text": "_Sendero AI invoking \`search_offers\`..._",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+    ],
+    "channel": "",
+    "text": "Sendero AI invoking search_offers",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack tool_result with share 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "Best fare found",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "text": {
+          "text": "AA 100, JFK to LHR, $482.10 all-in.",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"• 1 stop
+• 8h 5m
+• Refundable"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "sendero_select_offer.off-1",
+            "text": {
+              "emoji": true,
+              "text": "Hold this fare",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "off-1",
+          },
+        ],
+        "type": "actions",
+      },
+    ],
+    "channel": "",
+    "text": "Best fare found",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack approval_request reuses buildApprovalBlocks (sendero_approval action_ids) 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "Approval requested · Casey Traveler",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "text": {
+          "text": 
+"*JFK to LHR* · 
+_Departs 2026-04-25T10:15:00.000Z_"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "fields": [
+          {
+            "text": 
+"*Amount*
+$482.10 USD"
+,
+            "type": "mrkdwn",
+          },
+          {
+            "text": 
+"*Fare class*
+"
+,
+            "type": "mrkdwn",
+          },
+          {
+            "text": 
+"*Booking*
+\`booking-1\`"
+,
+            "type": "mrkdwn",
+          },
+          {
+            "text": 
+"*Policy*
+Out of policy"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"> *Policy flags:*
+> • over_policy_cap"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "sendero_approval.approve",
+            "style": "primary",
+            "text": {
+              "emoji": true,
+              "text": "Approve",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "{"t":"","tr":"","b":"booking-1"}",
+          },
+          {
+            "action_id": "sendero_approval.reject",
+            "style": "danger",
+            "text": {
+              "emoji": true,
+              "text": "Reject",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "{"t":"","tr":"","b":"booking-1"}",
+          },
+          {
+            "action_id": "sendero_approval.open",
+            "text": {
+              "emoji": true,
+              "text": "Open in Sendero",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "url": "https://sendero.travel/dashboard/console?tripId=trip-1",
+            "value": "",
+          },
+        ],
+        "type": "actions",
+      },
+      {
+        "elements": [
+          {
+            "text": "Booking held for 15 min · Sendero × Arc · _requested 2026-04-25T10:00:00.000Z_",
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+    ],
+    "channel": "",
+    "text": "Approval requested: Casey Traveler",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack sources 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "elements": [
+          {
+            "text": "<https://aa.com/flights/100|AA flight status> · <https://heathrow.com/arrivals|Heathrow arrivals>",
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+    ],
+    "channel": "",
+    "text": "Sources: AA flight status, Heathrow arrivals",
+    "thread_ts": undefined,
+  },
+}
+`;

@@ -158,19 +158,30 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
         accountNumber: r.accountNumber ?? '',
       }))
     );
-    const offers = await searchFlights({
-      origin: input.origin,
-      destination: input.destination,
-      departureDate: input.departureDate,
-      returnDate: input.returnDate,
-      passengers: input.passengers,
-      cabinClass: input.cabinClass,
-      privateFares: input.privateFares,
-      leisureFareTypes: input.leisureFareTypes,
-      loyaltyProgrammeAccounts,
-      airlineCreditIds: input.airlineCreditIds as FlightSearchParams['airlineCreditIds'],
-      customerUserId,
-    });
-    return { offers: offers.slice(0, 3) };
+    try {
+      const offers = await searchFlights({
+        origin: input.origin,
+        destination: input.destination,
+        departureDate: input.departureDate,
+        returnDate: input.returnDate,
+        passengers: input.passengers,
+        cabinClass: input.cabinClass,
+        privateFares: input.privateFares,
+        leisureFareTypes: input.leisureFareTypes,
+        loyaltyProgrammeAccounts,
+        airlineCreditIds: input.airlineCreditIds as FlightSearchParams['airlineCreditIds'],
+        customerUserId,
+      });
+      return { offers: offers.slice(0, 3) };
+    } catch (err) {
+      // Duffel can throw bare Error('') from network failures; surface
+      // a contextual message so smoke probes + tool-audit tests show
+      // *which* tool failed and on what input. Keeps the agent
+      // observable when search-flights bubbles up an opaque error.
+      const msg = err instanceof Error && err.message ? err.message : String(err);
+      throw new Error(
+        `search_flights failed (origin=${input.origin}, destination=${input.destination}, departureDate=${input.departureDate}): ${msg.slice(0, 200)}`
+      );
+    }
   },
 };

@@ -490,6 +490,98 @@ This is how the agent gets better over time and reduces repetitive ops work.
 
 ---
 
+## Tech debt — post-hackathon (traveler-wallet flow, Steps 1–6, 2026-04-25)
+
+Items deferred during the hackathon push. Surfaced by `/review` + `/browse` e2e on
+`ship/2026-04-24-platform-release` after Steps 3–6 + connection layer landed.
+None are demo-blocking; all are real follow-ups before this flow goes to mainnet.
+
+### Pay-link bearer credential — referrer leak
+
+- [ ] Add `<meta name="referrer" content="no-referrer" />` to
+  `apps/app/app/pay/[bookingId]/page.tsx` head, OR set
+  `Referrer-Policy: same-origin` on the response. The single-use `?t=<token>`
+  in the URL would otherwise leak via `Referer` header if the success state
+  ever links out to an external page (it doesn't today, but the audit trail
+  surfaces an explorer link in `result.txHash` rendering).
+
+### Pay-link rotation tooling
+
+- [ ] Build an admin "revoke this pay link" action (operator dashboard or
+  internal tool) instead of leaving it as manual SQL
+  (`UPDATE booking_pay_tokens SET consumedAt = now() WHERE id = …`).
+  Bearer token, 30-min TTL, single-use — the surface is small but rotation
+  on a leak should be a tool, not a runbook step.
+
+### Booking reconcile retry queue
+
+- [ ] `apps/app/lib/booking-reconcile/reconcile.ts` is fire-and-forget from
+  `executeTransferSpend` with only `console.warn` on failure. If the booking
+  flip throws (DB blip, tenant cascade race) the spend stays settled on-chain
+  but `Booking.status` stays `pending`, and operators have to flip via Slack.
+  Wire a retry queue (Trigger.dev task or Vercel Workflow) that re-runs the
+  reconciler on `TransferAttempt(status='executed', metadata.bookingId NOT NULL)`
+  rows whose booking is still `pending` after N minutes.
+
+### Step 3 commit message attribution
+
+- [ ] Step 3 of the wallet queue (treasury pre-fund + `kit.depositFor`) landed
+  under commit subject `fix(agent-chat): prefer direct provider over gateway
+  for streaming surface` (`bfb768c`) because a parallel Claude session's
+  `git commit` swept up the staged files. The diff is correct; only the
+  message lies. Fix via `git notes add bfb768c -m "Actually: Step 3 …"` or a
+  follow-up `chore(notes)` empty commit pointing at it. Won't change behavior;
+  just makes `git log --oneline` honest.
+
+### TransferAttempt double-spend defense (defense-in-depth)
+
+- [x] Pay-link path: race-safe token consume before spend (commit `1e94af7`).
+- [ ] Add a unique partial index on `transfer_attempts (tenantId,
+  metadata->>'bookingId') WHERE status IN ('executed', 'passed', 'pending')`
+  so the database itself rejects duplicate in-flight spends for the same
+  booking, regardless of which surface (settle-action, pay-action, agent
+  dispatch, future) tries to create the row. Belt-and-suspenders with the
+  per-surface idempotency checks already in place.
+
+### Slack rebroadcast on spend-driven booking-confirmed
+
+- [ ] When `reconcileBookingAfterSpend` flips a booking to `confirmed`, the
+  Slack approval thread (if it exists for this booking) doesn't get an
+  update. Operators see the email + WhatsApp confirmation but the original
+  Slack approval card stays as "awaiting approval". Mirror the
+  `chat.update` call from `slack/interactions/route.ts` so the spend-driven
+  path closes the Slack card too.
+
+### `prefund_traveler_balance` agent tool
+
+- [ ] We shipped `send_pay_link` so the agent can dispatch the magic link.
+  We did NOT ship a tool for the pre-fund step itself — operators can
+  pre-fund only via the wallet-page UI. Mirror the same shape:
+  internal route `/api/wallet/prefund` (auth: `AGENT_DISPATCH_SECRET`),
+  tool `prefund_traveler_balance` in `@sendero/tools`, scope `treasury`,
+  add to `PRIVILEGED_TOOLS`. Agent gains a fully programmatic
+  end-to-end pre-fund + dispatch + reconcile loop.
+
+### WhatsApp `cta_url` test coverage
+
+- [ ] The fix in `apps/app/lib/channel-render/channels/whatsapp.ts` to
+  render single `open_link` CTAs as `interactive.type: 'cta_url'` (instead
+  of broken `reply` buttons) doesn't have unit-test coverage in the
+  parallel session's new `__tests__/whatsapp.test.ts`. Add a snapshot
+  test for the `cta_url` branch and the mixed-CTA inline-fallback branch.
+
+### E2E test infrastructure for authenticated wallet UI
+
+- [ ] The headless `/browse` e2e couldn't drive the operator wallet UI
+  because the dev-mode `Agentation` overlay (rendered when
+  `NODE_ENV === 'development'` in `apps/app/app/layout.tsx`) intercepts
+  clicks. Either gate Agentation behind a separate env flag
+  (`NEXT_PUBLIC_ENABLE_AGENTATION`) so QA can disable it, or move the
+  e2e harness to `/open-gstack-browser` (real Chrome via the
+  setup-browser-cookies skill).
+
+---
+
 ## Open questions
 
 - [ ] Which WhatsApp BSP should we standardize on?
@@ -498,3 +590,127 @@ This is how the agent gets better over time and reduces repetitive ops work.
 - [ ] Is DragonPass the right launch provider for lounge access, with LoungePass as commercial backup?
 - [ ] Should Rain be the first card / payout partner, or should we compare one more stablecoin-card stack?
 - [ ] Which finance export should be first: CSV, ERP sync, or accounting API?
+
+---
+
+## Post-hackathon — platform-release ship/2026-04-24 follow-ups
+
+Surfaced by /review on 2026-04-25 (hackathon-deadline session). All deferred,
+none block the submission demo.
+
+### P1 — fix in the first post-hackathon PR
+
+- [ ] **MeterEvent FK violation on first-time Clerk sign-in** —
+  `apps/app/app/api/agent/chat/route.ts:134` falls back to `a.userId`
+  (Clerk-format string) when `prisma.user.findUnique({clerkUserId})`
+  returns null. `MeterEvent.userId` is FK'd to `User.id` so the
+  `onFinish` write throws P2003. Race window: between Clerk sign-up
+  and the `apps/app/app/api/webhooks/clerk` user-created webhook
+  landing. Fix: reject with 401 ("first sign-in still provisioning")
+  OR auto-provision the User row inline. Option A is safer for
+  billing integrity.
+
+- [ ] **`submit_validation_response` enum schema fails Vertex** —
+  `packages/tools/src/submit-validation-response.ts:53` defines
+  `enum: [0, 100]` (numeric integers). Vertex AI's tool function-
+  declaration schema requires string enums. Gateway is more lenient
+  and accepts it; once we move chat traffic to Vertex direct (paid
+  credits or ADC), every turn that includes this tool fails.
+  Fix (1 line): drop the `enum`, keep `type: 'integer'`, document
+  allowed values (0=fail, 100=pass) in the description.
+
+### P2 — hardening, schedule when convenient
+
+- [ ] **Console NanopayPanel: per-tool MeterEvent granularity** —
+  `/api/chat`, `/api/agent/chat`, and `runAgentTurn` all write ONE
+  `chat_reply` row per turn. The console's NanopayWorkflowsPanel
+  surfaces per-tool ledger rows from the `useChat` stream as a
+  visual proxy (heuristic prices via `PRICE_HINT_USD` in
+  `apps/app/components/console/meta-inbox.tsx`). For truly
+  authoritative per-tool prices, write one MeterEvent per
+  `finish.toolCalls[]` step in `@sendero/billing/meter` +
+  `runAgentTurn`. Schema already supports it via `toolName`. After
+  this lands, drop `PRICE_HINT_USD` and source the ledger directly
+  from `meterEvents`.
+
+- [ ] **`/api/chat` flat $0.001 placeholder price** —
+  `apps/app/app/api/chat/route.ts::onFinish` writes
+  `priceMicroUsdc: 1_000n` per turn. Should match `/api/agent/chat`:
+  resolve `segment = await resolveSegment(tenantId)`, call
+  `priceFor({ action: 'chat_reply', segment, overrides: buildPlanOverrides(tier) })`,
+  use the resolved micro-USDC. Also wire `preflight()` for cap
+  enforcement so console turns can't blow through the same plan
+  cap dispatch respects.
+
+- [ ] **`/api/meter/stream` EventSource cookie-only auth** —
+  `apps/app/app/api/meter/stream/route.ts` reads the Clerk session
+  from cookies (browser EventSource sends them automatically). Fine
+  for `/dashboard/*` use, but any non-browser consumer (CLI, Node
+  test harness) needs a cookie jar. Document or accept an API key
+  via query param as a fallback if we ever surface this stream
+  outside the dashboard.
+
+- [ ] **Share-image token has no TTL** —
+  `apps/app/lib/og/share-url.ts`. Once signed, valid forever. JSDoc
+  explicitly accepts this for unfurl-bot caching. Add a `signedAt`
+  field + max-age check before any leak/rotation event makes it
+  load-bearing.
+
+- [ ] **Split `INVOICE_SIGNING_SECRET` -> dedicated `SHARE_SIGNING_SECRET`** —
+  Currently both invoice signing and share-image signing share one
+  secret. Rotating breaks both at once. Add a getter in
+  `@sendero/env`, prefer it with fallback to `INVOICE_SIGNING_SECRET`,
+  document the migration path.
+
+- [ ] **`/api/og/share` rate limit** — public route, edge runtime,
+  fail-soft on bad token. Each VALID token triggers a Satori render
+  (CPU). Add Upstash-Redis-backed per-IP rate limit (e.g. 30/min).
+  Cache-control `public, max-age=86400, immutable` already mitigates
+  the cache-fronted case.
+
+- [ ] **`CREATE INDEX CONCURRENTLY`** in three migrations on this
+  branch (`20260424_slack_user_binding`, `20260425_transfer_attempt_kind`,
+  `20260425_wallet_dcw_fields`). Lefthook already warns. All three
+  tables are young (<few hundred rows in dev) so the lock is sub-
+  second today, but follow the runbook on next migration.
+
+### P3 — confusing-but-not-broken
+
+- [ ] **AI Gateway "Free credits restricted" error is misleading on
+  paid accounts** — `tcxcxs-projects` Vercel team has $4.62 paid
+  balance + $0.38 used. The gateway's abuse-protection error
+  message implies free-tier even when balance is paid. Likely a
+  model-specific rate limit on the preview-tier `gemini-3.1-pro-preview`
+  / `gemini-3-flash` handles. Verify by switching to a stable
+  model (`gemini-2.5-pro`) and confirm the error class clears.
+  Root cause: Vercel AI Gateway error taxonomy. File issue
+  upstream after demo.
+
+- [ ] **Dev server's Turbopack module cache holds stale
+  `apps/app/lib/agent-models.ts`** — even after a kill+restart, the
+  Vertex direct path (`directModelFromString` for `vertex/...`)
+  doesn't activate without a hard cache wipe. `bun run` works
+  immediately. Workaround: `rm -rf apps/app/.next-turbo` before
+  `bun dev`.
+
+- [ ] **Cross-file `Date` mock pollution** in
+  `apps/app/lib/channel-render/__tests__/`. Slack approval-block
+  snapshot freezes Date in `beforeAll`; needs an `afterAll` cleanup
+  to stop pollution into other test files. 73/73 pass file-by-file;
+  72/73 when run together. Fix: add `afterAll(() => { ... })`
+  restoring the original Date global.
+
+### P4 — tech debt / cosmetic
+
+- [ ] **Unused deps from failed AI Elements CLI runs** —
+  `@radix-ui/react-progress` and `@radix-ui/react-scroll-area` (0
+  usages each). `apps/app/components/ui/accordion.tsx` and
+  `apps/app/components/ai-elements/inline-citation.tsx` are wrapper-
+  only with no downstream consumers (~25KB combined gzipped). Remove
+  in a cleanup PR.
+
+- [ ] **Concurrency-collision commit messages** — eight commits
+  this session bundle parallel session WIP into my commit messages
+  (e.g. `6434c10`, `9703425`, `5ad55e8`, `bfb768c`, `6a96e1f`,
+  `d6e1cc7`). PR squash-merge collapses. Don't try to rewrite local
+  history.

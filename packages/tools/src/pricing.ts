@@ -78,6 +78,9 @@ export const TOOL_PRICING: Record<string, string> = {
   book_stay: '0.008',
   cancel_order_quote: '0.002',
   confirm_cancel_order: '0.003',
+  request_order_change: '0.002',
+  select_order_change_offer: '0.001',
+  confirm_order_change: '0.003',
   list_airline_credits: '0.001',
   manage_stays_negotiated_rate: '0.003',
 
@@ -91,6 +94,13 @@ export const TOOL_PRICING: Record<string, string> = {
   // LLM, no external API (until Sherpa is wired). Priced minimal so
   // workflows can call it on every booking without budget pressure.
   check_travel_eligibility: '0.0005',
+
+  // Tenant pricing policy agent surface (E1 + E2).
+  // E1 = read-only metadata (one SELECT). E2 = privileged write that
+  // flips the activated row + runs treasury preflight; priced at the
+  // settlement-tier per-call rate ($1.00 micro) to mirror confirm_booking.
+  get_tenant_pricing_policy: '0.0005',
+  activate_tenant_pricing_policy: '1.00',
 };
 
 /** USDC has 6 decimals on every chain. */

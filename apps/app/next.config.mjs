@@ -1,5 +1,6 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withWorkflow } from 'workflow/next';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(__dirname, '../..');
@@ -24,6 +25,11 @@ const nextConfig = {
       { protocol: 'https', hostname: 'images.unsplash.com' },
       { protocol: 'https', hostname: 'img.clerk.com' },
       { protocol: 'https', hostname: 'images.clerk.dev' },
+      // NFT stamp art served straight from Vercel Blob's public host.
+      { protocol: 'https', hostname: '*.public.blob.vercel-storage.com' },
+      // Pinata gateway fallback for IPFS metadata + image when Blob is cold.
+      { protocol: 'https', hostname: '*.mypinata.cloud' },
+      { protocol: 'https', hostname: 'gateway.pinata.cloud' },
     ],
   },
   // Legacy /app/* routes were renamed to /dashboard/* (see app/(app)/dashboard).
@@ -37,4 +43,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withWorkflow(nextConfig);

@@ -12,6 +12,7 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
 import { openai } from '@ai-sdk/openai';
+import { auth } from '@clerk/nextjs/server';
 import {
   buildProviderOptions,
   buildSystemPrompt,
@@ -22,15 +23,16 @@ import {
   googleGenerativeAiKey,
   type ModelTier,
   renderWorkflowsBlock,
-  selectModel,
   SENDERO_SOUL,
+  selectModel,
   vertexLocation,
   vertexProject,
 } from '@sendero/agent';
+import { prisma } from '@sendero/database';
 import { detectLocale, getLocaleSlice, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
-import { listWorkflows } from '@sendero/workflows';
+import { buildRunWorkflowTool, listWorkflows, listWorkflowsTool } from '@sendero/workflows';
 import {
   convertToModelMessages,
   generateText,
@@ -201,6 +203,44 @@ interface ChatBody {
   context?: Record<string, string | number | boolean | null | object>;
   tier?: ModelTier;
   locale?: string;
+  /**
+   * Optional trip scope. When the MetaInbox is mounted at
+   * `/dashboard/inbox/[tripId]`, the live wrapper threads the tripId
+   * through here so the meter event written in `onFinish` carries the
+   * trip in its metadata, and the SSE stream at `/api/meter/stream`
+   * can fan out the row to anyone watching that trip.
+   */
+  tripId?: string;
+  /** Channel name for the meter event metadata. Defaults to 'web'. */
+  channel?: 'web' | 'whatsapp' | 'slack' | 'email' | 'mcp';
+  /**
+   * Stable client-side chat session id. When provided, /api/chat
+   * upserts a `ChatSession` row keyed on it and persists every
+   * UIMessage as a `ChatMessage`. Lets the operator re-view past
+   * sessions in the CHAT MODE tab. Omitted = ephemeral turn (e.g.
+   * playground / mcp callers); no row written.
+   */
+  chatSessionId?: string;
+}
+
+/**
+ * Pull a flat text snippet out of a UIMessage parts array. Used for
+ * the denormalized `ChatMessage.content` column (fast list previews
+ * without rehydrating `parts` JSON) and for ChatSession.title — first
+ * user message becomes the auto-title.
+ */
+function extractContent(message: { parts?: unknown[] }): string {
+  if (!Array.isArray(message.parts)) return '';
+  const out: string[] = [];
+  for (const p of message.parts) {
+    if (p && typeof p === 'object') {
+      const part = p as { type?: string; text?: string };
+      if ((part.type === 'text' || part.type === 'reasoning') && typeof part.text === 'string') {
+        out.push(part.text);
+      }
+    }
+  }
+  return out.join('\n').slice(0, 4000);
 }
 
 export async function POST(req: NextRequest) {
@@ -208,6 +248,36 @@ export async function POST(req: NextRequest) {
   const messages = body.messages;
   const traveler = body.traveler;
   const locale = body.locale ?? requestLocale(req);
+  const tripId = body.tripId ?? null;
+  const channel = body.channel ?? 'web';
+  const chatSessionId = body.chatSessionId ?? null;
+
+  // Resolve tenant for the meter write. Done lazily — the chat route
+  // is also reachable from non-authenticated surfaces (storybook,
+  // playground), so a missing session is logged + skipped, not an
+  // error. Real users hit this from the Clerk-gated `/dashboard/*`
+  // routes and always have an `orgId`.
+  let tenantId: string | null = null;
+  let userId: string | null = null;
+  try {
+    const session = await auth();
+    if (session.orgId) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { clerkOrgId: session.orgId },
+        select: { id: true },
+      });
+      tenantId = tenant?.id ?? null;
+    }
+    if (session.userId) {
+      const user = await prisma.user.findUnique({
+        where: { clerkUserId: session.userId },
+        select: { id: true },
+      });
+      userId = user?.id ?? null;
+    }
+  } catch (err) {
+    console.warn('[chat] tenant resolve failed; meter write will be skipped', err);
+  }
 
   const runtimeContextJson = body.context ? JSON.stringify(body.context, null, 2) : undefined;
 
@@ -269,7 +339,31 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const tools = buildAiSdkTools(toolList, { traveler });
+  // Workflow orchestration tools — expose `list_workflows` + `run_workflow`
+  // alongside the leaf tools so the model can either chain manually or
+  // dispatch a full multi-step plan in one call. The runner needs the
+  // same per-request tool registry the LLM uses, so the factory closes
+  // over the freshly built `tools` map below.
+  // Tenant flows into tool ctx so tools that mutate per-tenant data
+  // (create_passenger, activate_pricing_policy, etc.) can scope their
+  // writes without trusting the LLM to supply a tenantId.
+  const enrichedTraveler = tenantId
+    ? { ...(traveler ?? {}), tenantId, userId: userId ?? undefined }
+    : traveler;
+  const baseTools = buildAiSdkTools(toolList, { traveler: enrichedTraveler });
+  const runWorkflowTool = buildRunWorkflowTool({
+    resolveTools: () => {
+      const registry: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {};
+      for (const def of toolList) {
+        registry[def.name] = args => def.handler(args, { traveler });
+      }
+      return registry;
+    },
+  });
+  const workflowTools = buildAiSdkTools([listWorkflowsTool, runWorkflowTool], {
+    traveler: enrichedTraveler,
+  });
+  const tools = { ...baseTools, ...workflowTools };
   const converted = await convertToModelMessages(messages);
 
   console.log(`[chat] using ${picked.label}`);
@@ -298,6 +392,9 @@ export async function POST(req: NextRequest) {
   const providerOptions =
     typeof picked.model === 'string' ? buildProviderOptions(picked.tier) : undefined;
 
+  // Stable per-turn id so retries de-dupe at the meter layer.
+  const turnId = `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
   const result = streamText({
     model: picked.model,
     system: systemPrompt,
@@ -307,6 +404,174 @@ export async function POST(req: NextRequest) {
     maxRetries: 2,
     providerOptions,
     onError,
+    // Bill the turn after the last chunk lands. `chat_reply` is the
+    // canonical aggregator the rest of the system already understands
+    // (matches `runAgentTurn` in @sendero/agent and the streaming
+    // sibling at /api/agent/chat). The toolNames array carried in
+    // metadata lets `/api/meter/stream` consumers reconstruct what the
+    // agent actually did this turn — useful for the NanopayPanel
+    // ledger but never trusted for pricing.
+    onFinish: async finish => {
+      if (!tenantId) return;
+      const toolNames = (finish.toolCalls ?? []).map(t => t.toolName);
+
+      // Persist the chat session + every UIMessage. Non-fatal: meter
+      // write still runs even if this throws. Skipped when the caller
+      // didn't supply a chatSessionId (mcp / playground turns).
+      if (chatSessionId) {
+        // Defensive: if the dev server is holding a stale Prisma
+        // client (no chatSession namespace), log loudly and skip
+        // instead of throwing inside the streaming callback.
+        const client = prisma as typeof prisma & { chatSession?: typeof prisma.chatSession };
+        if (!client.chatSession) {
+          console.warn(
+            '[chat] persistence skipped: Prisma client is stale (no chatSession). Restart the dev server (`bun dev`) to pick up the regenerated client.'
+          );
+        } else {
+          try {
+            // Auto-title from the first user message — first 80 chars.
+            const firstUserMsg = (messages as Array<{ role?: string; parts?: unknown[] }>).find(
+              m => m?.role === 'user'
+            );
+            const autoTitle = firstUserMsg
+              ? extractContent(firstUserMsg).slice(0, 80) || null
+              : null;
+
+            await prisma.chatSession.upsert({
+              where: { id: chatSessionId },
+              create: {
+                id: chatSessionId,
+                tenantId,
+                userId,
+                tripId,
+                title: autoTitle,
+                metadata: { channel, locale },
+              },
+              update: {
+                tripId: tripId ?? undefined,
+                ...(autoTitle ? { title: autoTitle } : {}),
+              },
+            });
+
+            // Find the highest createdAt we already persisted so we
+            // only insert messages new since the last turn (useChat
+            // re-sends the full history every turn).
+            const lastPersistedCount = await prisma.chatMessage.count({
+              where: { chatSessionId },
+            });
+            const incoming = messages as Array<{ role?: string; parts?: unknown[] }>;
+            const newRows = incoming.slice(lastPersistedCount);
+            if (newRows.length > 0) {
+              await prisma.chatMessage.createMany({
+                data: newRows.map(m => ({
+                  chatSessionId,
+                  role: m.role ?? 'assistant',
+                  content: extractContent(m),
+                  parts: (m.parts ?? []) as never,
+                })),
+              });
+            }
+            // Plus the assistant's freshly-finished response.
+            if (finish.response?.messages) {
+              for (const respMsg of finish.response.messages) {
+                if (!respMsg) continue;
+                const roleName =
+                  typeof (respMsg as { role?: unknown }).role === 'string'
+                    ? ((respMsg as { role: string }).role as string)
+                    : 'assistant';
+                const text = (() => {
+                  const content = (respMsg as { content?: unknown }).content;
+                  if (typeof content === 'string') return content;
+                  if (Array.isArray(content)) {
+                    return content
+                      .map(c =>
+                        c && typeof c === 'object' && 'text' in c
+                          ? String((c as { text?: unknown }).text ?? '')
+                          : ''
+                      )
+                      .join('\n');
+                  }
+                  return '';
+                })();
+                await prisma.chatMessage.create({
+                  data: {
+                    chatSessionId,
+                    role: roleName,
+                    content: text.slice(0, 4000),
+                    parts: ((respMsg as { content?: unknown }).content ?? null) as never,
+                  },
+                });
+              }
+            }
+
+            console.log(
+              `[chat] chat session persisted: ${chatSessionId} (+${newRows.length} new messages)`
+            );
+
+            // Notify any subscribers (the CHAT MODE rail) so they can
+            // refetch in real time without polling. Mirrors the
+            // pg_notify('meter_event', …) pattern we already use for
+            // the live meter stream.
+            const payload = JSON.stringify({
+              chatSessionId,
+              tenantId,
+              userId,
+              tripId,
+              at: new Date().toISOString(),
+            });
+            await prisma.$executeRaw`SELECT pg_notify('chat_session_updated', ${payload})`.catch(
+              err => console.warn('[chat] pg_notify chat_session_updated failed (non-fatal)', err)
+            );
+          } catch (err) {
+            console.error('[chat] chat session persistence failed (non-fatal):', err);
+          }
+        }
+      }
+
+      try {
+        const row = await prisma.meterEvent.create({
+          data: {
+            tenantId,
+            userId,
+            toolName: 'chat_reply',
+            // Flat $0.001 per turn for the web console until the full
+            // segment-aware preflight pipeline is wired here. Real
+            // pricing lives in `runAgentTurn` for dispatch + the agent
+            // chat stream; this surface stays cheap-and-honest until
+            // we promote it.
+            priceMicroUsdc: 1_000n,
+            status: 'paid',
+            note: `surface=chat channel=${channel} tools=${toolNames.length}`,
+            metadata: {
+              channel,
+              turnId,
+              tripId,
+              toolNames,
+              surface: 'web_console_chat',
+              chatSessionId,
+            },
+          },
+          select: { id: true, at: true, priceMicroUsdc: true },
+        });
+
+        // Fan out to anyone watching the meter SSE stream.
+        const payload = JSON.stringify({
+          id: row.id,
+          tenantId,
+          tripId,
+          toolName: 'chat_reply',
+          toolNames,
+          priceMicroUsdc: row.priceMicroUsdc.toString(),
+          status: 'paid',
+          at: row.at.toISOString(),
+        });
+        await prisma.$executeRaw`SELECT pg_notify('meter_event', ${payload})`.catch(err =>
+          console.warn('[chat] pg_notify meter_event failed (non-fatal)', err)
+        );
+      } catch (err) {
+        console.error('[chat] meter write failed (non-fatal):', err);
+      }
+    },
   });
 
   return result.toUIMessageStreamResponse({

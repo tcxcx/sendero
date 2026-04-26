@@ -713,6 +713,13 @@ const TRIP_TOOL_NAMES = new Set([
   'quote_stay',
   'cancel_order_quote',
   'confirm_cancel_order',
+  'scan_document',
+  'trip_weather_brief',
+  'air_quality_brief',
+  'validate_travel_address',
+  'timezone_brief',
+  'elevation_risk_brief',
+  'travel_safety_aid',
 ]);
 
 function ToolPreview({ toolName, result }: { toolName: string; result: unknown }) {

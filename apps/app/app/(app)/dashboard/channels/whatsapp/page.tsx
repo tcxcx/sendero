@@ -1,3 +1,17 @@
+/**
+ * /dashboard/channels/whatsapp — WhatsappA layout when connected,
+ * ChannelStatusPanel + setup CTA otherwise.
+ *
+ * Connected state lifts h1 + lede + actions into the WhatsappConnected
+ * panel itself. Disconnected state owns its own h1 above the
+ * ChannelStatusPanel so every channel page renders a single semantic
+ * h1.
+ *
+ * Kapso plumbing is unchanged: `WhatsAppInstall` row drives display
+ * fields; the `probe` server action calls `KapsoClient.getPhoneNumber`
+ * and updates `status` / `lastHealthyAt` / `lastErrorMessage`.
+ */
+
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 
@@ -9,7 +23,11 @@ import {
   ChannelStatusPanel,
   type ChannelStatusKind,
 } from '@/components/channels/channel-status-panel';
+import { WhatsappConnectedPanel } from '@/components/channels/whatsapp-connected-panel';
+import { Crumb } from '@/components/console/crumb';
 import { requireCurrentTenant } from '@/lib/tenant-context';
+
+export const dynamic = 'force-dynamic';
 
 export default async function WhatsAppChannelPage() {
   const { tenant } = await requireCurrentTenant();
@@ -23,6 +41,7 @@ export default async function WhatsAppChannelPage() {
       lastHealthyAt: true,
       lastErrorMessage: true,
       phoneNumberId: true,
+      metadata: true,
     },
   });
 
@@ -66,40 +85,126 @@ export default async function WhatsAppChannelPage() {
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div
+      style={{
+        padding: '24px 28px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 18,
+        flex: 1,
+        minHeight: 0,
+      }}
+    >
+      <Crumb trail={['WhatsApp']} />
+
+      {status === 'active' && install ? (
+        <ConnectedView install={install} />
+      ) : (
+        <DisconnectedView
+          status={status}
+          identifier={identifier}
+          lastHealthyAt={install?.lastHealthyAt?.toISOString() ?? null}
+          lastErrorMessage={install?.lastErrorMessage ?? null}
+          onProbe={status === 'not_installed' ? undefined : probe}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConnectedView({
+  install,
+}: {
+  install: {
+    displayPhoneNumber: string | null;
+    businessDisplayName: string | null;
+    metadata: unknown;
+  };
+}) {
+  const metadata = (install.metadata as Record<string, unknown> | null) ?? {};
+  const templates = Array.isArray(metadata.templates)
+    ? (metadata.templates as Array<{ name: string; status: string }>)
+    : [];
+  return (
+    <WhatsappConnectedPanel
+      displayName={install.businessDisplayName}
+      displayPhoneNumber={install.displayPhoneNumber}
+      status="Connected"
+      templates={templates}
+      recentThreads={[]}
+      weeklyStats={{ trips: 0, messages: 0, deliveryRate: 100 }}
+    />
+  );
+}
+
+function DisconnectedView({
+  status,
+  identifier,
+  lastHealthyAt,
+  lastErrorMessage,
+  onProbe,
+}: {
+  status: ChannelStatusKind;
+  identifier: string | null;
+  lastHealthyAt: string | null;
+  lastErrorMessage: string | null;
+  onProbe?: () => Promise<{ ok: boolean; message?: string } | void>;
+}) {
+  return (
+    <>
+      <header>
+        <h1 className="t-h1">WhatsApp</h1>
+        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
+          Sendero owns the WhatsApp Business Account and lends you a number from the pool. No Meta
+          embedded signup, no carrier paperwork — you brand the experience.
+        </p>
+      </header>
+
       <ChannelStatusPanel
         brand="whatsapp"
         status={status}
         identifier={identifier}
-        lastHealthyAt={install?.lastHealthyAt?.toISOString() ?? null}
-        lastErrorMessage={install?.lastErrorMessage ?? null}
-        connectHref="/onboarding/agency"
-        onProbe={status === 'not_installed' ? undefined : probe}
+        lastHealthyAt={lastHealthyAt}
+        lastErrorMessage={lastErrorMessage}
+        connectHref="/dashboard/channels/whatsapp/connect"
+        onProbe={onProbe}
       />
 
-      <section className="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-sm)]">
-        <h3 className="text-[15px] font-semibold tracking-normal text-foreground">
-          What this does
-        </h3>
-        <ul className="flex flex-col gap-1.5 text-sm text-muted-foreground">
-          <li>
-            <strong className="text-foreground">Inbound</strong>: Travelers message your WhatsApp
-            number; the agent surfaces threads in{' '}
-            <Link className="underline underline-offset-2" href="/dashboard/inbox">
-              Trip inboxes
-            </Link>
-            .
-          </li>
-          <li>
-            <strong className="text-foreground">Outbound</strong>: Operators reply from the trip
-            composer; sends route through Kapso → Meta Cloud API.
-          </li>
-          <li>
-            <strong className="text-foreground">Health</strong>: Hourly cron pings Kapso. Use the
-            probe button above to re-check on demand.
-          </li>
-        </ul>
+      <section
+        className="sd-card-flat"
+        style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
+      >
+        <div className="t-meta">Set up the channel</div>
+        <p
+          className="t-body ink-70"
+          style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55, maxWidth: '64ch' }}
+        >
+          The 5-step wizard takes about 5 minutes. Claim a number, verify ownership, brand the
+          experience, send a test message, and go live.
+        </p>
+        <Link
+          href="/dashboard/channels/whatsapp/connect"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            marginTop: 12,
+            padding: '8px 18px',
+            background: 'var(--vermillion)',
+            color: '#fdfbf7',
+            border: 0,
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: 'var(--font-mono-x)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            textDecoration: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Start setup
+        </Link>
       </section>
-    </div>
+    </>
   );
 }

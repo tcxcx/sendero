@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Sendero — Pitch / 2026</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23EEDCC7'/%3E%3Ccircle cx='11' cy='17' r='5' fill='none' stroke='%23D65438' stroke-width='1.5'/%3E%3Ccircle cx='21' cy='17' r='5' fill='none' stroke='%23D65438' stroke-width='1.5'/%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,450;9..144,500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preload" as="image" href="assets/agent-workflow.jpg">
+<link rel="preload" as="image" href="assets/boarding-pass-stamp.jpg">
+<style>
+  /* ============================================================
+     Sendero Pitch — Midday-style restraint, Sendero brand colors
+     ============================================================ */
+  :root {
+    --bg: #EEDCC7;
+    --surface: #FDFBF7;
+    --ink: #1F2A44;
+    --ink-80: rgba(31,42,68,0.80);
+    --ink-60: rgba(31,42,68,0.55);
+    --ink-40: rgba(31,42,68,0.35);
+    --ink-20: rgba(31,42,68,0.16);
+    --vermillion: #D65438;
+    --vermillion-soft: #F4DDD4;
+    --hairline: #D8C1A7;
+    --grid: rgba(31,42,68,0.08);
+    --shadow-md: 0 1px 2px rgba(31,42,68,0.04), 0 8px 24px -12px rgba(31,42,68,0.10);
+    --shadow-lg: 0 2px 4px rgba(31,42,68,0.06), 0 16px 40px -16px rgba(31,42,68,0.14);
+    --display: "Fraunces", ui-serif, "Iowan Old Style", Georgia, serif;
+    --sans: "Geist", -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: "Geist Mono", ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
+  }
+  html, body { margin: 0; padding: 0; background: #000; }
+  body { font-family: var(--sans); color: var(--ink); }
+  * { box-sizing: border-box; }
+
+  deck-stage > section {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    letter-spacing: -0.005em;
+    position: relative;
+  }
+
+  /* Ambient grid lines — subtle hairlines (Midday's #161616 → our #D8C1A7 at 8% alpha) */
+  .grid-lines {
+    position: absolute; inset: 0; pointer-events: none; display: grid;
+    grid-template-columns: repeat(6, 1fr); padding: 0 32px;
+  }
+  .grid-lines::before, .grid-lines::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+  }
+  .grid-lines > div { border-right: 1px solid var(--grid); }
+  .grid-lines > div:last-child { border-right: 0; }
+  /* Horizontal grid lines */
+  .grid-rows { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+  .grid-rows > div { border-top: 1px solid var(--grid); }
+  .grid-rows > div:first-child { border-top: 0; }
+
+  /* Slide chrome: tiny header + bottom URL */
+  .frame { position: absolute; inset: 0; padding: 32px 64px; display: flex; flex-direction: column; }
+  .header { display: flex; justify-content: space-between; font-family: var(--sans); font-size: 17px; letter-spacing: -0.01em; }
+  .header .topic { color: var(--ink); }
+  .header .brand { color: var(--ink-60); text-decoration: none; }
+  .header .brand:hover { color: var(--vermillion); }
+
+  /* The center column — flex 1 + grid */
+  .body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 32px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; align-items: stretch; }
+  /* Wide-image variant — image gets more horizontal real estate */
+  .grid-3.wide-image { grid-template-columns: 1fr 1.7fr 1fr; gap: 28px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: stretch; }
+  .col { display: flex; flex-direction: column; gap: 32px; }
+
+  /* Card — Midday's pattern: floating, padded, centered icon → title → small subtitle → big numeral */
+  .card {
+    background: var(--surface);
+    border-radius: 4px;
+    box-shadow: var(--shadow-md);
+    padding: 32px 28px 28px;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    text-align: center;
+  }
+  /* Cards with stats reserve space for the numeral; plain cards size to content */
+  .card.has-stat { min-height: 320px; }
+  /* Live "open" pill — for non-numeric stats like an MCP endpoint */
+  .open-tag {
+    margin-top: auto;
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--ink-80);
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 8px 14px; background: var(--bg); border-radius: 999px;
+    box-shadow: inset 0 0 0 1px var(--ink-20);
+  }
+  .open-tag .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--vermillion);
+    box-shadow: 0 0 0 0 rgba(214,84,56,0.5);
+    animation: pulse 1.6s var(--ease) infinite;
+  }
+  .card .icon { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; color: var(--ink); }
+  .card .icon svg { width: 100%; height: auto; }
+  .card h2 { margin: 0; font-family: var(--display); font-weight: 450; font-size: 28px; line-height: 1.05; letter-spacing: -0.012em; color: var(--ink); }
+  .card p { margin: 0; font-family: var(--sans); font-size: 14px; line-height: 1.55; color: var(--ink-60); max-width: 38ch; }
+  .card .stat { margin-top: auto; font-family: var(--mono); font-size: clamp(72px, 8vw, 112px); font-weight: 500; letter-spacing: -0.05em; line-height: 0.92; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .card .stat.accent { color: var(--vermillion); }
+  .card .stat small { font-size: 0.5em; vertical-align: top; }
+  .card .live { display: inline-flex; align-items: center; gap: 12px; }
+  .card .live::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--vermillion); position: relative; box-shadow: 0 0 0 0 rgba(214,84,56,0.5);
+    animation: pulse 1.6s var(--ease) infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(214,84,56,0.45); }
+    50%      { box-shadow: 0 0 0 8px rgba(214,84,56,0); }
+  }
+
+  /* Big editorial headline (Midday: text-6xl in column) */
+  .headline {
+    font-family: var(--display);
+    font-weight: 450;
+    font-size: clamp(52px, 5.4vw, 88px);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    text-wrap: balance;
+    margin: 0;
+  }
+  .headline em { font-style: italic; color: var(--vermillion); font-weight: 400; }
+
+  /* Image cell (Midday: full bleed, no chrome) */
+  /* All images: rounded-md corners (8px) — applied to bare and framed image cells */
+  .image-cell { position: relative; display: flex; align-items: center; justify-content: center; min-height: 480px; }
+  .image-cell img { display: block; max-width: 100%; max-height: 600px; object-fit: contain; border-radius: 8px; }
+  .image-cell.framed {
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    border-radius: 8px;
+    overflow: hidden;
+    padding: 0;
+  }
+  .image-cell.framed img { max-height: none; width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
+
+  /* ============================================================
+     S1 · Title — giant Fraunces wordmark
+     ============================================================ */
+  .s1 .frame { padding: 32px 32px; }
+  .s1 .mark { position: absolute; top: 120px; right: 96px; opacity: 0.85; }
+  .s1 .wordmark {
+    font-family: var(--display);
+    font-weight: 450;
+    font-size: clamp(120px, 20vw, 296px);
+    line-height: 0.84;
+    letter-spacing: -0.04em;
+    color: var(--ink);
+    position: absolute;
+    bottom: 64px;
+    right: 96px;
+    margin: 0;
+  }
+  .s1 .wordmark em { font-style: italic; color: var(--vermillion); font-weight: 400; }
+  .s1 .tagline {
+    position: absolute;
+    bottom: 56px;
+    left: 64px;
+    font-family: var(--display);
+    font-weight: 450;
+    font-size: 28px;
+    line-height: 1.2;
+    letter-spacing: -0.012em;
+    color: var(--ink);
+    max-width: 480px;
+  }
+  .s1 .tagline em { font-style: italic; color: var(--vermillion); }
+
+  /* ============================================================
+     S6 Thesis — VS layout
+     ============================================================ */
+  .s6 .examples-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 48px; }
+  .s6 .ex { display: flex; flex-direction: column; gap: 6px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+  .s6 .ex.accent { border-top: 2px solid var(--vermillion); }
+  .s6 .ex .seg { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-60); }
+  .s6 .ex .co { font-family: var(--display); font-weight: 500; font-size: 24px; letter-spacing: -0.012em; }
+  .s6 .ex.accent .co { color: var(--vermillion); }
+  .s6 .ex .note { font-size: 13px; color: var(--ink-60); line-height: 1.5; }
+
+  /* ============================================================
+     S7 Pricing — minimalist
+     ============================================================ */
+  .s7 .price-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 48px; }
+  .s7 .price-row .card .icon { display: none; }
+  .s7 .price-row .card .stat { font-size: clamp(56px, 6vw, 88px); }
+
+  /* ============================================================
+     S8 Unit Economics — three-col swap
+     ============================================================ */
+  .s8 .center-card .stat { font-size: clamp(120px, 16vw, 240px); }
+  .s8 .center-card { background: var(--vermillion-soft); }
+  .s8 .center-card h2 { color: var(--vermillion); }
+
+  /* ============================================================
+     S9 Market — three big mono numbers
+     ============================================================ */
+  .s9 .tam-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+  .s9 .tam { display: flex; flex-direction: column; gap: 16px; padding: 48px 24px; }
+  .s9 .tam .num { font-family: var(--mono); font-size: clamp(100px, 12vw, 180px); font-weight: 500; letter-spacing: -0.05em; line-height: 0.92; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .s9 .tam.accent .num { color: var(--vermillion); }
+  .s9 .tam .label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--ink-60); }
+  .s9 .tam .sub { font-family: var(--sans); font-size: 14px; line-height: 1.55; color: var(--ink-60); max-width: 32ch; }
+
+  /* ============================================================
+     S10 Ask — close
+     ============================================================ */
+  .s10 .ask-headline {
+    font-family: var(--display);
+    font-weight: 450;
+    font-size: clamp(72px, 9vw, 144px);
+    line-height: 0.96;
+    letter-spacing: -0.025em;
+    margin: 0;
+  }
+  .s10 .ask-headline em { font-style: italic; color: var(--vermillion); }
+
+  /* Sponsors / tech partners — sits between the ask and the contact footer */
+  .s10 .partners { display: flex; flex-direction: column; gap: 28px; margin-top: auto; padding-bottom: 28px; }
+  .s10 .partners-label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-60);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .s10 .partners-label::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+  .s10 .partners-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 56px; align-items: end; }
+  .s10 .partner { display: flex; flex-direction: column; gap: 6px; }
+  .s10 .partner .role {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-60);
+  }
+  .s10 .partner .name {
+    font-family: var(--display); font-weight: 450; font-size: clamp(40px, 4vw, 60px);
+    line-height: 1; letter-spacing: -0.022em; color: var(--ink);
+  }
+  .s10 .partner .name em { font-style: italic; color: var(--vermillion); font-weight: 400; }
+
+  .s10 .contact { display: grid; grid-template-columns: auto 1fr auto; gap: 32px; align-items: end; padding-top: 22px; border-top: 1px solid var(--hairline); }
+  .s10 .contact .col-l { font-family: var(--sans); font-size: 18px; color: var(--ink-60); }
+  .s10 .contact .col-l a { color: var(--vermillion); text-decoration: none; }
+  .s10 .contact .col-r { font-family: var(--mono); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-40); text-align: right; }
+
+  /* ============================================================
+     Slide entrance + count-up + kinetic title
+     ============================================================ */
+  section.is-active .reveal { animation: rise 700ms var(--ease) both; }
+  section.is-active .reveal:nth-child(1) { animation-delay: 80ms; }
+  section.is-active .reveal:nth-child(2) { animation-delay: 160ms; }
+  section.is-active .reveal:nth-child(3) { animation-delay: 240ms; }
+  section.is-active .reveal:nth-child(4) { animation-delay: 320ms; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* Title kinetic reveal — only on titles with .line spans */
+  .kinetic-title .line { display: inline-block; overflow: hidden; line-height: 1.04; padding-bottom: 0.05em; margin-bottom: -0.05em; vertical-align: top; }
+  .kinetic-title .line > span { display: inline-block; transform: translateY(105%); will-change: transform; }
+  section.is-active .kinetic-title .line > span { animation: rise-line 900ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  section.is-active .kinetic-title .line:nth-child(1) > span { animation-delay: 80ms; }
+  section.is-active .kinetic-title .line:nth-child(2) > span { animation-delay: 180ms; }
+  section.is-active .kinetic-title .line:nth-child(3) > span { animation-delay: 280ms; }
+  @keyframes rise-line { from { transform: translateY(105%); } to { transform: translateY(0); } }
+
+  [data-count] { font-variant-numeric: tabular-nums; }
+
+  /* ============================================================
+     Password gate
+     ============================================================ */
+  #pw-gate { position: fixed; inset: 0; z-index: 99999; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 32px; }
+  #pw-gate.hidden { display: none; }
+  #pw-gate .frame-mark { font-family: var(--mono); font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ink-60); display: flex; align-items: center; gap: 12px; }
+  #pw-gate .frame-mark .dot { width: 6px; height: 6px; background: var(--vermillion); border-radius: 50%; box-shadow: 0 0 0 4px rgba(214,84,56,0.12); }
+  #pw-gate h1 { font-family: var(--display); font-weight: 450; font-size: clamp(56px, 7vw, 96px); letter-spacing: -0.025em; line-height: 0.96; margin: 0; max-width: 800px; text-align: center; text-wrap: balance; }
+  #pw-gate h1 em { font-style: italic; color: var(--vermillion); }
+  #pw-gate .meta { font-family: var(--sans); font-size: 16px; color: var(--ink-60); max-width: 500px; text-align: center; line-height: 1.5; }
+  #pw-gate form { display: flex; gap: 8px; align-items: center; }
+  #pw-gate input { font-family: var(--mono); font-size: 14px; padding: 13px 18px; border: 1px solid var(--ink-20); border-radius: 4px; background: var(--surface); color: var(--ink); outline: none; min-width: 280px; letter-spacing: 0.05em; transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease); }
+  #pw-gate input:focus { border-color: rgba(214,84,56,0.5); box-shadow: 0 0 0 4px rgba(214,84,56,0.10); }
+  #pw-gate button { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; padding: 13px 22px; background: var(--vermillion); color: var(--surface); border: 0; border-radius: 4px; cursor: pointer; transition: transform 160ms var(--ease); box-shadow: var(--shadow-md); }
+  #pw-gate button:active { transform: scale(0.97); }
+  #pw-gate .err { font-family: var(--mono); font-size: 11px; color: var(--vermillion); letter-spacing: 0.16em; text-transform: uppercase; min-height: 14px; }
+
+  /* Notes launcher — small icon-only button, anchored bottom-right so it never collides with the slide header */
+  .notes-launcher { position: fixed; bottom: 16px; right: 16px; z-index: 9000; opacity: 0.32; transition: opacity 200ms var(--ease); }
+  body:hover .notes-launcher, .notes-launcher:hover, .notes-launcher:focus-within { opacity: 1; }
+  .notes-launcher button {
+    font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+    padding: 0; width: 36px; height: 36px;
+    background: var(--surface); color: var(--ink);
+    border: 0; border-radius: 50%; cursor: pointer;
+    box-shadow: var(--shadow-md);
+    transition: transform 160ms var(--ease), background 160ms var(--ease), color 160ms var(--ease);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  @media (hover: hover) and (pointer: fine) { .notes-launcher button:hover { background: var(--vermillion); color: var(--surface); } }
+  .notes-launcher button:active { transform: scale(0.94); }
+</style>
+</head>
+<body>
+
+<div id="pw-gate">
+  <div class="frame-mark"><span class="dot"></span>SENDERO · PITCH / 2026</div>
+  <h1>The agent that does the <em>work</em>.</h1>
+  <div class="meta">Private preview. Enter the access phrase.</div>
+  <form id="pw-form" autocomplete="off">
+    <input id="pw-input" type="password" placeholder="access phrase" autofocus />
+    <button type="submit">Open deck</button>
+  </form>
+  <div class="err" id="pw-err">&nbsp;</div>
+</div>
+
+<div class="notes-launcher" id="notes-launcher">
+  <button type="button" id="open-notes" title="Open speaker notes (N)" aria-label="Open speaker notes">N&nbsp;↗</button>
+</div>
+
+<deck-stage width="1920" height="1080">
+
+  <!-- ============================================================
+       S1 · Title
+       ============================================================ -->
+  <section data-label="01 Title" class="s1">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">&nbsp;</span><span class="brand">Pitch / 2026</span></div>
+
+      <!-- Sendero binocular mark — left lens has a star (direction), right lens has a horizon line (destination) -->
+      <svg class="mark reveal" xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 160 100" fill="none" stroke="#D65438" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="44" cy="58" r="32" fill="none"/>
+        <circle cx="116" cy="58" r="32" fill="none"/>
+        <path d="M 76 50 L 84 50 M 76 64 L 84 64" />
+        <!-- Star in left lens -->
+        <path d="M 44 46 L 47 56 L 56 56 L 49 62 L 52 72 L 44 66 L 36 72 L 39 62 L 32 56 L 41 56 Z" fill="#D65438" stroke="none"/>
+        <!-- Horizon line + tiny mountain in right lens -->
+        <path d="M 92 64 L 140 64" stroke-width="2"/>
+        <path d="M 102 64 L 112 50 L 122 64" stroke-width="2" fill="none"/>
+      </svg>
+
+      <p class="tagline reveal">The AI agent that does <em>travel work</em>.<br/>Charged per action. Not per seat.</p>
+
+      <h1 class="wordmark reveal"><em>S</em>endero</h1>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S2 · Problem · "Travel ops is a mess"
+       ============================================================ -->
+  <section data-label="02 Problem" class="s2">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">Current problem</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body">
+        <div class="grid-3 wide-image">
+          <!-- Col 1 — card + headline -->
+          <div class="col">
+            <div class="card reveal">
+              <div class="icon">
+                <svg viewBox="0 0 56 56" fill="none"><rect x="6" y="14" width="44" height="36" stroke="#1F2A44" stroke-width="2"/><path d="M6 22 H50 M6 30 H50 M6 38 H50" stroke="#1F2A44" stroke-width="1.5"/></svg>
+              </div>
+              <h2>Six vendors,<br/>one workflow.</h2>
+              <p>Every booking touches an airline GDS, a travel firm, a CRM, expense software, payments, and humans gluing it all together. You pay all six.</p>
+            </div>
+            <h2 class="headline reveal">The current market for travel ops is <em>a mess</em>.</h2>
+          </div>
+
+          <!-- Col 2 — image -->
+          <div class="image-cell reveal">
+            <img src="assets/escrow-receipt.jpg" alt="Vintage railway receipt — proof of how outdated the underlying paperwork still is."/>
+          </div>
+
+          <!-- Col 3 — two cards -->
+          <div class="col">
+            <div class="card reveal">
+              <div class="icon">
+                <svg viewBox="0 0 56 56" fill="none"><circle cx="28" cy="20" r="8" stroke="#1F2A44" stroke-width="2"/><path d="M14 50 c0-8 6-14 14-14 s14 6 14 14" stroke="#1F2A44" stroke-width="2"/></svg>
+              </div>
+              <h2>Manual humans.<br/>Who quit.</h2>
+              <p>Your best travel agent costs $800 a month, works eight hours a day, quotes manually, and is gone in eighteen months.</p>
+            </div>
+            <div class="card reveal">
+              <div class="icon">
+                <svg viewBox="0 0 56 56" fill="none"><rect x="8" y="12" width="40" height="28" rx="2" stroke="#1F2A44" stroke-width="2"/><path d="M14 46 H42" stroke="#1F2A44" stroke-width="2"/><path d="M22 26 L34 26" stroke="#D65438" stroke-width="2"/></svg>
+              </div>
+              <h2>Forty-year-old tech.</h2>
+              <p>Sabre and Amadeus were built for travel agents in mainframes, not for the AI agents your customers now expect to do the work.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S3 · Solution
+       ============================================================ -->
+  <section data-label="03 Solution" class="s3">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">Solution</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body">
+        <div class="grid-3 wide-image">
+          <div class="col">
+            <h2 class="headline kinetic-title reveal">
+              <span class="line"><span>One agent.</span></span><br/>
+              <span class="line"><span>End to end.</span></span>
+            </h2>
+            <div class="card reveal">
+              <h2>Search → book → pay → support → sell more → report.</h2>
+              <p>Every stage of the trip lifecycle, run by a single AI agent. Auto-approve below threshold. Sub-six-second USDC settlement. Zero handoffs, sixty seconds.</p>
+            </div>
+          </div>
+
+          <div class="image-cell framed reveal">
+            <img src="assets/agent-workflow.jpg" alt="Sendero agent workflow map — illustrated end-to-end trip lifecycle."/>
+          </div>
+
+          <div class="col">
+            <div class="card reveal">
+              <div class="icon">
+                <svg viewBox="0 0 56 56" fill="none"><path d="M8 14 H48 V42 H8 Z" stroke="#1F2A44" stroke-width="2"/><circle cx="20" cy="28" r="3" fill="#D65438"/><circle cx="36" cy="28" r="3" fill="#D65438"/></svg>
+              </div>
+              <h2>Multi-tenant.</h2>
+              <p>One product. Four customers: consumers, agencies, corporates, other AI agents. Every tenant gets their own keys and MCP server.</p>
+            </div>
+            <div class="card reveal">
+              <div class="icon">
+                <svg viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="16" stroke="#1F2A44" stroke-width="2"/><path d="M16 28 H40" stroke="#D65438" stroke-width="2"/><path d="M28 16 V40" stroke="#1F2A44" stroke-width="1.5"/></svg>
+              </div>
+              <h2>WhatsApp. Slack.<br/>Teams. Web.</h2>
+              <p>Travelers stay in the channel they already use. The agent shows up where the conversation lives.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S4 · Live · Traction
+       ============================================================ -->
+  <section data-label="04 Live" class="s4">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">Where we are</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body">
+        <div class="grid-3 wide-image">
+          <div class="col">
+            <div class="card has-stat reveal">
+              <h2>Contracts verified.</h2>
+              <p>All Sendero contracts shipped to Arc-Testnet — escrow, stamps, ERC-8004 identity, reputation, validation — all verified-equivalent on Arcscan.</p>
+              <span class="stat live"><span data-count="6">6</span><span style="color:var(--ink-40);"> / 6</span></span>
+            </div>
+            <div class="card has-stat reveal">
+              <h2>End-to-end.</h2>
+              <p>From WhatsApp request to ticketed Duffel order with USDC on Arc, signature-and-freshness-dedup'd webhooks.</p>
+              <span class="stat"><span data-count="90">90</span><small>s</small></span>
+            </div>
+          </div>
+
+          <div class="image-cell framed reveal">
+            <img src="assets/sendero-travel-hero.jpg" alt="Sendero — live at sendero.travel — the agente de viajes for people, teams, and AI agents."/>
+          </div>
+
+          <div class="col">
+            <div class="card has-stat reveal">
+              <h2>Pilot pipeline.</h2>
+              <p>Mid-market LATAM travel agencies in Quito and Pichincha. Each one ready to white-label Sendero on their WhatsApp number.</p>
+              <span class="stat live"><span data-count="3">3</span></span>
+            </div>
+            <div class="card has-stat reveal">
+              <h2>MCP server, open.</h2>
+              <p>llms.txt published. First external AI agents already calling Sendero tools and paying nano-payments per call.</p>
+              <span class="open-tag"><span class="dot"></span>LIVE · sendero.travel/.well-known/llms.txt</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S5 · NFT Trip Stamps · Google × Arc
+       ============================================================ -->
+  <section data-label="05 Stamps" class="s5">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">Living NFTs · Google × Arc</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body">
+        <div class="grid-3 wide-image">
+          <div class="col">
+            <h2 class="headline kinetic-title reveal">
+              <span class="line"><span>The <em>collectible</em></span></span><br/>
+              <span class="line"><span>passport.</span></span>
+            </h2>
+            <div class="card has-stat reveal">
+              <h2>Gemini 2.5.<br/>IPFS. Arc.</h2>
+              <p>Boarding pass at confirm. Settlement receipt at payment. Itinerary map as legs land. A two-page passport spread when the trip closes.</p>
+              <span class="stat"><span data-count="14">14</span><small>s</small></span>
+            </div>
+          </div>
+
+          <div class="image-cell reveal">
+            <img src="assets/boarding-pass-stamp.jpg" alt="Vintage 1960s boarding pass NFT painted by Gemini 2.5 Flash Image."/>
+          </div>
+
+          <div class="col">
+            <div class="card reveal">
+              <h2>Painted on the trip.</h2>
+              <p>Vercel Workflow runs Gemini image + caption in parallel, pins to IPFS, mints into the traveler's Arc wallet. Idempotent on (kind, primaryKey).</p>
+            </div>
+            <div class="card reveal">
+              <h2>Unfurls inline.</h2>
+              <p>Paste a stamp link in Slack or WhatsApp — the art renders as the preview. The collectible <em>is</em> the marketing surface.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S6 · Thesis · Vertical AI agents replace SaaS
+       ============================================================ -->
+  <section data-label="06 Thesis" class="s6">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">The shift</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body" style="gap: 48px;">
+        <h2 class="headline kinetic-title reveal" style="font-size: clamp(56px, 7vw, 104px); max-width: 22ch;">
+          <span class="line"><span>Vertical AI agents</span></span><br/>
+          <span class="line"><span>replace the <em>software stack</em>.</span></span>
+        </h2>
+
+        <div class="grid-2">
+          <div class="card reveal" style="text-align: left; align-items: flex-start;">
+            <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--ink-60);">The last 20 years</div>
+            <h2 style="font-size: 32px;">Software as a Service.</h2>
+            <p style="text-align: left;">Humans do the work. Software provides tools. Priced per seat per month. You pay whether or not anyone uses it. Multiple vendors per workflow.</p>
+          </div>
+          <div class="card reveal" style="background: var(--vermillion-soft); text-align: left; align-items: flex-start;">
+            <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--vermillion);">The next 10 years</div>
+            <h2 style="font-size: 32px; color: var(--vermillion);">Vertical AI agents.</h2>
+            <p style="text-align: left;"><b style="color: var(--vermillion);">The agent does the work.</b> Humans review and set policy. Priced per action, per outcome. Zero usage equals zero cost. One agent per workflow.</p>
+          </div>
+        </div>
+
+        <div class="examples-row">
+          <div class="ex"><span class="seg">Legal</span><span class="co">Harvey</span><span class="note">Replaces associate + research</span></div>
+          <div class="ex"><span class="seg">Customer service</span><span class="co">Sierra</span><span class="note">Replaces agents + Zendesk</span></div>
+          <div class="ex"><span class="seg">Sales development</span><span class="co">Clay / 11x</span><span class="note">Replaces SDRs + tools</span></div>
+          <div class="ex accent"><span class="seg">Travel operations</span><span class="co">Sendero</span><span class="note">Replaces GDS + travel firm + humans</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S7 · Pricing · "If nobody travels, nobody pays"
+       ============================================================ -->
+  <section data-label="07 Pricing" class="s7">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">Pricing</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body" style="gap: 48px;">
+        <h2 class="headline kinetic-title reveal" style="font-size: clamp(64px, 9vw, 144px); max-width: 14ch;">
+          <span class="line"><span>If nobody travels,</span></span><br/>
+          <span class="line"><span><em>nobody pays</em>.</span></span>
+        </h2>
+
+        <p class="reveal" style="font-family: var(--sans); font-size: 22px; line-height: 1.5; color: var(--ink-80); max-width: 60ch;">
+          When AI does the work, you price the work — not the software. SaaS shell on top, per-action nano-payments underneath. <b>Both legs from day one.</b>
+        </p>
+
+        <div class="price-row">
+          <div class="card has-stat reveal">
+            <h2>Search</h2>
+            <p>Cents per search across 500+ airlines, hotels, ground.</p>
+            <span class="stat accent">$0.02</span>
+          </div>
+          <div class="card has-stat reveal" style="background: var(--vermillion-soft);">
+            <h2>Booking</h2>
+            <p>Flat fee per completed booking. No percentage markup, no GDS commission.</p>
+            <span class="stat accent">$1.00</span>
+          </div>
+          <div class="card has-stat reveal">
+            <h2>GMV take</h2>
+            <p>Half a percent of gross merchandise — versus 5–7% on legacy distribution.</p>
+            <span class="stat accent">0.5<small>%</small></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S8 · Unit Economics · The CFO math
+       ============================================================ -->
+  <section data-label="08 Unit Economics" class="s8">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">The CFO math</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body" style="gap: 48px;">
+        <h2 class="headline kinetic-title reveal" style="font-size: clamp(56px, 7vw, 104px); max-width: 18ch;">
+          <span class="line"><span>Eighty employees,</span></span><br/>
+          <span class="line"><span>two hundred trips.</span></span><br/>
+          <span class="line"><span>The math is <em>not close</em>.</span></span>
+        </h2>
+
+        <div class="grid-3" style="gap: 24px; align-items: stretch;">
+          <div class="card has-stat reveal">
+            <h2>With a travel firm.</h2>
+            <p>Transaction fees, monthly management, expense software, after-hours premium, implementation.</p>
+            <span class="stat">$<span data-count="28.5" data-decimals="1">28.5</span><small>K</small></span>
+          </div>
+          <div class="card has-stat center-card reveal">
+            <h2>Year-1 savings.</h2>
+            <p style="color: rgba(214,84,56,0.65);">Twenty-six thousand dollars back. Real-time data the travel firm never gave you.</p>
+            <span class="stat accent"><span data-count="91">91</span><small>%</small></span>
+          </div>
+          <div class="card has-stat reveal">
+            <h2>With Sendero.</h2>
+            <p>Nano-payments per action and a 0.5% GMV take. No licenses, no seats, no setup fees.</p>
+            <span class="stat accent">$<span data-count="2.4" data-decimals="1">2.4</span><small>K</small></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S9 · Market · TAM
+       ============================================================ -->
+  <section data-label="09 Market" class="s9">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">Total addressable</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body" style="gap: 64px;">
+        <h2 class="headline kinetic-title reveal" style="font-size: clamp(56px, 7vw, 104px);">
+          <span class="line"><span>$1.9T industry.</span></span><br/>
+          <span class="line"><span>Travel agencies still <em>mostly human</em>.</span></span>
+        </h2>
+
+        <div class="tam-row">
+          <div class="tam reveal">
+            <span class="label">Total · global travel</span>
+            <span class="num">$<span data-count="1.9" data-decimals="1">1.9</span>T</span>
+            <span class="sub">All travel spend. The workflow Sendero collapses end-to-end. <em>GBTA 2025</em>.</span>
+          </div>
+          <div class="tam reveal">
+            <span class="label">Wedge · LATAM + Spain</span>
+            <span class="num">$<span data-count="180">180</span>B</span>
+            <span class="sub">Spanish-speaking mid-market. Underserved, WhatsApp-native, USDC-growing.</span>
+          </div>
+          <div class="tam accent reveal">
+            <span class="label">3-year target</span>
+            <span class="num">$<span data-count="540">540</span>M</span>
+            <span class="sub">GMV through the agent. At 1–3% take = <b style="color: var(--vermillion);">$5–16M ARR</b>.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       S10 · Ask · Close
+       ============================================================ -->
+  <section data-label="10 Ask" class="s10">
+    <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="frame">
+      <div class="header"><span class="topic">What we need</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+
+      <div class="body" style="justify-content: flex-start; gap: 36px; padding-top: 56px;">
+        <h1 class="ask-headline kinetic-title reveal">
+          <span class="line"><span><em>Three</em> paid pilots.</span></span><br/>
+          <span class="line"><span>And intros.</span></span>
+        </h1>
+
+        <p class="reveal" style="font-family: var(--sans); font-size: 24px; line-height: 1.5; color: var(--ink-80); max-width: 56ch; margin: 0;">
+          Mid-market LATAM corporates and travel agencies for the pilot. Finance leaders we should meet. Investors who get vertical AI.
+        </p>
+      </div>
+
+      <div class="partners reveal">
+        <span class="partners-label">Sponsors · tech partners · <em style="font-style: italic; color: var(--vermillion);">thank you</em></span>
+        <div class="partners-row">
+          <div class="partner">
+            <span class="role">USDC · Alliance member</span>
+            <span class="name">Circle</span>
+          </div>
+          <div class="partner">
+            <span class="role">L2 chain · sub-6s settlement</span>
+            <span class="name">Arc</span>
+          </div>
+          <div class="partner">
+            <span class="role">Gemini 2.5 · Vertex AI</span>
+            <span class="name">Google</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="contact reveal">
+        <span class="col-l"><a href="mailto:hola@sendero.travel">hola@sendero.travel</a></span>
+        <span></span>
+        <span class="col-r">Quito · Madrid · CDMX</span>
+      </div>
+    </div>
+  </section>
+
+</deck-stage>
+
+<script type="application/json" id="speaker-notes">
+[
+  "Sendero is the AI agent that does travel work. End to end. Charged per action, not per seat.",
+  "Travel ops today: six vendors, manual humans who quit in eighteen months, forty-year-old tech. The current market is a mess.",
+  "One agent runs the entire lifecycle — search, book, pay, support, ancillaries, expense, report. Multi-tenant, all channels, sixty seconds.",
+  "Live today. Six contracts verified on Arc. Three pilots in pipeline. End-to-end ninety seconds. MCP server open to any AI agent.",
+  "Every trip mints collectible NFT stamps. Painted by Gemini in fourteen seconds. Pinned to IPFS, minted on Arc. The collectible is the marketing surface.",
+  "Vertical AI agents replace SaaS — that's YC's bet, three hundred billion-dollar opportunities. Harvey did legal. Sierra did support. Sendero does travel.",
+  "If nobody travels, nobody pays. SaaS shell on top, nano-payments underneath. Both legs from day one. Two cents per search, a dollar per booking.",
+  "Eighty-person company, two hundred trips: twenty-eight thousand five hundred with a travel firm. Two thousand four hundred with us. Ninety-one percent.",
+  "One-point-nine trillion industry. One hundred eighty billion wedge in LATAM and Spain. Three-year target: five to sixteen million ARR.",
+  "Three paid pilots. Intros to LATAM finance leaders. Investors who get vertical AI. hola@sendero.travel."
+]
+</script>
+
+<script src="deck-stage.js"></script>
+<script>
+  /* ============================================================
+     Active-slide marker, count-up, kinetic title (replays per slide)
+     ============================================================ */
+  (function () {
+    const stage = document.querySelector('deck-stage');
+    if (!stage) return;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function format(value, decimals, prefix, suffix) {
+      const fixed = Number(value).toFixed(decimals);
+      const withSep = decimals ? fixed : Number(fixed).toLocaleString('en-US');
+      return (prefix || '') + withSep + (suffix || '');
+    }
+    function runCountUp(el) {
+      const target = parseFloat(el.dataset.count);
+      const decimals = parseInt(el.dataset.decimals || '0', 10);
+      const prefix = el.dataset.prefix || '';
+      const suffix = el.dataset.suffix || '';
+      if (Number.isNaN(target)) return;
+      if (reduced) { el.textContent = format(target, decimals, prefix, suffix); return; }
+      const duration = 1100;
+      const start = performance.now();
+      const ease = (t) => 1 - Math.pow(1 - t, 4);
+      function tick(now) {
+        const t = Math.min(1, (now - start) / duration);
+        const v = target * ease(t);
+        el.textContent = format(v, decimals, prefix, suffix);
+        if (t < 1) requestAnimationFrame(tick);
+        else el.textContent = format(target, decimals, prefix, suffix);
+      }
+      requestAnimationFrame(tick);
+    }
+    function activate(slide) {
+      stage.querySelectorAll(':scope > section').forEach((s) => {
+        s.classList.remove('is-active');
+        s.querySelectorAll('[data-count]').forEach((el) => { el.textContent = ' '; });
+      });
+      void slide.offsetWidth;
+      slide.classList.add('is-active');
+      slide.querySelectorAll('[data-count]').forEach((el, i) => {
+        setTimeout(() => runCountUp(el), 500 + i * 60);
+      });
+    }
+    stage.addEventListener('slidechange', (e) => {
+      const slide = e.detail && e.detail.slide;
+      if (slide) activate(slide);
+    });
+    setTimeout(() => {
+      const visible = stage.querySelector(':scope > section[data-deck-active]') ||
+                      stage.querySelector(':scope > section.is-active') ||
+                      stage.querySelector(':scope > section');
+      if (visible && !visible.classList.contains('is-active')) activate(visible);
+    }, 100);
+  })();
+
+  /* ============================================================
+     Password gate
+     ============================================================ */
+  (function () {
+    const STORAGE_KEY = 'sendero-pitch-unlocked-v1';
+    const PASSWORD = 'sendero-arc';
+    const gate = document.getElementById('pw-gate');
+    const form = document.getElementById('pw-form');
+    const input = document.getElementById('pw-input');
+    const err = document.getElementById('pw-err');
+    if (sessionStorage.getItem(STORAGE_KEY) === '1') gate.classList.add('hidden');
+    else document.body.style.overflow = 'hidden';
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const v = (input.value || '').trim().toLowerCase();
+      if (v === PASSWORD) {
+        sessionStorage.setItem(STORAGE_KEY, '1');
+        gate.style.transition = 'opacity 320ms cubic-bezier(0.23, 1, 0.32, 1)';
+        gate.style.opacity = '0';
+        setTimeout(() => { gate.classList.add('hidden'); document.body.style.overflow = ''; }, 320);
+      } else {
+        err.textContent = 'Try again — phrase is on the README.';
+        input.value = '';
+        input.focus();
+      }
+    });
+  })();
+
+  /* ============================================================
+     Speaker-notes window — Google Slides-style
+     ============================================================ */
+  (function () {
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel('sendero-pitch-deck') : null;
+    let notesWin = null;
+    function publishState(detail) {
+      if (!channel) return;
+      const idx = (detail && typeof detail.index === 'number') ? detail.index : 0;
+      const total = (detail && typeof detail.total === 'number') ? detail.total : 10;
+      channel.postMessage({ type: 'state', index: idx, total });
+    }
+    document.addEventListener('slidechange', (e) => publishState(e.detail), false);
+    if (channel) {
+      channel.addEventListener('message', (msg) => {
+        const m = msg.data || {};
+        if (m.type === 'request-state') {
+          const stage = document.querySelector('deck-stage');
+          if (!stage) return;
+          const slides = Array.from(stage.querySelectorAll(':scope > section'));
+          let idx = 0;
+          slides.forEach((s, i) => { if (s.classList.contains('is-active')) idx = i; });
+          publishState({ index: idx, total: slides.length });
+        } else if (m.type === 'goto' && typeof m.index === 'number') {
+          const stage = document.querySelector('deck-stage');
+          if (stage && typeof stage.goTo === 'function') stage.goTo(m.index, 'api');
+        } else if (m.type === 'nav') {
+          const stage = document.querySelector('deck-stage');
+          if (!stage) return;
+          if (m.dir === 'next' && typeof stage.next === 'function') stage.next('api');
+          if (m.dir === 'prev' && typeof stage.prev === 'function') stage.prev('api');
+        }
+      });
+    }
+    document.getElementById('open-notes').addEventListener('click', () => {
+      const w = window.screen.availWidth, h = window.screen.availHeight;
+      const ww = Math.min(720, Math.floor(w * 0.45));
+      const wh = Math.min(900, Math.floor(h * 0.85));
+      const left = Math.max(0, w - ww - 32);
+      const top = 64;
+      notesWin = window.open(
+        new URL('notes.html', location.href).toString(),
+        'sendero-pitch-notes',
+        `popup=yes,width=${ww},height=${wh},left=${left},top=${top},toolbar=no,menubar=no,location=no,status=no`,
+      );
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.isContentEditable)) return;
+      if (e.key === 'n' || e.key === 'N') {
+        if (notesWin && !notesWin.closed) notesWin.focus();
+        else document.getElementById('open-notes').click();
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

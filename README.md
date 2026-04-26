@@ -33,15 +33,83 @@
 
 <br />
 
+## 2-minute pitch deck
+
+The same narrative compressed into 12 slides + a Google-Slides-style speaker-notes window. Live online (private preview):
+
+> **🔗 [sendero-pitch.vercel.app](https://sendero-pitch.vercel.app)** &nbsp;·&nbsp; passphrase **`sendero-arc`**
+>
+> Press **`N`** inside the deck (or click *Speaker notes ↗* in the top-right) to open the notes window in a separate tab — it stays in sync with the slide you're on.
+
+Run it locally:
+
+```bash
+bun dev:pitch     # → http://localhost:4000
+```
+
+Source lives in [`./pitch/`](./pitch/) — single static project, deployed standalone to Vercel from that directory. Brand language follows [`DESIGN.md`](./DESIGN.md) (parchment + vermillion + Fraunces).
+
+<br />
+
+## Verified on-chain — every Sendero contract is auditable on Arcscan
+
+Every contract Sendero deploys to Arc-Testnet is verified on Arcscan (Blockscout). Run `bun scripts/verify-deployments.ts` to audit all six in one shot — exits 1 on any real gap so CI can wire it as a post-deploy guard. Latest live audit:
+
+```
+✅  SenderoGuestEscrow proxy        0x640e15B2…f8515  ERC1967Proxy → SenderoGuestEscrow
+✅  SenderoStamps proxy             0xcc0fa835…71a03  EIP-1167 minimal proxy → TokenERC1155
+✅  SenderoStamps impl              0xCCf28A44…D4672  TokenERC1155 (thirdweb pre-audited)
+✅  ERC-8004 IdentityRegistry       0x8004A818…4BD9e  ERC1967Proxy → IdentityRegistryUpgradeable
+✅  ERC-8004 ReputationRegistry     0x8004B663…88713  ERC1967Proxy
+✅  ERC-8004 ValidationRegistry     0x8004Cb1B…B4272  ERC1967Proxy
+
+🎉 All contracts verified-equivalent. Shipped.
+```
+
+<table>
+  <tr>
+    <td width="50%">
+      <a href="https://testnet.arcscan.app/address/0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515" target="_blank" rel="noreferrer">
+        <img src="./apps/app/public/brand/screenshots/arcscan-guest-escrow.png" alt="SenderoGuestEscrow proxy on Arcscan: ERC1967Proxy with Implementation linked to SenderoGuestEscrow source" width="100%" />
+      </a>
+      <p align="center"><strong><a href="https://testnet.arcscan.app/address/0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515">SenderoGuestEscrow proxy</a></strong> — guest-escrow + claim-link contract powering the Peanut-style trip funding flow via secure escrow links. Source verified, implementation linked.</p>
+    </td>
+    <td width="50%">
+      <a href="https://testnet.arcscan.app/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03" target="_blank" rel="noreferrer">
+        <img src="./apps/app/public/brand/screenshots/arcscan-stamps-proxy.png" alt="SenderoStamps proxy on Arcscan: Proxy + Token badges, Implementation links to verified TokenERC1155" width="100%" />
+      </a>
+      <p align="center"><strong><a href="https://testnet.arcscan.app/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03">SenderoStamps proxy</a></strong> — ERC-1155 collection where every NFT trip stamp lives. EIP-1167 minimal clone of the verified <code>TokenERC1155</code> impl; Arcscan auto-links them.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e" target="_blank" rel="noreferrer">
+        <img src="./apps/app/public/brand/screenshots/arcscan-erc8004-identity.png" alt="ERC-8004 IdentityRegistry on Arcscan: ERC1967Proxy with Implementation IdentityRegistryUpgradeable, 5,000 transactions" width="100%" />
+      </a>
+      <p align="center"><strong><a href="https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e">ERC-8004 IdentityRegistry</a></strong> — the on-chain agent registry where every Sendero org and traveler gets a per-subject identity NFT. Mints atomically with wallet provisioning per the dual-reputation plan.</p>
+    </td>
+    <td width="50%">
+      <a href="https://testnet.arcscan.app/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/2286" target="_blank" rel="noreferrer">
+        <img src="./apps/app/public/brand/screenshots/arcscan-sendero-agent-2286.png" alt="Sendero agent NFT #2286 on Arcscan — AgentIdentity ERC-721 token, owner address visible, single transfer (the mint) recorded" width="100%" />
+      </a>
+      <p align="center"><strong><a href="https://testnet.arcscan.app/token/0x8004A818BFB912233c491871b3d84c89A494BD9e/instance/2286">Sendero agent NFT #2286</a></strong> — the platform's own ERC-8004 identity, minted via the bootstrap script. Future mints (org + user identities) render real Sendero brand art via <a href="./apps/app/app/agents/[kind]/[id]/metadata.json/route.ts"><code>/agents/[kind]/[id]/metadata.json</code></a>.</p> Used by other llm's via MCP and x402 nanopayments.
+    </td>
+  </tr>
+</table>
+
+The `Proxy` badge + `Implementation` link in each screenshot is what proves the verification: Arcscan resolves the proxy bytecode, finds the impl, and surfaces the impl's full Solidity source on the proxy's "Read/Write Contract" tab. Three deployment shapes covered (full-source / EIP-1167 minimal proxy / ERC1967 upgradeable proxy), all encoded in [`scripts/verify-deployments.ts`](./scripts/verify-deployments.ts) so future deployments stay audited.
+
+<br />
+
 ## Business model — production-grade SaaS + x402 nanopayments
 
 Sendero monetizes on **two independent revenue legs** from day one. This is not a future plan — it is wired through Clerk Billing, `@sendero/billing`, and the agent dispatch path today.
 
-**Leg 1 — Recurring SaaS (Clerk Billing on organizations).** Four plan tiers, monthly or annual, with a zero-card 14-day Pro trial. Plans gate capabilities (workspaces, production API keys, MCP-server exposure, SSO, white-label, SLA) via `has({ feature })`. Trial users get the full Pro ceiling at zero friction so they convert on what they actually shipped.
+**Leg 1 — Recurring SaaS (Clerk Billing on organizations).** Four plan tiers, monthly or annual, with a zero-card 14-day Pro trial. Plans gate capabilities (workspaces, production API keys, MCP-server exposure, SSO, white-label, SLA) via `has({ feature })`. Trial users get the full Pro ceiling at zero friction so they convert on what they actually shipped - providing API keys to power their own agentic travel agency via the Sendero MCP which is edge optimized as a Hono bun instance.
 
 **Leg 2 — Per-call nanopayments (x402 on Arc, settled in USDC).** Every agent action — flight search, policy check, booking hold, confirmation, MCP tool call, AI-agent context — is priced in micro-USDC and metered through `MeterEvent`. The traveler's or buyer's Circle wallet settles in batches on Arc L2. This leg is consumption-based and runs in parallel to the subscription: SaaS customers still pay nanopayments, just at a discounted unit rate.
 
-This is why the business model is durable: **the trial doesn't stop revenue, it shifts it.** A trialing user is still earning us nanopayment margin on every search and booking while they evaluate whether to pay for the SaaS shell. By the time Clerk flips the trial off, we've already shipped real trips against their wallet.
+This is why the business model is durable: **the trial doesn't stop revenue, it shifts it.** A trialing user is still earning us nanopayment margin on every search and booking while they evaluate whether to pay for the SaaS shell. By the time Clerk flips the trial off, we've already shipped real trips against their wallet. This new business model we've unlocked makes free-trial's for multi-tenant vertical AI agents actually monetize from day-one.
 
 ### Plan tiers (source of truth: [`packages/billing/src/plans.ts`](./packages/billing/src/plans.ts))
 
@@ -61,15 +129,15 @@ This is why the business model is durable: **the trial doesn't stop revenue, it 
 
 ### Why this shape
 
-- **API keys on the scale axis, not the integration axis.** For an agent-native platform where x402 is the primary distribution channel, production keys are equivalent to seats on traditional SaaS. Gating them is the commercial ask.
-- **Nanopayment discount scales with plan.** Paying MRR earns you unit economics. TMCs who would otherwise negotiate custom rates get default-priced terms — no bespoke contracts at Pro and below.
+- **API keys on the scale axis, not the integration axis.** For an agent-native platform where x402 is the primary distribution channel, production keys are equivalent to seats on traditional SaaS. Gating them is the commercial ask. We have a way to procure them fast thanks to Clerk while keeping Web3 auth with it.
+- **Nanopayment discount scales with plan.** Paying MRR earns you unit economics. TMCs who would otherwise negotiate custom rates get default-priced terms — no bespoke contracts at Pro and below. Customer's can add a markup on top of this to monetize their workspace travel OS operations.
 - **Zero-card trial on Pro, not Basic.** The trial should reveal the ceiling (public MCP, custom webhooks, audit export), not a throttled middle. Clerk's Oct-2025 no-card trials make this frictionless.
 - **Annual = 15–21% off with clean monthly-equivalent numbers.** Clerk's annual field is actually the *monthly rate when billed annually* (validated as ≤ monthly). $15 and $50 present cleaner than the exact 2-months-free computed values and still deliver real savings.
 - **Enterprise is an upward-open quote.** No list price, highest discount tier in code (50% / 15%), full capability set. Negotiation happens in the SLA, not in the feature checkbox matrix.
 
 ### Why this signals a durable vertical AI + SaaS business
 
-Vertical AI agents that only charge per-call have thin defensibility — the next cheaper LLM or router eats your margin. Vertical AI agents that only charge SaaS miss the obvious x402 opportunity sitting on the same agent runtime. Sendero does both, in one workspace, on one codebase, from day one:
+Vertical AI agents that only charge per-call have thin defensibility — the next cheaper LLM or router eats your margin. Vertical AI agents that only charge SaaS miss the obvious x402 opportunity sitting on the same agent runtime. Sendero does both, in one workspace, on one codebase, multi-tenant, from day one:
 
 - **SaaS pays for the platform** (workspaces, channels, MCP, identity, audit).
 - **Nanopayments pay for the calls** (every search, every booking, every settlement, every tool exposed to other agents).
@@ -152,15 +220,118 @@ Eligibility runs are jobs, not synchronous calls ([`TripEligibilityRun` model](.
 
 #### Visa as a revenue line — LATAM's biggest opportunity
 
-When Sherpa returns an `apply-product` action for the traveler's nationality × destination, it carries a full `Product` shape — `productId` (e.g. `USA_ESTA`, `CAN_ETA`, `IND_EVISA`), price, breakdown (government fee + service fee), application deadline, co-branded apply URL. Sendero exposes it as an `ancillary` hint on the verdict, ready to surface as an **"Add visa assistance — $185" CTA on the flight-offer card**. Partners on Sherpa see [14.6% conversion on booking-confirmation pages, 31% higher average booking values, 100% lift in ancillary add-ons](https://www.joinsherpa.com/solutions). The LATAM outbound lane (BRA → USA, ARG → USA, MEX → CAN, COL → Schengen) is where visa friction historically caused the most trip abandonment — and where Sendero's Arc-settled booking cart turns that friction into attach revenue.
+When Sherpa returns an `apply-product` action for the traveler's nationality × destination, it carries a full `Product` shape — `productId` (e.g. `USA_ESTA`, `CAN_ETA`, `IND_EVISA`), price, breakdown (government fee + service fee), application deadline, co-branded apply URL. Sendero exposes it as an `ancillary` hint on the verdict, ready to surface as an **"Add visa assistance — $185" CTA on the flight-offer card**. Partners on Sherpa see [14.6% conversion on booking-confirmation pages, 31% higher average booking values, 100% lift in ancillary add-ons](https://www.joinsherpa.com/solutions). The LATAM outbound lane (BRA → USA, ARG → USA, MEX → CAN, COL → Schengen) is where visa friction historically caused the most trip abandonment — and where Sendero's Arc-settled booking cart turns that friction into attached revenue.
 
 #### The PII boundary stays hard
 
-Agents, workflow scratchpads, and log lines only ever see enum codes + non-PII `ancillary` fields. Full legal name, DOB, passport number, and MRZ lines stay in `ciphertext bytea` and surface at two controlled moments: when **the traveler** views [`/dashboard/passport`](./apps/app/app/api/passport/self/route.ts), and when **Duffel ticketing or Sherpa eVisa submission** calls [`readVaultTicketingRecord()`](./packages/sendero-vault/src/passport.ts) — which writes a separate `ticketing_read` audit-log action distinct from `decrypt`, so compliance can distinguish "booking read passport# for legitimate reasons" from "owner viewed their own document." The LLM is never on either side of that boundary.
+Agents, workflow scratchpads, and log lines only ever see enum codes + non-PII `ancillary` fields. Full legal name, DOB, passport number, and MRZ lines stay in `ciphertext bytea` and surface at two controlled moments: when **the traveler** views [`/dashboard/passport`](./apps/app/app/api/passport/self/route.ts), and when **Duffel ticketing, extra luggage, seats, accomodation and car rentals or Sherpa eVisa submission** calls [`readVaultTicketingRecord()`](./packages/sendero-vault/src/passport.ts) — which writes a separate `ticketing_read` audit-log action distinct from `decrypt`, so compliance can distinguish "booking read passport# for legitimate reasons" from "owner viewed their own document." The LLM is never on either side of that boundary.
 
-#### What this buys in the demo
+#### What this get's us
 
 A new traveler signs in → dashboard shows the 10-second onboarding card → every flight search from that moment runs visa-aware, async via Sherpa in the background. **USA → CAN** business trip → verdict `ok` in under 400 ms, "visa-free" badge on the offer, one-tap book. **BRA → USA** 5-day business trip → verdict `warn` with `visa_required_not_on_file` + a Sherpa B2 eVisa `ancillary` hint → offer card sprouts *"Add B2 visa assistance — $185"*, tap adds it to the Arc-settled booking cart alongside the flight. WhatsApp a passport photo at any point → the agent refuses, logs the attempt, and replies *"passports go in the secure vault — here's a link"*. Upload, MRZ validates, vault encrypts. **Same rigor as on-chain escrow, applied to identity documents — and the same rigor applied to ancillary revenue.**
+
+### Living NFT stamps — Gemini generates trip art across the journey
+
+<p align="center">
+  <a href="https://gateway.pinata.cloud/ipfs/bafybeihzltlavpdf3xoksvx4542gzki5if4cpzgfezcms22k3bbvuonedy" target="_blank" rel="noreferrer">
+    <img
+      src="./apps/marketing/public/brand/stamps/boarding-pass-jfk-gru-vertex-gemini.png"
+      alt="Vintage 1960s boarding pass for JFK → GRU on AA — generated end-to-end this session by Gemini 2.5 Flash Image via Vercel + Vertex AI, pinned to IPFS via Pinata, ready to mint into a traveler's DCW on Arc-Testnet."
+      width="44%"
+    />
+  </a>
+</p>
+
+> **Live artifact from this hackathon submission** — 1024×1024 PNG generated in **~7s** by Gemini 2.5 Flash Image via Vertex AI, captioned in **~1s** by Gemini 2.5 Flash-Lite, both pinned to IPFS via Pinata in **~6s** combined. **Total wall-clock ~14s** for a fully-shareable, on-chain-ready NFT artifact.
+>
+> - **Image on IPFS** (canonical, immutable): [`ipfs://bafybei…onedy`](https://gateway.pinata.cloud/ipfs/bafybeihzltlavpdf3xoksvx4542gzki5if4cpzgfezcms22k3bbvuonedy) · mirrors: [ipfs.io](https://ipfs.io/ipfs/bafybeihzltlavpdf3xoksvx4542gzki5if4cpzgfezcms22k3bbvuonedy) · [cloudflare-ipfs](https://cloudflare-ipfs.com/ipfs/bafybeihzltlavpdf3xoksvx4542gzki5if4cpzgfezcms22k3bbvuonedy)
+> - **OpenSea-shape manifest** (the on-chain `tokenURI`): [`ipfs://bafkrei…sort4`](https://gateway.pinata.cloud/ipfs/bafkreig55n2lf4ktzj45ju6tit4z5wra4tuwifw76bfjynxsx5p7hsort4)
+> - **GPT-/Gemini-written caption** baked into the manifest: *"Confirmed AA to GRU from JFK – the adventure officially begins!"*
+> - **SenderoStamps ERC-1155 contract** (Circle SCP, deployed Apr 2026, all auto-verified by Circle's pipeline): Arcscan [`0xcc0f…1a03`](https://testnet.arcscan.app/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03) · Arc explorer [`0xcc0f…1a03`](https://testnet-explorer.arc.com/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03)
+>
+> **Why the art lives on IPFS, not Vercel Blob.** The OG unfurl path needs unauthenticated public HTTPS so Slackbot, WhatsApp, X, and Discord can fetch the image without a session cookie. Pinata's gateway gives us that for free; the on-chain `tokenURI` resolves to the same `ipfs://` CID through *any* IPFS gateway in the world, forever. Paste the manifest link into Slack and the boarding pass renders inline as the unfurl preview. Same `og:image` is set in `<head>` of [`/stamps/[tokenId]`](./apps/app/app/stamps/%5BtokenId%5D/page.tsx) for direct link previews.
+
+The same Gemini stack that reads documents (OCR above) also **paints them**. Every time a Sendero trip crosses a meaningful state boundary, a Vercel Workflow fires Gemini 2.5 Flash Image and a GPT-5-nano caption *in parallel*, pins both to IPFS, and mints an ERC-1155 stamp into the traveler's Developer Controlled Wallet on Arc-Testnet. By trip end, the user owns a small **collectible passport** — every stamp is a moment in the journey; the art is generated specifically for that trip, and the OpenGraph payload makes Slack and WhatsApp render the art when the link is shared. **Proof-of-trip you can put in your pocket.**
+
+This is intentional: our agent is designed to accompany you from booking through every travel milestone, enriching the journey with context-aware actions. For example, travel tools are integrated via [Google Places, Maps, Weather, etc, etc.](./packages/sendero-travel-tools/) APIs to power features like live recommendations and local info. You can see their usage in the [workflow for generating stamps](./apps/app/workflows/stamps/generate-stamp.ts), where relevant APIs are orchestrated depending on trip state.
+
+Pattern lifted directly from Vercel's [`birthday-card-generator`](https://github.com/vercel/workflow/tree/main/examples/birthday-card-generator) example — the *parallel art + text → durable upload → on-chain mint* shape generalizes beautifully from "card a friend can RSVP to" to "NFT a traveler keeps." Everything runs on Vercel Workflow DevKit; every step is `'use step'` so a transient Gemini 5xx, a Pinata timeout, or a redeploy doesn't burn tokens or re-mint on Arc.
+
+#### Four kind-specific entrypoints — one for each beat in the trip
+
+```
+apps/app/workflows/stamps/
+├── generate-boarding-pass.ts       ← BoardingPass
+├── generate-settlement-receipt.ts  ← SettlementReceipt
+├── generate-itinerary-map.ts       ← ItineraryMap
+└── generate-trip-passport.ts       ← TripPassport
+```
+
+**🛫 BoardingPass** — fires the moment `confirm_flight` lands a Duffel order. Gemini draws a **vintage 1960s jet-age boarding pass** on cream cardstock — perforated edge, route codes typeset like jet-age letterpress, carrier and cabin baked into the prompt. Caption is GPT-5-nano in journal-entry voice: *"Gate B22, flight booked — JFK to GRU, the long way home."* Mints to the traveler's DCW the second the supplier confirms.
+
+**🧾 SettlementReceipt** — fires on `settle_booking` after USDC moves on Arc. Gemini draws a **vintage railway-ticket receipt** with the actual amount stamped on it in the tenant's brand color, the Arc transaction hash baked into the punched cancellation marks. Caption is brisk, ledger-clerk voice: *"Paid in full, USDC 4,287.50 — booked, settled, ledger closed."* The art *is* the proof of payment.
+
+**🗺️ ItineraryMap** — fires on `book_flight` and refreshes as legs are added (the contract supports `setTokenURI` so the same NFT updates in place). Gemini draws a **WPA-poster travel map** — flowing route line, stylized landmasses in tenant-brand `oklch()`, compass rose top-right, brand cartouche bottom-right. As more legs land, the map redraws without minting a new token — your *single* itinerary stamp deepens through the trip.
+
+**📔 TripPassport** — fires on the **last** `settle_booking`, when the trip closes. Gemini draws a **two-page passport spread** with overlapping ink stamps for every tool the agent used during the trip — boarding passes, hotel chops, settlement receipts, itinerary map. The capstone NFT. For multi-traveler trips, the same class id is minted with `quantity = N` and distributed via the contract's group-mint extension — every traveler walks away with a copy of the same shared passport.
+
+#### The technical magic that makes it actually work
+
+```ts
+// apps/app/workflows/stamps/generate-stamp.ts — the shared engine
+'use workflow';
+
+const ctx = await loadStampContext({ kind, tripId, bookingId });
+
+// Parallel: Gemini paints, GPT-5-nano writes — saves ~2s per stamp.
+const [imageDataUrl, caption] = await Promise.all([
+  generateStampImage(imagePromptForKind(ctx)),    // 'use step'
+  generateStampCaption(captionPromptForKind(ctx)) // 'use step'
+]);
+
+// Hot path (Vercel Blob) AND cold path (IPFS via Pinata).
+const blobUrl    = await uploadStampToBlob(...);   // 'use step'
+const imageCid   = await pinStampImageToIpfs(...); // 'use step'
+const manifestCid = await pinStampManifestToIpfs({
+  ...manifest,
+  image:      `ipfs://${imageCid}`, // canonical
+  image_blob: blobUrl,              // hot OG / dashboard
+});
+
+// Mint via the existing mint_stamp x402 tool — idempotent on (kind, primaryKey).
+const { tokenId, txHash } = await execMintFirst({
+  ctx,
+  uri: `ipfs://${manifestCid}`,
+  to:  ctx.travelers[0].address,
+});
+```
+
+- **Parallel image + caption** — Gemini 2.5 Flash Image and GPT-5-nano hit the AI Gateway simultaneously. ~2 s saved per stamp.
+- **Two homes for the art** — the canonical URI on-chain is `ipfs://<manifestCid>`, but the manifest also carries `image_blob: <Vercel Blob URL>` so the OG unfurl renders in <100 ms instead of waiting on an IPFS gateway. Best of both worlds: decentralized truth, centralized speed.
+- **Idempotent everywhere** — Pinata is content-addressed (re-uploading identical bytes returns the same CID), the `mint_stamp` tool is `UNIQUE(kind, primaryKey)` in Postgres, the contract assigns sequential token ids. Re-run the workflow with the same `(tripId, bookingId)` → same CID, same row, same token id, no double-spend, no double-mint.
+- **WDK retries are surgical** — Gemini 5xx? Just that step retries. Pinata 502? Just that step. Mint reverts? Image + manifest already pinned, the workflow re-attempts mint without re-spending Gemini tokens.
+- **One on-chain tx, one URI, one event** — no placeholder URI, no second `setTokenURI` call, no extra event for indexers to special-case. Art-first, then mint.
+- **Live progress stream** — every `'use step'` writes a JSON event onto the WDK readable. The dashboard StampCard subscribes via [`/api/workflows/stamps/runs/[runId]/stream`](./apps/app/app/api/workflows/stamps/runs/%5BrunId%5D/stream/route.ts) and replaces a shimmering passport-cover skeleton in real time as each step completes.
+
+#### Why the OG unfurl is a feature, not an afterthought
+
+The public stamp page at [`/stamps/[tokenId]`](./apps/app/app/stamps/%5BtokenId%5D/page.tsx) lives outside the auth-gated `(app)` segment so Slackbot, WhatsApp, and X can fetch it without a session. `generateMetadata` returns `og:image` (the hot Vercel Blob URL — not IPFS, because unfurl bots have a ~3 s budget), `twitter:summary_large_image`, and `eth:nft:contract` / `eth:nft:token_id` / `eth:nft:chain` hints for NFT-aware bots. **Paste a stamp link in any chat → the art renders inline.** Recipients see the trip, click through, discover Sendero. The collectible *is* the marketing surface.
+
+#### The return-for-service loop
+
+Signed-in travelers see their full collection at [`/dashboard/stamps`](./apps/app/app/(app)/dashboard/stamps/page.tsx) — a 4-column responsive grid backed by [`NftStampOwnership`](./packages/database/prisma/schema.prisma). The Postgres table is populated by **Circle Event Monitors** (registered via [`scripts/register-stamps-event-monitor.ts`](./scripts/register-stamps-event-monitor.ts) — `TransferSingle` / `TransferBatch` / `TokensMinted` / `URI`) hitting [`/api/webhooks/circle/events`](./apps/app/app/api/webhooks/circle/events/route.ts), which means **no separate indexer to operate** — Circle's infra is the source of truth, our webhook is just a thin reducer. A future iteration adds *"re-book this route"* CTAs hovered off each stamp's `attributes` so the collection literally drives repeat travel — every stamp is a return-for-service hook.
+
+#### Why this stack, not another one
+
+- **Gemini 2.5 Flash Image** — handles the four distinct prompt aesthetics (boarding-pass, railway-receipt, WPA-poster, passport-spread) with one model. No prompt-juggling across providers.
+- **Vercel Workflow DevKit** — `'use workflow'` + `'use step'` is the cleanest way we've seen to express "one durable graph spanning Gemini, Pinata, Postgres, and an EVM RPC." Birthday-card-generator was the proof; we just generalized the shape.
+- **Pinata for IPFS** — content-addressed pinning makes retries free. JSON + image upload from the same SDK.
+- **Circle Smart Contract Platform** — pre-audited ERC-1155 template, automatic Gas Station sponsorship — the treasury wallet signs `mintTo(...)` and Circle bills Sendero in fiat. Travelers never see gas.
+- **Vercel Blob** — the hot path for OG previews + dashboard cards. IPFS is the canonical truth; Blob is the speed.
+
+**End-to-end, in numbers.** ~6 s wall-clock from the supplier confirming a flight to a minted NFT in the traveler's wallet. ~$0.0003 of Pinata storage per stamp. Zero gas to the user. Zero ops surface to maintain — Circle's Event Monitors keep our Postgres in sync without a Ponder node, an Etherscan subscription, or a cron job.
+
+> The pitch in one line: Gemini paints a vintage travel artifact for every meaningful moment of your trip, Vercel Workflows guarantees the pipeline is durable + idempotent, Circle handles the on-chain mint without gas friction, and the OG unfurl turns every stamp into a marketing surface that actually moves bookings. **NFT mania of 2020, redone in the age of agentic AI — but this time the artwork has a job.**
 
 ## Developer experience — the docs surface we wanted when we started
 
@@ -197,29 +368,42 @@ See [`/docs/security`](./apps/docs/content/docs/security.mdx) for the full integ
 
 <br />
 
-# Sendero × Arc
+## Production-grade workflow runtime — Vercel Workflows + Fluid Compute
 
-Sendero is an AI operating layer for travel agencies, TMCs, concierge teams, and corporate travel desks and also individual travelers. It turns messy travel requests into quotes, approvals, bookings, service actions, refunds, artifacts, invoices, and settlement trails. Arc/Circle is the trust and money backplane: every flight, hotel, and ground leg can be booked by an AI workflow and settled on Arc L2 in USDC or EURC.
+> By default, Vercel Workflows encrypts all data, including step inputs, outputs, and stream chunks, before they leave your deployment. Nothing is readable in transit or at rest outside your environment, and decryption only happens inside the deployment running the workflow.
+> — [Vercel Workflows](https://vercel.com/docs/workflows)
 
-**Custom `SenderoGuestEscrow` (Arc Testnet):** we implemented **guest-escrow passes** for travel—programmable holds and releases tied to trips, offers, and fulfillment—so **guests, contractors, and interview candidates** can be funded and settled with the same rigor as employee programs. The contract is designed to sit beside **ERC-8183**-style agentic job escrows and **ERC-8004** agent identity/reputation, while **Circle Nanopayments** and **x402** meter API and workflow usage so finance can align **per-trip** and **per-tool** spend with on-chain escrow state instead of only chasing receipts after the fact. A **deployed Ponder** indexer keeps `SenderoGuestEscrow` events in **Postgres** with **GraphQL** so the app, ops, and agents query one truth layer without hammering the RPC.
+Sendero's agent layer is a workflow engine first and a chat surface second. That choice has runtime consequences — long-running booking flows that wait days for a supplier webhook, OCR pipelines that move multi-MB passport scans through privileged extraction, settlement runs that fan one userOp out into seven on-chain transfers, multi-step setup wizards that pause overnight while a tenant admin grants Slack scopes. None of that is safe on cold-start serverless or on vanilla edge functions. **Vercel Workflows on Fluid Compute** gives us four guarantees we'd otherwise have to rebuild ourselves:
 
-The on-chain implementation is **[`SenderoGuestEscrow`](./contracts/src/SenderoGuestEscrow.sol)** ([`contracts/README.md`](./contracts/README.md) — API, lifecycle, upgrades). It follows **Peanut Protocol–style payment links**: the buyer locks USDC against an ephemeral **claim keypair** (public identifier on-chain; private key shared out-of-band, e.g. in a guest URL fragment). **`claimTrip`** accepts only a **recipient-bound ECDSA signature** that binds the guest’s chosen wallet into the signed digest (domain separation uses the contract’s fixed `SENDERO_SALT` label plus chain id and `address(this)` in the hash—**not** the same thing as the optional human-facing code below). On top of that link pattern we add a **travel** state machine: **reserve → commit → confirm → settle** bookings, upper-bound reservations for fare drift, buyer reclaim on timeouts, and sweeps—so escrow matches how trips are actually bought and reconciled.
+**1. Encrypted by default.** Step inputs, outputs, and stream chunks are encrypted before they leave the deployment. Passport MRZ extractions, settlement memos, OCR'd boarding-pass JSON, traveler emails, Slack OAuth state payloads — none of it is readable in transit or at rest outside the Sendero deployment. Pairs cleanly with our column-level [`PassportVault`](./packages/sendero-vault/src/passport.ts) AES-256 encryption (`pgcrypto`, per-tenant DEK derived via HKDF from a Vercel-env KEK): **Workflows handles transport, `pgcrypto` handles storage** — the LLM never sees a plaintext on either side.
 
-**Second security layer:** when the trip is created, the buyer may set a **`claimCodeHash`**. The guest must then submit the matching **unique preimage** (OTP-style one-time code) in the same `claimTrip` call as the signature. That is a **second secret** on top of possession of the ephemeral claim key: a leaked link alone is not always enough to enroll an attacker’s wallet. (The preimage appears in calldata; rotate codes if a link may have been observed—see *Known gaps* in `contracts/README.md`.)
+**2. Durable execution.** [`packages/workflows`](./packages/workflows) defines the graphs (`sendero.book_flight`, `cancellationRecoveryWorkflow`, `agencyCohortWorkflow`, channel setup wizards), and the [`WorkflowRun`](./packages/database/prisma/schema.prisma) row is the resumable checkpoint — but the runtime that survives crashes, cold starts, and redeploys is Workflows + Fluid Compute. `sendero.book_flight` can pause for hours awaiting `supplier_order_ticketed`, drift across two deploys, and resume from the exact pending step on the next webhook. The traveler reaches out on WhatsApp on Monday, the supplier confirms ticketing on Wednesday, the same workflow run mails the receipt — one durable object, three timezones, zero glue code.
+
+**3. Resumable streams + large-payload headroom.** Agent turns that emit live tool-output streaming, OCR jobs that pass entire PDF buffers, flight searches that return hundreds of offers — Fluid Compute's graceful-shutdown + request-cancellation semantics combined with Workflows' resumable streams mean we can move multi-MB payloads through hours-long state machines without a custom queue. The SSE channel at [`/api/wallet/balance/stream`](./apps/app/app/api/wallet/balance/stream/route.ts) and the eligibility-run channel at [`/api/trip-eligibility/[runId]/stream`](./apps/app/app/api/trip-eligibility/%5BrunId%5D/stream/route.ts) both lean on this — the EventSource can drop, the workflow keeps running, the next reconnect picks up mid-stream.
+
+**4. AI SDK ↔ Workflow SDK integration — agents *are* workflows.** Tools can be implemented as workflow steps (automatic retries, deterministic replay across resumes) or as regular workflow-level logic that uses `sleep` and hooks to suspend on webhooks. [`runAgentTurn`](./packages/agent) orchestrates the AI SDK's tool-calling loop *inside* a Workflows run — every tool invocation is a checkpointable step, every supplier webhook is a hook, every meter event is a step output the runtime can replay. LLM crashes mid-turn → workflow resumes from the last completed tool call. Duffel API times out → the step retries with backoff. 24-hour ticketing wait → the workflow sleeps without burning compute. The agent processes tool calls iteratively until completion, surviving its own restarts and the supplier's failures along the way.
+
+**Fluid Compute is the right primitive for AI agents.** Not Edge Functions — incompatible Node bindings, memory ceiling, no Prisma adapter on most ORMs. Not classic serverless — cold-start tax, one-request-per-instance billing, no concurrency reuse. Fluid Compute reuses function instances across concurrent requests (significantly fewer cold starts), gives us full Node.js + Bun + Rust runtimes natively, defaults to a 300s timeout, supports graceful shutdown + request cancellation, and prices on Active CPU rather than wall-clock GB-seconds. For an agent layer that *must* hold state across multi-minute LLM calls + supplier waits + on-chain settlement, that's the difference between "this works in a demo" and "this works at production scale."
+
+This is the runtime contract that makes the rest of the README possible. The Arc escrow contract is rigorous because the chain is rigorous. The workflow runtime is rigorous because Vercel encrypts + checkpoints + resumes + cancels for us. We didn't build a queue. We didn't build a state store. We didn't write encryption-in-transit for our own multi-step flows. We ship travel features and let the platform hold the durability + security contract under us.
+
+<br />
+
+# Sendero × Arc: BEST FOR LAST 🚬🥃
+
+To bring this back to perspective, Sendero is an AI operating layer for travel agencies, TMCs, concierge teams, and corporate travel desks, as well as individual traveler companions via WhatsApp and Slack channels managed by operators. It turns messy travel requests into quotes, approvals, bookings, service actions, refunds, artifacts, invoices, and settlement trails. Arc/Circle is the trust and money backplane: every flight, hotel, and ground leg can be booked by an AI workflow and settled on Arc L2 in USDC or EURC.
+
+**Custom `SenderoGuestEscrow` (Arc Testnet):** We implemented **guest-escrow passes** for travel—programmable holds and releases tied to trips, offers, and fulfillment—so **guests, contractors, and interview candidates** can be funded and settled with the same rigor as employee programs. The contract is designed to sit alongside norms like **ERC-8183**-style agentic job escrows and **ERC-8004** agent identity/reputation contracts. Both agencies and individual travelers have associated on-chain reputation: bookings, claims, and fulfilment history update agent and traveler standing, so participants can build reputation with every completed trip, aligned with the ERC-8004 on-chain identity model. This supports not just transactional trust, but reputation-based matching and service quality, directly composable across the ecosystem.
+
+**Circle Nanopayments** and **x402** meter API and workflow usage allow finance teams to align **per-trip** and **per-tool** spend with on-chain escrow and reputation state, rather than only chasing receipts after the fact. A **deployed Ponder** indexer keeps `SenderoGuestEscrow` events and reputation events in **Postgres** with **GraphQL** so the app, ops, and agents query a single truth layer without hammering the RPC.
+
+The on-chain implementation is **[`SenderoGuestEscrow`](./contracts/src/SenderoGuestEscrow.sol)** ([`contracts/README.md`](./contracts/README.md) — API, lifecycle, upgrades), which supports programmable travel escrow through **Peanut Protocol–style payment links**: the buyer locks USDC against an ephemeral **claim keypair** (public identifier on-chain; private key shared out-of-band, e.g. in a guest URL fragment). **`claimTrip`** accepts only a **recipient-bound ECDSA signature** that binds the guest’s chosen wallet into the signed digest (domain separation uses the contract’s fixed `SENDERO_SALT` label plus chain id and `address(this)` in the hash—**not** the same thing as the optional human-facing code below). On top of that pattern we add a **travel** state machine: **reserve → commit → confirm → settle** bookings, upper-bound reservations for fare drift, buyer reclaim on timeouts, and sweeps—so escrow matches actual traveler and agency workflows, and reputation is enforced transitively.
+
+**Reputation contracts:** As agencies and guests transact, **reputation scores** and completed actions are anchored on-chain for both sides. Agencies build a history of delivery and service level, while travelers or guest payees accrue credentials for successful claims and completion. This on-chain reputation can be surfaced in discovery, automated scoring, or workflow policy—see `contracts/GuestReputation.sol`. Agency and traveler reputation is queryable, portable, and upgradable; every completed trip increases reputation, every reclaim or dispute leaves an audit trail.
+
+**Second security layer:** When the trip is created, the buyer may set a **`claimCodeHash`**. The guest must then submit the matching **unique preimage** (OTP-style one-time code) in the same `claimTrip` call as the signature. That is a **second secret** on top of possession of the ephemeral claim key: a leaked link alone is not always enough to enroll an attacker’s wallet. (The preimage appears in calldata; rotate codes if a link may have been observed—see *Known gaps* in `contracts/README.md`.)
 
 **Deployed proxy (Arc Testnet, chain `5042002`, verified on Arc Scan):** [`0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515`](https://testnet.arcscan.app/address/0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515).
-
-> This app is intentionally **standalone** within the monorepo so it can be cleanly extracted into its own repository for submission. It uses zero `@bu/*` workspace imports. We built a much larger platform, as you can see, but the goal here is to launch this experiment quickly, learn fast, and refine it alongside Arc’s mainnet launch.
-
-Sendero was refined with the help of **beta testers worldwide** from the [**Arbitrum Foundation**](https://arbitrum.foundation/) community.
-
-<p align="center">
-  <img
-    src="./apps/app/public/testers/first-beta-testers.webp"
-    alt="Beta testers worldwide from the Arbitrum Foundation community"
-    width="100%"
-  />
-</p>
 
 ## LLM and agent entrypoints
 
@@ -247,15 +431,29 @@ Implementation lives in [`packages/llms`](./packages/llms) (generator + shared c
 
 Direct HTTP clients can call **`/tools/:name`** on the edge origin with **x402 `Payment-Signature`** headers. Use safe identifiers such as `tenantId`, `userId`, `tripId`, `bookingId`, and `runId`. Never persist guest private-link fragments, plaintext claim codes, raw card data, seed phrases, or API secrets.
 
+<img align="right" width="56" src="./apps/marketing/public/brand/signature/12-binoculars.png" alt="" />
+
 ## Trip companion (not only flights and hotels)
 
-Sendero’s tools are meant to support the **whole trip**, not just the flight lifecycle and accommodation booking. That is why we integrated the **Google Places API**—to help with restaurants, local context, and practical guidance so **tourists and business travelers** are supported from first quote through **getting home safely**.
+Sendero’s tools are meant to support the **whole trip**, not just the flight lifecycle and accommodation booking. That is why, as mentioned earlier, we integrated the **Google Places API**—to help with restaurants, local context, and practical guidance so **tourists and business travelers** are supported from first quote through **getting home safely**.
 
-The next 20 trip-assistance tools and workflows are tracked canonically in [`TODO_TOOLS.md`](./TODO_TOOLS.md). That backlog defines MCP shape, web AI Elements expectations, WhatsApp/Slack output rules, and which integrations should be extended before adding new APIs.
-
-Further tools we can add include **eSIM sales** (QR install in chat), **travel insurance** quotes and bind, travel information based on profile (traveler visa requiremnts, passport expiration, memory notifications) and deeper ground services. Partnership directions worth exploring include **LoungePass** and **Mastercard-style international card programs** with spend funded or settled from **USDC**, to lower cost and friction for travelers abroad via providers such as **Rain.xyz** which do support Visa Signature card programs funded by USDC.
+Further tools we can add include **eSIM sales** (QR install in chat), **travel insurance** quotes and bind, travel information based on profile (traveler visa requiremnts, passport expiration, memory notifications - pending API KEY provision from Sherpa to bring this live) and deeper ground services. Partnership directions worth exploring include **LoungePass** and **Mastercard-style international card programs** with spend funded or settled from **USDC**, to lower cost and friction for travelers abroad via providers such as **Rain.xyz** which do support Visa Signature card programs funded by USDC.
 
 MOAT: The more Sendero can absorb “my flight changed, now what?” the more defensible it becomes.
+
+## Roadmap — kernel ideas (post-validation)
+
+> **Nothing below ships until we have initial traction or product validation with design partners.** These are kernels meant to change. See [`ROADMAP.md`](./ROADMAP.md) for the full doc — scaffold references, starter code blocks, audience + prerequisites + kill-criteria per kernel, and the design-partner discovery questions.
+
+Five tool kernels distilled from four Vercel reference templates ([call-summary](https://vercel.com/templates/other/call-summary-agent) · [slack-agent](https://vercel.com/templates/other/slack-agent-template) · [lead-agent](https://vercel.com/templates/other/lead-processing-agent) · [knowledge-agent](https://vercel.com/templates/template/chat-sdk-knowledge-agent)), each extending the existing `@sendero/tools` registry, MCP surface, OpenAPI spec, and x402 dispatch layer without rewriting any of them:
+
+1. **HITL Slack approvals** — `request_approval` + `evaluate_travel_policy` as workflow primitives, signed-envelope resume via existing Slack interactions route.
+2. **Disruption-recovery (IROPS) agent** — composes `cancel_booking` + `request_approval` + new `propose_rebook_options` for the 22:30 "your flight just cancelled" loop.
+3. **Inbound qualification + travel research** — schema-pinned triage (lead-agent style) + Exa web research; ship traveler-intake half before the GTM lift.
+4. **Docs-grounded chat without a vector store** — knowledge-agent pattern: `grep`/`find`/`cat` over a git-cloned snapshot inside Vercel Sandbox, smart-model routing, sandbox pool reused by Kernel 1.
+5. **Concierge call intelligence** — webhook → Vercel Sandbox transcript grep → structured action items + supplier commitments + objection scoring; Kernel 4's sandbox infra unlocks this.
+
+**Step 0 (cross-cutting prereq):** extract `assertFetchableUrl` + `fetchDocument` from `packages/tools/src/scan-document.ts` into `@sendero/tools/safe-fetch` — Kernels 1, 3, 4 all need it.
 
 ## Google Maps Platform travel intelligence
 
@@ -302,6 +500,8 @@ The next major product step is a **proper on- and off-ramp**: credit card, bank 
 
 **WhatsApp** and **Slack** are first-class client surfaces for many agencies, TMCs, and road warriors. Meeting people there means a dedicated **mobile or web trip app is optional**, not mandatory, for day-to-day trip management—as long as the agent, tools, and settlement layer stay reliable behind the scenes.
 
+<img align="right" width="56" src="./apps/marketing/public/brand/signature/02-north-star.png" alt="" />
+
 ## Why we built this
 
 We decided to build this inspired by Y Combinator’s thesis that **vertical AI agents may become larger businesses than SaaS**.
@@ -313,7 +513,7 @@ We decided to build this inspired by Y Combinator’s thesis that **vertical AI 
 
 > "As AI models continue to rapidly improve and compete with one another, a new business model is coming into view: vertical AI agents. In this episode of the Lightcone, the hosts consider what effect vertical AI agents will have on incumbent SaaS companies, what use cases make the most sense, and how there could be 300 billion dollar companies in this category alone."
 
-The deeper idea is **replicability**: a template for **vertical AI agents on Arc** paid for with **nanopayments** and **usage-based** billing instead of flat SaaS seats. Price tracks **work actually completed** in **fully automated** flows, which weakens the assumption that every workflow must live behind a traditional product UI and can strip fixed platform cost from idle licenses. Layer in **USDC / EURC settlement**, credible **on- and off-ramps**, and familiar **PSP and card** rails for humans and treasury, and you get a serious production ready sketch of **agent-native commerce**—not a one-off demo, but a pattern others can fork for their own vertical.
+The deeper idea is **replicability**: a template for **vertical AI agents on Arc** paid for with **nanopayments** and **usage-based** billing instead of flat SaaS seats. Price tracks **work actually completed** in **fully automated** flows, which weakens the assumption that every workflow must live behind a traditional product UI and can strip fixed platform cost from idle licenses. Layer in **USDC / EURC settlement**, credible **on- and off-ramps**, and familiar **PSP and card** rails for humans and treasury, and you get a serious production ready sketch of **agent-native commerce**—not a one-off demo, but a pattern for any vertical.
 
 ### Enterprise travel: Navan, Ramp, Brex, and why guest escrow matters
 
@@ -326,11 +526,13 @@ From the **corporate card** side, **Ramp** and **Brex** are comparable financial
 
 ## How we design the travel experience (AI-native)
 
-Sendero is not a chat on top of a booking tool — it is a **workflow engine with channels on top**. The design principles below are codified as a skill (`.claude/skills/design-travel-experience-ai`) and paired with the `ai-workflows` skill so UX work and the workflow graph in [`packages/workflows`](./packages/workflows) stay in lockstep.
+Sendero is not a chat on top of a booking tool — it is a **workflow engine with channels on top** for multi-tenant agencies and corporates travel provisoning. The design principles below are codified as a skill (`.claude/skills/design-travel-experience-ai`) and paired with the `ai-workflows` skill so UX work and the workflow graph in [`packages/workflows`](./packages/workflows) stay in lockstep.
 
 ### One share, many channels
 
 A traveler-facing step produces a single `share` payload. The same shape renders as a **WhatsApp** interactive message, a **Slack** block kit card (for operators), an **email** via [`@sendero/notifications`](./packages/notifications), and a **web** card in [`apps/app/components/ai-elements/`](./apps/app/components/ai-elements). If a field matters to the UX, it lives in `share` — never hard-coded in one adapter. This is how the same flow can start on WhatsApp, resume on the web, and mail a receipt — all one run.
+
+<img align="right" width="56" src="./apps/marketing/public/brand/signature/04-courier-profile.png" alt="" />
 
 ### Stakeholders and role-tailored UX
 
@@ -339,7 +541,7 @@ Sendero's `Role` enum in [`packages/database/prisma/schema.prisma`](./packages/d
 | Role | Primary channel | What they see | Key affordances |
 | --- | --- | --- | --- |
 | **agency_admin** | Web console + Slack | All tenant trips, policy editor, approval inbox, commission reports, guest-pass issuance. | Prefund trips, issue guest passes, override policy with memo, approve exceptions, bulk prefund via `agencyCohortWorkflow`. |
-| **finance** | Web console + email | Invoices, settlement tx list, refund ledger, commission splits, reconciliations. | Export CSV, open artifact pack (`opsArtifactPackWorkflow`), drill from invoice → settle tx → per-leg split. No booking authority. |
+| **finance** | Web console + email | Invoices, settlement tx list, refund ledger, commission splits, reconciliations. | Export CSV, open artifact pack (`opsArtifactPackWorkflow`), drill from invoice → settle tx → per-leg split. No booking authority. | [pending Clerk paid subscription to add officialy]
 | **traveler** | WhatsApp / web / email | Their own trips, policy summary, offer cards, check-in nudges, receipts. | Book within policy, pick ancillaries, approve rebooks on disruption, rate the agent. Never sees other travelers, never edits policy. |
 | **guest** | WhatsApp (entry) + web (claim) + email | One trip — the one they were invited to — and only after claim. | Claim via MSCA passkey, pick offer within prefunded budget, confirm booking, receive receipt. No long-lived account. |
 
@@ -347,7 +549,7 @@ Role gating is re-checked inside every tool handler (not only the UI), and each 
 
 ### Guest passes (prepaid trips, Navan-shaped wedge)
 
-A **guest pass** is a WhatsApp-shareable link that lets someone without a Sendero account spend a prefunded USDC budget on one trip, then walk away. End-to-end:
+A **guest pass** is a WhatsApp-or-Slack-shareable link that lets someone without a Sendero account spend a prefunded USDC budget on one trip, then walk away. End-to-end:
 
 1. `prefund_trip` escrows USDC on-chain with budget + expiry + metadata CID.
 2. [`@sendero/guest`](./packages/sendero-guest) emits a Peanut-style share link (private key in URL fragment, never server-side) — email mirrors the link as the durable channel.
@@ -375,6 +577,8 @@ Canonical workflows: `guestPrefundWorkflow` (single seat) and `agencyCohortWorkf
 - A traveler can switch from web to WhatsApp mid-flow — the run is keyed by traveler + tripId, not by session.
 
 Consequences for design: never ask the traveler to "stay on this page"; every pending state is reachable from their inbox with a live link (no spinners); timeout values are product copy ("we'll follow up by Friday"); resume tokens are shareable URLs for ops handoff, WhatsApp CTAs, and Slack buttons.
+
+<img align="right" width="56" src="./apps/marketing/public/brand/signature/14-bird.png" alt="" />
 
 ### Confirmations must persist via email
 
@@ -412,6 +616,55 @@ Accessibility is non-negotiable: ~1 in 5 travelers have accessibility needs. 44�
 ### Nanopayments + USDC are billing *and* settlement
 
 [`@sendero/sendero-nanopayments`](./packages/sendero-nanopayments) settles bookings in a single Arc userOp that atomically fans traveler escrow → supplier + agency commission + Sendero fee + validator reward + reputation tip. The same rails meter per-turn agent usage (via x402). Quotes show fiat (via `quote_fx`) but commit in USDC; the invoice email shows both plus the settle tx hash; refunds via `send_tokens` surface their own tx hash. Card rails cannot do atomic multi-leg settlement — this is the Sendero-specific unlock.
+
+### Rolling releases on Vercel — gradual production rollouts
+
+Every production deploy of `apps/{app, marketing, docs, help}` rolls out in stages instead of flipping 100% of traffic at once. This is the web-tier counterpart to the Cloudflare Workers canary system on the edge worker — a bad deploy gets caught while it's only serving 5% of users, not after it's already broken everyone.
+
+Source of truth is one file per app: [`apps/<app>/.rolling-release.json`](./apps/app/.rolling-release.json). Stage shape is `{ targetPercentage, duration }` where `duration` is **minutes** until the stage auto-advances. A final 100% stage is required.
+
+| App | First stage | Subsequent stages | Total bake time |
+|---|---|---|---|
+| `apps/app` (auth, money, agent dispatch) | 5% / 15 min | 25% / 30 min → 50% / 60 min → 100% | ~1h 45m |
+| `apps/marketing` | 10% / 10 min | 50% / 30 min → 100% | ~40 min |
+| `apps/docs` | 25% / 15 min | 100% | ~15 min |
+| `apps/help` | 25% / 15 min | 100% | ~15 min |
+
+**One-time setup (per Vercel project).** Each `apps/<app>` must already be linked (`vercel link` once). Then push the JSON config to Vercel:
+
+```bash
+bun run deploy:rolling:configure          # apply all four
+bun run deploy:rolling:configure:dry      # preview the CLI calls
+bun run deploy:rolling:disable            # turn rolling releases off everywhere
+```
+
+Re-running the configure script overwrites the project's stored config — keep the JSON in git as the source of truth.
+
+**Day-to-day deploy.** Once Rolling Releases is enabled, every promotion automatically uses the configured stages — the normal git push pipeline keeps working. To deploy from a workstation:
+
+```bash
+bun run deploy:app                         # vercel deploy --prod under apps/app
+bun run deploy:marketing
+bun run deploy:docs
+bun run deploy:help
+```
+
+**Halt or finish a release in flight.**
+
+```bash
+bun run deploy:rolling:status:app          # current stage + canary deploy id
+bun run deploy:rolling:abort:app           # stop the canary, keep prod on previous deploy
+bun run deploy:rolling:approve:app         # advance to the next stage early
+bun run deploy:rolling:complete:app        # promote canary to 100% immediately
+```
+
+`abort` is also reachable as **Instant Rollback** in the Vercel dashboard.
+
+**Auto-halt on error rate.** Vercel's Rolling Releases does **not** expose an `errorRateThreshold` config field — auto-halt is not a built-in primitive. The Observability tab on the project shows canary-vs-baseline metrics (Speed Insights, error rate, Web Vitals) and `abort` is one click. For programmatic halting, wire the Vercel REST API (`POST /v1/projects/{id}/rollback/{deploymentId}`) into our existing `/health` substrate so a degraded canary triggers an abort. Tracked separately from this initial setup.
+
+**Plan tier.** Rolling Releases is a Vercel **Pro / Enterprise** feature (Sendero is on Pro). Hobby projects will reject the configure call.
+
+**Edge-tier counterpart.** The CF Workers `sendero-arc-edge` worker has its own canary system documented in [`apps/edge/README.md`](./apps/edge/README.md#canary-rollouts) — different runtime, same shape (gradient rollout, health-probe gating, manual rollback escape hatch).
 
 
 ## One-liner setup (mise)
@@ -493,24 +746,64 @@ bun run bootstrap-agent
 - **Next.js 15** (App Router)
 - **React 19**
 - **Vercel AI Gateway + Google Gemini** — default LLM path; see [Technology partners](#technology-partners)
-- **Nanopayments and Gateway** — x402 protocol for metered billing
-- **Circle Modular Wallets** — passkey-authenticated MSCAs on Arc Testnet
-- **Circle Developer-Controlled Wallets** — provider/treasury signing
-- **ERC-8183** agentic commerce (escrow) + **ERC-8004** agent identity/reputation
+- **Nanopayments + x402** — metered billing on every priced tool call. Sendero take batched into `NanopayBatch`, atomic on-chain settle on Arc.
+- **Circle App Kit** ([`@circle-fin/app-kit`](https://www.npmjs.com/package/@circle-fin/app-kit)) — single SDK for **swap, send, bridge, and unified balances** across every Sendero treasury surface. Used by `swap_tokens`, `send_tokens`, `bridge_to_arc`, `swap_and_bridge`, and the in-thread agent treasury actions. Composes both wallet types below.
+- **Circle Modular Wallets (MSCA)** — passkey-authenticated smart-contract accounts on Arc Testnet. **Tenant treasury** (today) + **agency-buyer cancel/sweep** path (roadmap: per-admin passkey).
+- **Circle Developer-Controlled Wallets (DCW)** — server-custodied EOAs on Arc. **Provisioned per traveler** so the same human carries one wallet across Clerk corporate, WhatsApp lead, and B2C entry points. Powers the operator signer (`setClaimCodeHash` rotation, operator-relayed `cancelTrip`) + the agent's spend rail.
+- **Circle Gateway** — unified-USDC balance across **7 testnets** (Arc, Ethereum Sepolia, Base Sepolia, Avalanche Fuji, OP Sepolia, Arbitrum Sepolia, Sonic Blaze). One balance for the agent to spend from; CCTP burn-and-mint under the hood. See `gateway_balance` / `gateway_transfer` tools.
+- **Transfer-policy guards** ([`packages/database/prisma/schema.prisma::TransferPolicy`](./packages/database/prisma/schema.prisma)) — per-tenant + per-traveler spend rails. Five guard kinds: `budget` (daily/weekly/monthly cap), `single_tx` (max one transfer), `recipient` (allow/deny addresses), `rate_limit` (count + window), `confirm` (operator-approval threshold). Every DCW outbound spend hits a chain through `/api/transfer/spend` and is logged to `TransferAttempt` so caps + budgets read from the same source as x402 charges.
+- **Reputation gate** ([`apps/app/lib/reputation-gate.ts`](./apps/app/lib/reputation-gate.ts)) — `ReputationPolicy` per tenant: `minStars`, `minTripCount`, `maxDisputeRatio`, `requireKyc/Kyb`, `enforcement: block | warn | allow`. Sub-50ms preflight on the dispatch route — sourced from the on-chain ERC-8004 record + cached locally. Blocks unmet checks before the LLM ever sees the turn.
+- **ERC-8183** agentic commerce escrow (`SenderoGuestEscrow` v3.0.0 — three-recipient atomic settle) + **ERC-8004** agent identity/reputation (each tenant + agent gets a verifiable on-chain identity).
 - **Ponder indexer** ([`apps/ponder`](./apps/ponder), workspace `@sendero/indexer`) — Postgres-backed index of **`SenderoGuestEscrow`** on Arc Testnet; ships a **GraphQL** read API (`mise run dev:indexer` / port `42069` locally). **Production:** self-hosted on **Railway** (~$5/mo vs hosted-subgraph pricing); see [`apps/ponder/README.md`](./apps/ponder/README.md).
 - First-party supplier flights + stays
 
-<a id="technology-partners"></a>
 
-## Technology partners: Google Gemini & Vercel AI Gateway
+## Wallets, transfers + policy guards
 
-**Google (Gemini)** We route production traffic through the **[Vercel AI Gateway](https://vercel.com/docs/ai-gateway)** using **Gemini-first** model strings (for example `google/gemini-3-flash` for fast turns and `google/gemini-3.1-pro-preview` for smart turns), with `providerOptions.gateway.order` set to **`google` → `anthropic` → `openai`** so the gateway can fail over across providers while we keep a single `AI_GATEWAY_API_KEY` (or `VERCEL_OIDC_TOKEN` on Vercel). Optional **BYOK** keys for Google, Anthropic, and OpenAI are forwarded when present so billing can stay on your own accounts.
+Sendero runs **three wallet types** in production, each scoped to a different actor. Spending from any of them flows through a single guarded path so caps + budgets + receipt audit stay coherent across surfaces.
 
-**Direct fallback cascade** (no gateway, or after a gateway hard-fail in `/api/agent/dispatch`): **Gemini** (`GOOGLE_GENERATIVE_AI_API_KEY` or `GEMINI_API_KEY`) → **OpenAI** → **Anthropic**, using tier-specific candidate lists. That matches the challenge to **use Gemini for reasoning, chat, and tool calling**, run **automated workflows** over user context, and **coordinate settlement on Arc with USDC** via Circle (wallets, Gateway, CCTP, x402) elsewhere in the stack.
+### Wallet roles
 
-Implementation (tiers, gateway order, BYOK, and direct cascade) lives in **[`packages/agent/src/models.ts`](./packages/agent/src/models.ts)**. Web streaming chat resolves models in [`apps/app/app/api/chat/route.ts`](./apps/app/app/api/chat/route.ts); channel dispatch retries in [`apps/app/app/api/agent/dispatch/route.ts`](./apps/app/app/api/agent/dispatch/route.ts).
+| Actor | Wallet type | Custody model | Provisioned by | Used for |
+|---|---|---|---|---|
+| **Tenant** (agency / corporate buyer) | Circle MSCA — passkey-backed Modular Smart Contract Account on Arc | Custodial (operator-controlled today) → roadmap: per-admin passkey | Clerk `organization.created` webhook → `provisionTenantWallet` from `@sendero/circle`. Stored on `CircleWallet { provisioner: 'msca' }`. | Tenant treasury, agency-buyer cancel/sweep, ERC-8004 identity owner. |
+| **Traveler** (the human who actually books) | Circle DCW — server-custodied EOA on Arc | Custodial (Circle holds keys, signs via entity secret) | First inbound channel touchpoint (Clerk corporate sign-in, WhatsApp lead, B2C signup). One DCW per `User` — persistent across tenants + channels so the same human carries one wallet everywhere. | Funded spend rail for the agent ([Circle App Kit](https://www.npmjs.com/package/@circle-fin/app-kit) — swap, send, bridge, unified balances), cross-chain travel payments. |
+| **Operator** (Sendero backend) | Circle DCW signer | Server (env-secret signed) | Set at `SenderoGuestEscrow.initialize`; submits operator-only contract calls. | `setClaimCodeHash` rotation, operator-relayed `cancelTrip`, settlement fan-out. |
 
-**Resources:** [Gemini API models](https://ai.google.dev/gemini-api/docs/models) · [Gemini 3 developer guide](https://ai.google.dev/gemini-api/docs/gemini-3) · [Google AI Studio](https://aistudio.google.com/) · [AI SDK Google provider](https://ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai)
+### Unified balances for the traveler — Circle App Kit + Gateway
+
+Every traveler DCW is wired into **Circle Gateway** so the agent sees a single USDC balance across **7 testnets** (Arc, Ethereum Sepolia, Base Sepolia, Avalanche Fuji, OP Sepolia, Arbitrum Sepolia, Sonic Blaze). Spending is exposed to the agent through:
+
+- **`gateway_balance`** — read the unified balance.
+- **`gateway_transfer`** — spend from any reachable chain in one call (CCTP burn-and-mint under the hood).
+- **`swap_tokens` / `send_tokens` / `bridge_to_arc` / `swap_and_bridge`** — Circle App Kit primitives, wrapped as agent tools at [`packages/tools/src/{swap-tokens,send-tokens,swap-and-bridge}.ts`](./packages/tools/src/). Same SDK powers the dashboard treasury surfaces.
+
+The traveler never holds keys — the DCW is the rail; App Kit is the verb layer.
+
+### Policy guards on every transfer
+
+Every outbound spend hits **`POST /api/transfer/spend`** before reaching the chain. The route runs the configured `TransferPolicy` rows, blocks or pauses as needed, and writes a `TransferAttempt` row at every branch (`passed`, `executed`, `blocked`, `pending`, `failed`). Same audit table that ops dashboards + budget guards read, alongside `MeterEvent` for x402 charges.
+
+Five guard kinds (per-tenant or per-traveler scope, configured in [`packages/database/prisma/schema.prisma::TransferPolicy`](./packages/database/prisma/schema.prisma)):
+
+| Guard kind | Semantics | Example config |
+|---|---|---|
+| `budget` | Rolling cap over a window | `{ period: 'monthly', capMicroUsdc: '50000000000' }` ($50k/mo) |
+| `single_tx` | Max amount per transfer | `{ maxMicroUsdc: '5000000000' }` ($5k/tx) |
+| `recipient` | Allow- or deny-list of addresses | `{ mode: 'allow', addresses: ['0x...'] }` |
+| `rate_limit` | Count cap over a window | `{ maxCount: 10, windowMs: 3600000 }` (10/hr) |
+| `confirm` | Operator-approval threshold | `{ triggerAtMicroUsdc: '1000000000', reason: 'amount > $1k' }` |
+
+Hard caps reject; soft caps pause for operator approval (queued + surfaced in `/dashboard/admin-retries`). Same machinery for tenant-scoped guards (corporate budget) and traveler-scoped guards (per-employee daily cap).
+
+### Reputation gate before the agent turn
+
+[`apps/app/lib/reputation-gate.ts`](./apps/app/lib/reputation-gate.ts) runs as a sub-50ms preflight on `/api/agent/dispatch`. Reads the tenant's `ReputationPolicy` (`minStars`, `minTripCount`, `maxDisputeRatio`, `requireKyc`, `requireKyb`, `enforcement: block | warn | allow`), checks against the on-chain ERC-8004 record (cached locally via `Attestation` rows), and short-circuits before the LLM sees the turn when the policy says `block`. `warn` posts a banner, `allow` is a no-op observation channel for tracking-mode rollouts.
+
+### Roadmap: tenant-controlled MSCA spend
+
+Today the tenant treasury MSCA is operator-signed on the tenant's behalf — operator-relayed cancel + sweep on the `/dashboard/trips/[tripId]/cancel` page falls under [task #25](./README.md#open-tasks). The roadmap moves to per-admin passkey signing (WebAuthn on the dashboard) so the tenant fully controls their treasury — a strict superset of today's flow. The contract permits both paths (`cancelTrip` accepts `t.buyer || operator`).
+
 
 ## Layout
 
@@ -533,7 +826,7 @@ Implementation (tiers, gateway order, BYOK, and direct cascade) lives in **[`pac
 
 ## Supported Currencies
 
-- Settlement token: USDC / EURC / Auto-FX on Arc Testnet
+- Settlement token: USDC / EURC on Arc Testnet
 
 ## Arc × Circle integration
 
@@ -544,9 +837,9 @@ Every scenario shows a per-invoice breakdown settled via **Circle CCTP v2 on Arc
 - Sub-6s finality target
 - Treasury balance in both tokens
 
-## Smart contract indexer (Ponder)
+## Smart contract indexer (Ponder and Circle Smart Contract Events)
 
-We ship and run a **TypeScript Ponder indexer** for the guest-escrow contract on Arc Testnet (replaces a Goldsky-style subgraph for this chain). It **backfills and follows** `SenderoGuestEscrow` events into **Postgres**, exposes **auto-generated GraphQL** for trips, bookings, and related entities, and is what keeps long-lived escrow and settlement state legible to the product without hammering the RPC.
+We ship and run a **TypeScript Ponder indexer** for the guest-escrow contract on Arc Testnet (replaces a Goldsky-style subgraph for this chain). It **backfills and follows** `SenderoGuestEscrow` events into **Postgres**, exposes **auto-generated GraphQL** for trips, bookings, and related entities, and is what keeps long-lived escrow and settlement state legible to the product without hammering the RPC. **Circle Smart Contract Events** handles the NFT event listeners and lifecycle usinf Circle Console services.
 
 - **Code:** [`apps/ponder`](./apps/ponder) (`@sendero/indexer`)
 - **Local:** `mise run dev:indexer` or `bun run dev:indexer` — GraphQL at `http://localhost:42069/graphql` (see [`apps/ponder/README.md`](./apps/ponder/README.md))
@@ -607,8 +900,18 @@ sendero-arc/
 
 ## Built on
 
+- [Circle Arc App Kit](https://www.arc.network/app-kit) — fast-track apps on Arc with wallet, treasury, jobs, and supplier primitives.
+- [Circle Developer Services](https://developers.circle.com/) — see docs for building on Arc’s smart contract platform with Modular Wallets, treasury, programmable webhooks, and on-chain gas station.
+- [Next Forge 6](https://www.next-forge.com/) — monorepo starter template .
 - [Google Gemini](https://ai.google.dev/gemini-api/docs) & [Google AI Studio](https://aistudio.google.com/) — multimodal agents, function calling, and sponsor-aligned defaults.
 - [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) — unified routing, observability, and provider failover.
+- [Vercel Workflows](https://vercel.com/docs/workflows) — manage async flows, pipelines, and jobs on Vercel.
+- [Vercel AI SDK](https://vercel.com/docs/ai) — streaming, function calling, and UI patterns for AI interfaces.
+- [Vercel Fluid Compute (Edge Functions)](https://vercel.com/docs/functions/edge-functions) — scalable, low-latency compute for real-time agents and workflows.
+- [Vercel Blob](https://vercel.com/docs/storage/vercel-blob) — simple object/file storage built into Vercel.
+- [Pinata](https://www.pinata.cloud/) — managed IPFS storage and gateway for content addressing and decentralized media.
+- [Slack](https://slack.com/) — team chats, agent handoff, support flows.
+- [Kapso](https://kapso.in/) — WhatsApp integration for notifications, booking, and agent chat.
 - [Circle Arc](https://www.arc.network/) — USDC as native gas, sub-second finality.
 - First-party supplier integrations — real flight inventory and PNR issuance.
 - [Circle Nanopayments](https://www.circle.com/nanopayments) — USDC-native agentic payments. batching thousands of offchain signatures into a single onchain transaction through [Circle Gateway](https://developers.circle.com/gateway), the per-payment gas cost is effectively eliminated.
@@ -616,3 +919,42 @@ sendero-arc/
 - [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) — tool-aware LLM integration.
 - [Ponder](https://ponder.sh/) — Arc Testnet smart contract indexer for escrow and trip state.
 - [Next Forge 6](https://www.next-forge.com/) — monorepo starter template .
+
+<br />
+
+---
+
+<p align="center">
+  <img
+    src="./apps/marketing/public/brand/signature/motion-passport-tomas-cordero.png"
+    alt="Motion passport — Tomas Cordero"
+    width="520"
+  />
+</p>
+
+<p align="center">
+  <strong>Built by Tomas Cordero</strong><br />
+  <sub>indie hacker · design engineer · blockchain & AI developer · full stack · TypeScript, Solidity & Rust Dev</sub>
+</p>
+
+<p align="center">
+  <a href="https://x.com/criptopoeta">X · @criptopoeta</a> ·
+  <a href="https://github.com/tcxcx">GitHub · @tcxcx</a> ·
+  <a href="https://www.linkedin.com/in/tomas-cordero-b601452a7/">LinkedIn</a>
+</p>
+
+<p align="center">
+  <sub>
+    Huge thanks to <a href="https://emilkowal.ski/">Emil Kowalski</a> and the broader design-engineering community for teaching us how to make software truly feel right — from the invisible details and the motion to the typography and the art of restraint.<br />
+    Gratitude as well to <a href="https://shadcn.com/">shadcn</a> and <a href="https://rauchg.com/">Guillermo Rauch</a> for making building robust, beautiful apps easier for everyone.<br />
+    Special thanks to <b>Pavel, Joanna, and the entire <a href="https://lablab.ai/">lablab.ai</a> team</b> for organizing this alongside <a href="https://www.circle.com/">Circle</a> — your energy and dedication makes all the difference.<br />
+    Appreciation to all sponsors, <b>especially Google for $300 cloud credits</b>, for supporting innovation and empowering builders.<br />
+    Sincere appreciation for the <b>Claude</b>, <b>OpenAI</b>, and <b>Cursor</b> teams for bringing agentic coding tools that help turn wild ideas into reality.<br />
+    Shout out to <a href="https://skills.sh/">skills.sh</a> and Circle Skills</a> for making powerful skills and integrations accessible without friction.<br />
+    Deep thanks to the Circle Developer community, the active folks on Discord, and the On Arc community for their shared insights, support, and collaborative spirit.<br />
+    Also, gratitude to all developers in the depths of npm packages we've relied on without ever knowing your names, and all those who quietly push technology and the world forward in silence.<br />
+    And to AGI and onwards!<br /> 🤠
+    <b>DX feedback is attached — please see the <a href="./FEEDBACK.md">FEEDBACK.md</a> filed for track submission and noticeable improvements.</b><br />
+    Thank you all.
+  </sub>
+</p>

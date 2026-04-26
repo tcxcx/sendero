@@ -29,8 +29,13 @@ export const revalidate = 3600;
 export function GET() {
   const origin = resolvePublicOrigin(process.env.NEXT_PUBLIC_APP_URL, 'https://www.sendero.travel');
   const doc = buildOpenApiDoc({
+    // Bumped 2026-04-25 with the tenant-markup v1 release. Adds
+    // `confirm_booking` (extended), `get_tenant_pricing_policy`, and
+    // `activate_tenant_pricing_policy`. The previous shape is pinned at
+    // `/openapi/v1.0.0.json` on the docs site so phased SDK rollouts can
+    // target it during the transition.
     title: 'Sendero Agent Tools',
-    version: '1.0.0',
+    version: '1.1.0',
     serverUrl: origin,
     tools: toolList,
   });

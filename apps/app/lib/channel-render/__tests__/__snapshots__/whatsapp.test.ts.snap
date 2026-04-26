@@ -1,0 +1,182 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`renderForWhatsApp card with <=3 ctas renders interactive button payload 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "interactive": {
+      "action": {
+        "buttons": [
+          {
+            "reply": {
+              "id": "approve:booking-1",
+              "title": "Confirm",
+            },
+            "type": "reply",
+          },
+          {
+            "reply": {
+              "id": "reject:booking-1",
+              "title": "Cancel",
+            },
+            "type": "reply",
+          },
+        ],
+      },
+      "body": {
+        "text": 
+"*Itinerary held*
+
+JFK to LHR on Apr 30. Hold expires in 15 minutes.
+
+- Departs 21:30 EDT
+- Economy Plus
+- Refundable"
+,
+      },
+      "header": undefined,
+      "type": "button",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
+  },
+}
+`;
+
+exports[`renderForWhatsApp card with >3 ctas falls back to list payload 1`] = `
+{
+  "channel": "whatsapp",
+  "degraded": false,
+  "payload": {
+    "interactive": {
+      "action": {
+        "button": "View options",
+        "sections": [
+          {
+            "rows": [
+              {
+                "description": "off-1",
+                "id": "select_offer:off-1",
+                "title": "Offer 1",
+              },
+              {
+                "description": "off-2",
+                "id": "select_offer:off-2",
+                "title": "Offer 2",
+              },
+              {
+                "description": "off-3",
+                "id": "select_offer:off-3",
+                "title": "Offer 3",
+              },
+              {
+                "description": "off-4",
+                "id": "select_offer:off-4",
+                "title": "Offer 4",
+              },
+              {
+                "description": "off-5",
+                "id": "select_offer:off-5",
+                "title": "Offer 5",
+              },
+            ],
+            "title": "Itinerary held",
+          },
+        ],
+      },
+      "body": {
+        "text": 
+"*Itinerary held*
+
+JFK to LHR on Apr 30. Hold expires in 15 minutes.
+
+- Departs 21:30 EDT
+- Economy Plus
+- Refundable"
+,
+      },
+      "type": "list",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
+  },
+}
+`;
+
+exports[`renderForWhatsApp tool_result with share 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "interactive": {
+      "action": {
+        "buttons": [
+          {
+            "reply": {
+              "id": "select_offer:off-1",
+              "title": "Hold this fare",
+            },
+            "type": "reply",
+          },
+        ],
+      },
+      "body": {
+        "text": 
+"*Best fare found*
+
+AA 100, JFK to LHR, $482.10 all-in.
+
+- 1 stop
+- 8h 5m
+- Refundable"
+,
+      },
+      "header": undefined,
+      "type": "button",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
+  },
+}
+`;
+
+exports[`renderForWhatsApp sources renders text with numbered links 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "text": {
+      "body": 
+"Sources:
+1. AA flight status - https://aa.com/flights/100
+2. Heathrow arrivals - https://heathrow.com/arrivals"
+,
+      "preview_url": true,
+    },
+    "to": "",
+    "type": "text",
+  },
+}
+`;
+
+exports[`renderForWhatsApp text uses type:text and rewrites markdown to WhatsApp mrkdwn 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "text": {
+      "body": "Booked _AA 100_ to LHR",
+      "preview_url": false,
+    },
+    "to": "",
+    "type": "text",
+  },
+}
+`;

@@ -8,9 +8,18 @@
  *   buyer: approve USDC → createTrip      (funds escrow, generates guest link)
  *   guest: claimTrip                      (Peanut-style ephemeral-key signature)
  *   agent: reserveForBooking              (locks upper-bound)
- *   agent: commitBooking                  (releases slack)
- *   agent: confirmDuffel + settleBooking  (fans out to vendor + fee)
+ *   agent: commitBooking[V2]              (releases slack; v2 also persists agency leg)
+ *   agent: confirmDuffel + settleBooking  (fans out to vendor [+ agency] + fee)
  *   buyer: sweepUnspent                   (returns leftover budget)
+ *
+ * v3.0.0 of the on-chain contract added a three-recipient settle path
+ * (vendor + agency + operator). This smoke can exercise either path
+ * via `--mode`:
+ *
+ *   --mode=v1   (default) commitBooking + BookingSettled       — backward-compat
+ *   --mode=v2             commitBookingV2 + BookingSettledV2   — new agency leg
+ *   --mode=both           runs v1 then v2 against separate trips in one invocation
+ *                         (the post-upgrade smoke we run after UUPS rollout)
  *
  * Uses TREASURY_PRIVATE_KEY for every role in this test — the guest
  * wallet here is just a fresh throwaway EOA signing via the same key.
@@ -18,7 +27,9 @@
  * Paymaster (see apps/app/app/g/page.tsx).
  *
  * Usage:
- *   bun run scripts/smoke-guest-escrow.ts
+ *   bun run scripts/smoke-guest-escrow.ts                # legacy v1 path
+ *   bun run scripts/smoke-guest-escrow.ts --mode=v2      # new agency-leg path
+ *   bun run scripts/smoke-guest-escrow.ts --mode=both    # both, sequentially
  *
  * Required env:
  *   ARC_RPC_URL, ARC_ESCROW_ADDRESS, TREASURY_PRIVATE_KEY, ARC_USDC_ADDRESS
@@ -46,7 +57,9 @@ import {
   createWalletClient,
   type Hex,
   http,
+  keccak256,
   parseEventLogs,
+  toHex,
   zeroHash,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -83,19 +96,100 @@ const chain = {
 const publicClient = createPublicClient({ chain, transport: http(RPC) });
 const wallet = createWalletClient({ chain, account: operator, transport: http(RPC) });
 
+// ─── CLI parsing ──────────────────────────────────────────────────────
+
+type Mode = 'v1' | 'v2' | 'both';
+
+function parseMode(argv: string[]): Mode {
+  // Accept --mode=v1, --mode=v2, --mode=both. Default v1.
+  for (const arg of argv) {
+    const m = /^--mode=(v1|v2|both)$/.exec(arg);
+    if (m) return m[1] as Mode;
+    if (arg === '--mode') {
+      // --mode v2 (space-separated) — pick the next arg
+      const idx = argv.indexOf(arg);
+      const next = argv[idx + 1];
+      if (next === 'v1' || next === 'v2' || next === 'both') return next;
+    }
+  }
+  return 'v1';
+}
+
 // ─── smoke test ───────────────────────────────────────────────────────
 
 async function main() {
-  const budget = toUsdcMicro('0.50');
-  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 3600);
+  const mode = parseMode(process.argv.slice(2));
 
   console.log(`[smoke] operator      = ${operator.address}`);
   console.log(`[smoke] escrow        = ${ESCROW}`);
   console.log(`[smoke] usdc          = ${USDC}`);
   console.log(`[smoke] rpc           = ${RPC}`);
+  console.log(`[smoke] mode          = ${mode}`);
   console.log();
 
-  // 0. sanity — escrow USDC + state
+  await assertEscrowVersion();
+
+  if (mode === 'v1' || mode === 'both') {
+    await lifecycle('v1');
+  }
+  if (mode === 'v2' || mode === 'both') {
+    if (mode === 'both') {
+      console.log();
+      console.log('[smoke] ═══ switching to v2 (agency-leg) lifecycle ════════════');
+      console.log();
+    }
+    await lifecycle('v2');
+  }
+
+  // ─── cancel-path scenario (mode-agnostic — exercises legacy refund path) ──
+  await cancelScenario();
+}
+
+/**
+ * Read `version()` from the proxy and warn loudly if we're not on v3.
+ * v2 impls don't expose the view at all → that surfaces as a revert
+ * we treat as "old impl behind proxy, upgrade hasn't landed".
+ */
+async function assertEscrowVersion(): Promise<void> {
+  try {
+    const v = (await publicClient.readContract({
+      address: ESCROW,
+      abi: SENDERO_GUEST_ESCROW_ABI,
+      functionName: 'version',
+    })) as string;
+    console.log(`[smoke] escrow.version()  = ${v}`);
+    if (!v.startsWith('3.')) {
+      console.warn(
+        `[smoke] ⚠  expected v3.x at ${ESCROW} but got ${v} — commitBookingV2 will revert.`
+      );
+    }
+    console.log();
+  } catch (err) {
+    console.warn(
+      `[smoke] ⚠  version() reverted at ${ESCROW} — proxy likely still points at the v2 impl. ` +
+        'Run the UUPS upgrade before --mode=v2 or --mode=both.'
+    );
+    console.warn('       ', err instanceof Error ? err.message : err);
+    console.log();
+  }
+}
+
+/**
+ * Deterministic agency address per trip — keccak256('agency:' || tripId)
+ * truncated to 20 bytes. Stable across reruns so we can grep explorer
+ * by address if a smoke fails.
+ */
+function deriveAgencyAddress(tripId: Hex): Address {
+  const h = keccak256(`0x${toHex('agency:').slice(2)}${tripId.slice(2)}` as Hex);
+  return `0x${h.slice(2, 42)}` as Address;
+}
+
+/**
+ * Read escrow's USDC / owner / operator views. Surfaces operator
+ * mismatch as a warning so the lifecycle's onlyOperator reverts have
+ * an obvious upstream cause in the log.
+ */
+async function sanityRead(): Promise<void> {
   const [escrowUsdc, owner, knownOperator] = await Promise.all([
     publicClient.readContract({
       address: ESCROW,
@@ -146,6 +240,21 @@ async function main() {
     );
   }
   console.log();
+}
+
+async function lifecycle(mode: 'v1' | 'v2') {
+  // v2 needs a different (much larger) budget envelope, so it runs in a
+  // self-contained sibling rather than threading mode-flags through the
+  // existing v1 flow. Sanity-check the proxy first either way.
+  if (mode === 'v2') {
+    await sanityRead();
+    return v2Lifecycle();
+  }
+
+  const budget = toUsdcMicro('0.50');
+  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+  await sanityRead();
 
   // 1. approve USDC
   console.log('[smoke] 1/6  approve USDC → escrow');
@@ -291,6 +400,27 @@ async function main() {
   const settleReceipt = await publicClient.waitForTransactionReceipt({ hash: settleTx });
   console.log(`             confirm tx ${confirmTx}`);
   console.log(`             settle  tx ${settleTx}  block ${settleReceipt.blockNumber}`);
+  // v1 should emit BookingSettled (not BookingSettledV2). Surface a
+  // count so a regression where v1 commits accidentally route through
+  // the v2 emit path is visible in the smoke output.
+  const v1SettleLogs = parseEventLogs({
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    logs: settleReceipt.logs,
+    eventName: 'BookingSettled',
+  });
+  const v2SettleLogs = parseEventLogs({
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    logs: settleReceipt.logs,
+    eventName: 'BookingSettledV2',
+  });
+  console.log(
+    `             BookingSettled events: ${v1SettleLogs.length}  BookingSettledV2 events: ${v2SettleLogs.length}`
+  );
+  if (v1SettleLogs.length !== 1 || v2SettleLogs.length !== 0) {
+    throw new Error(
+      `v1 settle emitted unexpected events: BookingSettled=${v1SettleLogs.length} BookingSettledV2=${v2SettleLogs.length}`
+    );
+  }
   console.log();
 
   // 7. sweepUnspent (optional cleanup)
@@ -310,11 +440,261 @@ async function main() {
   }
 
   console.log();
-  console.log('[smoke] ✔  full lifecycle succeeded against live SenderoGuestEscrow');
+  console.log('[smoke] ✔  v1 lifecycle succeeded against live SenderoGuestEscrow');
   console.log(`[smoke]     explorer: https://testnet.arcscan.app/address/${ESCROW}#events`);
+}
 
-  // ─── cancel-path scenario ────────────────────────────────────────────
-  await cancelScenario();
+/**
+ * Self-contained v2 lifecycle — uses realistic GDS-shaped numbers
+ * (vendorAmount = 1_000_000_000, feeAmount = 5_000_000, agencyAmount =
+ * 110_000_000 micro-USDC) so we can prove the new agency leg routes
+ * correctly. Asserts vendor, agency, and operator deltas match the
+ * committed amounts exactly, and that the receipt carries a single
+ * BookingSettledV2 event (not the legacy BookingSettled).
+ */
+async function v2Lifecycle() {
+  const vendor = operator.address;
+  const vendorAmount = 1_000_000_000n; // supplier cost
+  const feeAmount = 5_000_000n; //         Sendero take
+  const agencyAmount = 110_000_000n; //    tenant markup (~11%)
+  const itineraryHash = computeGuestIdHash({ email: 'smoke-v2@sendero.test', nonce: zeroHash });
+
+  const total = vendorAmount + feeAmount + agencyAmount;
+  // Headroom over the booking total so reserve/commit slack-release runs.
+  const upperBound = (total * 12n) / 10n;
+  const budget = upperBound; // single-booking trip — budget == reserve ceiling
+  const expiresAt = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+  // tripId is generated up-front so we can derive a stable agency
+  // address from it before any on-chain call.
+  const tripId = generateTripId();
+  const claimKp = generateClaimKeypair();
+  const agencyAddress = deriveAgencyAddress(tripId);
+
+  console.log(`[smoke v2] tripId       = ${tripId}`);
+  console.log(`[smoke v2] vendor       = ${vendor}`);
+  console.log(`[smoke v2] agency       = ${agencyAddress}`);
+  console.log(`[smoke v2] vendorAmount = ${vendorAmount} micro`);
+  console.log(`[smoke v2] feeAmount    = ${feeAmount} micro`);
+  console.log(`[smoke v2] agencyAmount = ${agencyAmount} micro`);
+  console.log(`[smoke v2] total        = ${total} micro`);
+  console.log(`[smoke v2] upperBound   = ${upperBound} micro`);
+
+  // 1. approve USDC (v2-sized budget)
+  console.log('[smoke v2] 1/6  approve USDC → escrow');
+  const approveTx = await wallet.writeContract({
+    address: USDC,
+    abi: USDC_ABI,
+    functionName: 'approve',
+    args: [ESCROW, budget],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: approveTx });
+  console.log(`              tx ${approveTx}`);
+
+  // 2. createTrip (tripId + claimKp generated above so agency address
+  // can be derived from tripId before any on-chain call)
+  console.log('[smoke v2] 2/6  createTrip');
+  const createTx = await wallet.writeContract({
+    address: ESCROW,
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    functionName: 'createTrip',
+    args: [
+      tripId,
+      claimKp.pubKey20,
+      budget,
+      expiresAt,
+      zeroHash,
+      'ipfs://smoke-v2',
+      BigInt(process.env.SENDERO_AGENT_TOKEN_ID ?? '2286'),
+      zeroHash,
+    ],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: createTx });
+  console.log(`              tx ${createTx}`);
+
+  // 3. claimTrip
+  console.log('[smoke v2] 3/6  claimTrip');
+  const signature = await signClaim({
+    claimPrivateKey: claimKp.privateKey,
+    chainId: CHAIN_ID,
+    escrow: ESCROW,
+    tripId,
+    guestWallet: operator.address,
+  });
+  const [claimCall] = buildClaimTripCalls({
+    escrow: ESCROW,
+    tripId,
+    guestWallet: operator.address,
+    signature,
+    claimCodePreimage: '0x',
+  });
+  const claimTx = await wallet.sendTransaction({
+    to: claimCall.to,
+    data: claimCall.data,
+    value: claimCall.value,
+  });
+  await publicClient.waitForTransactionReceipt({ hash: claimTx });
+  console.log(`              tx ${claimTx}`);
+
+  // 4. reserveForBooking
+  console.log('[smoke v2] 4/6  reserveForBooking');
+  const bookingId = generateBookingId();
+  const reserveCall = encodeReserveForBooking({
+    escrow: ESCROW,
+    tripId,
+    bookingId,
+    upperBound,
+  });
+  const reserveTx = await wallet.sendTransaction({
+    to: reserveCall.to,
+    data: reserveCall.data,
+    value: reserveCall.value,
+  });
+  await publicClient.waitForTransactionReceipt({ hash: reserveTx });
+  console.log(`              tx ${reserveTx}  bookingId = ${bookingId}`);
+
+  // Snapshot vendor / agency / operator USDC balances so we can assert
+  // the three-way settle delta on the other side.
+  const operatorBefore = await usdcBalanceOf(operator.address);
+  const agencyBefore = await usdcBalanceOf(agencyAddress);
+  // vendor == operator in this test, so vendorBefore is captured by
+  // operatorBefore — we'll separate the deltas below.
+
+  // 5. commitBookingV2 — direct writeContract (no encoder helper in
+  // @sendero/guest yet; the ABI carries the signature so viem handles it).
+  console.log('[smoke v2] 5/6  commitBookingV2');
+  const commitTx = await wallet.writeContract({
+    address: ESCROW,
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    functionName: 'commitBookingV2',
+    args: [
+      bookingId,
+      vendorAmount,
+      feeAmount,
+      agencyAmount,
+      vendor,
+      agencyAddress,
+      itineraryHash,
+      'ipfs://smoke-v2-itinerary',
+    ],
+  });
+  const commitReceipt = await publicClient.waitForTransactionReceipt({ hash: commitTx });
+  const committedV2Logs = parseEventLogs({
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    logs: commitReceipt.logs,
+    eventName: 'BookingCommittedV2',
+  });
+  console.log(`              tx ${commitTx}  BookingCommittedV2 events: ${committedV2Logs.length}`);
+  if (committedV2Logs.length !== 1) {
+    throw new Error(`expected 1 BookingCommittedV2 event, got ${committedV2Logs.length}`);
+  }
+
+  // 6. confirmDuffel + settleBooking → expect BookingSettledV2
+  console.log('[smoke v2] 6/6  confirmDuffel + settleBooking');
+  const duffelHash = ('0x' +
+    Buffer.from(`duffel-smoke-v2-${Date.now()}`).toString('hex').padEnd(64, '0')) as Hex;
+  const confirmTx = await wallet.writeContract({
+    address: ESCROW,
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    functionName: 'confirmDuffel',
+    args: [bookingId, duffelHash.slice(0, 66) as Hex],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: confirmTx });
+
+  const settleTx = await wallet.writeContract({
+    address: ESCROW,
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    functionName: 'settleBooking',
+    args: [bookingId],
+  });
+  const settleReceipt = await publicClient.waitForTransactionReceipt({ hash: settleTx });
+  console.log(`              confirm tx ${confirmTx}`);
+  console.log(`              settle  tx ${settleTx}  block ${settleReceipt.blockNumber}`);
+
+  // Event assertions: exactly one BookingSettledV2, zero legacy BookingSettled.
+  const v1SettleLogs = parseEventLogs({
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    logs: settleReceipt.logs,
+    eventName: 'BookingSettled',
+  });
+  const v2SettleLogs = parseEventLogs({
+    abi: SENDERO_GUEST_ESCROW_ABI,
+    logs: settleReceipt.logs,
+    eventName: 'BookingSettledV2',
+  });
+  console.log(
+    `              BookingSettled events: ${v1SettleLogs.length}  BookingSettledV2 events: ${v2SettleLogs.length}`
+  );
+  if (v2SettleLogs.length !== 1 || v1SettleLogs.length !== 0) {
+    throw new Error(
+      `v2 settle emitted unexpected events: BookingSettled=${v1SettleLogs.length} BookingSettledV2=${v2SettleLogs.length}`
+    );
+  }
+
+  // Decoded event sanity — args should match what we committed.
+  const ev = v2SettleLogs[0]!.args as {
+    bookingId: Hex;
+    vendor: Address;
+    vendorAmount: bigint;
+    agencyAddress: Address;
+    agencyAmount: bigint;
+    feeAmount: bigint;
+  };
+  if (
+    ev.vendorAmount !== vendorAmount ||
+    ev.agencyAmount !== agencyAmount ||
+    ev.feeAmount !== feeAmount ||
+    ev.vendor.toLowerCase() !== vendor.toLowerCase() ||
+    ev.agencyAddress.toLowerCase() !== agencyAddress.toLowerCase()
+  ) {
+    throw new Error(
+      `BookingSettledV2 args mismatch: ${JSON.stringify(ev, (_, v) => (typeof v === 'bigint' ? v.toString() : v))}`
+    );
+  }
+
+  // Balance-delta assertions. vendor == operator in this smoke, so the
+  // operator's net delta is `vendorAmount + feeAmount` (paid to itself
+  // twice in one tx). Agency's delta is the markup leg.
+  const operatorAfter = await usdcBalanceOf(operator.address);
+  const agencyAfter = await usdcBalanceOf(agencyAddress);
+  const operatorDelta = operatorAfter - operatorBefore;
+  const agencyDelta = agencyAfter - agencyBefore;
+
+  // Note: operator pays gas in USDC on Arc — the post-tx operator
+  // delta will be (vendorAmount + feeAmount - gasUsedInUsdc). We can't
+  // assert exact equality; assert it falls within a sane window
+  // instead. For agency the assertion is exact (no gas paid).
+  const expectedOperatorGross = vendorAmount + feeAmount;
+  console.log(`              operatorBefore = ${operatorBefore}`);
+  console.log(`              operatorAfter  = ${operatorAfter}`);
+  console.log(
+    `              operatorDelta  = ${operatorDelta} micro (expected ≈ +${expectedOperatorGross}, less gas)`
+  );
+  console.log(`              agencyBefore   = ${agencyBefore}`);
+  console.log(`              agencyAfter    = ${agencyAfter}`);
+  console.log(
+    `              agencyDelta    = ${agencyDelta} micro (expected exactly +${agencyAmount})`
+  );
+
+  if (agencyDelta !== agencyAmount) {
+    throw new Error(
+      `agency leg did not settle exactly: expected +${agencyAmount}, got ${agencyDelta}`
+    );
+  }
+  // Operator delta must be at most expectedOperatorGross (we received
+  // that much) and at least expectedOperatorGross - 1 USDC (gas
+  // headroom on Arc; settle + confirm + a few smaller calls run well
+  // under 1 USDC of gas in practice).
+  const operatorGasFloor = expectedOperatorGross - 1_000_000n;
+  if (operatorDelta > expectedOperatorGross || operatorDelta < operatorGasFloor) {
+    throw new Error(
+      `operator delta out of expected window: got ${operatorDelta}, expected in [${operatorGasFloor}, ${expectedOperatorGross}]`
+    );
+  }
+
+  console.log();
+  console.log('[smoke v2] ✔  v2 lifecycle succeeded — agency leg routed correctly');
+  console.log(`[smoke v2]    explorer: https://testnet.arcscan.app/address/${ESCROW}#events`);
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────

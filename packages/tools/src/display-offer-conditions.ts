@@ -98,7 +98,17 @@ function verdictLabel(kind: 'change' | 'refund', v: OfferConditionPenalty): stri
 export async function displayOfferConditions(
   input: DisplayOfferConditionsInput
 ): Promise<DisplayOfferConditionsResult> {
-  const src = await getOfferConditions(input.offerId);
+  let src: Awaited<ReturnType<typeof getOfferConditions>>;
+  try {
+    src = await getOfferConditions(input.offerId);
+  } catch (err) {
+    // Wrap Duffel's bare errors so smoke probes show which lookup
+    // failed rather than an empty string.
+    const msg = err instanceof Error && err.message ? err.message : String(err);
+    throw new Error(
+      `display_offer_conditions failed (offerId=${input.offerId}): ${msg.slice(0, 200)}`
+    );
+  }
   const change = normalizeCondition(src.conditions?.change_before_departure ?? null);
   const refund = normalizeCondition(src.conditions?.refund_before_departure ?? null);
   const slices = src.slices.map(s => ({

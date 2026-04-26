@@ -92,6 +92,20 @@ export interface WorkflowDef<I = unknown> {
   /** Optional input schema — runner coerces / validates with caller-provided zod. */
   input?: I;
   steps: WorkflowStep[];
+  /**
+   * Operator-only workflow — never advertised to external API keys,
+   * MCP clients, or customer-facing channels.  Defaults to `false`.
+   *
+   * Mark `internal: true` for tenant-admin orchestrations
+   * (channel provisioning wizards, vault rotation drills, payout-
+   * runs that should never be triggered by an external agent or
+   * prompt-injected through a customer chat).
+   *
+   * Filtering happens at `listWorkflows()` consumer sites — the
+   * canonical registry stays complete; surfaces decide what they
+   * advertise.
+   */
+  internal?: boolean;
 }
 
 /** Run-time runner output. */

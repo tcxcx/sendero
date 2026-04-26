@@ -16,10 +16,8 @@
 
 import {
   CreateSetupLinkRequest,
-  CreateWebhookRequest,
   KapsoCustomer,
   KapsoSetupLink,
-  KapsoWebhookRegistration,
   KapsoWhatsAppPhoneNumber,
   SendTemplateRequest,
   SendTextRequest,
@@ -87,17 +85,56 @@ export class KapsoClient {
   }
 
   // ── Customers ──────────────────────────────────────────────────────
-  async createCustomer(args: { name: string; external_id?: string }): Promise<KapsoCustomer> {
+  async createCustomer(args: {
+    name: string;
+    /** Sendero tenant id — Kapso indexes customers under this for lookup. */
+    externalCustomerId?: string;
+  }): Promise<KapsoCustomer> {
     const raw = await this.request<unknown>('/customers', {
       method: 'POST',
-      body: JSON.stringify({ customer: args }),
+      body: JSON.stringify({
+        customer: {
+          name: args.name,
+          external_customer_id: args.externalCustomerId,
+        },
+      }),
     });
-    return KapsoCustomer.parse(unwrap(raw, 'customer'));
+    return KapsoCustomer.parse(unwrap(raw, 'customer') ?? unwrap(raw, 'data'));
+  }
+
+  /**
+   * Find a Kapso customer by the Sendero tenant id we stamped on it.
+   * Kapso enforces uniqueness on `external_customer_id`, so the first
+   * match (if any) is the canonical one. Returns null when nothing is
+   * found — callers can `findOrCreate`.
+   */
+  async findCustomerByExternalId(externalCustomerId: string): Promise<KapsoCustomer | null> {
+    const raw = await this.request<unknown>(
+      `/customers?external_customer_id=${encodeURIComponent(externalCustomerId)}`
+    );
+    const list = unwrap(raw, 'data') ?? unwrap(raw, 'customers') ?? raw;
+    if (!Array.isArray(list) || list.length === 0) return null;
+    return KapsoCustomer.parse(list[0]);
+  }
+
+  /**
+   * Idempotent customer get-or-create. Avoids the 422
+   * "External customer has already been taken" error when a prior partial
+   * setup left a Kapso customer behind without a matching Sendero install
+   * row.
+   */
+  async findOrCreateCustomer(args: {
+    name: string;
+    externalCustomerId: string;
+  }): Promise<KapsoCustomer> {
+    const existing = await this.findCustomerByExternalId(args.externalCustomerId);
+    if (existing) return existing;
+    return this.createCustomer(args);
   }
 
   async getCustomer(customerId: string): Promise<KapsoCustomer> {
     const raw = await this.request<unknown>(`/customers/${customerId}`);
-    return KapsoCustomer.parse(unwrap(raw, 'customer'));
+    return KapsoCustomer.parse(unwrap(raw, 'customer') ?? unwrap(raw, 'data'));
   }
 
   // ── Setup links ────────────────────────────────────────────────────
@@ -114,12 +151,19 @@ export class KapsoClient {
       method: 'POST',
       body: JSON.stringify({ setup_link: body }),
     });
-    return KapsoSetupLink.parse(unwrap(raw, 'setup_link'));
+    const unwrapped = unwrap(raw, 'data') ?? unwrap(raw, 'setup_link') ?? raw;
+    // Kapso doesn't echo customer_id on this endpoint (it's in the URL).
+    // Stitch it in so downstream consumers always see it.
+    const stitched =
+      typeof unwrapped === 'object' && unwrapped !== null
+        ? { ...(unwrapped as object), customer_id: customerId }
+        : unwrapped;
+    return KapsoSetupLink.parse(stitched);
   }
 
   async getSetupLink(setupLinkId: string): Promise<KapsoSetupLink> {
     const raw = await this.request<unknown>(`/setup_links/${setupLinkId}`);
-    return KapsoSetupLink.parse(unwrap(raw, 'setup_link'));
+    return KapsoSetupLink.parse(unwrap(raw, 'data') ?? unwrap(raw, 'setup_link'));
   }
 
   // ── WhatsApp phone numbers ────────────────────────────────────────
@@ -138,20 +182,20 @@ export class KapsoClient {
   }
 
   // ── Webhooks ──────────────────────────────────────────────────────
-  async registerWebhook(
-    input: Parameters<typeof CreateWebhookRequest.parse>[0]
-  ): Promise<KapsoWebhookRegistration> {
-    const body = CreateWebhookRequest.parse(input);
-    const raw = await this.request<unknown>('/webhooks', {
-      method: 'POST',
-      body: JSON.stringify({ webhook: body }),
-    });
-    return KapsoWebhookRegistration.parse(unwrap(raw, 'webhook'));
-  }
-
-  async deleteWebhook(webhookId: string): Promise<void> {
-    await this.request<unknown>(`/webhooks/${webhookId}`, { method: 'DELETE' });
-  }
+  //
+  // Project-scope webhooks (the kind Sendero needs for
+  // `whatsapp.phone_number.created`) are dashboard-only on Kapso —
+  // verified Apr 2026 against
+  // https://docs.kapso.ai/docs/platform/webhooks/overview. Register
+  // via the Kapso dashboard, paste the secret into KAPSO_WEBHOOK_SECRET,
+  // and use `bun scripts/register-kapso-webhook.ts` to print the steps.
+  //
+  // WhatsApp number-scoped webhooks DO have an API surface
+  // (POST /platform/v1/whatsapp/phone_numbers/:id/webhooks) — wire
+  // those here when we need per-number webhook control. We don't need
+  // them today: connection events come through the project-scope
+  // webhook, and inbound messages flow through Meta → Kapso proxy
+  // → /api/webhooks/whatsapp.
 
   // ── Outbound messages (Kapso's higher-level send helper) ──────────
   /**
@@ -209,5 +253,5 @@ function unwrap(body: unknown, key: string): unknown {
   if (body && typeof body === 'object' && key in body) {
     return (body as Record<string, unknown>)[key];
   }
-  return body;
+  return undefined;
 }

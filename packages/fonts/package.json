@@ -1,0 +1,32 @@
+{
+  "name": "@sendero/fonts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sendero canonical font system: Geist (sans + mono), Fraunces (display serif, OFL), IoskeleyMono (display mono / Berkeley alt, OFL). One package, one set of CSS variables, one source of truth across all four Next apps and the edge runtime.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./css": "./src/css.ts"
+  },
+  "files": [
+    "src",
+    "assets"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "geist": "^1.3.1"
+  },
+  "peerDependencies": {
+    "next": "^15.0.0 || ^16.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.5",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "typescript": "^5.8.3"
+  }
+}

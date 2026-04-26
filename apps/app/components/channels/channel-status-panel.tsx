@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * ChannelStatusPanel — not-installed / pending / error state for the
+ * channel hub pages, restyled with the design tokens.  Health-check
+ * "Run probe" still calls the Kapso server action (`onProbe`).
+ */
+
 import { useTransition } from 'react';
 import { CheckCircle2, AlertTriangle, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
@@ -21,20 +27,13 @@ export interface ChannelStatusPanelProps {
 
 const STATUS_COPY: Record<
   ChannelStatusKind,
-  { label: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' }
+  { label: string; tone: 'sea' | 'sand' | 'verm' | 'outline' }
 > = {
-  active: { label: 'Connected', tone: 'ok' },
-  pending: { label: 'Pending', tone: 'warn' },
-  disabled: { label: 'Disabled', tone: 'neutral' },
-  error: { label: 'Error', tone: 'bad' },
-  not_installed: { label: 'Not connected', tone: 'neutral' },
-};
-
-const TONE_CLASSES: Record<'ok' | 'warn' | 'bad' | 'neutral', string> = {
-  ok: 'border-[color:var(--accent-green,#16a34a)] text-[color:var(--accent-green,#16a34a)]',
-  warn: 'border-[color:var(--accent-amber,#d97706)] text-[color:var(--accent-amber,#d97706)]',
-  bad: 'border-[color:var(--accent-rose,#e11d48)] text-[color:var(--accent-rose,#e11d48)]',
-  neutral: 'border-border text-muted-foreground',
+  active: { label: 'Connected', tone: 'sea' },
+  pending: { label: 'Pending', tone: 'sand' },
+  disabled: { label: 'Disabled', tone: 'outline' },
+  error: { label: 'Error', tone: 'verm' },
+  not_installed: { label: 'Not connected', tone: 'outline' },
 };
 
 export function ChannelStatusPanel({
@@ -52,73 +51,109 @@ export function ChannelStatusPanel({
   const lastHealthyLabel = lastHealthyAt ? formatRelative(new Date(lastHealthyAt)) : '—';
 
   return (
-    <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
-      <header className="flex flex-wrap items-center gap-3">
+    <section
+      className="sd-card-raised"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        padding: '20px 24px',
+      }}
+    >
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
         <span
-          className={
-            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] ' +
-            TONE_CLASSES[copy.tone]
-          }
+          className={`sd-pill sd-pill-${copy.tone}`}
+          style={{
+            fontSize: 9,
+            padding: '3px 10px',
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
           aria-label={`${brandName} channel status: ${copy.label}`}
         >
-          {copy.tone === 'ok' ? (
+          {copy.tone === 'sea' ? (
             <CheckCircle2 className="size-3" aria-hidden="true" />
-          ) : copy.tone === 'bad' ? (
+          ) : copy.tone === 'verm' ? (
             <AlertTriangle className="size-3" aria-hidden="true" />
           ) : null}
           {copy.label}
         </span>
         {identifier ? (
-          <span className="font-mono text-xs text-foreground">{identifier}</span>
+          <span className="t-mono" style={{ fontSize: 12, color: 'var(--midnight)' }}>
+            {identifier}
+          </span>
         ) : null}
-        <div className="ml-auto flex items-center gap-2">
-          {onProbe ? (
-            <button
-              type="button"
-              disabled={pending || status === 'not_installed'}
-              onClick={() =>
-                start(async () => {
-                  await onProbe();
-                })
-              }
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground hover:border-[color:var(--ink)] hover:text-[color:var(--ink)] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {pending ? (
-                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-              ) : (
-                <RefreshCw className="size-3" aria-hidden="true" />
-              )}
-              {pending ? 'Probing…' : 'Run health check'}
-            </button>
-          ) : null}
-          <Link
-            href={connectHref}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-foreground hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
+        <span style={{ flex: 1 }} />
+        {onProbe ? (
+          <button
+            type="button"
+            disabled={pending || status === 'not_installed'}
+            onClick={() =>
+              start(async () => {
+                await onProbe();
+              })
+            }
+            style={{
+              ...ghostBtnStyle,
+              opacity: pending || status === 'not_installed' ? 0.5 : 1,
+              cursor: pending || status === 'not_installed' ? 'not-allowed' : 'pointer',
+            }}
           >
-            {status === 'not_installed' ? 'Connect' : 'Manage install'}
-            <ExternalLink className="size-3" aria-hidden="true" />
-          </Link>
-        </div>
+            {pending ? (
+              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+            ) : (
+              <RefreshCw className="size-3" aria-hidden="true" />
+            )}
+            {pending ? 'Probing…' : 'Run health check'}
+          </button>
+        ) : null}
+        <Link href={connectHref} style={primaryBtnStyle}>
+          {status === 'not_installed' ? 'Connect' : 'Manage install'}
+          <ExternalLink className="size-3" style={{ marginLeft: 6 }} aria-hidden="true" />
+        </Link>
       </header>
 
-      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-0.5">
-          <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            Last healthy
-          </dt>
-          <dd className="text-sm text-foreground">{lastHealthyLabel}</dd>
+      <dl
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 16,
+          margin: 0,
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <dt className="t-meta">Last healthy</dt>
+          <dd className="t-mono" style={{ margin: 0, fontSize: 12, color: 'var(--midnight)' }}>
+            {lastHealthyLabel}
+          </dd>
         </div>
-        <div className="flex flex-col gap-0.5">
-          <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            Last error
-          </dt>
-          <dd className="text-sm text-foreground">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <dt className="t-meta">Last error</dt>
+          <dd style={{ margin: 0 }}>
             {lastErrorMessage ? (
-              <code className="break-words font-mono text-xs text-[color:var(--accent-rose,#e11d48)]">
+              <code
+                className="t-mono"
+                style={{
+                  fontSize: 11,
+                  color: 'var(--vermillion)',
+                  wordBreak: 'break-word',
+                }}
+              >
                 {lastErrorMessage}
               </code>
             ) : (
-              <span className="text-muted-foreground">None recorded</span>
+              <span className="t-body ink-70" style={{ fontSize: 13 }}>
+                None recorded
+              </span>
             )}
           </dd>
         </div>
@@ -138,3 +173,37 @@ function formatRelative(date: Date): string {
   const day = Math.round(hr / 24);
   return `${day}d ago`;
 }
+
+const primaryBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '6px 12px',
+  background: 'var(--vermillion)',
+  color: '#fdfbf7',
+  border: 0,
+  borderRadius: 8,
+  fontSize: 11,
+  fontWeight: 600,
+  fontFamily: 'var(--font-mono-x)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+  textDecoration: 'none',
+};
+
+const ghostBtnStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '6px 12px',
+  background: 'transparent',
+  color: 'var(--midnight)',
+  border: 0,
+  boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+  borderRadius: 8,
+  fontSize: 11,
+  fontWeight: 600,
+  fontFamily: 'var(--font-mono-x)',
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+};

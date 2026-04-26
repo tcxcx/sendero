@@ -51,7 +51,6 @@ export function WorkflowLog() {
     <div className="col">
       <div className="col-head">
         <span className="title">Workflow</span>
-        <span className="tag faint mono">▣ run · stream</span>
       </div>
       <div className="col-body log">
         <WorkflowGraph workflow={workflow} />

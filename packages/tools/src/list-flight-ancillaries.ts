@@ -117,7 +117,17 @@ function mapSeat(s: DuffelSeatOption): AncillarySeatOption {
 export async function listFlightAncillaries(
   input: ListFlightAncillariesInput
 ): Promise<ListFlightAncillariesResult> {
-  const ancillaries = await getOfferWithAncillaries(input.offerId);
+  let ancillaries: Awaited<ReturnType<typeof getOfferWithAncillaries>>;
+  try {
+    ancillaries = await getOfferWithAncillaries(input.offerId);
+  } catch (err) {
+    // Duffel propagates bare network errors; wrap with the offerId so
+    // operators see which lookup failed.
+    const msg = err instanceof Error && err.message ? err.message : String(err);
+    throw new Error(
+      `list_flight_ancillaries failed (offerId=${input.offerId}): ${msg.slice(0, 200)}`
+    );
+  }
 
   const bags = ancillaries.available.filter(s => s.type === 'baggage').map(s => mapBag(s));
   const cfar = ancillaries.available

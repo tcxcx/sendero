@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Viewport } from 'next';
 import Script from 'next/script';
 
+import { senderoFontVars } from '@sendero/fonts';
 import {
   buildMetadata,
   organizationJsonLd,
@@ -74,7 +75,7 @@ const structuredData = [
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={senderoFontVars}>
       <head>
         {process.env.NODE_ENV === 'development' && (
           <Script

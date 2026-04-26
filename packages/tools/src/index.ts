@@ -1,3 +1,4 @@
+import { activatePricingPolicyTool } from './activate-pricing-policy';
 import { airQualityBriefTool } from './air-quality-brief';
 import { airportArrivalPlaybookTool } from './airport-arrival-playbook';
 import { airportTransferCoordinatorTool } from './airport-transfer-coordinator';
@@ -6,15 +7,38 @@ import { bookStayTool } from './book-stay';
 import { bridgeToArcTool } from './bridge-to-arc';
 import { cancelBookingTool } from './cancel-booking';
 import { cancelOrderQuoteTool, confirmCancelOrderTool } from './cancel-order-quote';
+import {
+  confirmOrderChangeTool,
+  requestOrderChangeTool,
+  selectOrderChangeOfferTool,
+} from './order-change-quote';
 import { checkPolicyTool } from './check-policy';
 import { checkTreasuryTool } from './check-treasury';
+import { confirmBookingTool } from './confirm-booking';
 import { confirmFlightTool } from './confirm-flight';
+import { createPassengerTool } from './create-passenger';
+import { createTripTool } from './create-trip';
 import { displayOfferConditionsTool } from './display-offer-conditions';
+import {
+  addPassengerToGroupTripTool,
+  createGroupTripTool,
+  removePassengerFromGroupTripTool,
+  removePassengerTool,
+} from './group-trips';
 import { elevationRiskBriefTool } from './elevation-risk-brief';
 import { ensureFlightCustomerTool } from './ensure-flight-customer';
 import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
 import { findAirportsNearbyTool } from './find-airports-nearby';
+import { mintStampTool, refreshStampUriTool } from './mint-stamp';
+import {
+  kapsoActivatePhoneNumberTool,
+  kapsoListNumbersTool,
+  kapsoReserveNumberTool,
+  kapsoSendTestMessageTool,
+  kapsoSubmitMessageTemplatesTool,
+  kapsoUpdateBusinessProfileTool,
+} from './kapso-channel';
 import { listAirlineCreditsTool } from './list-airline-credits';
 import { listFlightAncillariesTool } from './list-flight-ancillaries';
 import { gatewayBalanceTool } from './gateway-balance';
@@ -23,6 +47,7 @@ import { quoteStayTool } from './quote-stay';
 import { gatewayTransferTool } from './gateway-transfer';
 import { generateBookingInvoiceTool } from './generate-booking-invoice';
 import { geocodeTripStopTool } from './geocode-trip-stop';
+import { getPricingPolicyTool } from './get-pricing-policy';
 import {
   commitBookingTool,
   guestClaimLinkTool,
@@ -31,14 +56,28 @@ import {
   reserveBookingTool,
 } from './guest-escrow';
 import { quoteFxTool } from './quote-fx';
-import { rateAgentTool } from './rate-agent';
+import { giveFeedbackTool } from './give-feedback';
+import { readReputationTool } from './read-reputation';
+import { readValidationTool } from './read-validation';
+import { requestValidationTool } from './request-validation';
+import { submitValidationResponseTool } from './submit-validation-response';
 import { recommendRestaurantsTool } from './recommend-restaurants';
 import { restaurantRouteCardTool } from './restaurant-route-card';
 import { checkTravelEligibilityTool } from './check-travel-eligibility';
 import { scanDocumentTool } from './scan-document';
+import { scanDocumentAutoTool } from './scan-document-auto';
 import { searchFlightsTool } from './search-flights';
 import { searchHotelsTool } from './search-hotels';
+import { sendPayLinkTool } from './send-pay-link';
 import { sendTokensTool } from './send-tokens';
+import {
+  slackCheckInstallTool,
+  slackInviteBotToChannelsTool,
+  slackListWorkspaceChannelsTool,
+  slackPersistChannelRoutesTool,
+  slackSendTestMessageTool,
+  slackStartOauthInstallTool,
+} from './slack-channel';
 import { settleBookingTool } from './settle-booking';
 import { settleSplitTool } from './settle-split';
 import { swapAndBridgeTool } from './swap-and-bridge';
@@ -58,6 +97,46 @@ export {
   airQualityBriefTool,
 } from './air-quality-brief';
 export { cancelBookingTool } from './cancel-booking';
+export {
+  confirmBookingTool,
+  runConfirmBooking,
+  dbDependencies as confirmBookingDbDependencies,
+  type ConfirmBookingDeps,
+  type ConfirmBookingInput,
+  type ConfirmBookingOutput,
+  PolicyInactiveError,
+  PolicyMissingKindError,
+  MarkupOverCeilingError,
+  MarkupUnderFloorError,
+  MarkupUnderTakeFloorError,
+  OverrideRequiresScopeError,
+  OverrideUnnecessaryError,
+  TreasuryAddressMissingError,
+} from './confirm-booking';
+export {
+  getPricingPolicyTool,
+  runGetPricingPolicy,
+  dbDependencies as getPricingPolicyDbDependencies,
+  type GetPricingPolicyDeps,
+  type GetPricingPolicyInput,
+  type GetPricingPolicyOutput,
+  type PolicyRow,
+  type PolicyStatus,
+  TenantContextMissingError as GetPricingPolicyTenantMissingError,
+} from './get-pricing-policy';
+export {
+  activatePricingPolicyTool,
+  runActivatePricingPolicy,
+  dbDependencies as activatePricingPolicyDbDependencies,
+  type ActivatePricingPolicyDeps,
+  type ActivatePricingPolicyInput,
+  type ActivatePricingPolicyOutput,
+  TenantContextMissingError as ActivatePricingPolicyTenantMissingError,
+  OperatorOnlyError,
+  TreasuryNotProvisionedError,
+  MarkupConfigInvalidError,
+  PolicyVersionConflictError,
+} from './activate-pricing-policy';
 export { confirmFlightTool } from './confirm-flight';
 export {
   type ElevationRiskBriefInput,
@@ -80,14 +159,22 @@ export {
   requestFaucetDrip,
 } from './faucet';
 export { generateBookingInvoiceTool } from './generate-booking-invoice';
+export {
+  confirmOrderChangeTool,
+  requestOrderChangeTool,
+  selectOrderChangeOfferTool,
+} from './order-change-quote';
 export { checkTravelEligibilityTool } from './check-travel-eligibility';
 export type { OpenApiDocInput } from './openapi';
 export { buildOpenApiDoc } from './openapi';
 export { scanDocumentTool } from './scan-document';
+export { scanDocumentAutoTool } from './scan-document-auto';
 export type { KeyScope } from './scopes';
 export {
   DEFAULT_PROD_SCOPES,
+  filterPublicTools,
   hasScope,
+  isPublicTool,
   KEY_SCOPES,
   PRIVILEGED_TOOLS,
   requiresSignature,
@@ -162,6 +249,7 @@ export {
   listFlightAncillaries,
   listFlightAncillariesTool,
 } from './list-flight-ancillaries';
+export { sendPayLinkTool } from './send-pay-link';
 export { settleBookingTool } from './settle-booking';
 export {
   type TimezoneBriefInput,
@@ -208,16 +296,27 @@ export const toolList: ToolDef[] = [
   settleSplitTool,
   checkPolicyTool,
   quoteFxTool,
-  rateAgentTool,
+  // ERC-8004 reputation + validation (replaces the in-memory rate_agent mock)
+  giveFeedbackTool,
+  readReputationTool,
+  requestValidationTool,
+  submitValidationResponseTool,
+  readValidationTool,
   // Guest escrow — prefund-then-share (Peanut-style)
   prefundTripTool,
   guestClaimLinkTool,
   reserveBookingTool,
   commitBookingTool,
+  confirmBookingTool,
   confirmFlightTool,
   settleBookingTool,
   cancelBookingTool,
+  // Wallet flow — pay-link dispatch (Step 5 agent surface)
+  sendPayLinkTool,
   generateBookingInvoiceTool,
+  // Tenant pricing policy agent surface (E1 + E2)
+  getPricingPolicyTool,
+  activatePricingPolicyTool,
   logAgentActionTool,
   // Concierge / in-trip companion
   geocodeTripStopTool,
@@ -245,13 +344,45 @@ export const toolList: ToolDef[] = [
   bookStayTool,
   cancelOrderQuoteTool,
   confirmCancelOrderTool,
+  requestOrderChangeTool,
+  selectOrderChangeOfferTool,
+  confirmOrderChangeTool,
   listAirlineCreditsTool,
   manageStaysNegotiatedRateTool,
   // Ops helpers
   faucetDripTool,
+  // Inbox seeding — create a passenger row (User) for testing the
+  // MetaInbox; channel binding is optional so the agent can collect
+  // phone/Slack id in a follow-up turn.
+  createPassengerTool,
+  // Trip primitives — open a regular Trip (lightweight), distinct
+  // from prefund_trip (escrow + claim link).
+  createTripTool,
+  // Group trips — multi-passenger journeys with capacity ceilings.
+  createGroupTripTool,
+  addPassengerToGroupTripTool,
+  removePassengerFromGroupTripTool,
+  removePassengerTool,
   // Multimodal OCR / document extraction
   scanDocumentTool,
+  scanDocumentAutoTool,
   checkTravelEligibilityTool,
+  // Channel-provisioning (WhatsApp via Kapso, Slack OAuth + routing)
+  kapsoListNumbersTool,
+  kapsoReserveNumberTool,
+  kapsoUpdateBusinessProfileTool,
+  kapsoSubmitMessageTemplatesTool,
+  kapsoActivatePhoneNumberTool,
+  kapsoSendTestMessageTool,
+  slackStartOauthInstallTool,
+  slackCheckInstallTool,
+  slackListWorkspaceChannelsTool,
+  slackPersistChannelRoutesTool,
+  slackInviteBotToChannelsTool,
+  slackSendTestMessageTool,
+  // NFT stamps (Arc-Testnet ERC-1155 souvenirs via Circle SCP template)
+  mintStampTool,
+  refreshStampUriTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */

@@ -1,0 +1,117 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`renderForWeb text bubble keeps markdown intact for client-side rendering 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "text",
+    "content": {
+      "markdown": "Booked **AA 100** JFK to LHR. See [itinerary](https://sendero.travel/i/abc).",
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;
+
+exports[`renderForWeb card bubble passes ctas straight through 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "card",
+    "content": {
+      "body": "JFK to LHR on Apr 30. Hold expires in 15 minutes.",
+      "bullets": [
+        "Departs 21:30 EDT",
+        "Economy Plus",
+        "Refundable",
+      ],
+      "ctas": [
+        {
+          "emphasis": "primary",
+          "kind": "approve",
+          "label": "Confirm",
+          "value": "booking-1",
+        },
+        {
+          "emphasis": "secondary",
+          "kind": "reject",
+          "label": "Cancel",
+          "value": "booking-1",
+        },
+      ],
+      "imageUrl": undefined,
+      "title": "Itinerary held",
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;
+
+exports[`renderForWeb tool_result with share renders a card bubble 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "card",
+    "content": {
+      "body": "AA 100, JFK to LHR, $482.10 all-in.",
+      "bullets": [
+        "1 stop",
+        "8h 5m",
+        "Refundable",
+      ],
+      "ctas": [
+        {
+          "kind": "select_offer",
+          "label": "Hold this fare",
+          "value": "off-1",
+        },
+      ],
+      "imageUrl": undefined,
+      "title": "Best fare found",
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;
+
+exports[`renderForWeb sources bubble surfaces every item 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "sources",
+    "content": {
+      "items": [
+        {
+          "title": "AA flight status",
+          "url": "https://aa.com/flights/100",
+        },
+        {
+          "title": "Heathrow arrivals",
+          "url": "https://heathrow.com/arrivals",
+        },
+      ],
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;

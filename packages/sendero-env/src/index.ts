@@ -113,6 +113,13 @@ export const env = {
   /** Public URL Kapso posts BYO WhatsApp events to. Override in dev (ngrok). */
   kapsoWebhookBaseUrl: () =>
     process.env.KAPSO_WEBHOOK_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || null,
+  /**
+   * Project-scope webhook secret returned by Kapso when we register the
+   * Sendero webhook. One value across all tenants — the Sendero project
+   * is the unit Kapso signs against, not per-customer. Populate via
+   * `bun scripts/register-kapso-webhook.ts` (one-shot).
+   */
+  kapsoWebhookSecret: () => process.env.KAPSO_WEBHOOK_SECRET || null,
 
   slackSigningSecret: () => process.env.SLACK_SIGNING_SECRET || null,
   slackClientId: () => process.env.SLACK_CLIENT_ID || null,
@@ -123,11 +130,48 @@ export const env = {
   resendWebhookSecret: () => process.env.RESEND_WEBHOOK_SECRET || null,
 
   // ── Concierge / in-trip companion ─────────────────────────────────
+  // Both helpers fall back to GOOGLE_API_KEY so a single Google Cloud
+  // key with Maps + Places + Geocoding enabled covers every concierge
+  // tool. Operators can still split per-API keys for revocation
+  // isolation by setting GOOGLE_MAPS_API_KEY / GOOGLE_PLACES_API_KEY
+  // alongside the generic key.
   googleMapsApiKey: () => process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY || null,
-  googlePlacesApiKey: () => process.env.GOOGLE_API_KEY || null,
+  googlePlacesApiKey: () => process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_API_KEY || null,
 
   // ── Invoicing (Phase 11b) ─────────────────────────────────────────
   invoiceSigningSecret: () => process.env.INVOICE_SIGNING_SECRET || null,
+
+  // ── Pinata IPFS (NFT stamps — image + manifest pinning) ──────────
+  // JWT is the full scoped-key bearer token from Pinata Console; SDK
+  // needs only this. API key is kept for log/UI display so ops can
+  // identify which scoped key is in use without printing the secret.
+  // Gateway override for paid plans (custom subdomain) — defaults to
+  // the public Pinata gateway.
+  pinataJwt: () => process.env.PINATA_JWT || null,
+  pinataApiKey: () => process.env.PINATA_API_KEY || null,
+  pinataGateway: () => process.env.PINATA_GATEWAY || 'gateway.pinata.cloud',
+
+  // ── App Kit · Unified Balance Kit (DCW outbound spends) ───────────
+  /**
+   * Hex private key for the Sendero delegate wallet that signs
+   * `kit.unifiedBalance.spend()` calls on a traveler's behalf.  When
+   * unset, `/api/transfer/spend` returns 503 with a "configure
+   * delegate" message.  In production this should resolve from a
+   * KMS-backed secret rather than an env var.
+   */
+  unifiedBalanceDelegateKey: () => process.env.SENDERO_UB_DELEGATE_PRIVATE_KEY || null,
+
+  // ── Traveler DCW provisioning (lazy at hold) ──────────────────────
+  /**
+   * Platform-level Circle walletset id.  All traveler DCWs are created
+   * inside this single walletset so a wallet is permanent across the
+   * traveler's lifetime — same wallet whether they arrive via Clerk
+   * corporate invite, WhatsApp lead, or B2C signup.  Tenant context
+   * is recorded at the policy + TransferAttempt layer, not the wallet
+   * layer.  Without this set, `ensureTravelerWallet()` returns null
+   * and the booking flow logs a warning instead of crashing.
+   */
+  senderoWalletSetId: () => process.env.SENDERO_WALLETSET_ID || null,
 };
 
 export * from './require';

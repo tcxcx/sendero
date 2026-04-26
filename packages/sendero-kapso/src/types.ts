@@ -16,8 +16,9 @@ import { z } from 'zod';
 export const KapsoCustomer = z.object({
   id: z.string(),
   name: z.string(),
-  external_id: z.string().nullable().optional(),
+  external_customer_id: z.string().nullable().optional(),
   created_at: z.string().optional(),
+  updated_at: z.string().optional(),
 });
 export type KapsoCustomer = z.infer<typeof KapsoCustomer>;
 
@@ -25,11 +26,17 @@ export type KapsoCustomer = z.infer<typeof KapsoCustomer>;
 export const KapsoSetupLink = z.object({
   id: z.string(),
   url: z.string().url(),
-  customer_id: z.string(),
+  /** Stitched in client-side — Kapso's POST /customers/:id/setup_links
+   *  response doesn't echo the customer_id back since it's already in
+   *  the URL. We inject it before parsing so callers always see it. */
+  customer_id: z.string().optional(),
   /** ISO-8601. */
   expires_at: z.string(),
   status: z.enum(['pending', 'active', 'completed', 'expired']).optional(),
   allowed_connection_types: z.array(z.string()).optional(),
+  provisioned_phone_number: z.string().nullable().optional(),
+  whatsapp_setup_status: z.string().nullable().optional(),
+  whatsapp_setup_error: z.string().nullable().optional(),
 });
 export type KapsoSetupLink = z.infer<typeof KapsoSetupLink>;
 

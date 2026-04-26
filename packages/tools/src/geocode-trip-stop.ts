@@ -22,11 +22,14 @@ export interface GeocodeTripStopResult {
   plusCode?: string;
 }
 
+// The legacy Geocoding API at maps.googleapis.com/maps/api/geocode/json
+// emits snake_case (formatted_address, place_id, plus_code.global_code).
+// Don't be fooled by Google's TS SDK types — the wire is snake_case.
 interface RawGeocodeResult {
-  formattedAddress?: string;
+  formatted_address?: string;
   geometry?: { location?: { lat?: number; lng?: number } };
-  placeId?: string;
-  plusCode?: { globalCode?: string };
+  place_id?: string;
+  plus_code?: { global_code?: string };
 }
 
 interface RawGeocodeResponse {
@@ -48,16 +51,16 @@ export async function geocodeTripStop(input: GeocodeTripStopInput): Promise<Geoc
   const lat = top?.geometry?.location?.lat;
   const lng = top?.geometry?.location?.lng;
 
-  if (!top?.formattedAddress || typeof lat !== 'number' || typeof lng !== 'number') {
+  if (!top?.formatted_address || typeof lat !== 'number' || typeof lng !== 'number') {
     throw new Error(`No geocoding result found for "${input.address}".`);
   }
 
   return {
-    formattedAddress: top.formattedAddress,
+    formattedAddress: top.formatted_address,
     latitude: lat,
     longitude: lng,
-    placeId: top.placeId,
-    plusCode: top.plusCode?.globalCode,
+    placeId: top.place_id,
+    plusCode: top.plus_code?.global_code,
   };
 }
 

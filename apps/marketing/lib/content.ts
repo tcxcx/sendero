@@ -69,10 +69,31 @@ export interface MarketingNav {
   agents: string;
 }
 
+export interface MarketingAudienceTile {
+  id: string;
+  label: string;
+  headline: string;
+  body: string;
+  cta: MarketingCta;
+}
+
+export interface MarketingFooterGroup {
+  label: string;
+  links: Array<{ label: string; href: string }>;
+}
+
 export interface MarketingContent {
   locale: string;
   nav: MarketingNav;
   hero: MarketingHero;
+  proof: {
+    items: string[];
+  };
+  audiences: {
+    eyebrow: string;
+    title: string;
+    items: MarketingAudienceTile[];
+  };
   waitlist: {
     eyebrow: string;
     title: string;
@@ -124,6 +145,7 @@ export interface MarketingContent {
   footer: {
     copyright: string;
     links: Array<{ label: string; href: string }>;
+    groups?: MarketingFooterGroup[];
   };
 }
 
@@ -144,71 +166,211 @@ const FOOTER_LINKS = [
   { label: 'Twitter', href: 'https://x.com/sendero_travel' },
 ];
 
+const FOOTER_GROUPS_EN: MarketingFooterGroup[] = [
+  {
+    label: 'Product',
+    links: [
+      { label: 'For travelers', href: '/dashboard' },
+      { label: 'For agencies', href: '/dashboard' },
+      { label: 'For companies', href: 'mailto:sales@sendero.travel' },
+      { label: 'For AI agents', href: '/llms.txt' },
+      { label: 'Pricing', href: '#pricing' },
+    ],
+  },
+  {
+    label: 'Developers',
+    links: [
+      { label: 'Docs', href: 'https://docs.sendero.travel' },
+      { label: 'MCP server', href: 'https://docs.sendero.travel' },
+      { label: 'llms.txt', href: '/llms.txt' },
+      { label: 'Arc explorer', href: 'https://testnet.arcscan.app' },
+    ],
+  },
+  {
+    label: 'Company',
+    links: [
+      { label: 'Help', href: 'https://help.sendero.travel' },
+      { label: 'Sales', href: 'mailto:sales@sendero.travel' },
+      { label: 'Twitter', href: 'https://x.com/sendero_travel' },
+    ],
+  },
+];
+
+const FOOTER_GROUPS_ES: MarketingFooterGroup[] = [
+  {
+    label: 'Producto',
+    links: [
+      { label: 'Para viajeros', href: '/dashboard' },
+      { label: 'Para agencias', href: '/dashboard' },
+      { label: 'Para empresas', href: 'mailto:sales@sendero.travel' },
+      { label: 'Para agentes IA', href: '/llms.txt' },
+      { label: 'Precios', href: '#pricing' },
+    ],
+  },
+  {
+    label: 'Desarrolladores',
+    links: [
+      { label: 'Docs', href: 'https://docs.sendero.travel' },
+      { label: 'Servidor MCP', href: 'https://docs.sendero.travel' },
+      { label: 'llms.txt', href: '/llms.txt' },
+      { label: 'Arc explorer', href: 'https://testnet.arcscan.app' },
+    ],
+  },
+  {
+    label: 'Compañía',
+    links: [
+      { label: 'Soporte', href: 'https://help.sendero.travel' },
+      { label: 'Ventas', href: 'mailto:sales@sendero.travel' },
+      { label: 'Twitter', href: 'https://x.com/sendero_travel' },
+    ],
+  },
+];
+
+const FOOTER_GROUPS_PT: MarketingFooterGroup[] = [
+  {
+    label: 'Produto',
+    links: [
+      { label: 'Para viajantes', href: '/dashboard' },
+      { label: 'Para agências', href: '/dashboard' },
+      { label: 'Para empresas', href: 'mailto:sales@sendero.travel' },
+      { label: 'Para agentes IA', href: '/llms.txt' },
+      { label: 'Preços', href: '#pricing' },
+    ],
+  },
+  {
+    label: 'Desenvolvedores',
+    links: [
+      { label: 'Docs', href: 'https://docs.sendero.travel' },
+      { label: 'Servidor MCP', href: 'https://docs.sendero.travel' },
+      { label: 'llms.txt', href: '/llms.txt' },
+      { label: 'Arc explorer', href: 'https://testnet.arcscan.app' },
+    ],
+  },
+  {
+    label: 'Empresa',
+    links: [
+      { label: 'Suporte', href: 'https://help.sendero.travel' },
+      { label: 'Vendas', href: 'mailto:sales@sendero.travel' },
+      { label: 'Twitter', href: 'https://x.com/sendero_travel' },
+    ],
+  },
+];
+
 const EN_US: MarketingContent = {
   locale: 'en-US',
   nav: {
-    website: 'Website',
+    website: 'Product',
     app: 'App',
     pricing: 'Pricing',
     agents: 'For AI agents',
   },
   hero: {
-    eyebrow: 'Sendero on Circle Arc',
-    title: 'The travel agent for humans, teams, and AI agents.',
+    eyebrow: 'Live on Circle Arc',
+    title: 'Travel infrastructure for the agent era.',
     subtitle:
-      'Sendero turns a travel request into a coordinated booking workflow: real inventory, policy checks, prepaid guest escrow, PNR issuance, USDC settlement on Arc, invoices, and trip support in one persistent agent thread.',
-    primaryCta: { label: 'Join the launch waitlist', href: '#waitlist' },
-    secondaryCta: { label: 'Read llms.txt', href: '/llms.txt' },
+      'Bookings, prepaid escrow, USDC settlement, and trip support — in one persistent thread.',
+    primaryCta: { label: 'Start free', href: '/dashboard' },
+    secondaryCta: { label: 'For AI agents', href: '/llms.txt' },
+  },
+  proof: {
+    items: [
+      'Live on Circle Arc',
+      'USDC + EURC settlement',
+      'MCP + x402 native',
+      'WhatsApp + Slack + web',
+      'EN · ES · PT',
+    ],
+  },
+  audiences: {
+    eyebrow: 'Four ways in',
+    title: 'One engine. Every entry point.',
+    items: [
+      {
+        id: 'travelers',
+        label: 'Travelers',
+        headline: 'Book from the thread in your hand.',
+        body: 'WhatsApp, web, real options, prepaid budgets, receipts.',
+        cta: { label: 'Start free', href: '/dashboard' },
+      },
+      {
+        id: 'agencies',
+        label: 'Agencies',
+        headline: 'A staffed counter behind every link.',
+        body: 'White-label quote, hold, ticket, settle, support.',
+        cta: { label: 'Start free', href: '/dashboard' },
+      },
+      {
+        id: 'companies',
+        label: 'Companies',
+        headline: 'Prepay the trip. Keep policy clean.',
+        body: 'Slack approvals, tenant caps, USDC reconciliation.',
+        cta: { label: 'Talk to sales', href: 'mailto:sales@sendero.travel' },
+      },
+      {
+        id: 'agents',
+        label: 'AI agents',
+        headline: 'Call the travel back office.',
+        body: 'MCP-discoverable. x402-priced. llms.txt-published.',
+        cta: { label: 'Read llms.txt', href: '/llms.txt' },
+      },
+    ],
   },
   waitlist: {
-    eyebrow: 'Arc testnet live',
-    title: 'Join the mainnet launch list.',
-    body: 'We are opening production onboarding for agencies, companies, and AI builders in waves. Join the list if you want early access to prepaid travel budgets, MCP booking tools, or white-label travel operations.',
+    eyebrow: 'Mainnet wave',
+    title: 'Get in line for production.',
+    body: 'Agencies, companies, and AI builders go live in waves. Reserve your spot for prepaid budgets, MCP tools, and white-label ops.',
   },
   routeMurals: {
     eyebrow: 'Route intelligence',
-    title: 'One request becomes an auditable travel route.',
-    body: 'The product is not a chat wrapper. Sendero keeps traveler intent, policy, approvals, inventory, escrow, supplier actions, support, and reconciliation attached to the same journey record.',
+    title: 'One request. One auditable route.',
+    body: 'Intent, policy, approvals, inventory, escrow, support, and reconciliation stay attached to the same trip record.',
     items: [
       {
         label: 'Handoff map',
-        title: 'A traveler asks once. The system coordinates every next step.',
-        body: 'The agent can move between WhatsApp, web, Slack approvals, and MCP callers without losing the trip state.',
+        title: 'Asks once. The system coordinates the rest.',
+        body: 'Move between WhatsApp, web, Slack approvals, and MCP callers without losing trip state.',
         image: '/brand/generated/agent-handoff-map.jpg',
         alt: 'Sendero illustrated handoff map with traveler, operator checks, approvals, and a destination route.',
       },
       {
         label: 'Trust sequence',
         title: 'Locked, checked, approved, ticketed, settled.',
-        body: 'Every irreversible action has a proof point: claim links, policy decisions, offer holds, ticket confirmation, and payment settlement.',
+        body: 'Every irreversible action carries proof: claim links, policy, holds, confirmation, settlement.',
         image: '/brand/generated/trust-stamp-flow.jpg',
         alt: 'Sendero illustrated trust sequence of route documents, approval stamps, and settlement handoff.',
       },
       {
         label: 'Operations network',
         title: 'A graph for travel work, not just messages.',
-        body: 'Bookings, approvals, receipts, invoices, tenant spend caps, support events, and agent tool calls become inspectable records.',
+        body: 'Bookings, approvals, receipts, invoices, caps, support events, and tool calls — inspectable.',
         image: '/brand/generated/operations-network-map.jpg',
         alt: 'Sendero illustrated operations network with travel, finance, policy, and support nodes.',
       },
       {
         label: 'Open route',
-        title: 'The journey stays alive after the ticket is issued.',
-        body: 'Sendero continues through reminders, changes, receipts, support, refunds, and reconciliation until the trip is complete.',
+        title: 'The journey stays alive after the ticket.',
+        body: 'Reminders, changes, receipts, support, refunds, and reconciliation — until the trip is closed.',
         image: '/brand/generated/traveler-world-panorama.jpg',
         alt: 'Sendero illustrated world map panorama with traveler, route marks, envelopes, and destinations.',
+      },
+      {
+        label: 'Trip passport',
+        title: 'An AI guide there. A stamped souvenir at the end.',
+        body: 'Sendero rides along through the trip — then mints a personalized on-chain souvenir on Arc. Traceable, collectible, yours.',
+        image: '/brand/generated/symbol-collage.png',
+        alt: 'Sendero illustrated stamp collage representing the on-chain trip passport souvenir.',
       },
     ],
   },
   story: {
-    eyebrow: 'Four ways in',
-    title: 'The agent meets each buyer where travel actually starts.',
-    body: 'Travel begins in messy places: a WhatsApp thread, an agency desk, a finance approval, or another LLM. Sendero gives each entry point the same booking, escrow, settlement, and support engine.',
+    eyebrow: 'Where travel starts',
+    title: 'Same engine. Every entry point.',
+    body: 'Travel begins in messy places — a chat, an agency desk, a finance approval, an LLM. Sendero gives each one the same booking, escrow, settlement, and support engine.',
     paths: [
       {
         eyebrow: 'Individual traveler',
-        title: 'Book from the thread already in your hand.',
-        body: 'A traveler can start in WhatsApp or web, compare real options, claim a prepaid budget when needed, and keep the same agent for changes, receipts, alerts, and local help.',
+        title: 'Book from the thread already open.',
+        body: 'Start in WhatsApp or web, compare real options, claim a prepaid budget, keep the same agent for changes and support.',
         panel: '/brand/panels/panel-02.png',
         icons: [
           '/brand/icons/04-courier-profile.png',
@@ -218,8 +380,8 @@ const EN_US: MarketingContent = {
       },
       {
         eyebrow: 'Travel agency',
-        title: 'Send a booking link that behaves like a staffed counter.',
-        body: 'Agencies keep the customer relationship while Sendero handles quote, policy check, offer hold, ticketing, payment, invoice, and trip support behind the scenes.',
+        title: 'A booking link that runs like a staffed counter.',
+        body: 'You keep the customer. Sendero handles quote, policy, hold, ticketing, payment, invoice, and trip support.',
         panel: '/brand/panels/panel-05.png',
         icons: [
           '/brand/icons/01-mail-circle.png',
@@ -229,8 +391,8 @@ const EN_US: MarketingContent = {
       },
       {
         eyebrow: 'Corporate travel',
-        title: 'Prepay the journey. Keep policy and audit in line.',
-        body: 'Companies can issue prepaid guest links, route exceptions to Slack or Teams, cap tenant spend, and reconcile each travel action back to the right trip and invoice.',
+        title: 'Prepay. Keep policy and audit aligned.',
+        body: 'Issue prepaid guest links, route exceptions to Slack, cap tenant spend, reconcile every action to the right trip and invoice.',
         panel: '/brand/panels/panel-06.png',
         icons: [
           '/brand/icons/09-secure-check-shield.png',
@@ -240,8 +402,8 @@ const EN_US: MarketingContent = {
       },
       {
         eyebrow: 'AI agents',
-        title: 'Let another agent call the travel back office.',
-        body: 'LLMs can discover Sendero through llms.txt and MCP, then call tools for search, prefunding, reservation, settlement, refunds, and invoice generation with x402-style payment boundaries.',
+        title: 'Let another agent call the back office.',
+        body: 'Discoverable via llms.txt and MCP. Tools for search, prefunding, reservation, settlement, refunds, and invoicing — priced per call.',
         panel: '/brand/panels/panel-04.png',
         icons: [
           '/brand/icons/16-ai-chip.png',
@@ -254,40 +416,40 @@ const EN_US: MarketingContent = {
   features: [
     {
       id: 'consumer',
-      title: 'Travelers get a persistent trip agent',
-      body: 'Preferences, passport context, budget, dates, receipts, and changes stay attached to the same conversation instead of being scattered across apps.',
+      title: 'A trip agent that remembers',
+      body: 'Preferences, passport, budget, dates, receipts, and changes — all in one conversation.',
       iconSrc: '/brand/icons/02-chat-bubbles.png',
     },
     {
       id: 'agency',
-      title: 'Agencies get white-label operations',
-      body: 'Bring your WhatsApp Business number and customer relationship. Sendero supplies the booking workflow, escrow lifecycle, settlement records, and repetitive support automation.',
+      title: 'White-label operations',
+      body: 'Bring your WhatsApp number and customer relationship. We bring the booking, escrow, and support engine.',
       iconSrc: '/brand/icons/03-group-chat.png',
     },
     {
       id: 'corporate',
-      title: 'Companies get controlled spend',
-      body: 'Policy checks, manager approvals, prepaid guest budgets, tenant caps, invoices, and audit trails are built into the trip instead of bolted on after booking.',
+      title: 'Spend under control',
+      body: 'Policy, approvals, prepaid guest budgets, caps, invoices, audit — built into the trip.',
       iconSrc: '/brand/icons/14-bank.png',
     },
     {
       id: 'agents',
-      title: 'AI agents get travel tools',
-      body: 'MCP discovery, llms.txt, priced tool calls, and named workflows let other agents delegate real travel actions without handling supplier or payment risk themselves.',
+      title: 'Travel tools for agents',
+      body: 'MCP discovery, llms.txt, priced tool calls, and named workflows. Delegate real travel work safely.',
       iconSrc: '/brand/icons/16-ai-chip.png',
     },
   ],
   assetShowcase: {
     eyebrow: 'Visual system',
-    title: 'A travel operating system should look inspectable.',
-    body: 'Sendero uses maps, stamps, tickets, receipts, and route marks because the product is about custody of intent: who asked, who approved, what was held, what settled, and what remains open.',
+    title: 'A travel OS should look inspectable.',
+    body: 'Maps, stamps, tickets, receipts, and route marks — because the product is custody of intent: who asked, who approved, what was held, what settled.',
     assets: [
       {
         id: 'agent-route-map',
         type: 'image',
         title: 'One route map',
         brief:
-          'A single session can begin in WhatsApp, Slack, web, or MCP, then pass through inventory, policy, escrow, invoice, and support.',
+          'WhatsApp, Slack, web, or MCP — through inventory, policy, escrow, invoice, and support.',
         src: '/brand/panels/panel-04.png',
         alt: 'Risograph-style ticket and route map showing Sendero agent coordination.',
       },
@@ -296,16 +458,16 @@ const EN_US: MarketingContent = {
         type: 'lottie',
         title: 'Escrow lifecycle',
         brief:
-          'Buyer prefunds, traveler claims, Sendero reserves, ticket confirms, escrow settles, invoice appears.',
+          'Buyer prefunds, traveler claims, we reserve, ticket confirms, escrow settles, invoice appears.',
         src: '/brand/panels/panel-05.png',
         alt: 'Illustrated settlement document used for the prepaid escrow lifecycle.',
       },
       {
         id: 'channel-symbols',
         type: 'icon-set',
-        title: 'Channel and trust symbols',
+        title: 'Channel + trust symbols',
         brief:
-          'A stamp kit for messages, routes, approvals, tickets, travelers, policy, payments, and agent calls.',
+          'Stamps for messages, routes, approvals, tickets, travelers, policy, payments, and tool calls.',
         src: '/brand/panels/panel-06.png',
         alt: 'Sendero delivery document panel used as the basis for channel and trust symbols.',
       },
@@ -313,13 +475,13 @@ const EN_US: MarketingContent = {
   },
   passport: {
     eyebrow: 'Custody trail',
-    title: 'Every agent action leaves a travel postcard.',
-    body: 'The story is intentionally physical: locked requests, tagged context, approval stamps, settlement marks, and final records. It makes invisible agent work inspectable.',
+    title: 'Every action leaves a postcard.',
+    body: 'Locked requests, tagged context, approval stamps, settlement marks, and final records. Invisible agent work, made visible.',
     postcards: [
       {
         label: 'Seal',
         title: 'Secure the request',
-        body: 'The trip begins as a locked instruction, not a loose chat promise.',
+        body: 'The trip starts as a locked instruction, not a loose chat promise.',
         image: '/brand/postcards/sendero-3-01.png',
         alt: 'Sendero postcard showing a hand holding a locked travel note over an island route.',
       },
@@ -333,47 +495,47 @@ const EN_US: MarketingContent = {
       {
         label: 'Bind',
         title: 'Bundle the proofs',
-        body: 'Approvals, holds, and claims stay tied to the same operational thread.',
+        body: 'Approvals, holds, and claims stay tied to one operational thread.',
         image: '/brand/postcards/sendero-3-03.png',
         alt: 'Sendero postcard showing a banded bundle of travel documents and a route marker.',
       },
       {
         label: 'Clear',
         title: 'Approve the itinerary',
-        body: 'The agent moves only when the next irreversible action is allowed.',
+        body: 'The agent moves only when the next irreversible step is allowed.',
         image: '/brand/postcards/sendero-3-04.png',
         alt: 'Sendero postcard showing a ticket with a plane stamp and approval check.',
       },
       {
         label: 'Settle',
         title: 'Reconcile the money',
-        body: 'USDC settlement, supplier rails, fees, and invoices resolve into one trail.',
+        body: 'USDC settlement, supplier rails, fees, and invoices — one trail.',
         image: '/brand/postcards/sendero-3-05.png',
         alt: 'Sendero postcard showing bank settlement, coins, a compass, and an invoice.',
       },
       {
         label: 'Deliver',
         title: 'Send the record home',
-        body: 'The traveler, buyer, and agent keep the same final document state.',
+        body: 'Traveler, buyer, and agent share the same final state.',
         image: '/brand/postcards/sendero-3-06.png',
         alt: 'Sendero postcard showing a final travel document delivered along a coastal route.',
       },
     ],
   },
   pricing: {
-    heading: 'One workspace free. Scale when you need to.',
+    heading: 'Free to start. Scales when you do.',
     subheading:
-      'Sendero meters per travel action — search, book, MCP. A paid plan unlocks more workspaces, discounts on nanopayments, and a lower booking take rate. Start free.',
+      'Metered per travel action. Paid plans unlock workspaces, lower nanopayment + take rates, and production keys.',
     tiers: [
       {
         id: 'free',
         name: 'Free',
         price: '$0',
-        unit: 'one workspace · sandbox only',
+        unit: '1 workspace · sandbox',
         description: 'Ship a prototype, test the MCP, try the agent console.',
         features: [
           '1 workspace',
-          'Sandbox API key (rate-limited)',
+          'Sandbox API key',
           'Baseline nanopayment pricing',
           'Agent console + Arc testnet',
         ],
@@ -383,29 +545,29 @@ const EN_US: MarketingContent = {
         id: 'basic',
         name: 'Basic',
         price: '$19',
-        unit: '/mo · or $15/mo billed annually',
+        unit: '/mo · $15 annually',
         description: 'Agencies and small teams running multiple brands.',
         features: [
           'Up to 5 workspaces',
           '3 production API keys',
           'WhatsApp + Slack channels',
-          '15% off nanopayments · 5% off take rate',
+          '15% off nano · 5% off take rate',
         ],
-        cta: { label: 'Upgrade to Basic', href: '/dashboard/billing/plans' },
+        cta: { label: 'Start free', href: '/dashboard' },
       },
       {
         id: 'pro',
         name: 'Pro',
         price: '$60',
-        unit: '/mo · or $50/mo billed annually',
+        unit: '/mo · $50 annually',
         description: 'TMCs and agentic platforms at scale.',
         features: [
-          'Unlimited workspaces · 25 API keys',
-          'Public MCP server + custom webhooks',
-          'Audit log export · priority support',
-          '30% off nanopayments · 10% off take rate',
+          'Unlimited workspaces · 25 keys',
+          'Public MCP + custom webhooks',
+          'Audit export · priority support',
+          '30% off nano · 10% off take rate',
         ],
-        cta: { label: 'Upgrade to Pro', href: '/dashboard/billing/plans' },
+        cta: { label: 'Start 14-day trial', href: '/dashboard' },
       },
       {
         id: 'enterprise',
@@ -414,10 +576,10 @@ const EN_US: MarketingContent = {
         unit: 'contact sales',
         description: 'White-label, SSO/SAML, custom SLA, dedicated solution eng.',
         features: [
-          'Unlimited API keys and spend',
+          'Unlimited keys + spend',
           'SSO/SAML + audit export',
           'White-label + custom SLA',
-          '50% off nanopayments · 15% off take rate',
+          '50% off nano · 15% off take rate',
         ],
         cta: { label: 'Talk to sales', href: 'mailto:sales@sendero.travel' },
       },
@@ -425,12 +587,13 @@ const EN_US: MarketingContent = {
   },
   symbols: {
     eyebrow: 'Asset language',
-    title: 'A stamp kit for every agent action.',
-    body: 'These marks appear across product states, empty states, docs, and launch assets so Sendero can explain channel work, trust work, payment work, and travel work without stock illustrations.',
+    title: 'A stamp kit for every action.',
+    body: 'Channel, trust, payment, and travel marks across product, docs, and launch — and the same kit becomes your on-chain trip passport. Blockchain traceability shipping next.',
   },
   footer: {
     copyright: `© ${CURRENT_YEAR} Sendero. All rights reserved.`,
     links: FOOTER_LINKS,
+    groups: FOOTER_GROUPS_EN,
   },
 };
 
@@ -438,76 +601,122 @@ const ES_MX: MarketingContent = {
   ...EN_US,
   locale: 'es-MX',
   nav: {
-    website: 'Sitio',
+    website: 'Producto',
     app: 'App',
     pricing: 'Precios',
     agents: 'Para agentes IA',
   },
   hero: {
-    eyebrow: 'Sendero en Circle Arc',
-    title: 'El agente de viajes para personas, equipos y agentes de IA.',
-    subtitle:
-      'Sendero convierte una solicitud de viaje en un flujo coordinado: inventario real, reglas de política, escrow prepagado para invitados, emisión de PNR, liquidación en USDC sobre Arc, facturas y soporte en un mismo hilo persistente.',
-    primaryCta: { label: 'Unirme a la lista', href: '#waitlist' },
-    secondaryCta: { label: 'Leer llms.txt', href: '/llms.txt' },
+    eyebrow: 'En vivo en Circle Arc',
+    title: 'Infraestructura de viajes para la era de los agentes IA.',
+    subtitle: 'Reservas, escrow prepagado, liquidación en USDC y soporte — en un solo hilo.',
+    primaryCta: { label: 'Empezar gratis', href: '/dashboard' },
+    secondaryCta: { label: 'Para agentes IA', href: '/llms.txt' },
+  },
+  proof: {
+    items: [
+      'En vivo en Circle Arc',
+      'Liquidación USDC + EURC',
+      'MCP + x402 nativo',
+      'WhatsApp + Slack + web',
+      'EN · ES · PT',
+    ],
+  },
+  audiences: {
+    eyebrow: 'Cuatro entradas',
+    title: 'Un mismo motor. Cada entrada.',
+    items: [
+      {
+        id: 'travelers',
+        label: 'Viajeros',
+        headline: 'Reserva desde el chat que ya tienes abierto.',
+        body: 'WhatsApp, web, opciones reales, presupuestos prepagados, recibos.',
+        cta: { label: 'Empezar gratis', href: '/dashboard' },
+      },
+      {
+        id: 'agencies',
+        label: 'Agencias',
+        headline: 'Un mostrador atendido detrás de cada link.',
+        body: 'Cotización, hold, emisión, liquidación y soporte white-label.',
+        cta: { label: 'Empezar gratis', href: '/dashboard' },
+      },
+      {
+        id: 'companies',
+        label: 'Empresas',
+        headline: 'Prepaga el viaje. Mantén política y auditoría.',
+        body: 'Aprobaciones en Slack, límites por tenant, conciliación en USDC.',
+        cta: { label: 'Hablar con ventas', href: 'mailto:sales@sendero.travel' },
+      },
+      {
+        id: 'agents',
+        label: 'Agentes IA',
+        headline: 'Llama al back office de viajes.',
+        body: 'MCP descubrible. x402 con precio. llms.txt publicado.',
+        cta: { label: 'Leer llms.txt', href: '/llms.txt' },
+      },
+    ],
   },
   waitlist: {
-    eyebrow: 'Arc testnet activo',
-    title: 'Únete a la lista de mainnet.',
-    body: 'Estamos abriendo producción por etapas para agencias, empresas y builders de IA. Únete si quieres acceso temprano a presupuestos prepagados, herramientas MCP de reserva o operaciones white-label.',
+    eyebrow: 'Mainnet en camino',
+    title: 'Aparta tu lugar en producción.',
+    body: 'Agencias, empresas y desarrolladores de IA entran por etapas. Regístrate para acceso temprano a presupuestos prepagados, herramientas MCP y operaciones white-label.',
   },
   routeMurals: {
     eyebrow: 'Inteligencia de ruta',
-    title: 'Una solicitud se vuelve una ruta de viaje auditable.',
-    body: 'Sendero mantiene intención, política, aprobaciones, inventario, escrow, acciones de proveedor, soporte y conciliación dentro del mismo registro de viaje.',
+    title: 'Una solicitud. Una ruta auditable.',
+    body: 'Intención, política, aprobaciones, inventario, escrow, soporte y conciliación viven en el mismo registro de viaje.',
     items: EN_US.routeMurals.items.map(item => ({
       ...item,
       title:
         item.label === 'Handoff map'
-          ? 'El viajero pregunta una vez. El sistema coordina cada paso.'
+          ? 'Pregunta una vez. El sistema coordina el resto.'
           : item.label === 'Trust sequence'
-            ? 'Bloqueado, revisado, aprobado, emitido y liquidado.'
+            ? 'Bloqueado, revisado, aprobado, emitido, liquidado.'
             : item.label === 'Operations network'
               ? 'Un grafo para trabajo de viaje, no solo mensajes.'
-              : 'El viaje sigue vivo después del boleto.',
+              : item.label === 'Open route'
+                ? 'El viaje sigue vivo después del boleto.'
+                : 'Un guía IA en el camino. Un souvenir sellado al final.',
       body:
         item.label === 'Handoff map'
-          ? 'El agente puede moverse entre WhatsApp, web, aprobaciones en Slack y agentes MCP sin perder el estado del viaje.'
+          ? 'Se mueve entre WhatsApp, web, aprobaciones de Slack y MCP sin perder el estado del viaje.'
           : item.label === 'Trust sequence'
-            ? 'Cada acción irreversible tiene prueba: links de reclamo, decisiones de política, holds, confirmación y liquidación.'
+            ? 'Cada acción irreversible tiene prueba: link, política, hold, confirmación, liquidación.'
             : item.label === 'Operations network'
-              ? 'Reservas, aprobaciones, recibos, facturas, límites de gasto, soporte y llamadas de herramientas quedan inspeccionables.'
-              : 'Sendero continúa con recordatorios, cambios, recibos, soporte, reembolsos y conciliación hasta cerrar el viaje.',
+              ? 'Reservas, aprobaciones, recibos, facturas, límites, soporte y llamadas — inspeccionables.'
+              : item.label === 'Open route'
+                ? 'Recordatorios, cambios, recibos, soporte, reembolsos y conciliación — hasta cerrar.'
+                : 'Sendero te acompaña durante el viaje y al cierre acuña un souvenir on-chain personalizado en Arc. Trazable, coleccionable, tuyo.',
     })),
   },
   story: {
-    eyebrow: 'Cuatro entradas',
-    title: 'El agente aparece donde el viaje realmente empieza.',
-    body: 'El viaje comienza en lugares imperfectos: WhatsApp, una mesa de agencia, una aprobación de finanzas o otro LLM. Sendero da a cada entrada el mismo motor de reserva, escrow, liquidación y soporte.',
+    eyebrow: 'Donde empieza el viaje',
+    title: 'Un mismo motor. Todas las entradas.',
+    body: 'El viaje arranca en lugares imperfectos: chat, mostrador, aprobación financiera, otro LLM. Sendero le da a cada uno el mismo motor de reserva, escrow, liquidación y soporte.',
     paths: [
       {
         ...EN_US.story.paths[0],
         eyebrow: 'Viajero individual',
         title: 'Reserva desde el hilo que ya tienes abierto.',
-        body: 'El viajero inicia en WhatsApp o web, compara opciones reales, reclama un presupuesto prepagado si hace falta y conserva el mismo agente para cambios, recibos, alertas y ayuda local.',
+        body: 'WhatsApp o web, opciones reales, presupuesto prepagado, mismo agente para cambios y soporte.',
       },
       {
         ...EN_US.story.paths[1],
-        eyebrow: 'Agencia de viajes',
-        title: 'Envía un link de reserva que opera como mostrador atendido.',
-        body: 'La agencia conserva la relación con el cliente mientras Sendero gestiona cotización, política, hold, emisión, pago, factura y soporte.',
+        eyebrow: 'Agencia',
+        title: 'Un link de reserva que opera como mostrador atendido.',
+        body: 'Tú mantienes al cliente. Sendero hace cotización, política, hold, emisión, pago, factura y soporte.',
       },
       {
         ...EN_US.story.paths[2],
         eyebrow: 'Viaje corporativo',
-        title: 'Prepaga el viaje. Mantén política y auditoría alineadas.',
-        body: 'Las empresas emiten links prepagados, enrutan excepciones a Slack o Teams, limitan gasto por tenant y concilian cada acción con el viaje y la factura correcta.',
+        title: 'Prepaga. Mantén política y auditoría.',
+        body: 'Links prepagados, excepciones a Slack, límites por tenant, conciliación de cada acción.',
       },
       {
         ...EN_US.story.paths[3],
-        eyebrow: 'Agentes de IA',
-        title: 'Deja que otro agente llame al back office de viajes.',
-        body: 'Los LLMs descubren Sendero con llms.txt y MCP, y llaman herramientas de búsqueda, prefunding, reserva, liquidación, reembolsos y facturación.',
+        eyebrow: 'Agentes IA',
+        title: 'Que otro agente llame al back office.',
+        body: 'Descubrible por llms.txt y MCP. Búsqueda, prefunding, reserva, liquidación, reembolsos, facturación — con precio.',
       },
     ],
   },
@@ -515,26 +724,26 @@ const ES_MX: MarketingContent = {
     ...feature,
     title:
       feature.id === 'consumer'
-        ? 'Los viajeros obtienen un agente persistente'
+        ? 'Un agente que recuerda'
         : feature.id === 'agency'
-          ? 'Las agencias obtienen operaciones white-label'
+          ? 'Operaciones white-label'
           : feature.id === 'corporate'
-            ? 'Las empresas controlan el gasto'
-            : 'Los agentes de IA obtienen herramientas de viaje',
+            ? 'Gasto bajo control'
+            : 'Herramientas para agentes',
     body:
       feature.id === 'consumer'
-        ? 'Preferencias, contexto, presupuesto, fechas, recibos y cambios permanecen en la misma conversación.'
+        ? 'Preferencias, contexto, presupuesto, fechas, recibos y cambios — en una sola conversación.'
         : feature.id === 'agency'
-          ? 'Trae tu WhatsApp Business y relación comercial. Sendero aporta flujo de reserva, escrow, liquidación y soporte repetitivo.'
+          ? 'Trae tu WhatsApp y la relación con el cliente. Nosotros aportamos reserva, escrow, liquidación y soporte.'
           : feature.id === 'corporate'
-            ? 'Políticas, aprobaciones, presupuestos prepagados, límites, facturas y auditoría viven dentro del viaje.'
-            : 'MCP, llms.txt, llamadas con precio y workflows permiten que otros agentes deleguen acciones reales de viaje.',
+            ? 'Política, aprobaciones, presupuestos prepagados, límites, facturas y auditoría — dentro del viaje.'
+            : 'MCP, llms.txt, llamadas con precio y workflows. Delega acciones reales de viaje sin riesgo.',
   })),
   assetShowcase: {
     ...EN_US.assetShowcase,
     eyebrow: 'Sistema visual',
-    title: 'Un sistema operativo de viajes debe sentirse inspeccionable.',
-    body: 'Sendero usa mapas, sellos, tickets, recibos y marcas de ruta porque el producto trata sobre custodia de intención: quién pidió, quién aprobó, qué se retuvo, qué se liquidó y qué sigue abierto.',
+    title: 'Un OS de viajes debe sentirse inspeccionable.',
+    body: 'Mapas, sellos, tickets, recibos y marcas de ruta — porque el producto es custodia de intención.',
     assets: EN_US.assetShowcase.assets.map(asset => ({
       ...asset,
       title:
@@ -542,14 +751,20 @@ const ES_MX: MarketingContent = {
           ? 'Un mapa de ruta'
           : asset.id === 'escrow-lifecycle'
             ? 'Ciclo de escrow'
-            : 'Símbolos de canal y confianza',
+            : 'Símbolos de canal + confianza',
+      brief:
+        asset.id === 'agent-route-map'
+          ? 'WhatsApp, Slack, web o MCP — pasando por inventario, política, escrow, factura y soporte.'
+          : asset.id === 'escrow-lifecycle'
+            ? 'El comprador prepaga, el viajero reclama, reservamos, el ticket confirma, el escrow liquida, aparece la factura.'
+            : 'Sellos para mensajes, rutas, aprobaciones, tickets, viajeros, política, pagos y llamadas de herramientas.',
     })),
   },
   passport: {
     ...EN_US.passport,
     eyebrow: 'Rastro de custodia',
-    title: 'Cada acción del agente deja una postal de viaje.',
-    body: 'La historia es física: solicitudes bloqueadas, contexto etiquetado, sellos de aprobación, marcas de liquidación y registros finales. Hace visible el trabajo del agente.',
+    title: 'Cada acción deja una postal.',
+    body: 'Solicitudes bloqueadas, contexto etiquetado, sellos de aprobación, marcas de liquidación y registros finales.',
     postcards: EN_US.passport.postcards.map(card => ({
       ...card,
       title:
@@ -567,9 +782,9 @@ const ES_MX: MarketingContent = {
     })),
   },
   pricing: {
-    heading: 'Un workspace gratis. Escala cuando lo necesites.',
+    heading: 'Gratis para empezar. Crece a tu ritmo.',
     subheading:
-      'Sendero se mide por acción de viaje: búsqueda, reserva, MCP. Un plan pago desbloquea más workspaces, descuentos en nanopagos y una tarifa de reserva menor. Empieza gratis.',
+      'Cobramos por acción de viaje. Los planes de paga desbloquean más workspaces, descuentos en nanopagos + take rate, y llaves de producción.',
     tiers: EN_US.pricing.tiers.map(t => ({
       ...t,
       name: t.id === 'free' ? 'Gratis' : t.id === 'enterprise' ? 'Empresa' : t.name,
@@ -580,14 +795,21 @@ const ES_MX: MarketingContent = {
             ? 'Empezar gratis'
             : t.id === 'enterprise'
               ? 'Hablar con ventas'
-              : `Actualizar a ${t.name}`,
+              : t.id === 'pro'
+                ? 'Probar 14 días'
+                : 'Empezar gratis',
       },
     })),
   },
   symbols: {
     eyebrow: 'Lenguaje de activos',
-    title: 'Un kit de sellos para cada acción del agente.',
-    body: 'Estas marcas aparecen en producto, documentación y lanzamiento para explicar trabajo de canal, confianza, pagos y viajes sin ilustraciones genéricas.',
+    title: 'Un kit de sellos para cada acción.',
+    body: 'Marcas de canal, confianza, pagos y viaje en producto, docs y lanzamiento — y el mismo kit se vuelve tu pasaporte de viaje on-chain. Trazabilidad en blockchain ya en camino.',
+  },
+  footer: {
+    copyright: `© ${CURRENT_YEAR} Sendero. Todos los derechos reservados.`,
+    links: FOOTER_LINKS,
+    groups: FOOTER_GROUPS_ES,
   },
 };
 
@@ -595,76 +817,122 @@ const PT_BR: MarketingContent = {
   ...EN_US,
   locale: 'pt-BR',
   nav: {
-    website: 'Site',
+    website: 'Produto',
     app: 'App',
     pricing: 'Preços',
     agents: 'Para agentes IA',
   },
   hero: {
-    eyebrow: 'Sendero na Circle Arc',
-    title: 'O agente de viagens para pessoas, equipes e agentes de IA.',
-    subtitle:
-      'A Sendero transforma um pedido de viagem em um fluxo coordenado: inventário real, regras de política, escrow pré-pago para convidados, emissão de PNR, liquidação em USDC na Arc, notas e suporte em uma mesma conversa persistente.',
-    primaryCta: { label: 'Entrar na lista', href: '#waitlist' },
-    secondaryCta: { label: 'Ler llms.txt', href: '/llms.txt' },
+    eyebrow: 'No ar na Circle Arc',
+    title: 'Infraestrutura de viagens para a era dos agentes IA.',
+    subtitle: 'Reservas, escrow pré-pago, liquidação em USDC e suporte — em um único fio.',
+    primaryCta: { label: 'Começar grátis', href: '/dashboard' },
+    secondaryCta: { label: 'Para agentes IA', href: '/llms.txt' },
+  },
+  proof: {
+    items: [
+      'No ar na Circle Arc',
+      'Liquidação USDC + EURC',
+      'MCP + x402 nativo',
+      'WhatsApp + Slack + web',
+      'EN · ES · PT',
+    ],
+  },
+  audiences: {
+    eyebrow: 'Quatro entradas',
+    title: 'Um motor. Toda entrada.',
+    items: [
+      {
+        id: 'travelers',
+        label: 'Viajantes',
+        headline: 'Reserve do chat que já está aberto.',
+        body: 'WhatsApp, web, opções reais, orçamentos pré-pagos, recibos.',
+        cta: { label: 'Começar grátis', href: '/dashboard' },
+      },
+      {
+        id: 'agencies',
+        label: 'Agências',
+        headline: 'Um balcão atendido atrás de cada link.',
+        body: 'Cotação, hold, emissão, liquidação e suporte white-label.',
+        cta: { label: 'Começar grátis', href: '/dashboard' },
+      },
+      {
+        id: 'companies',
+        label: 'Empresas',
+        headline: 'Pré-pague a viagem. Mantenha política e auditoria.',
+        body: 'Aprovações no Slack, limites por tenant, conciliação USDC.',
+        cta: { label: 'Falar com vendas', href: 'mailto:sales@sendero.travel' },
+      },
+      {
+        id: 'agents',
+        label: 'Agentes IA',
+        headline: 'Chame o back office de viagens.',
+        body: 'Descobrível por MCP. Precificado por x402. llms.txt publicado.',
+        cta: { label: 'Ler llms.txt', href: '/llms.txt' },
+      },
+    ],
   },
   waitlist: {
-    eyebrow: 'Arc testnet ativo',
-    title: 'Entre na lista de lançamento mainnet.',
-    body: 'Estamos abrindo produção em ondas para agências, empresas e builders de IA. Entre na lista para acessar orçamentos pré-pagos, ferramentas MCP de reserva e operações white-label.',
+    eyebrow: 'Onda mainnet',
+    title: 'Garanta seu lugar em produção.',
+    body: 'Agências, empresas e builders de IA entram em ondas. Garanta acesso a orçamentos pré-pagos, ferramentas MCP e operações white-label.',
   },
   routeMurals: {
     eyebrow: 'Inteligência de rota',
-    title: 'Um pedido vira uma rota de viagem auditável.',
-    body: 'A Sendero mantém intenção, política, aprovações, inventário, escrow, ações de fornecedor, suporte e reconciliação no mesmo registro de viagem.',
+    title: 'Um pedido. Uma rota auditável.',
+    body: 'Intenção, política, aprovações, inventário, escrow, suporte e reconciliação no mesmo registro de viagem.',
     items: EN_US.routeMurals.items.map(item => ({
       ...item,
       title:
         item.label === 'Handoff map'
-          ? 'O viajante pede uma vez. O sistema coordena cada passo.'
+          ? 'Pede uma vez. O sistema coordena o resto.'
           : item.label === 'Trust sequence'
-            ? 'Travado, verificado, aprovado, emitido e liquidado.'
+            ? 'Travado, verificado, aprovado, emitido, liquidado.'
             : item.label === 'Operations network'
               ? 'Um grafo para trabalho de viagem, não só mensagens.'
-              : 'A jornada segue viva depois do bilhete.',
+              : item.label === 'Open route'
+                ? 'A jornada segue viva depois do bilhete.'
+                : 'Um guia IA no caminho. Um souvenir carimbado no fim.',
       body:
         item.label === 'Handoff map'
-          ? 'O agente transita entre WhatsApp, web, aprovações no Slack e chamadas MCP sem perder o estado da viagem.'
+          ? 'Transita entre WhatsApp, web, aprovações no Slack e MCP sem perder o estado da viagem.'
           : item.label === 'Trust sequence'
-            ? 'Cada ação irreversível tem prova: links de resgate, decisões de política, holds, confirmação e liquidação.'
+            ? 'Cada ação irreversível tem prova: link, política, hold, confirmação, liquidação.'
             : item.label === 'Operations network'
-              ? 'Reservas, aprovações, recibos, notas, limites, suporte e chamadas de ferramentas viram registros inspecionáveis.'
-              : 'A Sendero continua com lembretes, mudanças, recibos, suporte, reembolsos e reconciliação até o fechamento da viagem.',
+              ? 'Reservas, aprovações, recibos, notas, limites, suporte e chamadas — inspecionáveis.'
+              : item.label === 'Open route'
+                ? 'Lembretes, mudanças, recibos, suporte, reembolsos e reconciliação — até fechar.'
+                : 'Sendero te acompanha durante a viagem e no fim cunha um souvenir on-chain personalizado na Arc. Rastreável, colecionável, seu.',
     })),
   },
   story: {
-    eyebrow: 'Quatro entradas',
-    title: 'O agente aparece onde a viagem realmente começa.',
-    body: 'A viagem nasce em lugares bagunçados: WhatsApp, balcão de agência, aprovação financeira ou outro LLM. A Sendero entrega a mesma reserva, escrow, liquidação e suporte para cada entrada.',
+    eyebrow: 'Onde a viagem começa',
+    title: 'Um motor. Todas as entradas.',
+    body: 'A viagem nasce em lugares bagunçados: chat, balcão, aprovação financeira, outro LLM. Sendero entrega o mesmo motor de reserva, escrow, liquidação e suporte para cada um.',
     paths: [
       {
         ...EN_US.story.paths[0],
         eyebrow: 'Viajante individual',
         title: 'Reserve a partir da conversa que você já usa.',
-        body: 'O viajante começa no WhatsApp ou web, compara opções reais, resgata um orçamento pré-pago quando necessário e mantém o mesmo agente para mudanças, recibos, alertas e ajuda local.',
+        body: 'WhatsApp ou web, opções reais, orçamento pré-pago, mesmo agente para mudanças e suporte.',
       },
       {
         ...EN_US.story.paths[1],
-        eyebrow: 'Agência de viagens',
-        title: 'Envie um link de reserva que opera como um balcão atendido.',
-        body: 'A agência mantém a relação com o cliente enquanto a Sendero executa cotação, política, hold, emissão, pagamento, nota e suporte.',
+        eyebrow: 'Agência',
+        title: 'Um link de reserva que opera como balcão atendido.',
+        body: 'Você mantém o cliente. Sendero faz cotação, política, hold, emissão, pagamento, nota e suporte.',
       },
       {
         ...EN_US.story.paths[2],
         eyebrow: 'Viagem corporativa',
-        title: 'Pré-pague a jornada. Mantenha política e auditoria alinhadas.',
-        body: 'Empresas emitem links pré-pagos, roteiam exceções para Slack ou Teams, limitam gastos por tenant e conciliam cada ação com a viagem e nota corretas.',
+        title: 'Pré-pague. Mantenha política e auditoria.',
+        body: 'Links pré-pagos, exceções para o Slack, limites por tenant, conciliação de cada ação.',
       },
       {
         ...EN_US.story.paths[3],
-        eyebrow: 'Agentes de IA',
-        title: 'Deixe outro agente chamar o back office de viagens.',
-        body: 'LLMs descobrem a Sendero por llms.txt e MCP e chamam ferramentas de busca, prefunding, reserva, liquidação, reembolso e faturamento.',
+        eyebrow: 'Agentes IA',
+        title: 'Deixe outro agente chamar o back office.',
+        body: 'Descobrível por llms.txt e MCP. Busca, prefunding, reserva, liquidação, reembolso, faturamento — precificado.',
       },
     ],
   },
@@ -672,39 +940,53 @@ const PT_BR: MarketingContent = {
     ...feature,
     title:
       feature.id === 'consumer'
-        ? 'Viajantes ganham um agente persistente'
+        ? 'Um agente que lembra'
         : feature.id === 'agency'
-          ? 'Agências ganham operações white-label'
+          ? 'Operações white-label'
           : feature.id === 'corporate'
-            ? 'Empresas controlam gastos'
-            : 'Agentes de IA ganham ferramentas de viagem',
+            ? 'Gasto sob controle'
+            : 'Ferramentas para agentes',
     body:
       feature.id === 'consumer'
-        ? 'Preferências, contexto, orçamento, datas, recibos e mudanças ficam na mesma conversa.'
+        ? 'Preferências, contexto, orçamento, datas, recibos e mudanças — numa única conversa.'
         : feature.id === 'agency'
-          ? 'Traga seu WhatsApp Business e a relação comercial. A Sendero entrega reserva, escrow, liquidação e automação de suporte.'
+          ? 'Traga seu WhatsApp e a relação. Trazemos reserva, escrow, liquidação e suporte.'
           : feature.id === 'corporate'
-            ? 'Políticas, aprovações, orçamentos pré-pagos, limites, notas e auditoria vivem dentro da viagem.'
-            : 'MCP, llms.txt, chamadas precificadas e workflows permitem que outros agentes deleguem ações reais de viagem.',
+            ? 'Política, aprovações, orçamentos pré-pagos, limites, notas e auditoria — dentro da viagem.'
+            : 'MCP, llms.txt, chamadas precificadas e workflows. Delegue ações reais sem risco.',
   })),
   assetShowcase: {
     ...EN_US.assetShowcase,
     eyebrow: 'Sistema visual',
-    title: 'Um sistema operacional de viagens precisa parecer inspecionável.',
-    body: 'A Sendero usa mapas, selos, bilhetes, recibos e marcas de rota porque o produto trata da custódia da intenção: quem pediu, quem aprovou, o que foi retido, o que liquidou e o que segue aberto.',
-    assets: EN_US.assetShowcase.assets,
+    title: 'Um OS de viagens precisa parecer inspecionável.',
+    body: 'Mapas, selos, bilhetes, recibos e marcas de rota — porque o produto trata da custódia da intenção.',
+    assets: EN_US.assetShowcase.assets.map(asset => ({
+      ...asset,
+      title:
+        asset.id === 'agent-route-map'
+          ? 'Um mapa de rota'
+          : asset.id === 'escrow-lifecycle'
+            ? 'Ciclo de escrow'
+            : 'Símbolos de canal + confiança',
+      brief:
+        asset.id === 'agent-route-map'
+          ? 'WhatsApp, Slack, web ou MCP — passando por inventário, política, escrow, nota e suporte.'
+          : asset.id === 'escrow-lifecycle'
+            ? 'Comprador pré-paga, viajante resgata, reservamos, bilhete confirma, escrow liquida, nota aparece.'
+            : 'Selos para mensagens, rotas, aprovações, bilhetes, viajantes, política, pagamentos e chamadas de ferramentas.',
+    })),
   },
   passport: {
     ...EN_US.passport,
     eyebrow: 'Trilha de custódia',
-    title: 'Cada ação do agente deixa uma postal de viagem.',
-    body: 'A história é física: pedidos travados, contexto etiquetado, selos de aprovação, marcas de liquidação e registros finais. O trabalho invisível do agente fica visível.',
+    title: 'Cada ação deixa uma postal.',
+    body: 'Pedidos travados, contexto etiquetado, selos de aprovação, marcas de liquidação e registros finais.',
     postcards: EN_US.passport.postcards,
   },
   pricing: {
-    heading: 'Um workspace grátis. Escale quando precisar.',
+    heading: 'Grátis para começar. Escala com você.',
     subheading:
-      'A Sendero cobra por ação de viagem: busca, reserva, MCP. Um plano pago libera mais workspaces, desconto em nanopagamentos e taxa de reserva menor. Comece grátis.',
+      'Cobrado por ação de viagem. Planos pagos liberam workspaces, descontos em nano + take rate, e chaves de produção.',
     tiers: EN_US.pricing.tiers.map(t => ({
       ...t,
       name: t.id === 'free' ? 'Grátis' : t.id === 'enterprise' ? 'Empresa' : t.name,
@@ -715,14 +997,21 @@ const PT_BR: MarketingContent = {
             ? 'Começar grátis'
             : t.id === 'enterprise'
               ? 'Falar com vendas'
-              : `Assinar ${t.name}`,
+              : t.id === 'pro'
+                ? 'Testar 14 dias'
+                : 'Começar grátis',
       },
     })),
   },
   symbols: {
     eyebrow: 'Linguagem visual',
-    title: 'Um kit de selos para cada ação do agente.',
-    body: 'Essas marcas aparecem no produto, na documentação e no lançamento para explicar canais, confiança, pagamentos e viagem sem ilustrações genéricas.',
+    title: 'Um kit de selos para cada ação.',
+    body: 'Marcas de canal, confiança, pagamento e viagem no produto, na documentação e no lançamento — e o mesmo kit vira seu passaporte de viagem on-chain. Rastreabilidade em blockchain a caminho.',
+  },
+  footer: {
+    copyright: `© ${CURRENT_YEAR} Sendero. Todos os direitos reservados.`,
+    links: FOOTER_LINKS,
+    groups: FOOTER_GROUPS_PT,
   },
 };
 
@@ -731,17 +1020,72 @@ const ES_AR: MarketingContent = {
   locale: 'es-AR',
   hero: {
     ...ES_MX.hero,
-    title: 'El agente de viajes para personas, equipos y agentes de IA.',
-    subtitle:
-      'Sendero convierte un pedido de viaje en un flujo coordinado: inventario real, reglas de política, escrow prepagado para invitados, emisión de PNR, liquidación en USDC sobre Arc, facturas y soporte en un mismo hilo persistente.',
-    primaryCta: { label: 'Sumarme a la lista', href: '#waitlist' },
+    primaryCta: { label: 'Empezar gratis', href: '/dashboard' },
+    secondaryCta: { label: 'Para agentes IA', href: '/llms.txt' },
+  },
+  audiences: {
+    ...ES_MX.audiences,
+    items: ES_MX.audiences.items.map(item =>
+      item.id === 'travelers'
+        ? { ...item, headline: 'Reservá desde el chat que ya tenés abierto.' }
+        : item.id === 'companies'
+          ? { ...item, headline: 'Prepagá el viaje. Mantené política y auditoría.' }
+          : item.id === 'agents'
+            ? { ...item, headline: 'Llamá al back office de viajes.' }
+            : item
+    ),
   },
   waitlist: {
-    eyebrow: 'Arc testnet activo',
-    title: 'Sumate a la lista de mainnet.',
-    body: 'Estamos abriendo onboarding productivo por etapas para agencias, empresas y builders de IA. Sumate si querés acceso temprano a presupuestos prepagados, herramientas MCP o operaciones white-label.',
+    eyebrow: 'Mainnet en camino',
+    title: 'Sumate a la lista de producción.',
+    body: 'Agencias, empresas y desarrolladores de IA entran por etapas. Sumate para acceso temprano a presupuestos prepagados, herramientas MCP y operaciones white-label.',
   },
-  pricing: ES_MX.pricing,
+  routeMurals: {
+    ...ES_MX.routeMurals,
+    items: ES_MX.routeMurals.items.map(item =>
+      item.label === 'Handoff map'
+        ? { ...item, title: 'Preguntás una vez. El sistema coordina el resto.' }
+        : item
+    ),
+  },
+  story: {
+    ...ES_MX.story,
+    paths: ES_MX.story.paths.map((p, i) =>
+      i === 0
+        ? { ...p, title: 'Reservá desde el hilo que ya tenés abierto.' }
+        : i === 1
+          ? {
+              ...p,
+              body: 'Vos mantenés al cliente. Sendero hace cotización, política, hold, emisión, pago, factura y soporte.',
+            }
+          : i === 2
+            ? {
+                ...p,
+                title: 'Prepagá. Mantené política y auditoría.',
+                body: 'Links prepagados, excepciones a Slack, límites por tenant, conciliación de cada acción.',
+              }
+            : p
+    ),
+  },
+  features: ES_MX.features.map(feature =>
+    feature.id === 'agency'
+      ? {
+          ...feature,
+          body: 'Traé tu WhatsApp y la relación con el cliente. Nosotros aportamos reserva, escrow, liquidación y soporte.',
+        }
+      : feature.id === 'agents'
+        ? {
+            ...feature,
+            body: 'MCP, llms.txt, llamadas con precio y workflows. Delegá acciones reales de viaje sin riesgo.',
+          }
+        : feature
+  ),
+  pricing: {
+    ...ES_MX.pricing,
+    heading: 'Gratis para empezar. Crecé a tu ritmo.',
+    subheading:
+      'Cobramos por acción de viaje. Los planes pagos te desbloquean más workspaces, descuentos en nanopagos + take rate, y llaves de producción.',
+  },
 };
 
 const FALLBACK_CONTENT: Record<string, MarketingContent> = {
@@ -841,6 +1185,8 @@ function isMarketingContentPartial(value: unknown): value is DeepPartial<Marketi
     isRecord(value.hero) ||
     isRecord(value.waitlist) ||
     isRecord(value.routeMurals) ||
+    isRecord(value.audiences) ||
+    isRecord(value.proof) ||
     Array.isArray(value.features) ||
     isRecord(value.pricing)
   );

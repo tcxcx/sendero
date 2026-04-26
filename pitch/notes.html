@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Speaker Notes · Sendero Pitch</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231F2A44'/%3E%3Ccircle cx='11' cy='17' r='5' fill='none' stroke='%23F4DDD4' stroke-width='1.5'/%3E%3Ccircle cx='21' cy='17' r='5' fill='none' stroke='%23F4DDD4' stroke-width='1.5'/%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,450;9..144,500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #1F2A44; --surface: rgba(253,251,247,0.05); --paper: #FDFBF7; --paper-60: rgba(253,251,247,0.60); --paper-40: rgba(253,251,247,0.40); --paper-20: rgba(253,251,247,0.20); --vermillion: #E27556; --vermillion-soft: rgba(226,117,86,0.18); --line: rgba(253,251,247,0.10); --display: "Fraunces", ui-serif, Georgia, serif; --sans: "Geist", -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; --mono: "Geist Mono", ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: 0ms !important; transition-duration: 0ms !important; } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { background: var(--bg); color: var(--paper); font-family: var(--sans); letter-spacing: -0.005em; display: grid; grid-template-rows: auto 1fr auto; min-height: 100vh; }
+  header { padding: 20px 28px 16px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center; }
+  header .brand { font-family: var(--mono); font-size: 12px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--paper); font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  header .brand .dot { width: 6px; height: 6px; background: var(--vermillion); border-radius: 50%; box-shadow: 0 0 0 4px rgba(226,117,86,0.16); }
+  header .pos { font-family: var(--mono); font-size: 11px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--paper-60); text-align: center; }
+  header .pos .num { color: var(--paper); font-weight: 600; }
+  header .timer { font-family: var(--mono); font-size: 14px; color: var(--paper); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 12px; }
+  header .timer .lbl { font-size: 9px; letter-spacing: 0.20em; color: var(--paper-40); text-transform: uppercase; }
+  header .timer button { background: transparent; border: 1px solid var(--paper-20); color: var(--paper); font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; padding: 6px 11px; border-radius: 999px; cursor: pointer; transition: background 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 160ms var(--ease-out); }
+  @media (hover: hover) and (pointer: fine) { header .timer button:hover { background: var(--surface); border-color: var(--paper-40); } }
+  header .timer button:active { transform: scale(0.97); }
+  header .timer .running { color: var(--vermillion); }
+  main { padding: 24px 28px; display: grid; grid-template-rows: auto 1fr auto; gap: 18px; overflow: hidden; }
+  .slide-meta { font-family: var(--mono); font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--vermillion); display: flex; align-items: center; gap: 12px; }
+  .slide-meta .tick { width: 18px; height: 1px; background: var(--vermillion); display: inline-block; }
+  .note-current { font-family: var(--display); font-size: clamp(28px, 4vw, 44px); font-weight: 450; line-height: 1.22; letter-spacing: -0.012em; color: var(--paper); transition: opacity 240ms var(--ease-out); overflow-y: auto; text-wrap: pretty; }
+  .note-current.swap { opacity: 0; }
+  .next-up { border-top: 1px solid var(--line); padding-top: 14px; display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start; color: var(--paper-60); font-family: var(--sans); font-size: 14px; line-height: 1.5; }
+  .next-up .lbl { font-family: var(--mono); font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--paper-40); white-space: nowrap; padding-top: 3px; }
+  footer { padding: 14px 28px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 10px; letter-spacing: 0.20em; text-transform: uppercase; color: var(--paper-40); }
+  footer .nav { display: flex; gap: 6px; }
+  footer .nav button { background: transparent; border: 1px solid var(--paper-20); color: var(--paper); font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; padding: 7px 12px; border-radius: 999px; cursor: pointer; transition: background 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 160ms var(--ease-out); }
+  @media (hover: hover) and (pointer: fine) { footer .nav button:hover { background: var(--surface); border-color: var(--vermillion); } }
+  footer .nav button:active { transform: scale(0.97); }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 4px rgba(226,117,86,0.16); } 50% { box-shadow: 0 0 0 8px rgba(226,117,86,0.28); } 100% { box-shadow: 0 0 0 4px rgba(226,117,86,0.16); } }
+  .pulsing { animation: pulse 600ms var(--ease-out); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot" id="conn-dot"></span>SENDERO · NOTES</div>
+  <div class="pos"><span id="pos-eyebrow">Slide</span> · <span class="num" id="pos-num">— / —</span></div>
+  <div class="timer">
+    <span class="lbl">Elapsed</span>
+    <span id="elapsed">00:00</span>
+    <button type="button" id="timer-toggle">Start</button>
+    <button type="button" id="timer-reset">Reset</button>
+  </div>
+</header>
+<main>
+  <div class="slide-meta"><span class="tick"></span><span id="slide-label">— · —</span></div>
+  <div class="note-current" id="note-current">Open the deck in another window — this view will sync as you move between slides.</div>
+  <div class="next-up"><span class="lbl">Up next</span><span class="text" id="note-next">—</span></div>
+</main>
+<footer>
+  <span>2-MIN PITCH · KEYBOARD: ← → / SPACE / N</span>
+  <div class="nav"><button type="button" id="nav-prev">← Prev</button><button type="button" id="nav-next">Next →</button></div>
+</footer>
+<script>
+  const NOTES = [
+    "Sendero is the AI agent that does travel work. End to end. Charged per action, not per seat.",
+    "Travel ops today: six vendors, manual humans who quit in eighteen months, forty-year-old tech. The current market is a mess.",
+    "One agent runs the entire lifecycle — search, book, pay, support, ancillaries, expense, report. Multi-tenant, all channels, sixty seconds.",
+    "Live today. Six contracts verified on Arc. Three pilots in pipeline. End-to-end ninety seconds. MCP server open to any AI agent.",
+    "Every trip mints collectible NFT stamps. Painted by Gemini in fourteen seconds. Pinned to IPFS, minted on Arc. The collectible is the marketing surface.",
+    "Vertical AI agents replace SaaS — that's YC's bet, three hundred billion-dollar opportunities. Harvey did legal. Sierra did support. Sendero does travel.",
+    "If nobody travels, nobody pays. SaaS shell on top, nano-payments underneath. Both legs from day one. Two cents per search, a dollar per booking.",
+    "Eighty-person company, two hundred trips: twenty-eight thousand five hundred with a travel firm. Two thousand four hundred with us. Ninety-one percent.",
+    "One-point-nine trillion industry. One hundred eighty billion wedge in LATAM and Spain. Three-year target: five to sixteen million ARR.",
+    "Three paid pilots. Intros to LATAM finance leaders. Investors who get vertical AI. hola@sendero.travel.",
+  ];
+  const LABELS = [
+    "01 · Title",
+    "02 · Current problem",
+    "03 · Solution",
+    "04 · Where we are · live",
+    "05 · Living trip NFTs · Google × Arc",
+    "06 · The shift · vertical AI agents",
+    "07 · Pricing · if nobody travels, nobody pays",
+    "08 · The CFO math · 91%",
+    "09 · Total addressable",
+    "10 · The ask",
+  ];
+  const noteCurrent = document.getElementById('note-current');
+  const noteNext = document.getElementById('note-next');
+  const posNum = document.getElementById('pos-num');
+  const slideLabel = document.getElementById('slide-label');
+  const connDot = document.getElementById('conn-dot');
+  let currentIdx = 0; let totalSlides = NOTES.length;
+  function render(idx) {
+    const safe = Math.max(0, Math.min(NOTES.length - 1, idx));
+    currentIdx = safe;
+    posNum.textContent = `${String(safe + 1).padStart(2,'0')} / ${String(totalSlides).padStart(2,'0')}`;
+    slideLabel.textContent = LABELS[safe] || `${safe + 1} · —`;
+    noteCurrent.classList.add('swap');
+    setTimeout(() => { noteCurrent.textContent = NOTES[safe] || '—'; noteCurrent.classList.remove('swap'); }, 160);
+    noteNext.textContent = (safe + 1 < NOTES.length) ? NOTES[safe + 1] : '— end of deck —';
+    connDot.classList.add('pulsing'); setTimeout(() => connDot.classList.remove('pulsing'), 700);
+  }
+  const channel = ('BroadcastChannel' in window) ? new BroadcastChannel('sendero-pitch-deck') : null;
+  if (channel) {
+    channel.addEventListener('message', (msg) => {
+      const m = msg.data || {};
+      if (m.type === 'state' && typeof m.index === 'number') {
+        if (typeof m.total === 'number') totalSlides = m.total;
+        render(m.index);
+      }
+    });
+    setTimeout(() => channel.postMessage({ type: 'request-state' }), 200);
+  }
+  document.getElementById('nav-prev').addEventListener('click', () => { if (channel) channel.postMessage({ type: 'nav', dir: 'prev' }); });
+  document.getElementById('nav-next').addEventListener('click', () => { if (channel) channel.postMessage({ type: 'nav', dir: 'next' }); });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { if (channel) channel.postMessage({ type: 'nav', dir: 'prev' }); }
+    else if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); if (channel) channel.postMessage({ type: 'nav', dir: 'next' }); }
+    else if (e.key >= '1' && e.key <= '9') { const idx = parseInt(e.key, 10) - 1; if (channel) channel.postMessage({ type: 'goto', index: idx }); }
+    else if (e.key === '0') { if (channel) channel.postMessage({ type: 'goto', index: 9 }); }
+  });
+  const elapsed = document.getElementById('elapsed');
+  const toggle = document.getElementById('timer-toggle');
+  const reset = document.getElementById('timer-reset');
+  let startedAt = 0, accumMs = 0, ticking = null;
+  function fmt(ms) { const total = Math.max(0, Math.floor(ms / 1000)); const m = Math.floor(total / 60); const s = total % 60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+  function tick() { elapsed.textContent = fmt(accumMs + (Date.now() - startedAt)); if (accumMs + (Date.now() - startedAt) >= 120000) elapsed.classList.add('running'); }
+  toggle.addEventListener('click', () => {
+    if (ticking) { accumMs += Date.now() - startedAt; clearInterval(ticking); ticking = null; toggle.textContent = 'Start'; }
+    else { startedAt = Date.now(); ticking = setInterval(tick, 200); toggle.textContent = 'Pause'; }
+  });
+  reset.addEventListener('click', () => { if (ticking) { clearInterval(ticking); ticking = null; toggle.textContent = 'Start'; } accumMs = 0; startedAt = 0; elapsed.textContent = '00:00'; elapsed.classList.remove('running'); });
+  render(0);
+</script>
+</body>
+</html>

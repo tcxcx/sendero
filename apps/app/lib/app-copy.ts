@@ -127,7 +127,10 @@ export type DashboardCopy = {
 export type TripsCopy = {
   title: string;
   description: string;
+  /** Prefund-and-share CTA (creates an escrow + claim link). */
   createCta: string;
+  /** Plain create-trip CTA (Trip row only, no prefund). */
+  createTripCta: string;
   emptyTitle: string;
   emptyDescription: string;
 };
@@ -501,9 +504,10 @@ const EN_US: AppCopy = {
     description:
       'Create prepaid escrow links, send them to travelers, and monitor booking drawdown.',
     createCta: 'Create prepaid trip',
+    createTripCta: 'New trip',
     emptyTitle: 'No trips yet',
     emptyDescription:
-      'Create a prepaid trip, copy the claim link into WhatsApp or Slack, and let the traveler claim their Arc escrow budget.',
+      'Create a trip to scope booking work for a passenger, then optionally generate a prepaid claim link.',
   },
   invoices: {
     title: 'Invoices',
@@ -794,6 +798,7 @@ const ES_MX: AppCopy = {
     description:
       'Crea links de escrow prepagados, envíalos a viajeros y monitorea el consumo de reserva.',
     createCta: 'Crear viaje prepagado',
+    createTripCta: 'Nuevo viaje',
     emptyTitle: 'Todavía no hay viajes',
     emptyDescription:
       'Crea un viaje prepagado, copia el link a WhatsApp o Slack y deja que el viajero reclame su presupuesto Arc.',
@@ -1134,6 +1139,7 @@ const PT_BR: AppCopy = {
     description:
       'Crie links de escrow pré-pagos, envie aos viajantes e monitore o consumo da reserva.',
     createCta: 'Criar viagem pré-paga',
+    createTripCta: 'Nova viagem',
     emptyTitle: 'Ainda não há viagens',
     emptyDescription:
       'Crie uma viagem pré-paga, copie o link para WhatsApp ou Slack e deixe o viajante resgatar o orçamento Arc.',
