@@ -112,8 +112,17 @@ export function AgentChatClient({ tenantId }: Props) {
         onSubmit={(message, evt) => {
           evt.preventDefault();
           const text = (message.text || input).trim();
-          if (!text || busy) return;
-          void sendMessage({ text });
+          const files = message.files ?? [];
+          if ((!text && files.length === 0) || busy) return;
+          // Pass files alongside text — the AI SDK turns FileUIPart[] into
+          // image/file message parts the model sees natively. The agent
+          // routes them to `scan_document_auto` for kind detection +
+          // extraction (see lib/agent-system-prompt.ts).
+          if (files.length > 0) {
+            void sendMessage({ text: text || ' ', files });
+          } else {
+            void sendMessage({ text });
+          }
           setInput('');
         }}
         className="border-t border-border"

@@ -66,8 +66,7 @@ const DESTINATION = process.env.NEXT_PUBLIC_DEMO_TRIP_DESTINATION || 'MDZ';
 export const DEMO_TRIP_PROMPTS: ReadonlyArray<string> = [
   `Hi Sendero — I need a cheap flight from ${ORIGIN} to ${DESTINATION} this Friday. Quick weekend trip.`,
   `Yes, book the cheapest one and pay from my Duffel balance.`,
-  `Drip 5 USDC from the Sendero treasury to my passkey wallet so I can cover settlement, then settle the booking on Arc-Testnet.`,
-  `Mint the boarding pass NFT for the trip and the settlement receipt as a second stamp.`,
+  `Now mint a real boarding-pass NFT on Arc-Testnet for that booking. Use the demo_mint_boarding_pass tool — pass the PNR you just got from book_flight, the route as "${ORIGIN} → ${DESTINATION}", and a short caption. Return the explorer URL when done so I can verify on Arcscan.`,
   `Where can I have dinner near Plaza Independencia in Mendoza? Argentine parrilla preferred.`,
 ];
 
