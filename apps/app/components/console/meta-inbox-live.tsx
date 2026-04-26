@@ -29,6 +29,7 @@ import { useRouter } from 'next/navigation';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { Maximize2, Minimize2 } from 'lucide-react';
+import { useQueryState } from 'nuqs';
 
 import {
   Conversation,
@@ -103,9 +104,15 @@ export function MetaInboxLive({
   // upserts a `ChatSession` row + appends every UIMessage as a
   // `ChatMessage`. Lets the CHAT MODE tab list past sessions and
   // re-view them later.
-  const [chatSessionId] = useState(
+  //
+  // When the URL carries `?cs=<id>` (operator clicked a row in the
+  // CHAT MODE rail), we adopt that id instead so subsequent sends
+  // append to the same session. Falls back to a fresh id otherwise.
+  const [activeCs] = useQueryState('cs');
+  const [freshSessionId] = useState(
     () => `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
   );
+  const chatSessionId = activeCs ?? freshSessionId;
 
   // Memoize the transport so re-renders don't reset useChat state.
   // The body callback closes over scopedTripId so we re-create when
@@ -126,7 +133,7 @@ export function MetaInboxLive({
   // useChat drives the internal-mode AI Elements stream. It mounts
   // regardless of mode so the agent remains running in the background
   // even while the operator is typing into the channel composer.
-  const { messages, sendMessage, status, error, stop } = useChat({
+  const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     transport,
     onError: err => {
       console.error('[meta-inbox-live] useChat onError:', err);
@@ -159,6 +166,34 @@ export function MetaInboxLive({
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  // Resume past chats. When `?cs=<id>` flips (rail row click), fetch
+  // that session's full UIMessage[] and seed useChat's state so the
+  // conversation rehydrates inline — no page reload, no overlay flash.
+  // Cleared back to [] when the operator returns to a fresh session.
+  useEffect(() => {
+    if (!activeCs) {
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await fetch(`/api/chats/${encodeURIComponent(activeCs)}`, {
+          cache: 'no-store',
+        });
+        if (!r.ok) return;
+        const json = (await r.json()) as { ok: boolean; messages?: UIMessage[] };
+        if (cancelled) return;
+        if (json.ok && Array.isArray(json.messages)) setMessages(json.messages);
+      } catch (err) {
+        console.warn('[meta-inbox-live] resume fetch failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCs, setMessages]);
 
   // Diagnostic logs — surface chat status, message count, and any
   // streaming error in the console so we can see at a glance whether

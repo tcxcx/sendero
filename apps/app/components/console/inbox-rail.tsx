@@ -19,6 +19,7 @@
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useQueryState } from 'nuqs';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -109,6 +110,10 @@ interface ChatSessionRow {
 function ChatHistoryList() {
   const [sessions, setSessions] = useState<ChatSessionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // `cs` lives in the URL so reloads / shared links resume. nuqs
+  // defaults to shallow (history.replaceState) so clicks don't
+  // re-fetch the dashboard RSC tree or fire the loading.tsx overlay.
+  const [activeCs, setActiveCs] = useQueryState('cs');
 
   // Stable refetch fn — pulled out so the SSE subscriber + intra-tab
   // BroadcastChannel listener can both call it. `useCallback` so the
@@ -237,15 +242,27 @@ function ChatHistoryList() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '4px 0' }}>
       {sessions.map(s => (
-        <a
+        <button
           key={s.id}
-          href={`/dashboard/console?cs=${s.id}`}
+          type="button"
+          onClick={() => {
+            void setActiveCs(s.id);
+          }}
           style={{
             display: 'block',
+            width: '100%',
             padding: '8px 10px',
             borderRadius: 8,
             textDecoration: 'none',
             color: 'inherit',
+            textAlign: 'left',
+            background:
+              activeCs === s.id
+                ? 'color-mix(in oklab, var(--ink) 8%, transparent)'
+                : 'transparent',
+            border: 0,
+            cursor: 'pointer',
+            font: 'inherit',
           }}
         >
           <div
@@ -332,7 +349,7 @@ function ChatHistoryList() {
               </span>
             ) : null}
           </div>
-        </a>
+        </button>
       ))}
     </div>
   );
