@@ -48,19 +48,27 @@ export function SearchForm({
   const [contentRef, contentHovered] = useHover<HTMLDivElement>();
   const rawHoverIntent = triggerHovered || contentHovered;
 
-  // Only count hover as intent AFTER the user has demonstrated they
-  // know where the cursor is — i.e. after a pointer-leave on the
-  // trigger. Without this, navigating between pages while the cursor
-  // happens to be over the trigger auto-opens the palette on the new
-  // page, which feels like a UI ghost. Reset on every pathname change
-  // so each new page requires a fresh leave→enter cycle.
-  const [hasLeftSinceMount, setHasLeftSinceMount] = useState(false);
+  // Only count hover as intent AFTER an explicit enter event on the
+  // trigger (or the panel) since the last pathname change. Without this
+  // gate, navigating between pages can leave a stale-positive hover
+  // state that auto-opens the palette over the new page — a UI ghost.
+  //
+  // Implementation: track previous values of triggerHovered/contentHovered
+  // and flip `hasIntent` true only on a `false → true` transition.
+  // Pure-mount renders (where useHover starts at false) never flip the
+  // gate; only an actual pointer-enter does. Pathname change resets the
+  // gate AND the previous-value refs so each new page starts fresh.
+  const prevTriggerRef = useRef(false);
+  const prevContentRef = useRef(false);
+  const [hasIntent, setHasIntent] = useState(false);
   useEffect(() => {
-    if (!triggerHovered && !hasLeftSinceMount) {
-      setHasLeftSinceMount(true);
-    }
-  }, [triggerHovered, hasLeftSinceMount]);
-  const hoverIntent = hasLeftSinceMount && rawHoverIntent;
+    const triggerEntered = !prevTriggerRef.current && triggerHovered;
+    const contentEntered = !prevContentRef.current && contentHovered;
+    prevTriggerRef.current = triggerHovered;
+    prevContentRef.current = contentHovered;
+    if (triggerEntered || contentEntered) setHasIntent(true);
+  }, [triggerHovered, contentHovered]);
+  const hoverIntent = hasIntent && rawHoverIntent;
 
   // `manualOpen` is sticky state for ⌘K / click / focus. `hoverIntent`
   // is transient. The Radix open is `manualOpen || hoverIntent`, but
@@ -80,7 +88,9 @@ export function SearchForm({
   useEffect(() => {
     setManualOpen(false);
     setOpen(false);
-    setHasLeftSinceMount(false);
+    setHasIntent(false);
+    prevTriggerRef.current = false;
+    prevContentRef.current = false;
   }, [pathname, setOpen]);
 
   // Drive the global store from local derived state. A single effect
