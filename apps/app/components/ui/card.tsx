@@ -52,4 +52,28 @@ const CardFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardFooter.displayName = 'CardFooter';
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };
+// Modern shadcn Card v2 slot — top-right action area inside CardHeader.
+// Added so AI Elements (`plan.tsx` etc.) that target the v2 API compile
+// against this older Card implementation. Layout sized to live in a
+// 2-column header grid; falls back gracefully if the parent isn't a grid.
+const CardAction = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-slot="card-action"
+      className={cn('col-start-2 row-span-2 row-start-1 self-start justify-self-end', className)}
+      {...props}
+    />
+  )
+);
+CardAction.displayName = 'CardAction';
+
+export {
+  Card,
+  CardAction,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardDescription,
+  CardContent,
+};

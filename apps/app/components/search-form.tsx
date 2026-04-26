@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Search } from 'lucide-react';
 
@@ -55,6 +56,22 @@ export function SearchForm({
 
   useSearchHotkey(() => setManualOpen(true));
 
+  // Close the palette on route change AND suppress hover-driven re-open
+  // for a short window. Without the suppression: when the user clicks a
+  // sidebar link, the cursor is often still over the search trigger as
+  // the new page mounts — `useHover` then reports `true` immediately,
+  // re-opening the palette uninvited over the new page. The suppress
+  // window gives the user time to either move on or actually hover.
+  const pathname = usePathname();
+  const [suppressHover, setSuppressHover] = useState(false);
+  useEffect(() => {
+    setManualOpen(false);
+    setOpen(false);
+    setSuppressHover(true);
+    const timer = setTimeout(() => setSuppressHover(false), 600);
+    return () => clearTimeout(timer);
+  }, [pathname, setOpen]);
+
   // Drive the global store from local derived state. A single effect
   // so we don't get stuck with open=true after the user moves away.
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,7 +80,11 @@ export function SearchForm({
       clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
     }
-    if (manualOpen || hoverIntent) {
+    // During the post-navigation suppress window, only an explicit
+    // user gesture (manualOpen via click / ⌘K) can open the palette.
+    // Stale hover state from before the navigation no longer counts.
+    const effectiveHover = suppressHover ? false : hoverIntent;
+    if (manualOpen || effectiveHover) {
       setOpen(true);
       return;
     }
@@ -77,7 +98,7 @@ export function SearchForm({
         closeTimerRef.current = null;
       }
     };
-  }, [manualOpen, hoverIntent, setOpen]);
+  }, [manualOpen, hoverIntent, suppressHover, setOpen]);
 
   return (
     <SidebarGroup className={className ? `py-0 ${className}` : 'py-0'}>
