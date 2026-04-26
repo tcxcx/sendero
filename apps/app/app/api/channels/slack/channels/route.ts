@@ -30,9 +30,17 @@ export async function GET(req: NextRequest) {
   }
   const tool = tools.slack_list_workspace_channels;
   if (!tool) return NextResponse.json({ error: 'tool_unavailable' }, { status: 500 });
-  const result = (await tool.handler({ installId })) as {
-    channels: Array<{ id: string; name: string; isPrivate: boolean }>;
-    nextCursor: string | null;
-  };
-  return NextResponse.json(result);
+  try {
+    const result = (await tool.handler({ installId })) as {
+      channels: Array<{ id: string; name: string; isPrivate: boolean }>;
+      nextCursor: string | null;
+    };
+    return NextResponse.json(result);
+  } catch (err) {
+    // Slack throws when the bot token lacks `channels:read` / `groups:read`.
+    // Degrade gracefully: empty list lets the pane render its "missing
+    // scope?" hint instead of the Next.js 500 page.
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ channels: [], nextCursor: null, error: message });
+  }
 }
