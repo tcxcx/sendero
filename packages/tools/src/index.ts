@@ -31,6 +31,7 @@ import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
 import { findAirportsNearbyTool } from './find-airports-nearby';
 import { mintStampTool, refreshStampUriTool } from './mint-stamp';
+import { demoMintBoardingPassTool } from './demo-mint-boarding-pass';
 import {
   kapsoActivatePhoneNumberTool,
   kapsoListNumbersTool,
@@ -383,6 +384,10 @@ export const toolList: ToolDef[] = [
   // NFT stamps (Arc-Testnet ERC-1155 souvenirs via Circle SCP template)
   mintStampTool,
   refreshStampUriTool,
+  // Demo-only tool for the /demo trip console flow. Gated to envs where
+  // NEXT_PUBLIC_DEMO_TRIP_ENABLED === 'true'. The agent can call this even
+  // for users without a passkey wallet because it routes to org treasury.
+  demoMintBoardingPassTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */
