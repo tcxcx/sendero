@@ -1,0 +1,52 @@
+name: Edge Worker Health Probe
+
+# Continuously verifies the sendero-arc-edge Cloudflare Worker is alive
+# and within latency SLO, independent of CI/CD. Failures open a labeled
+# incident issue; recovery closes it. Read-only — never deploys.
+
+on:
+  schedule:
+    # Every 5 minutes. Justification for 5 vs 1:
+    # - Cloudflare Workers cold-start budget is <50ms; we don't need
+    #   sub-minute resolution to detect outages.
+    # - GitHub Actions schedule has minute-level skew (jobs can drift
+    #   3-10 min during peak hours). Tighter cadence wastes minutes
+    #   without improving real MTTD.
+    # - 5-min covers SLA-class detection: at 99.9% uptime we tolerate
+    #   ~43min/month downtime; one missed probe still flags within SLO.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: edge-health
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  probe:
+    name: Probe /health
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check pause flag
+        # Repo variable EDGE_HEALTH_PAUSE=1 disables the probe without
+        # editing this file (e.g., during a planned outage / maintenance).
+        if: ${{ vars.EDGE_HEALTH_PAUSE == '1' }}
+        run: |
+          echo "EDGE_HEALTH_PAUSE=1 — skipping probe."
+          exit 0
+
+      - uses: actions/checkout@v4
+        if: ${{ vars.EDGE_HEALTH_PAUSE != '1' }}
+
+      - name: Run health check
+        if: ${{ vars.EDGE_HEALTH_PAUSE != '1' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEALTH_URL: ${{ vars.EDGE_HEALTH_URL || 'https://sendero-arc-edge.tomas-cordero-esp.workers.dev/health' }}
+        run: bash scripts/edge-health-check.sh

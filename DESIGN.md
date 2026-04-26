@@ -258,6 +258,73 @@ Editorial, elegant, legible, slightly literary, premium but not ornate.
 
 Travel magazine meets intelligent product company.
 
+#### Type Stack — four faces, four CSS variables
+
+The canonical face system lives in [`@sendero/fonts`](./packages/fonts) and is mounted on `<html>` in every Next app via `senderoFontVars`. All four CSS custom properties are available everywhere — apps, marketing, docs, help, Storybook.
+
+| Variable | Face | License | When to reach for it |
+|---|---|---|---|
+| `var(--sans)` / `var(--font-geist-sans)` | **Geist** | OFL (Vercel) | UI body, buttons, labels, paragraph copy, table cells. The default. |
+| `var(--display)` / `var(--font-display)` | **Fraunces** variable | OFL | Hero h1s, marketing section h2s, docs page titles, onboarding headlines, oversized numerals. The editorial moment, never body. |
+| `var(--mono)` / `var(--font-mono)` | **Geist Mono** | OFL (Vercel) | Inline code, dense tabular data, anything functional that needs monospace. |
+| `var(--mono-x)` / `var(--font-mono-x)` | **IoskeleyMono** | OFL (Iosevka build by ahatem) | The character mono. Eyebrows, ALL-CAPS micro-type, `.label` / `.tag`, breadcrumbs, tx-hash chips, terminal-style stamps. Berkeley-Mono–shaped without the license. |
+
+#### When to use each — decision rules
+
+- **Editorial display moment?** Hero, marketing section h2, onboarding `<h1>`, docs page title → **Fraunces** (`var(--display)`). Pair with `font-weight: 450`, `letter-spacing: -0.012em`, `text-wrap: balance`. Never use Fraunces below 22px.
+- **Body, button, label, paragraph?** → **Geist** (`var(--sans)`). Default, no opt-in needed.
+- **Mono with character — uppercase + tracking, eyebrow, nav, tag, label, tx hash, status pill?** → **IoskeleyMono** (`var(--mono-x)`). The signal is `text-transform: uppercase` + `letter-spacing: 0.08em–0.14em` + `font-size: 9–12px`.
+- **Mono without character — inline code, table cell with money, raw JSON, kbd, address?** → **Geist Mono** (`var(--mono)`). Functional, neutral, dense.
+
+#### Code examples
+
+```css
+/* Editorial display headline */
+.hero h1 {
+  font-family: var(--display);
+  font-size: clamp(42px, 6.4vw, 76px);
+  font-weight: 450;
+  letter-spacing: -0.015em;
+  line-height: 1.01;
+  text-wrap: balance;
+  font-feature-settings: "ss01" on;
+}
+
+/* Eyebrow / ALL-CAPS label */
+.eyebrow {
+  font-family: var(--mono-x);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* Inline tx hash chip — functional mono */
+.tx-hash {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-feature-settings: "ss05";
+  letter-spacing: 0.01em;
+}
+
+/* Body copy — no font-family declaration needed; inherits from Geist */
+p { color: var(--text); line-height: 1.6; }
+```
+
+#### Anti-patterns
+
+- ❌ Fraunces on body or buttons. It's a display face, not a UI face.
+- ❌ IoskeleyMono in dense tables of numeric values — Geist Mono's tabular figures land cleaner.
+- ❌ Mixing both monos in the same component. Pick one per surface.
+- ❌ Hardcoding `"Geist"`, `"Fraunces"`, or `"IoskeleyMono"` font-family literals. Always go through the CSS variable so the fallback chain works in Storybook and SSR-only contexts.
+- ❌ Creating a fifth face. The four-variable contract is the system; if a design needs a different vibe, get there with weight, size, tracking, color — not a new family.
+
+#### Loading + fallbacks
+
+`next/font/local` ships Fraunces (variable TTF) and IoskeleyMono (woff2, four weights) self-hosted from `packages/fonts/assets/`. Both are configured `preload: false` — they're loaded on-demand the first time their CSS variable is referenced, so a page that only uses Geist pays no extra network cost. Geist + Geist Mono come from the `geist` npm package and are preloaded by every layout.
+
+Storybook mirrors the same variable contract via `apps/storybook/.storybook/preview-head.html`: Geist + Fraunces from Google Fonts CDN; IoskeleyMono falls back to Geist Mono in stories (the real apps still get Ioskeley because next/font stamps it on `<html>`).
+
 #### Opacity Scale for Type
 
 Use midnight at varying alpha instead of grey ramps:

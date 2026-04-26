@@ -64,3 +64,24 @@ NEXT_PUBLIC_SENDERO_EDGE_URL=https://preview.edge.sendero.travel
 ```
 
 The landing page does not currently read this; the quickstart examples use shell env vars directly.
+
+## Production deploys — rolling releases
+
+Config: [`.rolling-release.json`](./.rolling-release.json).
+
+| Stage | Traffic | Bake time |
+|---|---|---|
+| 1 | 25% | 15 min |
+| 2 | 100% | — |
+
+Two-stage rollout — the docs site is read-mostly so a long bake doesn't pay off, but a quarter-traffic stage still catches the catastrophic-render case.
+
+**Deploy:**
+
+```bash
+bun run deploy:docs                  # from repo root
+bun run deploy:rolling:status:docs
+bun run deploy:rolling:abort:docs    # if the canary breaks
+```
+
+See the root [README.md](../../README.md#rolling-releases-on-vercel--gradual-production-rollouts) for the full rolling-releases playbook.

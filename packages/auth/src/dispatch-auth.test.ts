@@ -641,3 +641,43 @@ describe('end-to-end: MCP caller signs + server verifies + response round-trips'
     expect(hasScope(DEFAULT_PROD_SCOPES, 'treasury')).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Audience filter — operator-only tools never leak to channels / MCP
+// ─────────────────────────────────────────────────────────────────────
+
+describe('audience filter', () => {
+  test('every kapso_* tool is internal', () => {
+    const kapso = toolList.filter(t => t.name.startsWith('kapso_'));
+    expect(kapso.length).toBeGreaterThan(0);
+    for (const t of kapso) {
+      expect(t.internal).toBe(true);
+    }
+  });
+
+  test('every slack_* tool is internal', () => {
+    const slack = toolList.filter(t => t.name.startsWith('slack_'));
+    expect(slack.length).toBeGreaterThan(0);
+    for (const t of slack) {
+      expect(t.internal).toBe(true);
+    }
+  });
+
+  test('customer-facing tools (search, book, treasury, etc.) are NOT internal', () => {
+    const customerFacing = [
+      'search_flights',
+      'search_hotels',
+      'book_flight',
+      'check_treasury',
+      'send_tokens',
+      'scan_document',
+      'check_travel_eligibility',
+      'restaurant_route_card',
+    ];
+    for (const name of customerFacing) {
+      const tool = toolList.find(t => t.name === name);
+      expect(tool).toBeDefined();
+      expect(tool?.internal).not.toBe(true);
+    }
+  });
+});

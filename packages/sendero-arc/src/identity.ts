@@ -77,16 +77,19 @@ async function waitForCircleTx(txId: string, label: string, timeoutMs = 120_000)
 }
 
 async function execContract(params: {
-  walletAddress: string;
+  walletId: string;
   contractAddress: Address;
   abiFunctionSignature: string;
   abiParameters: unknown[];
   label: string;
 }): Promise<{ txId: string; txHash: Hex }> {
   const circle = getCircle();
+  // Circle's `createContractExecutionTransaction` accepts EITHER `walletId`
+  // (UUID, requires no `blockchain`) OR `walletAddress` (0x… on-chain address,
+  // requires `blockchain`). We pass UUIDs everywhere — sending a UUID into
+  // `walletAddress` produces "Cannot find target wallet" (code 156001).
   const response = await circle.createContractExecutionTransaction({
-    walletAddress: params.walletAddress,
-    blockchain: 'ARC-TESTNET' as any,
+    walletId: params.walletId,
     contractAddress: params.contractAddress,
     abiFunctionSignature: params.abiFunctionSignature,
     abiParameters: params.abiParameters as any,
@@ -110,7 +113,7 @@ export async function registerAgent(params: {
   metadataURI: string;
 }): Promise<{ agentId: bigint; txHash: Hex }> {
   const result = await execContract({
-    walletAddress: params.ownerWalletAddress,
+    walletId: params.ownerWalletAddress,
     contractAddress: IDENTITY_REGISTRY,
     abiFunctionSignature: 'register(string)',
     abiParameters: [params.metadataURI],
@@ -142,6 +145,117 @@ export async function registerAgent(params: {
     }
   }
   throw new Error(`No Transfer event to owner found in tx ${result.txHash}`);
+}
+
+// ─── SenderoStamps (ERC-1155 souvenirs via Circle SCP template) ─────────────
+
+/// Sentinel: thirdweb's TokenERC1155.mintTo accepts type(uint256).max as a
+/// "create new tokenId" signal — the contract auto-increments and emits the
+/// real assigned tokenId on the TokensMinted event. Any other value must
+/// be an existing tokenId (`< nextTokenIdToMint`) for "add quantity to
+/// existing class id" semantics (used for group TripPassport — N units to N
+/// distinct recipients of the same class id).
+export const STAMP_NEW_TOKEN_ID = (1n << 256n) - 1n;
+
+/**
+ * Topic0 of TokensMinted(address indexed mintedTo, uint256 indexed tokenIdMinted, string uri, uint256 quantityMinted).
+ * Used by mint_stamp to extract the assigned tokenId from the deployment
+ * tx receipt when the sentinel was passed.
+ */
+const TOKENS_MINTED_EVENT = {
+  type: 'event',
+  name: 'TokensMinted',
+  inputs: [
+    { indexed: true, name: 'mintedTo', type: 'address' },
+    { indexed: true, name: 'tokenIdMinted', type: 'uint256' },
+    { indexed: false, name: 'uri', type: 'string' },
+    { indexed: false, name: 'quantityMinted', type: 'uint256' },
+  ],
+} as const;
+
+/**
+ * Mint into the SenderoStamps ERC-1155 collection (Circle SCP template,
+ * thirdweb TokenERC1155 implementation). Treasury wallet signs; gas is
+ * sponsored by Circle Gas Station per the project policy.
+ *
+ *   - Pass `tokenId = STAMP_NEW_TOKEN_ID` for a fresh class id (the
+ *     contract auto-increments and the real id is parsed from the
+ *     TokensMinted event).
+ *   - Pass an existing `tokenId` to add `amount` units to that class
+ *     (used for group TripPassport — same passport id distributed to
+ *     multiple traveler DCWs via repeated mintTo calls).
+ *
+ * Returns `{ tokenId, txHash, txId }` where `tokenId` is the canonical
+ * class id (assigned or echoed back).
+ */
+export async function mintStamp(params: {
+  treasuryWalletId: string;
+  contractAddress: Address;
+  to: Address;
+  tokenId: bigint;
+  uri: string;
+  amount: bigint;
+}): Promise<{ tokenId: bigint; txHash: Hex; txId: string }> {
+  const result = await execContract({
+    walletId: params.treasuryWalletId,
+    contractAddress: params.contractAddress,
+    abiFunctionSignature: 'mintTo(address,uint256,string,uint256)',
+    abiParameters: [params.to, params.tokenId.toString(), params.uri, params.amount.toString()],
+    label: `mintStamp:${params.tokenId === STAMP_NEW_TOKEN_ID ? 'new' : params.tokenId.toString()}`,
+  });
+
+  // For "add quantity to existing tokenId", we already know the id —
+  // skip the receipt parse.
+  if (params.tokenId !== STAMP_NEW_TOKEN_ID) {
+    return { tokenId: params.tokenId, txHash: result.txHash, txId: result.txId };
+  }
+
+  // Sentinel mint — read the assigned tokenId off the TokensMinted event.
+  const publicClient = getArcClient();
+  const receipt = await publicClient.getTransactionReceipt({ hash: result.txHash });
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== params.contractAddress.toLowerCase()) continue;
+    try {
+      const decoded = decodeEventLog({
+        abi: [TOKENS_MINTED_EVENT],
+        data: (log as any).data,
+        topics: (log as any).topics,
+      }) as any;
+      if (decoded.eventName === 'TokensMinted') {
+        const { mintedTo, tokenIdMinted } = decoded.args as {
+          mintedTo: Address;
+          tokenIdMinted: bigint;
+        };
+        if (mintedTo.toLowerCase() === params.to.toLowerCase()) {
+          return { tokenId: tokenIdMinted, txHash: result.txHash, txId: result.txId };
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  throw new Error(`mintStamp: no TokensMinted event found in tx ${result.txHash}`);
+}
+
+/**
+ * Update the tokenURI for an existing SenderoStamps class id. Used by
+ * the ItineraryMap kind as new flight legs are added — the same class
+ * id stays, the IPFS manifest CID changes.
+ */
+export async function refreshStampUri(params: {
+  treasuryWalletId: string;
+  contractAddress: Address;
+  tokenId: bigint;
+  newUri: string;
+}): Promise<{ txHash: Hex; txId: string }> {
+  const result = await execContract({
+    walletId: params.treasuryWalletId,
+    contractAddress: params.contractAddress,
+    abiFunctionSignature: 'setTokenURI(uint256,string)',
+    abiParameters: [params.tokenId.toString(), params.newUri],
+    label: `refreshStampUri:${params.tokenId.toString()}`,
+  });
+  return { txHash: result.txHash, txId: result.txId };
 }
 
 /**
@@ -203,7 +317,7 @@ export async function giveFeedback(params: {
 }): Promise<{ txId: string; txHash: Hex }> {
   const feedbackHash = keccak256(toHex(params.tag));
   return execContract({
-    walletAddress: params.validatorWalletAddress,
+    walletId: params.validatorWalletAddress,
     contractAddress: REPUTATION_REGISTRY,
     abiFunctionSignature: 'giveFeedback(uint256,int128,uint8,string,string,string,string,bytes32)',
     abiParameters: [
@@ -342,4 +456,125 @@ export function invalidateReputationCache(agentId?: bigint): void {
   } else {
     REPUTATION_CACHE.delete(agentId.toString());
   }
+}
+
+// ─── ERC-8004 ValidationRegistry ─────────────────────────────────────────────
+
+const VALIDATION_ABI = [
+  {
+    name: 'getValidationStatus',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'requestHash', type: 'bytes32' }],
+    outputs: [
+      { name: 'validatorAddress', type: 'address' },
+      { name: 'agentId', type: 'uint256' },
+      { name: 'response', type: 'uint8' },
+      { name: 'responseHash', type: 'bytes32' },
+      { name: 'tag', type: 'string' },
+      { name: 'lastUpdate', type: 'uint256' },
+    ],
+  },
+] as const;
+
+/**
+ * Two-step validation flow per the ERC-8004 quickstart.
+ *
+ *   - Owner (any wallet) calls validationRequest(validator, agentId, requestURI, requestHash).
+ *   - Validator wallet replies with validationResponse(requestHash, response, responseURI,
+ *     responseHash, tag). 100 = passed, 0 = failed.
+ *
+ * Used for KYC/KYB checks today; the same primitive can carry suitability, eligibility,
+ * or any "this counterparty was validated by X" claim.
+ */
+export async function requestValidation(params: {
+  ownerWalletAddress: string;
+  validatorAddress: Address;
+  agentId: bigint;
+  requestURI: string;
+  requestHash: Hex;
+}): Promise<{ txId: string; txHash: Hex }> {
+  return execContract({
+    walletId: params.ownerWalletAddress,
+    contractAddress: VALIDATION_REGISTRY,
+    abiFunctionSignature: 'validationRequest(address,uint256,string,bytes32)',
+    abiParameters: [
+      params.validatorAddress,
+      params.agentId.toString(),
+      params.requestURI,
+      params.requestHash,
+    ],
+    label: 'validationRequest',
+  });
+}
+
+export async function submitValidationResponse(params: {
+  validatorWalletAddress: string;
+  requestHash: Hex;
+  /** 100 = passed, 0 = failed. */
+  response: 0 | 100;
+  tag: string;
+  responseURI?: string;
+}): Promise<{ txId: string; txHash: Hex }> {
+  return execContract({
+    walletId: params.validatorWalletAddress,
+    contractAddress: VALIDATION_REGISTRY,
+    abiFunctionSignature: 'validationResponse(bytes32,uint8,string,bytes32,string)',
+    abiParameters: [
+      params.requestHash,
+      params.response.toString(),
+      params.responseURI ?? '',
+      `0x${'0'.repeat(64)}`,
+      params.tag,
+    ],
+    label: 'validationResponse',
+  });
+}
+
+export interface ValidationStatus {
+  validatorAddress: Address;
+  agentId: bigint;
+  response: number;
+  responseHash: Hex;
+  tag: string;
+  lastUpdate: bigint;
+}
+
+export async function getValidationStatus(requestHash: Hex): Promise<ValidationStatus | null> {
+  const publicClient = getArcClient();
+  try {
+    // viem 2.x typings now require an authorizationList field; cast
+    // through any to keep the call shape compatible across versions.
+    const result = (await (publicClient.readContract as any)({
+      address: VALIDATION_REGISTRY,
+      abi: VALIDATION_ABI,
+      functionName: 'getValidationStatus',
+      args: [requestHash],
+    })) as readonly [Address, bigint, number, Hex, string, bigint];
+    return {
+      validatorAddress: result[0],
+      agentId: result[1],
+      response: result[2],
+      responseHash: result[3],
+      tag: result[4],
+      lastUpdate: result[5],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compute a deterministic requestHash for a validation flow. Mirrors the
+ * pattern in Circle's quickstart: keccak(`<tag>_request_agent_<agentId>`).
+ * Callers can override by passing a custom seed to keep multiple
+ * validations for the same agent distinct.
+ */
+export function computeValidationRequestHash(args: {
+  agentId: bigint;
+  tag: string;
+  seed?: string;
+}): Hex {
+  const seed = args.seed ?? Date.now().toString(36);
+  return keccak256(toHex(`${args.tag}_request_agent_${args.agentId}_${seed}`));
 }

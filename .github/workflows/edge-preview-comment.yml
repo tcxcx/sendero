@@ -1,0 +1,260 @@
+# Auto-comments the Cloudflare Workers preview URL on the open PR
+# after the corresponding CF Workers Builds run finishes.
+#
+# Required secret: CLOUDFLARE_API_TOKEN
+# Scope: Account -> Workers Scripts -> Read (for the sendero-arc-edge worker only).
+# Generate at https://dash.cloudflare.com/profile/api-tokens.
+# If the secret is missing, the workflow fails soft with an explanatory comment.
+
+name: Edge preview comment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+concurrency:
+  group: edge-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: read
+
+env:
+  CF_ACCOUNT_ID: 67f97ad58ab9673c26f9f5a2c27c99da
+  CF_WORKER_NAME: sendero-arc-edge
+  CF_WORKER_HOST: tomas-cordero-esp.workers.dev
+
+jobs:
+  compute-url:
+    runs-on: ubuntu-latest
+    outputs:
+      branch_slug: ${{ steps.slug.outputs.branch_slug }}
+      alias_url: ${{ steps.slug.outputs.alias_url }}
+    steps:
+      - name: Compute branch slug + alias URL
+        id: slug
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          # Lowercase, replace `/` with `-`, strip non-alphanumeric except `-`,
+          # collapse repeated dashes, trim leading/trailing dashes.
+          slug=$(printf '%s' "$HEAD_REF" \
+            | tr '[:upper:]' '[:lower:]' \
+            | tr '/' '-' \
+            | sed -E 's/[^a-z0-9-]+/-/g' \
+            | sed -E 's/-+/-/g' \
+            | sed -E 's/^-+|-+$//g')
+          if [ -z "$slug" ]; then
+            echo "Empty branch slug derived from HEAD_REF=$HEAD_REF" >&2
+            exit 1
+          fi
+          alias="https://${slug}-${CF_WORKER_NAME}.${CF_WORKER_HOST}"
+          echo "branch_slug=$slug" >> "$GITHUB_OUTPUT"
+          echo "alias_url=$alias" >> "$GITHUB_OUTPUT"
+          echo "Resolved alias: $alias"
+
+  wait-and-comment:
+    runs-on: ubuntu-latest
+    needs: compute-url
+    steps:
+      - name: Poll Cloudflare build + post sticky comment
+        id: poll
+        uses: actions/github-script@v7
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
+          CF_WORKER_NAME: ${{ env.CF_WORKER_NAME }}
+          CF_WORKER_HOST: ${{ env.CF_WORKER_HOST }}
+          ALIAS_URL: ${{ needs.compute-url.outputs.alias_url }}
+          BRANCH_SLUG: ${{ needs.compute-url.outputs.branch_slug }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          result-encoding: string
+          script: |
+            const {
+              CF_API_TOKEN,
+              CF_ACCOUNT_ID,
+              CF_WORKER_NAME,
+              CF_WORKER_HOST,
+              ALIAS_URL,
+              BRANCH_SLUG,
+              PR_HEAD_SHA,
+            } = process.env;
+            const shortSha = (PR_HEAD_SHA || '').slice(0, 7);
+            const dashboardBuildsUrl =
+              `https://dash.cloudflare.com/${CF_ACCOUNT_ID}/workers/services/view/${CF_WORKER_NAME}/production/builds`;
+
+            const fmtDuration = (sec) => {
+              if (sec == null || Number.isNaN(sec)) return 'n/a';
+              const s = Math.max(0, Math.round(Number(sec)));
+              const m = Math.floor(s / 60);
+              const r = s % 60;
+              return m > 0 ? `${m}m ${r}s` : `${r}s`;
+            };
+
+            const buildBody = ({ status, alias, version, duration, commitSubject, note }) => {
+              const lines = [];
+              lines.push('<!-- sendero-edge-preview -->');
+              lines.push('### Cloudflare Worker preview');
+              lines.push('');
+              lines.push('| Field | Value |');
+              lines.push('| --- | --- |');
+              lines.push(`| **Alias URL** | ${alias} |`);
+              if (version) lines.push(`| **Version URL** | ${version} |`);
+              lines.push(`| **Build** | ${status} |`);
+              if (commitSubject) {
+                lines.push(`| **Commit** | \`${shortSha}\` ${commitSubject} |`);
+              } else if (shortSha) {
+                lines.push(`| **Commit** | \`${shortSha}\` |`);
+              }
+              lines.push('');
+              lines.push(`_Auto-updated on each push. Worker: \`${CF_WORKER_NAME}\`._`);
+              if (note) {
+                lines.push('');
+                lines.push(`> ${note}`);
+              }
+              return lines.join('\n');
+            };
+
+            // Fail-soft: missing CF token. Post alias-only comment and exit.
+            if (!CF_API_TOKEN) {
+              core.warning('CLOUDFLARE_API_TOKEN secret missing — posting alias-only comment.');
+              core.setOutput('body', buildBody({
+                status: 'pending (no API token)',
+                alias: ALIAS_URL,
+                note: 'CLOUDFLARE_API_TOKEN is not configured on this repo, so build status + version URL are unavailable. The alias URL above will resolve once Cloudflare finishes deploying this branch.',
+              }));
+              return;
+            }
+
+            const apiBase = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/workers/scripts/${CF_WORKER_NAME}/builds`;
+            const headers = {
+              Authorization: `Bearer ${CF_API_TOKEN}`,
+              'Content-Type': 'application/json',
+            };
+
+            const fetchBuilds = async () => {
+              let res;
+              try {
+                res = await fetch(`${apiBase}?per_page=20`, { headers });
+              } catch (err) {
+                core.warning(`CF builds API fetch threw: ${err && err.message}`);
+                return null;
+              }
+              const rawText = await res.text();
+              if (!res.ok) {
+                core.warning(`CF builds API returned ${res.status}: ${rawText.slice(0, 300)}`);
+                return null;
+              }
+              let json;
+              try {
+                json = JSON.parse(rawText);
+              } catch (err) {
+                core.warning(
+                  `CF builds API returned non-JSON (status ${res.status}, ` +
+                  `content-type ${res.headers.get('content-type')}): ` +
+                  `${rawText.slice(0, 300)}`
+                );
+                return null;
+              }
+              if (!json || json.success === false) {
+                core.warning(`CF builds API error: ${JSON.stringify(json && json.errors)}`);
+                return null;
+              }
+              return json.result || [];
+            };
+
+            // CF Workers Builds API uses camelCase (commitHash, buildOutcome, ...)
+            // The snake_case fallbacks stay in case CF backports a v5 schema later.
+            const pick = (b, ...keys) => {
+              for (const k of keys) if (b && b[k] != null) return b[k];
+              return null;
+            };
+
+            const matchBuild = (builds) =>
+              (builds || []).find((b) => {
+                const sha = pick(b, 'commitHash', 'commit_hash', 'commit_sha', 'commit') || '';
+                return sha && PR_HEAD_SHA && sha.startsWith(PR_HEAD_SHA.slice(0, 7));
+              });
+
+            const buildOutcome = (b) =>
+              (pick(b, 'buildOutcome', 'build_outcome') || '').toString().toLowerCase();
+            const buildStatus = (b) =>
+              (pick(b, 'status', 'state') || '').toString().toLowerCase();
+
+            const isTerminal = (b) => {
+              if (!b) return false;
+              // CF reports `status: "stopped"` once the build halts; `buildOutcome`
+              // then carries success | fail | cancelled.
+              if (buildStatus(b) === 'stopped' || buildOutcome(b)) {
+                const o = buildOutcome(b);
+                return ['success', 'succeeded', 'fail', 'failure', 'failed', 'cancelled', 'canceled', 'error'].includes(o);
+              }
+              return false;
+            };
+            const isSuccess = (b) => ['success', 'succeeded'].includes(buildOutcome(b));
+
+            // Poll up to 5 minutes (30 attempts * 10s).
+            const maxAttempts = 30;
+            const intervalMs = 10_000;
+            let build = null;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              const builds = await fetchBuilds();
+              build = builds ? matchBuild(builds) : null;
+              if (build && isTerminal(build)) break;
+              if (attempt < maxAttempts) {
+                core.info(`Attempt ${attempt}/${maxAttempts}: build ${build ? 'in progress' : 'not found yet'} — sleeping ${intervalMs / 1000}s`);
+                await new Promise((r) => setTimeout(r, intervalMs));
+              }
+            }
+
+            if (!build) {
+              core.setOutput('body', buildBody({
+                status: 'pending (build not reported within 5m)',
+                alias: ALIAS_URL,
+                note: `Cloudflare did not report a build matching \`${shortSha}\` within 5 minutes. Check the [builds dashboard](${dashboardBuildsUrl}). The alias URL will resolve once a build for this branch succeeds.`,
+              }));
+              return;
+            }
+
+            const success = isSuccess(build);
+            const durationSec = pick(
+              build,
+              'buildDurationSeconds',
+              'build_duration_seconds',
+              'durationSeconds',
+              'duration_seconds',
+              'duration',
+            );
+            const versionId = pick(
+              build,
+              'workerVersionId',
+              'versionId',
+              'version_id',
+              'worker_version_id',
+              'version',
+            );
+            const versionUrl = versionId
+              ? `https://${versionId}-${CF_WORKER_NAME}.${CF_WORKER_HOST}`
+              : null;
+            const commitSubject = (
+              pick(build, 'commitMessage', 'commit_message') || ''
+            ).split('\n')[0] || '';
+            const statusLabel = success
+              ? `Success in ${fmtDuration(durationSec)}`
+              : `Failed — see [build logs](${dashboardBuildsUrl})`;
+
+            core.setOutput('body', buildBody({
+              status: statusLabel,
+              alias: ALIAS_URL,
+              version: versionUrl,
+              commitSubject,
+            }));
+
+      - name: Upsert sticky PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: sendero-edge-preview
+          message: ${{ steps.poll.outputs.body }}

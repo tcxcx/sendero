@@ -10,10 +10,21 @@
     "tools/overview",
     "tools/search_flights",
     "tools/settle_split",
+    "---Pricing---",
+    "pricing",
+    "pricing/markup",
+    "pricing/markup-error-codes",
+    "pricing/markup-scopes",
+    "---Agents---",
+    "agents/markup-eval-recipes",
+    "---Conventions---",
+    "api-conventions/errors",
     "---Protocol---",
     "x402-nanopayments",
     "mcp-integration",
     "security",
-    "pricing"
+    "security/claim-code",
+    "---Changelog---",
+    "changelog/2026-04-tenant-markup-v1"
   ]
 }

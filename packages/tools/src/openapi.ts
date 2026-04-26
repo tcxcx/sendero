@@ -20,7 +20,7 @@
  *     surface for non-agent integrations.
  */
 
-import { type KeyScope, toolToScope } from './scopes';
+import { isPublicTool, type KeyScope, toolToScope } from './scopes';
 import type { ToolDef } from './types';
 
 export interface OpenApiDocInput {
@@ -41,7 +41,12 @@ export function buildOpenApiDoc(input: OpenApiDocInput): Record<string, unknown>
   const paths: Record<string, unknown> = {};
   const schemas: Record<string, unknown> = {};
 
-  for (const tool of input.tools) {
+  // Strip operator-only tools — they're never part of the public
+  // contract for external integrators.  The web console + admin
+  // surfaces consume the canonical registry directly, not this doc.
+  const publicTools = input.tools.filter(isPublicTool);
+
+  for (const tool of publicTools) {
     const schemaName = toSchemaName(tool.name);
     schemas[schemaName] = tool.jsonSchema;
 
@@ -149,7 +154,7 @@ export function buildOpenApiDoc(input: OpenApiDocInput): Record<string, unknown>
       },
       schemas,
     },
-    tags: Array.from(new Set(input.tools.map(t => categorize(t.name)))).map(name => ({ name })),
+    tags: Array.from(new Set(publicTools.map(t => categorize(t.name)))).map(name => ({ name })),
     paths,
   };
 }

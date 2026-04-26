@@ -2,6 +2,7 @@ import type { Viewport } from 'next';
 import Script from 'next/script';
 
 import { ClerkProvider } from '@clerk/nextjs';
+import { senderoFontVars } from '@sendero/fonts';
 import { SUPPORTED_LOCALES } from '@sendero/locale';
 import {
   buildClerkAllowedRedirectOrigins,
@@ -101,14 +102,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getRequestLocale();
 
   return (
-    <html lang={locale}>
+    <html lang={locale} className={senderoFontVars}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
         <link rel="alternate" type="text/plain" title="Sendero App llms.txt" href="/llms.txt" />
         <link
           rel="alternate"

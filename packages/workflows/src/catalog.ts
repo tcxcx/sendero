@@ -1501,6 +1501,318 @@ export const verifyTravelDocumentsWorkflow: WorkflowDef = {
   ],
 };
 
+// ─── whatsapp-provision: 5-step Sendero-owned WhatsApp setup ─────────
+//
+// Replaces the legacy "Connect Meta Business" flow. Sendero owns the
+// WABA + phone-number pool via Kapso. Tenant picks a country, we
+// reserve a number from the pool, the operator brands the profile,
+// approves Sendero's canonical template pack, and flips it live.
+//
+// Each `pause.payload.promptId` keys into the wizard's right-pane
+// renderer (see apps/app/components/channels/setup-wizard/panes.tsx).
+// The wizard polls /api/workflows/:runId for the current pause and
+// POSTs to /api/workflows/:runId/resume with the form values.
+
+export const whatsappProvisionWorkflow: WorkflowDef = {
+  id: 'sendero.whatsapp_provision',
+  version: 1,
+  label: 'Connect WhatsApp',
+  description:
+    'Sendero-owned WhatsApp setup wizard via Kapso. Five user-facing steps: pick a phone number, confirm provisioning, brand the business profile, approve message templates, and go live with an optional test ping. No Meta embedded signup — Sendero owns the WABA and shares a number from its pool.',
+  steps: [
+    // Step 1 — number picker
+    {
+      kind: 'pause',
+      id: 'pick_number',
+      label: 'Pick phone number',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'whatsapp.pick_number',
+        stepIndex: 1,
+        totalSteps: 5,
+        helpText: 'Sendero provisions a fresh WhatsApp number in your country.',
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'reserve',
+      tool: 'kapso_reserve_number',
+      label: 'Reserve the chosen number',
+      as: 'reservation',
+      args: {
+        tenantId: $('input.tenantId'),
+        tenantName: $('input.tenantName'),
+        countryIso: $('pick_number.countryIso'),
+        preferredE164: $('pick_number.e164'),
+      },
+      retries: 1,
+      timeoutMs: 30_000,
+    },
+    // Step 2 — verify (Sendero-side: just confirm what we provisioned)
+    {
+      kind: 'pause',
+      id: 'verify_number',
+      label: 'Verify business number',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'whatsapp.verify_number',
+        stepIndex: 2,
+        totalSteps: 5,
+        helpText:
+          'We provisioned this number in our shared WhatsApp Business Account. No Meta signup needed.',
+      },
+    },
+    // Step 3 — brand
+    {
+      kind: 'pause',
+      id: 'brand_profile',
+      label: 'Brand the experience',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'whatsapp.brand_profile',
+        stepIndex: 3,
+        totalSteps: 5,
+        helpText: 'Set the display name, profile photo, bio, and default greeting.',
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'update_profile',
+      tool: 'kapso_update_business_profile',
+      label: 'Update business profile',
+      args: {
+        tenantId: $('input.tenantId'),
+        displayName: $('brand_profile.displayName'),
+        about: $('brand_profile.about'),
+        profilePhotoUrl: $('brand_profile.profilePhotoUrl'),
+        defaultGreeting: $('brand_profile.defaultGreeting'),
+      },
+      retries: 1,
+      timeoutMs: 20_000,
+    },
+    // Step 4 — templates
+    {
+      kind: 'pause',
+      id: 'approve_templates',
+      label: 'Approve message templates',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'whatsapp.approve_templates',
+        stepIndex: 4,
+        totalSteps: 5,
+        helpText:
+          'Sendero ships three canonical templates. Pick the ones you want submitted to Meta.',
+        templates: [
+          { name: 'trip_intake_v3', description: 'Initial trip-intake greeting.' },
+          { name: 'hold_confirmation_v2', description: 'Sent when a hold is placed.' },
+          { name: 'cap_warning_v1', description: 'Fires near the spend cap.' },
+        ],
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'submit_templates',
+      tool: 'kapso_submit_message_templates',
+      label: 'Submit templates to Meta',
+      args: {
+        tenantId: $('input.tenantId'),
+        templateNames: $('approve_templates.templateNames'),
+      },
+      retries: 1,
+      timeoutMs: 20_000,
+    },
+    // Step 5 — go live (optional test ping, then activate)
+    {
+      kind: 'pause',
+      id: 'go_live',
+      label: 'Go live',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'whatsapp.go_live',
+        stepIndex: 5,
+        totalSteps: 5,
+        helpText:
+          'Optional: send a test ping to your own phone to confirm the channel works end-to-end.',
+      },
+    },
+    {
+      kind: 'branch',
+      id: 'maybe_test',
+      label: 'Send test if requested',
+      when: $('go_live.sendTest'),
+      equals: true,
+      // biome-ignore lint/suspicious/noThenProperty: BranchStep uses "then" as its workflow-domain field.
+      then: [
+        {
+          kind: 'tool',
+          id: 'send_test',
+          tool: 'kapso_send_test_message',
+          label: 'Send WhatsApp test ping',
+          args: {
+            tenantId: $('input.tenantId'),
+            toE164: $('go_live.testToE164'),
+            body: $('go_live.testBody'),
+          },
+          retries: 0,
+          timeoutMs: 20_000,
+        },
+      ],
+      otherwise: [],
+    },
+    {
+      kind: 'tool',
+      id: 'activate',
+      tool: 'kapso_activate_phone_number',
+      label: 'Flip status to active',
+      as: 'activation',
+      args: { tenantId: $('input.tenantId') },
+      retries: 1,
+      timeoutMs: 20_000,
+    },
+  ],
+};
+
+// ─── slack-install: 5-step Slack OAuth + routing setup ───────────────
+//
+// Tenant installs the Sendero Slack app, picks the workspace, decides
+// where each event class posts, the bot gets invited, and we send a
+// proof-of-life message. Mirrors the WhatsApp wizard's structure so
+// the two-pane UI shell stays generic across both channels.
+
+export const slackInstallWorkflow: WorkflowDef = {
+  id: 'sendero.slack_install',
+  version: 1,
+  label: 'Install Sendero in Slack',
+  description:
+    'Slack OAuth + channel-routing setup. Steps: emit install URL, wait for OAuth callback to write SlackInstall, confirm the workspace, save channel routes per event class, invite the bot, send a test message.',
+  steps: [
+    // Step 1 — install (auto-runs the tool to get the URL, then pauses)
+    {
+      kind: 'tool',
+      id: 'init_install',
+      tool: 'slack_start_oauth_install',
+      label: 'Generate Slack install URL',
+      as: 'install',
+      args: { tenantId: $('input.tenantId') },
+      retries: 0,
+      timeoutMs: 10_000,
+    },
+    {
+      kind: 'pause',
+      id: 'await_oauth_callback',
+      label: 'Install Sendero in Slack',
+      reason: 'external_event',
+      payload: {
+        promptId: 'slack.install',
+        stepIndex: 1,
+        totalSteps: 5,
+        helpText:
+          'Open the install URL in a new tab and approve the bot scopes. Wizard resumes when the OAuth callback writes the install row.',
+        via: 'slack_oauth_callback',
+      },
+      timeoutMs: 30 * 60 * 1000,
+    },
+    // Step 2 — pick workspace (Grid customers may have multiple)
+    {
+      kind: 'pause',
+      id: 'pick_workspace',
+      label: 'Pick the workspace',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'slack.pick_workspace',
+        stepIndex: 2,
+        totalSteps: 5,
+        helpText: 'Confirm which workspace Sendero should run in.',
+      },
+    },
+    // Step 3 — routes
+    {
+      kind: 'pause',
+      id: 'route_channels',
+      label: 'Route channels',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'slack.route_channels',
+        stepIndex: 3,
+        totalSteps: 5,
+        helpText:
+          'Pick which channels receive each event class. Defaults route everything to one channel.',
+        eventClasses: [
+          { id: 'trip_events', label: 'All trip events' },
+          { id: 'settlements', label: 'Settlements + invoices' },
+          { id: 'cap_warnings', label: 'Spend-cap warnings' },
+          { id: 'escalations', label: 'Cap breaches + over-policy holds' },
+          { id: 'silent', label: 'Health pings (suppressed)' },
+        ],
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'persist_routes',
+      tool: 'slack_persist_channel_routes',
+      label: 'Persist routing',
+      args: {
+        installId: $('pick_workspace.installId'),
+        defaultChannelId: $('route_channels.defaultChannelId'),
+        routes: $('route_channels.routes'),
+      },
+      retries: 1,
+      timeoutMs: 10_000,
+    },
+    // Step 4 — invite bot
+    {
+      kind: 'pause',
+      id: 'invite_bot',
+      label: 'Invite the bot',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'slack.invite_bot',
+        stepIndex: 4,
+        totalSteps: 5,
+        helpText: 'Sendero will join the channels you routed events to.',
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'do_invite',
+      tool: 'slack_invite_bot_to_channels',
+      label: 'Invite Sendero into channels',
+      args: {
+        installId: $('pick_workspace.installId'),
+        channelIds: $('invite_bot.channelIds'),
+      },
+      retries: 1,
+      timeoutMs: 30_000,
+    },
+    // Step 5 — test
+    {
+      kind: 'pause',
+      id: 'send_test',
+      label: 'Send test message',
+      reason: 'user_reply',
+      payload: {
+        promptId: 'slack.send_test',
+        stepIndex: 5,
+        totalSteps: 5,
+        helpText: 'Confirm Sendero can post and you see it land.',
+      },
+    },
+    {
+      kind: 'tool',
+      id: 'do_send_test',
+      tool: 'slack_send_test_message',
+      label: 'Send Slack test ping',
+      args: {
+        installId: $('pick_workspace.installId'),
+        channelId: $('send_test.channelId'),
+        text: $('send_test.text'),
+      },
+      retries: 0,
+      timeoutMs: 15_000,
+    },
+  ],
+};
+
 export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [bookFlightWorkflow.id]: bookFlightWorkflow,
   [groupTripWorkflow.id]: groupTripWorkflow,
@@ -1519,6 +1831,8 @@ export const WORKFLOW_CATALOG: Record<string, WorkflowDef> = {
   [bookStayWithLoyaltyWorkflow.id]: bookStayWithLoyaltyWorkflow,
   [cancelOrderWithCreditsWorkflow.id]: cancelOrderWithCreditsWorkflow,
   [verifyTravelDocumentsWorkflow.id]: verifyTravelDocumentsWorkflow,
+  [whatsappProvisionWorkflow.id]: whatsappProvisionWorkflow,
+  [slackInstallWorkflow.id]: slackInstallWorkflow,
 };
 
 /** Resolve a workflow by id; returns null if unknown. */

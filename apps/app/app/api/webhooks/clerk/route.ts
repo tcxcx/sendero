@@ -24,6 +24,7 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
 import { verifyClerkWebhook } from '@sendero/auth/webhooks';
 import { provisionTenantWallet } from '@sendero/circle';
+import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
 import { Prisma, prisma } from '@sendero/database';
 import {
   createCustomerUser,
@@ -137,6 +138,26 @@ async function onUserUpsert(data: Record<string, unknown>): Promise<void> {
   const lastName = String(data.last_name ?? '');
   const displayName = `${firstName} ${lastName}`.trim() || String(data.username ?? '') || email;
 
+  // Merge-by-email guard: a guest provisioned via WhatsApp / Slack lands
+  // a User row with `clerkUserId=null` (and an `email` that may be the
+  // real address or a `slack:U02H…@placeholder.sendero` shim). When the
+  // human later signs into Clerk with the same email, Clerk's webhook
+  // arrives here. Without this guard the upsert-by-clerkUserId creates
+  // a *new* User and orphans the guest row — losing the wallet, the
+  // reputation, and the trip history. We claim the existing row first.
+  if (email) {
+    const orphan = await prisma.user.findFirst({
+      where: { email, clerkUserId: null },
+      select: { id: true },
+    });
+    if (orphan) {
+      await prisma.user.update({
+        where: { id: orphan.id },
+        data: { clerkUserId: id, source: 'native' },
+      });
+    }
+  }
+
   const user = await prisma.user.upsert({
     where: { clerkUserId: id },
     create: { clerkUserId: id, email, displayName, phone: phone || undefined },
@@ -249,6 +270,51 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     },
   });
 
+  // Markup v1 — sandbox-default policy seed (DX D1 + V3b).
+  //
+  // Insert a `TenantPricingPolicy v0` flagged `sandboxOnly=true` so a
+  // freshly-provisioned org can call `confirm_booking` from a sandbox
+  // API key WITHOUT first filling out the activation wizard. Production
+  // keys ignore sandboxOnly rows and require a tenant-set policy via
+  // POST /api/tenant/pricing-policy.
+  //
+  // Idempotent on `(tenantId, version=0)` unique constraint — re-runs
+  // (svix retries) are no-ops.
+  //
+  // Numbers are demo defaults for sandbox bookings only. Production
+  // tenants are NEVER auto-seeded; they pick their own per the plan's
+  // "no platform-anchored defaults" decision (Phase 1 user gate).
+  try {
+    await prisma.tenantPricingPolicy.upsert({
+      where: { tenantId_version: { tenantId: tenant.id, version: 0 } },
+      create: {
+        tenantId: tenant.id,
+        version: 0,
+        markupConfig: {
+          flight: { strategy: 'static', bps: 500 },
+          hotel: { strategy: 'static', bps: 1000 },
+          rail: { strategy: 'static', bps: 800 },
+          car: { strategy: 'static', bps: 1000 },
+          other: { strategy: 'static', bps: 1500 },
+        },
+        floorMicroUsdc: 1_000_000n, // $1
+        senderoTakeBehavior: 'add_to_customer',
+        activated: true,
+        sandboxOnly: true,
+      },
+      update: {}, // no-op on retry
+    });
+  } catch (err) {
+    // Non-fatal: the seed is for sandbox ergonomics. If it fails,
+    // production flow is unaffected; the tenant just sets up their
+    // policy via the wizard before sandbox testing.
+    console.warn('[webhooks/clerk] sandbox policy seed failed (non-fatal)', {
+      id,
+      tenantId: tenant.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Best-effort Duffel CustomerUserGroup creation on org provision.
   // Non-blocking; if Duffel is down the first booking path fills it in
   // via ensure_flight_customer. We log but don't fail the Clerk
@@ -277,6 +343,21 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     tenantId: tenant.id,
     clerkOrgId: id,
   });
+
+  // Mint the org's ERC-8004 identity NFT atomically with wallet
+  // provisioning. The treasury wallet (just provisioned above) becomes
+  // the agent owner. Failure is non-fatal — wallet stands on its own;
+  // the cron sweeper at /api/cron/retry-identity-provision picks up
+  // pending rows.
+  try {
+    await ensureOrgIdentity({ tenantId: tenant.id });
+  } catch (err) {
+    console.warn('[webhooks/clerk] org identity mint failed (non-fatal)', {
+      id,
+      tenantId: tenant.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   const client = await clerkClient();
   await client.organizations.updateOrganization(id, {

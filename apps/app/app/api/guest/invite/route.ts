@@ -22,6 +22,9 @@ import { z } from 'zod';
 import { prefundTripTool } from '@sendero/tools';
 import { capture } from '@sendero/analytics/server';
 import { prisma } from '@sendero/database';
+import { notifier } from '@sendero/notifications';
+
+import { getTenantNotificationEmail } from '@/lib/tenant-notification-email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -99,6 +102,21 @@ export async function POST(req: NextRequest) {
     onchainCalls?: Array<unknown>;
   };
 
+  // Stamp `linkChannel` so the OTP resend route can prefer a DIFFERENT
+  // medium for the resend (channel-routing 2FA — see
+  // `selectOtpChannel` in `@sendero/notifications/otp`). For this
+  // route the link is always emailed (Resend), so 'email' is the
+  // canonical value. WhatsApp / Slack-driven prefund flows stamp
+  // their own value via the same metadata key.
+  const linkChannel: 'whatsapp' | 'email' | 'sms' = 'email';
+
+  // Verified contacts the buyer attached to the trip. Phone is null
+  // here because /api/guest/invite is the email-only entry point;
+  // phone-bearing flows (WhatsApp wizard, dashboard form with phone
+  // field) populate `phone` directly. The OTP resend route prefers
+  // this column over the legacy `metadata.invite.guestEmail` shape.
+  const guestVerifiedContacts = { email: body.guestEmail };
+
   await prisma.trip.upsert({
     where: { id: safeResult.tripId },
     create: {
@@ -114,8 +132,14 @@ export async function POST(req: NextRequest) {
         tripSummary: body.tripSummary ?? null,
         source: 'buyer_ui_prefund',
       },
+      guestVerifiedContacts,
       metadata: {
         tripSummary: body.tripSummary ?? null,
+        // Stamped only when the notify call returned ok — failed sends
+        // shouldn't influence the resend channel selector. Falls back
+        // to 'email' on the read side for legacy rows so consumers
+        // never see undefined.
+        ...(safeResult.invite?.ok ? { linkChannel } : {}),
         invite: {
           guestEmail: body.guestEmail,
           guestName: body.guestName ?? null,
@@ -136,8 +160,10 @@ export async function POST(req: NextRequest) {
     update: {
       status: 'awaiting_approval',
       totalUsdc: safeResult.budgetUsdc,
+      guestVerifiedContacts,
       metadata: {
         tripSummary: body.tripSummary ?? null,
+        ...(safeResult.invite?.ok ? { linkChannel } : {}),
         invite: {
           guestEmail: body.guestEmail,
           guestName: body.guestName ?? null,
@@ -157,6 +183,48 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Channel-bound DCW lookup: when a User row exists for guestEmail AND
+  // has tenant scope here (membership OR prior traveler trip) AND has a
+  // provisioned Circle DCW on Arc-Testnet, the success card can offer
+  // "auto-claim for traveler via DCW" instead of (only) sharing the
+  // peanut link. The peanut link is still generated unconditionally —
+  // it's the canonical share artifact and the cold-guest fallback.
+  //
+  // The User table is platform-global (one email = one user); tenant
+  // scoping comes from Membership (operators) or TripTraveler (travelers).
+  // We require ONE of those so an operator can't claim on behalf of any
+  // user with a DCW across tenants.
+  const ARC_TESTNET_CHAIN_ID = 5042002;
+  const boundUser = await prisma.user.findFirst({
+    where: {
+      email: { equals: body.guestEmail, mode: 'insensitive' },
+      OR: [
+        { memberships: { some: { tenantId: tenant.id } } },
+        { travelerTrips: { some: { tenantId: tenant.id } } },
+      ],
+    },
+    select: {
+      id: true,
+      displayName: true,
+      email: true,
+      wallets: {
+        where: { provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
+        select: { circleWalletId: true, address: true },
+        take: 1,
+      },
+    },
+  });
+  const boundWallet = boundUser?.wallets[0];
+  const boundTraveler =
+    boundUser && boundWallet?.circleWalletId
+      ? {
+          userId: boundUser.id,
+          displayName: boundUser.displayName ?? boundUser.email ?? 'Traveler',
+          dcwWalletId: boundWallet.circleWalletId,
+          dcwAddress: boundWallet.address,
+        }
+      : null;
+
   capture({
     event: 'guest_invite_issued',
     distinctId: userId,
@@ -170,5 +238,28 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(result);
+  // Out-of-band approval ping for the org admin so tenants without a
+  // Slack install still see hold-needs-approval. Fails-soft: a Resend
+  // error must never break the prefund response.
+  void (async () => {
+    try {
+      const adminEmail = await getTenantNotificationEmail(tenant.id);
+      if (!adminEmail) return;
+      const linkOrigin =
+        body.linkOrigin ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+      await notifier().sendHoldApproval(adminEmail, {
+        travelerName: body.guestName ?? body.guestEmail,
+        tripSummary: body.tripSummary ?? `${body.guestEmail} · prepaid invite`,
+        amount: body.budgetUsdc,
+        currency: 'USDC',
+        expiresAtIso: safeResult.expiresAt ?? new Date(Date.now() + 7 * 86400 * 1000).toISOString(),
+        reason: 'guest_invite_issued',
+        consoleUrl: `${linkOrigin.replace(/\/$/, '')}/dashboard/console?tripId=${encodeURIComponent(safeResult.tripId)}`,
+      });
+    } catch (err) {
+      console.warn('[guest/invite] sendHoldApproval failed', err);
+    }
+  })();
+
+  return NextResponse.json({ ...result, boundTraveler });
 }

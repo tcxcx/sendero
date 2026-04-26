@@ -78,7 +78,45 @@ async function main() {
     console.log('  (no CircleWallet — Circle API likely not configured, expected in dev)');
   }
 
+  // ERC-8004 identity provisioning is fired non-fatally inside the webhook.
+  // When the wallet exists, the post-wallet hook calls ensureOrgIdentity,
+  // which inserts an OnchainIdentity row with status='pending' (sweeper
+  // promotes to 'minted' once the on-chain registerAgent confirms).
+  // When the wallet doesn't exist (Circle not configured), the hook
+  // throws before mint and no row is inserted — that's expected in dev.
+  const identity = await prisma.onchainIdentity.findFirst({
+    where: { kind: 'org', tenantId: tenant.id },
+  });
+  if (identity) {
+    console.log(
+      `✓ OnchainIdentity row inserted: status=${identity.status}, holder=${identity.holderAddress}` +
+        (identity.agentId ? `, agentId=${identity.agentId}` : '')
+    );
+  } else if (wallet) {
+    console.log(
+      '  ⚠ wallet exists but no OnchainIdentity — ensureOrgIdentity may have thrown synchronously (non-fatal). Check sweeper at /api/cron/retry-identity-provision.'
+    );
+  } else {
+    console.log('  (no OnchainIdentity — wallet missing precondition, expected in dev)');
+  }
+
+  // Verify the public ERC-8004 metadata endpoint serves what the
+  // contract would store via tokenURI(). 200 = JSON shape correct;
+  // 404 = expected when no OnchainIdentity row exists.
+  const metaRes = await fetch(`${BASE_URL}/agents/org/${tenant.id}/metadata.json`);
+  if (identity && metaRes.status === 200) {
+    const meta = await metaRes.json();
+    console.log(
+      `✓ /agents/org/${tenant.id}/metadata.json: ${meta.name} (holder ${meta.holder_address})`
+    );
+  } else if (identity) {
+    console.log(`  ⚠ metadata route returned ${metaRes.status}, expected 200`);
+  } else {
+    console.log(`  metadata route ${metaRes.status} (expected 404 with no identity)`);
+  }
+
   // Cleanup
+  await prisma.onchainIdentity.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.circleWallet.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.tenant.delete({ where: { id: tenant.id } }).catch(() => void 0);
   console.log('--- SMOKE PASSED ---');

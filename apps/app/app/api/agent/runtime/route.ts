@@ -1,31 +1,22 @@
 import { NextResponse } from 'next/server';
 
 import { directProviderModel, gatewayConfigured, MODEL_TIERS, selectModel } from '@sendero/agent';
+import { toolList } from '@sendero/tools';
+import { listWorkflowsTool } from '@sendero/workflows';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const TOOL_NAMES = [
-  'search_flights',
-  'book_flight',
-  'search_hotels',
-  'check_treasury',
-  'swap_tokens',
-  'send_tokens',
-  'bridge_to_arc',
-  'swap_and_bridge',
-  'gateway_balance',
-  'gateway_transfer',
-  'settle_split',
-  'check_policy',
-  'quote_fx',
-  'rate_agent',
-  'prefund_trip',
-  'guest_claim_link',
-  'reserve_booking',
-  'commit_booking',
-  'log_agent_action',
+// Derived from the actual chat tool registry — never hand-maintain this
+// list. The chat route at /api/chat ships every tool here PLUS the two
+// orchestration tools `list_workflows` + `run_workflow`. We include the
+// list-side workflow tool name in the count so the UI matches the real
+// surface (49 leaves + 2 orchestration = 51 today).
+const CHAT_TOOL_NAMES = [
+  ...toolList.map(t => t.name),
+  listWorkflowsTool.name,
+  'run_workflow',
 ] as const;
 
 type ActiveModel = {
@@ -70,7 +61,7 @@ export async function GET() {
         { primary: v.primary, fallbacks: v.fallbacks },
       ])
     ),
-    tools: TOOL_NAMES,
-    toolCount: TOOL_NAMES.length,
+    tools: CHAT_TOOL_NAMES,
+    toolCount: CHAT_TOOL_NAMES.length,
   });
 }

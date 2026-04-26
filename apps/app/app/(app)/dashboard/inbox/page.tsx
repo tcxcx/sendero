@@ -1,21 +1,17 @@
-import Link from 'next/link';
+/**
+ * /dashboard/inbox (unscoped) — redirects to /dashboard/console.
+ *
+ * The unscoped MetaInbox view is functionally identical to the
+ * /dashboard/console unscoped view (operator ↔ Sendero AI). Sidebar's
+ * "Trip inboxes" entry lands here and bounces forward — keeps a single
+ * canonical operator surface so the breadcrumb + UI state stay in sync.
+ *
+ * Trip-scoped /dashboard/inbox/[tripId] still has its own page and
+ * renders the per-trip MetaInbox unchanged.
+ */
 
-import { Button } from '@sendero/ui/button';
+import { redirect } from 'next/navigation';
 
-export default function InboxIndexPage() {
-  return (
-    <div className="flex min-h-[min(24rem,50vh)] flex-col gap-4 p-6">
-      <p className="max-w-xl text-sm text-muted-foreground">
-        When a trip is selected, you’ll see conversation context and actions here. Connect WhatsApp
-        or Slack from{' '}
-        <Link href="/dashboard/channels/whatsapp" className="underline underline-offset-2">
-          Channels
-        </Link>{' '}
-        so inbox events map to the right place.
-      </p>
-      <Button asChild variant="outline" size="sm" className="w-fit">
-        <Link href="/dashboard/trips">Create or view trips</Link>
-      </Button>
-    </div>
-  );
+export default function InboxIndexPage(): never {
+  redirect('/dashboard/console');
 }

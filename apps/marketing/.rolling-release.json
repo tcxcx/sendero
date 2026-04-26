@@ -1,0 +1,10 @@
+{
+  "$comment": "Rolling release config for the @sendero/marketing project. Public site, low transaction stakes. Apply with `bun run deploy:rolling:configure` from the repo root.",
+  "enabled": true,
+  "advancementType": "automatic",
+  "stages": [
+    { "targetPercentage": 10, "duration": 10 },
+    { "targetPercentage": 50, "duration": 30 },
+    { "targetPercentage": 100 }
+  ]
+}

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@sendero/fonts": "workspace:*",
     "@sendero/llms": "workspace:*",
     "@sendero/locale": "workspace:*",
     "@sendero/seo": "workspace:*",

@@ -1,0 +1,70 @@
+name: Regression
+description: A production issue traceable to a specific commit. Feeds the weekly defect-escape report.
+title: "[regression] "
+labels: ["regression"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Filing a regression? Thanks — this feeds the weekly defect-escape report
+        (`scripts/defect-escape-report.ts`) so we know whether the ship bar is
+        holding. Keep it short; you can edit later.
+
+  - type: textarea
+    id: what-broke
+    attributes:
+      label: What broke
+      description: One or two sentences. What's the user-visible symptom?
+      placeholder: "Invoice page renders raw HTML in the customer-name field after the Apr 23 deploy."
+    validations:
+      required: true
+
+  - type: input
+    id: caused-by
+    attributes:
+      label: Caused by commit (SHA, prefix is OK)
+      description: |
+        7 to 40 hex characters. Use `git log --oneline` or the GitHub commit URL.
+        This SHA is what the defect-escape report joins on — please double-check it.
+      placeholder: "abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How bad is it?
+      options:
+        - critical
+        - major
+        - minor
+      default: 1
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps. Include URL, account/tenant, and any payload that triggers it.
+      placeholder: |
+        1. Sign in as org `org_test`.
+        2. Visit `/invoice/<token>`.
+        3. Observe escaping issue in customer-name field.
+    validations:
+      required: true
+
+  - type: textarea
+    id: trailer
+    attributes:
+      label: Caused-By trailer (do not edit)
+      description: |
+        This block is auto-stamped into the issue body. The defect-escape report
+        parses `Caused-By: <sha>` from the body via regex. Leave the format alone.
+      value: |
+        <!-- defect-escape: do not remove -->
+        Caused-By: <REPLACE_WITH_SHA>
+        <!-- end defect-escape -->
+    validations:
+      required: true

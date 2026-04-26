@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = BodySchema.parse(await req.json());
     const { txHash } = await setBudget({
-      providerWalletAddress: providerAddress,
+      // Circle DCW signs by walletId UUID, not on-chain address.
+      providerWalletAddress: providerWalletId,
       jobId: BigInt(body.jobId),
       amount: toUsdcUnits(body.totalAmountUsdc),
     });

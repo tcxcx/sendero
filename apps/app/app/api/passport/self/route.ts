@@ -19,27 +19,53 @@ import { prisma } from '@sendero/database';
 import { decryptVaultPayload, readVaultSignals, revokeVault } from '@sendero/vault';
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { ensureUserRow } from '@/lib/ensure-user';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function resolveActor() {
   const { userId, orgId } = await auth();
-  if (!userId || !orgId) return null;
-  const user = await prisma.user.findUnique({
-    where: { clerkUserId: userId },
-    select: { id: true },
+  console.log('[passport/self] auth()', {
+    hasUserId: Boolean(userId),
+    hasOrgId: Boolean(orgId),
   });
+  if (!userId || !orgId) {
+    console.warn('[passport/self] ✕ resolveActor: missing clerk userId or orgId', {
+      userId,
+      orgId,
+    });
+    return null;
+  }
   const tenant = await prisma.tenant.findUnique({
     where: { clerkOrgId: orgId },
     select: { id: true },
   });
-  if (!user || !tenant) return null;
+  if (!tenant) {
+    console.warn('[passport/self] ✕ resolveActor: tenant row missing', { clerkOrgId: orgId });
+    return null;
+  }
+  let user: { id: string };
+  try {
+    user = await ensureUserRow(userId);
+  } catch (err) {
+    console.error('[passport/self] ✕ ensureUserRow failed', {
+      clerkUserId: userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
   return { clerkUserId: userId, userId: user.id, tenantId: tenant.id };
 }
 
 export async function GET(req: NextRequest) {
+  console.log('[passport/self] ▶ GET received');
   const actor = await resolveActor();
   if (!actor) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  console.log('[passport/self] actor resolved', {
+    tenantId: actor.tenantId,
+    userId: actor.userId,
+  });
 
   try {
     const reveal = new URL(req.url).searchParams.get('reveal') === '1';

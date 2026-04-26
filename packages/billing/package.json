@@ -12,11 +12,17 @@
     "./caps": "./src/caps.ts",
     "./meter": "./src/meter.ts",
     "./batch": "./src/batch.ts",
-    "./analytics": "./src/analytics.ts"
+    "./analytics": "./src/analytics.ts",
+    "./markup": "./src/markup.ts",
+    "./settlement": "./src/settlement.ts",
+    "./markup-recommendations": "./src/markup-recommendations.ts"
   },
   "peerDependencies": {
     "@sendero/database": "*",
     "@sendero/nanopayments": "*"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

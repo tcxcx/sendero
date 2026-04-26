@@ -142,6 +142,57 @@ For a hackathon or demo, 13-19 min on Base Sepolia is unusable. We had to depose
 
 ---
 
+## A collaboration ask — the "SaaS + nanopayments" template
+
+Sendero is the first vertical AI agent we're shipping on this stack, **not the last**. The plumbing under it generalizes cleanly into a template — and we'd like to build that template *with* Circle rather than fork it alone.
+
+### What the template already is (battle-tested in this repo)
+
+The combination of **Clerk Billing + Clerk Organizations + Clerk-native API keys** wired alongside **Circle Modular Wallets (passkey MSCA) + DCW + Nanopayments + App Kit + Webhooks + SCP** turned out to be the most productive SaaS-on-crypto stack we've hit. Specifically:
+
+- **Two revenue legs from one codebase.** Clerk Billing handles MRR (Free/Basic/Pro/Enterprise tiers, no-card 14-day trial, organization-scoped). Circle Nanopayments handles per-tool x402. They're independent — a trialing user pays $0 SaaS but is still earning us nanopayment margin. SaaS pays for the platform; nanopayments pay for the calls. See [`packages/billing/src/plans.ts`](../../packages/billing/src/plans.ts) + [`apps/app/lib/billing-plan.ts`](../../apps/app/lib/billing-plan.ts).
+- **Robust auth + crypto wallet login in one identity.** Clerk handles email / SSO / SAML / passkey *for the human side*; Circle Modular Wallets handles passkey-backed MSCA *for the on-chain side*. The user enrolls one passkey and gets both — `clerkUserId` ↔ `mscaAddress` mapped on `User.metadata`.
+- **Plan-tier limits enforce on Circle surfaces, not just Clerk features.** Production API key count, monthly spend cap ceiling, nanopayment discount basis points — all in code keyed on tier. The `apiKey.created` Clerk webhook revokes keys that bust the plan limit (fails closed on Clerk list errors). The agent dispatch path materializes the discount into `MeterEvent.priceMicroUsdc`. Same primitive, two billing surfaces.
+- **Scoped + signed dispatch.** Production keys mint with a read-mostly default scope set; settlement / treasury keys require HMAC-signed requests with nonce dedup; every response carries a signed envelope (trace id + meter id + sig). Hot path stays sub-second; privileged path is hardened. See [`packages/auth/src/dispatch-auth.ts`](../../packages/auth/src/dispatch-auth.ts).
+- **Encrypted, durable workflows.** Vercel Workflows + Fluid Compute carries every multi-step agent run; passport vault + booking state survive crashes, redeploys, and 24h supplier waits. Pairs with column-level `pgcrypto` AES-256 for storage. The LLM never sees a plaintext PII field.
+- **Complete agent surface.** OpenAPI 3.1 (`/api/openapi.json`) generated from the canonical tool registry, MCP server (`/api/mcp`), x402-gated `/tools/:name` HTTP endpoints, llms.txt manifests on every origin, per-page docs-as-markdown. Self-serve API key minting via Clerk's native UI — no sales call, no email thread.
+
+### What we want to ship next, with Circle, as a public template
+
+We'd like to extract the parts above into a **Next Forge–style starter template** (call it `next-circle-saas` or similar) that ships with:
+
+- Clerk Billing tiers + plan-tier-gated production API keys.
+- Circle Modular Wallets passkey enrollment wired to Clerk identity.
+- DCW treasury wallet provisioned per Clerk org via webhook.
+- App Kit (swap / bridge / send / unified balances) embedded as drop-in components.
+- x402 + Nanopayments + Gateway middleware wired into a sample MCP server.
+- SCP ERC-1155 template + Gas Station deployment scripts (for trip-stamps, loyalty NFTs, receipt NFTs, etc).
+- Webhook + Event Monitor handlers env-tagged correctly out of the box.
+- Vercel Workflows + Fluid Compute as the runtime contract.
+- llms.txt + OpenAPI + docs-as-markdown so the resulting product is partner-readable on day one.
+
+This is the missing on-ramp for every founder asking "how do I monetize my AI agent both as SaaS *and* per-call without picking sides?". The answer in 2026 is **Clerk Billing × Circle Nanopayments**, and the recipe should be one `bun create`.
+
+### Why this matters strategically — the Sendero / Bufi axis
+
+Sendero is one **vertical** AI agent on this template. The horizontal layer underneath is **Bufi** — an on/off ramp + lightweight ERP that handles the non-AI parts every business needs: KYC, fiat in/out, accounting exports, compliance reporting, treasury management. The thesis:
+
+- **Bufi = horizontal SaaS** (on/off ramps + ERP). Every business needs it.
+- **Sendero, and N more vertical AI agents** = the AI-native applications layered on top. Each one is a wedge into a specific industry (travel, legal, healthcare, real estate, etc), each one shares the same auth + wallet + nanopayment + escrow plumbing.
+- **Vertical AI agents are the adoption funnel for the horizontal stack.** A traveler signs up for Sendero → their org gets a Circle MSCA + USDC treasury → they discover Bufi's on/off ramp + ERP exports → they start running broader operations on Circle rails. The vertical pulls users in; the horizontal keeps them.
+
+This is the Y Combinator "vertical AI agents > SaaS" thesis with one extra move: the verticals **share infrastructure** rather than each rebuilding their own. Circle is the natural settlement + identity layer for that infrastructure, because it's the only stack where USDC, EURC, MSCA passkeys, Gateway batching, and Nanopayments all line up under one API surface.
+
+### The collaboration ask
+
+If Circle is interested in seeding the **"vertical AI agent on Arc"** category beyond hackathon demos, the highest-leverage move is to **co-build the SaaS-on-Circle starter template** above and put it in the official docs alongside the per-product quickstarts. We've already paid the integration cost across all the surfaces — Clerk Billing, MSCA passkey, DCW, App Kit, Nanopayments, Gateway, SCP, Webhooks, x402. We can extract the template, harden the gotchas surfaced in this doc, and co-maintain it.
+
+The promise to founders becomes: **"Sign up for Clerk + Circle, run one command, get a production-ready agentic-SaaS skeleton with both revenue legs wired."** That's the reference architecture the agentic-economy thesis needs, and it's the one Sendero accidentally built while shipping a travel product.
+
+Happy to chat — `tomas.cordero.esp@gmail.com` / `@criptopoeta` on X.
+
+---
+
 ## What we built with all of this (the pitch sentence)
 
 > Sendero turns every MCP tool call into a pay-per-action agentic-commerce primitive. An AI agent (web, Claude Desktop, Slack, Discord, or a WhatsApp thread) pays between $0.0005 and $0.01 USDC per tool invocation via Circle Nanopayments on Arc. A single travel-planning workflow triggers 54+ on-chain nanopayment authorizations in 2 minutes — a workload that would cost $40+ in Ethereum gas but costs $0.07 on Arc with Gateway batching. Agents finally run economically viable high-frequency loops.

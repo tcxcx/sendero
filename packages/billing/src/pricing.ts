@@ -26,6 +26,8 @@ export type PricedAction =
   | 'cancel_booking'
   | 'get_trip_status'
   | 'get_traveler_context'
+  | 'get_tenant_pricing_policy'
+  | 'activate_tenant_pricing_policy'
   | 'recommend_restaurants'
   | 'book_insurance'
   | 'book_car_rental'
@@ -117,6 +119,25 @@ export const DEFAULT_PRICING: Record<PricedAction, CatalogCell> = {
     agency: { micro: M('0.05') },
     corporate: { micro: M('0.05') },
     ai_agent: { micro: M('0.05') },
+  },
+  // E1 — read-only metadata about the tenant's pricing policy. Free for
+  // sandbox/consumer; same nano-tier as get_traveler_context for paid
+  // segments (a single Postgres SELECT, mirrors that cost profile).
+  get_tenant_pricing_policy: {
+    consumer: { micro: M('0.00') },
+    agency: { micro: M('0.05') },
+    corporate: { micro: M('0.05') },
+    ai_agent: { micro: M('0.05') },
+  },
+  // E2 — admin orchestration tool. Same settlement-tier pricing as
+  // confirm_booking ($1.00 micro) since it's a privileged write that
+  // unblocks the entire booking pipeline. No GMV component — this is
+  // a config flip, not a settled flow.
+  activate_tenant_pricing_policy: {
+    consumer: { micro: M('1.00') },
+    agency: { micro: M('1.00') },
+    corporate: { micro: M('1.00') },
+    ai_agent: { micro: M('1.00') },
   },
   recommend_restaurants: {
     consumer: { micro: M('0.02') },

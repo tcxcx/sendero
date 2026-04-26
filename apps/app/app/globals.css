@@ -49,9 +49,17 @@
   --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --font-pixel: "Departure Mono", ui-monospace, monospace;
-  --font-sans: "Geist", ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* @sendero/fonts — variables wired through `senderoFontVars` className on
+     <html>. Geist is the canonical UI face; Fraunces drives editorial
+     headlines; IoskeleyMono is the Berkeley-Mono-alternative display mono.
+     The fallbacks below mean the CSS still works in Storybook / SSR
+     stylesheet-only contexts where the next/font className isn't applied. */
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: var(--font-display, "Fraunces"), ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono-x: var(--font-mono-x, "IoskeleyMono"), var(--font-mono);
+  --font-pixel: "Departure Mono", var(--font-mono-x);
 
   /* Sidebar palette — aligned to DESIGN.md: Parchment surfaces,
      Vermillion primary, warm editorial accents. Shadcn's default
@@ -129,6 +137,209 @@
   --surface-transition:
     box-shadow 240ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms
     cubic-bezier(0.23, 1, 0.32, 1);
+
+  /* ─── Sendero design system tokens ─────────────────────────────
+     Aligned with /sendero/project/App routes.html spec sheet. The
+     `.t-*` classes below consume these. */
+  --midnight: #1f2a44;
+  --vermillion: var(--ink);
+  --sea: #0f7c82;
+  --sand: #b6844e;
+  --surface-base: var(--bg);
+  --surface-raised: var(--bg-elev);
+  --surface-floating: #fdfbf7;
+  --surface-terminal: rgba(31, 42, 68, 0.97);
+  --tint-vermillion-soft: color-mix(in oklab, var(--vermillion) 10%, transparent);
+  --tint-vermillion-medium: color-mix(in oklab, var(--vermillion) 18%, transparent);
+  --tint-sea-soft: color-mix(in oklab, var(--sea) 10%, transparent);
+  --tint-sand-soft: color-mix(in oklab, var(--sand) 12%, transparent);
+  --tint-midnight-soft: color-mix(in oklab, var(--midnight) 4%, transparent);
+  --tint-midnight-medium: color-mix(in oklab, var(--midnight) 8%, transparent);
+  --hairline-color: var(--border);
+  --hairline-color-soft: color-mix(in oklab, var(--midnight) 8%, transparent);
+  --hairline-color-strong: color-mix(in oklab, var(--midnight) 14%, transparent);
+
+  /* Strict named scale — exact px (DESIGN.md §10) */
+  --t-display: 56px;
+  --t-h1: 40px;
+  --t-h2: 28px;
+  --t-h3: 20px;
+  --t-body: 14px;
+  --t-body-lg: 16px;
+  --t-meta: 11px;
+  --t-mono-size: 12px;
+
+  /* Channel-aware accents — keep in sync with apps/app/components/console/channels.tsx */
+  --ch-whatsapp: #25d366;
+  --ch-whatsapp-tint: #e7f6e9;
+  --ch-slack: #4a154b;
+  --ch-slack-tint: #f4ecf7;
+  --ch-sms: #3b82f6;
+  --ch-sms-tint: #e8f0fb;
+  --ch-internal: var(--midnight);
+  --ch-internal-tint: #f5ede0;
+}
+
+/* ─── Sendero type primitives — strict named scale ──────────────
+   Use these classes instead of ad-hoc Tailwind sizing whenever the
+   design calls for a named token. Mirrors /sendero/project/App
+   routes.html lines 57-83. */
+.t-display {
+  font-family: var(--font-display);
+  font-size: var(--t-display);
+  font-weight: 480;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  color: var(--midnight);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "ss01", "ss02";
+}
+.t-h1 {
+  font-family: var(--font-display);
+  font-size: var(--t-h1);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--midnight);
+}
+.t-h2 {
+  font-family: var(--font-display);
+  font-size: var(--t-h2);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0;
+  color: var(--midnight);
+}
+.t-h3 {
+  font-family: var(--font-sans);
+  font-size: var(--t-h3);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--midnight);
+}
+.t-body {
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  font-weight: 400;
+  line-height: 1.5;
+  color: color-mix(in oklab, var(--midnight) 85%, transparent);
+}
+.t-body-lg {
+  font-family: var(--font-sans);
+  font-size: var(--t-body-lg);
+  font-weight: 400;
+  line-height: 1.6;
+  color: color-mix(in oklab, var(--midnight) 85%, transparent);
+}
+.t-meta {
+  font-family: var(--font-sans);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: var(--label-meta-tracking);
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--midnight) 60%, transparent);
+  font-feature-settings: "smcp", "c2sc";
+}
+.t-mono {
+  font-family: var(--font-mono-x);
+  font-size: var(--t-mono-size);
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  color: color-mix(in oklab, var(--midnight) 78%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.t-num-lg {
+  font-family: var(--font-display);
+  font-size: var(--numeral-lg);
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--midnight);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.t-num-md {
+  font-family: var(--font-display);
+  font-size: var(--numeral-md);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+  color: var(--midnight);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Ink opacity helpers — used pervasively in the design artboards. */
+.ink-90 {
+  color: color-mix(in oklab, var(--midnight) 90%, transparent);
+}
+.ink-70 {
+  color: color-mix(in oklab, var(--midnight) 70%, transparent);
+}
+.ink-60 {
+  color: color-mix(in oklab, var(--midnight) 60%, transparent);
+}
+.ink-50 {
+  color: color-mix(in oklab, var(--midnight) 50%, transparent);
+}
+.ink-40 {
+  color: color-mix(in oklab, var(--midnight) 40%, transparent);
+}
+
+/* Sendero atoms — card surfaces + hairlines from the design system. */
+.sd-card-raised {
+  background: var(--surface-floating);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: var(--shadow-md);
+  padding: 20px 22px;
+}
+.sd-card-flat {
+  background: transparent;
+  border-radius: var(--radius-lg, 16px);
+  padding: 20px 22px;
+}
+.sd-hairline {
+  height: 1px;
+  background: var(--hairline-color);
+  border: 0;
+}
+.sd-hairline-soft {
+  height: 1px;
+  background: var(--hairline-color-soft);
+  border: 0;
+}
+.sd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sd-pill-sea {
+  background: var(--tint-sea-soft);
+  color: var(--sea);
+}
+.sd-pill-verm {
+  background: var(--tint-vermillion-soft);
+  color: var(--vermillion);
+}
+.sd-pill-sand {
+  background: var(--tint-sand-soft);
+  color: var(--sand);
+}
+.sd-pill-mid {
+  background: var(--midnight);
+  color: var(--surface-floating);
+}
+.sd-pill-outline {
+  background: transparent;
+  color: color-mix(in oklab, var(--midnight) 70%, transparent);
+  box-shadow: inset 0 0 0 1px var(--hairline-color);
 }
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -465,7 +676,7 @@ a[role="button"]:active,
 }
 
 .label {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -473,7 +684,7 @@ a[role="button"]:active,
 }
 
 .tag {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -567,7 +778,7 @@ a[role="button"]:active,
   padding: 0 16px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-elev);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
 }
 .topbar-left {
@@ -602,7 +813,7 @@ a[role="button"]:active,
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
   color: var(--text-dim);
 }
@@ -672,7 +883,7 @@ a[role="button"]:active,
   padding: 6px 10px;
   border: 1.5px solid var(--ink);
   background: var(--bg-elev);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -700,7 +911,7 @@ a[role="button"]:active,
   gap: 6px;
   padding: 4px 8px;
   border: 1px solid var(--border);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -760,7 +971,7 @@ a[role="button"]:active,
   min-height: 38px;
 }
 .col-head .title {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -817,7 +1028,7 @@ a[role="button"]:active,
   min-width: 0;
 }
 .msg-meta {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -875,7 +1086,7 @@ a[role="button"]:active,
   margin-top: 8px;
 }
 .suggestion {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -958,7 +1169,7 @@ a[role="button"]:active,
   gap: 4px;
 }
 .composer-tool {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -973,7 +1184,7 @@ a[role="button"]:active,
 .composer-send {
   background: var(--ink);
   color: var(--bg-elev);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -1036,24 +1247,32 @@ a[role="button"]:active,
   letter-spacing: 0;
 }
 
-/* Horizontal step rail — pill cells on parchment (DESIGN.md §19). */
+/* Horizontal step rail — pill cells on parchment (DESIGN.md §19).
+   Sized tight so the six phases (Intake / Search / Review / Hold /
+   Pay / Settle) fit in a single row inside the console Stage column. */
 .step-rail {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
+  gap: 4px;
+  padding: 4px 0;
   background: transparent;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.step-rail::-webkit-scrollbar {
+  display: none;
 }
 .step-cell {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
+  gap: 5px;
+  padding: 3px 7px;
   border-radius: 999px;
   transition: var(--surface-transition);
   min-width: 0;
   background: transparent;
+  flex-shrink: 0;
 }
 .step-cell.active {
   background: var(--tint-vermillion-soft);
@@ -1096,7 +1315,7 @@ a[role="button"]:active,
 }
 .step-name {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0;
   color: var(--text-dim);
@@ -1574,7 +1793,7 @@ a[role="button"]:active,
   background: color-mix(in oklab, var(--ink) 6%, var(--bg-sunk));
 }
 .log-head .name {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1708,7 +1927,7 @@ a[role="button"]:active,
   max-width: 520px;
 }
 .globe-eyebrow {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -1745,7 +1964,7 @@ a[role="button"]:active,
   margin-top: 10px;
 }
 .btn {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -1786,7 +2005,7 @@ a[role="button"]:active,
   border-right: none;
 }
 .globe-spec-cell .k {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1912,7 +2131,7 @@ a[role="button"]:active,
   display: inline-flex;
   gap: 28px;
   padding: 0 14px;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1937,7 +2156,7 @@ a[role="button"]:active,
   justify-content: space-between;
   padding: 0 24px;
   border-top: 1px solid var(--border);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -2004,7 +2223,7 @@ a[role="button"]:active,
   padding: 8px 12px;
   background: var(--ink);
   color: var(--bg-elev);
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -2030,7 +2249,7 @@ a[role="button"]:active,
   gap: 6px;
 }
 .tweak-group .tk-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -2042,7 +2261,7 @@ a[role="button"]:active,
   gap: 4px;
 }
 .tweak-opt {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono-x);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -2572,10 +2791,12 @@ hr.rule {
 }
 .app-loading-spinner__bar {
   position: absolute;
-  left: -10%;
-  top: -3.9%;
+  left: 50%;
+  top: 50%;
   width: 24%;
   height: 8%;
+  margin-left: -12%;
+  margin-top: -4%;
   background: currentColor;
   border-radius: 6px;
   animation: app-loading-fade 1.2s linear infinite;
@@ -2593,5 +2814,63 @@ hr.rule {
   .app-loading-spinner__bar {
     animation: none;
     opacity: 0.6;
+  }
+}
+
+/* Tool-block running pulse — used by ai-elements/tool.tsx's RunningStar
+   while a tool call is in flight. Ink-tinted opacity bob + the
+   smallest visible scale nudge so the operator feels the tool
+   working without the chrome of a spinner. */
+@keyframes tool-running {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+.animate-tool-running {
+  animation: tool-running 1.2s ease-in-out infinite;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-tool-running {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* WorkflowLog "▣ RUN · STREAM" tag — pulses ink ⇆ darker-ink when a
+   tool / stream / nanopayment workflow is active. Used by
+   workflow-log.tsx whenever any event is bullet='active'. */
+@keyframes wf-tag-pulse {
+  0%,
+  100% {
+    background: var(--ink);
+    color: #fdfbf7;
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--ink) 40%, transparent);
+  }
+  50% {
+    background: color-mix(in oklab, var(--ink) 80%, #000 20%);
+    color: #fdfbf7;
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--ink) 20%, transparent);
+  }
+}
+.wf-tag-running {
+  background: var(--ink);
+  color: #fdfbf7;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  animation: wf-tag-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wf-tag-running {
+    animation: none;
   }
 }

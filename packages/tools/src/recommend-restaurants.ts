@@ -176,11 +176,18 @@ function mapPlace(place: RawPlace): RestaurantPlace {
   };
 }
 
-/** Narrow to genuine restaurants — Places returns bars, cafes, etc. under "food". */
+/** Narrow to genuine restaurants — Places (New) emits specific
+ * primaryType values like "mexican_restaurant", "burrito_restaurant",
+ * "breakfast_restaurant" and grouping types like "food",
+ * "point_of_interest". A place is a restaurant if its primaryType is
+ * "restaurant" or ends in "_restaurant", or if "restaurant" appears
+ * anywhere in its types array. Bakeries and cafes that don't claim
+ * the restaurant type still get filtered out. */
 function isRestaurant(place: RestaurantPlace): boolean {
   const primary = place.primaryType;
   if (primary === 'restaurant') return true;
-  if (!primary && place.types.includes('restaurant')) return true;
+  if (primary && primary.endsWith('_restaurant')) return true;
+  if (place.types.includes('restaurant')) return true;
   return false;
 }
 

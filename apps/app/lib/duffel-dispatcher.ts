@@ -16,10 +16,12 @@ import { bookFlightWorkflow, guestPrefundWorkflow } from '@sendero/workflows/cat
 import { resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
 import type { DuffelAirlineCreditWire, DuffelWebhookEvent } from '@sendero/duffel';
 import { getAirlineCredit } from '@sendero/duffel';
+import { notifier } from '@sendero/notifications';
 
 import { upsertAirlineCredit } from './airline-credits-sync';
 import { makeToolRegistry } from './tool-registry';
 import { persistPausedRun, readPausedRun } from './workflow-pause';
+import { getTenantNotificationEmail } from './tenant-notification-email';
 
 export async function dispatchDuffelEvent(args: {
   event: DuffelWebhookEvent;
@@ -109,5 +111,106 @@ export async function dispatchDuffelEvent(args: {
     run: resumed,
   });
 
+  // Email the traveler (and cc the tenant admin) on a successful
+  // ticketing. Slack-installed tenants get the same data via the
+  // approval card resolution; this covers email-only tenants and
+  // ticketings that came through without an operator approval (e.g.
+  // auto-approved under-cap holds). Fails-soft: a Resend error
+  // never blocks the webhook ack.
+  if (resolutionStatus === 'ticketed') {
+    void emailBookingConfirmed({
+      bookingId: booking.id,
+      tenantId: booking.tenantId,
+      duffelOrderId: args.event.orderId,
+    });
+  }
+
   return { matched: true, runId: paused.runId, run: resumed };
+}
+
+interface BookingForEmail {
+  pnr: string | null;
+  totalUsd: { toFixed: (n: number) => string } | string | number | null;
+  currency: string;
+  segments: unknown;
+  trip: {
+    id: string;
+    intent: unknown;
+    traveler: { email: string | null; displayName: string | null } | null;
+  } | null;
+}
+
+async function emailBookingConfirmed(args: {
+  bookingId: string;
+  tenantId: string;
+  duffelOrderId: string;
+}): Promise<void> {
+  try {
+    const row = (await prisma.booking.findUnique({
+      where: { id: args.bookingId },
+      select: {
+        pnr: true,
+        totalUsd: true,
+        currency: true,
+        segments: true,
+        trip: {
+          select: {
+            id: true,
+            intent: true,
+            traveler: { select: { email: true, displayName: true } },
+          },
+        },
+      },
+    })) as BookingForEmail | null;
+    if (!row || !row.trip) return;
+
+    const travelerEmail = row.trip.traveler?.email ?? null;
+    const intent = (row.trip.intent ?? null) as { tripSummary?: string } | null;
+    const tripSummary = intent?.tripSummary ?? `Trip ${row.trip.id.slice(0, 12)}…`;
+    const totalAmount =
+      typeof row.totalUsd === 'object' && row.totalUsd && 'toFixed' in row.totalUsd
+        ? row.totalUsd.toFixed(2)
+        : String(row.totalUsd ?? '0.00');
+    const segments = Array.isArray(row.segments)
+      ? (row.segments as Array<Record<string, unknown>>)
+      : [];
+    const linkOrigin = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+    const tripUrl = `${linkOrigin.replace(/\/$/, '')}/dashboard/console?tripId=${encodeURIComponent(row.trip.id)}`;
+
+    const recipients = new Set<string>();
+    if (travelerEmail) recipients.add(travelerEmail);
+    const adminEmail = await getTenantNotificationEmail(args.tenantId);
+    if (adminEmail && adminEmail !== travelerEmail) recipients.add(adminEmail);
+    if (recipients.size === 0) return;
+
+    const n = notifier();
+    for (const to of recipients) {
+      await n
+        .sendBookingConfirmed(to, {
+          travelerName: row.trip.traveler?.displayName ?? 'Traveler',
+          tripSummary,
+          pnr: row.pnr ?? args.duffelOrderId,
+          total: totalAmount,
+          currency: row.currency || 'USD',
+          segments: segments.map(s => ({
+            carrier: String(s.carrier ?? s.flightNumber ?? ''),
+            origin: String(s.origin ?? s.originIata ?? ''),
+            destination: String(s.destination ?? s.destinationIata ?? ''),
+            departAt: String(s.departureAt ?? s.departure_at ?? s.departAt ?? ''),
+            arriveAt: s.arrivalAt
+              ? String(s.arrivalAt)
+              : s.arrival_at
+                ? String(s.arrival_at)
+                : s.arriveAt
+                  ? String(s.arriveAt)
+                  : undefined,
+            cabin: s.cabin ? String(s.cabin) : undefined,
+          })),
+          tripUrl,
+        })
+        .catch(err => console.warn('[duffel-dispatcher] sendBookingConfirmed failed', to, err));
+    }
+  } catch (err) {
+    console.warn('[duffel-dispatcher] emailBookingConfirmed outer failure', err);
+  }
 }

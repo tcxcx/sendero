@@ -3,8 +3,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { useAuth, useClerk, useOrganization } from '@clerk/nextjs';
+import { useAuth, useOrganization } from '@clerk/nextjs';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@sendero/ui/hover-card';
+
+import { PricingTableDialog } from '@/components/billing/pricing-table-dialog';
 
 const SENDERO_LOGO_SRC = '/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png';
 
@@ -29,7 +31,6 @@ const PLAN_LABEL: Record<PlanSlug, string> = {
 export function BrandUpgradeCard() {
   const { has, isLoaded } = useAuth();
   const { organization } = useOrganization();
-  const { openOrganizationProfile } = useClerk();
 
   const plan = isLoaded ? currentPlanSlug(has) : 'free';
   const isEnterprise = plan === 'enterprise';
@@ -143,13 +144,14 @@ export function BrandUpgradeCard() {
 
         {!isEnterprise && (
           <div className="border-t border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] px-4 py-3">
-            <button
-              type="button"
-              onClick={() => openOrganizationProfile()}
-              className="flex w-full items-center justify-center gap-2 rounded-md bg-[color:var(--ink)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] transition-opacity hover:opacity-90"
-            >
-              Upgrade →
-            </button>
+            <PricingTableDialog>
+              <button
+                type="button"
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-[color:var(--ink)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] transition-opacity hover:opacity-90"
+              >
+                Upgrade →
+              </button>
+            </PricingTableDialog>
           </div>
         )}
       </HoverCardContent>

@@ -1,15 +1,51 @@
 'use client';
 
 import { useClerk } from '@clerk/nextjs';
+import { CheckIcon, CopyIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@sendero/ui/button';
+import { toast } from '@sendero/ui/sonner';
 
 type PlanContext = {
   tier: string;
   productionApiKeyLimit: number | null;
   isBeta: boolean;
 };
+
+function CopyableSnippet({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    if (!navigator?.clipboard?.writeText) {
+      toast.error('Clipboard unavailable');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+      toast.success('Copied to clipboard');
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+  const Icon = copied ? CheckIcon : CopyIcon;
+  return (
+    <div className="relative mt-2">
+      <pre className="overflow-x-auto rounded-[var(--radius-sm)] bg-[color:var(--surface-base)] p-3 pr-10 font-mono text-xs">
+        {code}
+      </pre>
+      <button
+        type="button"
+        onClick={onCopy}
+        aria-label={copied ? 'Copied' : 'Copy to clipboard'}
+        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] text-[color:var(--ink)] opacity-60 transition hover:bg-[color:color-mix(in_oklab,var(--ink)_8%,transparent)] hover:opacity-100"
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
 
 export default function ApiKeysPage() {
   const { openOrganizationProfile } = useClerk();
@@ -81,8 +117,8 @@ export default function ApiKeysPage() {
               </code>
               ):
             </p>
-            <pre className="mt-2 overflow-x-auto rounded-[var(--radius-sm)] bg-[color:var(--surface-base)] p-3 font-mono text-xs">
-              {`{
+            <CopyableSnippet
+              code={`{
   "mcpServers": {
     "sendero": {
       "type": "http",
@@ -91,18 +127,18 @@ export default function ApiKeysPage() {
     }
   }
 }`}
-            </pre>
+            />
           </div>
           <div>
             <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--ink)]">
               2 · curl (agent dispatch)
             </div>
-            <pre className="mt-2 overflow-x-auto rounded-[var(--radius-sm)] bg-[color:var(--surface-base)] p-3 font-mono text-xs">
-              {`curl -X POST https://sendero.travel/api/agent/dispatch \\
+            <CopyableSnippet
+              code={`curl -X POST https://sendero.travel/api/agent/dispatch \\
   -H "Authorization: Bearer ak_…" \\
   -H "Content-Type: application/json" \\
   -d '{"channel":"mcp","text":"search SFO→LHR May 8"}'`}
-            </pre>
+            />
           </div>
           <div>
             <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[color:var(--ink)]">

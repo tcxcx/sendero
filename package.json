@@ -1,6 +1,6 @@
 {
   "name": "sendero-arc",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Sendero × Arc — AI travel agent monorepo. apps/{app, edge, docs, storybook} + packages/{auth, database, tools, circle, duffel, arc, erc8183, nanopayments, env}. Circle Arc Hackathon Spring 2026.",
@@ -21,6 +21,7 @@
     "dev": "turbo run dev --filter=@sendero/app",
     "dev:edge": "turbo run dev --filter=@sendero/edge",
     "dev:indexer": "turbo run dev --filter=@sendero/indexer",
+    "dev:pitch": "bun run pitch/serve.ts",
     "dev:complete": "turbo run dev --ui=stream --filter=@sendero/app --filter=@sendero/marketing --filter=@sendero/help --filter=@sendero/docs --filter=@sendero/edge --filter=@sendero/indexer --filter=@sendero/storybook",
     "dev:all": "turbo run dev --ui=stream",
     "indexer:codegen": "turbo run codegen --filter=@sendero/indexer",
@@ -48,6 +49,33 @@
     "smoke:escrow": "bun run scripts/smoke-guest-escrow.ts",
     "smoke:nanopay": "bun run scripts/smoke-nanopay-batch.ts",
     "deploy:fonts": "bun run scripts/deploy-invoice-fonts.ts",
+    "deploy:edge": "bun run --cwd apps/edge deploy",
+    "deploy:edge:preview": "bun run --cwd apps/edge deploy:preview",
+    "deploy:edge:dry-run": "bun run --cwd apps/edge deploy:dry-run",
+    "deploy:edge:canary": "bun run --cwd apps/edge deploy:canary --",
+    "deploy:edge:promote": "bun run --cwd apps/edge deploy:promote",
+    "deploy:edge:rollback": "bun run --cwd apps/edge deploy:rollback",
+    "deploy:app": "vercel --cwd apps/app deploy --prod",
+    "deploy:marketing": "vercel --cwd apps/marketing deploy --prod",
+    "deploy:docs": "vercel --cwd apps/docs deploy --prod",
+    "deploy:help": "vercel --cwd apps/help deploy --prod",
+    "deploy:rolling:configure": "bun run scripts/configure-rolling-releases.ts",
+    "deploy:rolling:configure:dry": "bun run scripts/configure-rolling-releases.ts --dry-run",
+    "deploy:rolling:disable": "bun run scripts/configure-rolling-releases.ts --disable",
+    "deploy:rolling:status:app": "vercel --cwd apps/app rolling-release fetch",
+    "deploy:rolling:status:marketing": "vercel --cwd apps/marketing rolling-release fetch",
+    "deploy:rolling:status:docs": "vercel --cwd apps/docs rolling-release fetch",
+    "deploy:rolling:status:help": "vercel --cwd apps/help rolling-release fetch",
+    "deploy:rolling:abort:app": "vercel --cwd apps/app rolling-release abort",
+    "deploy:rolling:abort:marketing": "vercel --cwd apps/marketing rolling-release abort",
+    "deploy:rolling:abort:docs": "vercel --cwd apps/docs rolling-release abort",
+    "deploy:rolling:abort:help": "vercel --cwd apps/help rolling-release abort",
+    "deploy:rolling:approve:app": "vercel --cwd apps/app rolling-release approve",
+    "deploy:rolling:complete:app": "vercel --cwd apps/app rolling-release complete",
+    "config:doctor": "bun run scripts/config-doctor.ts",
+    "cache:setup": "bash scripts/setup-turbo-cache.sh",
+    "defect-escape:report": "bun run scripts/defect-escape-report.ts",
+    "edge:health": "bash scripts/edge-health-check.sh",
     "smoke:retry": "bun run scripts/smoke-nanopay-retry.ts",
     "smoke:resume-settle": "bun run scripts/smoke-webhook-resume-settle.ts",
     "smoke:resume-cancel": "bun run scripts/smoke-webhook-resume-cancel.ts",
@@ -60,6 +88,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.8",
+    "@circle-fin/developer-controlled-wallets": "^8.0.0",
+    "@circle-fin/smart-contract-platform": "^10.3.0",
     "@vercel/blob": "^2.3.3",
     "@turbo/gen": "^2.9.6",
     "@types/node": "^22.9.0",
@@ -68,7 +98,8 @@
     "prisma": "^5.22.0",
     "turbo": "^2.9.6",
     "typescript": "^5.8.3",
-    "viem": "^2.21.0"
+    "viem": "^2.21.0",
+    "wrangler": "^4.85.0"
   },
   "repository": {
     "type": "git",
@@ -85,5 +116,6 @@
     "ai-agent",
     "hackathon"
   ],
-  "license": "MIT"
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Tomas Cordero <tomas.cordero.esp@gmail.com> (https://github.com/tcxcx)"
 }

@@ -1,0 +1,55 @@
+---
+title: Tenant markup v1 + on-chain three-way split (2026-04-25)
+description: Tenant agencies can now set their own markup over supplier cost, see GMV roll-ups, and get historical-median recommendations. Bookings settle three legs atomically on Arc — vendor, agency, Sendero — via SenderoGuestEscrow v3. Includes new MCP tools, the standard error envelope, and OTP brute-force protection on the same contract.
+---
+
+**Released:** 2026-04-25
+
+The full markup pipeline is live. Tenants set their own margin, customers pay one total, and Arc settles three recipients atomically in one transaction. No reconciliation, no end-of-month true-up.
+
+## What's new for tenants
+
+- **Set markup per booking kind.** `/dashboard/settings/pricing` now exposes a wizard for `flight`, `hotel`, `rail`, `car`, `other`. Pick `static` markup in basis points; v2 will add tiered + volume-curve strategies behind the same schema.
+- **Floor and ceiling guardrails.** Self-set bounds. The floor stops free upgrades; the ceiling stops a hallucinating agent from booking a $50K hotel at 200% markup. Override the ceiling with a privileged scope ([details](/docs/pricing/markup-scopes)).
+- **Two take behaviors.** Choose `deduct_from_markup` (Sendero is invisible to the buyer; agency keeps `markup - take`) or `add_to_customer` (clean agency margin; customer pays `cost + markup + take`).
+- **GMV reporting.** Per-tenant rollup of vendor / agency / Sendero legs from `Settlement` rows, indexed off `BookingSettledV2`.
+- **Historical-median recommendations.** Once you have 100+ confirmed bookings of a given kind, `get_tenant_pricing_policy` surfaces a `recommendation` field with the median markup observed across your bookings. Refreshed weekly by `/api/cron/refresh-markup-medians`.
+- **Plan-tier discounts.** Take rate scales with plan: Free 50bps / Basic 47.5bps / Pro 45.0bps / Enterprise 42.5bps. The take floor scales with the same formula: $0.500 / $0.475 / $0.450 / $0.425.
+
+## What's new for agents
+
+- **`confirm_booking` extended.** Now computes the full markup breakdown (cost + markup + take), enforces the policy ceiling, runs the override gate, persists the breakdown back onto the `Booking`, and encodes the `commitBookingV2` userOp. The operator MSCA submits it; the tool only encodes.
+- **`get_tenant_pricing_policy` (new).** Read-only twin of `GET /api/tenant/pricing-policy`. Returns status (`active` / `inactive` / `partial` / `sandbox_seed` / `not_initialized`), missing kinds, floor / ceiling, and the optional historical-median recommendation. Tenant resolved from the API key — the LLM never passes a tenantId.
+- **`activate_tenant_pricing_policy` (new).** Admin-only. Flips a tenant from "no policy" → "active production policy" entirely in-thread. Rejects sandbox keys unconditionally even when carrying `'*'`. Runs the treasury preflight before activation.
+- **Standard error envelope.** Every JSON route returns `{ code, message, details, docsUrl, agentInstruction, traceId }`. The `agentInstruction` field carries canonical recovery copy that an LLM should surface to the human verbatim. See [api-conventions/errors](/docs/api-conventions/errors).
+- **New error codes.** `POLICY_INACTIVE`, `POLICY_PARTIAL_FOR_KIND`, `TREASURY_NOT_PROVISIONED`, `MARKUP_OVER_CEILING`, `MARKUP_UNDER_FLOOR`, `MARKUP_UNDER_TAKE_FLOOR`, `MARKUP_AMBIGUOUS_INPUT`, `OVERRIDE_REQUIRES_SCOPE`, `OVERRIDE_UNNECESSARY`, `MARKUP_CONFIG_INVALID`. Full catalog at [pricing/markup-error-codes](/docs/pricing/markup-error-codes).
+- **Override scope.** `tenant:pricing:override` is the privileged escape hatch for confirms above the tenant ceiling. Never granted to sandbox keys. Signing is required (it lives in `PRIVILEGED_TOOLS`). See [pricing/markup-scopes](/docs/pricing/markup-scopes).
+
+## What's new on chain
+
+- **`SenderoGuestEscrow` v3.0.0.** New `commitBookingV2(bookingId, vendorAmount, feeAmount, agencyAmount, vendor, agency, itineraryHash, itineraryCID)` enforces the three-way split atomically. A revert anywhere reverts the whole transaction.
+- **`BookingSettledV2(bookingId, vendor, agency, fee, vendorAmount, agencyAmount, feeAmount)` event.** The off-chain indexer (`persistSettlementFromV2Event`) writes three `SettlementLeg` rows from a single event — one per recipient. Existing v1 `BookingSettled` events still index to a single `Settlement` row.
+- **OTP brute-force protection (same contract).** Three failed claim attempts in the same trip trigger a 15-minute lockout. Wrong-code attempts emit `ClaimAttemptFailed(tripId, attemptCount)` instead of reverting; lockout state is exposed via `ClaimLockoutTriggered(tripId, lockedUntil)`. Code rotation via `setClaimCodeHash` resets the failed-attempt counter (but does NOT clear the lockout). Full design: [security/claim-code](/docs/security/claim-code).
+
+## Migration notes
+
+- **Existing bookings.** Any booking confirmed before this release is flagged `markupSource: 'pre_v1_no_markup_recorded'` on `Booking.metadata`. They settle through the v1 single-leg path; no re-pricing happens.
+- **GMV reporting starts from launch.** The rollup denominator is `Settlement` rows with non-null `agencyAmount`, which only exist for v2-confirmed bookings. Pre-v1 bookings are excluded from agency-leg totals.
+- **Sandbox keys.** No behavior change — sandbox keys continue to mint `MeterEvent.status = 'sandbox'` rows that never settle real USDC. The seeded `TenantPricingPolicy` row (with `sandboxOnly = true`) lets the smoke test fire on a brand-new org without any human config.
+- **Tenants with no activated policy.** Confirms throw `POLICY_INACTIVE` with the canonical `agentInstruction` pointing to `/dashboard/settings/pricing`. Activation is a one-screen wizard.
+
+## OpenAPI + DX
+
+- **OpenAPI spec bumped to `1.1.0`.** Source: `packages/tools/src/openapi.ts`. The new spec adds `confirm_booking` (extended), `get_tenant_pricing_policy`, and `activate_tenant_pricing_policy` to the catalog.
+- **v1.0.0 snapshot pinned.** Old spec preserved at [`/openapi/v1.0.0.json`](https://docs.sendero.travel/openapi/v1.0.0.json) for clients that need the previous shape during a phased rollout. Live spec stays at [`/api/openapi.json`](https://www.sendero.travel/api/openapi.json).
+- **Per-page `.md`.** Every new docs page is automatically available as plain markdown — append `.md` to any URL. Mirrors Sherpa's "Trips LLM Friendly" pattern.
+- **`llms.txt` updated.** The two new tools (`get_tenant_pricing_policy`, `activate_tenant_pricing_policy`) are listed in `AGENT_TOOL_CATALOG` with deep-links to the activation flow.
+
+## Source
+
+- [`packages/tools/src/confirm-booking.ts`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/confirm-booking.ts)
+- [`packages/tools/src/get-pricing-policy.ts`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/get-pricing-policy.ts)
+- [`packages/tools/src/activate-pricing-policy.ts`](https://github.com/tcxcx/sendero/blob/main/packages/tools/src/activate-pricing-policy.ts)
+- [`packages/billing/src/markup.ts`](https://github.com/tcxcx/sendero/blob/main/packages/billing/src/markup.ts)
+- [`packages/billing/src/markup-recommendations.ts`](https://github.com/tcxcx/sendero/blob/main/packages/billing/src/markup-recommendations.ts)
+- [`apps/app/lib/api-errors.ts`](https://github.com/tcxcx/sendero/blob/main/apps/app/lib/api-errors.ts)

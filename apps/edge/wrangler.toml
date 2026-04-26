@@ -1,5 +1,14 @@
 # Cloudflare Workers config — run `wrangler deploy` from apps/edge/
 # to ship the Hono edge worker. Free tier covers hackathon traffic.
+#
+# Canary rollouts (gradient deploy with health-probe rollback):
+#   bun run deploy:edge:canary -- --pct 10   # upload + route 10% to new version
+#   bun run deploy:edge:promote              # take the canary to 100%
+#   bun run deploy:edge:rollback             # 100% back to the prior version
+#
+# Auto-rollout via .github/workflows/edge-canary-rollout.yml runs the
+# 10% → 50% → 100% gradient on every push to main with health-probe gating.
+# Skip per-PR with the `skip-canary` label.
 name = "sendero-arc-edge"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"

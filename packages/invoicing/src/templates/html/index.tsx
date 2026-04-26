@@ -1,5 +1,6 @@
 // packages/invoicing/src/templates/html/index.tsx
 import type { TemplateProps } from '../types';
+import { HeroTotal } from './components/hero-total';
 import { Meta } from './components/meta';
 import { LineItems } from './components/line-items';
 import { Summary } from './components/summary';
@@ -18,6 +19,17 @@ export async function renderInvoiceQrDataUrl(publicUrl: string): Promise<string>
 }
 
 export function InvoiceHtml(props: TemplateProps & { qrDataUrl?: string }) {
+  // Track C3 layout order (top → bottom):
+  //   1. Meta            (logo / from / customer / invoice number / dates)
+  //   2. HeroTotal       (display-size customer-pays figure — anchored at top per the
+  //                       Booking.com / Hopper / Airbnb confirmation pattern)
+  //   3. LineItems       (vertical stack; collapses to nothing for single-line mode
+  //                       since the hero already shows the customer total)
+  //   4. Summary         (subtotal/tax/discount/total — totals block below)
+  //   5. QR + Note       (optional; unchanged)
+  //
+  // No fixed-width tables anywhere — everything is flex / block so the
+  // layout reflows under 320px viewports.
   return (
     <div
       style={{
@@ -30,9 +42,9 @@ export function InvoiceHtml(props: TemplateProps & { qrDataUrl?: string }) {
       }}
     >
       <Meta {...props} />
-      <div style={{ height: 32 }} />
+      <HeroTotal {...props} />
       <LineItems {...props} />
-      <div style={{ height: 32 }} />
+      {props.invoice.lineItems.length > 1 ? <div style={{ height: 32 }} /> : null}
       <Summary {...props} />
       {props.template.include_qr && props.qrDataUrl ? <QRCode dataUrl={props.qrDataUrl} /> : null}
       <Note {...props} />
