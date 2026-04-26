@@ -58,8 +58,8 @@ const DASHBOARD_PAGE_COPY: Record<string, Copy> = {
     description: 'Install approvals and employee travel DMs.',
   },
   '/dashboard/integrations/mcp': {
-    title: 'MCP agents',
-    description: 'Expose the journey engine to external LLMs.',
+    title: 'API keys & MCP',
+    description: 'One key powers HTTP dispatch, MCP server, and direct tool calls.',
   },
   '/dashboard/settings': {
     title: 'Settings',
