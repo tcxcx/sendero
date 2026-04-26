@@ -161,7 +161,7 @@ export default async function DashboardPage() {
           title={copy.stats.unpaidInvoices}
           value={formatMicroUsd(unpaidInvoices._sum.totalMicro ?? 0n)}
           description={copy.stats.openInvoices(unpaidInvoices._count)}
-          href="/dashboard/billing/invoices?status=issued"
+          href="/dashboard/billing/invoices"
         />
         <StatCard
           title={copy.stats.monthToDateSpend}
