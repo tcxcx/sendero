@@ -15,7 +15,7 @@ export default async function OrganizationSettingsPage() {
   });
 
   return (
-    <main className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-4 rounded-[var(--radius-lg)] bg-[color:var(--surface-raised)] p-6 shadow-[var(--shadow-md)]">
         <header className="flex flex-row items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
@@ -56,6 +56,6 @@ export default async function OrganizationSettingsPage() {
           }}
         />
       </div>
-    </main>
+    </div>
   );
 }
