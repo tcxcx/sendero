@@ -68,6 +68,7 @@
         "@sendero/arc": "workspace:*",
         "@sendero/auth": "workspace:*",
         "@sendero/billing": "workspace:*",
+        "@sendero/bu": "workspace:*",
         "@sendero/circle": "workspace:*",
         "@sendero/collaboration": "workspace:*",
         "@sendero/commission": "workspace:*",
@@ -77,6 +78,7 @@
         "@sendero/erc8183": "workspace:*",
         "@sendero/fonts": "workspace:*",
         "@sendero/guest": "workspace:*",
+        "@sendero/icons": "workspace:*",
         "@sendero/intelligence": "workspace:*",
         "@sendero/invoicing": "workspace:*",
         "@sendero/kapso": "workspace:*",
@@ -366,6 +368,13 @@
         "@sendero/nanopayments": "*",
       },
     },
+    "packages/bu": {
+      "name": "@sendero/bu",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
     "packages/collaboration": {
       "name": "@sendero/collaboration",
       "version": "0.1.0",
@@ -409,6 +418,20 @@
       "dependencies": {
         "geist": "^1.3.1",
       },
+      "devDependencies": {
+        "@types/react": "^19.2.5",
+        "next": "^16.2.4",
+        "react": "^19.2.5",
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "next": "^15.0.0 || ^16.0.0",
+        "react": "^19.0.0",
+      },
+    },
+    "packages/icons": {
+      "name": "@sendero/icons",
+      "version": "0.1.0",
       "devDependencies": {
         "@types/react": "^19.2.5",
         "next": "^16.2.4",
@@ -1716,6 +1739,8 @@
 
     "@sendero/billing": ["@sendero/billing@workspace:packages/billing"],
 
+    "@sendero/bu": ["@sendero/bu@workspace:packages/bu"],
+
     "@sendero/circle": ["@sendero/circle@workspace:packages/sendero-circle"],
 
     "@sendero/collaboration": ["@sendero/collaboration@workspace:packages/collaboration"],
@@ -1739,6 +1764,8 @@
     "@sendero/guest": ["@sendero/guest@workspace:packages/sendero-guest"],
 
     "@sendero/help": ["@sendero/help@workspace:apps/help"],
+
+    "@sendero/icons": ["@sendero/icons@workspace:packages/icons"],
 
     "@sendero/indexer": ["@sendero/indexer@workspace:apps/ponder"],
 

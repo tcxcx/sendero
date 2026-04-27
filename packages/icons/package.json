@@ -1,0 +1,31 @@
+{
+  "name": "@sendero/icons",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero canonical icon system. Centralizes raster brand marks (provider webps, integration logos) and inline-rendered SVG components. One source of truth across all four Next apps so consumers stop scattering paths in /public.",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./providers": "./src/providers.tsx",
+    "./integrations": "./src/integrations.tsx"
+  },
+  "files": [
+    "src",
+    "assets"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "next": "^15.0.0 || ^16.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.5",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "typescript": "^5.8.3"
+  }
+}
