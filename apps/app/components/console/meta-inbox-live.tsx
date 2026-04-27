@@ -503,9 +503,7 @@ interface ToolPartShape {
 function UIMessageBody({ message }: { message: UIMessage }) {
   const parts = (message.parts ?? []) as Array<ToolPartShape>;
   return (
-    <MessageContent
-      className="relative isolate overflow-hidden rounded-2xl border border-[color:var(--hairline-color-soft)] bg-[color:color-mix(in_oklab,var(--surface-raised)_82%,transparent)] px-4 py-3 text-[color:var(--midnight)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),inset_0_-1px_0_rgba(255,255,255,0.12),0_8px_24px_-18px_rgba(31,42,68,0.22)] backdrop-blur-[6px] backdrop-saturate-[1.4] [--bubble-tint:var(--ink)] group-[.is-user]:!rounded-2xl group-[.is-user]:!bg-[color:color-mix(in_oklab,var(--surface-raised)_82%,transparent)] group-[.is-user]:!text-[color:var(--midnight)] group-[.is-user]:[--bubble-tint:var(--midnight)]"
-    >
+    <MessageContent className="relative isolate overflow-hidden rounded-2xl border border-[color:var(--hairline-color-soft)] bg-[color:color-mix(in_oklab,var(--surface-raised)_82%,transparent)] px-4 py-3 text-[color:var(--midnight)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),inset_0_-1px_0_rgba(255,255,255,0.12),0_8px_24px_-18px_rgba(31,42,68,0.22)] backdrop-blur-[6px] backdrop-saturate-[1.4] [--bubble-tint:var(--ink)] group-[.is-user]:!rounded-2xl group-[.is-user]:!bg-[color:color-mix(in_oklab,var(--surface-raised)_82%,transparent)] group-[.is-user]:!text-[color:var(--midnight)] group-[.is-user]:[--bubble-tint:var(--midnight)]">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10 opacity-[0.18]"
@@ -563,7 +561,10 @@ function UIMessageBody({ message }: { message: UIMessage }) {
           // The block stays collapsed even after the result lands;
           // operators can open any tool to inspect inputs/outputs.
           return (
-            <Tool key={key}>
+            <Tool
+              key={key}
+              className="border-[color:color-mix(in_oklab,var(--ink)_55%,transparent)] bg-[color:color-mix(in_oklab,var(--ink)_4%,var(--surface-raised))] shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_1px_2px_color-mix(in_oklab,var(--ink)_18%,transparent)]"
+            >
               <ToolHeader type={`tool-${toolName}` as `tool-${string}`} state={aiElementState} />
               <ToolContent>
                 <ToolInput input={input} />
