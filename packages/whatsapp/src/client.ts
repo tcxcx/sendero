@@ -95,34 +95,40 @@ export class WhatsAppClient {
     this.onApiCall = config.onApiCall;
   }
 
-  /** Fire-and-forget audit hook for one request attempt. */
-  private async fireApiCall(event: WhatsAppApiCallEvent): Promise<void> {
+  /**
+   * Fire-and-forget audit hook for one request attempt. Same posture
+   * as `fireAudit` — we don't await, so the request hot path doesn't
+   * pay audit-DB-write latency on every send + retry.
+   */
+  private fireApiCall(event: WhatsAppApiCallEvent): void {
     if (!this.onApiCall) return;
-    try {
-      await this.onApiCall(event);
-    } catch (err) {
-      console.error('[whatsapp.client] api-call hook failed', {
-        endpoint: event.endpoint,
-        error: err instanceof Error ? err.message : String(err),
+    void Promise.resolve()
+      .then(() => this.onApiCall?.(event))
+      .catch(err => {
+        console.error('[whatsapp.client] api-call hook failed', {
+          endpoint: event.endpoint,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    }
   }
 
   /**
-   * Run the `onSent` hook fire-and-forget. We swallow exceptions here
-   * — a downed audit log must NEVER fail an outbound send, since the
-   * customer message has already been delivered to Meta.
+   * Run the `onSent` hook truly fire-and-forget. We don't await the
+   * caller's hook — every awaited send would otherwise pay
+   * audit-DB-write latency on the wire-edge, doubling p95 under load.
+   * Errors are caught + logged on the detached promise so a hook
+   * throw never becomes an unhandled rejection.
    */
-  private async fireAudit(event: WhatsAppSendEvent): Promise<void> {
+  private fireAudit(event: WhatsAppSendEvent): void {
     if (!this.onSent) return;
-    try {
-      await this.onSent(event);
-    } catch (err) {
-      console.error('[whatsapp.client] audit hook failed', {
-        wamid: event.wamid,
-        error: err instanceof Error ? err.message : String(err),
+    void Promise.resolve()
+      .then(() => this.onSent?.(event))
+      .catch(err => {
+        console.error('[whatsapp.client] audit hook failed', {
+          wamid: event.wamid,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    }
   }
 
   /**
