@@ -12,12 +12,14 @@
  * a victim's Slack workspace to an attacker's tenant.
  */
 
-import { NextResponse, type NextRequest } from 'next/server';
-import { env } from '@sendero/env';
+import { after, type NextRequest, NextResponse } from 'next/server';
+
 import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
 import { exchangeCode } from '@sendero/slack';
 
-import { verifySlackState, type SlackStateVerifyResult } from '@/lib/slack-oauth-state';
+import { sendSlackInstallReceivedEmail } from '@/lib/slack-install-email';
+import { type SlackStateVerifyResult, verifySlackState } from '@/lib/slack-oauth-state';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,11 +56,12 @@ export async function GET(req: NextRequest) {
 
   const tenantExists = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true },
+    select: { id: true, slug: true },
   });
   if (!tenantExists) {
     return NextResponse.json({ error: 'unknown_tenant' }, { status: 404 });
   }
+  const flow = verified.flow;
 
   try {
     const install = await exchangeCode({
@@ -100,6 +103,32 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Fire the tenant-admin email past the redirect so the user sees
+    // the success page immediately. Resend latency / outage never
+    // blocks the install flow.
+    after(async () => {
+      try {
+        await sendSlackInstallReceivedEmail({
+          tenantId,
+          teamName: install.teamName,
+          enterpriseName: install.enterpriseName,
+          installedAt: new Date(),
+        });
+      } catch (err) {
+        console.warn('[slack/oauth] install email fire-and-forget failed', err);
+      }
+    });
+
+    if (flow === 'public') {
+      // Persona C — end-customer admin who came in via the public
+      // /install/slack?tenant=<slug> flow. Land them on the public
+      // success page with tenant attribution + workspace label.
+      const url = new URL('/install/slack/success', req.url);
+      url.searchParams.set('tenant', tenantExists.slug);
+      url.searchParams.set('team', install.teamName);
+      return NextResponse.redirect(url);
+    }
+    // Tenant operator who finished the wizard — back into the dashboard.
     return NextResponse.redirect(new URL('/dashboard/channels/slack/connect?installed=1', req.url));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
