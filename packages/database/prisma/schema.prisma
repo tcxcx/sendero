@@ -33,6 +33,7 @@ datasource db {
 
 enum BillingTier {
   free
+  basic
   pro
   business
   enterprise
@@ -118,6 +119,10 @@ enum MeterStatus {
   /// key downgraded during testnet-beta network mode). Row is kept for
   /// analytics; NanopayBatch excludes `status='sandbox'` from settlement.
   sandbox
+  /// Paid from the tenant's SaaS-included credit grant (Subscription.meterBalanceMicro).
+  /// Excluded from NanopayBatch settlement and from CapStore.spentInWindow so the
+  /// monthly spend cap only counts actual out-of-pocket overage.
+  credit
 }
 
 enum SettlementStatus {
@@ -423,7 +428,17 @@ model Subscription {
   status            SubscriptionStatus @default(active)
   currentPeriodEnd  DateTime?          @db.Timestamptz(6)
   /// Signed micro-USDC balance for the current billing period (negative = owed).
+  /// Refilled by the Clerk subscription.created/subscription.updated webhook on
+  /// cycle renewal. Use-it-or-lose-it: no rollover.
   meterBalanceMicro BigInt             @default(0)
+  /// Sum of `status='credit'` MeterEvents inside the current daily window.
+  /// Persisted so the atomic preflight UPDATE can enforce the daily sub-cap
+  /// (typically 25% of monthlyIncludedCreditsMicro) without a separate
+  /// aggregate read race.
+  dailyCreditBurnMicro BigInt          @default(0)
+  /// UTC timestamp when the current daily window opened. Reset by preflight
+  /// when wall clock crosses (dailyWindowStartedAt + 24h).
+  dailyWindowStartedAt DateTime?       @db.Timestamptz(6)
   metadata          Json?
   createdAt         DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
