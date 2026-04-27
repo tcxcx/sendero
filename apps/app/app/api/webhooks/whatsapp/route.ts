@@ -35,11 +35,7 @@ import {
 } from '@sendero/whatsapp';
 
 import { newTraceId } from '@/lib/api-errors';
-import {
-  logOutboundMessage,
-  logWebhookEvent,
-  reconcileOutboundStatus,
-} from '@/lib/whatsapp-audit';
+import { logOutboundMessage, logWebhookEvent, reconcileOutboundStatus } from '@/lib/whatsapp-audit';
 import { claimWhatsAppMessage, isWithinReplayWindow } from '@/lib/whatsapp-dedup';
 
 export const runtime = 'nodejs';
@@ -258,8 +254,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const replayWindowOk =
-    messages.length === 0 ? null : droppedReplay < messages.length;
+  const replayWindowOk = messages.length === 0 ? null : droppedReplay < messages.length;
 
   // Resolve the most-likely tenantId from the first inbound message.
   // For pure-status payloads with no inbound message, we can't infer a

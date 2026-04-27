@@ -174,10 +174,7 @@ async function checkSlashHelp() {
 }
 
 async function checkWhatsAppBadSignature() {
-  const r = await postWhatsApp(
-    { object: 'whatsapp_business_account', entry: [] },
-    { sign: false }
-  );
+  const r = await postWhatsApp({ object: 'whatsapp_business_account', entry: [] }, { sign: false });
   record('whatsapp 401 on bad signature', r.status === 401, `status=${r.status}`);
 }
 
@@ -186,10 +183,7 @@ async function checkWhatsAppEmptyEnvelope() {
     record('whatsapp empty envelope ack', false, 'skipped — WHATSAPP_APP_SECRET not set');
     return;
   }
-  const r = await postWhatsApp(
-    { object: 'whatsapp_business_account', entry: [] },
-    { sign: true }
-  );
+  const r = await postWhatsApp({ object: 'whatsapp_business_account', entry: [] }, { sign: true });
   record('whatsapp empty envelope ack', r.status === 200, `status=${r.status}`);
 }
 

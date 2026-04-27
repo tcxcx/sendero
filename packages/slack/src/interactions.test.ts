@@ -64,9 +64,7 @@ describe('parseInteractionBody', () => {
   });
 
   test('unknown payload type returns null (caller silently 200s)', () => {
-    const result = parseInteractionBody(
-      urlEncode({ type: 'shortcut', user: { id: 'U1' } })
-    );
+    const result = parseInteractionBody(urlEncode({ type: 'shortcut', user: { id: 'U1' } }));
     expect(result).toBeNull();
   });
 
@@ -143,9 +141,10 @@ describe('serializeSubmissionResult', () => {
     expect(serializeSubmissionResult({ kind: 'ack' })).toEqual({});
   });
   test('errors → response_action errors envelope', () => {
-    expect(
-      serializeSubmissionResult({ kind: 'errors', errors: { block_a: 'msg' } })
-    ).toEqual({ response_action: 'errors', errors: { block_a: 'msg' } });
+    expect(serializeSubmissionResult({ kind: 'errors', errors: { block_a: 'msg' } })).toEqual({
+      response_action: 'errors',
+      errors: { block_a: 'msg' },
+    });
   });
   test('update → response_action update with view', () => {
     const v = { type: 'modal', title: 'X' };
