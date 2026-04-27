@@ -83,9 +83,7 @@ export default async function WhatsAppInboxPage() {
               <tbody>
                 {webhookEvents.map(ev => (
                   <tr key={ev.id} className="border-t border-border">
-                    <Td title={ev.receivedAt.toISOString()}>
-                      {formatRelative(ev.receivedAt)}
-                    </Td>
+                    <Td title={ev.receivedAt.toISOString()}>{formatRelative(ev.receivedAt)}</Td>
                     <Td>
                       <Badge tone={ev.signatureValid ? 'ok' : 'fail'}>
                         {ev.signatureValid ? 'ok' : 'bad'}
@@ -199,13 +197,7 @@ function Td({
   );
 }
 
-function Badge({
-  tone,
-  children,
-}: {
-  tone: 'ok' | 'warn' | 'fail';
-  children: React.ReactNode;
-}) {
+function Badge({ tone, children }: { tone: 'ok' | 'warn' | 'fail'; children: React.ReactNode }) {
   const cls =
     tone === 'ok'
       ? 'bg-emerald-100 text-emerald-900'

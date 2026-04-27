@@ -79,10 +79,7 @@ mock.module('@sendero/database', () => ({
         });
         return { id: `om_${state.outbound.length}` };
       },
-      updateMany: async (args: {
-        where: { wamid: string };
-        data: Record<string, unknown>;
-      }) => {
+      updateMany: async (args: { where: { wamid: string }; data: Record<string, unknown> }) => {
         state.outboundUpdates.push(args);
         const matches = state.outbound.filter(r => r.wamid === args.where.wamid);
         for (const row of matches) {

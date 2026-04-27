@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({
       response_type: 'ephemeral',
-      text: "I hit an error running that command. Try again, or check the Sendero dashboard if it persists.",
+      text: 'I hit an error running that command. Try again, or check the Sendero dashboard if it persists.',
     });
   }
 

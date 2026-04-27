@@ -49,9 +49,7 @@ export type SlashCommandResult =
       responseType?: 'ephemeral' | 'in_channel';
     };
 
-export type SlashCommandHandler = (
-  payload: SlashCommandPayload
-) => Promise<SlashCommandResult>;
+export type SlashCommandHandler = (payload: SlashCommandPayload) => Promise<SlashCommandResult>;
 
 /**
  * Parse the URL-encoded slash-command body Slack sends. Returns null
@@ -133,9 +131,7 @@ export class SlashCommandRouter {
  * Serialize a `SlashCommandResult` into the JSON body Slack reads on the
  * original POST.
  */
-export function serializeSlashCommandResult(
-  result: SlashCommandResult
-): Record<string, unknown> {
+export function serializeSlashCommandResult(result: SlashCommandResult): Record<string, unknown> {
   if (result.kind === 'ack') return {};
   const body: Record<string, unknown> = {};
   if (result.text) body.text = result.text;
