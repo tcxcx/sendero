@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+  <title>Model Context Protocol</title>
+  <circle cx="96" cy="48" r="14"/>
+  <circle cx="40" cy="128" r="14"/>
+  <circle cx="152" cy="128" r="14"/>
+  <path d="M96 62 L40 114"/>
+  <path d="M96 62 L152 114"/>
+  <path d="M54 128 L138 128"/>
+  <path d="M96 88 L96 144" stroke-dasharray="6 6"/>
+</svg>
