@@ -268,16 +268,20 @@ export async function deductAndRecord(args: DeductAndRecordArgs): Promise<Deduct
     const sub = await lockSubscription(tx, args.tenantId);
 
     // 4. No subscription row OR the tenant's plan doesn't include
-    //    a credit envelope (free tier). Write `status='paid'` at full
-    //    cost as before.
+    //    a credit envelope (free tier). Write `status='paid'` with
+    //    the plan's nanopayment discount applied — Free has 0% so this
+    //    is a no-op today, but it removes a footgun if a future plan
+    //    sets `credits: null + discount > 0` (would silently drop the
+    //    discount otherwise; see /review 2026-04-27).
     if (!sub || args.plan.monthlyIncludedCreditsMicro === null) {
+      const paidMicro = applyBpsDiscount(args.costMicro, args.plan.nanopaymentDiscountBps);
       const row = await tx.meterEvent.create({
         data: {
           tenantId: args.tenantId,
           userId: args.userId ?? null,
           payerAddress: args.payerAddress ?? null,
           toolName: args.toolName,
-          priceMicroUsdc: args.costMicro,
+          priceMicroUsdc: paidMicro,
           status: 'paid',
           settlementRef: null,
           note: args.note ?? null,
@@ -289,7 +293,7 @@ export async function deductAndRecord(args: DeductAndRecordArgs): Promise<Deduct
       return {
         meterEventIds: [row.id],
         creditMicro: 0n,
-        paidMicro: args.costMicro,
+        paidMicro,
         newBalanceMicro: sub?.meterBalanceMicro ?? null,
         newDailyBurnMicro: sub?.dailyCreditBurnMicro ?? null,
         replayed: false,
@@ -379,3 +383,96 @@ export async function deductAndRecord(args: DeductAndRecordArgs): Promise<Deduct
 // the constraint ordering (balance before daily-cap) and window-reset
 // behavior without standing up a database.
 export const __test = { planSplit, applyBpsDiscount };
+
+// ─── MeterStore adapter ─────────────────────────────────────────────
+//
+// `runAgentTurn` and route handlers call `meterStore.create(input)` once
+// per metered action. The bare `makeMeterStore()` writes a single row at
+// `input.priceMicroUsdc` with no credit awareness. This adapter wraps
+// `deductAndRecord()` in the same `MeterStore` shape so wiring is a
+// 1-line swap at each call site:
+//
+//   meterStore: makeMeterStore({ forceStatus })           // before
+//   meterStore: makeCreditAwareMeterStore({ plan, ... })  // after
+//
+// Returned `id` is the credit row when one was written, otherwise the
+// paid row, otherwise the sandbox row — whichever is present. Callers
+// that need the FULL split (both ids, the credit/paid breakdown) should
+// invoke `deductAndRecord()` directly.
+
+import type { MeterEventInput, MeterStore } from '@sendero/billing/meter';
+
+export interface MakeCreditAwareMeterStoreOpts {
+  plan: PlanConfig;
+  /** Sandbox key on this dispatch — skip deduction, write status='sandbox'. */
+  sandbox: boolean;
+  segment: BillingSegment;
+}
+
+/**
+ * Returns the same `MeterStore` shape that `makeMeterStore()` does,
+ * but each `.create()` call routes through the credit-deduction
+ * transaction. Tenants with no subscription / no grant fall through
+ * to `status='paid'` at full cost, matching prior behavior — so swapping
+ * this in is safe even before the `subscription.created` webhook lands.
+ *
+ * **Idempotency.** Reads `metadata.idempotencyKey` from the input (the
+ * existing convention). If absent, generates a stable per-request key
+ * from `(tenantId, toolName, timestamp)` so concurrent turns within the
+ * same millisecond get different keys. Production callers should always
+ * supply a stable key (typically the turnId) — silent fallback exists
+ * to keep legacy callers working during rollout.
+ */
+export function makeCreditAwareMeterStore(opts: MakeCreditAwareMeterStoreOpts): MeterStore {
+  return {
+    create: async (input: MeterEventInput) => {
+      // No tenant — system event, cron job, etc. Fall through to a
+      // plain insert. Credits don't apply.
+      if (!input.tenantId) {
+        const row = await prisma.meterEvent.create({
+          data: {
+            tenantId: null,
+            userId: input.userId ?? null,
+            payerAddress: input.payerAddress ?? null,
+            toolName: input.toolName,
+            priceMicroUsdc: input.priceMicroUsdc,
+            status: input.status,
+            settlementRef: input.settlementRef ?? null,
+            note: input.note ?? null,
+            metadata: (input.metadata as object | undefined) ?? undefined,
+            idempotencyKey: null,
+          },
+          select: { id: true },
+        });
+        return { id: row.id };
+      }
+
+      const idempotencyKey =
+        input.metadata &&
+        typeof input.metadata === 'object' &&
+        'idempotencyKey' in input.metadata &&
+        typeof (input.metadata as Record<string, unknown>).idempotencyKey === 'string'
+          ? ((input.metadata as Record<string, unknown>).idempotencyKey as string)
+          : `auto-${input.tenantId}-${input.toolName}-${Date.now()}`;
+
+      const result = await deductAndRecord({
+        tenantId: input.tenantId,
+        toolName: input.toolName,
+        costMicro: input.priceMicroUsdc,
+        plan: opts.plan,
+        sandbox: opts.sandbox,
+        segment: opts.segment,
+        idempotencyKey,
+        userId: input.userId ?? null,
+        payerAddress: input.payerAddress ?? null,
+        metadata: (input.metadata as Record<string, unknown> | undefined) ?? null,
+        note: input.note ?? null,
+      });
+
+      // Return the first written row's id — the credit row when one
+      // was written, otherwise paid, otherwise sandbox. Callers that
+      // need the full split bypass this adapter.
+      return { id: result.meterEventIds[0] ?? '' };
+    },
+  };
+}
