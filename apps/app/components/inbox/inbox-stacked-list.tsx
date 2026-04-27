@@ -168,24 +168,22 @@ export function InboxStackedList({ trips }: Props) {
         />
       </div>
 
-      {/* Stacked thread list */}
-      <div
-        className="flex min-h-0 flex-1 flex-col overflow-auto rounded-[var(--radius-lg)]"
-        style={{
-          background: 'var(--surface-floating, var(--surface-raised))',
-          boxShadow: 'var(--shadow-md)',
-        }}
-      >
+      {/* Stacked thread list — gap between cards, each card on a cool gray fill */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto pr-1">
         {visible.length === 0 ? (
           <div className="flex flex-1 items-center justify-center p-12 text-sm text-muted-foreground">
             No trips match this filter.
           </div>
         ) : (
-          visible.map((t, i) => (
+          visible.map(t => (
             <Link
               key={t.id}
               href={`/dashboard/inbox/${t.id}`}
-              className="relative flex items-center gap-4 border-b border-[color:var(--hairline-color-soft)] px-6 py-4 no-underline transition-colors last:border-b-0 hover:bg-[color:color-mix(in_oklab,var(--ink)_3%,transparent)]"
+              className="relative flex items-center gap-4 rounded-[var(--radius-md)] px-5 py-4 no-underline transition-colors hover:bg-[color:color-mix(in_oklab,var(--midnight)_8%,transparent)]"
+              style={{
+                background: 'color-mix(in oklab, var(--midnight) 5%, transparent)',
+                boxShadow: 'inset 0 0 0 1px var(--hairline-color-soft)',
+              }}
             >
               {(t.state === 'AWAITING' || t.state === 'HOLD' || t.state === 'OVER CAP') && (
                 <div
