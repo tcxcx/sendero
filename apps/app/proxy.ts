@@ -27,6 +27,7 @@ const isPublicRoute = createRouteMatcher([
   '/pay/(.*)', // hosted magic-link payment page for off-app travelers (BookingPayToken-gated)
   '/stamps/(.*)', // public NFT stamp viewer + OG unfurl target (Slack/WhatsApp)
   '/agents/(.*)', // public ERC-8004 agent metadata + reputation profile (org + user)
+  '/install/(.*)', // public per-tenant channel install pages (Persona C — end-customer admins, no Sendero session)
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/sso-callback(.*)',
