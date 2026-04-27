@@ -14,6 +14,32 @@ export interface WhatsAppClientConfig {
   accessToken: string;
   /** Override for Meta Cloud API. Defaults to graph.facebook.com v21.0. */
   apiBaseUrl?: string;
+  /**
+   * Optional fire-and-forget hook invoked after every successful send.
+   * Apps wire this to their audit log so every wamid is reconcilable
+   * with the corresponding inbound `messages.statuses` update (which
+   * arrives later, on the inbound webhook).
+   *
+   * Failures are caught and logged here — never thrown — so an audit
+   * outage never breaks the send hot path.
+   */
+  onSent?: (event: WhatsAppSendEvent) => Promise<void> | void;
+}
+
+export interface WhatsAppSendEvent {
+  /** Meta wamid returned in the send response (`messages[0].id`). */
+  wamid: string;
+  /** Send kind: 'text' | 'template' | 'interactive' | 'image' | 'document' | 'reaction' | 'flow' | string */
+  kind: string;
+  /** Recipient identifier — phone (E.164) or BSUID, whichever was used. */
+  recipientId: string;
+  /** Populated for `kind === 'template'` only. */
+  templateName?: string;
+  /**
+   * Up-to-280-char preview for operator UIs. PII-light: text body
+   * truncated; templates show the template name + first body param.
+   */
+  preview?: string;
 }
 
 const DEFAULT_API_URL = 'https://graph.facebook.com/v21.0';
@@ -28,11 +54,30 @@ export class WhatsAppClient {
   readonly phoneNumberId: string;
   readonly accessToken: string;
   readonly apiBaseUrl: string;
+  private readonly onSent?: WhatsAppClientConfig['onSent'];
 
   constructor(config: WhatsAppClientConfig) {
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
     this.apiBaseUrl = config.apiBaseUrl ?? DEFAULT_API_URL;
+    this.onSent = config.onSent;
+  }
+
+  /**
+   * Run the `onSent` hook fire-and-forget. We swallow exceptions here
+   * — a downed audit log must NEVER fail an outbound send, since the
+   * customer message has already been delivered to Meta.
+   */
+  private async fireAudit(event: WhatsAppSendEvent): Promise<void> {
+    if (!this.onSent) return;
+    try {
+      await this.onSent(event);
+    } catch (err) {
+      console.error('[whatsapp.client] audit hook failed', {
+        wamid: event.wamid,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /**
@@ -84,13 +129,23 @@ export class WhatsAppClient {
   }
 
   async sendText(to: string, text: string) {
-    return this.request('/messages', {
+    const result = await this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'text',
       text: { body: text },
     });
+    const wamid = extractWamid(result);
+    if (wamid) {
+      await this.fireAudit({
+        wamid,
+        kind: 'text',
+        recipientId: to,
+        preview: truncatePreview(text),
+      });
+    }
+    return result;
   }
 
   /**
@@ -112,7 +167,19 @@ export class WhatsAppClient {
    * Reference: https://developers.facebook.com/docs/whatsapp/cloud-api/reference/messages
    */
   async send(payload: unknown) {
-    return this.request('/messages', payload);
+    const result = await this.request('/messages', payload);
+    const wamid = extractWamid(result);
+    if (wamid) {
+      const meta = inspectPayload(payload);
+      await this.fireAudit({
+        wamid,
+        kind: meta.kind,
+        recipientId: meta.recipientId,
+        ...(meta.templateName ? { templateName: meta.templateName } : {}),
+        ...(meta.preview ? { preview: meta.preview } : {}),
+      });
+    }
+    return result;
   }
 
   async reactToMessage(to: string, messageId: string, emoji: string) {
@@ -144,7 +211,7 @@ export class WhatsAppClient {
       index?: number;
     }>;
   }) {
-    return this.request('/messages', {
+    const result = await this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: args.to,
@@ -155,6 +222,22 @@ export class WhatsAppClient {
         components: args.components ?? [],
       },
     });
+    const wamid = extractWamid(result);
+    if (wamid) {
+      const firstBodyParam = args.components
+        ?.find(c => c.type === 'body')
+        ?.parameters?.find(p => p.type === 'text')?.text;
+      await this.fireAudit({
+        wamid,
+        kind: 'template',
+        recipientId: args.to,
+        templateName: args.templateName,
+        preview: firstBodyParam
+          ? `${args.templateName}: ${truncatePreview(firstBodyParam)}`
+          : args.templateName,
+      });
+    }
+    return result;
   }
 
   async sendInteractiveButtons(
@@ -165,7 +248,7 @@ export class WhatsAppClient {
     if (buttons.length > 3) {
       throw new Error('WhatsApp interactive messages allow a maximum of 3 buttons');
     }
-    return this.request('/messages', {
+    const result = await this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
@@ -181,6 +264,16 @@ export class WhatsAppClient {
         },
       },
     });
+    const wamid = extractWamid(result);
+    if (wamid) {
+      await this.fireAudit({
+        wamid,
+        kind: 'interactive',
+        recipientId: to,
+        preview: truncatePreview(body),
+      });
+    }
+    return result;
   }
 
   async sendListMessage(
@@ -302,6 +395,74 @@ export class WhatsAppClient {
     if (!data.id) throw new Error('WhatsApp media upload returned no id');
     return { mediaId: data.id };
   }
+}
+
+/**
+ * Extract Meta's wamid from a send response. Meta returns
+ * `messages: [{ id: 'wamid.X' }]` on success; older / proxied paths
+ * may omit it. Returns null when absent so callers can skip the
+ * audit hook gracefully.
+ */
+function extractWamid(response: unknown): string | null {
+  if (!response || typeof response !== 'object') return null;
+  const messages = (response as { messages?: unknown }).messages;
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+  const first = messages[0];
+  if (!first || typeof first !== 'object') return null;
+  const id = (first as { id?: unknown }).id;
+  return typeof id === 'string' ? id : null;
+}
+
+/**
+ * Truncate user content to a 280-char preview for operator UIs.
+ * Keeps the original case + whitespace; just clips and adds an
+ * ellipsis when over the cap.
+ */
+function truncatePreview(text: string, max = 280): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}…`;
+}
+
+/**
+ * Best-effort introspection for the canonical `send(payload)` path.
+ * The payload could be any of the WhatsApp message shapes — we narrow
+ * on `type` and pick out a sensible preview + recipient. Returns
+ * defaults (kind='unknown', preview empty) when the shape is
+ * unfamiliar so the audit row still records the wamid.
+ */
+function inspectPayload(payload: unknown): {
+  kind: string;
+  recipientId: string;
+  templateName?: string;
+  preview?: string;
+} {
+  if (!payload || typeof payload !== 'object') {
+    return { kind: 'unknown', recipientId: '' };
+  }
+  const p = payload as {
+    type?: string;
+    to?: string;
+    text?: { body?: string };
+    template?: { name?: string };
+    interactive?: { body?: { text?: string } };
+    image?: { caption?: string };
+    document?: { caption?: string };
+  };
+  const recipientId = typeof p.to === 'string' ? p.to : '';
+  const kind = typeof p.type === 'string' ? p.type : 'unknown';
+  if (kind === 'text' && p.text?.body) {
+    return { kind, recipientId, preview: truncatePreview(p.text.body) };
+  }
+  if (kind === 'template' && p.template?.name) {
+    return { kind, recipientId, templateName: p.template.name, preview: p.template.name };
+  }
+  if (kind === 'interactive' && p.interactive?.body?.text) {
+    return { kind, recipientId, preview: truncatePreview(p.interactive.body.text) };
+  }
+  if ((kind === 'image' || kind === 'document') && p[kind]?.caption) {
+    return { kind, recipientId, preview: truncatePreview(p[kind]!.caption!) };
+  }
+  return { kind, recipientId };
 }
 
 export const REACTION_EMOJIS = {

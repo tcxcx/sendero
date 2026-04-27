@@ -40,6 +40,7 @@ export async function GET() {
     backgroundColor: '#e65632',
     eventsUrl: `${APP_BASE_URL}/api/webhooks/slack/events`,
     interactionsUrl: `${APP_BASE_URL}/api/webhooks/slack/interactions`,
+    commandsUrl: `${APP_BASE_URL}/api/webhooks/slack/commands`,
     redirectUri: `${APP_BASE_URL}/api/webhooks/slack/oauth-callback`,
     scopes: DEFAULT_BOT_SCOPES,
     botEvents: [
@@ -51,6 +52,13 @@ export async function GET() {
       // (not channel-scoped), no extra scopes required.
       'tokens_revoked',
       'app_uninstalled',
+    ],
+    slashCommands: [
+      {
+        command: '/sendero',
+        description: 'Sendero AI travel agent',
+        usageHint: 'help | status <trip-id> | note <trip-id>',
+      },
     ],
   });
 
@@ -70,9 +78,15 @@ interface ManifestInput {
   backgroundColor: string;
   eventsUrl: string;
   interactionsUrl: string;
+  commandsUrl: string;
   redirectUri: string;
   scopes: readonly string[];
   botEvents: readonly string[];
+  slashCommands: ReadonlyArray<{
+    command: string;
+    description: string;
+    usageHint?: string;
+  }>;
 }
 
 function renderSlackManifestYaml(input: ManifestInput): string {
@@ -96,6 +110,24 @@ function renderSlackManifestYaml(input: ManifestInput): string {
     '  scopes:',
     '    bot:',
     ...input.scopes.map(s => `      - ${yamlString(s)}`),
+    ...(input.slashCommands.length
+      ? [
+          'features:',
+          '  slash_commands:',
+          ...input.slashCommands.flatMap(cmd => {
+            const lines = [
+              `    - command: ${yamlString(cmd.command)}`,
+              `      url: ${yamlString(input.commandsUrl)}`,
+              `      description: ${yamlString(cmd.description)}`,
+              '      should_escape: false',
+            ];
+            if (cmd.usageHint) {
+              lines.splice(3, 0, `      usage_hint: ${yamlString(cmd.usageHint)}`);
+            }
+            return lines;
+          }),
+        ]
+      : []),
     'settings:',
     '  event_subscriptions:',
     `    request_url: ${yamlString(input.eventsUrl)}`,
