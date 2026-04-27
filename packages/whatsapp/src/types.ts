@@ -118,6 +118,13 @@ export interface WhatsAppStatus {
   recipient_id?: string | null;
   /** Populated on BSUID recipient statuses. */
   recipient_user_id?: string | null;
+  /** Populated on `failed` statuses — Meta error envelope. */
+  errors?: Array<{
+    code?: number;
+    title?: string;
+    message?: string;
+    error_data?: { details?: string };
+  }>;
 }
 
 /**

@@ -29,11 +29,13 @@ import {
   WhatsAppClient,
   type NormalizedIdentityChange,
   type NormalizedInboundMessage,
+  type NormalizedStatusUpdate,
   type WhatsAppIdentity,
   type WhatsAppMedia,
 } from '@sendero/whatsapp';
 
 import { newTraceId } from '@/lib/api-errors';
+import { claimWhatsAppMessage, isWithinReplayWindow } from '@/lib/whatsapp-dedup';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  const { messages, identityChanges } = normalizeWebhookPayload(
+  const { messages, identityChanges, statusUpdates } = normalizeWebhookPayload(
     parsed as Parameters<typeof normalizeWebhookPayload>[0],
     { defaultCountry: env.whatsappDefaultCountry() }
   );
@@ -95,6 +97,7 @@ export async function POST(req: NextRequest) {
     traceId,
     messageCount: messages.length,
     identityChangeCount: identityChanges.length,
+    statusUpdateCount: statusUpdates.length,
   });
 
   // Apply identity changes FIRST so downstream message routing sees the
@@ -107,11 +110,56 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Apply outbound delivery-status updates. Today these only fan out to
+  // OtpDeliveryAttempt rows (the one outbound surface that persists
+  // providerMessageId). Adding other outbound surfaces — booking
+  // confirmations, trip nudges — would route through the same loop with
+  // a tagged provider id.
+  let statusUpdated = 0;
+  for (const status of statusUpdates) {
+    try {
+      const updated = await applyOtpStatusUpdate(status);
+      statusUpdated += updated;
+    } catch (err) {
+      console.error('[wa/webhook] status-update failed:', {
+        traceId,
+        wamid: status.messageId,
+        status: status.status,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // Ensure every sender has a ChannelIdentity row + fire agent dispatch
   // for each text-or-media message. Dispatch is best-effort; a failure in
   // the agent turn must not cause Meta to retry the webhook.
   let dispatched = 0;
+  let droppedReplay = 0;
+  let droppedDuplicate = 0;
   for (const msg of messages) {
+    // Replay-window: Meta's signature only signs the body, so freshness
+    // gating happens per-message off the server-stamped timestamp.
+    if (!isWithinReplayWindow(msg.timestamp)) {
+      droppedReplay++;
+      console.warn('[wa/webhook] dropping stale message outside replay window', {
+        traceId,
+        messageId: msg.messageId,
+        timestamp: msg.timestamp.toISOString(),
+      });
+      continue;
+    }
+    // Dedup: Meta retries the same wamid on non-200 acks, and rare
+    // network blips can deliver twice even after our 200. SETNX in
+    // Redis with 1h TTL covers both. Fail-open if Redis is down.
+    const fresh = await claimWhatsAppMessage(msg.messageId);
+    if (!fresh) {
+      droppedDuplicate++;
+      console.log('[wa/webhook] duplicate message, skipping', {
+        traceId,
+        messageId: msg.messageId,
+      });
+      continue;
+    }
     try {
       const identity = await upsertChannelIdentity(msg);
       if (!identity) continue;
@@ -186,6 +234,9 @@ export async function POST(req: NextRequest) {
     received: messages.length,
     identityChanges: identityChanges.length,
     dispatched,
+    droppedReplay,
+    droppedDuplicate,
+    statusUpdated,
   });
 }
 
@@ -495,6 +546,39 @@ function localeFromMetadata(metadata: unknown, fallback: string): string {
     if (typeof locale === 'string' && locale) return locale;
   }
   return fallback;
+}
+
+/**
+ * Match a status update to its outbound row(s) and reconcile.
+ *
+ * The wamid (`status.messageId`) is what we wrote into
+ * `OtpDeliveryAttempt.providerMessageId` when we dispatched the OTP, so
+ * `updateMany` on that column fans out to all matching audit rows
+ * (typically one). Returns the count for the response payload's
+ * `statusUpdated` counter.
+ *
+ * `failed` carries a non-null `failureReason`; non-failed updates leave
+ * the prior `failureReason` alone (it might still be informative — e.g.
+ * a partial-failure in a batch). We do NOT downgrade — Meta's status
+ * stream is roughly monotonic (sent → delivered → read, or sent →
+ * failed), and stale 'sent' updates after a 'delivered' would be rare;
+ * if they happen we accept the noise rather than read-then-write each
+ * row. Worth revisiting if ops sees flapping.
+ */
+async function applyOtpStatusUpdate(status: NormalizedStatusUpdate): Promise<number> {
+  const data: { deliveryStatus: string; failureReason?: string } = {
+    deliveryStatus: status.status,
+  };
+  if (status.failureReason) data.failureReason = status.failureReason;
+
+  const result = await prisma.otpDeliveryAttempt.updateMany({
+    where: {
+      providerMessageId: status.messageId,
+      channel: 'whatsapp',
+    },
+    data,
+  });
+  return result.count;
 }
 
 async function applyIdentityChange(change: NormalizedIdentityChange): Promise<void> {

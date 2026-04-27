@@ -42,7 +42,16 @@ export async function GET() {
     interactionsUrl: `${APP_BASE_URL}/api/webhooks/slack/interactions`,
     redirectUri: `${APP_BASE_URL}/api/webhooks/slack/oauth-callback`,
     scopes: DEFAULT_BOT_SCOPES,
-    botEvents: ['app_mention', 'message.im', 'message.channels'],
+    botEvents: [
+      'app_mention',
+      'message.im',
+      'message.channels',
+      // Lifecycle — needed so we mark `SlackInstall.revokedAt` and
+      // stop hitting a dead bot token. Both events fire workspace-wide
+      // (not channel-scoped), no extra scopes required.
+      'tokens_revoked',
+      'app_uninstalled',
+    ],
   });
 
   return new Response(yaml, {

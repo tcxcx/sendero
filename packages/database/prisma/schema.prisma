@@ -1054,8 +1054,13 @@ model SlackInstall {
   scope               String
   isEnterpriseInstall Boolean  @default(false)
   authedUserId        String
-  installedAt         DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+  installedAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  /// Set when Slack delivers `tokens_revoked` or `app_uninstalled` for
+  /// this install. Non-null means the bot token is dead — keep the
+  /// row for audit trail (meter_events.userId references survive) but
+  /// every webhook handler must treat the install as gone.
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(6)
   raw                 Json?
   /// Channel routing config from the Slack setup wizard:
   /// { defaultChannel, routes: [{ eventClass, channel, mode }] }.
@@ -1069,6 +1074,7 @@ model SlackInstall {
 
   @@unique([enterpriseId, teamId])
   @@index([tenantId])
+  @@index([revokedAt])
   @@map("slack_installs")
 }
 

@@ -54,6 +54,7 @@ import {
   type ModelTier,
 } from './agent-models';
 import { senderoSlackTools } from './slack-agent-tools';
+import { markThreadSubscribed } from './slack-thread-subscription';
 
 /**
  * Persisted Slack install — superset of OAuth's `SlackInstall` plus the
@@ -234,6 +235,38 @@ export async function runSlackAgentTurn(
     );
   }
 
+  // Post a "thinking" placeholder up front so the user sees the bot
+  // engage immediately. Cold turns can take 5–20s; without this the
+  // thread looks dead until the model finishes. We `chat.update` the
+  // same `ts` once the reply is ready — Slack treats edits as silent
+  // (no re-notify), so this is purely UX and never spams.
+  //
+  // Token-by-token streaming is the proper next step but requires
+  // swapping `generateText` → `streamText` in `@sendero/agent::run.ts`,
+  // which is shared with /api/agent/dispatch and /api/agent/chat.
+  // That refactor is intentionally separate from this UX placeholder.
+  //
+  // Fail-soft: if the placeholder post itself fails (network blip,
+  // revoked token), we just skip the edit later and post the final
+  // reply fresh.
+  const slack = createSlackClient(args.install.botToken);
+  let placeholderTs: string | null = null;
+  try {
+    const placeholder = await slack.chat.postMessage({
+      channel: args.channelId,
+      thread_ts: args.threadTs,
+      text: '_Thinking…_',
+      mrkdwn: true,
+      unfurl_links: false,
+    });
+    placeholderTs = placeholder.ts ?? null;
+  } catch (err) {
+    console.warn('[slack.agent] placeholder post failed; falling back to single-shot post', {
+      teamId: args.install.teamId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   let result: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
     result = await runAgentTurn({
@@ -301,18 +334,62 @@ export async function runSlackAgentTurn(
 
   // Post the agent's final reply into the originating thread. We always
   // thread (`thread_ts`) — never broadcast — so noisy channels don't
-  // turn into a top-level firehose.
+  // turn into a top-level firehose. If we already posted a "Thinking…"
+  // placeholder, edit it in place (silent); otherwise post fresh.
   let postedTs: string | undefined;
   if (result.text && result.text.trim().length > 0) {
-    const slack = createSlackClient(args.install.botToken);
-    const posted = await slack.chat.postMessage({
-      channel: args.channelId,
-      thread_ts: args.threadTs,
-      text: result.text,
-      mrkdwn: true,
-      unfurl_links: false,
-    });
-    postedTs = posted.ts ?? undefined;
+    if (placeholderTs) {
+      try {
+        await slack.chat.update({
+          channel: args.channelId,
+          ts: placeholderTs,
+          text: result.text,
+          // `mrkdwn` only applies on `chat.postMessage`; edits inherit
+          // the original message's parse mode, so it's not in the
+          // `chat.update` arg type.
+        });
+        postedTs = placeholderTs;
+      } catch (err) {
+        // Edit failed (rare — channel closed, bot kicked between
+        // placeholder + final). Fall back to a fresh post so the user
+        // still sees the answer.
+        console.warn('[slack.agent] chat.update on placeholder failed; posting fresh', {
+          teamId: args.install.teamId,
+          placeholderTs,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        const posted = await slack.chat.postMessage({
+          channel: args.channelId,
+          thread_ts: args.threadTs,
+          text: result.text,
+          mrkdwn: true,
+          unfurl_links: false,
+        });
+        postedTs = posted.ts ?? undefined;
+      }
+    } else {
+      const posted = await slack.chat.postMessage({
+        channel: args.channelId,
+        thread_ts: args.threadTs,
+        text: result.text,
+        mrkdwn: true,
+        unfurl_links: false,
+      });
+      postedTs = posted.ts ?? undefined;
+    }
+  } else if (placeholderTs) {
+    // Empty result (e.g. tool-approval pause). Replace the
+    // "Thinking…" placeholder with a neutral state so the thread isn't
+    // left with a dangling spinner-emoji message.
+    try {
+      await slack.chat.update({
+        channel: args.channelId,
+        ts: placeholderTs,
+        text: '_Working on it — I may need approval before continuing._',
+      });
+    } catch {
+      // Best-effort; no-op on failure.
+    }
   }
 
   // TODO(slack-approval): When the LLM picked a `needsApproval`-gated
@@ -323,6 +400,17 @@ export async function runSlackAgentTurn(
   // so we can render an Approve/Reject card for arbitrary Slack tool
   // calls and resume the turn from the existing interactions handler.
   // For now the user simply sees the LLM's narration in the thread.
+
+  // Mark the thread subscribed so follow-up messages in the same
+  // thread (no fresh @-mention needed) trigger the agent. Fire-and-
+  // forget — a Redis blip shouldn't block the return path.
+  if (postedTs && args.channelId && args.threadTs) {
+    void markThreadSubscribed({
+      teamId: args.install.teamId,
+      channelId: args.channelId,
+      threadTs: args.threadTs,
+    });
+  }
 
   return {
     text: result.text,
