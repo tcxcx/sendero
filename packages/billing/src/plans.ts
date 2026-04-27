@@ -37,6 +37,13 @@ export const BILLING_FEATURES = {
   PRODUCTION_API_KEYS: 'production_api_keys',
   NANOPAYMENT_DISCOUNT: 'nanopayment_discount',
   BOOKING_TAKE_RATE_DISCOUNT: 'booking_take_rate_discount',
+  /**
+   * SaaS-included nanopayment credit grant. Numeric envelope per tier
+   * lives in `PlanConfig.monthlyIncludedCreditsMicro`. The flag exists
+   * so UI can render "Includes $X/mo" badges from `has({ feature })`
+   * without re-deriving from the tier.
+   */
+  INCLUDED_CREDITS: 'included_credits',
   CHANNEL_WHATSAPP: 'channel_whatsapp',
   CHANNEL_SLACK: 'channel_slack',
   MCP_SERVER_PUBLIC: 'mcp_server_public',
@@ -88,6 +95,40 @@ export interface PlanConfig {
    */
   bookingTakeRateDiscountBps: number;
   /**
+   * SaaS-included nanopayment credit grant per billing cycle, in
+   * micro-USDC. Refilled by the Clerk `subscription.created` and
+   * `subscription.updated` webhooks. Use-it-or-lose-it: no rollover.
+   * `null` for tenants without a credit envelope (free tier).
+   *
+   * Locked envelope: Free $0 / Basic $5 / Pro $25 / Enterprise $250
+   * floor + 50% overage discount (`nanopaymentDiscountBps`).
+   */
+  monthlyIncludedCreditsMicro: bigint | null;
+  /**
+   * Daily sub-cap on credit burn, in micro-USDC. Defaults to 25% of
+   * `monthlyIncludedCreditsMicro` per the eng review's runaway-loop
+   * defense — without this, a single bad agent loop on opus drains
+   * the monthly grant in an afternoon. Reset every 24h by preflight
+   * when wall clock crosses `Subscription.dailyWindowStartedAt + 24h`.
+   * `null` for tenants without a credit envelope.
+   */
+  dailyCreditCapMicro: bigint | null;
+  /**
+   * Per-turn COGS ceiling in micro-USDC. Server-side model gating
+   * compares `cogsPerTurnMicro(model)` from `@sendero/billing/cogs`
+   * against this cap. Models above the cap are visible in the UI
+   * picker but rendered locked with an upgrade CTA — visibility is
+   * the upsell vector, not punishment.
+   *
+   * Tier on price-band, NOT model name (per the autoplan eng review).
+   * When a new model ships (GPT-5.5, Sonnet 5, fine-tuned travel
+   * models), the allowlist resolves dynamically against the COGS
+   * registry. No quarterly maintenance.
+   *
+   * `null` = no per-turn ceiling (Enterprise: any model in the registry).
+   */
+  maxCostPerTurnMicro: bigint | null;
+  /**
    * Clerk Billing feature slugs this plan should have attached in the
    * dashboard. Informational — the source of truth for runtime gating
    * is `has({ feature })`. Keep this list in sync with the dashboard
@@ -117,6 +158,13 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlySpendCapCeilingMicro: USD(100),
     nanopaymentDiscountBps: 0,
     bookingTakeRateDiscountBps: 0,
+    monthlyIncludedCreditsMicro: null,
+    dailyCreditCapMicro: null,
+    // Cap at ~$0.007/turn — covers gemini-2.5-flash and gpt-5-mini.
+    // Free tenants only have a sandbox key, so credit deduction never
+    // fires; the cap exists to keep the model picker honest about
+    // which models would be allowed once they upgrade to Basic.
+    maxCostPerTurnMicro: 7_000n,
     features: [],
     publiclyListed: true,
   },
@@ -130,11 +178,20 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlySpendCapCeilingMicro: USD(2_000),
     nanopaymentDiscountBps: 1_500,
     bookingTakeRateDiscountBps: 500,
+    // $5/mo of metered usage. Sized below the worst-case sonnet COGS
+    // envelope so a runaway loop can't go upside-down on Basic margin.
+    monthlyIncludedCreditsMicro: 5_000_000n,
+    // 25% of monthly = $1.25/day. Hard ceiling against single-day burn.
+    dailyCreditCapMicro: 1_250_000n,
+    // Same band as Free — Basic differentiates by giving you the credit
+    // grant, not a wider model picker. Sonnet/Opus stay locked.
+    maxCostPerTurnMicro: 7_000n,
     features: [
       BILLING_FEATURES.ADDITIONAL_WORKSPACES,
       BILLING_FEATURES.PRODUCTION_API_KEYS,
       BILLING_FEATURES.NANOPAYMENT_DISCOUNT,
       BILLING_FEATURES.BOOKING_TAKE_RATE_DISCOUNT,
+      BILLING_FEATURES.INCLUDED_CREDITS,
       BILLING_FEATURES.CHANNEL_WHATSAPP,
       BILLING_FEATURES.CHANNEL_SLACK,
     ],
@@ -150,11 +207,21 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlySpendCapCeilingMicro: USD(20_000),
     nanopaymentDiscountBps: 3_000,
     bookingTakeRateDiscountBps: 1_000,
+    // $25/mo of metered usage. Sized for ~3,500 cached sonnet turns
+    // or ~5k cached gpt-5 turns. Margin floor at full burn ~58%.
+    monthlyIncludedCreditsMicro: 25_000_000n,
+    // 25% of monthly = $6.25/day.
+    dailyCreditCapMicro: 6_250_000n,
+    // Cap at $0.05/turn — adds gpt-5, gemini-2.5-pro, and sonnet to
+    // the unlocked picker. Opus ($0.20+/turn worst case) stays locked
+    // until Enterprise.
+    maxCostPerTurnMicro: 50_000n,
     features: [
       BILLING_FEATURES.ADDITIONAL_WORKSPACES,
       BILLING_FEATURES.PRODUCTION_API_KEYS,
       BILLING_FEATURES.NANOPAYMENT_DISCOUNT,
       BILLING_FEATURES.BOOKING_TAKE_RATE_DISCOUNT,
+      BILLING_FEATURES.INCLUDED_CREDITS,
       BILLING_FEATURES.CHANNEL_WHATSAPP,
       BILLING_FEATURES.CHANNEL_SLACK,
       BILLING_FEATURES.MCP_SERVER_PUBLIC,
@@ -181,11 +248,21 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlySpendCapCeilingMicro: null,
     nanopaymentDiscountBps: 5_000,
     bookingTakeRateDiscountBps: 1_500,
+    // $250/mo floor with overage continuing at 50% off list (the
+    // existing `nanopaymentDiscountBps: 5_000`). Procurement-friendly:
+    // big credit grant, predictable overage rate, never hard-blocked.
+    monthlyIncludedCreditsMicro: 250_000_000n,
+    // 25% of monthly = $62.50/day.
+    dailyCreditCapMicro: 62_500_000n,
+    // No per-turn ceiling. Opus and any future expensive model is
+    // available. The daily-cap + monthly-cap combo bounds abuse.
+    maxCostPerTurnMicro: null,
     features: [
       BILLING_FEATURES.ADDITIONAL_WORKSPACES,
       BILLING_FEATURES.PRODUCTION_API_KEYS,
       BILLING_FEATURES.NANOPAYMENT_DISCOUNT,
       BILLING_FEATURES.BOOKING_TAKE_RATE_DISCOUNT,
+      BILLING_FEATURES.INCLUDED_CREDITS,
       BILLING_FEATURES.CHANNEL_WHATSAPP,
       BILLING_FEATURES.CHANNEL_SLACK,
       BILLING_FEATURES.MCP_SERVER_PUBLIC,
