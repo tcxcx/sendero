@@ -129,9 +129,7 @@ function FullCard({ usage }: { usage: CurrentCreditUsage }) {
     >
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex flex-col">
-          <span
-            className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:color-mix(in_oklab,var(--midnight)_60%,transparent)]"
-          >
+          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:color-mix(in_oklab,var(--midnight)_60%,transparent)]">
             Metered usage this cycle
           </span>
           <span className="text-[20px] font-medium text-[color:var(--midnight)]">
@@ -141,9 +139,7 @@ function FullCard({ usage }: { usage: CurrentCreditUsage }) {
             </span>
           </span>
         </div>
-        <div
-          className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:color-mix(in_oklab,var(--midnight)_55%,transparent)]"
-        >
+        <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-[color:color-mix(in_oklab,var(--midnight)_55%,transparent)]">
           {days === null
             ? 'this cycle'
             : days === 0

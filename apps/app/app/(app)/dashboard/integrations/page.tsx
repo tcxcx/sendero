@@ -154,7 +154,15 @@ function BigIntegrationPill({
           </Link>
         )}
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-xs text-xs">
+      {/* Topography variants match the dashboard CTA + brand-channel
+          chips: ink (vermillion) for MCP, bufi (purpura) for Bufi.
+          Same `topography.svg` mask system — the variant rule lives in
+          `globals.css` keyed on `data-variant`. */}
+      <TooltipContent
+        side="bottom"
+        data-variant={isMcp ? 'ink' : 'bufi'}
+        className="max-w-xs text-xs"
+      >
         <div className="font-medium">{label}</div>
         <div className="mt-0.5 text-[11px] opacity-90">{description}</div>
       </TooltipContent>

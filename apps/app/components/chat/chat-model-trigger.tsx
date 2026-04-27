@@ -150,9 +150,7 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
   // after `useChatModel` hydrates from localStorage.
   useEffect(() => {
     if (!isModelAllowedByCap(model, cap)) {
-      const fallback = [...CHAT_MODEL_COGS]
-        .filter(m => isModelAllowedByCap(m.id, cap))
-        .pop();
+      const fallback = [...CHAT_MODEL_COGS].filter(m => isModelAllowedByCap(m.id, cap)).pop();
       if (fallback) setModel(fallback.id);
     }
   }, [model, cap, setModel]);
@@ -168,8 +166,7 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
   );
 
   const allowedSet = useMemo(
-    () =>
-      new Set(CHAT_MODEL_COGS.filter(m => isModelAllowedByCap(m.id, cap)).map(m => m.id)),
+    () => new Set(CHAT_MODEL_COGS.filter(m => isModelAllowedByCap(m.id, cap)).map(m => m.id)),
     [cap]
   );
 
@@ -208,9 +205,7 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
               {models.map(m => {
                 const allowed = allowedSet.has(m.id);
                 const dots = tierDots(m.cogsPerTurnMicro);
-                const requiredTier = !allowed
-                  ? requiredTierFor(m.cogsPerTurnMicro, tier)
-                  : null;
+                const requiredTier = !allowed ? requiredTierFor(m.cogsPerTurnMicro, tier) : null;
 
                 // Inner row content — wrapped in HoverCard ONLY when a
                 // description is registered. Models without a description

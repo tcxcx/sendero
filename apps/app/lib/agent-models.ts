@@ -142,13 +142,14 @@ export function resolveChatModel(
   if (!isModelAllowedByCap(modelId, plan.maxCostPerTurnMicro)) {
     const cogs = cogsForModel(modelId);
     const cogsValue = cogs?.cogsPerTurnMicro ?? null;
-    const requiredTier = TIER_ORDER.find(t => {
-      if (t === plan.tier) return false;
-      const cap = PLANS[t]?.maxCostPerTurnMicro;
-      if (cap === null || cap === undefined) return true; // unbounded
-      if (cogsValue === null) return false;
-      return cogsValue <= cap;
-    }) ?? ('enterprise' as const);
+    const requiredTier =
+      TIER_ORDER.find(t => {
+        if (t === plan.tier) return false;
+        const cap = PLANS[t]?.maxCostPerTurnMicro;
+        if (cap === null || cap === undefined) return true; // unbounded
+        if (cogsValue === null) return false;
+        return cogsValue <= cap;
+      }) ?? ('enterprise' as const);
 
     const upgradeQS = new URLSearchParams({
       upgrade: requiredTier,
