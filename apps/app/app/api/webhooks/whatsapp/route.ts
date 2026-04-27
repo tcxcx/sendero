@@ -35,7 +35,12 @@ import {
 } from '@sendero/whatsapp';
 
 import { newTraceId } from '@/lib/api-errors';
-import { logOutboundMessage, logWebhookEvent, reconcileOutboundStatus } from '@/lib/whatsapp-audit';
+import {
+  logMetaCall,
+  logOutboundMessage,
+  logWebhookEvent,
+  reconcileOutboundStatus,
+} from '@/lib/whatsapp-audit';
 import { claimWhatsAppMessage, isWithinReplayWindow } from '@/lib/whatsapp-dedup';
 
 export const runtime = 'nodejs';
@@ -462,6 +467,19 @@ async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): 
               phoneNumberId: msg.tenantPhoneNumberId,
               source: 'agent_reply',
               event,
+            }),
+          // Audit every Meta API call (success + failure + each retry)
+          // so the inbox UI's "outbound API" tab can show p95 latency,
+          // 429 rate, and failed-only views per tenant.
+          onApiCall: event =>
+            logMetaCall({
+              tenantId: auditTenantId,
+              method: event.method,
+              endpoint: event.endpoint,
+              statusCode: event.statusCode,
+              durationMs: event.durationMs,
+              ok: event.ok,
+              ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
             }),
         }
       : {}),

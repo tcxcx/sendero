@@ -135,6 +135,72 @@ export async function logWebhookEvent(args: {
 }
 
 /**
+ * Audit one external API call to Kapso or Meta.
+ *
+ * Called from the WhatsAppClient `request()` retry loop and the Kapso
+ * health ping. Captures status_code + duration + endpoint shape so
+ * the inbox UI can show "last N calls" + "failed-only" filters.
+ *
+ * `endpoint` MUST be the path *shape*, not a concrete URL — replace
+ * dynamic ids with `{id}` so rows aggregate cleanly. The helpers below
+ * (`logKapsoCall`, `logMetaCall`) wrap the common shapes.
+ */
+export async function logApiCall(args: {
+  tenantId: string | null;
+  target: 'kapso' | 'meta';
+  method: string;
+  /** Endpoint *shape*, e.g. `/messages` or `/customers/{id}/setup_links`. */
+  endpoint: string;
+  statusCode: number;
+  durationMs: number;
+  ok: boolean;
+  errorMessage?: string;
+  traceId?: string;
+}): Promise<void> {
+  try {
+    await prisma.whatsAppApiLog.create({
+      data: {
+        ...(args.tenantId ? { tenantId: args.tenantId } : {}),
+        target: args.target,
+        method: args.method.toUpperCase(),
+        endpoint: args.endpoint,
+        statusCode: args.statusCode,
+        durationMs: args.durationMs,
+        ok: args.ok,
+        ...(args.errorMessage ? { errorMessage: truncate(args.errorMessage, 280) } : {}),
+        ...(args.traceId ? { traceId: args.traceId } : {}),
+      },
+    });
+  } catch (err) {
+    // Audit must never fail the hot path. The Prisma write itself
+    // failing is rare but the alternative — bubbling — would mean
+    // a downed Postgres takes down inbound WhatsApp ack budgets.
+    console.error('[whatsapp-audit] api-log insert failed', {
+      target: args.target,
+      endpoint: args.endpoint,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Sugar around `logApiCall` for the Kapso surface. Keeps call sites
+ * one line: `await logKapsoCall({ tenantId, method: 'POST', endpoint:
+ * '/customers/{id}/setup_links', ... })`.
+ */
+export function logKapsoCall(args: Omit<Parameters<typeof logApiCall>[0], 'target'>): Promise<void> {
+  return logApiCall({ ...args, target: 'kapso' });
+}
+
+export function logMetaCall(args: Omit<Parameters<typeof logApiCall>[0], 'target'>): Promise<void> {
+  return logApiCall({ ...args, target: 'meta' });
+}
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
+}
+
+/**
  * Reconcile a status update against the outbound row. Called from the
  * status-webhook handler in the route. Sets the per-status timestamp
  * column (`deliveredAt` / `readAt` / `failedAt`) plus the `deliveryStatus`

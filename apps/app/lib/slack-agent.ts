@@ -241,10 +241,14 @@ export async function runSlackAgentTurn(
   // same `ts` once the reply is ready — Slack treats edits as silent
   // (no re-notify), so this is purely UX and never spams.
   //
-  // Token-by-token streaming is the proper next step but requires
-  // swapping `generateText` → `streamText` in `@sendero/agent::run.ts`,
-  // which is shared with /api/agent/dispatch and /api/agent/chat.
-  // That refactor is intentionally separate from this UX placeholder.
+  // Step-based streaming: between tool calls we narrate progress
+  // ("Searching flights…" → "Comparing options…") so the user sees
+  // the bot working. This is *step* streaming, not token streaming;
+  // the placeholder edits once per AI SDK step (typically 1–4 per
+  // turn). True per-token streaming would require swapping
+  // `generateText` → `streamText` in `@sendero/agent::run.ts` (shared
+  // with dispatch + chat) — separate ~4d refactor, intentionally
+  // deferred.
   //
   // Fail-soft: if the placeholder post itself fails (network blip,
   // revoked token), we just skip the edit later and post the final
@@ -267,6 +271,36 @@ export async function runSlackAgentTurn(
     });
   }
 
+  // Step-streaming hook: when AI SDK finishes a step (text gen or
+  // tool call), update the placeholder so the user sees progress.
+  // We accumulate all text-only fragments into `runningText` so the
+  // partial reply grows toward the final answer without us having
+  // to wait for the whole turn to complete.
+  //
+  // chat.update rate limit (Tier 3, 50/min per workspace) is not a
+  // concern here — turns rarely exceed 4 steps so we'll never hit it.
+  let runningText = '';
+  const onStepFinish = placeholderTs
+    ? async (step: { stepNumber: number; toolNames: string[]; text: string }) => {
+        if (step.text) runningText += step.text;
+        const status = renderStepStatus(step, tools, runningText);
+        try {
+          await slack.chat.update({
+            channel: args.channelId,
+            ts: placeholderTs!,
+            text: status,
+          });
+        } catch (updateErr) {
+          // Edit failed (channel closed, bot kicked between steps). The
+          // final post-turn write below still tries — log + move on.
+          console.warn('[slack.agent] step update failed (non-fatal)', {
+            stepNumber: step.stepNumber,
+            error: updateErr instanceof Error ? updateErr.message : String(updateErr),
+          });
+        }
+      }
+    : undefined;
+
   let result: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
     result = await runAgentTurn({
@@ -281,6 +315,7 @@ export async function runSlackAgentTurn(
       ...(args.pricingOverrides ? { pricingOverrides: args.pricingOverrides } : {}),
       ...(args.loadTrip ? { loadTrip: args.loadTrip } : {}),
       persona,
+      ...(onStepFinish ? { onStepFinish } : {}),
     });
   } catch (err) {
     // Gateway-wide failure → cascade to direct providers in
@@ -306,6 +341,7 @@ export async function runSlackAgentTurn(
           ...(args.pricingOverrides ? { pricingOverrides: args.pricingOverrides } : {}),
           ...(args.loadTrip ? { loadTrip: args.loadTrip } : {}),
           persona,
+          ...(onStepFinish ? { onStepFinish } : {}),
         });
         break;
       } catch (innerErr) {
@@ -423,6 +459,52 @@ export async function runSlackAgentTurn(
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Render a "step in progress" status for the placeholder edit.
+ *
+ * If the step finished with text (final-answer step), surface the
+ * accumulated `runningText` so the user sees the answer growing.
+ *
+ * If the step ran tools, narrate which ones — operators should see
+ * "🔎 Searching flights, hotels…" between calls instead of a static
+ * "_Thinking…_". Sendero's tool catalog is large; we map the common
+ * verbs but fall through to the literal tool name on miss so new
+ * tools render readably without code changes here.
+ */
+function renderStepStatus(
+  step: { stepNumber: number; toolNames: string[]; text: string },
+  _tools: ToolSet,
+  runningText: string
+): string {
+  // Final-answer-shape step: surface the partial answer so the user
+  // can start reading. Add a faint trailing ellipsis so they know
+  // there's more coming if the engine continues.
+  if (runningText.trim().length > 0) {
+    return `${runningText}\n\n_…_`;
+  }
+  if (step.toolNames.length === 0) {
+    return '_Thinking…_';
+  }
+  const verbs = step.toolNames.map(toolNameToVerb);
+  // Dedup adjacent identical verbs ("Searching" + "Searching" → "Searching")
+  const unique = Array.from(new Set(verbs));
+  return `🔎 ${unique.join(', ')}…`;
+}
+
+function toolNameToVerb(toolName: string): string {
+  // High-traffic tools get a friendly verb; everything else falls
+  // through to the literal tool name (still readable, less polished).
+  if (toolName.startsWith('search_flights')) return 'Searching flights';
+  if (toolName.startsWith('search_hotels')) return 'Searching hotels';
+  if (toolName.startsWith('hold_')) return 'Holding the option';
+  if (toolName.startsWith('book_')) return 'Booking';
+  if (toolName.startsWith('settle_')) return 'Settling';
+  if (toolName.startsWith('scan_document')) return 'Scanning the document';
+  if (toolName.startsWith('lookup_trip')) return 'Looking up the trip';
+  if (toolName.startsWith('slack_')) return 'Working in Slack';
+  return `Running \`${toolName}\``;
+}
 
 interface BuildSlackPersonaArgs {
   orgName?: string;
