@@ -280,10 +280,16 @@ export async function runSlackAgentTurn(
   // chat.update rate limit (Tier 3, 50/min per workspace) is not a
   // concern here — turns rarely exceed 4 steps so we'll never hit it.
   let runningText = '';
+  let lastStatus = '';
   const onStepFinish = placeholderTs
     ? async (step: { stepNumber: number; toolNames: string[]; text: string }) => {
         if (step.text) runningText += step.text;
         const status = renderStepStatus(step, tools, runningText);
+        // Skip the round-trip when the rendered status matches the last
+        // one we sent — Slack treats identical edits as no-ops anyway,
+        // but cheaper to skip the whole API call.
+        if (status === lastStatus) return;
+        lastStatus = status;
         try {
           await slack.chat.update({
             channel: args.channelId,

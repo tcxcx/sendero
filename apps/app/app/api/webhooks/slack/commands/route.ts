@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   // Build the router fresh per request so handlers can close over the
   // resolved install (token, tenant scoping). The map building is O(commands)
   // and these are cheap object inserts.
-  const router = buildRouter(install.botToken);
+  const router = buildRouter({ botToken: install.botToken, tenantId: install.tenantId });
 
   let result: SlashCommandResult;
   try {
@@ -121,12 +121,12 @@ export async function POST(req: NextRequest) {
 
 // ─── command registry ─────────────────────────────────────────────────
 
-function buildRouter(botToken: string): SlashCommandRouter {
+function buildRouter(install: { botToken: string; tenantId: string }): SlashCommandRouter {
   return new SlashCommandRouter()
     .register('/sendero', 'help', handleHelp)
     .register('/sendero', '', handleHelp) // bare `/sendero` → help
-    .register('/sendero', 'note', payload => handleNote(payload, botToken))
-    .register('/sendero', 'status', handleStatus);
+    .register('/sendero', 'note', payload => handleNote(payload, install.botToken))
+    .register('/sendero', 'status', payload => handleStatus(payload, install.tenantId));
 }
 
 // ─── handlers ─────────────────────────────────────────────────────────
@@ -147,7 +147,10 @@ async function handleHelp(_payload: SlashCommandPayload): Promise<SlashCommandRe
   };
 }
 
-async function handleStatus(payload: SlashCommandPayload): Promise<SlashCommandResult> {
+async function handleStatus(
+  payload: SlashCommandPayload,
+  tenantId: string
+): Promise<SlashCommandResult> {
   const tripId = payload.args.split(/\s+/)[0]?.trim() ?? '';
   if (!tripId) {
     return {
@@ -157,8 +160,10 @@ async function handleStatus(payload: SlashCommandPayload): Promise<SlashCommandR
     };
   }
 
-  const trip = await prisma.trip.findUnique({
-    where: { id: tripId },
+  // Tenant gate inline so a cross-tenant lookup returns the same
+  // "not found" as a missing trip — never leak existence across tenants.
+  const trip = await prisma.trip.findFirst({
+    where: { id: tripId, tenantId },
     select: {
       id: true,
       tenantId: true,

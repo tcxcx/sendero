@@ -16,8 +16,6 @@
  * The route uses a single `ViewRouter` to dispatch by callback_id.
  */
 
-import { Prisma } from '@prisma/client';
-
 import { prisma } from '@sendero/database';
 import type { ViewSubmissionPayload, ViewSubmissionResult } from '@sendero/slack';
 
@@ -87,13 +85,25 @@ export function buildTripNoteView(args: {
   };
 }
 
+/** Caller-supplied context — the install resolution from the route. */
+export interface TripNoteContext {
+  /** SlackInstall.tenantId — required to gate cross-tenant access. */
+  tenantId: string;
+}
+
 /**
  * Submit handler — validates the note, appends to `Trip.events`, returns
  * `ack` (close modal) on success or `errors` (keep modal open with
  * field error) on validation fail.
+ *
+ * `context.tenantId` MUST come from the resolved `SlackInstall.tenantId`
+ * in the route — never trust `private_metadata` for tenant scoping.
+ * Cross-tenant trip ids return the same "Trip not found" error as
+ * missing trips so existence isn't leaked to the caller.
  */
 export async function handleTripNoteSubmission(
-  payload: ViewSubmissionPayload
+  payload: ViewSubmissionPayload,
+  context: TripNoteContext
 ): Promise<ViewSubmissionResult> {
   const metadata = parseMetadata(payload.view.private_metadata);
   if (!metadata) {
@@ -119,32 +129,33 @@ export async function handleTripNoteSubmission(
 
   const trip = await prisma.trip.findUnique({
     where: { id: metadata.tripId },
-    select: { id: true, tenantId: true, events: true },
+    select: { id: true, tenantId: true },
   });
-  if (!trip) {
+  // Treat "trip belongs to another tenant" as "trip not found" so we
+  // don't leak cross-tenant existence. Same error string both branches.
+  if (!trip || trip.tenantId !== context.tenantId) {
     return {
       kind: 'errors',
       errors: { [NOTE_BLOCK_ID]: 'Trip not found. It may have been removed.' },
     };
   }
 
-  // Append to the events log. The column is `Json @default("[]")` — we
-  // narrow defensively in case an older row has a different shape. Cast
-  // to Prisma.InputJsonValue at the boundary because we've already
-  // validated `trip.events` is an array of JSON-shaped values.
-  const existingEvents = Array.isArray(trip.events) ? (trip.events as unknown[]) : [];
+  // Atomic JSONB append — Postgres `||` operator on jsonb is concurrent-
+  // safe, so two parallel note submissions both land instead of one
+  // silently overwriting the other's read-then-write. Tenant id is
+  // double-bound in the WHERE so a TOCTOU between findUnique and
+  // executeRaw still can't write across tenants.
   const noteEvent = {
     type: 'operator_note' as const,
     text: trimmed,
     author: { source: 'slack' as const, slackUserId: payload.user.id },
     at: new Date().toISOString(),
   };
-  await prisma.trip.update({
-    where: { id: trip.id },
-    data: {
-      events: [...existingEvents, noteEvent] as Prisma.InputJsonValue,
-    },
-  });
+  await prisma.$executeRaw`
+    UPDATE "trips"
+    SET events = COALESCE(events, '[]'::jsonb) || ${JSON.stringify([noteEvent])}::jsonb
+    WHERE id = ${trip.id} AND "tenantId" = ${context.tenantId}
+  `;
 
   return { kind: 'ack' };
 }

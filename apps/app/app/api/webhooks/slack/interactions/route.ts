@@ -89,8 +89,15 @@ export async function POST(req: NextRequest) {
   // view_submission MUST ack synchronously — Slack reads the response
   // body to drive the modal lifecycle (close / show errors / push next).
   // No `after()` deferral allowed on this branch.
+  //
+  // Per-request router so the trip-note handler closes over the
+  // resolved install's `tenantId`. Without this, the handler would
+  // accept any `private_metadata.tripId` and write across tenants —
+  // the modal opener (slash command) takes user-supplied trip ids
+  // and stuffs them into private_metadata; only the handler can
+  // enforce the tenant gate.
   if (payload.type === 'view_submission') {
-    const result = await handleViewSubmission(payload);
+    const result = await handleViewSubmission(payload, install.tenantId);
     return NextResponse.json(serializeSubmissionResult(result));
   }
 
@@ -116,15 +123,20 @@ export async function POST(req: NextRequest) {
 }
 
 // ─── view-handler routing ─────────────────────────────────────────────
+//
+// Closed-handler router can be a singleton — view_closed only fires
+// with the same `callback_id` shape and doesn't need install scope.
+// Submission router is built per-request inside POST so handlers can
+// capture the resolved install's tenantId for cross-tenant gating.
 
-const viewRouter = new ViewRouter().registerSubmission(
-  TRIP_NOTE_CALLBACK_ID,
-  handleTripNoteSubmission
-);
+const closedRouter = new ViewRouter();
 
-async function handleViewSubmission(payload: ViewSubmissionPayload) {
+async function handleViewSubmission(payload: ViewSubmissionPayload, tenantId: string) {
+  const router = new ViewRouter().registerSubmission(TRIP_NOTE_CALLBACK_ID, p =>
+    handleTripNoteSubmission(p, { tenantId })
+  );
   try {
-    return await viewRouter.dispatchSubmission(payload);
+    return await router.dispatchSubmission(payload);
   } catch (err) {
     console.error('[slack/interactions] view_submission dispatch failed:', {
       callbackId: payload.view.callback_id,
@@ -143,7 +155,7 @@ async function handleViewSubmission(payload: ViewSubmissionPayload) {
 
 async function handleViewClosed(payload: ViewClosedPayload): Promise<void> {
   try {
-    await viewRouter.dispatchClosed(payload);
+    await closedRouter.dispatchClosed(payload);
   } catch (err) {
     console.error('[slack/interactions] view_closed dispatch failed:', {
       callbackId: payload.view.callback_id,
