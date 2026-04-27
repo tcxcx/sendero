@@ -13,8 +13,9 @@
  * models stay pinned server-side.
  */
 
-import Image from 'next/image';
 import { useCallback } from 'react';
+
+import { ProviderIcon, type ProviderSlug } from '@sendero/icons/providers';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -33,7 +34,7 @@ export interface ChatModelOption {
   id: string;
   name: string;
   chef: 'Google' | 'Anthropic' | 'OpenAI';
-  chefSlug: 'google' | 'anthropic' | 'openai';
+  chefSlug: ProviderSlug;
 }
 
 export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
@@ -56,26 +57,6 @@ export const CHAT_MODEL_OPTIONS: ChatModelOption[] = [
 ];
 
 const CHEF_ORDER: Array<ChatModelOption['chef']> = ['Google', 'Anthropic', 'OpenAI'];
-
-const PROVIDER_ICON: Record<ChatModelOption['chefSlug'], string> = {
-  google: '/brand/providers/google.webp',
-  anthropic: '/brand/providers/anthropic.webp',
-  openai: '/brand/providers/openai.webp',
-};
-
-function ProviderIcon({ slug, size = 14 }: { slug: ChatModelOption['chefSlug']; size?: number }) {
-  return (
-    <Image
-      src={PROVIDER_ICON[slug]}
-      alt=""
-      width={size}
-      height={size}
-      aria-hidden
-      className="shrink-0"
-      unoptimized
-    />
-  );
-}
 
 export function ChatModelTrigger() {
   const [model, setModel] = useChatModel();
