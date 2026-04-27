@@ -60,6 +60,10 @@ const DASHBOARD_PAGE_COPY: Record<string, Copy> = {
     title: 'Slack channel',
     description: 'Install approvals and employee travel DMs.',
   },
+  '/dashboard/integrations': {
+    title: 'Integrations',
+    description: 'Plug Sendero into the rest of your stack.',
+  },
   '/dashboard/integrations/mcp': {
     title: 'API keys & MCP',
     description: 'One key powers HTTP dispatch, MCP server, and direct tool calls.',
