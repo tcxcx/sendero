@@ -188,7 +188,9 @@ export async function logApiCall(args: {
  * one line: `await logKapsoCall({ tenantId, method: 'POST', endpoint:
  * '/customers/{id}/setup_links', ... })`.
  */
-export function logKapsoCall(args: Omit<Parameters<typeof logApiCall>[0], 'target'>): Promise<void> {
+export function logKapsoCall(
+  args: Omit<Parameters<typeof logApiCall>[0], 'target'>
+): Promise<void> {
   return logApiCall({ ...args, target: 'kapso' });
 }
 
