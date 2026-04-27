@@ -504,9 +504,25 @@ function UIMessageBody({ message }: { message: UIMessage }) {
   const parts = (message.parts ?? []) as Array<ToolPartShape>;
   return (
     <MessageContent
-      className="rounded-lg border border-[color:var(--hairline-color-soft)] bg-[color:var(--surface-raised)] bg-[url('/patterns/topography.svg')] bg-[length:240px] bg-no-repeat px-4 py-3 text-[color:color-mix(in_oklab,var(--ink)_72%,transparent)] group-[.is-user]:!bg-[color:var(--surface-raised)] group-[.is-user]:!text-[color:color-mix(in_oklab,var(--ink)_72%,transparent)]"
-      style={{ backgroundBlendMode: 'multiply' }}
+      className="relative isolate overflow-hidden rounded-2xl border border-[color:var(--hairline-color-soft)] bg-[color:color-mix(in_oklab,var(--surface-raised)_82%,transparent)] px-4 py-3 text-[color:var(--midnight)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55),inset_0_-1px_0_rgba(255,255,255,0.12),0_8px_24px_-18px_rgba(31,42,68,0.22)] backdrop-blur-[6px] backdrop-saturate-[1.4] [--bubble-tint:var(--ink)] group-[.is-user]:!rounded-2xl group-[.is-user]:!bg-[color:color-mix(in_oklab,var(--surface-raised)_82%,transparent)] group-[.is-user]:!text-[color:var(--midnight)] group-[.is-user]:[--bubble-tint:var(--midnight)]"
     >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.18]"
+        style={{
+          backgroundColor: 'var(--bubble-tint)',
+          WebkitMaskImage: "url('/patterns/topography.svg')",
+          maskImage: "url('/patterns/topography.svg')",
+          WebkitMaskRepeat: 'repeat',
+          maskRepeat: 'repeat',
+          WebkitMaskSize: '320px 320px',
+          maskSize: '320px 320px',
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-[5] h-2/3 rounded-t-2xl bg-gradient-to-b from-white/35 via-white/10 to-transparent"
+      />
       {parts.map((part, i) => {
         const key = `${message.id}-${i}`;
         const t = part.type ?? '';
