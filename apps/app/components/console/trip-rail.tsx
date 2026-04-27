@@ -43,9 +43,15 @@ interface TripRailProps {
   scopedTripId?: string | null;
   /** When set, the channel-scope card replaces the tab+search header. */
   scopedChannel?: ReturnType<typeof CHANNELS extends Record<string, infer V> ? () => V : never>;
+  /**
+   * Optional collapse-rail control. When provided, renders inline on the
+   * AW/HD/ST count row right-justified — keeps the chevron in the visual
+   * "rail header" line instead of overlapping the search input.
+   */
+  collapseControl?: React.ReactNode;
 }
 
-export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel }: TripRailProps) {
+export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel, collapseControl }: TripRailProps) {
   // Local search query — narrows the visible trip list on traveler
   // name, route, tripId, and last-message body. Group-trip + passenger
   // search will plug in here once those entities surface in the rail
@@ -115,8 +121,9 @@ export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel }: T
       ) : (
         <>
           {/* Compact count chips. Abbreviated labels (AW / HD / ST)
-              fit in the 160px expanded rail without wrapping. */}
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              fit in the 160px expanded rail without wrapping. Collapse
+              chevron sits on the same row, right-justified. */}
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
             <span className="sd-pill sd-pill-verm" style={{ fontSize: 9, padding: '2px 6px' }}>
               AW · {trips.filter(t => t.state === 'AWAITING').length}
             </span>
@@ -126,6 +133,7 @@ export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel }: T
             <span className="sd-pill sd-pill-sea" style={{ fontSize: 9, padding: '2px 6px' }}>
               ST · {trips.filter(t => t.state === 'SETTLED').length}
             </span>
+            {collapseControl ? <span style={{ marginLeft: 'auto' }}>{collapseControl}</span> : null}
           </div>
           <div
             className="sd-card-flat"

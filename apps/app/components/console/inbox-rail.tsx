@@ -58,7 +58,7 @@ export function InboxRail(props: InboxRailProps) {
 
   if (expanded) {
     return (
-      <ExpandedRail toggle={toggle}>
+      <ExpandedRail>
         <Tabs defaultValue="trips" className="flex h-full min-h-0 flex-col">
           <TabsList className="mb-1 h-7 w-full justify-stretch bg-transparent p-0 gap-1">
             <TabsTrigger
@@ -75,7 +75,7 @@ export function InboxRail(props: InboxRailProps) {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="trips" className="mt-0 flex-1 min-h-0 overflow-hidden">
-            <TripRail {...props} />
+            <TripRail {...props} collapseControl={<CollapseRailButton onClick={toggle} />} />
           </TabsContent>
           <TabsContent value="chats" className="mt-0 flex-1 min-h-0 overflow-auto">
             <ChatHistoryList />
@@ -366,12 +366,10 @@ function formatRelativeTime(iso: string): string {
 // Trip rows still truncate for any extra fields.
 const EXPANDED_WIDTH = 220;
 
-function ExpandedRail({ toggle, children }: { toggle: () => void; children: ReactNode }) {
-  const [hover, setHover] = useState(false);
+function ExpandedRail({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
-        position: 'relative',
         width: EXPANDED_WIDTH,
         display: 'flex',
         flexDirection: 'column',
@@ -380,32 +378,35 @@ function ExpandedRail({ toggle, children }: { toggle: () => void; children: Reac
       }}
     >
       {children}
-      <button
-        type="button"
-        aria-label="Collapse inbox rail"
-        onClick={toggle}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        style={{
-          position: 'absolute',
-          top: 88,
-          right: 6,
-          width: 26,
-          height: 26,
-          borderRadius: '50%',
-          border: 0,
-          background: hover ? 'var(--ink)' : 'color-mix(in oklab, var(--ink) 8%, transparent)',
-          color: hover ? '#fff' : 'var(--text-faint)',
-          cursor: 'pointer',
-          display: 'grid',
-          placeItems: 'center',
-          padding: 0,
-          transition: 'background-color 140ms ease, color 140ms ease',
-        }}
-      >
-        <ChevronLeft size={14} />
-      </button>
     </div>
+  );
+}
+
+export function CollapseRailButton({ onClick }: { onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label="Collapse inbox rail"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: '50%',
+        border: 0,
+        background: hover ? 'var(--ink)' : 'color-mix(in oklab, var(--ink) 10%, transparent)',
+        color: hover ? '#fff' : 'var(--ink)',
+        cursor: 'pointer',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 0,
+        transition: 'background-color 140ms ease, color 140ms ease',
+      }}
+    >
+      <ChevronLeft size={12} />
+    </button>
   );
 }
 
