@@ -20,12 +20,16 @@
 
 import Link from 'next/link';
 
+import { SlackInstallChannelManager, SlackInstallDisconnectButton } from './slack-install-actions';
+
 interface SlackConnectedProps {
+  installId: string;
   teamName: string;
   enterpriseLabel: string | null;
   botUserId: string;
   scopeCount: number;
   routes: Array<{
+    channelId: string;
     channelLabel: string;
     description: string;
     mode: 'route' | 'filter' | 'silent' | 'default' | 'escalation';
@@ -34,6 +38,7 @@ interface SlackConnectedProps {
 }
 
 export function SlackConnectedPanel({
+  installId,
   teamName,
   enterpriseLabel,
   botUserId,
@@ -41,6 +46,19 @@ export function SlackConnectedPanel({
   routes,
   weeklyEscalations,
 }: SlackConnectedProps) {
+  // Surface unique channels for the per-channel "Leave" actions. Some
+  // routing JSON shapes have multiple event-class rules pointing at the
+  // same channel; the leave action removes ALL routes for the channel
+  // anyway, so we de-dupe at the UI layer to avoid duplicate buttons.
+  const seenChannels = new Set<string>();
+  const uniqueChannels = routes
+    .filter(r => {
+      if (!r.channelId || seenChannels.has(r.channelId)) return false;
+      seenChannels.add(r.channelId);
+      return true;
+    })
+    .map(r => ({ channelId: r.channelId, channelLabel: r.channelLabel }));
+
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <header
@@ -60,9 +78,12 @@ export function SlackConnectedPanel({
             {weeklyEscalations === 1 ? '' : 's'} this week
           </p>
         </div>
-        <Link href="/dashboard/channels/slack/connect" style={primaryBtnStyle}>
-          Add channel
-        </Link>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <Link href="/dashboard/channels/slack/connect" style={primaryBtnStyle}>
+            Add channel
+          </Link>
+          <SlackInstallDisconnectButton installId={installId} teamName={teamName} />
+        </div>
       </header>
 
       <div
@@ -172,6 +193,11 @@ export function SlackConnectedPanel({
           </>
         )}
       </article>
+
+      {/* Per-channel leave controls — collapsed by default so the table
+          stays the focal element. Surfaces inside the same workspace
+          panel since each install owns its own channel set. */}
+      <SlackInstallChannelManager installId={installId} channels={uniqueChannels} />
     </section>
   );
 }

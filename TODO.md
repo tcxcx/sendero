@@ -695,6 +695,28 @@ none block the submission demo.
   tables are young (<few hundred rows in dev) so the lock is sub-
   second today, but follow the runbook on next migration.
 
+### P2 (cont.) — channel platform Stages 2 + 3
+
+Plan: `~/.gstack/projects/tcxcx-sendero/ship-2026-04-24-platform-release-multi-tenant-channel-apps-plan-20260427-140826.md`. Stage 1 approved + ships separately. Stages 2 + 3 deferred until customer demand surfaces.
+
+- [ ] **Channel platform Stage 2 — tenant brand fields + branded public install page** (~4-5 days). Trigger: first paying TMC asks for "remove Sendero footer / use my brand on the install page." Adds `Tenant.brandDisplayName/brandLogoUrl/brandAccentColor/brandLongDesc` columns, gates white-label public install page to Pro+ tier, ships trust signals (logo at 96px, scopes in human language, social proof). Tier-gating tone: "Hosted on Sendero" partner footer (NOT "Upgrade to remove" coercion — Design subagent finding).
+
+- [ ] **Channel platform Stage 3 — full per-tenant `SlackApp` + `WhatsAppApp` model** (~2 weeks; was 1, doubled after review). Trigger: signed TMC contract specifically requires "Acme TravelDesk" branded bot in customer workspaces. Implementation MUST include all of:
+  - Managed KMS encryption (AWS KMS or Vercel Marketplace; NOT a hand-rolled `@sendero/crypto` package)
+  - Slack distribution policy validation BEFORE building (Marketplace listing path or Slack Connect / shared-channels reframe)
+  - Per-app URL routing only after `slackAppId` column lands and a header-based dispatch cut-over completes
+  - Credential rotation dual-verify columns: `signingSecretEncPrevious Bytes?` + `previousValidUntil DateTime?` (without these, every rotation = 5min silent dead-air)
+  - Slack manifest YAML pre-fill in wizard (cuts TTHW from 25min → 8min for ~30 LOC)
+  - Error envelope pattern `{ code, message, fix, docsUrl }` referenced from `docs/channels/error-codes.md`
+  - Per-tenant generated runbook at `/dashboard/channels/slack/[slackAppId]/runbook` (templated MDX, NOT a hardcoded `docs/slack.md`)
+  - New `channels.admin` scope for `slack_app_create/update_brand/pause/rotate_signing_secret` tools; update `toolToScope()` in `packages/auth/src/dispatch-auth.ts`
+  - Apps list at 50 rows: filter chips, search, primary/secondary/tertiary visual hierarchy
+  - Full missing-state matrix per surface (loading / empty / error / partial / paused / "already installed")
+  - Wizard credential paste UX (monospace, paste-only, validate shape, last-4 confirm, never echo secret)
+  - Routing model: app-level rules + per-install overrides
+  - Public install Persona C success page + tenant email notification on new install
+  - Will-haunt-implementer specs (icon dimensions/format/storage, accent color picker, wizard back-nav, verify-failure retry, multi-app-same-workspace UX warning)
+
 ### P3 — confusing-but-not-broken
 
 - [ ] **AI Gateway "Free credits restricted" error is misleading on

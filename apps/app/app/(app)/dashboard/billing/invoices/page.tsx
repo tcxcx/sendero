@@ -183,13 +183,6 @@ export default async function InvoicesPage({
         minHeight: 0,
       }}
     >
-      <div>
-        <h1 className="t-h1">Invoices</h1>
-        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          Settled in nano-USDC on Arc L2. Full audit trail on every line.
-        </p>
-      </div>
-
       <KpiStrip
         items={[
           {

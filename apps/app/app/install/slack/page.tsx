@@ -141,6 +141,53 @@ export default async function PublicSlackInstallPage(props: PageProps) {
             </ul>
           </div>
 
+          {/* Three-step preview before the CTA — answers "what's about to
+              happen if I click this?" before Persona C commits. Cuts the
+              mid-OAuth bounces ("wait, what is this asking for?") that
+              kill conversion on B2B install pages. */}
+          <ol
+            style={{
+              margin: 0,
+              padding: 0,
+              listStyle: 'none',
+              counterReset: 'next-step',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              fontSize: 12.5,
+              lineHeight: 1.5,
+              color: 'var(--text-dim, #555)',
+            }}
+          >
+            {[
+              'You’ll be redirected to Slack to approve scopes (~10 seconds).',
+              'The bot installs in your workspace automatically.',
+              'Add it to a channel with /invite @Sendero, then mention it. It replies in the thread.',
+            ].map((step, i) => (
+              <li key={`step-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <span
+                  aria-hidden
+                  style={{
+                    width: 18,
+                    height: 18,
+                    flexShrink: 0,
+                    borderRadius: 9,
+                    background: 'color-mix(in oklab, var(--ink, #1f2a44) 8%, transparent)',
+                    color: 'var(--ink, #1f2a44)',
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-mono-x, ui-monospace, monospace)',
+                  }}
+                >
+                  {i + 1}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+
           {installUrl ? (
             <a
               href={installUrl}

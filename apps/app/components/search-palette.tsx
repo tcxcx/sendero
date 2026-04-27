@@ -327,21 +327,25 @@ export function SearchShortcutHint({ className }: { className?: string }) {
 
 /**
  * Dim + blur backdrop rendered as a portal-ed fixed overlay when the
- * palette is open. Shades out the dashboard behind so the floating
- * combobox reads as focused.
+ * palette is open. Shades out the dashboard CONTENT behind so the
+ * floating combobox reads as focused, but stops at the sidebar's right
+ * edge so the floating glass pill stays crisp as the visual anchor.
  *
- * No `saturate()` — the sidebar's vermillion topography pattern
- * bleeds warm under any saturation boost, making the sidebar look
- * orange-tinted on hover-open. Blur + a cool dark wash is enough to
- * defocus the dashboard without amplifying red channels.
+ * `--search-backdrop-left` flips between expanded (232px) and collapsed
+ * (80px) sidebar widths — see globals.css `:has([data-collapsible="icon"])`.
+ *
+ * No `saturate()` — saturation amplifies red channels and the sidebar's
+ * vermillion topography bleeds warm. Blur + cool dark wash defocuses
+ * the content area cleanly.
  */
 export function SearchBackdrop({ open }: { open: boolean }) {
   if (!open) return null;
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-0 z-40"
+      className="pointer-events-none fixed inset-y-0 right-0 z-40"
       style={{
+        left: 'var(--search-backdrop-left, 232px)',
         background: 'color-mix(in oklab, var(--sendero-midnight, #1F2A44) 16%, transparent)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',

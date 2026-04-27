@@ -376,14 +376,6 @@ function PassportOnFile({
 
   return (
     <>
-      <header>
-        <h1 className="t-h1">Passport on file</h1>
-        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          Extracted {timeAgo(vault.extractedAt)} via {vault.extractedBy.replace(/_/g, ' ')}. Image
-          bytes never left your browser.
-        </p>
-      </header>
-
       <div
         style={{
           flex: 1,
@@ -1033,14 +1025,6 @@ function PassportUpload({
   const busy = extracting || uploading;
   return (
     <>
-      <header>
-        <h1 className="t-h1">Add your passport</h1>
-        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          Drop a photo of the photo page. We extract the MRZ on the server, encrypt it with a
-          per-tenant key, and discard the image. Only the two MRZ lines are persisted.
-        </p>
-      </header>
-
       <div
         style={{
           flex: 1,

@@ -188,7 +188,7 @@ export function InboxStackedList({ trips }: Props) {
               {(t.state === 'AWAITING' || t.state === 'HOLD' || t.state === 'OVER CAP') && (
                 <div
                   aria-hidden
-                  className="absolute inset-y-0 left-0 w-[2px]"
+                  className="absolute inset-y-0 left-0 w-[2px] rounded-l-[var(--radius-md)]"
                   style={{ background: 'var(--ink)' }}
                 />
               )}

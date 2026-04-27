@@ -444,6 +444,13 @@ body::before {
 .app-shell-root {
   position: relative;
   z-index: 1;
+  /* Where the SearchBackdrop should start so it doesn't dim the
+     sidebar pill. Expanded sidebar = 232px (16px gutter + 200px pill +
+     16px gap); collapsed icon mode rule below drops it to 80px. */
+  --search-backdrop-left: 232px;
+}
+.app-shell-root:has(.group.peer[data-collapsible="icon"]) {
+  --search-backdrop-left: 80px;
 }
 /*
  * Outer parchment topography — contour-line texture behind the raised

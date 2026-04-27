@@ -149,14 +149,6 @@ function DisconnectedView({
 }) {
   return (
     <>
-      <header>
-        <h1 className="t-h1">WhatsApp</h1>
-        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          Sendero owns the WhatsApp Business Account and lends you a number from the pool. No Meta
-          embedded signup, no carrier paperwork — you brand the experience.
-        </p>
-      </header>
-
       <ChannelStatusPanel
         brand="whatsapp"
         status={status}

@@ -36,6 +36,8 @@
     "./input": "./src/components/input.tsx",
     "./label": "./src/components/label.tsx",
     "./language-selector": "./src/components/language-selector.tsx",
+    "./mcp-install-card": "./src/components/mcp-install-card.tsx",
+    "./pill-tabs": "./src/components/pill-tabs.tsx",
     "./popover": "./src/components/popover.tsx",
     "./select": "./src/components/select.tsx",
     "./separator": "./src/components/separator.tsx",

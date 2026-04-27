@@ -9,7 +9,6 @@ import { TooltipProvider } from '@sendero/ui/tooltip';
 
 import { AppHeader } from '@/components/app-shell/app-header';
 import { AppShellFooter } from '@/components/app-shell/app-shell-footer';
-import { DashboardBreadcrumb } from '@/components/app-shell/dashboard-breadcrumb';
 import { DashboardPageHeader } from '@/components/app-shell/dashboard-page-header';
 import { AppSidebar } from '@/components/app-sidebar';
 import { BridgeDialog } from '@/components/bridge-dialog';
@@ -74,7 +73,6 @@ export function AppChrome({
               locale={locale}
               startSlot={<SidebarTrigger className="-ml-1 shrink-0" aria-label="Toggle sidebar" />}
             />
-            <DashboardBreadcrumb />
             <DashboardPageHeader />
             <main
               className={cn('app-shell-main min-h-0 flex-1 overflow-auto my-2', mainPad, mainFlex)}
