@@ -11,7 +11,8 @@ export const BUFI_INTEGRATION = {
   /** Display name. */
   name: 'Bufi',
   /** One-liner shown in cards + tooltips. */
-  description: 'Bufi balance + payouts inside the operator console. Wait-listed for now.',
+  description:
+    'Bufi balance + ERP management, stablecoin to fiat payouts, accounts payable, and automated invoice reconciliation. Make your business management on-chain smarter and grow your business globally.',
   /** Status — flipped to `available` once the integration ships. */
   status: 'coming-soon' as 'available' | 'coming-soon',
   /** Canonical "Coming soon" caption shown when status === 'coming-soon'. */

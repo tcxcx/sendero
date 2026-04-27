@@ -2779,6 +2779,48 @@ hr.rule {
 }
 
 /* =====================================================
+   Tooltip — Bufi (Bu app) variant.
+   Same topography geometry as ink/whatsapp/slack: dim purpura fill +
+   bright BUFI_PURPURA (#6854CF) contour lines masked through
+   topography.svg. Used on /dashboard/integrations for the Bufi
+   "Coming soon" pill so the tooltip reads as Bu-branded without
+   relying on the brand mark.
+   ===================================================== */
+[data-radix-popper-content-wrapper] [data-variant="bufi"] {
+  position: relative;
+  isolation: isolate;
+  /* Dim purpura — mixes brand purple into a deep purple-black so text
+     reads white and the bright contour lines pop. */
+  background-color: color-mix(in oklab, #6854cf 24%, #1f1934) !important;
+  color: #fff !important;
+  border-color: color-mix(in oklab, #6854cf 36%, #1f1934) !important;
+  box-shadow:
+    0 1px 2px rgba(31, 25, 52, 0.18),
+    0 12px 28px -12px rgba(31, 25, 52, 0.4) !important;
+  overflow: hidden;
+}
+[data-radix-popper-content-wrapper] [data-variant="bufi"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Bright BUFI_PURPURA contour lines over the dim-purple field. */
+  background-color: #6854cf;
+  -webkit-mask-image: url("/patterns/topography.svg");
+  mask-image: url("/patterns/topography.svg");
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 220px 220px;
+  mask-size: 220px 220px;
+  opacity: 0.6;
+}
+[data-radix-popper-content-wrapper] [data-variant="bufi"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* =====================================================
    App loading spinner — 12-bar rotator used by the
    full-screen `AppLoadingOverlay` (see
    components/app-shell/app-loading-overlay.tsx).
