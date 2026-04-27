@@ -35,6 +35,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { ensureUserRow } from '@/lib/ensure-user';
+import { passportLog } from '@/lib/passport-debug';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -57,10 +58,10 @@ const BodySchema = z.object({
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
-  console.log('[passport/upload] ▶ POST received');
+  passportLog('[passport/upload] ▶ POST received');
   try {
     const { userId, orgId } = await auth();
-    console.log('[passport/upload] auth()', {
+    passportLog('[passport/upload] auth()', {
       hasUserId: Boolean(userId),
       hasOrgId: Boolean(orgId),
     });
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    console.log('[passport/upload] body parsed', {
+    passportLog('[passport/upload] body parsed', {
       mrz1Len: payload.data.mrzLine1.length,
       mrz2Len: payload.data.mrzLine2.length,
       hasImageHash: Boolean(payload.data.imageSha256),
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
         .update(`${payload.data.mrzLine1}\n${payload.data.mrzLine2}`)
         .digest('hex');
 
-    console.log('[passport/upload] → extractPassportFromMrz');
+    passportLog('[passport/upload] → extractPassportFromMrz');
     const extracted = extractPassportFromMrz({
       mrzLine1: payload.data.mrzLine1,
       mrzLine2: payload.data.mrzLine2,
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
         { status: 422 }
       );
     }
-    console.log('[passport/upload] mrz parsed', {
+    passportLog('[passport/upload] mrz parsed', {
       nationality: extracted.nationality ?? null,
       expirationDate: extracted.expirationDate ?? null,
       mrzChecksumValid: extracted.mrzChecksumValid,
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    console.log('[passport/upload] ✓ ok', {
+    passportLog('[passport/upload] ✓ ok', {
       vaultId: signals.id,
       tenantId: tenant.id,
       userId: user.id,

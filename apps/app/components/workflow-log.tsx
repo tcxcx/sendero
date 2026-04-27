@@ -7,6 +7,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { ChatModelTrigger } from '@/components/chat/chat-model-trigger';
+
 import { useSendero } from './store';
 import { useMeterStream, useMeterSummary } from './use-meter';
 import { WorkflowGraph } from './workflow-graph';
@@ -51,6 +53,7 @@ export function WorkflowLog() {
     <div className="col">
       <div className="col-head">
         <span className="title">Workflow</span>
+        <ChatModelTrigger />
       </div>
       <div className="col-body log">
         <WorkflowGraph workflow={workflow} />

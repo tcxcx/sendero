@@ -82,66 +82,64 @@ export default async function DashboardPage() {
       <PageActions>
         <>
           {copy.shortcuts.map(s => {
-                if (s.href === CHANNEL_HREFS.whatsapp) {
-                  return (
-                    <ChannelPill
-                      key={s.href}
-                      href={s.href}
-                      brand="whatsapp"
-                      connected={whatsappConnected}
-                      description={s.description}
-                    />
-                  );
-                }
-                if (s.href === CHANNEL_HREFS.slack) {
-                  return (
-                    <ChannelPill
-                      key={s.href}
-                      href={s.href}
-                      brand="slack"
-                      connected={slackConnected}
-                      description={s.description}
-                    />
-                  );
-                }
-                const Icon = NEUTRAL_SHORTCUT_ICONS[s.href] ?? Sparkles;
-                return (
-                  <Tooltip key={s.href}>
-                    <TooltipTrigger asChild>
-                      <Link
-                        href={s.href}
-                        aria-label={s.label}
-                        className="group/qa inline-flex h-9 w-9 items-center justify-center rounded-md border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] bg-white text-[color:var(--text-dim)] shadow-[var(--shadow-xs)] transition-colors duration-150 hover:border-[color:var(--ink)] hover:bg-[color:var(--tint-vermillion-soft)] hover:text-[color:var(--ink)]"
-                      >
-                        <Icon className="size-4" aria-hidden="true" />
-                      </Link>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" data-variant="ink" className="max-w-xs text-xs">
-                      <div className="font-medium">{s.label}</div>
-                      <div className="mt-0.5 text-[11px] opacity-85">{s.description}</div>
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
-              <Tooltip>
+            if (s.href === CHANNEL_HREFS.whatsapp) {
+              return (
+                <ChannelPill
+                  key={s.href}
+                  href={s.href}
+                  brand="whatsapp"
+                  connected={whatsappConnected}
+                  description={s.description}
+                />
+              );
+            }
+            if (s.href === CHANNEL_HREFS.slack) {
+              return (
+                <ChannelPill
+                  key={s.href}
+                  href={s.href}
+                  brand="slack"
+                  connected={slackConnected}
+                  description={s.description}
+                />
+              );
+            }
+            const Icon = NEUTRAL_SHORTCUT_ICONS[s.href] ?? Sparkles;
+            return (
+              <Tooltip key={s.href}>
                 <TooltipTrigger asChild>
-                  <Button asChild variant="topography">
-                    <Link href="/dashboard/console">
-                      <span className="agent-console-cta__bg" aria-hidden="true" />
-                      <span className="agent-console-cta__label">
-                        {copy.agentConsole.cta}
-                        <ArrowRight className="size-4" aria-hidden="true" />
-                      </span>
-                    </Link>
-                  </Button>
+                  <Link
+                    href={s.href}
+                    aria-label={s.label}
+                    className="group/qa inline-flex h-9 w-9 items-center justify-center rounded-md border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] bg-white text-[color:var(--text-dim)] shadow-[var(--shadow-xs)] transition-colors duration-150 hover:border-[color:var(--ink)] hover:bg-[color:var(--tint-vermillion-soft)] hover:text-[color:var(--ink)]"
+                  >
+                    <Icon className="size-4" aria-hidden="true" />
+                  </Link>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" data-variant="ink" className="max-w-xs text-xs">
-                  <div className="font-medium">{copy.agentConsole.title}</div>
-                  <div className="mt-0.5 text-[11px] opacity-85">
-                    {copy.agentConsole.description}
-                  </div>
+                  <div className="font-medium">{s.label}</div>
+                  <div className="mt-0.5 text-[11px] opacity-85">{s.description}</div>
                 </TooltipContent>
               </Tooltip>
+            );
+          })}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild variant="topography">
+                <Link href="/dashboard/console">
+                  <span className="agent-console-cta__bg" aria-hidden="true" />
+                  <span className="agent-console-cta__label">
+                    {copy.agentConsole.cta}
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </span>
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" data-variant="ink" className="max-w-xs text-xs">
+              <div className="font-medium">{copy.agentConsole.title}</div>
+              <div className="mt-0.5 text-[11px] opacity-85">{copy.agentConsole.description}</div>
+            </TooltipContent>
+          </Tooltip>
           <Button asChild>
             <Link href="/dashboard/trips?sheet=new">
               Create prepaid trip

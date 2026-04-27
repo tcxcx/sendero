@@ -384,13 +384,16 @@ function renderAttachmentsHint(input: AgentInput): string {
     `The traveler attached ${media.length} document${media.length === 1 ? '' : 's'}:`,
     manifest,
     '',
-    'Reach for the `scan_document` tool to pull structured fields before replying. Pick `kind` from context:',
-    '- Receipt (coffee, taxi, hotel folio, grocery till, ride-share e-receipt) → `kind: "receipt"`',
-    '- Invoice / SaaS bill / contractor invoice / supplier bill → `kind: "invoice"`',
-    '- Airline boarding pass (mobile, PDF, screenshot) → `kind: "boarding_pass"`',
-    '- Government ID / passport / driver license → refuse, these are compliance-gated',
+    'Default behavior: call `scan_document_auto` on each attachment. The tool runs Gemini classification + extraction in one shot, so you do NOT have to know the document kind ahead of time. Pass the same `data + mediaType` (or `documentUrl`) you see on the turn.',
     '',
-    'The attachment is already on the turn; call `scan_document` with the same `data + mediaType` you see. One short sentence like "Reading the receipt…" is enough before the tool call — after the tool returns, confirm what you extracted in one line and offer the next useful action (log as expense, reconcile to trip, verify PNR). Never transcribe the full extraction back — the UI already renders a card.',
+    'Decision rules after the tool returns:',
+    '- `detectedKind === "id_document"` → the traveler\'s passport vault is updated automatically when they\'re signed in (`vaultSaved` is set). Confirm in one short line ("Saved your passport — nationality USA, expires 2030-04-12.") and offer the next action (continue booking, ask for missing fields).',
+    '- `detectedKind === "invoice" | "receipt" | "boarding_pass"` → the structured fields are in `extraction.data`. Confirm what you extracted in one line and offer the next useful action (log as expense, reconcile to trip, verify PNR). Never transcribe the full extraction back — the UI already renders a card.',
+    '- `detectedKind === "unknown"` or `classifierConfidence < 0.55` → ask the traveler to clarify what the document is rather than guessing.',
+    '',
+    'When you ALREADY know the kind from context (the user said "here\'s the receipt"), prefer the cheaper `scan_document` with the explicit `kind` to skip the classifier round-trip. Otherwise default to `scan_document_auto`.',
+    '',
+    'One short sentence like "Reading that document…" is enough before the tool call — never describe the attachment in prose without first running a scanner.',
   ].join('\n');
 }
 

@@ -18,6 +18,7 @@
 import { useMemo, useState, type JSX } from 'react';
 
 import { useChat } from '@ai-sdk/react';
+import { useUser } from '@clerk/nextjs';
 import { DefaultChatTransport, type UIMessage, type UIMessagePart } from 'ai';
 
 import {
@@ -36,6 +37,8 @@ import {
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input';
 import { AgentPersona } from '@/components/agent-chat/agent-persona';
+import { ChatModelTrigger } from '@/components/chat/chat-model-trigger';
+import { useChatModel } from '@/hooks/use-chat-model';
 
 import { renderForOperator, type ChannelMessage } from '@/lib/channel-render';
 
@@ -46,13 +49,14 @@ interface Props {
 export function AgentChatClient({ tenantId }: Props) {
   const [input, setInput] = useState('');
 
+  const [chatModel] = useChatModel();
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: '/api/agent/chat',
-        body: { tenantId, channel: 'web' },
+        body: () => ({ tenantId, channel: 'web', model: chatModel }),
       }),
-    [tenantId]
+    [tenantId, chatModel]
   );
 
   const { messages, sendMessage, status } = useChat({ transport });
@@ -87,6 +91,9 @@ export function AgentChatClient({ tenantId }: Props) {
           </div>
           <div className="text-xs text-muted-foreground">{personaStateLabel(personaState)}</div>
         </div>
+        <div className="ml-auto">
+          <ChatModelTrigger />
+        </div>
       </header>
 
       <Conversation className="flex-1">
@@ -98,9 +105,17 @@ export function AgentChatClient({ tenantId }: Props) {
               const channelMessages = uiMessageToChannelMessages(uiMessage);
               const role = mapRole(uiMessage.role);
               return channelMessages.map(msg => (
-                <Message key={msg.id} from={role}>
-                  {renderForOperator(msg)}
-                </Message>
+                <div
+                  key={msg.id}
+                  className={
+                    'flex w-full items-start gap-3 ' + (role === 'user' ? 'flex-row-reverse' : '')
+                  }
+                >
+                  {role === 'user' ? <UserMessageAvatar /> : <AgentMessageAvatar />}
+                  <Message from={role} className="!max-w-[calc(95%-44px)]">
+                    {renderForOperator(msg)}
+                  </Message>
+                </div>
               ));
             })
           )}
@@ -316,6 +331,12 @@ function pushToolMessages(args: {
   const input = (part.input ?? {}) as Record<string, unknown>;
 
   if (state === 'output-available') {
+    // Single Tool block per call — input + output collapsed inside the
+    // same ToolContent. Emitting BOTH `tool_invocation` and `tool_result`
+    // here used to double-render on the operator surface (QA #001).
+    // Tools that want a separate share-card surface still emit a
+    // distinct tool_result downstream; this path is the AI-SDK generic
+    // case where the result is just JSON, not a share artifact.
     out.push({
       kind: 'tool_invocation',
       id: `${partId}-inv`,
@@ -323,13 +344,6 @@ function pushToolMessages(args: {
       toolName,
       input,
       status: 'done',
-      createdAt: baseTime,
-    });
-    out.push({
-      kind: 'tool_result',
-      id: `${partId}-res`,
-      author,
-      toolName,
       result: part.output ?? null,
       createdAt: baseTime,
     });
@@ -380,4 +394,39 @@ function personaStateLabel(state: PersonaState): string {
     case 'idle':
       return 'Ready';
   }
+}
+
+// ─── Avatars ────────────────────────────────────────────────────────────
+//
+// Same shape as meta-inbox-live's avatars so the two surfaces match.
+// User: bordered circle, ink fill, Clerk profile photo (or initial).
+// Agent: bordered circle, white fill, shared Persona halo Rive inside.
+
+function UserMessageAvatar() {
+  const { user } = useUser();
+  const initial = (user?.firstName ?? user?.username ?? 'U').slice(0, 1).toUpperCase();
+  return (
+    <div
+      className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[color:var(--hairline-color-strong)] bg-[color:var(--ink)] text-[11px] font-semibold text-[color:#fdfbf7]"
+      aria-hidden="true"
+    >
+      {user?.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={user.imageUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        initial
+      )}
+    </div>
+  );
+}
+
+function AgentMessageAvatar() {
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[color:var(--hairline-color-strong)] bg-white"
+      aria-hidden="true"
+    >
+      <Persona state="idle" variant="halo" className="h-7 w-7" />
+    </div>
+  );
 }

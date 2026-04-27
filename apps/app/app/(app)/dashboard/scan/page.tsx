@@ -19,8 +19,6 @@ import { useRef, useState } from 'react';
 
 import { toast } from '@sendero/ui/sonner';
 
-import { Crumb } from '@/components/console/crumb';
-
 type DocKind = 'receipt' | 'invoice' | 'boarding_pass';
 
 type ScanResponse =
@@ -144,7 +142,7 @@ export default function ScanPage() {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -152,8 +150,6 @@ export default function ScanPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Scan document']} />
-
       <header>
         <h1 className="t-h1">Scan a document</h1>
         <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>

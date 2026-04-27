@@ -13,17 +13,21 @@
  * than the install row's primary key would suggest.
  */
 
-import { after, NextResponse, type NextRequest } from 'next/server';
-import { env } from '@sendero/env';
+import { after, type NextRequest, NextResponse } from 'next/server';
+
 import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
 import {
   deriveTenantKey,
   isUrlVerificationChallenge,
-  verifySlackSignature,
   type SlackEventEnvelope,
+  verifySlackSignature,
 } from '@sendero/slack';
-import { runSlackAgentTurn } from '@/lib/slack-agent';
+
 import { makeCapStore, makeMeterStore, makeSessionStore, resolveSegment } from '@/lib/agent-stores';
+import { newTraceId } from '@/lib/api-errors';
+import { runSlackAgentTurn } from '@/lib/slack-agent';
+import { fetchSlackFilesAsAttachments } from '@/lib/slack-media';
 import { resolveSenderoUser } from '@/lib/slack-user-mapping';
 
 export const runtime = 'nodejs';
@@ -95,6 +99,49 @@ export async function POST(req: NextRequest) {
   const text = (ev?.text as string | undefined) ?? '';
   const threadTs = (ev?.thread_ts as string | undefined) ?? (ev?.ts as string | undefined);
 
+  // Event-type filter — only dispatch the agent on events the operator
+  // actually addressed Sendero in. Without this, every `channel_rename`,
+  // `member_joined_channel`, `pin_added`, etc. would burn an agent turn
+  // and (worse) post a noise reply into the originating thread. We
+  // accept the conservative trio: app_mention (explicit @-mention),
+  // message.im (DMs), message.channels with a non-empty body in a
+  // channel where the bot is a member. Bot-authored messages are
+  // skipped to avoid self-reply loops (subtype === 'bot_message' or
+  // user matches install.botUserId).
+  const eventType = (ev?.type as string | undefined) ?? null;
+  const eventSubtype = (ev?.subtype as string | undefined) ?? null;
+  const isBotEcho = userId === install.botUserId || eventSubtype === 'bot_message';
+  const isAgentInput =
+    !isBotEcho &&
+    (eventType === 'app_mention' ||
+      (eventType === 'message' && text.trim().length > 0 && !eventSubtype));
+  if (!isAgentInput) {
+    console.log('[slack/events] skip non-agent event', {
+      eventType,
+      eventSubtype,
+      isBotEcho,
+      teamId: install.teamId,
+      eventId: envelope.event_id,
+    });
+    return NextResponse.json({ ok: true });
+  }
+  // Cross-phase autoplan ask: every webhook entry gets a correlation id
+  // we can grep across the call graph (events → agent turn → meter row).
+  const traceId = newTraceId();
+  console.log('[slack/events] inbound', {
+    traceId,
+    teamId: install.teamId,
+    channelId,
+    eventId: envelope.event_id,
+    threadTs,
+    hasText: Boolean(text),
+    fileCount: Array.isArray(ev?.files) ? (ev?.files as unknown[]).length : 0,
+  });
+  // Slack delivers shared files inline on the event envelope as `files[]`.
+  // We pull them off here so the file fetch happens inside `after()`
+  // (auth'd download is slow) and the route still acks within Slack's 3s.
+  const rawFiles = Array.isArray(ev?.files) ? (ev?.files as unknown[]) : [];
+
   // Defer the agent turn past the ack — Slack only needs `{ ok: true }`
   // within 3s; the LLM call can take much longer on cold paths. The Slack
   // user → Sendero user resolve also runs inside `after()` because on
@@ -124,6 +171,16 @@ export async function POST(req: NextRequest) {
           ).senderoUserId
         : install.authedUserId;
 
+      // Fetch any inline file shares with the bot token. Slack's
+      // url_private requires Authorization, so we download here and pass
+      // the bytes through as base64 attachments — the agent runtime then
+      // exposes them as multimodal model parts and nudges the LLM toward
+      // `scan_document_auto`. Failures (private channels, expired tokens,
+      // oversize) are logged but never block the agent turn.
+      const attachments = rawFiles.length
+        ? await fetchSlackFilesAsAttachments(rawFiles, install.botToken)
+        : [];
+
       await runSlackAgentTurn({
         // Prisma's `routing: JsonValue` is structurally compatible with
         // SlackRoutingConfig | null at runtime; the agent's prompt-builder
@@ -135,6 +192,7 @@ export async function POST(req: NextRequest) {
         channelId,
         userId,
         senderoUserId: resolvedSenderoUserId,
+        ...(attachments.length ? { attachments } : {}),
         // Model intentionally omitted — slack-agent resolves via the
         // canonical Sendero policy: Gateway-first (Gemini-first cascade
         // google→anthropic→openai), direct-provider fallback on gateway
@@ -145,7 +203,35 @@ export async function POST(req: NextRequest) {
         resolveSegment,
       });
     } catch (err) {
-      console.error('[slack/events] runSlackAgentTurn failed:', err);
+      console.error('[slack/events] runSlackAgentTurn failed:', {
+        traceId,
+        teamId: install.teamId,
+        channelId,
+        threadTs,
+        eventId: envelope.event_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Best-effort fallback so the user doesn't see dead silence in the
+      // thread. If posting the fallback also fails (token revoked, etc.)
+      // we just log — never re-throw past `after()`, that bubbles up as
+      // an unhandled rejection in the Vercel runtime.
+      if (channelId && threadTs) {
+        try {
+          const { createSlackClient } = await import('@sendero/slack');
+          const slack = createSlackClient(install.botToken);
+          await slack.chat.postMessage({
+            channel: channelId,
+            thread_ts: threadTs,
+            text: "I'm having trouble reaching the agent right now. Please try again in a minute — your message did come through.",
+            mrkdwn: true,
+            unfurl_links: false,
+          });
+        } catch (fallbackErr) {
+          console.error('[slack/events] fallback post failed:', {
+            error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+          });
+        }
+      }
     }
   });
 

@@ -23,7 +23,7 @@ export default async function SlackConnectPage() {
   });
 
   return (
-    <div className="flex w-full flex-col items-center gap-6 px-6 py-8">
+    <div className="flex w-full flex-col items-center gap-2 px-2 pb-4 pt-0">
       <ChannelSetupWizard
         channel="slack"
         headline="5 steps · about 3 minutes"

@@ -32,6 +32,7 @@ import type { ToolSet } from 'ai';
 
 import {
   type AgentInput,
+  type AgentMediaAttachment,
   type ConversationState,
   runAgentTurn,
   type RunAgentTurnArgs,
@@ -98,6 +99,13 @@ export interface RunSlackAgentTurnArgs {
   envelope: SlackEventEnvelope;
   /** User-facing event text — mention body, slash command body, etc. */
   text: string;
+  /**
+   * Optional inbound media (Slack `event.files[]` after fetch + base64).
+   * Forwarded to the agent runtime as multimodal file parts so the model
+   * can run `scan_document_auto` on the attachment without needing to
+   * resolve a Slack file URL itself.
+   */
+  attachments?: AgentMediaAttachment[];
   /** Thread to reply into. For top-level mentions Slack returns the message ts. */
   threadTs: string;
   /** Originating Slack channel (`C…`). */
@@ -199,6 +207,7 @@ export async function runSlackAgentTurn(
     channel: 'slack',
     text: args.text,
     turnId,
+    ...(args.attachments && args.attachments.length > 0 ? { attachments: args.attachments } : {}),
     meta: {
       // Channel-agnostic subjectKey for stateful sessions: thread-scoped
       // so a single Slack user has separate context per thread.
@@ -251,9 +260,7 @@ export async function runSlackAgentTurn(
     for (const candidate of retryModels) {
       try {
         // eslint-disable-next-line no-console
-        console.warn(
-          `[slack.agent] gateway failed; retrying direct provider ${candidate.label}`
-        );
+        console.warn(`[slack.agent] gateway failed; retrying direct provider ${candidate.label}`);
         retryResult = await runAgentTurn({
           input,
           model: candidate.model,

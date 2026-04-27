@@ -109,7 +109,7 @@ export default async function StampsCollectionPage() {
     }));
 
   return (
-    <main className="mx-auto flex w-full max-w-[1080px] flex-col gap-8 px-6 py-10">
+    <main className="mx-auto flex w-full max-w-[1080px] flex-col gap-8 px-6 pt-2 pb-8">
       <header className="flex flex-col gap-1">
         <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendero × Arc</p>
         <h1 className="font-display text-3xl">Your trip stamps</h1>

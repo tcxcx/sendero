@@ -12,15 +12,17 @@ import { NextResponse } from 'next/server';
 
 import { prisma } from '@sendero/database';
 
+import { passportLog } from '@/lib/passport-debug';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const OPEN_STATUSES = ['draft', 'searching', 'awaiting_approval', 'booked', 'in_progress'] as const;
 
 export async function GET() {
-  console.log('[passport/active-trips] ▶ GET received');
+  passportLog('[passport/active-trips] ▶ GET received');
   const { userId, orgId } = await auth();
-  console.log('[passport/active-trips] auth()', {
+  passportLog('[passport/active-trips] auth()', {
     hasUserId: Boolean(userId),
     hasOrgId: Boolean(orgId),
   });
@@ -51,7 +53,7 @@ export async function GET() {
       traveler: { select: { displayName: true, email: true } },
     },
   });
-  console.log('[passport/active-trips] ✓ ok', { tenantId: tenant.id, tripCount: trips.length });
+  passportLog('[passport/active-trips] ✓ ok', { tenantId: tenant.id, tripCount: trips.length });
 
   return NextResponse.json({
     trips: trips.map(t => ({

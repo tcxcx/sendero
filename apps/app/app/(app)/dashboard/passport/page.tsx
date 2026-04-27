@@ -24,7 +24,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Crumb } from '@/components/console/crumb';
+import { passportLog } from '@/lib/passport-debug';
 
 interface VaultSignals {
   vaultId: string;
@@ -71,10 +71,10 @@ export default function PassportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadVault = useCallback(async () => {
-    console.log('[passport] → GET /api/passport/self');
+    passportLog('[passport] → GET /api/passport/self');
     try {
       const res = await fetch('/api/passport/self', { cache: 'no-store' });
-      console.log('[passport] ← /api/passport/self', { status: res.status, ok: res.ok });
+      passportLog('[passport] ← /api/passport/self', { status: res.status, ok: res.ok });
       const body = (await res.json()) as {
         error?: string;
         message?: string;
@@ -83,11 +83,25 @@ export default function PassportPage() {
       if (!res.ok || body.error) {
         throw new Error(body.message ?? body.error ?? 'Failed to load vault state');
       }
-      console.log('[passport] vault state', { hasVault: Boolean(body.vault) });
+      passportLog('[passport] vault state', { hasVault: Boolean(body.vault) });
       setVault(body.vault ?? null);
       setStatus(body.vault ? 'on_file' : 'empty');
     } catch (err) {
-      console.error('[passport] loadVault failed', err);
+      // Network-level aborts (TypeError: Failed to fetch) happen during
+      // dev hot-reload and around Clerk token refreshes — they're not
+      // actionable demo bugs and the next mount retries cleanly. Demote
+      // those to warn so the demo console stays clean. Real API failures
+      // (non-2xx responses) still hit the error path inside the try
+      // block above and surface as console.error.
+      const isTransient =
+        err instanceof TypeError &&
+        typeof err.message === 'string' &&
+        err.message.toLowerCase().includes('failed to fetch');
+      if (isTransient) {
+        console.warn('[passport] loadVault transient (will retry on next mount):', err.message);
+      } else {
+        console.error('[passport] loadVault failed', err);
+      }
       setError(err instanceof Error ? err.message : 'Failed to load vault state');
       setStatus('error');
     }
@@ -99,7 +113,7 @@ export default function PassportPage() {
 
   const submit = useCallback(
     async (line1: string, line2: string, filename: string | null, imageSha256?: string) => {
-      console.log('[passport] → POST /api/passport/upload', {
+      passportLog('[passport] → POST /api/passport/upload', {
         mrz1Len: line1.length,
         mrz2Len: line2.length,
         filename,
@@ -118,7 +132,7 @@ export default function PassportPage() {
             imageSha256,
           }),
         });
-        console.log('[passport] ← /api/passport/upload', { status: res.status, ok: res.ok });
+        passportLog('[passport] ← /api/passport/upload', { status: res.status, ok: res.ok });
         const body = (await safeJson(res)) as
           | { vaultId: string; [k: string]: unknown }
           | { error: string; message?: string };
@@ -140,7 +154,7 @@ export default function PassportPage() {
 
   const onFile = useCallback(
     async (file: File) => {
-      console.log('[passport] file picked', {
+      passportLog('[passport] file picked', {
         name: file.name,
         type: file.type,
         bytes: file.size,
@@ -151,10 +165,10 @@ export default function PassportPage() {
       try {
         const form = new FormData();
         form.append('file', file);
-        console.log('[passport] → POST /api/passport/extract-mrz');
+        passportLog('[passport] → POST /api/passport/extract-mrz');
         const tStart = Date.now();
         const res = await fetch('/api/passport/extract-mrz', { method: 'POST', body: form });
-        console.log('[passport] ← /api/passport/extract-mrz', {
+        passportLog('[passport] ← /api/passport/extract-mrz', {
           status: res.status,
           ok: res.ok,
           wallClockMs: Date.now() - tStart,
@@ -179,7 +193,7 @@ export default function PassportPage() {
           setStatus('empty');
           return;
         }
-        console.log('[passport] extract ok', {
+        passportLog('[passport] extract ok', {
           provider: body.provider,
           model: body.model,
           latencyMs: body.latencyMs,
@@ -230,15 +244,15 @@ export default function PassportPage() {
     if (status !== 'on_file') return;
     let cancelled = false;
     void (async () => {
-      console.log('[passport] → GET /api/passport/active-trips');
+      passportLog('[passport] → GET /api/passport/active-trips');
       try {
         const res = await fetch('/api/passport/active-trips', { cache: 'no-store' });
-        console.log('[passport] ← /api/passport/active-trips', {
+        passportLog('[passport] ← /api/passport/active-trips', {
           status: res.status,
           ok: res.ok,
         });
         const body = (await res.json().catch(() => ({}))) as { trips?: TripSummary[] };
-        console.log('[passport] active trips', { count: body.trips?.length ?? 0 });
+        passportLog('[passport] active trips', { count: body.trips?.length ?? 0 });
         if (!cancelled) setActiveTrips(body.trips ?? []);
       } catch (err) {
         console.error('[passport] active-trips fetch failed', err);
@@ -272,7 +286,7 @@ export default function PassportPage() {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -280,8 +294,6 @@ export default function PassportPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Passport']} />
-
       {status === 'on_file' && vault ? (
         <>
           <PassportOnFile
@@ -296,6 +308,7 @@ export default function PassportPage() {
             }}
             onRevoke={revokeVault}
           />
+          <EligibilityVerdictsCard nationalityIso3={vault.nationalityIso3} />
           <PassportTripAssignment trips={activeTrips} />
         </>
       ) : null}
@@ -575,6 +588,296 @@ function PassportOnFile({
 
 // ── post-save trip assignment ─────────────────────────────────
 //
+// ── eligibility verdicts (UC4 — value loop without Sherpa/Timatic) ───
+//
+// Surfaces `verifyTravelDocuments`'s verdict against ~6 popular
+// destinations from the user's nationality, plus a "Test destination"
+// input for ad-hoc lookups. Backed by /api/passport/eligibility-preview
+// which calls into @sendero/vault — same engine the agent's
+// check_travel_eligibility tool uses, no external paid service.
+
+interface EligibilityVerdictRow {
+  dest: string;
+  status: 'ok' | 'warn' | 'block' | 'loading' | 'error';
+  reasons: string[];
+  message: string;
+}
+
+const VERDICT_DESTINATIONS_BY_NATIONALITY: Record<string, string[]> = {
+  USA: ['CAN', 'GBR', 'FRA', 'JPN', 'BRA', 'CHN'],
+  GBR: ['USA', 'FRA', 'JPN', 'CHN', 'IND', 'AUS'],
+  ARG: ['BRA', 'USA', 'ESP', 'GBR', 'CHL', 'URY'],
+  BRA: ['USA', 'ARG', 'ESP', 'GBR', 'DEU', 'MEX'],
+  MEX: ['USA', 'ESP', 'GBR', 'CAN'],
+  DEU: ['USA', 'GBR', 'JPN', 'BRA'],
+  FRA: ['USA', 'GBR', 'JPN', 'BRA'],
+  ESP: ['USA', 'GBR', 'BRA', 'ARG'],
+};
+
+const FALLBACK_DESTINATIONS = ['USA', 'GBR', 'FRA', 'JPN', 'BRA', 'MEX'];
+
+function formatVerdictReason(code: string): string {
+  // Map enum codes to short human copy. Kept here (not in vault package)
+  // so it can be tweaked per-tenant later. Add codes as `verifyTravelDocuments`
+  // grows.
+  const map: Record<string, string> = {
+    passport_missing: 'No passport on file',
+    passport_expired: 'Passport already expired',
+    passport_expires_within_6mo: 'Expires within 6 months of return',
+    visa_required_not_on_file: 'Visa required, not on file',
+    visa_required: 'Visa required',
+    evisa_required: 'eVisa required',
+    eta_required: 'Electronic Travel Authorization required',
+    visa_free: 'Visa-free',
+    visa_on_arrival: 'Visa on arrival',
+    nationality_unknown: 'Nationality not on file',
+    corridor_unknown: 'Corridor not in our static rules — verify manually',
+  };
+  return map[code] ?? code.replace(/_/g, ' ');
+}
+
+function EligibilityVerdictsCard({ nationalityIso3 }: { nationalityIso3: string | null }) {
+  const [rows, setRows] = useState<EligibilityVerdictRow[]>([]);
+  const [adhocDest, setAdhocDest] = useState('');
+  const [adhocResult, setAdhocResult] = useState<EligibilityVerdictRow | null>(null);
+
+  const destinations = nationalityIso3
+    ? (VERDICT_DESTINATIONS_BY_NATIONALITY[nationalityIso3] ?? FALLBACK_DESTINATIONS)
+    : FALLBACK_DESTINATIONS;
+
+  useEffect(() => {
+    let cancelled = false;
+    setRows(destinations.map(dest => ({ dest, status: 'loading', reasons: [], message: '' })));
+    void Promise.all(
+      destinations.map(async dest => {
+        try {
+          const res = await fetch(`/api/passport/eligibility-preview?dest=${dest}`, {
+            cache: 'no-store',
+          });
+          const body = (await res.json().catch(() => ({}))) as {
+            verdict?: { status: 'ok' | 'warn' | 'block'; reasons?: { code: string }[] };
+          };
+          if (!res.ok || !body.verdict) {
+            return {
+              dest,
+              status: 'error' as const,
+              reasons: [],
+              message: 'Unavailable',
+            };
+          }
+          const reasons = (body.verdict.reasons ?? []).map(r => formatVerdictReason(r.code));
+          return {
+            dest,
+            status: body.verdict.status,
+            reasons,
+            message:
+              body.verdict.status === 'ok'
+                ? (reasons[0] ?? 'Cleared')
+                : reasons.join(' · ') || body.verdict.status,
+          };
+        } catch {
+          return { dest, status: 'error' as const, reasons: [], message: 'Network error' };
+        }
+      })
+    ).then(results => {
+      if (!cancelled) setRows(results);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nationalityIso3]);
+
+  const onAdhoc = async () => {
+    const dest = adhocDest.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(dest)) {
+      setAdhocResult({
+        dest,
+        status: 'error',
+        reasons: [],
+        message: 'Enter a 3-letter ISO country code (e.g. USA, GBR, JPN).',
+      });
+      return;
+    }
+    setAdhocResult({ dest, status: 'loading', reasons: [], message: '' });
+    try {
+      const res = await fetch(`/api/passport/eligibility-preview?dest=${dest}`, {
+        cache: 'no-store',
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        verdict?: { status: 'ok' | 'warn' | 'block'; reasons?: { code: string }[] };
+      };
+      if (!res.ok || !body.verdict) {
+        setAdhocResult({ dest, status: 'error', reasons: [], message: 'Unavailable' });
+        return;
+      }
+      const reasons = (body.verdict.reasons ?? []).map(r => formatVerdictReason(r.code));
+      setAdhocResult({
+        dest,
+        status: body.verdict.status,
+        reasons,
+        message:
+          body.verdict.status === 'ok'
+            ? (reasons[0] ?? 'Cleared')
+            : reasons.join(' · ') || body.verdict.status,
+      });
+    } catch {
+      setAdhocResult({ dest, status: 'error', reasons: [], message: 'Network error' });
+    }
+  };
+
+  return (
+    <div
+      className="sd-card-raised"
+      style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
+      <div>
+        <div className="t-meta">Where this passport works</div>
+        <div className="t-h3" style={{ marginTop: 4 }}>
+          Eligibility verdicts
+        </div>
+        <p className="t-body ink-70" style={{ margin: '4px 0 0', fontSize: 12, maxWidth: '52ch' }}>
+          {nationalityIso3
+            ? `For a ${nationalityIso3} passport, planning a 7-day business trip departing in 30 days. Visa rules cover ~50 corridors today; unknowns surface a warn.`
+            : 'Nationality not on file. Verdicts default to USA — replace your passport image to update.'}
+        </p>
+      </div>
+
+      <ul
+        style={{
+          listStyle: 'none',
+          padding: 0,
+          margin: 0,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 8,
+        }}
+      >
+        {rows.map(row => (
+          <li key={row.dest}>
+            <VerdictRow row={row} />
+          </li>
+        ))}
+      </ul>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          borderTop: '1px solid var(--hairline-color-soft)',
+          paddingTop: 12,
+        }}
+      >
+        <input
+          type="text"
+          value={adhocDest}
+          onChange={e => setAdhocDest(e.target.value.toUpperCase())}
+          maxLength={3}
+          placeholder="ISO-3 (e.g. JPN)"
+          style={{
+            ...mrzInputStyle,
+            flex: '0 0 140px',
+            fontSize: 12,
+            padding: '8px 10px',
+            textTransform: 'uppercase',
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter') void onAdhoc();
+          }}
+        />
+        <button
+          type="button"
+          onClick={onAdhoc}
+          disabled={adhocDest.length < 3}
+          style={{
+            ...ghostBtnStyle,
+            padding: '8px 14px',
+            fontSize: 11,
+            opacity: adhocDest.length < 3 ? 0.5 : 1,
+            cursor: adhocDest.length < 3 ? 'not-allowed' : 'pointer',
+          }}
+        >
+          Test destination
+        </button>
+        <span style={{ flex: 1 }} />
+        {adhocResult ? (
+          <div style={{ minWidth: 0, flex: '1 1 auto', maxWidth: 320 }}>
+            <VerdictRow row={adhocResult} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function VerdictRow({ row }: { row: EligibilityVerdictRow }) {
+  const dotColor =
+    row.status === 'ok'
+      ? '#2EA876'
+      : row.status === 'warn'
+        ? 'var(--vermillion)'
+        : row.status === 'block'
+          ? '#C1361F'
+          : row.status === 'loading'
+            ? 'rgba(31,42,68,0.3)'
+            : 'rgba(31,42,68,0.5)';
+  const label =
+    row.status === 'ok'
+      ? 'Cleared'
+      : row.status === 'warn'
+        ? 'Action needed'
+        : row.status === 'block'
+          ? 'Blocked'
+          : row.status === 'loading'
+            ? '…'
+            : 'Error';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 10px',
+        background: 'var(--surface-base)',
+        boxShadow: 'inset 0 0 0 1px var(--hairline-color-soft)',
+        borderRadius: 'var(--radius-md, 8px)',
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          background: dotColor,
+          flexShrink: 0,
+        }}
+      />
+      <span className="t-mono" style={{ fontSize: 11, fontWeight: 600, minWidth: 32 }}>
+        {row.dest}
+      </span>
+      <span className="t-meta" style={{ fontSize: 10, color: dotColor, minWidth: 76 }}>
+        {label}
+      </span>
+      <span
+        className="t-body"
+        style={{
+          fontSize: 11,
+          color: 'var(--text-dim)',
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {row.message}
+      </span>
+    </div>
+  );
+}
+
 // After the vault is on file, surface where the passport will be
 // used. Empty trip list → redirect CTA to /dashboard/trips so the
 // user can create one. Non-empty → list up to six open trips with

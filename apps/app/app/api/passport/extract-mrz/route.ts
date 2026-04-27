@@ -25,13 +25,15 @@ import {
   MAX_OCR_BYTES,
 } from '@sendero/ocr';
 
+import { passportLog } from '@/lib/passport-debug';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 90;
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
-  console.log('[passport/extract-mrz] ▶ POST received');
+  passportLog('[passport/extract-mrz] ▶ POST received');
 
   const { userId } = await auth();
   if (!userId) {
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
 
   const mediaType = file.type || 'application/octet-stream';
   const filename = file instanceof File ? file.name : null;
-  console.log('[passport/extract-mrz] file', {
+  passportLog('[passport/extract-mrz] file', {
     userId,
     filename,
     mediaType,
@@ -110,10 +112,10 @@ export async function POST(req: NextRequest) {
   }
 
   const imageSha256 = createHash('sha256').update(Buffer.from(buf)).digest('hex');
-  console.log('[passport/extract-mrz] hashed image', { sha256Prefix: imageSha256.slice(0, 12) });
+  passportLog('[passport/extract-mrz] hashed image', { sha256Prefix: imageSha256.slice(0, 12) });
 
   try {
-    console.log('[passport/extract-mrz] → extractDocument(id_document)');
+    passportLog('[passport/extract-mrz] → extractDocument(id_document)');
     const tExtract = Date.now();
     const result = await extractDocument({
       kind: 'id_document',
@@ -121,7 +123,7 @@ export async function POST(req: NextRequest) {
       mediaType,
       allowSensitive: true,
     });
-    console.log('[passport/extract-mrz] ← extractDocument', {
+    passportLog('[passport/extract-mrz] ← extractDocument', {
       provider: result.provider,
       model: result.model,
       latencyMs: result.latencyMs,
@@ -137,7 +139,7 @@ export async function POST(req: NextRequest) {
     const mrzLine2 = result.data.mrz_line2?.trim().toUpperCase() ?? '';
     const mrzLine3 = result.data.mrz_line3?.trim().toUpperCase() ?? null;
     // Length-only — NEVER log MRZ values.
-    console.log('[passport/extract-mrz] mrz lengths', {
+    passportLog('[passport/extract-mrz] mrz lengths', {
       line1: mrzLine1.length,
       line2: mrzLine2.length,
       line3: mrzLine3?.length ?? 0,
@@ -157,7 +159,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log('[passport/extract-mrz] ✓ ok', { totalMs: Date.now() - t0 });
+    passportLog('[passport/extract-mrz] ✓ ok', { totalMs: Date.now() - t0 });
     return NextResponse.json({
       mrzLine1,
       mrzLine2,

@@ -21,11 +21,7 @@ export default async function ProtectedAppLayout({ children }: { children: React
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <RedirectToTasks />
-      <AppChrome
-        headerCopy={copy.header}
-        locale={locale}
-        defaultSidebarOpen={defaultSidebarOpen}
-      >
+      <AppChrome headerCopy={copy.header} locale={locale} defaultSidebarOpen={defaultSidebarOpen}>
         {children}
       </AppChrome>
     </div>

@@ -20,7 +20,6 @@ import { prisma } from '@sendero/database';
 
 import { CapsGauge } from '@/components/caps/caps-gauge';
 import { CapsTable, type CapTableRow } from '@/components/caps/caps-table';
-import { Crumb } from '@/components/console/crumb';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -73,7 +72,7 @@ export default async function CapsPage() {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -81,8 +80,6 @@ export default async function CapsPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Money & policy', 'Caps']} />
-
       <div
         style={{
           display: 'flex',
@@ -147,7 +144,7 @@ export default async function CapsPage() {
       <div
         className="sd-card-raised"
         style={{
-          padding: '24px 28px',
+          padding: '0 20px 20px',
           display: 'flex',
           gap: 0,
           alignItems: 'stretch',
