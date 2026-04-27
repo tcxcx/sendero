@@ -1246,6 +1246,41 @@ model WhatsAppWebhookEvent {
   @@map("whatsapp_webhook_events")
 }
 
+/// Audit row for every external API call we make to Kapso or Meta.
+///
+/// Closes the last gap in Bucket 5 (observability): operators want to
+/// know not just "did the inbound webhook arrive" but also "are our
+/// outbound calls succeeding". Failed Kapso health pings, slow Meta
+/// template publishes, 429-throttled sends — all show up here with
+/// duration + status_code + endpoint shape so ops can grep the whole
+/// outbound surface from one table.
+///
+/// `tenantId` is nullable: install-time setup links happen before a
+/// tenant binding exists. Endpoint paths are normalized
+/// (`/customers/{id}/setup_links`) so the same shape aggregates
+/// cleanly without exploding row count per id.
+model WhatsAppApiLog {
+  id           String   @id @default(cuid())
+  tenantId     String?  @map("tenant_id")
+  calledAt     DateTime @default(now()) @map("called_at") @db.Timestamptz(6)
+  /// 'kapso' | 'meta' — extend as new outbound surfaces land.
+  target       String
+  method       String
+  /// Endpoint shape with path params replaced (`/messages`,
+  /// `/customers/{id}/setup_links`). Static prefix so groupings work.
+  endpoint     String
+  /// 0 when the request never completed (DNS / network / timeout).
+  statusCode   Int      @map("status_code")
+  durationMs   Int      @map("duration_ms")
+  ok           Boolean
+  errorMessage String?  @map("error_message")
+  traceId      String?  @map("trace_id")
+
+  @@index([tenantId, calledAt(sort: Desc)])
+  @@index([target, calledAt(sort: Desc)])
+  @@map("whatsapp_api_logs")
+}
+
 /// Audit row for every WhatsApp outbound send.
 ///
 /// One row per `wamid` (UNIQUE). Inserted at send time; updated by the

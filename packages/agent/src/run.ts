@@ -80,6 +80,39 @@ export interface RunAgentTurnArgs {
   loadTrip?: (args: { tripId: string; tenantId: string }) => Promise<TripSnapshot | null>;
   /** Persona string appended after the context block. */
   persona: string;
+  /**
+   * Optional callback fired after each AI SDK step (text generation OR
+   * tool call). Adapters use this for incremental UI updates — e.g.
+   * the Slack adapter edits its placeholder message between tool
+   * calls so users see "Searching flights…" → "Comparing options…"
+   * instead of staring at "_Thinking…_" for the full turn.
+   *
+   * Step-based, not token-based: keeps the engine on `generateText`
+   * so cap/meter/session integrity is unchanged. True token streaming
+   * (post-then-edit every 750ms while generating) is a separate
+   * `streamText` refactor.
+   *
+   * Failures are caught here — adapter audit hooks must not break the
+   * agent turn.
+   */
+  onStepFinish?: (event: AgentStepEvent) => Promise<void> | void;
+}
+
+/**
+ * Step boundary the engine surfaces to the optional `onStepFinish`
+ * callback. Mirrors AI SDK's `StepResult` but in a stable shape we
+ * own — adapters import this, not the AI SDK type, so an SDK upgrade
+ * doesn't ripple into Slack/WhatsApp adapter code.
+ */
+export interface AgentStepEvent {
+  /** 1-indexed step number within the turn. */
+  stepNumber: number;
+  /** Names of tools called in this step (empty array on text-only steps). */
+  toolNames: string[];
+  /** Plain-text fragment generated in this step (empty when none). */
+  text: string;
+  /** AI SDK's `finishReason` for this step. */
+  finishReason: string;
 }
 
 export interface AgentTurnResult extends AgentOutput {
@@ -176,6 +209,30 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
   const tier: ModelTier = hasMedia ? 'smart' : (args.tier ?? 'smart');
   const providerOptions: AgentProviderOptions | undefined =
     typeof args.model === 'string' ? buildProviderOptions(tier) : undefined;
+  // Wrap caller's `onStepFinish` so AI SDK errors in the listener
+  // never bubble out of the engine. The adapter audit hooks are
+  // optional UX — the agent turn must keep running even if a Slack
+  // chat.update fails mid-stream.
+  let stepCounter = 0;
+  const adaptedOnStepFinish = args.onStepFinish
+    ? async (step: { text?: string; toolCalls?: Array<{ toolName: string }>; finishReason: string }) => {
+        stepCounter += 1;
+        try {
+          await args.onStepFinish?.({
+            stepNumber: stepCounter,
+            toolNames: (step.toolCalls ?? []).map(tc => tc.toolName),
+            text: step.text ?? '',
+            finishReason: step.finishReason,
+          });
+        } catch (err) {
+          console.error('[agent.run] onStepFinish hook failed (non-fatal)', {
+            stepNumber: stepCounter,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    : undefined;
+
   const result = hasMedia
     ? await generateText({
         model: args.model,
@@ -193,6 +250,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
         stopWhen: stepCountIs(4),
         maxRetries: 2,
         providerOptions,
+        ...(adaptedOnStepFinish ? { onStepFinish: adaptedOnStepFinish } : {}),
       })
     : await generateText({
         model: args.model,
@@ -202,6 +260,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
         stopWhen: stepCountIs(4),
         maxRetries: 2,
         providerOptions,
+        ...(adaptedOnStepFinish ? { onStepFinish: adaptedOnStepFinish } : {}),
       });
 
   const latencyMs = Date.now() - startedAt;

@@ -24,6 +24,36 @@ export interface WhatsAppClientConfig {
    * outage never breaks the send hot path.
    */
   onSent?: (event: WhatsAppSendEvent) => Promise<void> | void;
+
+  /**
+   * Optional fire-and-forget hook invoked after every HTTP request
+   * (success OR failure, including each retry). Closes the
+   * "external API call log" gap in operator observability —
+   * apps wire this to their `WhatsAppApiLog` writer so failed Meta
+   * calls + slow calls show up next to inbound webhook deliveries
+   * in the inbox UI.
+   */
+  onApiCall?: (event: WhatsAppApiCallEvent) => Promise<void> | void;
+}
+
+export interface WhatsAppApiCallEvent {
+  /** HTTP method — pass-through. */
+  method: string;
+  /**
+   * Path *shape*, with dynamic ids replaced by `{id}` so logs
+   * aggregate per endpoint without exploding. e.g. `/messages`,
+   * `/{phone_number_id}/media`. The client emits the shape; the
+   * audit writer doesn't need to normalize again.
+   */
+  endpoint: string;
+  /** 0 when the request never completed (DNS / network / timeout). */
+  statusCode: number;
+  durationMs: number;
+  ok: boolean;
+  /** Up to 280-char compact error on non-2xx. */
+  errorMessage?: string;
+  /** Which attempt this was (1, 2, 3 — bounded by MAX_ATTEMPTS=3). */
+  attempt: number;
 }
 
 export interface WhatsAppSendEvent {
@@ -55,12 +85,27 @@ export class WhatsAppClient {
   readonly accessToken: string;
   readonly apiBaseUrl: string;
   private readonly onSent?: WhatsAppClientConfig['onSent'];
+  private readonly onApiCall?: WhatsAppClientConfig['onApiCall'];
 
   constructor(config: WhatsAppClientConfig) {
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
     this.apiBaseUrl = config.apiBaseUrl ?? DEFAULT_API_URL;
     this.onSent = config.onSent;
+    this.onApiCall = config.onApiCall;
+  }
+
+  /** Fire-and-forget audit hook for one request attempt. */
+  private async fireApiCall(event: WhatsAppApiCallEvent): Promise<void> {
+    if (!this.onApiCall) return;
+    try {
+      await this.onApiCall(event);
+    } catch (err) {
+      console.error('[whatsapp.client] api-call hook failed', {
+        endpoint: event.endpoint,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /**
@@ -94,6 +139,11 @@ export class WhatsAppClient {
    */
   private async request(endpoint: string, body: unknown) {
     const url = `${this.apiBaseUrl}/${this.phoneNumberId}${endpoint}`;
+    // Endpoint shape for audit (replaces `{phone_number_id}` so rows
+    // aggregate cleanly across tenants). Caller's `endpoint` arg is
+    // already in shape form (e.g. `/messages`, `/{mediaId}` is rare
+    // here — request() is POST-only and called for /messages).
+    const endpointShape = `/{phone_number_id}${endpoint}`;
     const headers = {
       ...authHeaders(this.accessToken, this.apiBaseUrl),
       'Content-Type': 'application/json',
@@ -105,11 +155,53 @@ export class WhatsAppClient {
     let lastStatus = 0;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      const response = await fetch(url, { method: 'POST', headers, body: payload });
-      if (response.ok) return response.json();
+      const start = Date.now();
+      let response: Response;
+      try {
+        response = await fetch(url, { method: 'POST', headers, body: payload });
+      } catch (err) {
+        // Network / DNS / TLS failure — no HTTP response at all.
+        const message = err instanceof Error ? err.message : String(err);
+        await this.fireApiCall({
+          method: 'POST',
+          endpoint: endpointShape,
+          statusCode: 0,
+          durationMs: Date.now() - start,
+          ok: false,
+          errorMessage: message,
+          attempt,
+        });
+        if (attempt === MAX_ATTEMPTS) {
+          throw new Error(`WhatsApp API network error: ${message}`);
+        }
+        await new Promise(r => setTimeout(r, 200 * 2 ** (attempt - 1)));
+        continue;
+      }
+      const durationMs = Date.now() - start;
+
+      if (response.ok) {
+        await this.fireApiCall({
+          method: 'POST',
+          endpoint: endpointShape,
+          statusCode: response.status,
+          durationMs,
+          ok: true,
+          attempt,
+        });
+        return response.json();
+      }
 
       lastStatus = response.status;
       lastError = await response.text();
+      await this.fireApiCall({
+        method: 'POST',
+        endpoint: endpointShape,
+        statusCode: response.status,
+        durationMs,
+        ok: false,
+        errorMessage: lastError,
+        attempt,
+      });
 
       const transient = response.status >= 500 || response.status === 429;
       if (!transient || attempt === MAX_ATTEMPTS) break;

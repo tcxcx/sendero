@@ -26,7 +26,7 @@ const PAGE_SIZE = 50;
 export default async function WhatsAppInboxPage() {
   const { tenant } = await requireCurrentTenant();
 
-  const [webhookEvents, outboundMessages] = await Promise.all([
+  const [webhookEvents, outboundMessages, apiLogs] = await Promise.all([
     prisma.whatsAppWebhookEvent.findMany({
       where: { tenantId: tenant.id },
       orderBy: { receivedAt: 'desc' },
@@ -35,6 +35,11 @@ export default async function WhatsAppInboxPage() {
     prisma.whatsAppOutboundMessage.findMany({
       where: { tenantId: tenant.id },
       orderBy: { sentAt: 'desc' },
+      take: PAGE_SIZE,
+    }),
+    prisma.whatsAppApiLog.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { calledAt: 'desc' },
       take: PAGE_SIZE,
     }),
   ]);
@@ -105,6 +110,71 @@ export default async function WhatsAppInboxPage() {
                     <Td>{ev.droppedDuplicateCount}</Td>
                     <Td>{ev.durationMs == null ? '—' : `${ev.durationMs}ms`}</Td>
                     <Td className="font-mono">{ev.traceId?.slice(0, 8) ?? '—'}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="api-heading" className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <h2 id="api-heading" className="text-lg font-medium">
+            Outbound API calls
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Last {Math.min(apiLogs.length, PAGE_SIZE)} of newest-first · Kapso + Meta
+          </p>
+        </div>
+        {apiLogs.length === 0 ? (
+          <EmptyState
+            title="No API calls logged yet"
+            body="Every Kapso health ping and Meta send (or failed attempt) lands here. Filter by failed-only to triage outages."
+          />
+        ) : (
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-muted/40 text-muted-foreground">
+                <tr>
+                  <Th>Called</Th>
+                  <Th>Target</Th>
+                  <Th>Method</Th>
+                  <Th>Endpoint</Th>
+                  <Th>Status</Th>
+                  <Th>Duration</Th>
+                  <Th>Error</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {apiLogs.map(log => (
+                  <tr key={log.id} className="border-t border-border">
+                    <Td title={log.calledAt.toISOString()}>{formatRelative(log.calledAt)}</Td>
+                    <Td>
+                      <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+                        {log.target}
+                      </span>
+                    </Td>
+                    <Td className="font-mono">{log.method}</Td>
+                    <Td className="font-mono text-[11px]" title={log.endpoint}>
+                      {log.endpoint}
+                    </Td>
+                    <Td>
+                      <Badge tone={log.ok ? 'ok' : 'fail'}>
+                        {log.statusCode === 0 ? 'net' : log.statusCode}
+                      </Badge>
+                    </Td>
+                    <Td>{`${log.durationMs}ms`}</Td>
+                    <Td
+                      className="max-w-[260px] truncate text-[11px]"
+                      title={log.errorMessage ?? undefined}
+                    >
+                      {log.errorMessage ? (
+                        <span className="text-rose-700">{log.errorMessage}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </Td>
                   </tr>
                 ))}
               </tbody>
