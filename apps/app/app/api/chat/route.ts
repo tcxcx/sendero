@@ -479,13 +479,30 @@ export async function POST(req: NextRequest) {
       // so we can see WHICH prompts the model fails to tool-route on.
       // Single line, structured, greppable. No PII beyond the prompt
       // first 200 chars (already stored verbatim in chatMessage.content).
+      //
+      // Aggregate across multi-step turns. `finish.toolCalls` only
+      // reports the FINAL step's calls; in a 2-step turn (step 1: call
+      // tool → step 2: summarize) the summary step's empty toolCalls
+      // would falsely report selection failure. Walk every step in
+      // `finish.steps` and union their toolCalls instead.
       try {
-        const usage = (finish as { usage?: { inputTokens?: number; outputTokens?: number } })
-          .usage;
+        const steps = Array.isArray((finish as { steps?: unknown[] }).steps)
+          ? ((finish as { steps?: unknown[] }).steps as Array<{
+              toolCalls?: Array<{ toolName?: string }>;
+            }>)
+          : [];
+        const allInvoked: string[] = [];
+        for (const step of steps) {
+          const calls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
+          for (const call of calls) {
+            if (typeof call?.toolName === 'string') allInvoked.push(call.toolName);
+          }
+        }
+        // Fallback to final-step toolNames if steps array is unavailable
+        // (older AI SDK versions, error paths).
+        const invoked = allInvoked.length > 0 ? allInvoked : toolNames;
+        const usage = (finish as { usage?: { inputTokens?: number; outputTokens?: number } }).usage;
         const finishReason = (finish as { finishReason?: string }).finishReason;
-        const stepCount = Array.isArray((finish as { steps?: unknown[] }).steps)
-          ? ((finish as { steps?: unknown[] }).steps as unknown[]).length
-          : undefined;
         console.log(
           '[tool-select] ' +
             JSON.stringify({
@@ -498,11 +515,11 @@ export async function POST(req: NextRequest) {
               promptLen: lastUserMessage.length,
               catalogCount: toolCatalogNames.length,
               catalog: toolCatalogNames,
-              invokedCount: toolNames.length,
-              invoked: toolNames,
+              invokedCount: invoked.length,
+              invoked,
               inputTokens: usage?.inputTokens ?? null,
               outputTokens: usage?.outputTokens ?? null,
-              stepCount: stepCount ?? null,
+              stepCount: steps.length || null,
               finishReason: finishReason ?? null,
               durationMs: Date.now() - turnStart,
             })
