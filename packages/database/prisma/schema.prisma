@@ -267,6 +267,7 @@ model Tenant {
   slackInstalls       SlackInstall[]
   slackUserBindings   SlackUserBinding[]
   whatsappInstall     WhatsAppInstall?
+  whatsappOutbound    WhatsAppOutboundMessage[]
   whatsappLinkTokens  WhatsAppLinkToken[]
   bookingPayTokens    BookingPayToken[]
   spendCaps           TenantSpendCap[]
@@ -1196,6 +1197,79 @@ model WhatsAppInstall {
   @@index([tenantId, status])
   @@index([phoneNumberId])
   @@map("whatsapp_installs")
+}
+
+/// Audit row for every WhatsApp webhook delivery.
+///
+/// Closes the operator visibility gap: when a customer says "I sent a
+/// message and the bot didn't respond," ops looks up by wamid (or
+/// timestamp) and sees the verify outcome, replay-window decision,
+/// dedup decision, and how many normalized messages were dispatched.
+/// Inserted fire-and-forget after the 200 ack so it never blocks
+/// Slack/Meta's retry-on-non-200 logic.
+model WhatsAppWebhookEvent {
+  id                    String    @id @default(cuid())
+  tenantId              String?   @map("tenant_id")
+  receivedAt            DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  signatureValid        Boolean   @map("signature_valid")
+  replayWindowOk        Boolean?  @map("replay_window_ok")
+  payloadHash           String    @map("payload_hash")
+  messageCount          Int       @default(0) @map("message_count")
+  identityChangeCount   Int       @default(0) @map("identity_change_count")
+  statusUpdateCount     Int       @default(0) @map("status_update_count")
+  droppedReplayCount    Int       @default(0) @map("dropped_replay_count")
+  droppedDuplicateCount Int       @default(0) @map("dropped_duplicate_count")
+  dispatchedCount       Int       @default(0) @map("dispatched_count")
+  durationMs            Int?      @map("duration_ms")
+  traceId               String?   @map("trace_id")
+  /// Optional raw envelope — null in production unless the tenant
+  /// opts in via `WhatsAppInstall.metadata.auditRawPayloads`.
+  rawEnvelope           Json?     @map("raw_envelope")
+
+  @@index([tenantId, receivedAt(sort: Desc)])
+  @@index([traceId])
+  @@map("whatsapp_webhook_events")
+}
+
+/// Audit row for every WhatsApp outbound send.
+///
+/// One row per `wamid` (UNIQUE). Inserted at send time; updated by the
+/// inbound `messages.statuses` webhook handler (already wired in the
+/// route). Source labels separate agent replies from OTP drops from
+/// security alerts so ops can answer "did the OTP land?" without
+/// grepping handlers.
+model WhatsAppOutboundMessage {
+  id              String    @id @default(cuid())
+  tenantId        String    @map("tenant_id")
+  wamid           String    @unique
+  phoneNumberId   String    @map("phone_number_id")
+  /// E.164 or BSUID, whichever was used at send time.
+  recipientId     String    @map("recipient_id")
+  /// 'text' | 'template' | 'interactive' | 'image' | 'document' | 'video' | …
+  kind            String
+  /// 'agent_reply' | 'otp' | 'security_alert' | 'manual' | etc.
+  source          String
+  templateName    String?   @map("template_name")
+  /// Up to 280-char preview (PII-light). For `template` sends, the
+  /// template name + first body parameter; for `text`, the body
+  /// truncated.
+  preview         String?
+  sentAt          DateTime  @default(now()) @map("sent_at") @db.Timestamptz(6)
+  /// Initialised to `'sent'` at insert. Updated by the inbound status
+  /// webhook to `'delivered' | 'read' | 'failed'`.
+  deliveryStatus  String    @default("sent") @map("delivery_status")
+  failureReason   String?   @map("failure_reason")
+  deliveredAt     DateTime? @map("delivered_at") @db.Timestamptz(6)
+  readAt          DateTime? @map("read_at") @db.Timestamptz(6)
+  failedAt        DateTime? @map("failed_at") @db.Timestamptz(6)
+  traceId         String?   @map("trace_id")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sentAt(sort: Desc)])
+  @@index([tenantId, deliveryStatus])
+  @@index([tenantId, source])
+  @@map("whatsapp_outbound_messages")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

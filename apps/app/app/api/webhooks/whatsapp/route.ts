@@ -14,7 +14,7 @@
  * happens here — keeps p95 latency predictable.
  */
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { after, NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 import { detectLocale, localeForPhone } from '@sendero/locale';
@@ -35,6 +35,11 @@ import {
 } from '@sendero/whatsapp';
 
 import { newTraceId } from '@/lib/api-errors';
+import {
+  logOutboundMessage,
+  logWebhookEvent,
+  reconcileOutboundStatus,
+} from '@/lib/whatsapp-audit';
 import { claimWhatsAppMessage, isWithinReplayWindow } from '@/lib/whatsapp-dedup';
 
 export const runtime = 'nodejs';
@@ -64,6 +69,9 @@ export async function GET(req: NextRequest) {
 // ─── POST: Inbound messages + identity changes ─────────────────────────
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
+  const receivedAt = new Date();
+
   const appSecret = env.whatsappAppSecret();
   if (!appSecret) {
     return NextResponse.json(
@@ -77,6 +85,26 @@ export async function POST(req: NextRequest) {
     req.headers.get('x-hub-signature-256') ?? req.headers.get('x-webhook-signature') ?? null;
 
   if (!verifyWebhookSignature(rawBody, signature, appSecret)) {
+    // Audit the rejected request for forensics — somebody hit our
+    // public endpoint with a bad sig, ops should be able to grep for
+    // these without wading through Vercel logs.
+    after(() =>
+      logWebhookEvent({
+        tenantId: null,
+        receivedAt,
+        rawBody,
+        signatureValid: false,
+        replayWindowOk: null,
+        messageCount: 0,
+        identityChangeCount: 0,
+        statusUpdateCount: 0,
+        droppedReplayCount: 0,
+        droppedDuplicateCount: 0,
+        dispatchedCount: 0,
+        durationMs: Date.now() - startTime,
+        traceId: newTraceId(),
+      })
+    );
     return NextResponse.json({ error: 'bad_signature' }, { status: 401 });
   }
 
@@ -229,6 +257,40 @@ export async function POST(req: NextRequest) {
       console.error('[wa/webhook] upsert failed:', err);
     }
   }
+
+  const replayWindowOk =
+    messages.length === 0 ? null : droppedReplay < messages.length;
+
+  // Resolve the most-likely tenantId from the first inbound message.
+  // For pure-status payloads with no inbound message, we can't infer a
+  // tenant (status updates carry phone_number_id; we'd have to look up
+  // the install). Acceptable to leave null on those rows.
+  let auditTenantId: string | null = null;
+  if (messages[0]) {
+    auditTenantId = await resolveTenantIdForPhoneNumberId(messages[0].tenantPhoneNumberId);
+  }
+
+  // Persist webhook audit row past the 200 ack so a slow Prisma write
+  // never extends Meta's wait. Same pattern as identity-change apply.
+  const traceIdForAudit = traceId;
+  const totalDurationMs = Date.now() - startTime;
+  after(() =>
+    logWebhookEvent({
+      tenantId: auditTenantId,
+      receivedAt,
+      rawBody,
+      signatureValid: true,
+      replayWindowOk,
+      messageCount: messages.length,
+      identityChangeCount: identityChanges.length,
+      statusUpdateCount: statusUpdates.length,
+      droppedReplayCount: droppedReplay,
+      droppedDuplicateCount: droppedDuplicate,
+      dispatchedCount: dispatched,
+      durationMs: totalDurationMs,
+      traceId: traceIdForAudit,
+    })
+  );
 
   return NextResponse.json({
     received: messages.length,
@@ -387,10 +449,27 @@ async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): 
   const accessToken = env.whatsappAccessToken();
   if (!accessToken) return;
   const { formatForWhatsApp } = await import('@sendero/whatsapp');
+
+  // Resolve the tenant once so every audit row carries the correct
+  // tenantId. Skip auditing entirely when we can't resolve (dev with
+  // no install row) — better a missing audit row than a broken FK.
+  const auditTenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
+
   const client = new WhatsAppClient({
     phoneNumberId: msg.tenantPhoneNumberId,
     accessToken,
     apiBaseUrl: env.whatsappApiBaseUrl() ?? undefined,
+    ...(auditTenantId
+      ? {
+          onSent: event =>
+            logOutboundMessage({
+              tenantId: auditTenantId,
+              phoneNumberId: msg.tenantPhoneNumberId,
+              source: 'agent_reply',
+              event,
+            }),
+        }
+      : {}),
   });
   const chunks = formatForWhatsApp(reply);
   for (const chunk of chunks) {
@@ -571,14 +650,27 @@ async function applyOtpStatusUpdate(status: NormalizedStatusUpdate): Promise<num
   };
   if (status.failureReason) data.failureReason = status.failureReason;
 
-  const result = await prisma.otpDeliveryAttempt.updateMany({
-    where: {
-      providerMessageId: status.messageId,
-      channel: 'whatsapp',
-    },
-    data,
-  });
-  return result.count;
+  const [otpResult, outboundCount] = await Promise.all([
+    prisma.otpDeliveryAttempt.updateMany({
+      where: {
+        providerMessageId: status.messageId,
+        channel: 'whatsapp',
+      },
+      data,
+    }),
+    // Also reconcile the canonical outbound audit row. A given wamid
+    // appears in OtpDeliveryAttempt OR WhatsAppOutboundMessage (or both
+    // during the migration window), so we update both unconditionally.
+    reconcileOutboundStatus({
+      wamid: status.messageId,
+      status: status.status,
+      failureReason: status.failureReason,
+      at: status.timestamp,
+    }),
+  ]);
+  // Return the maximum of the two counts so the response payload's
+  // `statusUpdated` counter reflects "at least one row was reconciled".
+  return Math.max(otpResult.count, outboundCount);
 }
 
 async function applyIdentityChange(change: NormalizedIdentityChange): Promise<void> {
