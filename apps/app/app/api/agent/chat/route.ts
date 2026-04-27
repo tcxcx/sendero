@@ -58,7 +58,6 @@ import {
   extractBearerForSigning,
   loadTrip,
   makeCapStore,
-  makeMeterStore,
   makeSessionStore,
   requestLocale,
   resolveDirectModel,
@@ -66,6 +65,7 @@ import {
   resolveSegment,
   resolveTenantPlan,
 } from '@/lib/agent-auth';
+import { makeCreditAwareMeterStore } from '@/lib/credit-store';
 import { detectAttachmentsHint } from '@/lib/agent-attachments-hint';
 import {
   chatPricingBreakdown,
@@ -427,9 +427,16 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const meterStore = makeMeterStore(
-    apiKey?.effectiveKeyType === 'sandbox' ? { forceStatus: 'sandbox' } : undefined
-  );
+  // Credit-aware meter store — routes every metered action through
+  // `deductAndRecord()` so SaaS-included credits decrement off
+  // `Subscription.meterBalanceMicro` before falling through to
+  // status='paid'. Tenants with no grant (free tier) get the same
+  // 'paid' write as before, so this swap is backward-compatible.
+  const meterStore = makeCreditAwareMeterStore({
+    plan: resolvePlan(planTier),
+    sandbox: apiKey?.effectiveKeyType === 'sandbox',
+    segment,
+  });
   const sessionStore = makeSessionStore();
 
   // useChat sends UIMessages; convertToModelMessages narrows them to

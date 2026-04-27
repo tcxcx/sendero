@@ -34,7 +34,6 @@ import {
   extractBearerForSigning,
   loadTrip,
   makeCapStore,
-  makeMeterStore,
   makeSessionStore,
   requestLocale,
   resolveDirectModels,
@@ -43,6 +42,8 @@ import {
   resolveTenantPlan,
 } from '@/lib/agent-auth';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
+import { makeCreditAwareMeterStore } from '@/lib/credit-store';
+import { resolvePlan } from '@sendero/billing/plans';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
@@ -346,12 +347,17 @@ export async function POST(req: NextRequest) {
 
   const planTier = await resolveTenantPlan(body.tenantId);
   const pricingOverrides = buildPlanOverrides(planTier);
-  // If the caller authed with an API key whose effective type is
-  // sandbox (either it's a sandbox key, or it's a production key
-  // downgraded during testnet-beta), write MeterEvents as 'sandbox'
-  // so NanopayBatch skips them.
-  const meterStoreOpts =
-    apiKey?.effectiveKeyType === 'sandbox' ? ({ forceStatus: 'sandbox' } as const) : undefined;
+  // Credit-aware meter store — routes every metered action through
+  // `deductAndRecord()` so SaaS-included credits decrement off
+  // `Subscription.meterBalanceMicro`. Sandbox keys still skip the
+  // deduction (write 'sandbox') and tenants with no grant fall through
+  // to 'paid' at full cost — backward-compatible with prior behavior.
+  const dispatchSegment = await resolveSegment(body.tenantId);
+  const creditMeterStore = makeCreditAwareMeterStore({
+    plan: resolvePlan(planTier),
+    sandbox: apiKey?.effectiveKeyType === 'sandbox',
+    segment: dispatchSegment,
+  });
 
   let result: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
@@ -361,7 +367,7 @@ export async function POST(req: NextRequest) {
       tier,
       tools,
       capStore: makeCapStore(),
-      meterStore: makeMeterStore(meterStoreOpts),
+      meterStore: creditMeterStore,
       sessionStore: makeSessionStore(),
       resolveSegment,
       pricingOverrides,
@@ -382,7 +388,7 @@ export async function POST(req: NextRequest) {
           tier,
           tools,
           capStore: makeCapStore(),
-          meterStore: makeMeterStore(meterStoreOpts),
+          meterStore: creditMeterStore,
           sessionStore: makeSessionStore(),
           resolveSegment,
           pricingOverrides,
