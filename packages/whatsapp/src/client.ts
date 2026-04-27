@@ -35,22 +35,52 @@ export class WhatsAppClient {
     this.apiBaseUrl = config.apiBaseUrl ?? DEFAULT_API_URL;
   }
 
+  /**
+   * Retries on transient failure: 5xx (Meta-side outages) and 429
+   * (rate limit). 4xx errors bubble immediately — those are caller
+   * bugs that retry won't fix (bad template id, malformed payload,
+   * outside the 24h window, etc).
+   *
+   * Backoff: 200 / 400 / 800 ms with a small jitter. If Meta returns
+   * `Retry-After` (RFC 7231) the header wins. Capped at 3 attempts
+   * total — each `chat.postMessage`-equivalent send is on the
+   * latency-sensitive webhook path, so we'd rather fail fast than hold
+   * the dispatch budget hostage.
+   */
   private async request(endpoint: string, body: unknown) {
-    const response = await fetch(`${this.apiBaseUrl}/${this.phoneNumberId}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        ...authHeaders(this.accessToken, this.apiBaseUrl),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    const url = `${this.apiBaseUrl}/${this.phoneNumberId}${endpoint}`;
+    const headers = {
+      ...authHeaders(this.accessToken, this.apiBaseUrl),
+      'Content-Type': 'application/json',
+    };
+    const payload = JSON.stringify(body);
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`WhatsApp API error: ${response.status} - ${error}`);
+    const MAX_ATTEMPTS = 3;
+    let lastError = '';
+    let lastStatus = 0;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const response = await fetch(url, { method: 'POST', headers, body: payload });
+      if (response.ok) return response.json();
+
+      lastStatus = response.status;
+      lastError = await response.text();
+
+      const transient = response.status >= 500 || response.status === 429;
+      if (!transient || attempt === MAX_ATTEMPTS) break;
+
+      // Honor Retry-After when Meta provides it; otherwise exponential
+      // backoff with jitter (200, 400, 800 ms ± 50ms).
+      const retryAfterHeader = response.headers.get('retry-after');
+      const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+      const delayMs =
+        Number.isFinite(retryAfterSec) && retryAfterSec > 0
+          ? retryAfterSec * 1000
+          : 200 * 2 ** (attempt - 1) + Math.floor(Math.random() * 100);
+      await new Promise(r => setTimeout(r, delayMs));
     }
 
-    return response.json();
+    throw new Error(`WhatsApp API error: ${lastStatus} - ${lastError}`);
   }
 
   async sendText(to: string, text: string) {
@@ -214,6 +244,63 @@ export class WhatsAppClient {
       throw new Error(`Failed to download media: ${response.status}`);
     }
     return response.arrayBuffer();
+  }
+
+  /**
+   * Upload media to Meta and return the `mediaId` that can be used in a
+   * subsequent message-send (`image.id`, `document.id`, `video.id`).
+   *
+   * Required for outbound media that wasn't already hosted on a public
+   * URL Meta could fetch — invoice PDFs, scan-document followups,
+   * traveler-uploaded passport snapshots we re-emit, etc. Without this
+   * the only path is to host the file ourselves and pass `link`, which
+   * leaks our hostnames into Meta's CDN cache and won't work for
+   * private files.
+   *
+   * Multipart shape per Meta spec:
+   *   POST /{phone_number_id}/media
+   *   form-data:
+   *     - messaging_product=whatsapp
+   *     - file=<binary>
+   *     - type=<mime>
+   *
+   * Note: this does NOT go through `request()` because that helper
+   * forces JSON. The Meta media endpoint requires multipart/form-data
+   * with the binary attached as a `Blob`.
+   */
+  async uploadMedia(args: {
+    /** Binary content (image / pdf / etc). */
+    data: ArrayBuffer | Uint8Array;
+    /** MIME type Meta will associate with the media (`image/jpeg`, etc). */
+    mimeType: string;
+    /** Optional filename — Meta surfaces it for documents. */
+    filename?: string;
+  }): Promise<{ mediaId: string }> {
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', args.mimeType);
+    const bytes =
+      args.data instanceof Uint8Array ? args.data : new Uint8Array(args.data as ArrayBuffer);
+    form.append(
+      'file',
+      new Blob([bytes as unknown as BlobPart], { type: args.mimeType }),
+      args.filename ?? 'upload'
+    );
+
+    const response = await fetch(`${this.apiBaseUrl}/${this.phoneNumberId}/media`, {
+      method: 'POST',
+      headers: authHeaders(this.accessToken, this.apiBaseUrl),
+      body: form,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`WhatsApp media upload error: ${response.status} - ${error}`);
+    }
+
+    const data = (await response.json()) as { id?: string };
+    if (!data.id) throw new Error('WhatsApp media upload returned no id');
+    return { mediaId: data.id };
   }
 }
 

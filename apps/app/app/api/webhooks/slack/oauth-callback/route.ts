@@ -100,6 +100,9 @@ export async function GET(req: NextRequest) {
         teamName: install.teamName,
         isEnterpriseInstall: install.isEnterpriseInstall,
         raw: install.raw as object,
+        // Reinstall after revocation: clear the marker so the events
+        // route stops dropping inbound traffic.
+        revokedAt: null,
       },
     });
 
