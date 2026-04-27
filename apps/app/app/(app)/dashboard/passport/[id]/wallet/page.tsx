@@ -13,7 +13,6 @@ import { notFound } from 'next/navigation';
 
 import { prisma } from '@sendero/database';
 
-import { Crumb } from '@/components/console/crumb';
 import { CopyAddress } from '@/components/wallet/copy-address';
 import { PrefundForm } from '@/components/wallet/prefund-form';
 import { requireRole } from '@/lib/require-role';
@@ -106,7 +105,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -114,8 +113,6 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Passport', label, 'Wallet']} />
-
       <div>
         <h1 className="t-h1">{label}</h1>
         <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>

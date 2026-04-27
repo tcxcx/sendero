@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { prisma } from '@sendero/database';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@sendero/ui/tooltip';
 
-import { Crumb } from '@/components/console/crumb';
 import { getAppCopy } from '@/lib/app-copy';
 import { getRequestLocale } from '@/lib/request-locale';
 import { requireCurrentTenant } from '@/lib/tenant-context';
@@ -28,17 +27,8 @@ export default async function ChannelsPage() {
   const slackCopy = copy.shortcuts.find(s => s.href === '/dashboard/channels/slack');
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 24,
-        minHeight: 'calc(100vh - 200px)',
-      }}
-    >
-      <Crumb trail={['Channels']} />
-
-      <div className="flex flex-1 flex-col items-center justify-center gap-10 py-16">
+    <div className="flex w-full flex-col gap-6 px-2 pb-4 pt-0">
+      <div className="flex flex-col items-center gap-6 pt-2">
         <div className="flex flex-col items-center gap-2 text-center">
           <p className="max-w-md text-sm text-[color:var(--ink)]">
             Pick where Sendero should listen and reply. You can add both — each install is scoped to

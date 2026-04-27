@@ -22,7 +22,6 @@
 import { prisma } from '@sendero/database';
 import type { Prisma } from '@sendero/database';
 
-import { Crumb } from '@/components/console/crumb';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -143,7 +142,7 @@ export default async function GmvPage({ searchParams }: PageProps) {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -151,8 +150,6 @@ export default async function GmvPage({ searchParams }: PageProps) {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Money & policy', 'Finance', 'GMV']} />
-
       <div
         style={{
           display: 'flex',
@@ -459,7 +456,7 @@ function EmptyGmv({ launchDate }: { launchDate: Date | null }) {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -467,7 +464,6 @@ function EmptyGmv({ launchDate }: { launchDate: Date | null }) {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Money & policy', 'Finance', 'GMV']} />
       <div>
         <h1 className="t-h1">GMV</h1>
       </div>

@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { prisma, type Prisma } from '@sendero/database';
 import { Button } from '@sendero/ui/button';
 
-import { Crumb } from '@/components/console/crumb';
 import { PageActions } from '@/components/dashboard/page-actions';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
@@ -84,7 +83,7 @@ export default async function TripsPage({
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -92,8 +91,6 @@ export default async function TripsPage({
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Trips']} />
-
       <div
         style={{
           display: 'flex',

@@ -127,6 +127,13 @@ export interface ChannelMessageToolInvocation {
   status: 'pending' | 'streaming' | 'done' | 'error';
   /** When status === 'error'. */
   errorMessage?: string;
+  /**
+   * When status === 'done', the tool's output. Rendered inline by the
+   * operator as the same Tool block's ToolOutput so the operator sees
+   * one Tool per call, not a separate invocation + result pair.
+   * tool_result is still used by share-card-emitting tools.
+   */
+  result?: unknown;
   /** Latency in ms once status flips to done/error. */
   latencyMs?: number;
   createdAt: string;

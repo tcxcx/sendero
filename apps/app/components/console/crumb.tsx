@@ -7,6 +7,13 @@
  */
 
 export function Crumb({ trail }: { trail: string[] }) {
+  // Per Design review (autoplan H5): a single-segment crumb is just a
+  // bald label that duplicates the page header. With parent prefixes
+  // already trimmed across the app, render nothing when there's only
+  // one segment — let the h1 carry the page identity. Multi-segment
+  // crumbs still render so deep routes (trips/[id]/cancel, etc.) keep
+  // their navigation context.
+  if (trail.length <= 1) return null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {trail.map((segment, i) => (

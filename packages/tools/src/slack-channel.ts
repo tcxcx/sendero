@@ -9,19 +9,17 @@
  *   2. slack_check_install           — poll for the SlackInstall row written by the OAuth callback
  *   3. slack_list_workspace_channels — list public + private channels the bot can post to
  *   4. slack_persist_channel_routes  — save defaultChannel + per-event-class routes onto SlackInstall.routing
- *   5. slack_invite_bot_to_channels  — call conversations.invite for the chosen routes
+ *   5. slack_invite_bot_to_channels  — call conversations.join for each routed channel (public); private channels are surfaced as needs_manual
  *   6. slack_send_test_message       — postMessage to the default channel as proof-of-life
  */
-
-import { createHmac, timingSafeEqual } from 'node:crypto';
-
-import { z } from 'zod';
 
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 import { buildInstallUrl, createSlackClient, DEFAULT_BOT_SCOPES } from '@sendero/slack';
+import { z } from 'zod';
 
 import type { ToolDef } from './types';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 const SLACK_OAUTH_REDIRECT_PATH = '/api/webhooks/slack/oauth-callback';
@@ -311,12 +309,24 @@ const inviteInput = z.object({
 
 export const slackInviteBotToChannelsTool: ToolDef<
   z.infer<typeof inviteInput>,
-  { invited: string[]; alreadyIn: string[]; failed: Array<{ channelId: string; reason: string }> }
+  {
+    /** Channels the bot is now in (newly joined this call). */
+    joined: string[];
+    /** Channels the bot was already a member of. */
+    alreadyIn: string[];
+    /**
+     * Private channels the bot can't add itself to. The wizard surfaces
+     * a one-click "Open #channel and run /invite @sendero" CTA for these.
+     */
+    needsManual: string[];
+    /** Channels that hit a non-recoverable error (channel_not_found, archived, etc.). */
+    failed: Array<{ channelId: string; reason: string }>;
+  }
 > = {
   name: 'slack_invite_bot_to_channels',
   internal: true,
   description:
-    "Add the Sendero bot to each channel it needs to post into. The wizard runs this for every channel referenced in `slack_persist_channel_routes` so the bot doesn't hit not_in_channel on first event. Errors are returned per-channel so the wizard can surface them without aborting the rest.",
+    'Add the Sendero bot to each channel it needs to post into. Tries `conversations.join` first (works for public channels with the `channels:join` scope; bot self-adds, no human required). Falls back to a manual-invite hint for private channels — Slack does not let bots invite themselves into a private channel. Per-channel results so the wizard can surface state without aborting the rest.',
   inputSchema: inviteInput,
   jsonSchema: {
     type: 'object',
@@ -334,27 +344,42 @@ export const slackInviteBotToChannelsTool: ToolDef<
     if (!install) throw new Error('slack_install_not_found');
 
     const client = createSlackClient(install.botToken);
-    const invited: string[] = [];
+    const joined: string[] = [];
     const alreadyIn: string[] = [];
+    const needsManual: string[] = [];
     const failed: Array<{ channelId: string; reason: string }> = [];
 
     for (const channelId of input.channelIds) {
       try {
-        await client.conversations.invite({
-          channel: channelId,
-          users: install.botUserId,
-        });
-        invited.push(channelId);
+        const res = await client.conversations.join({ channel: channelId });
+        // Slack returns the channel object plus an optional warning of
+        // 'already_in_channel' when the bot was already a member.
+        const warning = (res as { warning?: string }).warning;
+        if (warning === 'already_in_channel') {
+          alreadyIn.push(channelId);
+        } else {
+          joined.push(channelId);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (message.includes('already_in_channel')) {
+        // `conversations.join` only works on public channels. The two
+        // error codes Slack returns for "this is private, bot can't
+        // self-add" are method_not_supported_for_channel_type and
+        // is_private — surface as needs_manual so the wizard can show
+        // a one-click "Open #channel and /invite @sendero" CTA.
+        if (
+          message.includes('method_not_supported_for_channel_type') ||
+          message.includes('is_private')
+        ) {
+          needsManual.push(channelId);
+        } else if (message.includes('already_in_channel')) {
           alreadyIn.push(channelId);
         } else {
           failed.push({ channelId, reason: message });
         }
       }
     }
-    return { invited, alreadyIn, failed };
+    return { joined, alreadyIn, needsManual, failed };
   },
 };
 

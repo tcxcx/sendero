@@ -621,6 +621,27 @@ none block the submission demo.
 
 ### P2 — hardening, schedule when convenient
 
+- [ ] **Slack bot avatar from app config** — the Slack setup wizard
+  installs Sendero correctly but the bot ships without a profile pic
+  (Slack defaults to the workspace avatar block). Two ways to fix:
+  (a) upload the avatar in `https://api.slack.com/apps/{appId}` →
+  Basic Information → App Icon (per-Slack-app, applies to every
+  install), OR (b) add `users.profile:write` to `DEFAULT_BOT_SCOPES`
+  and call `users.setPhoto` once on install with the Sendero
+  vermillion mark. (a) is simpler and survives reinstalls; (b) lets
+  each tenant theme it. Do (a) for the demo Slack app, leave (b) as
+  a multi-tenant TODO.
+
+- [ ] **Slack connected panel — debug tab** — operators need a way to
+  see recent bot activity (postMessage out + events in) without
+  leaving the dashboard. Add a "Debug" tab to
+  `apps/app/components/channels/slack-connected-panel.tsx` showing
+  the last 50 events captured at
+  `apps/app/app/api/webhooks/slack/events/route.ts` plus outbound
+  posts logged from `slack_send_test_message` and the workflow
+  poster. Use the existing `MeterEvent` table or add a tiny
+  `SlackEventLog` model — keep it append-only and 30-day TTL.
+
 - [ ] **Console NanopayPanel: per-tool MeterEvent granularity** —
   `/api/chat`, `/api/agent/chat`, and `runAgentTurn` all write ONE
   `chat_reply` row per turn. The console's NanopayWorkflowsPanel
@@ -714,3 +735,16 @@ none block the submission demo.
   (e.g. `6434c10`, `9703425`, `5ad55e8`, `bfb768c`, `6a96e1f`,
   `d6e1cc7`). PR squash-merge collapses. Don't try to rewrite local
   history.
+
+- [ ] **Wallet-dropdown 404 spam on unprovisioned org** — `GET
+  /api/wallet/balance?address=…` 404s when the org's `arcWalletAddress`
+  in Clerk metadata points at a placeholder (e.g. dogfood's
+  `0x1111…1111`) that has no `CircleWallet` row. The 404 is correct
+  behavior (route can't tell "not provisioned" from "not yours"
+  without leaking) but the UI fires this on every dashboard mount,
+  filling console with red. Found by /qa cycle 31 (2026-04-26). Two
+  fixes: (a) `wallet-dropdown.tsx:62` skips fetch when the address
+  matches the placeholder pattern, or (b) the route returns 200 with
+  `{ provisioned: false }` for wallet-not-found-in-tenant and keeps
+  401/404 only for auth/tenant lookup. (b) is the right fix but
+  bigger blast radius — every caller of /api/wallet/balance.

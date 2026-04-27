@@ -15,7 +15,6 @@ import Link from 'next/link';
 
 import { prisma, type InvoiceKind, type InvoiceStatus, type Prisma } from '@sendero/database';
 
-import { Crumb } from '@/components/console/crumb';
 import { InvoicesGrid } from '@/components/invoices/invoices-card-grid';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
@@ -176,7 +175,7 @@ export default async function InvoicesPage({
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -184,8 +183,6 @@ export default async function InvoicesPage({
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Money & policy', 'Invoices']} />
-
       <div>
         <h1 className="t-h1">Invoices</h1>
         <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>

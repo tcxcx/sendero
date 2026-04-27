@@ -43,6 +43,7 @@ import {
 } from '@sendero/agent';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
 import { preflight } from '@sendero/billing/meter';
+import { resolvePlan } from '@sendero/billing/plans';
 import type { MeterStatus } from '@sendero/database';
 import { getLocaleSlice } from '@sendero/locale';
 import { filterPublicTools, toolList } from '@sendero/tools';
@@ -66,6 +67,12 @@ import {
   resolveTenantPlan,
 } from '@/lib/agent-auth';
 import { detectAttachmentsHint } from '@/lib/agent-attachments-hint';
+import {
+  chatPricingBreakdown,
+  chatTurnPriceMicroUsdc,
+  inferModelId,
+  type ChatUsage,
+} from '@/lib/chat-pricing';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
@@ -99,6 +106,13 @@ const BodySchema = z.object({
   tripId: z.string().optional(),
   locale: z.string().optional(),
   turnId: z.string().optional(),
+  /**
+   * Operator-selected gateway model id (e.g. `google/gemini-2.5-flash`).
+   * When set + gateway is configured, the conversational LLM uses this
+   * exact model. Falls back to the standard cascade on miss. Tool-
+   * internal models (OCR, embeddings) ignore this field.
+   */
+  model: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -330,7 +344,14 @@ export async function POST(req: NextRequest) {
   const vertexProjectEnv = process.env.GOOGLE_CLOUD_PROJECT;
   const vertexLocationEnv = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
   let modelHandle: ReturnType<typeof resolveModel> = null;
-  if (vertexProjectEnv) {
+  // Operator-picked model wins when the gateway is up — gateway slug
+  // strings flow straight into streamText (AI SDK auto-routes via
+  // AI_GATEWAY_API_KEY). Direct Vertex / direct providers stay as the
+  // server-default fallback below if the operator didn't pick one.
+  if (body.model && process.env.AI_GATEWAY_API_KEY) {
+    modelHandle = body.model;
+  }
+  if (!modelHandle && vertexProjectEnv) {
     let googleAuthOptions: Parameters<typeof createVertex>[0]['googleAuthOptions'];
     const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
     if (saJson) {
@@ -416,6 +437,22 @@ export async function POST(req: NextRequest) {
   const modelMessages = await convertToModelMessages(body.messages as UIMessage[]);
   const startedAt = Date.now();
 
+  // Enable thinking on the conversational LLM so AI Elements'
+  // <Reasoning> bubble has parts to render. Only applies when the model
+  // is a gateway slug; direct Vertex / direct Anthropic handles their
+  // own thinking config via the model handle itself when applicable.
+  const chatProviderOptions =
+    typeof modelHandle === 'string'
+      ? {
+          google: {
+            thinkingConfig: { thinkingBudget: 4096, includeThoughts: true },
+          },
+          anthropic: {
+            thinking: { type: 'enabled', budgetTokens: 4096 },
+          },
+        }
+      : undefined;
+
   const result = streamText({
     model: modelHandle,
     system: systemPrompt,
@@ -423,6 +460,7 @@ export async function POST(req: NextRequest) {
     tools,
     stopWhen: stepCountIs(6),
     maxRetries: 2,
+    providerOptions: chatProviderOptions,
     // The closure captures everything we need to write the meter
     // event + update the session AFTER the last chunk lands. The
     // client has already received its tokens at this point; meter
@@ -435,15 +473,36 @@ export async function POST(req: NextRequest) {
         turnId,
         eventKind: 'chat_reply',
       });
+      // Token-aware turn price: take the larger of the segment-priced
+      // preflight (covers cap-policy minimums + plan-tier discounts via
+      // pricingOverrides) and the actual provider cost from finish.usage.
+      // Plan-tier discount applies to BOTH paths so paid plans get
+      // their advertised cut even when an expensive thinking model
+      // dominates cost.
+      const modelId = inferModelId(modelHandle);
+      const usage = (finish as { usage?: ChatUsage }).usage;
+      const planConfig = resolvePlan(planTier);
+      const discountBps = planConfig.nanopaymentDiscountBps;
+      const tokenAwarePrice = chatTurnPriceMicroUsdc(modelId, usage, discountBps);
+      const turnPrice = pre.priceMicroUsdc > tokenAwarePrice ? pre.priceMicroUsdc : tokenAwarePrice;
+      const breakdown = chatPricingBreakdown(modelId, usage, discountBps);
+
       try {
         await meterStore.create({
           tenantId,
           userId,
           toolName: 'chat_reply',
-          priceMicroUsdc: pre.priceMicroUsdc,
+          priceMicroUsdc: turnPrice,
           status: 'paid' satisfies MeterStatus,
-          note: `channel=${channel} idem=${idempotencyKey} surface=stream`,
-          metadata: { channel, idempotencyKey, turnId, surface: 'agent_chat_stream' },
+          note: `channel=${channel} idem=${idempotencyKey} surface=stream model=${modelId ?? 'unknown'}`,
+          metadata: {
+            channel,
+            idempotencyKey,
+            turnId,
+            surface: 'agent_chat_stream',
+            pricing: breakdown,
+            preflightMicroUsdc: pre.priceMicroUsdc.toString(),
+          },
         });
       } catch (err) {
         if (!isDuplicateKeyError(err)) {

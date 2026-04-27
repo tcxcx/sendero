@@ -33,6 +33,8 @@ import {
   type WhatsAppMedia,
 } from '@sendero/whatsapp';
 
+import { newTraceId } from '@/lib/api-errors';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -88,13 +90,20 @@ export async function POST(req: NextRequest) {
     { defaultCountry: env.whatsappDefaultCountry() }
   );
 
+  const traceId = newTraceId();
+  console.log('[wa/webhook] inbound', {
+    traceId,
+    messageCount: messages.length,
+    identityChangeCount: identityChanges.length,
+  });
+
   // Apply identity changes FIRST so downstream message routing sees the
   // reconciled ChannelIdentity rows.
   for (const change of identityChanges) {
     try {
       await applyIdentityChange(change);
     } catch (err) {
-      console.error('[wa/webhook] identity-change failed:', err);
+      console.error('[wa/webhook] identity-change failed:', { traceId, error: err });
     }
   }
 
@@ -120,9 +129,22 @@ export async function POST(req: NextRequest) {
           req,
         })
           .then(result => {
-            if (result?.reply) void sendWhatsAppReply(msg, result.reply);
+            if (result?.reply) {
+              void sendWhatsAppReply(msg, result.reply);
+            } else {
+              // Dispatch returned null — agent didn't produce text but
+              // didn't throw. Still send a fallback so the user knows
+              // their message landed.
+              void sendDispatchFallback(msg, 'no_reply');
+            }
           })
-          .catch(err => console.error('[wa/webhook] dispatch failed:', err));
+          .catch(err => {
+            console.error('[wa/webhook] dispatch failed:', {
+              messageId: msg.messageId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            void sendDispatchFallback(msg, 'dispatch_error');
+          });
         dispatched++;
       } else if ((kind === 'image' || kind === 'document') && msg.message[kind]) {
         // Process media turns async — downloading can be slow, Meta
@@ -140,9 +162,19 @@ export async function POST(req: NextRequest) {
           req,
         })
           .then(result => {
-            if (result?.reply) void sendWhatsAppReply(msg, result.reply);
+            if (result?.reply) {
+              void sendWhatsAppReply(msg, result.reply);
+            } else {
+              void sendDispatchFallback(msg, 'no_reply');
+            }
           })
-          .catch(err => console.error('[wa/webhook] media dispatch failed:', err));
+          .catch(err => {
+            console.error('[wa/webhook] media dispatch failed:', {
+              messageId: msg.messageId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            void sendDispatchFallback(msg, 'dispatch_error');
+          });
         dispatched++;
       }
     } catch (err) {
@@ -260,10 +292,44 @@ function mediaCaption(msg: NormalizedInboundMessage['message']): string {
 
 function agentDispatchHeaders() {
   const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  if (!secret) {
+    console.error(
+      '[wa/webhook] AGENT_DISPATCH_SECRET / CRON_SECRET unset — dispatch will 401. Set one before customer traffic.'
+    );
+  }
   return {
     'Content-Type': 'application/json',
     'x-sendero-dispatch-secret': secret,
   };
+}
+
+/**
+ * Last-resort fallback message when the agent dispatch fails or returns
+ * nothing. Without this, the WhatsApp user sees dead silence — Meta
+ * already received our 200 ack so it won't retry, and the user has no
+ * indication their message even landed. The fallback closes the loop.
+ *
+ * Best-effort: a fallback that itself fails just logs. We don't escalate
+ * a fallback failure into a 500 because that retriggers Meta's webhook
+ * retry which is the worse outcome (duplicate dispatches).
+ */
+async function sendDispatchFallback(
+  msg: NormalizedInboundMessage,
+  reason: 'no_reply' | 'dispatch_error'
+): Promise<void> {
+  const text =
+    reason === 'dispatch_error'
+      ? "I'm having trouble reaching the agent right now. Please try again in a minute — your message did come through."
+      : "Got your message. I'm on it — give me a moment.";
+  try {
+    await sendWhatsAppReply(msg, text);
+  } catch (err) {
+    console.error('[wa/webhook] fallback send failed:', {
+      messageId: msg.messageId,
+      reason,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): Promise<void> {

@@ -68,12 +68,4 @@ const CardAction = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardAction.displayName = 'CardAction';
 
-export {
-  Card,
-  CardAction,
-  CardHeader,
-  CardFooter,
-  CardTitle,
-  CardDescription,
-  CardContent,
-};
+export { Card, CardAction, CardHeader, CardFooter, CardTitle, CardDescription, CardContent };

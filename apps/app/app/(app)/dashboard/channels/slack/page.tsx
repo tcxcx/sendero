@@ -16,7 +16,6 @@ import {
   type ChannelStatusKind,
 } from '@/components/channels/channel-status-panel';
 import { SlackConnectedPanel } from '@/components/channels/slack-connected-panel';
-import { Crumb } from '@/components/console/crumb';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
@@ -52,16 +51,14 @@ export default async function SlackChannelPage() {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 18,
+        gap: 16,
         flex: 1,
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Slack']} />
-
       {installs.length === 0 ? (
         <DisconnectedView />
       ) : (

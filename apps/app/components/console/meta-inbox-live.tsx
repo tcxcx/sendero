@@ -25,11 +25,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
+import { useQueryState } from 'nuqs';
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
-import { Maximize2, Minimize2 } from 'lucide-react';
-import { useQueryState } from 'nuqs';
+import { useUser } from '@clerk/nextjs';
+
+import { useChatModel } from '@/hooks/use-chat-model';
 
 import {
   Conversation,
@@ -46,7 +48,6 @@ import {
   ToolInput,
   ToolOutput,
 } from '@/components/ai-elements/tool';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useChatStoreSync } from '@/components/use-chat-store-sync';
 import { useSendero } from '@/components/store';
 
@@ -84,9 +85,6 @@ export function MetaInboxLive({
   const [composerMode, setComposerMode] = useState<ComposerMode>(
     scopedTripId ? 'channel' : 'internal'
   );
-  // Operator can pop the SENDERO AI conversation into a full-screen dialog
-  // (same component, same useChat instance, just a wider canvas).
-  const [expanded, setExpanded] = useState(false);
 
   // Scripted "demo trip" — autonomous customer↔agent simulation. Activated
   // by typing `/demo trip` in the SENDERO AI composer. See demo-trip.tsx
@@ -99,20 +97,20 @@ export function MetaInboxLive({
     setComposerMode(scopedTripId ? 'channel' : 'internal');
   }, [scopedTripId]);
 
-  // Stable client-side chat session id. Generated once per
-  // MetaInboxLive mount and threaded into /api/chat so the server
-  // upserts a `ChatSession` row + appends every UIMessage as a
-  // `ChatMessage`. Lets the CHAT MODE tab list past sessions and
-  // re-view them later.
-  //
-  // When the URL carries `?cs=<id>` (operator clicked a row in the
-  // CHAT MODE rail), we adopt that id instead so subsequent sends
-  // append to the same session. Falls back to a fresh id otherwise.
+  // Resume vs. fresh: `?cs=<id>` in the URL means the operator clicked
+  // a row in the CHAT MODE rail. We use that id as the chatSessionId
+  // and rehydrate setMessages from /api/chats/[id]. Without `?cs=` we
+  // fall back to a freshly minted id so a brand-new conversation gets
+  // its own ChatSession row on the first turn. nuqs is shallow by
+  // default — switching sessions updates the URL via history.replaceState
+  // with no RSC refetch and no loading.tsx overlay.
   const [activeCs] = useQueryState('cs');
   const [freshSessionId] = useState(
     () => `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
   );
   const chatSessionId = activeCs ?? freshSessionId;
+
+  const [chatModel] = useChatModel();
 
   // Memoize the transport so re-renders don't reset useChat state.
   // The body callback closes over scopedTripId so we re-create when
@@ -125,9 +123,10 @@ export function MetaInboxLive({
           channel: 'web' as const,
           tripId: scopedTripId ?? undefined,
           chatSessionId,
+          model: chatModel,
         }),
       }),
-    [scopedTripId, chatSessionId]
+    [scopedTripId, chatSessionId, chatModel]
   );
 
   // useChat drives the internal-mode AI Elements stream. It mounts
@@ -160,17 +159,10 @@ export function MetaInboxLive({
     },
   });
 
-  // Mirror status into a ref so the demo-trip runner can poll the
-  // current value without subscribing to re-renders.
-  const statusRef = useRef(status);
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
-
-  // Resume past chats. When `?cs=<id>` flips (rail row click), fetch
-  // that session's full UIMessage[] and seed useChat's state so the
-  // conversation rehydrates inline — no page reload, no overlay flash.
-  // Cleared back to [] when the operator returns to a fresh session.
+  // Resume effect: when `?cs=<id>` lands in the URL (rail click,
+  // shared link, page refresh on a session view), pull the full
+  // message history and seed useChat. setMessages([]) when the param
+  // clears so the composer hands off to a fresh conversation cleanly.
   useEffect(() => {
     if (!activeCs) {
       setMessages([]);
@@ -182,10 +174,15 @@ export function MetaInboxLive({
         const r = await fetch(`/api/chats/${encodeURIComponent(activeCs)}`, {
           cache: 'no-store',
         });
-        if (!r.ok) return;
+        if (!r.ok) {
+          console.warn('[meta-inbox-live] resume fetch non-ok:', r.status);
+          return;
+        }
         const json = (await r.json()) as { ok: boolean; messages?: UIMessage[] };
         if (cancelled) return;
-        if (json.ok && Array.isArray(json.messages)) setMessages(json.messages);
+        if (json.ok && Array.isArray(json.messages)) {
+          setMessages(json.messages);
+        }
       } catch (err) {
         console.warn('[meta-inbox-live] resume fetch failed', err);
       }
@@ -194,6 +191,13 @@ export function MetaInboxLive({
       cancelled = true;
     };
   }, [activeCs, setMessages]);
+
+  // Mirror status into a ref so the demo-trip runner can poll the
+  // current value without subscribing to re-renders.
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   // Diagnostic logs — surface chat status, message count, and any
   // streaming error in the console so we can see at a glance whether
@@ -307,10 +311,7 @@ export function MetaInboxLive({
   // Render the AI Elements conversation when the active composer mode
   // is internal. In channel mode we fall back to MetaInbox's built-in
   // ConversationEntry render so the operator sees the trip log.
-  // The same body renders in two contexts: the narrow inline column
-  // (380px in MetaInbox.cols) and a full-screen dialog the operator
-  // toggles via the expand button on the SENDERO AI header.
-  const renderHeader = (variant: 'inline' | 'dialog') => (
+  const renderHeader = () => (
     <header
       style={{
         display: 'flex',
@@ -376,9 +377,17 @@ export function MetaInboxLive({
           </div>
         ) : (
           messages.map(m => (
-            <Message key={m.id} from={m.role}>
-              <UIMessageBody message={m} />
-            </Message>
+            <div
+              key={m.id}
+              className={
+                'flex w-full items-start gap-3 ' + (m.role === 'user' ? 'flex-row-reverse' : '')
+              }
+            >
+              {m.role === 'user' ? <UserMessageAvatar /> : <AgentMessageAvatar />}
+              <Message from={m.role} className="!max-w-[calc(95%-44px)]">
+                <UIMessageBody message={m} />
+              </Message>
+            </div>
           ))
         )}
         {error ? (
@@ -441,101 +450,33 @@ export function MetaInboxLive({
     />
   ) : null;
 
-  // Inline slot — collapses to nothing when expanded so the conversation
-  // doesn't render twice (avoids two stick-to-bottom contexts fighting).
+  // Inline slot — single render path for the internal-mode AI Elements
+  // stream. The expand-to-fullscreen affordance was removed (it was
+  // intended for react-flow diagrams, not chat); the dialog wrapper +
+  // `expanded` state went with it.
   const conversationSlot =
     composerMode === 'internal' ? (
-      expanded ? (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            height: '100%',
-            color: 'var(--text-dim)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.14em',
-            textTransform: 'uppercase',
-          }}
-        >
-          <span>Sendero AI · expanded</span>
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="sd-pill sd-pill-outline"
-            style={{ padding: '6px 12px', fontSize: 11 }}
-          >
-            ↩ Collapse
-          </button>
-        </div>
-      ) : (
-        <>
-          {demoBanner}
-          {renderHeader('inline')}
-          {conversationBody}
-        </>
-      )
+      <>
+        {demoBanner}
+        {renderHeader()}
+        {conversationBody}
+      </>
     ) : undefined;
 
   return (
-    <>
-      <MetaInbox
-        trips={trips}
-        scopedTripId={scopedTripId}
-        conversation={scopedConversation}
-        conversationSlot={conversationSlot}
-        traveler={traveler}
-        holdExpires={holdExpires}
-        pendingBooking={pendingBooking}
-        composerMode={composerMode}
-        onComposerModeChange={setComposerMode}
-        onSubmit={handleSubmit}
-        disabled={posting || isStreaming}
-      />
-
-      {/* Full-screen Sendero AI conversation. Shares the same useChat
-          state — sending from either canvas hits the same backend. */}
-      <Dialog open={expanded} onOpenChange={setExpanded}>
-        <DialogContent
-          className="flex flex-col gap-3 p-6"
-          style={{
-            width: 'min(100vw, 1280px)',
-            maxWidth: 'calc(100vw - 48px)',
-            height: 'calc(100vh - 64px)',
-            maxHeight: 'calc(100vh - 64px)',
-            background: 'var(--surface-base, #fdfbf7)',
-            borderRadius: 12,
-            overflow: 'hidden',
-          }}
-        >
-          {/* Visually-hidden DialogTitle keeps Radix's a11y contract
-              (screen readers announce the dialog name); the visible
-              header below replaces it for sighted users. */}
-          <DialogTitle className="sr-only">Sendero AI conversation</DialogTitle>
-          {renderHeader('dialog')}
-          <div
-            style={{
-              flex: 1,
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 14,
-              overflow: 'hidden',
-            }}
-          >
-            {conversationBody}
-          </div>
-          {/* Composer is in the parent app shell. The dialog is a wider
-              read+monitor canvas; sending still happens from the inbox
-              composer below. We could mount a duplicate composer here
-              later, but two composers wired to the same useChat would
-              just race for the same input string. */}
-        </DialogContent>
-      </Dialog>
-    </>
+    <MetaInbox
+      trips={trips}
+      scopedTripId={scopedTripId}
+      conversation={scopedConversation}
+      conversationSlot={conversationSlot}
+      traveler={traveler}
+      holdExpires={holdExpires}
+      pendingBooking={pendingBooking}
+      composerMode={composerMode}
+      onComposerModeChange={setComposerMode}
+      onSubmit={handleSubmit}
+      disabled={posting || isStreaming}
+    />
   );
 }
 
@@ -562,7 +503,10 @@ interface ToolPartShape {
 function UIMessageBody({ message }: { message: UIMessage }) {
   const parts = (message.parts ?? []) as Array<ToolPartShape>;
   return (
-    <MessageContent>
+    <MessageContent
+      className="rounded-lg border border-[color:var(--hairline-color-soft)] bg-[color:var(--surface-raised)] bg-[url('/patterns/topography.svg')] bg-[length:240px] bg-no-repeat px-4 py-3 text-[color:color-mix(in_oklab,var(--ink)_72%,transparent)] group-[.is-user]:!bg-[color:var(--surface-raised)] group-[.is-user]:!text-[color:color-mix(in_oklab,var(--ink)_72%,transparent)]"
+      style={{ backgroundBlendMode: 'multiply' }}
+    >
       {parts.map((part, i) => {
         const key = `${message.id}-${i}`;
         const t = part.type ?? '';
@@ -572,8 +516,9 @@ function UIMessageBody({ message }: { message: UIMessage }) {
         }
 
         if (t === 'reasoning' && typeof part.text === 'string' && part.text.length > 0) {
+          // Collapsed by default — operator opens the trigger to read.
           return (
-            <Reasoning key={key} className="w-full">
+            <Reasoning key={key} className="w-full" defaultOpen={false}>
               <ReasoningTrigger />
               <ReasoningContent>{part.text}</ReasoningContent>
             </Reasoning>
@@ -620,5 +565,39 @@ function UIMessageBody({ message }: { message: UIMessage }) {
         return null;
       })}
     </MessageContent>
+  );
+}
+
+// ─── Avatars ────────────────────────────────────────────────────────────
+//
+// User: bordered circle, ink fill, Clerk profile photo inside (or initial).
+// Agent: bordered circle, white fill, shared Persona halo Rive inside.
+
+function UserMessageAvatar() {
+  const { user } = useUser();
+  const initial = (user?.firstName ?? user?.username ?? 'U').slice(0, 1).toUpperCase();
+  return (
+    <div
+      className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[color:var(--hairline-color-strong)] bg-[color:var(--ink)] text-[11px] font-semibold text-[color:#fdfbf7]"
+      aria-hidden="true"
+    >
+      {user?.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={user.imageUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        initial
+      )}
+    </div>
+  );
+}
+
+function AgentMessageAvatar() {
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[color:var(--hairline-color-strong)] bg-white"
+      aria-hidden="true"
+    >
+      <Persona state="idle" variant="halo" className="h-7 w-7" />
+    </div>
   );
 }

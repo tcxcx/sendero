@@ -22,7 +22,6 @@
 
 import { prisma } from '@sendero/database';
 
-import { Crumb } from '@/components/console/crumb';
 import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
@@ -86,7 +85,7 @@ export default async function PricingSettingsPage() {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -94,8 +93,6 @@ export default async function PricingSettingsPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Settings', 'Pricing']} />
-
       <div>
         <h1 className="t-h1">{headerFor(existing.status)}</h1>
         <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>

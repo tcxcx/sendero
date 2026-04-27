@@ -257,9 +257,7 @@ function ChatHistoryList() {
             color: 'inherit',
             textAlign: 'left',
             background:
-              activeCs === s.id
-                ? 'color-mix(in oklab, var(--ink) 8%, transparent)'
-                : 'transparent',
+              activeCs === s.id ? 'color-mix(in oklab, var(--ink) 8%, transparent)' : 'transparent',
             border: 0,
             cursor: 'pointer',
             font: 'inherit',
