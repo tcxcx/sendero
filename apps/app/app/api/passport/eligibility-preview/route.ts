@@ -49,17 +49,17 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const departureDate = url.searchParams.get('depart')
-    ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const departureDate =
+    url.searchParams.get('depart') ??
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const returnDateRaw = url.searchParams.get('return');
   // Default to 7-day round-trip so the 6-month validity rule actually
   // exercises the return leg. Callers can override or pass null.
   const returnDate =
     returnDateRaw === 'null'
       ? null
-      : (returnDateRaw ?? new Date(Date.parse(departureDate) + 7 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .slice(0, 10));
+      : (returnDateRaw ??
+        new Date(Date.parse(departureDate) + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
 
   const tenant = await prisma.tenant.findUnique({
     where: { clerkOrgId: orgId },

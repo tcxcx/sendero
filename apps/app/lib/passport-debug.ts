@@ -17,9 +17,7 @@
 function isDebugEnabled(): boolean {
   // Server-side / Node: read from process.env directly.
   if (typeof window === 'undefined') {
-    return (
-      process.env.DEBUG_PASSPORT === '1' || process.env.NEXT_PUBLIC_DEBUG_PASSPORT === '1'
-    );
+    return process.env.DEBUG_PASSPORT === '1' || process.env.NEXT_PUBLIC_DEBUG_PASSPORT === '1';
   }
   // Client-side: build-time env var or runtime localStorage flag.
   if (process.env.NEXT_PUBLIC_DEBUG_PASSPORT === '1') return true;
