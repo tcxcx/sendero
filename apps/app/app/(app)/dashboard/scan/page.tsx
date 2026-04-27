@@ -150,14 +150,6 @@ export default function ScanPage() {
         minHeight: 0,
       }}
     >
-      <header>
-        <h1 className="t-h1">Scan a document</h1>
-        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          Drop an itinerary, invoice, or visa scan. We&rsquo;ll extract structured fields and route
-          it to the right trip.
-        </p>
-      </header>
-
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span className="t-meta">Document kind</span>
         {(Object.keys(KIND_LABEL) as DocKind[]).map(k => {

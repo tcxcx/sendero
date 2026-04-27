@@ -51,7 +51,13 @@ interface TripRailProps {
   collapseControl?: React.ReactNode;
 }
 
-export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel, collapseControl }: TripRailProps) {
+export function TripRail({
+  trips,
+  activeTripId,
+  scopedTripId,
+  scopedChannel,
+  collapseControl,
+}: TripRailProps) {
   // Local search query — narrows the visible trip list on traveler
   // name, route, tripId, and last-message body. Group-trip + passenger
   // search will plug in here once those entities surface in the rail

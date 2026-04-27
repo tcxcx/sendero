@@ -293,3 +293,53 @@ Single source of truth for cross-channel share images. When a tool's `share` pay
 - **Tests**: `apps/app/lib/og/__tests__/share-url.test.ts` — HMAC roundtrip, payload tamper, signature tamper, wrong-secret rejection, malformed token, secret-unset fail-soft, weak-secret rejection.
 
 The canonical `share` contract: any tool can return a `share` block on `tool_result` (`{ title, body, bullets, primaryCta, secondaryCtas, imageUrl? }`). That single shape renders as a Slack block kit card, a WhatsApp interactive message, an email body card, and a web card. **If a field matters to the UX, it lives in `share` — never hard-coded in one adapter.**
+
+## Wedge findings (a16z + YC RFS, applied)
+
+Strategic synthesis after reviewing a16z Speedrun's "Come for the Agent, Stay for the Network" thesis (Speedrun 2026) + YC Summer 2026 RFS. Re-read this when scoping any new product surface — the network is the moat, every decision should compound it.
+
+The expanded template is in `BUILD_VERTICAL_AI_AGENT.md` (root); this section is the Sendero-specific applied version.
+
+**Six-precondition self-test for travel ops: 5.5/6.** ✅ Fragmented supply (Duffel aggregates 100s carriers/hotels), ✅ offline suppliers (corporate rate negotiations are still phone/email/PDF), ✅ opaque pricing (corporate fares vs published, dynamic surge, ancillary fees), ✅ frequent purchases (corporate travel = monthly+ per company), ✅ different SKUs (every flight, every hotel night, every ground leg), ⚠️ commoditized (Hyatt night = Hyatt night; SFO→LHR direct at 16:00 isn't fully fungible). **Travel ops clears the framework — agent-procurement-network economics apply.**
+
+What Sendero already executes (don't re-invent):
+- **Agent wedge**: `book_flight`, `search_flights`, `hold`, `book_stay`, `settle_*` end-to-end, no human-in-the-loop. Shipped.
+- **Multi-channel surface**: Slack + WhatsApp + MCP + web + email. One `runAgentTurn` engine, channel-shaped wrappers at the edges.
+- **% of revenue model**: take-rate on confirm_booking (`packages/billing/src/pricing.ts` 50bps default) + nanopay margin per tool call. Two-leg: take-rate + nanopay defends each leg against the other being commoditized.
+- **Settlement rail differentiator**: USDC on Arc with on-chain audit trail. Not in a16z's framework — a16z's portfolio companies (Heavi, Vereda) settle in fiat. Sendero's auditable network effect is differentiated for regulated-industry TMCs (financial services, healthcare, public sector).
+- **Tier 2 GTM (co-branded resale)**: per-tenant install URL `/install/slack?tenant=<slug>` lets a tenant share Sendero with their corporate customers without white-label friction. Bot is "Sendero" in workspace; tenant owns the dashboard relationship + billing. Stage 1 of the multi-tenant channel platform plan.
+
+**What's missing — the "Stay for the Network" half (priority order):**
+
+1. **Pricing benchmark surface** (~1 week CC, low risk). Per-booking, log every `search_flights` result set, picked offer, and supplier rate. Per-tenant view: "Your SFO→LHR cost was $1,820. Median across N platform bookings on this route this month: $1,640. You paid 11% above median." Cross-tenant aggregation gated by k-anonymity (n≥20). This is the first network hook — without it, every Sendero install is an island. Required before Stage 2/3 of the channel platform pays off.
+2. **Demand aggregation MVP** (~3 weeks CC, medium risk). TMC dashboard surfacing "Your N corporate clients booked X trips on these top 5 routes — want to request a corporate rate?" Manual negotiation tooling first; automation later. Higher ceiling than #1; needs supplier engagement to prove value.
+3. **Direct supplier rates** (multi-quarter, high risk). Sendero negotiates with one airline + two hotel chains for Sendero-only corporate rates. Suppliers compete to be on the network. The actual a16z moat. Heavy GTM lift — only after #1 and #2 prove out.
+
+**Stage 2 (tenant brand fields) and Stage 3 (full per-tenant SlackApp + WhatsAppApp model with KMS) of the channel platform plan support the network-effect thesis but don't BUILD it.** They're distribution infrastructure — necessary scaffolding for resale-led GTM. The pricing benchmark surface above is what creates the lock-in once the distribution exists.
+
+**Reframing implications:**
+
+- Lead with "Stay for the Network" in TMC-facing copy. Today the README leads with the agent surface ("AI travel agent with on-chain settlement"). The right pitch at scale is "the more TMCs use Sendero, the better every TMC's pricing gets."
+- The `/install/slack?tenant=` flow IS the entry point to the network. Tell that story explicitly: install → contribute to network → benefit from network insights.
+- For regulated-industry TMCs (finserv, healthcare, public sector), lead with the auditable-settlement-rail moat, not the agent surface.
+
+**Anti-patterns to refuse:**
+
+- ❌ Pricing per seat as the primary axis — caps Sendero at HR-budget logic; commoditizes against Concur/Navan
+- ❌ Building a chatbot bolted onto the existing booking surface — Sendero is agent-native, not copilot
+- ❌ Internal-only tools that don't generate buyer × supplier graph data
+- ❌ Spending engineering cycles on Stage 3 (full white-label) before a TMC has signed for it — speculative platform engineering before customer demand
+
+**YC RFS items Sendero already maps to (for fundraising / messaging):**
+
+- "AI-Native Service Companies" (Alströmer): Sendero IS this for travel ops. We don't sell software; the TMC sells the trip getting booked.
+- "Software for Agents" (Epstein): MCP server, OpenAPI surface, `/llms.txt`, ERC-8004 agent identity. Sendero is a first-class citizen for agent consumers.
+- "AI Operating System for Companies" (Diana Hu): Sendero is the closed loop for corporate travel ops — agent watches trips → flags policy violations → routes to approver → settles → audits.
+- "Company Brain" (Blomfield): adjacent — per-tenant travel policy + cap exceptions + traveler memory. Productizable as a future surface.
+
+**Founder forcing questions to revisit quarterly:**
+
+1. What's the smallest bundle of our buyers that moves an airline's price by 5%? (If we can't answer, we don't have demand-side leverage yet.)
+2. In 12 months, when a TMC operator hears "Sendero", what's the one sentence they say? (If it's "they have a chatbot", we've failed.)
+3. If Sendero disappeared tomorrow, who panics first — corporate buyers, suppliers, or TMC operators? (We want all three. If only one, we've built a feature, not a platform.)
+4. What's the single fastest way Sendero loses its moat? (Likely: a hyperscaler ships a generic travel agent in their API. Defense: depth of vertical integration + on-chain settlement audit story.)

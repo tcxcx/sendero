@@ -12,11 +12,18 @@ import Link from 'next/link';
 import { prisma } from '@sendero/database';
 
 import {
-  ChannelStatusPanel,
   type ChannelStatusKind,
+  ChannelStatusPanel,
 } from '@/components/channels/channel-status-panel';
+import { PublicInstallUrlCard } from '@/components/channels/public-install-url-card';
+import { SlackChannelTabs } from '@/components/channels/slack-channel-tabs';
 import { SlackConnectedPanel } from '@/components/channels/slack-connected-panel';
 import { requireCurrentTenant } from '@/lib/tenant-context';
+
+const APP_ORIGIN = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.sendero.travel').replace(
+  /\/$/,
+  ''
+);
 
 export const dynamic = 'force-dynamic';
 
@@ -31,22 +38,28 @@ const ROUTE_FALLBACKS: Record<string, string> = {
 export default async function SlackChannelPage() {
   const { tenant } = await requireCurrentTenant();
 
-  const installs = await prisma.slackInstall.findMany({
-    where: { tenantId: tenant.id },
-    orderBy: { installedAt: 'desc' },
-    select: {
-      id: true,
-      teamId: true,
-      teamName: true,
-      enterpriseName: true,
-      isEnterpriseInstall: true,
-      botUserId: true,
-      scope: true,
-      installedAt: true,
-      updatedAt: true,
-      routing: true,
-    },
-  });
+  const [installs, tenantRow] = await Promise.all([
+    prisma.slackInstall.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { installedAt: 'desc' },
+      select: {
+        id: true,
+        teamId: true,
+        teamName: true,
+        enterpriseName: true,
+        isEnterpriseInstall: true,
+        botUserId: true,
+        scope: true,
+        installedAt: true,
+        updatedAt: true,
+        routing: true,
+      },
+    }),
+    prisma.tenant.findUnique({
+      where: { id: tenant.id },
+      select: { slug: true, displayName: true },
+    }),
+  ]);
 
   return (
     <div
@@ -59,40 +72,69 @@ export default async function SlackChannelPage() {
         minHeight: 0,
       }}
     >
-      {installs.length === 0 ? (
-        <DisconnectedView />
-      ) : (
-        <>
-          {installs.map(install => {
-            const enterpriseLabel =
-              install.isEnterpriseInstall && install.enterpriseName
-                ? `${install.enterpriseName} (Grid)`
-                : null;
-            const routing =
-              (install.routing as {
-                defaultChannel?: string;
-                routes?: Array<{ eventClass: string; channelId: string; mode: string }>;
-              } | null) ?? null;
-            const routes = (routing?.routes ?? []).map(r => ({
-              channelLabel: `#${r.channelId}`,
-              description: ROUTE_FALLBACKS[r.eventClass] ?? r.eventClass,
-              mode: r.mode as 'route' | 'filter' | 'silent' | 'default' | 'escalation',
-            }));
-            const scopeCount = install.scope ? install.scope.split(',').filter(Boolean).length : 0;
-            return (
-              <SlackConnectedPanel
-                key={install.id}
-                teamName={install.teamName}
-                enterpriseLabel={enterpriseLabel}
-                botUserId={install.botUserId}
-                scopeCount={scopeCount}
-                routes={routes}
-                weeklyEscalations={0}
-              />
-            );
-          })}
-        </>
-      )}
+      {/* Two-tab layout: 'Workspace' (default) shows the connected
+          install panel(s); 'Share install URL' shows the public install
+          URL card. Both subtrees are server-rendered in this RSC and
+          the client tab wrapper just toggles visibility. When the
+          tenant has no slug we hide the share tab content silently —
+          no slug means the install URL can't be built. */}
+      <SlackChannelTabs
+        workspaceContent={
+          installs.length === 0 ? (
+            <DisconnectedView />
+          ) : (
+            <>
+              {installs.map(install => {
+                const enterpriseLabel =
+                  install.isEnterpriseInstall && install.enterpriseName
+                    ? `${install.enterpriseName} (Grid)`
+                    : null;
+                const routing =
+                  (install.routing as {
+                    defaultChannel?: string;
+                    routes?: Array<{ eventClass: string; channelId: string; mode: string }>;
+                  } | null) ?? null;
+                const routes = (routing?.routes ?? []).map(r => ({
+                  channelId: r.channelId,
+                  channelLabel: `#${r.channelId}`,
+                  description: ROUTE_FALLBACKS[r.eventClass] ?? r.eventClass,
+                  mode: r.mode as 'route' | 'filter' | 'silent' | 'default' | 'escalation',
+                }));
+                const scopeCount = install.scope
+                  ? install.scope.split(',').filter(Boolean).length
+                  : 0;
+                return (
+                  <SlackConnectedPanel
+                    key={install.id}
+                    installId={install.id}
+                    teamName={install.teamName}
+                    enterpriseLabel={enterpriseLabel}
+                    botUserId={install.botUserId}
+                    scopeCount={scopeCount}
+                    routes={routes}
+                    weeklyEscalations={0}
+                  />
+                );
+              })}
+            </>
+          )
+        }
+        shareContent={
+          tenantRow?.slug ? (
+            <PublicInstallUrlCard
+              appOrigin={APP_ORIGIN}
+              tenantSlug={tenantRow.slug}
+              tenantDisplayName={tenantRow.displayName}
+            />
+          ) : (
+            <p className="t-body ink-70" style={{ fontSize: 13 }}>
+              Your tenant doesn&rsquo;t have a slug yet. Set one in{' '}
+              <code className="t-mono">/dashboard/settings/org</code> to enable the public install
+              URL.
+            </p>
+          )
+        }
+      />
     </div>
   );
 }
@@ -100,14 +142,6 @@ export default async function SlackChannelPage() {
 function DisconnectedView() {
   return (
     <>
-      <header>
-        <h1 className="t-h1">Slack</h1>
-        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          Sendero installs into your workspace, posts trip events to the channels you pick, and
-          escalates cap breaches + over-policy holds where managers already live.
-        </p>
-      </header>
-
       <ChannelStatusPanel
         brand="slack"
         status={'not_installed' as ChannelStatusKind}
