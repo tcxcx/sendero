@@ -215,7 +215,11 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
   // chat.update fails mid-stream.
   let stepCounter = 0;
   const adaptedOnStepFinish = args.onStepFinish
-    ? async (step: { text?: string; toolCalls?: Array<{ toolName: string }>; finishReason: string }) => {
+    ? async (step: {
+        text?: string;
+        toolCalls?: Array<{ toolName: string }>;
+        finishReason: string;
+      }) => {
         stepCounter += 1;
         try {
           await args.onStepFinish?.({

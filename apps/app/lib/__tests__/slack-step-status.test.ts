@@ -84,10 +84,7 @@ describe('renderStepStatus', () => {
   });
 
   test('tool-call step renders the verb', () => {
-    const out = renderStepStatus(
-      { stepNumber: 1, toolNames: ['search_flights'], text: '' },
-      ''
-    );
+    const out = renderStepStatus({ stepNumber: 1, toolNames: ['search_flights'], text: '' }, '');
     expect(out).toBe('🔎 Searching flights…');
   });
 
@@ -112,10 +109,7 @@ describe('renderStepStatus', () => {
   });
 
   test('first step with no text and no tools falls back to Thinking', () => {
-    const out = renderStepStatus(
-      { stepNumber: 1, toolNames: [], text: '' },
-      ''
-    );
+    const out = renderStepStatus({ stepNumber: 1, toolNames: [], text: '' }, '');
     expect(out).toBe('_Thinking…_');
   });
 
