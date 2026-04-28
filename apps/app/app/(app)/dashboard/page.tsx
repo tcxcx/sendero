@@ -125,27 +125,31 @@ export default async function DashboardPage() {
           })}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button asChild variant="topography" className="sd-corner-hover">
-                <Link href="/dashboard/console">
-                  <span className="agent-console-cta__bg" aria-hidden="true" />
-                  <span className="agent-console-cta__label">
-                    {copy.agentConsole.cta}
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </span>
-                </Link>
-              </Button>
+              <div className="sd-corner-hover">
+                <Button asChild variant="topography">
+                  <Link href="/dashboard/console">
+                    <span className="agent-console-cta__bg" aria-hidden="true" />
+                    <span className="agent-console-cta__label">
+                      {copy.agentConsole.cta}
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </span>
+                  </Link>
+                </Button>
+              </div>
             </TooltipTrigger>
             <TooltipContent side="bottom" data-variant="ink" className="max-w-xs text-xs">
               <div className="font-medium">{copy.agentConsole.title}</div>
               <div className="mt-0.5 text-[11px] opacity-85">{copy.agentConsole.description}</div>
             </TooltipContent>
           </Tooltip>
-          <Button asChild>
-            <Link href="/dashboard/trips?sheet=new">
-              Create prepaid trip
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
-          </Button>
+          <div className="sd-corner-hover">
+            <Button asChild>
+              <Link href="/dashboard/trips?sheet=new">
+                Create prepaid trip
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
         </>
       </PageActions>
 
@@ -275,7 +279,7 @@ function ChannelPill({
           />
         </Link>
       </TooltipTrigger>
-      <TooltipContent side="bottom" data-variant={brand} className="max-w-xs text-xs">
+      <TooltipContent side="bottom" data-variant="ink" className="max-w-xs text-xs">
         <div className="font-medium">{label}</div>
         <div className="mt-0.5 text-[11px] opacity-90">{description}</div>
       </TooltipContent>
