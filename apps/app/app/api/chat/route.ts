@@ -6,7 +6,7 @@
  * registry — no duplication.
  */
 
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse, after } from 'next/server';
 
 import { anthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
@@ -29,7 +29,15 @@ import {
 } from '@sendero/agent';
 import { buildAgentPersona } from '@/lib/agent-persona';
 import { prisma, type Prisma } from '@sendero/database';
-import { aiTelemetryConfig } from '@sendero/langfuse';
+import {
+  aiTelemetryConfig,
+  evaluateTrace,
+  flushLangfuse,
+  getActiveTraceId,
+  scoreCost,
+  scoreLatency,
+  scoreToolSuccess,
+} from '@sendero/langfuse';
 import { detectLocale, getLocaleSlice, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
@@ -511,34 +519,54 @@ export async function POST(req: NextRequest) {
     // agent actually did this turn — useful for the NanopayPanel
     // ledger but never trusted for pricing.
     onFinish: async finish => {
-      const toolNames = (finish.toolCalls ?? []).map(t => t.toolName);
+      // ── Walk finish.steps to aggregate every tool invocation across
+      // the turn. `finish.toolCalls` only returns the FINAL step's calls;
+      // for the common tool→summarize shape, the final step has 0 calls
+      // → the meter event's metadata.toolNames was empty even when tools
+      // ran (verified in QA 2026-04-28). Walk every step + read
+      // step.toolResults so scoreToolSuccess can report honest failures
+      // instead of hardcoded `success: true`.
+      const steps = Array.isArray((finish as { steps?: unknown[] }).steps)
+        ? ((finish as { steps?: unknown[] }).steps as Array<{
+            toolCalls?: Array<{ toolName?: string; toolCallId?: string }>;
+            toolResults?: Array<{
+              toolCallId?: string;
+              output?: unknown;
+              error?: unknown;
+              errorText?: string;
+            }>;
+          }>)
+        : [];
+      const invokedTools: Array<{ toolName: string; success: boolean }> = [];
+      for (const step of steps) {
+        const calls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
+        const results = Array.isArray(step?.toolResults) ? step.toolResults : [];
+        for (const call of calls) {
+          if (typeof call?.toolName !== 'string') continue;
+          const r = results.find(x => x.toolCallId === call.toolCallId);
+          const out = r?.output;
+          const success =
+            !r ||
+            (!r.error &&
+              !r.errorText &&
+              !(out && typeof out === 'object' && 'error' in (out as Record<string, unknown>)));
+          invokedTools.push({ toolName: call.toolName, success });
+        }
+      }
+      // Fallback to final-step calls when steps array is unavailable
+      // (older AI SDK paths, error states).
+      if (invokedTools.length === 0) {
+        for (const tc of finish.toolCalls ?? []) {
+          invokedTools.push({ toolName: tc.toolName, success: true });
+        }
+      }
+      const toolNames = invokedTools.map(t => t.toolName);
 
       // [tool-select] telemetry — fires every turn, even unauthed ones,
       // so we can see WHICH prompts the model fails to tool-route on.
       // Single line, structured, greppable. No PII beyond the prompt
       // first 200 chars (already stored verbatim in chatMessage.content).
-      //
-      // Aggregate across multi-step turns. `finish.toolCalls` only
-      // reports the FINAL step's calls; in a 2-step turn (step 1: call
-      // tool → step 2: summarize) the summary step's empty toolCalls
-      // would falsely report selection failure. Walk every step in
-      // `finish.steps` and union their toolCalls instead.
       try {
-        const steps = Array.isArray((finish as { steps?: unknown[] }).steps)
-          ? ((finish as { steps?: unknown[] }).steps as Array<{
-              toolCalls?: Array<{ toolName?: string }>;
-            }>)
-          : [];
-        const allInvoked: string[] = [];
-        for (const step of steps) {
-          const calls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
-          for (const call of calls) {
-            if (typeof call?.toolName === 'string') allInvoked.push(call.toolName);
-          }
-        }
-        // Fallback to final-step toolNames if steps array is unavailable
-        // (older AI SDK versions, error paths).
-        const invoked = allInvoked.length > 0 ? allInvoked : toolNames;
         const usage = (finish as { usage?: { inputTokens?: number; outputTokens?: number } }).usage;
         const finishReason = (finish as { finishReason?: string }).finishReason;
         console.log(
@@ -553,8 +581,8 @@ export async function POST(req: NextRequest) {
               promptLen: lastUserMessage.length,
               catalogCount: toolCatalogNames.length,
               catalog: toolCatalogNames,
-              invokedCount: invoked.length,
-              invoked,
+              invokedCount: toolNames.length,
+              invoked: toolNames,
               inputTokens: usage?.inputTokens ?? null,
               outputTokens: usage?.outputTokens ?? null,
               stepCount: steps.length || null,
@@ -742,6 +770,34 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error('[chat] meter write failed (non-fatal):', err);
       }
+
+      // ── Langfuse scoring + LLM-judge eval (Step 1 from autoplan).
+      // Wrapped in after() so the four LLM-judge calls don't get
+      // orphaned by Vercel teardown after the stream closes. Reuses
+      // turnPrice as the cost — same source of truth as the MeterEvent
+      // row above (no recompute, no drift). Without this block, every
+      // /api/chat trace lands in Langfuse with 0 scores while
+      // /api/agent/chat traces get 6+. Confirmed in QA 2026-04-28.
+      const langfuseTraceId = getActiveTraceId() ?? turnId;
+      after(async () => {
+        try {
+          await scoreLatency(langfuseTraceId, Date.now() - turnStart);
+          await scoreCost(langfuseTraceId, turnPrice);
+          if (invokedTools.length > 0) {
+            await scoreToolSuccess(langfuseTraceId, invokedTools);
+          }
+          if (lastUserMessage && finish.text) {
+            await evaluateTrace({
+              traceId: langfuseTraceId,
+              input: lastUserMessage,
+              output: finish.text,
+            });
+          }
+          await flushLangfuse();
+        } catch (err) {
+          console.warn('[chat] langfuse scoring failed (non-fatal):', err);
+        }
+      });
     },
   });
 
