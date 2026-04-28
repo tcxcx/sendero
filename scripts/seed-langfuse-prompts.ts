@@ -146,7 +146,8 @@ const PROMPTS: PromptDef[] = [
   {
     name: 'sendero-inbox-rewrite',
     prompt: INBOX_REWRITE,
-    commitMessage: 'Initial seed — inbox-rewrite system prompt with {{brand_voice}} + {{locale_block}}',
+    commitMessage:
+      'Initial seed — inbox-rewrite system prompt with {{brand_voice}} + {{locale_block}}',
   },
 ];
 

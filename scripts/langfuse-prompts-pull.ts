@@ -63,9 +63,7 @@ async function fetchJson<T>(path: string): Promise<T> {
 async function main(): Promise<void> {
   // List all prompts; we filter to sendero-* in code so this script
   // doesn't pull unrelated experiments out of the same Langfuse project.
-  const list = await fetchJson<{ data: ListedPrompt[] }>(
-    '/api/public/v2/prompts?limit=100'
-  );
+  const list = await fetchJson<{ data: ListedPrompt[] }>('/api/public/v2/prompts?limit=100');
 
   const senderoPrompts = list.data
     .filter(p => p.name.startsWith('sendero-'))
