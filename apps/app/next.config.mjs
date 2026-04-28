@@ -16,6 +16,11 @@ const nextConfig = {
   serverExternalPackages: [
     '@circle-fin/developer-controlled-wallets',
     '@circle-fin/modular-wallets-core',
+    '@langfuse/client',
+    '@langfuse/tracing',
+    '@langfuse/otel',
+    '@opentelemetry/sdk-trace-node',
+    '@opentelemetry/api',
   ],
   images: {
     remotePatterns: [

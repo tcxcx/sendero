@@ -29,6 +29,7 @@ import {
   vertexProject,
 } from '@sendero/agent';
 import { prisma, type Prisma } from '@sendero/database';
+import { aiTelemetryConfig } from '@sendero/langfuse';
 import { detectLocale, getLocaleSlice, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
@@ -42,6 +43,12 @@ import {
 } from 'ai';
 
 import { detectAttachmentsHint } from '@/lib/agent-attachments-hint';
+import {
+  buildPlanOverrides,
+  makeCapStore,
+  resolveSegment,
+  resolveTenantPlan,
+} from '@/lib/agent-auth';
 import { currentOrgPlan } from '@/lib/billing-plan';
 import {
   chatPricingBreakdown,
@@ -49,6 +56,7 @@ import {
   inferModelId,
   type ChatUsage,
 } from '@/lib/chat-pricing';
+import { preflight } from '@sendero/billing/meter';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -295,6 +303,49 @@ export async function POST(req: NextRequest) {
     console.warn('[chat] tenant resolve failed; meter write will be skipped', err);
   }
 
+  // Cap preflight — same gate as /api/agent/dispatch and /api/agent/chat.
+  // Without this, console turns ignore plan-tier caps and a Free-tier
+  // tenant can blow past their $100 ceiling via `/dashboard/console`
+  // alone. Keep behavior pre-Clerk for unauthed callers (storybook,
+  // playground): no tenant → no preflight, no meter write.
+  if (tenantId) {
+    try {
+      const segment = await resolveSegment(tenantId);
+      const planTier = await resolveTenantPlan(tenantId);
+      const overrides = buildPlanOverrides(planTier);
+      const capStore = makeCapStore();
+      const pre = await preflight(capStore, {
+        tenantId,
+        action: 'chat_reply',
+        segment,
+        overrides,
+      });
+      if (pre.blocked) {
+        return NextResponse.json(
+          {
+            error: 'cap_exceeded',
+            text:
+              pre.cap.warnings[0] ??
+              'Your tenant has hit its spend cap for this period. Contact your admin.',
+            periods: pre.cap.periods.map(p => ({
+              period: p.period,
+              spentMicro: p.spentMicro.toString(),
+              capMicro: p.capMicro.toString(),
+              remainingMicro: p.remainingMicro.toString(),
+            })),
+          },
+          { status: 402 }
+        );
+      }
+    } catch (err) {
+      // Cap store outage — fail open so a degraded billing service
+      // doesn't take the chat surface down. The actual price write
+      // below still runs; the operator sees a higher-than-expected
+      // cap report next page load and can investigate.
+      console.warn('[chat] cap preflight failed; allowing turn', err);
+    }
+  }
+
   const runtimeContextJson = body.context ? JSON.stringify(body.context, null, 2) : undefined;
 
   // Chat tier defaults to 'fast' (sonnet-class) for responsive replies.
@@ -475,20 +526,18 @@ export async function POST(req: NextRequest) {
     maxRetries: 2,
     providerOptions,
     onError,
-    // Vercel AI Gateway groups runs by metadata in observability —
-    // tenant + tier + model attribution without a separate COGS
-    // pipeline. Tagging is independent from credits and ships value
-    // even when the deduction loop is dormant.
-    experimental_telemetry: {
-      isEnabled: true,
-      metadata: {
-        tenantId: tenantId ?? 'anonymous',
-        model: picked.label,
-        scope: 'chat',
-        channel,
-        userId: userId ?? 'anonymous',
-      },
-    },
+    // Langfuse traces every AI SDK call via OTel (initLangfuseOtel in
+    // instrumentation.ts). aiTelemetryConfig() returns the standard
+    // experimental_telemetry shape with Langfuse-aware metadata tags.
+    experimental_telemetry: aiTelemetryConfig('sendero-chat', {
+      userId: userId ?? 'anonymous',
+      tenantId: tenantId ?? 'anonymous',
+      surface: 'app-api',
+      trigger: 'user',
+      channel,
+      model: picked.label,
+      scope: 'chat',
+    }),
     // Bill the turn after the last chunk lands. `chat_reply` is the
     // canonical aggregator the rest of the system already understands
     // (matches `runAgentTurn` in @sendero/agent and the streaming

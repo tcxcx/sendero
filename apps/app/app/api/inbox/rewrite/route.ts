@@ -31,6 +31,7 @@ import {
   vertexLocation,
   vertexProject,
 } from '@sendero/agent';
+import { aiTelemetryConfig } from '@sendero/langfuse';
 import { getLocaleSlice, renderLocaleSlicePrompt } from '@sendero/locale';
 import type { RewriteMode, RewriteRequest, RewriteResponse } from '@sendero/ui/tiptap';
 import { generateText, type LanguageModel } from 'ai';
@@ -209,6 +210,11 @@ async function runCascade(system: string, prompt: string): Promise<string> {
         maxOutputTokens: 600,
         maxRetries: 0,
         providerOptions,
+        experimental_telemetry: aiTelemetryConfig('sendero-inbox-rewrite', {
+          surface: 'app-api',
+          trigger: 'user',
+          scope: 'inbox-rewrite',
+        }),
       });
       const text = (result.text ?? '').trim().replace(/^["']|["']$/g, '');
       if (text) return text;

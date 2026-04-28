@@ -17,6 +17,7 @@ import { after, NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 import type { SlackInstall as SlackInstallRow } from '@prisma/client';
+import { flushLangfuse, scoreGeneration } from '@sendero/langfuse';
 import { notifier } from '@sendero/notifications';
 import {
   buildResolvedBlocks,
@@ -239,6 +240,7 @@ async function handleApprovalAction(
       segments: true,
       tenantId: true,
       pnr: true,
+      metadata: true,
       trip: {
         select: {
           id: true,
@@ -248,6 +250,28 @@ async function handleApprovalAction(
       },
     },
   });
+
+  // Score the originating agent generation with the human's decision.
+  // Booking.metadata.traceId is only present when confirm_booking ran
+  // through a Langfuse-traced agent turn. Fire-and-forget; never blocks
+  // the Slack ack.
+  const bookingTraceId =
+    booking?.metadata && typeof (booking.metadata as Record<string, unknown>).traceId === 'string'
+      ? ((booking.metadata as Record<string, unknown>).traceId as string)
+      : null;
+  if (bookingTraceId) {
+    void Promise.resolve().then(async () => {
+      try {
+        await scoreGeneration(
+          bookingTraceId,
+          parsed.decision === 'approve' ? 'approved' : 'rejected'
+        );
+        await flushLangfuse();
+      } catch {
+        // already logged inside the helpers
+      }
+    });
+  }
 
   // Email parity with the Slack approval flip. On approve, the traveler
   // gets a hold-confirmed receipt. Failures are swallowed so the Slack
