@@ -14,6 +14,9 @@ import {
 } from '@sendero/seo';
 import { Agentation } from 'agentation';
 
+import { SiteFooter } from '@/components/site-shell/site-footer';
+import { SiteHeader } from '@/components/site-shell/site-header';
+
 import { Providers } from './providers';
 import './globals.css';
 
@@ -96,7 +99,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         ))}
       </head>
       <body>
-        <Providers allowedRedirectOrigins={CLERK_ALLOWED_REDIRECT_ORIGINS}>{children}</Providers>
+        <Providers allowedRedirectOrigins={CLERK_ALLOWED_REDIRECT_ORIGINS}>
+          {/*
+            Shared marketing chrome. The home page (/) and every secondary
+            route (/agents, /pricing, /policy, /terms, /updates) inherit
+            this header + footer; pages render only their body in between.
+          */}
+          <div className="mk-root">
+            <SiteHeader />
+            {children}
+            <SiteFooter />
+          </div>
+        </Providers>
         {process.env.NODE_ENV === 'development' && <Agentation />}
       </body>
     </html>

@@ -44,9 +44,13 @@ function InfraDiagram() {
       {'                                                     │\n'}
       {'                                              MCP / CLI / API\n'}
       {'                                                     │\n'}
-      {' ┌───────────────────────────────────────────────────┴───────────────────────────────────────────────────┐\n'}
+      {
+        ' ┌───────────────────────────────────────────────────┴───────────────────────────────────────────────────┐\n'
+      }
       {' │'}
-      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {d(
+        '░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░'
+      )}
       {'│\n'}
       {' │'}
       {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
@@ -54,7 +58,9 @@ function InfraDiagram() {
       {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
       {'│\n'}
       {' │'}
-      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {d(
+        '░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░'
+      )}
       {'│\n'}
       {' │'}
       {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
@@ -62,9 +68,13 @@ function InfraDiagram() {
       {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
       {'│\n'}
       {' │'}
-      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {d(
+        '░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░'
+      )}
       {'│\n'}
-      {' └────┬───────────┬───────────┬───────────┬───────────┬───────────┬───────────┬─────────────────────────┘\n'}
+      {
+        ' └────┬───────────┬───────────┬───────────┬───────────┬───────────┬───────────┬─────────────────────────┘\n'
+      }
       {'      │           │           │           │           │           │           │\n'}
       {'      ▼           ▼           ▼           ▼           ▼           ▼           ▼\n'}
       {'\n'}
@@ -313,7 +323,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   const past = (p: Phase) => PHASES.indexOf(phase) >= PHASES.indexOf(p);
 
   useEffect(() => {
-    const id = setInterval(() => setCursorOn((v) => !v), 530);
+    const id = setInterval(() => setCursorOn(v => !v), 530);
     return () => clearInterval(id);
   }, []);
 
@@ -334,7 +344,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
 
   useEffect(() => {
     if (phase !== 'spin-1' && phase !== 'spin-2') return;
-    const id = setInterval(() => setFrame((f) => (f + 1) % ORA_FRAMES.length), 80);
+    const id = setInterval(() => setFrame(f => (f + 1) % ORA_FRAMES.length), 80);
     const dur = phase === 'spin-1' ? 2000 : 1400;
     const t = setTimeout(() => {
       clearInterval(id);
@@ -376,7 +386,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   useEffect(() => {
     if (phase !== 'done') return;
     const t = setTimeout(() => {
-      setActiveTab((prev) => (prev + 1) % SCENARIOS.length);
+      setActiveTab(prev => (prev + 1) % SCENARIOS.length);
     }, 2000);
     return () => clearTimeout(t);
   }, [phase]);
@@ -410,7 +420,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   const done = (text: string) => <div className="text-foreground">{text}</div>;
 
   return (
-    <div className="max-w-3xl w-full font-mono">
+    <div className="agents-terminal max-w-3xl w-full font-mono">
       <div className="overflow-hidden border border-border">
         <div className="select-none flex items-center h-7 px-3 border-b border-border bg-[hsl(225,70%,26%)]">
           <div className="flex gap-[5px]">
@@ -446,16 +456,9 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
           ref={termRef}
           className="overflow-y-auto h-[380px] md:h-[460px] scroll-smooth p-5 bg-background text-[13px] leading-[1.7] text-foreground"
         >
-          <div>
-            {prompt}npx @sendero/cli@latest
-          </div>
+          <div>{prompt}npx @sendero/cli@latest</div>
 
-          <div
-            className={cn(
-              'text-7xl sm:text-8xl text-foreground mt-3',
-              pixelFontClass
-            )}
-          >
+          <div className={cn('text-7xl sm:text-8xl text-foreground mt-3', pixelFontClass)}>
             sendero
           </div>
           <div className="text-[hsl(225,60%,75%)] text-[10px] tracking-widest mt-1.5 mb-5">
@@ -515,7 +518,7 @@ const FEATURES = [
   {
     title: 'Settle on-chain in USDC',
     description:
-      "confirm_booking tickets the offer and writes the on-chain audit row in the same call. Arcscan URL surfaces in the response for finance.",
+      'confirm_booking tickets the offer and writes the on-chain audit row in the same call. Arcscan URL surfaces in the response for finance.',
   },
   {
     title: 'Reconcile autonomously',
@@ -540,7 +543,7 @@ const FEATURES = [
   {
     title: 'Locale aware',
     description:
-      "Reply in the same language the user wrote in — Spanish, Portuguese, English. The tool surface is locale-agnostic; the skill teaches Claude to mirror.",
+      'Reply in the same language the user wrote in — Spanish, Portuguese, English. The tool surface is locale-agnostic; the skill teaches Claude to mirror.',
   },
   {
     title: 'Cross-channel by design',
@@ -649,7 +652,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
               Start automating
             </Link>
             <Link
-              href="https://sendero.travel/docs/claude-code-plugin"
+              href="https://docs.sendero.travel/claude-code-plugin"
               className="hidden md:inline-flex h-11 items-center justify-center border border-border bg-transparent px-6 font-mono text-sm text-foreground transition-colors hover:!bg-[hsl(225,70%,28%)]"
             >
               Read documentation
@@ -661,10 +664,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
       </div>
 
       <div className="space-y-16 max-w-screen-lg mx-auto px-4">
-        <section
-          aria-labelledby="agents-installer-title"
-          className="mt-4 flex flex-col gap-4"
-        >
+        <section aria-labelledby="agents-installer-title" className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <h3 id="agents-installer-title" className="font-sans text-2xl text-foreground">
               Install
@@ -682,11 +682,8 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
           <h3 className="font-sans text-2xl text-foreground">Features</h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-4">
-            {FEATURES.map((feature) => (
-              <div
-                className="border border-border p-1 -mt-[1px] -ml-[1px]"
-                key={feature.title}
-              >
+            {FEATURES.map(feature => (
+              <div className="border border-border p-1 -mt-[1px] -ml-[1px]" key={feature.title}>
                 <div className="p-4">
                   <div className="space-y-4">
                     <h3 className="text-sm text-foreground">{feature.title}</h3>
@@ -704,11 +701,8 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
           <h3 className="font-sans text-2xl text-foreground">Possibilities</h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-4">
-            {POSSIBILITIES.map((item) => (
-              <div
-                className="border border-border p-1 -mt-[1px] -ml-[1px]"
-                key={item.title}
-              >
+            {POSSIBILITIES.map(item => (
+              <div className="border border-border p-1 -mt-[1px] -ml-[1px]" key={item.title}>
                 <div className="p-4">
                   <div className="space-y-3">
                     <span className="text-xs text-[hsl(225,50%,60%)] uppercase tracking-widest">
@@ -816,7 +810,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
                 Start automating
               </Link>
               <Link
-                href="https://sendero.travel/docs"
+                href="https://docs.sendero.travel"
                 className="inline-flex h-11 items-center justify-center border border-primary bg-background px-6 font-mono text-sm text-foreground transition-colors hover:!bg-[hsl(225,70%,45%)]"
               >
                 Read documentation

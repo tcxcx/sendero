@@ -33,7 +33,7 @@ export const metadata = createPageMetadata({
 const APP_PATHS = ['/dashboard', '/onboarding', '/billing'];
 
 function toAppHref(href: string, appOrigin: string): string {
-  return APP_PATHS.some((p) => href === p || href.startsWith(`${p}/`) || href.startsWith(`${p}?`))
+  return APP_PATHS.some(p => href === p || href.startsWith(`${p}/`) || href.startsWith(`${p}?`))
     ? `${appOrigin.replace(/\/$/, '')}${href}`
     : href;
 }
@@ -53,30 +53,9 @@ export default async function PricingPage() {
     'https://app.sendero.travel'
   );
 
+  // Header + footer come from app/layout.tsx (SiteHeader / SiteFooter).
   return (
-    <main className="mk-root">
-      <header className="mk-nav">
-        <div className="mk-brand">
-          <img
-            alt=""
-            className="mk-mark"
-            decoding="async"
-            src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
-          />
-          <span>SENDERO</span>
-          <span className="mk-x">·</span>
-          <span>ARC</span>
-        </div>
-        <div className="mk-nav-tools">
-          <nav className="mk-nav-apps" aria-label="Sendero product navigation">
-            <a href="/">{content.nav.website}</a>
-            <a href="/agents">Agents</a>
-            <a href="/pricing">{content.nav.pricing ?? 'Pricing'}</a>
-            <a href={appOrigin}>{content.nav.app}</a>
-          </nav>
-        </div>
-      </header>
-
+    <>
       <section className="mk-hero" style={{ minHeight: 'auto', paddingBottom: 32 }}>
         <div className="mk-hero-copy" style={{ maxWidth: '70ch' }}>
           <div className="mk-eyebrow">Pricing</div>
@@ -96,7 +75,7 @@ export default async function PricingPage() {
           </span>
         </div>
         <div className="mk-tiers">
-          {content.pricing.tiers.map((tier) => (
+          {content.pricing.tiers.map(tier => (
             <article key={tier.id} className="mk-tier">
               <div className="mk-tier-name">{tier.name}</div>
               <div className="mk-tier-price">{tier.price}</div>
@@ -131,33 +110,47 @@ export default async function PricingPage() {
         >
           How billing works
         </h2>
-        <div style={{ display: 'grid', gap: 16, gridTemplateColumns: '1fr', fontSize: 14, lineHeight: 1.6 }}>
+        <div
+          style={{
+            display: 'grid',
+            gap: 16,
+            gridTemplateColumns: '1fr',
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
           <p>
             <strong>Two revenue legs.</strong> A monthly SaaS subscription (this page) covers the
             seat. Per-call <strong>nanopayments</strong> are charged on top — every metered tool
-            call your agent makes pays a small amount of USDC from your workspace's Arc wallet.
-            They are independent: a Pro trial pauses leg 1 while leg 2 keeps flowing.
+            call your agent makes pays a small amount of USDC from your workspace's Arc wallet. They
+            are independent: a Pro trial pauses leg 1 while leg 2 keeps flowing.
           </p>
           <p>
             <strong>Plan discounts compound.</strong> Pro gets 30% off nanopay rates and 10% off
-            booking take-rate. Enterprise gets 50% / 15%. The discount is applied to the meter
-            event at dispatch time — see{' '}
-            <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>buildPlanOverrides()</code>{' '}
-            in <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>apps/app/lib/billing-plan.ts</code>.
+            booking take-rate. Enterprise gets 50% / 15%. The discount is applied to the meter event
+            at dispatch time — see{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>buildPlanOverrides()</code> in{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
+              apps/app/lib/billing-plan.ts
+            </code>
+            .
           </p>
           <p>
             <strong>Sandbox is always free.</strong> Every workspace mints a sandbox API key
             automatically on creation. Sandbox keys route meter events to{' '}
-            <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>status: 'sandbox'</code>;
-            no real USDC moves. Practice the whole flow before paying anything.
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>status: 'sandbox'</code>; no
+            real USDC moves. Practice the whole flow before paying anything.
           </p>
           <p>
             <strong>Pro free trial: 14 days, no card required.</strong> Clerk handles the trial
-            timing natively; <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>has({'{'} plan: 'pro' {'}'})</code>{' '}
+            timing natively;{' '}
+            <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
+              has({'{'} plan: 'pro' {'}'})
+            </code>{' '}
             stays true throughout. Drop to Free at expiry, or upgrade with a card.
           </p>
         </div>
       </section>
-    </main>
+    </>
   );
 }

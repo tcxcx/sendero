@@ -1,5 +1,3 @@
-import { resolvePublicOrigin } from '@sendero/seo';
-
 import { createPageMetadata } from '@/lib/metadata';
 import { getUpdatesSorted } from '@/lib/updates';
 
@@ -34,36 +32,10 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 export default function UpdatesPage() {
   const updates = getUpdatesSorted();
-  const appOrigin = resolvePublicOrigin(
-    process.env.NEXT_PUBLIC_APP_URL,
-    'https://app.sendero.travel'
-  );
 
+  // Header + footer come from app/layout.tsx (SiteHeader / SiteFooter).
   return (
-    <main className="mk-root">
-      <header className="mk-nav">
-        <div className="mk-brand">
-          <img
-            alt=""
-            className="mk-mark"
-            decoding="async"
-            src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
-          />
-          <span>SENDERO</span>
-          <span className="mk-x">·</span>
-          <span>ARC</span>
-        </div>
-        <div className="mk-nav-tools">
-          <nav className="mk-nav-apps" aria-label="Sendero product navigation">
-            <a href="/">Home</a>
-            <a href="/agents">Agents</a>
-            <a href="/pricing">Pricing</a>
-            <a href="/updates">Updates</a>
-            <a href={appOrigin}>App</a>
-          </nav>
-        </div>
-      </header>
-
+    <>
       <section className="mk-hero" style={{ minHeight: 'auto', paddingBottom: 32 }}>
         <div className="mk-hero-copy" style={{ maxWidth: '70ch' }}>
           <div className="mk-eyebrow">Updates</div>
@@ -83,7 +55,7 @@ export default function UpdatesPage() {
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-          {updates.map((update) => (
+          {updates.map(update => (
             <article
               key={update.slug}
               style={{
@@ -125,7 +97,7 @@ export default function UpdatesPage() {
                   {update.date}
                 </span>
                 <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
-                  {update.categories.map((cat) => (
+                  {update.categories.map(cat => (
                     <span
                       key={cat}
                       style={{
@@ -173,7 +145,7 @@ export default function UpdatesPage() {
                   color: 'color-mix(in oklab, var(--ink) 80%, transparent)',
                 }}
               >
-                {update.highlights.map((line) => (
+                {update.highlights.map(line => (
                   <li key={line}>{line}</li>
                 ))}
               </ul>
@@ -181,6 +153,6 @@ export default function UpdatesPage() {
           ))}
         </div>
       </section>
-    </main>
+    </>
   );
 }

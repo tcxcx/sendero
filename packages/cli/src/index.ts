@@ -57,7 +57,9 @@ function writeKey(key: string): void {
 async function authCmd(argv: string[]): Promise<number> {
   const sub = argv[0] ?? 'whoami';
   if (sub === 'login') {
-    process.stdout.write(`Open this URL to mint an API key:\n  ${DEFAULT_BASE}/dashboard/settings/api-keys\n`);
+    process.stdout.write(
+      `Open this URL to mint an API key:\n  ${DEFAULT_BASE}/dashboard/settings/api-keys\n`
+    );
     process.stdout.write(`\nPaste your key here, then press Enter:\n> `);
     const key = await readLine();
     if (!key.startsWith('ak_')) {
@@ -100,9 +102,13 @@ async function mcpCmd(argv: string[]): Promise<number> {
   if (sub === 'install') {
     process.stdout.write('Sendero plugin install steps:\n');
     process.stdout.write('  1. Mint an API key:    sendero auth login\n');
-    process.stdout.write('  2. Clone the repo:     git clone https://github.com/tcxcx/sendero.git\n');
-    process.stdout.write('  3. Launch Claude Code: claude --plugin-dir ./sendero/apps/claude-code-plugin\n');
-    process.stdout.write('\nFull docs: https://sendero.travel/docs/claude-code-plugin\n');
+    process.stdout.write(
+      '  2. Clone the repo:     git clone https://github.com/tcxcx/sendero.git\n'
+    );
+    process.stdout.write(
+      '  3. Launch Claude Code: claude --plugin-dir ./sendero/apps/claude-code-plugin\n'
+    );
+    process.stdout.write('\nFull docs: https://docs.sendero.travel/claude-code-plugin\n');
     return 0;
   }
   process.stderr.write(`Unknown mcp subcommand: ${sub}\n`);
@@ -126,8 +132,8 @@ async function toolsCmd(argv: string[]): Promise<number> {
     }
     const spec = (await r.json()) as { paths?: Record<string, unknown> };
     const tools = Object.keys(spec.paths ?? {})
-      .filter((p) => p.startsWith('/tools/'))
-      .map((p) => p.replace('/tools/', ''))
+      .filter(p => p.startsWith('/tools/'))
+      .map(p => p.replace('/tools/', ''))
       .sort();
     if (process.stdout.isTTY) {
       process.stdout.write(`${tools.length} tools available:\n`);
@@ -185,14 +191,14 @@ ENV
   SENDERO_API_URL    Override the API base (default: ${DEFAULT_BASE})
 
 DOCS
-  https://sendero.travel/docs
-  https://sendero.travel/docs/claude-code-plugin
+  https://docs.sendero.travel
+  https://docs.sendero.travel/claude-code-plugin
 `);
   return 0;
 }
 
 async function readLine(): Promise<string> {
-  return await new Promise((resolve) => {
+  return await new Promise(resolve => {
     let buf = '';
     process.stdin.setEncoding('utf8');
     const onData = (chunk: string) => {

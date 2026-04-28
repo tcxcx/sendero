@@ -20,48 +20,20 @@ interface LegalPageProps {
   effectiveDate: string;
   /** Page content (h2/h3/p/ul/li/strong/code). */
   children: ReactNode;
-  /** App origin for nav links. Resolves to https://app.sendero.travel by default. */
-  appOrigin?: string;
 }
 
-export function LegalPage({
-  eyebrow,
-  title,
-  effectiveDate,
-  children,
-  appOrigin = 'https://app.sendero.travel',
-}: LegalPageProps) {
+// Header + footer come from apps/marketing/app/layout.tsx
+// (SiteHeader / SiteFooter). This shell renders only the prose column.
+export function LegalPage({ eyebrow, title, effectiveDate, children }: LegalPageProps) {
   return (
-    <main className="mk-root">
-      <header className="mk-nav">
-        <div className="mk-brand">
-          <img
-            alt=""
-            className="mk-mark"
-            decoding="async"
-            src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
-          />
-          <span>SENDERO</span>
-          <span className="mk-x">·</span>
-          <span>ARC</span>
-        </div>
-        <div className="mk-nav-tools">
-          <nav className="mk-nav-apps" aria-label="Sendero product navigation">
-            <a href="/">Home</a>
-            <a href="/agents">Agents</a>
-            <a href="/pricing">Pricing</a>
-            <a href={appOrigin}>App</a>
-          </nav>
-        </div>
-      </header>
-
+    <>
       <article
         className="legal-prose"
         style={{
           maxWidth: '70ch',
           margin: '0 auto',
           padding: '64px max(24px, 6vw) 96px',
-          color: 'var(--ink)',
+          color: 'var(--fg)',
           fontSize: 15,
           lineHeight: 1.75,
         }}
@@ -95,7 +67,7 @@ export function LegalPage({
         <hr
           style={{
             border: 'none',
-            borderTop: '1px solid color-mix(in oklab, var(--ink) 12%, transparent)',
+            borderTop: '1px solid color-mix(in oklab, var(--fg) 12%, transparent)',
             margin: '48px 0 24px',
           }}
         />
@@ -137,17 +109,17 @@ export function LegalPage({
         .legal-body p { margin: 0 0 14px; }
         .legal-body ul, .legal-body ol { margin: 0 0 14px; padding-left: 1.4em; }
         .legal-body li { margin: 0 0 6px; }
-        .legal-body strong { font-weight: 500; color: var(--ink); }
+        .legal-body strong { font-weight: 500; color: var(--fg); }
         .legal-body code {
           font-family: var(--mono);
           font-size: 13px;
           padding: 1px 5px;
-          background: color-mix(in oklab, var(--ink) 6%, transparent);
+          background: color-mix(in oklab, var(--fg) 6%, transparent);
           border-radius: 3px;
         }
-        .legal-body a { color: var(--vermillion); text-decoration: underline; text-underline-offset: 2px; }
-        .legal-body a:hover { color: var(--ink); }
+        .legal-body a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+        .legal-body a:hover { color: var(--fg); }
       `}</style>
-    </main>
+    </>
   );
 }
