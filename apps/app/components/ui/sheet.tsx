@@ -21,9 +21,15 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Overlay
     className={cn(
-      'fixed inset-0 z-50 bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+      'fixed inset-0 z-50 backdrop-blur-sm backdrop-saturate-125 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       className
     )}
+    style={{
+      // Matches DialogOverlay — ink baseline + warm vermillion tint,
+      // 18% transparent so the dimmed app stays faintly visible.
+      backgroundColor:
+        'color-mix(in oklab, color-mix(in oklab, var(--midnight, #1f2a44) 88%, var(--vermillion, #d65438) 12%), transparent 18%)',
+    }}
     {...props}
     ref={ref}
   />
