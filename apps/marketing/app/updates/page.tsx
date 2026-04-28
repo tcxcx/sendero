@@ -54,105 +54,196 @@ export default function UpdatesPage() {
           padding: '0 max(24px, 6vw) 96px',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-          {updates.map(update => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {updates.map((update, idx) => (
             <article
               key={update.slug}
+              className="updates-card"
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 16,
-                padding: '32px',
-                border: '1px solid color-mix(in oklab, var(--ink) 14%, transparent)',
-                background: 'color-mix(in oklab, var(--ink) 2%, white)',
+                position: 'relative',
+                display: 'grid',
+                gridTemplateColumns: 'minmax(120px, 160px) 1fr',
+                gap: 32,
+                padding: '36px 32px',
+                background: '#fdfbf7',
+                border: '1px solid color-mix(in oklab, var(--fg) 14%, transparent)',
               }}
             >
-              <header
+              {/*
+                Left rail: editorial release-marker. Big version number set
+                in the display serif, date below in mono. Picks up the
+                editorial-magazine rhythm Sendero's brand book asks for
+                (DESIGN.md §1) without recycling the generic "card with
+                metadata pills above headline" pattern.
+              */}
+              <aside
                 style={{
                   display: 'flex',
-                  flexWrap: 'wrap',
-                  alignItems: 'baseline',
-                  gap: 12,
+                  flexDirection: 'column',
+                  gap: 6,
+                  borderRight: '1px solid color-mix(in oklab, var(--fg) 10%, transparent)',
+                  paddingRight: 24,
                 }}
               >
                 <span
                   style={{
-                    fontFamily: 'var(--mono)',
-                    fontSize: 11,
-                    letterSpacing: '0.14em',
+                    fontFamily: 'var(--mono-x)',
+                    fontSize: 10,
+                    letterSpacing: '0.18em',
                     textTransform: 'uppercase',
-                    color: 'var(--vermillion)',
+                    color: 'color-mix(in oklab, var(--fg) 50%, transparent)',
+                  }}
+                >
+                  Release {String(updates.length - idx).padStart(2, '0')}
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--display)',
+                    fontSize: 'clamp(28px, 3.4vw, 38px)',
+                    fontWeight: 450,
+                    letterSpacing: '-0.01em',
+                    color: 'var(--ink)',
+                    lineHeight: 1,
                   }}
                 >
                   v{update.version}
                 </span>
                 <span
                   style={{
-                    fontFamily: 'var(--mono)',
+                    fontFamily: 'var(--mono-x)',
                     fontSize: 11,
                     letterSpacing: '0.04em',
-                    color: 'var(--muted)',
+                    color: 'color-mix(in oklab, var(--fg) 55%, transparent)',
+                    marginTop: 4,
                   }}
                 >
                   {update.date}
                 </span>
-                <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
-                  {update.categories.map(cat => (
+              </aside>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {update.categories.map((cat) => (
                     <span
                       key={cat}
                       style={{
-                        fontFamily: 'var(--mono)',
+                        fontFamily: 'var(--mono-x)',
                         fontSize: 10,
-                        letterSpacing: '0.12em',
+                        letterSpacing: '0.14em',
                         textTransform: 'uppercase',
                         padding: '3px 8px',
-                        background: 'color-mix(in oklab, var(--ink) 8%, transparent)',
+                        border: '1px solid color-mix(in oklab, var(--ink) 35%, transparent)',
                         color: 'var(--ink)',
+                        background: 'color-mix(in oklab, var(--ink) 5%, white)',
                       }}
                     >
                       {CATEGORY_LABEL[cat] ?? cat}
                     </span>
                   ))}
                 </div>
-              </header>
 
-              <h2
-                style={{
-                  fontFamily: 'var(--display)',
-                  fontSize: 'clamp(20px, 2.4vw, 28px)',
-                  letterSpacing: '-0.005em',
-                  fontWeight: 500,
-                  margin: 0,
-                  color: 'var(--ink)',
-                }}
-              >
-                {update.title}
-              </h2>
+                <h2
+                  style={{
+                    fontFamily: 'var(--display)',
+                    fontSize: 'clamp(22px, 2.6vw, 30px)',
+                    letterSpacing: '-0.005em',
+                    fontWeight: 450,
+                    margin: 0,
+                    color: 'var(--fg)',
+                    lineHeight: 1.18,
+                    textWrap: 'balance',
+                  }}
+                >
+                  {update.title}
+                </h2>
 
-              <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--ink)', margin: 0 }}>
-                {update.summary}
-              </p>
+                <p
+                  style={{
+                    fontSize: 15,
+                    lineHeight: 1.65,
+                    color: 'var(--fg)',
+                    margin: 0,
+                    maxWidth: '62ch',
+                  }}
+                >
+                  {update.summary}
+                </p>
 
-              <ul
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                  margin: 0,
-                  padding: '0 0 0 1.2em',
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  color: 'color-mix(in oklab, var(--ink) 80%, transparent)',
-                }}
-              >
-                {update.highlights.map(line => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
+                <ul
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    margin: '4px 0 0',
+                    padding: 0,
+                    listStyle: 'none',
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                    color: 'color-mix(in oklab, var(--fg) 72%, transparent)',
+                  }}
+                >
+                  {update.highlights.map((line) => (
+                    <li
+                      key={line}
+                      style={{
+                        position: 'relative',
+                        paddingLeft: 16,
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: '0.7em',
+                          width: 6,
+                          height: 1,
+                          background: 'var(--ink)',
+                        }}
+                      />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </article>
           ))}
         </div>
       </section>
+
+      {/*
+        Editorial hover state — entry cards lift slightly + the left
+        rail border turns vermillion. Subtle reward for moving the
+        cursor over a release; not a banner-ad bounce.
+      */}
+      <style>{`
+        .updates-card {
+          transition: transform 200ms ease-out, border-color 200ms ease-out;
+        }
+        .updates-card:hover {
+          transform: translateY(-2px);
+          border-color: color-mix(in oklab, var(--fg) 28%, transparent);
+        }
+        .updates-card:hover aside {
+          border-right-color: var(--ink) !important;
+        }
+        @media (max-width: 720px) {
+          .updates-card {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+            padding: 24px !important;
+          }
+          .updates-card aside {
+            border-right: 0 !important;
+            border-bottom: 1px solid color-mix(in oklab, var(--fg) 10%, transparent);
+            padding-right: 0 !important;
+            padding-bottom: 16px;
+            flex-direction: row !important;
+            align-items: baseline;
+            gap: 12px !important;
+          }
+        }
+      `}</style>
     </>
   );
 }

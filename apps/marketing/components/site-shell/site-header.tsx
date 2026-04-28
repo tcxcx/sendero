@@ -1,6 +1,11 @@
 import { cookies, headers } from 'next/headers';
 
-import { detectLocale, LOCALE_COOKIE_NAME, LOCALE_HEADER_NAME, normalizeLocale } from '@sendero/locale';
+import {
+  detectLocale,
+  LOCALE_COOKIE_NAME,
+  LOCALE_HEADER_NAME,
+  normalizeLocale,
+} from '@sendero/locale';
 import { resolvePublicOrigin } from '@sendero/seo';
 import { buildLocaleApiHrefs, SenderoLanguageSelector } from '@sendero/ui/language-selector';
 
@@ -32,6 +37,15 @@ export async function SiteHeader() {
   const appOrigin = resolvePublicOrigin(
     process.env.NEXT_PUBLIC_APP_URL,
     'https://app.sendero.travel'
+  );
+  // Resolve docs origin the same way: prefer the deployed docs origin in
+  // prod (NEXT_PUBLIC_DOCS_URL=https://docs.sendero.travel), fall back to
+  // local dev (default 3020 from apps/docs/package.json) when running
+  // marketing on localhost. Same shape as appOrigin so /agents, /pricing,
+  // /updates, /policy, /terms all hit the right docs surface per env.
+  const docsOrigin = resolvePublicOrigin(
+    process.env.NEXT_PUBLIC_DOCS_URL,
+    'https://docs.sendero.travel'
   );
 
   // The hero's primary CTA copy (e.g., "Start free" / "Empezar gratis")
@@ -65,7 +79,7 @@ export async function SiteHeader() {
           <a href="/agents">Agents</a>
           <a href="/pricing">{content.nav.pricing ?? 'Pricing'}</a>
           <a href="/updates">Updates</a>
-          <a href="https://docs.sendero.travel">Docs</a>
+          <a href={docsOrigin}>Docs</a>
           <a href={appOrigin}>{content.nav.app}</a>
         </nav>
 
