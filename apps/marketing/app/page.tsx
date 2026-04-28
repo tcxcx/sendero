@@ -98,7 +98,8 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           <nav className="mk-nav-apps" aria-label="Sendero product navigation">
             <a href="#audiences">{content.nav.website}</a>
             <a href="/agents">Agents</a>
-            <a href="#pricing">{content.nav.pricing ?? 'Pricing'}</a>
+            <a href="/pricing">{content.nav.pricing ?? 'Pricing'}</a>
+            <a href="/updates">Updates</a>
             <a href={appOrigin}>{content.nav.app}</a>
           </nav>
           <nav className="mk-nav-right" aria-label="Marketing actions">

@@ -173,8 +173,8 @@ const FOOTER_GROUPS_EN: MarketingFooterGroup[] = [
       { label: 'For travelers', href: '/dashboard' },
       { label: 'For agencies', href: '/dashboard' },
       { label: 'For companies', href: 'mailto:sales@sendero.travel' },
-      { label: 'For AI agents', href: '/llms.txt' },
-      { label: 'Pricing', href: '#pricing' },
+      { label: 'For AI agents', href: '/agents' },
+      { label: 'Pricing', href: '/pricing' },
     ],
   },
   {
@@ -189,9 +189,17 @@ const FOOTER_GROUPS_EN: MarketingFooterGroup[] = [
   {
     label: 'Company',
     links: [
+      { label: 'Updates', href: '/updates' },
       { label: 'Help', href: 'https://help.sendero.travel' },
       { label: 'Sales', href: 'mailto:sales@sendero.travel' },
       { label: 'Twitter', href: 'https://x.com/sendero_travel' },
+    ],
+  },
+  {
+    label: 'Legal',
+    links: [
+      { label: 'Privacy', href: '/policy' },
+      { label: 'Terms', href: '/terms' },
     ],
   },
 ];

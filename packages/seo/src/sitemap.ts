@@ -127,6 +127,10 @@ function trimTrailingSlash(s: string): string {
 export const SENDERO_MARKETING_ROUTES: SitemapRoute[] = [
   { path: '/', changeFrequency: 'daily', priority: 1.0 },
   { path: '/agents', changeFrequency: 'weekly', priority: 0.9 },
+  { path: '/pricing', changeFrequency: 'weekly', priority: 0.85 },
+  { path: '/updates', changeFrequency: 'weekly', priority: 0.8 },
+  { path: '/policy', changeFrequency: 'monthly', priority: 0.5 },
+  { path: '/terms', changeFrequency: 'monthly', priority: 0.5 },
   { path: '/llms.txt', changeFrequency: 'daily', priority: 0.95 },
   { path: '/.well-known/llms.txt', changeFrequency: 'daily', priority: 0.95 },
 ];
