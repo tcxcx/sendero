@@ -15,8 +15,8 @@
  *
  * The component is a leaf component — it takes URLs as props rather
  * than reading env, so it can render in any package or app without
- * pulling in `process.env.NEXT_PUBLIC_*`. Callers compose
- * `mcpUrl`, `apiKeysUrl`, `docsUrl` from their environment helper.
+ * pulling in client-side env vars. Callers compose `mcpUrl`,
+ * `apiKeysUrl`, and `docsUrl` from their own environment helper.
  *
  * Auth contract surfaced in the snippets: every MCP call requires
  * `Authorization: Bearer ak_…`. `/api/mcp` returns JSON-RPC -32001
