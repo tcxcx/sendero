@@ -29,6 +29,15 @@ import { auth } from '@clerk/nextjs/server';
 import { createVertex } from '@ai-sdk/google-vertex';
 import { type NextRequest, NextResponse } from 'next/server';
 
+import {
+  agentSessionId,
+  aiTelemetryConfig,
+  evaluateTrace,
+  flushLangfuse,
+  scoreLatency,
+  scoreToolSuccess,
+} from '@sendero/langfuse';
+
 import { prisma } from '@sendero/database';
 
 import {
@@ -78,6 +87,7 @@ import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
+import { provisionClerkUserId } from '@/lib/user-provisioning';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -141,12 +151,23 @@ export async function POST(req: NextRequest) {
           { status: 404 }
         );
       }
-      const u = await prisma.user.findUnique({
-        where: { clerkUserId: a.userId },
-        select: { id: true },
-      });
+      // Auto-provision the User row inline if the Clerk webhook hasn't
+      // landed yet. Without this, brand-new sign-ups blow up on first
+      // turn with P2003 (MeterEvent.userId FK) because the old fallback
+      // smuggled a Clerk-format id into a column FK'd to User.id.
+      const userId = await provisionClerkUserId(a.userId);
+      if (!userId) {
+        return NextResponse.json(
+          {
+            error: 'user_not_provisioned',
+            message:
+              'Your account is still finishing setup. Try again in a moment — this should clear within seconds.',
+          },
+          { status: 401 }
+        );
+      }
       clerkSession = {
-        userId: u?.id ?? a.userId,
+        userId,
         orgId: a.orgId,
         tenantId: tenant.id,
       };
@@ -490,18 +511,18 @@ export async function POST(req: NextRequest) {
     // "which Pro tenants are routing to opus most" without a separate
     // COGS pipeline. Independent from credits — ships value even if
     // the deduction loop stops.
-    experimental_telemetry: {
-      isEnabled: true,
-      metadata: {
-        tenantId,
-        planTier,
-        model: typeof modelHandle === 'string' ? modelHandle : 'direct',
-        turnId,
-        userId: userId ?? 'anonymous',
-        scope: 'agent-chat',
-        channel,
-      },
-    },
+    experimental_telemetry: aiTelemetryConfig('sendero-chat', {
+      userId: userId ?? 'anonymous',
+      tenantId,
+      sessionId: agentSessionId(tenantId, channel),
+      surface: 'app-api',
+      trigger: 'user',
+      channel,
+      turnId,
+      planTier,
+      model: typeof modelHandle === 'string' ? modelHandle : 'direct',
+      scope: 'agent-chat',
+    }),
     // The closure captures everything we need to write the meter
     // event + update the session AFTER the last chunk lands. The
     // client has already received its tokens at this point; meter
@@ -604,6 +625,30 @@ export async function POST(req: NextRequest) {
           latencyMs,
         },
       });
+
+      // Langfuse scoring + LLM-as-a-judge eval (fire-and-forget).
+      // traceId comes from the OTel span automatically propagated by
+      // initLangfuseOtel → LangfuseSpanProcessor. We score against
+      // the active trace so all spans are grouped correctly.
+      void Promise.resolve().then(async () => {
+        const traceId = turnId; // turnId used as correlation key; OTel links spans by trace context
+        const toolResults = (finish.toolCalls ?? []).map(tc => ({
+          toolName: tc.toolName,
+          success: true,
+        }));
+        await scoreLatency(traceId, latencyMs);
+        if (toolResults.length > 0) await scoreToolSuccess(traceId, toolResults);
+        const lastUser = lastUserText(body.messages as UIMessage[]);
+        if (lastUser && finish.text) {
+          await evaluateTrace({
+            traceId,
+            input: lastUser,
+            output: finish.text,
+          });
+        }
+        await flushLangfuse();
+      });
+
       await flush();
     },
     onError: event => {

@@ -22,6 +22,7 @@ import { generateText, stepCountIs } from 'ai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
+import { aiTelemetryConfig } from '@sendero/langfuse';
 import { toolList } from './index';
 import { buildAiSdkTools } from './adapters/ai-sdk';
 import type { ToolContext, ToolDef } from './types';
@@ -144,6 +145,12 @@ export async function routeToAgent(
     tools,
     stopWhen: stepCountIs(opts.maxSteps ?? 6),
     maxRetries: 2,
+    experimental_telemetry: aiTelemetryConfig('sendero-conversation', {
+      surface: 'app-api',
+      trigger: 'user',
+      model: picked.label,
+      scope: 'route-to-agent',
+    }),
   };
 
   const result =

@@ -25,6 +25,14 @@ import type { CapStore } from '@sendero/billing/caps';
 import { type MeterStore, type PreflightArgs, preflight } from '@sendero/billing/meter';
 import type { BillingSegment } from '@sendero/billing/pricing';
 import type { MeterStatus } from '@sendero/database';
+import {
+  agentSessionId,
+  aiTelemetryConfig,
+  flushLangfuse,
+  scoreLatency,
+  scoreToolSuccess,
+  traceAgent,
+} from '@sendero/langfuse';
 import { getLocaleSlice } from '@sendero/locale';
 import { listWorkflows } from '@sendero/workflows';
 import type { LanguageModel, ToolSet } from 'ai';
@@ -129,6 +137,42 @@ export interface AgentTurnResult extends AgentOutput {
 
 export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnResult> {
   const startedAt = Date.now();
+  const input = args.input;
+
+  const agentType =
+    input.channel === 'slack'
+      ? 'sendero-slack'
+      : input.channel === 'whatsapp'
+        ? 'sendero-whatsapp'
+        : input.channel === 'mcp'
+          ? 'sendero-mcp'
+          : 'sendero-conversation';
+
+  const traced = await traceAgent(
+    agentType,
+    {
+      tenantId: input.actor.tenantId,
+      ...(input.actor.userId ? { userId: input.actor.userId } : {}),
+      sessionId: agentSessionId(input.actor.tenantId, input.channel),
+      surface: 'agent-turn',
+      trigger: 'user',
+      channel: input.channel,
+      ...(input.actor.tripId ? { tripId: input.actor.tripId } : {}),
+      turnId: input.turnId,
+      ...(typeof args.model === 'string' ? { model: args.model } : {}),
+    },
+    ({ traceId }) => _runAgentTurnInner(args, startedAt, agentType, traceId)
+  );
+
+  return traced.result;
+}
+
+async function _runAgentTurnInner(
+  args: RunAgentTurnArgs,
+  startedAt: number,
+  agentType: 'sendero-conversation' | 'sendero-slack' | 'sendero-whatsapp' | 'sendero-mcp',
+  traceId: string
+): Promise<AgentTurnResult> {
   const input = args.input;
 
   // 1. cap preflight
@@ -237,6 +281,19 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
       }
     : undefined;
 
+  const telemetry = aiTelemetryConfig(agentType, {
+    tenantId: input.actor.tenantId,
+    ...(input.actor.userId ? { userId: input.actor.userId } : {}),
+    sessionId: agentSessionId(input.actor.tenantId, input.channel),
+    surface: 'agent-turn',
+    trigger: 'user',
+    channel: input.channel,
+    ...(input.actor.tripId ? { tripId: input.actor.tripId } : {}),
+    turnId: input.turnId,
+    ...(typeof args.model === 'string' ? { model: args.model } : {}),
+    scope: 'run-agent-turn',
+  });
+
   const result = hasMedia
     ? await generateText({
         model: args.model,
@@ -254,6 +311,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
         stopWhen: stepCountIs(4),
         maxRetries: 2,
         providerOptions,
+        experimental_telemetry: telemetry,
         ...(adaptedOnStepFinish ? { onStepFinish: adaptedOnStepFinish } : {}),
       })
     : await generateText({
@@ -264,6 +322,7 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
         stopWhen: stepCountIs(4),
         maxRetries: 2,
         providerOptions,
+        experimental_telemetry: telemetry,
         ...(adaptedOnStepFinish ? { onStepFinish: adaptedOnStepFinish } : {}),
       });
 
@@ -325,6 +384,22 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     userId: input.actor.userId ?? null,
     subjectKey: subjectKeyFromActor(input),
     state: nextState,
+  });
+
+  // 8. fire-and-forget Langfuse scoring + flush — must never extend the
+  //    turn's wall-clock or block the channel adapter from sending its
+  //    reply. Errors are swallowed inside each helper.
+  void Promise.resolve().then(async () => {
+    try {
+      await scoreLatency(traceId, latencyMs);
+      await scoreToolSuccess(
+        traceId,
+        trail.map(t => ({ success: t.ok, toolName: t.toolName }))
+      );
+      await flushLangfuse();
+    } catch {
+      // already logged inside the helpers; never throw out of fire-and-forget
+    }
   });
 
   return {

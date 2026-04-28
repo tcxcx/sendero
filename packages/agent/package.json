@@ -17,6 +17,7 @@
     "@sendero/billing": "*",
     "@sendero/database": "*",
     "@sendero/intelligence": "*",
+    "@sendero/langfuse": "*",
     "@sendero/locale": "*",
     "@sendero/tools": "*",
     "@sendero/workflows": "*",

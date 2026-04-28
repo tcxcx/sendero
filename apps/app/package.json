@@ -72,6 +72,7 @@
     "@sendero/intelligence": "workspace:*",
     "@sendero/invoicing": "workspace:*",
     "@sendero/kapso": "workspace:*",
+    "@sendero/langfuse": "workspace:*",
     "@sendero/llms": "workspace:*",
     "@sendero/locale": "workspace:*",
     "@sendero/multisig": "workspace:*",
