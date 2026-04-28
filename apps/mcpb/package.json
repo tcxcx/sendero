@@ -1,0 +1,15 @@
+{
+  "name": "@sendero/mcpb",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero one-click MCP installer for Claude Desktop. Bundles a tiny stdio→HTTP proxy that forwards JSON-RPC to https://app.sendero.travel/api/mcp using a user-supplied API key.",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "verify": "bun run scripts/build.ts && bunx @anthropic-ai/mcpb info dist/sendero.mcpb",
+    "clean": "rm -rf dist sendero-*.mcpb"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2"
+  }
+}

@@ -23,6 +23,7 @@
     "---Protocol---",
     "x402-nanopayments",
     "mcp-integration",
+    "claude-desktop-install",
     "security",
     "security/claim-code",
     "---Changelog---",
