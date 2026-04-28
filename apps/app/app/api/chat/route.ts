@@ -430,6 +430,12 @@ export async function POST(req: NextRequest) {
           },
           anthropic: {
             thinking: { type: 'enabled', budgetTokens: 4096 },
+            // Ephemeral cache breakpoint — system + tools cached at
+            // the provider, never user content. ~10× input-token COGS
+            // reduction on agentic loops. Cross-tenant cache leakage
+            // not a concern: cache is keyed by (content hash, API key)
+            // and gateway-with-BYOK scopes per-tenant.
+            cacheControl: { type: 'ephemeral' as const },
           },
         }
       : undefined;
@@ -461,10 +467,28 @@ export async function POST(req: NextRequest) {
     system: systemPrompt,
     messages: converted,
     tools,
-    stopWhen: stepCountIs(6),
+    // Per-turn step ceiling — runaway-loop defense. 8 covers the
+    // richest agent flows (search → policy check → hold → confirm)
+    // while bounding the worst-case for opus-on-Pro. Same number
+    // as agent/chat for consistency across operator surfaces.
+    stopWhen: stepCountIs(8),
     maxRetries: 2,
     providerOptions,
     onError,
+    // Vercel AI Gateway groups runs by metadata in observability —
+    // tenant + tier + model attribution without a separate COGS
+    // pipeline. Tagging is independent from credits and ships value
+    // even when the deduction loop is dormant.
+    experimental_telemetry: {
+      isEnabled: true,
+      metadata: {
+        tenantId: tenantId ?? 'anonymous',
+        model: picked.label,
+        scope: 'chat',
+        channel,
+        userId: userId ?? 'anonymous',
+      },
+    },
     // Bill the turn after the last chunk lands. `chat_reply` is the
     // canonical aggregator the rest of the system already understands
     // (matches `runAgentTurn` in @sendero/agent and the streaming

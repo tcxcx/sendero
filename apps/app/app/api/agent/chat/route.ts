@@ -448,6 +448,12 @@ export async function POST(req: NextRequest) {
   // <Reasoning> bubble has parts to render. Only applies when the model
   // is a gateway slug; direct Vertex / direct Anthropic handles their
   // own thinking config via the model handle itself when applicable.
+  // Provider options carry both the thinking config (when applicable)
+  // and the prompt-cache hints (anthropic ephemeral cache, gemini
+  // cachedContent breakpoint). Caching is scoped to the system prompt
+  // + tool definitions only — the user's messages are NEVER cached so
+  // there's no cross-tenant leak surface. ~10× input-token COGS
+  // reduction on agentic loops where system + tools dominate.
   const chatProviderOptions =
     typeof modelHandle === 'string'
       ? {
@@ -456,6 +462,11 @@ export async function POST(req: NextRequest) {
           },
           anthropic: {
             thinking: { type: 'enabled', budgetTokens: 4096 },
+            // Ephemeral cache breakpoint at the system prompt; the AI
+            // SDK rolls it into the system message for Anthropic. The
+            // tool-definition prefix gets cached automatically by the
+            // provider when tools repeat across turns.
+            cacheControl: { type: 'ephemeral' as const },
           },
         }
       : undefined;
@@ -465,9 +476,32 @@ export async function POST(req: NextRequest) {
     system: systemPrompt,
     messages: modelMessages,
     tools,
-    stopWhen: stepCountIs(6),
+    // Per-turn step ceiling — runaway-loop defense. Bumped to 8 for
+    // the operator chat surface (richer tool flows than dispatch);
+    // the autoplan eng review's #1 critical-gap insurance plus
+    // explicit user request in the credits-cogs locked decisions.
+    stopWhen: stepCountIs(8),
     maxRetries: 2,
     providerOptions: chatProviderOptions,
+    // Vercel AI Gateway groups runs by metadata in its observability
+    // dashboard. Tagging every call lets us attribute COGS back to
+    // tenant + tier + model — the autoplan DX-review "magical moment"
+    // recommendation. Also lets the gateway dashboard answer
+    // "which Pro tenants are routing to opus most" without a separate
+    // COGS pipeline. Independent from credits — ships value even if
+    // the deduction loop stops.
+    experimental_telemetry: {
+      isEnabled: true,
+      metadata: {
+        tenantId,
+        planTier,
+        model: typeof modelHandle === 'string' ? modelHandle : 'direct',
+        turnId,
+        userId: userId ?? 'anonymous',
+        scope: 'agent-chat',
+        channel,
+      },
+    },
     // The closure captures everything we need to write the meter
     // event + update the session AFTER the last chunk lands. The
     // client has already received its tokens at this point; meter
