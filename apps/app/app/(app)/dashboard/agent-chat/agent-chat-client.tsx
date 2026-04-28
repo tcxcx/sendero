@@ -15,7 +15,7 @@
  * reasoning all surface token-by-token.
  */
 
-import { useMemo, useState, type JSX } from 'react';
+import { useCallback, useMemo, useState, type JSX } from 'react';
 
 import { useChat } from '@ai-sdk/react';
 import { useUser } from '@clerk/nextjs';
@@ -62,6 +62,32 @@ export function AgentChatClient({ tenantId }: Props) {
   const { messages, sendMessage, status } = useChat({ transport });
   const busy = status === 'submitted' || status === 'streaming';
 
+  // Per-message feedback state. Keyed on UIMessage.id so re-renders
+  // during streaming don't lose the operator's selection. We never
+  // un-set a rating — the thumb stays lit until the message is
+  // re-streamed (new id).
+  const [feedbackByMessage, setFeedbackByMessage] = useState<
+    Record<string, 'up' | 'down' | 'sending' | undefined>
+  >({});
+  const submitFeedback = useCallback(
+    async (messageId: string, traceId: string, rating: 'up' | 'down') => {
+      setFeedbackByMessage(prev => ({ ...prev, [messageId]: 'sending' }));
+      try {
+        const res = await fetch('/api/agent/feedback', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ traceId, rating }),
+        });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        setFeedbackByMessage(prev => ({ ...prev, [messageId]: rating }));
+      } catch (err) {
+        console.error('[agent-chat] feedback submit failed', err);
+        setFeedbackByMessage(prev => ({ ...prev, [messageId]: undefined }));
+      }
+    },
+    []
+  );
+
   // Map AI SDK chat status → Persona state. The Persona is mounted
   // ONCE in the sticky header (Rive WebGL2 context is ~190KB gzipped
   // and a single GPU context — never per-message). idle/listening/
@@ -104,7 +130,10 @@ export function AgentChatClient({ tenantId }: Props) {
             messages.flatMap(uiMessage => {
               const channelMessages = uiMessageToChannelMessages(uiMessage);
               const role = mapRole(uiMessage.role);
-              return channelMessages.map(msg => (
+              const traceId = readTraceIdFromMessage(uiMessage);
+              const feedbackState = feedbackByMessage[uiMessage.id];
+              const showFeedback = role === 'assistant' && Boolean(traceId);
+              const nodes = channelMessages.map(msg => (
                 <div
                   key={msg.id}
                   className={
@@ -117,6 +146,16 @@ export function AgentChatClient({ tenantId }: Props) {
                   </Message>
                 </div>
               ));
+              if (showFeedback && traceId) {
+                nodes.push(
+                  <FeedbackStrip
+                    key={`${uiMessage.id}-feedback`}
+                    state={feedbackState}
+                    onRate={rating => submitFeedback(uiMessage.id, traceId, rating)}
+                  />
+                );
+              }
+              return nodes;
             })
           )}
         </ConversationContent>
@@ -427,6 +466,72 @@ function AgentMessageAvatar() {
       aria-hidden="true"
     >
       <Persona state="idle" variant="halo" className="h-7 w-7" />
+    </div>
+  );
+}
+
+/**
+ * Read the live Langfuse trace id off a streamed UIMessage. The chat
+ * route writes it as `senderoTraceId` via `messageMetadata({ part:
+ * 'start' })`, so it lands on the assistant message as soon as the
+ * stream begins. Returns undefined for user/system messages.
+ */
+function readTraceIdFromMessage(message: UIMessage): string | undefined {
+  const meta = (message as { metadata?: { senderoTraceId?: unknown } }).metadata;
+  const id = meta?.senderoTraceId;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
+}
+
+/**
+ * Compact thumbs-up / thumbs-down strip rendered under each assistant
+ * message. POSTs to /api/agent/feedback which calls
+ * `scoreGeneration(traceId, 'up'|'down')` — the score lands as a
+ * `user-feedback` BOOLEAN on the trace produced by this turn.
+ */
+function FeedbackStrip({
+  state,
+  onRate,
+}: {
+  state: 'up' | 'down' | 'sending' | undefined;
+  onRate: (rating: 'up' | 'down') => void | Promise<void>;
+}): JSX.Element {
+  const sending = state === 'sending';
+  const rated = state === 'up' || state === 'down';
+  return (
+    <div className="ml-12 mt-1 mb-2 flex items-center gap-1.5 text-muted-foreground">
+      <button
+        type="button"
+        disabled={sending || rated}
+        onClick={() => onRate('up')}
+        aria-label="Rate response up"
+        className={
+          'rounded-md border border-transparent px-1.5 py-0.5 font-mono text-[11px] leading-none transition-colors ' +
+          (state === 'up'
+            ? 'border-[color:var(--hairline-color-strong)] bg-[color:color-mix(in_oklab,var(--midnight)_8%,transparent)] text-[color:var(--midnight)]'
+            : 'hover:bg-[color:color-mix(in_oklab,var(--midnight)_5%,transparent)]')
+        }
+      >
+        ▲
+      </button>
+      <button
+        type="button"
+        disabled={sending || rated}
+        onClick={() => onRate('down')}
+        aria-label="Rate response down"
+        className={
+          'rounded-md border border-transparent px-1.5 py-0.5 font-mono text-[11px] leading-none transition-colors ' +
+          (state === 'down'
+            ? 'border-[color:var(--hairline-color-strong)] bg-[color:color-mix(in_oklab,var(--vermillion)_10%,transparent)] text-[color:var(--vermillion)]'
+            : 'hover:bg-[color:color-mix(in_oklab,var(--midnight)_5%,transparent)]')
+        }
+      >
+        ▼
+      </button>
+      {sending ? (
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] opacity-60">…</span>
+      ) : rated ? (
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] opacity-60">Logged</span>
+      ) : null}
     </div>
   );
 }

@@ -30,6 +30,7 @@ import {
   aiTelemetryConfig,
   evaluateTrace,
   flushLangfuse,
+  scoreCost,
   scoreLatency,
   scoreToolSuccess,
   traceAgent,
@@ -397,6 +398,7 @@ async function _runAgentTurnInner(
   void Promise.resolve().then(async () => {
     try {
       await scoreLatency(traceId, latencyMs);
+      await scoreCost(traceId, pre.priceMicroUsdc);
       await scoreToolSuccess(
         traceId,
         trail.map(t => ({ success: t.ok, toolName: t.toolName }))
