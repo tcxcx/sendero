@@ -1432,6 +1432,12 @@ model TransferAttempt {
   @@index([tenantId, status, createdAt])
   @@index([tenantId, travelerId, createdAt])
   @@index([tenantId, kind, createdAt])
+  /// Partial UNIQUE index on (tenantId, metadata->>'bookingId') WHERE
+  /// status IN (pending, passed, executed) — closes the settle-action
+  /// TOCTOU race so a booking can only have one in-flight / settled
+  /// attempt. Lives in
+  /// `migrations/20260428_transfer_attempt_booking_idempotency/migration.sql`
+  /// because Prisma can't express partial indexes natively.
   @@map("transfer_attempts")
 }
 
