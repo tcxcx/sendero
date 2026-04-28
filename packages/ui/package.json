@@ -22,6 +22,7 @@
     "./feature-grid": "./src/components/feature-grid.tsx",
     "./filter-pill-group": "./src/components/filter-pill-group.tsx",
     "./illustrations/dot-grid": "./src/illustrations/dot-grid/index.ts",
+    "./hooks/use-click-outside": "./src/hooks/use-click-outside.ts",
     "./hooks/use-stroke-draw": "./src/hooks/use-stroke-draw.ts",
     "./underline-tabs": "./src/components/underline-tabs.tsx",
     "./badge": "./src/components/badge.tsx",

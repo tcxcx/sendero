@@ -159,13 +159,14 @@ export default function ClaudeCodePluginIntegrationPage() {
                 overflowX: 'auto',
               }}
             >
-              {`# Clone or download
+              {`# 1. Mint and save an API key (browser flow)
+npx @sendero/cli@latest auth login
+
+# 2. Bootstrap the Claude Code plugin into your CLAUDE_HOME
+npx @sendero/cli@latest mcp install
+
+# 3. Or load the plugin straight from the repo (pre-marketplace)
 git clone https://github.com/tcxcx/sendero.git
-
-# Set the API key (sandbox or production)
-export SENDERO_API_KEY=ak_your_key_here
-
-# Launch Claude Code with the plugin loaded
 claude --plugin-dir ./sendero/apps/claude-code-plugin
 
 # Verify
@@ -267,19 +268,21 @@ claude --plugin-dir ./sendero/apps/claude-code-plugin
               <p style={{ margin: '0 0 8px' }}>
                 <strong>Plugin = MCP + skill.</strong> The bundled{' '}
                 <code className="t-mono">.mcp.json</code> registers Sendero as an HTTP MCP server,
-                so all ~49 tools auto-discover when Claude Code starts. The bundled SKILL.md
-                teaches Claude when to reach for them and how to call them safely (confirm scope
-                before settlement, respect plan caps, never fabricate offer IDs).
+                so all ~49 tools auto-discover when Claude Code starts. The bundled SKILL.md teaches
+                Claude when to reach for them and how to call them safely (confirm scope before
+                settlement, respect plan caps, never fabricate offer IDs).
               </p>
               <p style={{ margin: '0 0 8px' }}>
-                <strong>Credential model:</strong> the plugin is{' '}
-                <em>credential-less</em> — your API key lives in your env (
-                <code className="t-mono">SENDERO_API_KEY</code>), not the manifest. Rotate keys
-                from the dashboard without re-installing.
+                <strong>Credential model:</strong> the plugin is <em>credential-less</em> — your API
+                key lives in your env (<code className="t-mono">SENDERO_API_KEY</code>), not the
+                manifest. Rotate keys from the dashboard without re-installing.
               </p>
               <p style={{ margin: '0 0 8px' }}>
                 <strong>Plugin vs. raw MCP tab:</strong> the{' '}
-                <a href="/dashboard/integrations/mcp" style={{ color: 'var(--vermillion, #fb542b)' }}>
+                <a
+                  href="/dashboard/integrations/mcp"
+                  style={{ color: 'var(--vermillion, #fb542b)' }}
+                >
                   MCP integration page
                 </a>{' '}
                 gives you the raw <code className="t-mono">claude mcp add sendero</code> command —
@@ -288,7 +291,10 @@ claude --plugin-dir ./sendero/apps/claude-code-plugin
               </p>
               <p style={{ margin: 0 }}>
                 <strong>Sister installer:</strong> Claude Desktop users should install the{' '}
-                <a href={`${APP_ORIGIN}/downloads/sendero.mcpb`} style={{ color: 'var(--vermillion, #fb542b)' }}>
+                <a
+                  href={`${APP_ORIGIN}/downloads/sendero.mcpb`}
+                  style={{ color: 'var(--vermillion, #fb542b)' }}
+                >
                   .mcpb bundle
                 </a>{' '}
                 instead — same MCP endpoint, packaged for the desktop app.

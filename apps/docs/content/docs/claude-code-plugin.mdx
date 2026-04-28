@@ -26,7 +26,21 @@ use the [MCP integration guide](/docs/mcp-integration) instead.
 
 ## Install
 
-### Option A: clone and load locally (today)
+### Option A: one-line CLI (recommended)
+
+```bash
+# Mint a key (opens browser → paste back)
+npx @sendero/cli@latest auth login
+
+# Bootstrap the Claude Code plugin
+npx @sendero/cli@latest mcp install
+```
+
+The CLI walks through key minting, writes `~/.sendero/key` (chmod 600),
+and prints the exact `--plugin-dir` line you'll paste next time you
+launch Claude Code.
+
+### Option B: clone and load locally
 
 ```bash
 git clone https://github.com/tcxcx/sendero.git
@@ -37,7 +51,7 @@ claude --plugin-dir ./sendero/apps/claude-code-plugin
 Verify with `/help` — the Sendero MCP server and the
 `/sendero:travel-booking` skill should both be listed.
 
-### Option B: download the .zip
+### Option C: download the .zip
 
 ```bash
 curl -LO https://app.sendero.travel/downloads/sendero-claude-code-plugin.zip
@@ -46,7 +60,7 @@ export SENDERO_API_KEY=ak_your_key_here
 claude --plugin-dir ./sendero-plugin
 ```
 
-### Option C: plugin marketplace (once published)
+### Option D: plugin marketplace (once published)
 
 ```bash
 /plugin marketplace add tcxcx/sendero
