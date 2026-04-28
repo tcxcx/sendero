@@ -171,9 +171,9 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                                   <img
                                     src={item.iconSrc}
                                     alt=""
-                                    width={16}
-                                    height={16}
-                                    className="size-4 shrink-0"
+                                    width={20}
+                                    height={20}
+                                    className="size-5 shrink-0"
                                     aria-hidden="true"
                                   />
                                 ) : (
@@ -210,9 +210,9 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                           <img
                             src={item.iconSrc}
                             alt=""
-                            width={16}
-                            height={16}
-                            className="size-4 shrink-0"
+                            width={20}
+                            height={20}
+                            className="size-5 shrink-0"
                             aria-hidden="true"
                           />
                         ) : (

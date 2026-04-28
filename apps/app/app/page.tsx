@@ -14,22 +14,9 @@ export default async function Page() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)]">
-      {/* Cloud background — centered cover */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '1440px',
-            height: '900px',
-            minWidth: '100%',
-            minHeight: '100%',
-          }}
-        >
-          <AppHeroScene />
-        </div>
+      {/* Cloud background — fills the viewport; UnicornScene scales to 100%×100% */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+        <AppHeroScene />
       </div>
 
       {/* Gradient fade so text stays legible */}

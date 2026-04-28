@@ -6,10 +6,11 @@ export function AppHeroScene() {
   return (
     <UnicornScene
       projectId="nSeIGzF3okRILKrUl8hi"
-      width="1440px"
-      height="900px"
+      width="100%"
+      height="100%"
       scale={1}
       dpi={1.5}
+      lazyLoad={false}
       sdkUrl="https://cdn.jsdelivr.net/gh/hiunicornstudio/unicornstudio.js@2.1.9/dist/unicornStudio.umd.js"
     />
   );

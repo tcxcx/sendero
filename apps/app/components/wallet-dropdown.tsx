@@ -27,7 +27,7 @@ export function WalletDropdown() {
   const userAuth = useSendero(s => s.userAuth);
   const setUserAuth = useSendero(s => s.setUserAuth);
   const { user: clerkUser } = useUser();
-  const { openUserProfile } = useClerk();
+  const { openUserProfile, signOut: clerkSignOut } = useClerk();
 
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -134,6 +134,7 @@ export function WalletDropdown() {
     logout();
     setUserAuth(null);
     setOpen(false);
+    void clerkSignOut({ redirectUrl: '/' });
   };
 
   const fmt = (v: bigint | null) =>
