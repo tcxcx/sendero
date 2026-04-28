@@ -18,12 +18,13 @@
 
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 import { useQueryState } from 'nuqs';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { TripRail, type TripRowData } from './trip-rail';
+import { TripRail, type TripRowData, type TripState } from './trip-rail';
 import type { CHANNELS } from './channels';
 
 const STORAGE_KEY = 'sendero.console.inboxRail.expanded';
@@ -36,9 +37,14 @@ interface InboxRailProps {
 }
 
 export function InboxRail(props: InboxRailProps) {
-  // Collapsed by default. Persist the operator's choice across page
-  // reloads so they don't have to re-collapse every time.
   const [expanded, setExpanded] = useState(false);
+  // Persists across expand/collapse so selecting AW then opening the
+  // full rail keeps the filter active.
+  const [stateFilter, setStateFilter] = useState<TripState | null>(null);
+  const toggleStateFilter = useCallback(
+    (state: TripState) => setStateFilter(prev => (prev === state ? null : state)),
+    []
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -75,7 +81,12 @@ export function InboxRail(props: InboxRailProps) {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="trips" className="mt-0 flex-1 min-h-0 overflow-hidden">
-            <TripRail {...props} collapseControl={<CollapseRailButton onClick={toggle} />} />
+            <TripRail
+              {...props}
+              stateFilter={stateFilter}
+              onStateFilterChange={toggleStateFilter}
+              collapseControl={<CollapseRailButton onClick={toggle} />}
+            />
           </TabsContent>
           <TabsContent value="chats" className="mt-0 flex-1 min-h-0 overflow-auto">
             <ChatHistoryList />
@@ -85,7 +96,15 @@ export function InboxRail(props: InboxRailProps) {
     );
   }
 
-  return <CollapsedRail trips={props.trips} toggle={toggle} />;
+  return (
+    <CollapsedRail
+      trips={props.trips}
+      activeTripId={props.activeTripId}
+      stateFilter={stateFilter}
+      onStateFilterChange={toggleStateFilter}
+      toggle={toggle}
+    />
+  );
 }
 
 /**
@@ -191,13 +210,13 @@ function ChatHistoryList() {
     return (
       <div
         style={{
-          padding: '14px 8px',
-          fontSize: 10,
-          color: 'var(--text-faint)',
-          fontFamily: 'var(--font-mono)',
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        Loading…
+        <Loader2 size={16} color="var(--ink)" className="animate-spin" />
       </div>
     );
   }
@@ -375,6 +394,8 @@ function ExpandedRail({ children }: { children: ReactNode }) {
         flexDirection: 'column',
         minHeight: 0,
         overflow: 'hidden',
+        background: 'var(--surface-floating)',
+        borderRight: '1px solid var(--ink)',
       }}
     >
       {children}
@@ -410,14 +431,26 @@ export function CollapseRailButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function CollapsedRail({ trips, toggle }: { trips: TripRowData[]; toggle: () => void }) {
+function CollapsedRail({
+  trips,
+  activeTripId,
+  stateFilter,
+  onStateFilterChange,
+  toggle,
+}: {
+  trips: TripRowData[];
+  activeTripId: string | null;
+  stateFilter: TripState | null;
+  onStateFilterChange: (s: TripState) => void;
+  toggle: () => void;
+}) {
   const awaiting = trips.filter(t => t.state === 'AWAITING').length;
   const holds = trips.filter(t => t.state === 'HOLD').length;
   const settled = trips.filter(t => t.state === 'SETTLED').length;
   return (
     <div
       style={{
-        borderRight: '1px solid var(--ink-soft)',
+        borderRight: '1px solid var(--ink)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -456,31 +489,121 @@ function CollapsedRail({ trips, toggle }: { trips: TripRowData[]; toggle: () => 
           gap: 6,
           alignItems: 'center',
           width: '100%',
+          borderBottom: '1px solid var(--ink)',
+          paddingBottom: 12,
         }}
       >
-        <Count label="AW" value={awaiting} />
-        <Count label="HO" value={holds} />
-        <Count label="ST" value={settled} />
+        <Count
+          label="AW"
+          value={awaiting}
+          active={stateFilter === 'AWAITING'}
+          hasFilter={stateFilter !== null}
+          onClick={() => onStateFilterChange('AWAITING')}
+        />
+        <Count
+          label="HO"
+          value={holds}
+          active={stateFilter === 'HOLD'}
+          hasFilter={stateFilter !== null}
+          onClick={() => onStateFilterChange('HOLD')}
+        />
+        <Count
+          label="ST"
+          value={settled}
+          active={stateFilter === 'SETTLED'}
+          hasFilter={stateFilter !== null}
+          onClick={() => onStateFilterChange('SETTLED')}
+        />
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 6,
+          width: '100%',
+        }}
+      >
+        {trips.map(t => {
+          const active = t.id === activeTripId;
+          return (
+            <Link
+              key={t.id}
+              href={`/dashboard/console?tripId=${t.id}`}
+              title={t.who}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                border: active ? '2px solid var(--vermillion)' : '1px solid var(--ink)',
+                background: active ? 'var(--tint-vermillion-soft)' : '#fdfbf7',
+                display: 'grid',
+                placeItems: 'center',
+                textDecoration: 'none',
+                color: active ? 'var(--vermillion)' : 'var(--ink)',
+                fontFamily: 'var(--font-mono-x)',
+                fontSize: 9,
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                flexShrink: 0,
+              }}
+            >
+              {tripInitials(t.who)}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function Count({ label, value }: { label: string; value: number }) {
+function tripInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function Count({
+  label,
+  value,
+  active,
+  hasFilter,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active: boolean;
+  hasFilter: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div
-      title={`${label} · ${value}`}
+    <button
+      type="button"
+      title={`Filter by ${label}`}
+      onClick={onClick}
       style={{
         fontFamily: 'var(--font-mono-x)',
         fontSize: 9,
         letterSpacing: '0.08em',
-        color: value > 0 ? 'var(--vermillion)' : 'var(--text-faint)',
+        color: active ? 'var(--vermillion)' : value > 0 ? 'var(--ink)' : 'var(--text-faint)',
         textAlign: 'center',
         lineHeight: 1.2,
+        background: active ? 'var(--tint-vermillion-soft)' : 'transparent',
+        border: 0,
+        borderRadius: 4,
+        padding: '3px 4px',
+        cursor: 'pointer',
+        width: '100%',
+        opacity: hasFilter && !active ? 0.35 : 1,
+        transition: 'opacity 120ms ease, background 120ms ease',
       }}
     >
       <div style={{ fontSize: 14, fontWeight: 600 }}>{value}</div>
       <div>{label}</div>
-    </div>
+    </button>
   );
 }
