@@ -117,9 +117,9 @@ export default async function PlaygroundPage() {
           lineHeight: 1.5,
         }}
       >
-        Every turn here writes <code className="t-mono">MeterEvent.status = sandbox</code> — no
-        USDC moves, no plan cap charged. Rate limit: 30 turns / 10 min per account, 60 / 10 min
-        per network.
+        Every turn here writes <code className="t-mono">MeterEvent.status = sandbox</code> — no USDC
+        moves, no plan cap charged. Rate limit: 30 turns / 10 min per account, 60 / 10 min per
+        network.
       </div>
       <PlaygroundClient tenantId={tenantId} />
     </main>

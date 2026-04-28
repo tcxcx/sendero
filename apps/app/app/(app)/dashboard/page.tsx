@@ -106,12 +106,7 @@ export default async function DashboardPage() {
             }
             if (s.href === '/dashboard/integrations/mcp') {
               return (
-                <ChannelPill
-                  key={s.href}
-                  href={s.href}
-                  brand="mcp"
-                  description={s.description}
-                />
+                <ChannelPill key={s.href} href={s.href} brand="mcp" description={s.description} />
               );
             }
             const Icon = NEUTRAL_SHORTCUT_ICONS[s.href] ?? Sparkles;

@@ -51,7 +51,7 @@ export function AppChrome({
     pathname.startsWith('/dashboard/inbox/') ||
     pathname.startsWith('/dashboard/console')
       ? 'p-0'
-      : 'px-6 pb-6 pt-0';
+      : 'px-6 pb-6 pt-2';
 
   const mainFlex = pathname.startsWith('/dashboard/console') ? 'flex min-h-0 flex-1 flex-col' : '';
 
