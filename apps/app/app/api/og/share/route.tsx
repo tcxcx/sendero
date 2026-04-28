@@ -12,10 +12,12 @@
  *      never read the title/body/bullets from query params directly.
  *      Without the signature, an attacker could craft phishing-style
  *      cards and pass them through Sendero-branded URLs.
- *   2. The signing key is `INVOICE_SIGNING_SECRET` (re-used from the
- *      invoice flow; same operator/env footprint). Failures (bad sig,
- *      malformed token, unset secret) return a generic Sendero card so
- *      unfurl bots never see a 4xx that would suppress the preview.
+ *   2. The signing key is `OG_SHARE_SIGNING_SECRET` — a dedicated
+ *      secret separate from `INVOICE_SIGNING_SECRET` so share-image
+ *      can rotate freely (unfurl bots cache PNGs; no persisted tokens)
+ *      while invoice signing stays long-lived. Failures (bad sig,
+ *      malformed token, unset secret) return a generic Sendero card
+ *      so unfurl bots never see a 4xx that would suppress the preview.
  *
  * Edge runtime: this route reads no DB and pulls in no Prisma, so it
  * stays edge-eligible. Sub-50ms cold starts keep us well inside the
@@ -63,7 +65,7 @@ export async function GET(request: Request): Promise<Response> {
       });
     }
 
-    const secret = process.env.INVOICE_SIGNING_SECRET;
+    const secret = process.env.OG_SHARE_SIGNING_SECRET;
     if (!secret) return fallbackCard();
 
     const payload = await verifySharePayload(token, secret);
