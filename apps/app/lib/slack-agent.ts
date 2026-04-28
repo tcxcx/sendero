@@ -37,8 +37,8 @@ import {
   runAgentTurn,
   type RunAgentTurnArgs,
   type SessionStore,
-  SENDERO_SOUL,
 } from '@sendero/agent';
+import { buildSlackPersonaWithContext } from '@/lib/agent-persona';
 import type { CapStore } from '@sendero/billing/caps';
 import type { MeterStore } from '@sendero/billing/meter';
 import type { BillingSegment } from '@sendero/billing/pricing';
@@ -191,13 +191,16 @@ export async function runSlackAgentTurn(
   // prefix). Slack tools take precedence on any future overlap.
   const tools: ToolSet = { ...senderoTools, ...slackTools };
 
-  const persona = buildSlackPersona({
-    orgName: args.orgName ?? args.install.teamName,
-    planTier: args.planTier,
-    channelName: args.channelName,
-    channelId: args.channelId,
-    routing: args.install.routing ?? null,
-  });
+  const persona = await buildSlackPersonaWithContext(
+    {
+      orgName: args.orgName ?? args.install.teamName,
+      planTier: args.planTier,
+      channelName: args.channelName,
+      channelId: args.channelId,
+      routingPreamble: renderSlackRoutingPreamble(args.install.routing ?? null),
+    },
+    args.locale ?? null
+  );
 
   const turnId = args.envelope.event_id ?? `slack:${args.envelope.team_id}:${Date.now()}`;
   const input: AgentInput = {
@@ -561,59 +564,28 @@ function toolNameToVerb(toolName: string): string {
   return `Running \`${toolName}\``;
 }
 
-interface BuildSlackPersonaArgs {
-  orgName?: string;
-  planTier?: string;
-  channelName?: string;
-  channelId: string;
-  routing: SlackRoutingConfig | null;
-}
-
-function buildSlackPersona(args: BuildSlackPersonaArgs): string {
-  const parts: string[] = [SENDERO_SOUL, ''];
-
-  parts.push('## Tenant context');
-  if (args.orgName) parts.push(`- Workspace: ${args.orgName}`);
-  if (args.planTier) parts.push(`- Plan: ${args.planTier}`);
-
-  parts.push('', '## Slack context');
-  parts.push(
-    args.channelName
-      ? `- Channel: #${args.channelName} (${args.channelId})`
-      : `- Channel: ${args.channelId}`
-  );
-
-  if (args.routing) {
-    if (args.routing.defaultChannel) {
-      parts.push(`- Default routing channel: ${args.routing.defaultChannel}`);
-    }
-    if (args.routing.routes?.length) {
-      parts.push('- Event routing rules:');
-      for (const r of args.routing.routes) {
-        parts.push(`  - ${r.eventClass} → ${r.channel}${r.mode ? ` (${r.mode})` : ''}`);
-      }
-    }
-  } else {
-    // No routing set → reply in the same channel/thread the user wrote
-    // in. Surface that explicitly so the LLM doesn't try to discover a
-    // routing dest with a tool call.
-    parts.push(
-      '- Routing: not configured. Reply in the originating thread; do not move the conversation.'
-    );
+/**
+ * Render the per-tenant routing preamble that gets stitched between the
+ * (Langfuse-managed) tenant/channel context and the (Langfuse-managed)
+ * Slack tool guidance. Routing rules are dynamic per turn — they can't
+ * live as static prompt copy, so they stay in code as composed text.
+ */
+function renderSlackRoutingPreamble(routing: SlackRoutingConfig | null): string {
+  if (!routing) {
+    return '- Routing: not configured. Reply in the originating thread; do not move the conversation.';
   }
-
-  parts.push(
-    '',
-    '## Slack tool guidance',
-    '- You have access to Slack tools (`slack_send_message`, `slack_read_channel`, …) AND Sendero travel tools (flights, hotels, escrow). Pick the smallest tool that does the job.',
-    '- Mutating Slack tools (send / canvas / join / delete) require human approval — when you want to call one, narrate your intent in plain text instead of forcing the tool call so the workspace admin can confirm.',
-    '- Default to thread replies. Do not @-mention `@channel`/`@here` unless the user explicitly asks.',
-    '- Use Slack mrkdwn (`*bold*`, `_italic_`, `<https://example.com|link>`). No HTML.'
-  );
-
+  const lines: string[] = [];
+  if (routing.defaultChannel) {
+    lines.push(`- Default routing channel: ${routing.defaultChannel}`);
+  }
+  if (routing.routes?.length) {
+    lines.push('- Event routing rules:');
+    for (const r of routing.routes) {
+      lines.push(`  - ${r.eventClass} → ${r.channel}${r.mode ? ` (${r.mode})` : ''}`);
+    }
+  }
   // Reuse the `ConversationState` type so TS type-checks the import even
   // when the engine's `recentTurns` block grows new fields.
   void ({} as ConversationState);
-
-  return parts.join('\n');
+  return lines.join('\n');
 }
