@@ -47,7 +47,14 @@ export function parseOgQueryParams(searchParams: URLSearchParams): SenderoOgCard
   // `accent` query param is accepted but not part of SenderoOgCardProps
   // (the card derives its accent from the site domain). Drop it.
   const site = searchParams.get('site')?.trim() || undefined;
-  const bullets = searchParams.getAll('bullet').map(b => b.trim()).filter(Boolean);
+  const bullets = searchParams
+    .getAll('bullet')
+    .map(b => b.trim())
+    .filter(Boolean);
+  // `heroSrc` is required by SenderoOgCardProps but resolved at module
+  // load by the route handler (see apps/marketing/app/api/og/route.tsx
+  // — it calls `loadHalftoneHeroDataUrl()` and merges the result into
+  // these props). Return an empty string so the route can override.
   return {
     title,
     description,
@@ -55,5 +62,6 @@ export function parseOgQueryParams(searchParams: URLSearchParams): SenderoOgCard
     ctaLabel: cta,
     site,
     bullets,
+    heroSrc: '',
   };
 }
