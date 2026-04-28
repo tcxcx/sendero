@@ -24,12 +24,6 @@ export function registerChatBridge(send: Send): void {
   registered = send;
 }
 
-export function clearChatBridge(send: Send): void {
-  // Only clear if we still own it — avoids a late unmount from one
-  // chat surface stomping on a re-mounted sibling.
-  if (registered === send) registered = null;
-}
-
 export function sendViaChat(text: string): boolean {
   if (!registered) return false;
   registered(text);
