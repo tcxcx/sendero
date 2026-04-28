@@ -63,6 +63,11 @@ interface MetaInboxLiveProps {
   traveler?: { name: string; initials: string } | null;
   holdExpires?: string | null;
   pendingBooking?: { id: string; totalUsd: string } | null;
+  kpis?: {
+    settled30dCount: number;
+    settled30dFare: string | null;
+    avgResponseLabel: string | null;
+  };
 }
 
 export function MetaInboxLive({
@@ -72,6 +77,7 @@ export function MetaInboxLive({
   traveler,
   holdExpires,
   pendingBooking,
+  kpis,
 }: MetaInboxLiveProps) {
   const router = useRouter();
   const focusedChannel: ChannelKey = scopedTripId
@@ -487,6 +493,7 @@ export function MetaInboxLive({
       traveler={traveler}
       holdExpires={holdExpires}
       pendingBooking={pendingBooking}
+      kpis={kpis}
       composerMode={composerMode}
       onComposerModeChange={setComposerMode}
       onSubmit={handleSubmit}
