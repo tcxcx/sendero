@@ -13,19 +13,16 @@
  * specific scenario.
  */
 
+import { McpInstaller } from '@sendero/ui/mcp-installer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 
+const SENDERO_MCP_URL = 'https://app.sendero.travel/api/mcp';
+const SENDERO_API_KEYS_URL = 'https://app.sendero.travel/dashboard/settings/api-keys';
+
 const ORA_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
-type Phase =
-  | 'typing-1'
-  | 'spin-1'
-  | 'result-1'
-  | 'typing-2'
-  | 'spin-2'
-  | 'result-2'
-  | 'done';
+type Phase = 'typing-1' | 'spin-1' | 'result-1' | 'typing-2' | 'spin-2' | 'result-2' | 'done';
 
 const PHASES: Phase[] = [
   'typing-1',
@@ -239,7 +236,7 @@ function Terminal() {
   const past = (p: Phase) => PHASES.indexOf(phase) >= PHASES.indexOf(p);
 
   useEffect(() => {
-    const id = setInterval(() => setCursorOn((v) => !v), 530);
+    const id = setInterval(() => setCursorOn(v => !v), 530);
     return () => clearInterval(id);
   }, []);
 
@@ -260,7 +257,7 @@ function Terminal() {
 
   useEffect(() => {
     if (phase !== 'spin-1' && phase !== 'spin-2') return;
-    const id = setInterval(() => setFrame((f) => (f + 1) % ORA_FRAMES.length), 80);
+    const id = setInterval(() => setFrame(f => (f + 1) % ORA_FRAMES.length), 80);
     const dur = phase === 'spin-1' ? 2000 : 1400;
     const t = setTimeout(() => {
       clearInterval(id);
@@ -302,7 +299,7 @@ function Terminal() {
   useEffect(() => {
     if (phase !== 'done') return;
     const t = setTimeout(() => {
-      setActiveTab((prev) => (prev + 1) % SCENARIOS.length);
+      setActiveTab(prev => (prev + 1) % SCENARIOS.length);
     }, 2400);
     return () => clearTimeout(t);
   }, [phase]);
@@ -427,7 +424,7 @@ const FEATURES = [
   {
     title: 'Reconcile autonomously',
     description:
-      'Settlements without paired bookings get auto-matched on holdId + amount. Anomalies surface on a queue, not in someone\'s inbox.',
+      "Settlements without paired bookings get auto-matched on holdId + amount. Anomalies surface on a queue, not in someone's inbox.",
   },
   {
     title: 'Pull reports on demand',
@@ -582,10 +579,25 @@ export function Agents() {
       </div>
 
       <div className="mx-auto max-w-screen-lg space-y-16 px-4">
+        <section
+          aria-labelledby="agents-installer-title"
+          className="mt-4 flex flex-col gap-4"
+        >
+          <div className="flex flex-col gap-1">
+            <h3 id="agents-installer-title" className="font-sans text-2xl">
+              Install
+            </h3>
+            <p className="text-sm text-[color-mix(in_oklab,var(--ink)_65%,transparent)]">
+              Pick your install path. Same auth gate, same tool surface — different ergonomics.
+            </p>
+          </div>
+          <McpInstaller mcpUrl={SENDERO_MCP_URL} apiKeysHref={SENDERO_API_KEYS_URL} />
+        </section>
+
         <div className="mt-12">
           <h3 className="font-sans text-2xl">Features</h3>
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((feature) => (
+            {FEATURES.map(feature => (
               <div
                 key={feature.title}
                 className="-mt-[1px] -ml-[1px] border border-[color-mix(in_oklab,var(--ink)_18%,transparent)] p-1"
@@ -606,7 +618,7 @@ export function Agents() {
         <div>
           <h3 className="font-sans text-2xl">Possibilities</h3>
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {POSSIBILITIES.map((item) => (
+            {POSSIBILITIES.map(item => (
               <div
                 key={item.title}
                 className="-mt-[1px] -ml-[1px] border border-[color-mix(in_oklab,var(--ink)_18%,transparent)] p-1"
