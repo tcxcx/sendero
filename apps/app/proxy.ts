@@ -49,6 +49,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
   '/api/health',
   '/api/auth/whoami', // Bearer-keyed CLI introspection — auth happens via API key, not Clerk session
+  '/api/cli/login', // CLI login gateway — bounces unauthenticated users to /sign-in, then redirects to mint-key
   '/downloads/(.*)', // public artifact downloads (e.g. sendero.mcpb for Claude Desktop)
   '/api/guest/claimed', // guest submits post-claim; no session yet
   '/api/waitlist/precheck', // email lookup for waitlist toast + redirect (no session)

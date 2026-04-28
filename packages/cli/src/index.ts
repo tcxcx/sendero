@@ -1,256 +1,137 @@
 #!/usr/bin/env node
 /**
- * @sendero/cli — agent-native entry point for the Sendero travel-ops
- * platform. Designed to be run via `npx @sendero/cli@latest`, no
- * global install needed.
+ * @sendero/cli — agent-friendly CLI for the Sendero travel-ops platform.
  *
- * v0.1.0 surface:
- *   - `auth login`     → opens browser to mint an API key
- *   - `auth whoami`    → prints current tenant + plan tier
- *   - `mcp install`    → bootstraps the Claude Code plugin into ~/.claude
- *   - `tools list`     → fetches the live tool catalog from /api/openapi.json
- *   - `tools call <tool> [json-args]` → JSON-RPC dispatch through /api/mcp
+ *   npx @sendero/cli@latest auth login    # OAuth via browser, ~30 sec TTHW
+ *   npx @sendero/cli@latest tools list    # see what you can call
+ *   npx @sendero/cli@latest mcp install   # wire into Claude Code
  *
- * Future commands route through the same `runCommand(argv)` dispatch
- * so we never grow a hand-rolled router. Every result prints both
- * a structured-JSON form (default for agents) and a human table when
- * stdout is a TTY.
+ * Architecture:
+ *   index.ts             — commander entry, global flags, status-aware default
+ *   commands/auth.ts     — login / logout / whoami (PKCE + paste fallback)
+ *   commands/mcp.ts      — install (recommends plugin bundle)
+ *   commands/tools.ts    — list / call / schema (raw MCP surface)
+ *   client/auth.ts       — local-port listener + browser open + key capture
+ *   client/api.ts        — Bearer-auth fetch wrapper
+ *   client/pkce.ts       — RFC 7636 verifier + challenge
+ *   config/store.ts      — ~/.sendero/key file + prefs
+ *   output/{formatter,print}.ts — json/table/agent + NO_COLOR + spinner mute
+ *   ui/spinner.ts        — ora wrapper (muted in agent/quiet/non-TTY mode)
  *
- * Auth precedence: env `SENDERO_API_KEY` > `~/.sendero/key` > prompt.
- * Endpoint precedence: env `SENDERO_API_URL` > `https://app.sendero.travel`.
+ * Auth precedence: env SENDERO_API_KEY > ~/.sendero/key > prompt.
+ * Endpoint precedence: --api-url flag > env SENDERO_API_URL > app.sendero.travel.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { Command, Option } from 'commander';
 
-const VERSION = '0.1.0';
-const DEFAULT_BASE = process.env.SENDERO_API_URL ?? 'https://app.sendero.travel';
-const KEY_FILE = join(homedir(), '.sendero', 'key');
+import { createAuthCommand } from './commands/auth';
+import { createChannelsCommand } from './commands/channels';
+import { createMcpCommand } from './commands/mcp';
+import { createProfilesCommand } from './commands/profiles';
+import { createToolsCommand } from './commands/tools';
+import { createWorkflowCommands } from './commands/workflows';
+import { readKey } from './config/store';
+import { resolveFormat, type GlobalFlags } from './output/formatter';
+import { c, printJson, printText } from './output/print';
+import { makeClient, whoami, type WhoamiResponse } from './client/api';
 
-type Cmd = (argv: string[]) => Promise<number>;
+const VERSION = '0.2.0';
 
-const commands: Record<string, Cmd> = {
-  auth: authCmd,
-  mcp: mcpCmd,
-  tools: toolsCmd,
-  help: helpCmd,
-  version: async () => {
-    process.stdout.write(`${VERSION}\n`);
-    return 0;
-  },
-};
+export function createProgram(): Command {
+  const program = new Command('sendero')
+    .version(VERSION, '-v, --version', 'Print the CLI version')
+    .description('Sendero CLI — agent-friendly travel-ops surface');
 
-function readKey(): string | null {
-  if (process.env.SENDERO_API_KEY) return process.env.SENDERO_API_KEY;
-  if (existsSync(KEY_FILE)) {
-    return readFileSync(KEY_FILE, 'utf8').trim() || null;
-  }
-  return null;
-}
+  program
+    .addOption(new Option('--json', 'Output as JSON (default when piped)').conflicts('table'))
+    .addOption(new Option('--table', 'Output as table (default when TTY)').conflicts('json'))
+    .addOption(new Option('--agent', 'Agent mode: JSON output, no prompts, no spinners'))
+    .addOption(new Option('-q, --quiet', 'Suppress progress output'))
+    .addOption(new Option('--no-input', 'Disable interactive prompts'))
+    .addOption(new Option('-y, --yes', 'Skip confirmations'))
+    .addOption(new Option('-n, --dry-run', 'Preview destructive actions without executing'))
+    .addOption(new Option('--api-url <url>', 'Override the API base URL'))
+    .addOption(new Option('--debug', 'Verbose HTTP logging to stderr'));
 
-// Clerk API keys are `ak_` + a 64-char base62/url-safe payload. We don't
-// pin the exact length (Clerk could add segments), but anything shorter
-// than ~20 chars total or containing whitespace / control bytes is
-// definitely garbage. Validating here saves a confusing 401 on the
-// first real call.
-const KEY_FORMAT_RE = /^ak_[A-Za-z0-9_-]{16,}$/;
+  program.addCommand(createAuthCommand());
+  program.addCommand(createMcpCommand());
+  program.addCommand(createToolsCommand());
+  program.addCommand(createProfilesCommand());
+  program.addCommand(createChannelsCommand());
+  for (const cmd of createWorkflowCommands()) program.addCommand(cmd);
 
-function isValidKeyShape(key: string): boolean {
-  return KEY_FORMAT_RE.test(key);
-}
-
-function writeKey(key: string): void {
-  // 0o700 on the directory matches the 0o600 on the file — without
-  // this, the dir is world-readable (umask default) and any other
-  // local user can enumerate that you have a Sendero key, even if
-  // they can't read its contents.
-  mkdirSync(join(homedir(), '.sendero'), { recursive: true, mode: 0o700 });
-  writeFileSync(KEY_FILE, `${key}\n`, { mode: 0o600 });
-}
-
-async function authCmd(argv: string[]): Promise<number> {
-  const sub = argv[0] ?? 'whoami';
-  if (sub === 'login') {
-    process.stdout.write(
-      `Open this URL to mint an API key:\n  ${DEFAULT_BASE}/dashboard/settings/api-keys\n`
-    );
-    process.stdout.write(`\nPaste your key here, then press Enter:\n> `);
-    const key = await readLine();
-    if (!isValidKeyShape(key)) {
-      process.stderr.write(
-        'Invalid key format. Expected `ak_` followed by 16+ url-safe chars (no whitespace). Re-copy from the dashboard and try again.\n'
-      );
-      return 1;
-    }
-    writeKey(key);
-    process.stdout.write(`Saved to ${KEY_FILE}\n`);
-    return 0;
-  }
-  if (sub === 'whoami') {
-    const key = readKey();
-    if (!key) {
-      process.stderr.write('No API key — run `sendero auth login` first.\n');
-      return 1;
-    }
-    const r = await fetch(`${DEFAULT_BASE}/api/auth/whoami`, {
-      headers: { authorization: `Bearer ${key}` },
-    });
-    if (!r.ok) {
-      process.stderr.write(`whoami failed: ${r.status} ${r.statusText}\n`);
-      return 1;
-    }
-    process.stdout.write(`${await r.text()}\n`);
-    return 0;
-  }
-  if (sub === 'logout') {
-    if (existsSync(KEY_FILE)) {
-      writeFileSync(KEY_FILE, '');
-      process.stdout.write('Logged out.\n');
-    }
-    return 0;
-  }
-  process.stderr.write(`Unknown auth subcommand: ${sub}\n`);
-  return 1;
-}
-
-async function mcpCmd(argv: string[]): Promise<number> {
-  const sub = argv[0] ?? 'help';
-  if (sub === 'install') {
-    process.stdout.write('Sendero plugin install steps:\n');
-    process.stdout.write('  1. Mint an API key:    sendero auth login\n');
-    process.stdout.write(
-      '  2. Clone the repo:     git clone https://github.com/tcxcx/sendero.git\n'
-    );
-    process.stdout.write(
-      '  3. Launch Claude Code: claude --plugin-dir ./sendero/apps/claude-code-plugin\n'
-    );
-    process.stdout.write('\nFull docs: https://docs.sendero.travel/claude-code-plugin\n');
-    return 0;
-  }
-  process.stderr.write(`Unknown mcp subcommand: ${sub}\n`);
-  return 1;
-}
-
-async function toolsCmd(argv: string[]): Promise<number> {
-  const sub = argv[0] ?? 'list';
-  const key = readKey();
-  if (!key) {
-    process.stderr.write('No API key — run `sendero auth login` first.\n');
-    return 1;
-  }
-  if (sub === 'list') {
-    const r = await fetch(`${DEFAULT_BASE}/api/openapi.json`, {
-      headers: { authorization: `Bearer ${key}` },
-    });
-    if (!r.ok) {
-      process.stderr.write(`openapi fetch failed: ${r.status} ${r.statusText}\n`);
-      return 1;
-    }
-    const spec = (await r.json()) as { paths?: Record<string, unknown> };
-    const tools = Object.keys(spec.paths ?? {})
-      .filter(p => p.startsWith('/tools/'))
-      .map(p => p.replace('/tools/', ''))
-      .sort();
-    if (process.stdout.isTTY) {
-      process.stdout.write(`${tools.length} tools available:\n`);
-      for (const t of tools) process.stdout.write(`  - ${t}\n`);
-    } else {
-      process.stdout.write(`${JSON.stringify({ tools })}\n`);
-    }
-    return 0;
-  }
-  if (sub === 'call') {
-    const tool = argv[1];
-    const args = argv[2] ? (JSON.parse(argv[2]) as unknown) : {};
-    if (!tool) {
-      process.stderr.write('usage: sendero tools call <tool> [json-args]\n');
-      return 1;
-    }
-    const r = await fetch(`${DEFAULT_BASE}/api/mcp`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/call',
-        params: { name: tool, arguments: args },
-      }),
-    });
-    process.stdout.write(`${await r.text()}\n`);
-    return r.ok ? 0 : 1;
-  }
-  process.stderr.write(`Unknown tools subcommand: ${sub}\n`);
-  return 1;
-}
-
-async function helpCmd(): Promise<number> {
-  process.stdout.write(`Sendero CLI v${VERSION}
-
-USAGE
-  sendero <command> [subcommand] [args]
-
-COMMANDS
-  auth login      Mint and save an API key (browser flow)
-  auth whoami     Print the current tenant + plan tier
-  auth logout     Forget the saved key
-  mcp install     Print Claude Code plugin install steps
-  tools list      List the live tool catalog from /api/openapi.json
-  tools call      Dispatch a tool over /api/mcp (JSON-RPC)
-  version         Print the CLI version
-  help            Print this message
-
-ENV
-  SENDERO_API_KEY    Override the saved key
-  SENDERO_API_URL    Override the API base (default: ${DEFAULT_BASE})
-
-DOCS
-  https://docs.sendero.travel
-  https://docs.sendero.travel/claude-code-plugin
-`);
-  return 0;
-}
-
-async function readLine(): Promise<string> {
-  return await new Promise(resolve => {
-    let buf = '';
-    process.stdin.setEncoding('utf8');
-    const onData = (chunk: string) => {
-      const idx = chunk.indexOf('\n');
-      if (idx === -1) {
-        buf += chunk;
-        return;
-      }
-      buf += chunk.slice(0, idx);
-      process.stdin.removeListener('data', onData);
-      process.stdin.pause();
-      resolve(buf.trim());
-    };
-    process.stdin.on('data', onData);
-    process.stdin.resume();
+  // Status-aware default: `sendero` with no args shows current state +
+  // the next thing to do. Caught by the design + DX review lenses as a
+  // missing piece — the difference between "I'm lost" and "I know what
+  // to type next" is one helpful default.
+  program.action(async () => {
+    const globals = program.opts() as GlobalFlags;
+    await renderStatus(globals);
   });
+
+  return program;
 }
 
-async function main(): Promise<void> {
-  const [cmd, ...rest] = process.argv.slice(2);
-  if (!cmd || cmd === '--help' || cmd === '-h') {
-    process.exit(await helpCmd());
+async function renderStatus(globals: GlobalFlags): Promise<void> {
+  const apiUrl = globals.apiUrl ?? process.env.SENDERO_API_URL ?? 'https://app.sendero.travel';
+  const key = readKey();
+  const isJson = resolveFormat(globals) === 'json';
+
+  if (!key) {
+    if (isJson) {
+      printJson({ authenticated: false, next: 'sendero auth login' });
+      return;
+    }
+    printText(
+      `${c.bold('Sendero CLI')} ${c.dim(`v${VERSION}`)}\n\n` +
+        `${c.yellow('●')} Not signed in.\n\n` +
+        `${c.dim('Get started:')}\n` +
+        `  ${c.cyan('sendero auth login')}      ${c.dim('OAuth via browser')}\n` +
+        `  ${c.cyan('sendero help')}            ${c.dim('see all commands')}\n`
+    );
+    return;
   }
-  if (cmd === '--version' || cmd === '-v') {
-    process.exit(await commands.version([]));
+
+  // Probe whoami so the status is real, not just "key file exists".
+  const client = makeClient({ baseUrl: apiUrl, debug: globals.debug });
+  let me: WhoamiResponse | null = null;
+  try {
+    me = await whoami(client);
+  } catch {
+    // Stored key is invalid or network is down. Show a degraded status
+    // rather than silently lying.
+    if (isJson) {
+      printJson({ authenticated: false, error: 'stored_key_invalid', next: 'sendero auth login' });
+      return;
+    }
+    printText(
+      `${c.bold('Sendero CLI')} ${c.dim(`v${VERSION}`)}\n\n` +
+        `${c.red('●')} Stored key is invalid or expired.\n\n` +
+        `${c.dim('Fix:')}\n` +
+        `  ${c.cyan('sendero auth login')}      ${c.dim('re-authenticate')}\n`
+    );
+    return;
   }
-  const handler = commands[cmd];
-  if (!handler) {
-    process.stderr.write(`Unknown command: ${cmd}\nRun \`sendero help\` for usage.\n`);
-    process.exit(1);
+
+  if (isJson) {
+    printJson({ authenticated: true, ...me, next: 'sendero tools list' });
+    return;
   }
-  process.exit(await handler(rest));
+
+  printText(
+    `${c.bold('Sendero CLI')} ${c.dim(`v${VERSION}`)}\n\n` +
+      `${c.green('●')} Signed in as ${c.bold(me.tenantId)} ${c.dim(`(${me.effectiveKeyType})`)}\n\n` +
+      `${c.dim('Try:')}\n` +
+      `  ${c.cyan('sendero tools list')}             ${c.dim('see what you can call')}\n` +
+      `  ${c.cyan('sendero mcp install')}            ${c.dim('wire into Claude Code')}\n` +
+      `  ${c.cyan('sendero tools call check_treasury')} ${c.dim('quick test')}\n`
+  );
 }
 
-main().catch((err: unknown) => {
-  process.stderr.write(`sendero-cli: ${err instanceof Error ? err.message : String(err)}\n`);
+const program = createProgram();
+program.parseAsync(process.argv).catch((err: unknown) => {
+  process.stderr.write(
+    `${c.red('✘')} ${c.bold('sendero')}: ${err instanceof Error ? err.message : String(err)}\n`
+  );
   process.exit(1);
 });

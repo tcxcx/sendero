@@ -4,6 +4,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["bun"]
   }
 }
