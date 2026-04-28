@@ -14,6 +14,7 @@ import { getMarketingContent } from '@/lib/content';
 import { heroTitleWithHighlights } from '@/lib/hero-title';
 
 import { MarketingBrandHoverCard } from './brand-hover-card';
+import { MarketingEngineScene } from './marketing-engine-scene';
 import { MarketingHeroScene } from './marketing-hero-scene';
 import { MarketingWaitlist } from './waitlist';
 
@@ -200,6 +201,26 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           <p>{content.waitlist.body}</p>
         </div>
         <MarketingWaitlist />
+      </section>
+
+      <section className="mk-engine" aria-labelledby="mk-engine-title">
+        <MarketingEngineScene />
+        <div className="mk-engine-copy">
+          <div className="mk-engine-eyebrow">The Sendero Engine</div>
+          <h2 id="mk-engine-title" className="mk-engine-title">
+            Every route planned.
+            <br />
+            Every seat settled.
+          </h2>
+          <p className="mk-engine-sub">
+            One agent handles the full loop — fare search, policy check, seat hold, approval
+            routing, commission split, on-chain receipt. From the first Slack message to final USDC
+            settlement, no human in the loop unless you want one.
+          </p>
+          <a href={toAppHref('/dashboard')} className="mk-cta mk-engine-cta">
+            Start booking →
+          </a>
+        </div>
       </section>
 
       <section className="mk-murals" aria-labelledby="mk-murals-title">
@@ -545,6 +566,17 @@ const inlineCss = `
   @keyframes mkHeroImageIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes mkHeroTextIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes mkRouteTrace { from { opacity: 0; transform: scaleX(0); } to { opacity: 0.72; transform: scaleX(1); } }
+  /* Engine section — full-bleed dark cinematic with WebGL route visualization */
+  .mk-engine { position: relative; isolation: isolate; width: 100vw; margin: 0 calc(50% - 50vw) 0; min-height: clamp(560px, 68vw, 780px); display: grid; place-items: center; overflow: hidden; background: #0d0d0d; }
+  .mk-engine-scene { position: absolute; inset: 0; pointer-events: none; }
+  .mk-engine-scene > * { width: 100% !important; height: 100% !important; }
+  .mk-engine::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 80%, transparent 20%, rgba(13,13,13,0.55) 100%); pointer-events: none; z-index: 1; }
+  .mk-engine-copy { position: relative; z-index: 2; display: grid; place-items: center; text-align: center; padding: clamp(64px, 10vw, 120px) clamp(24px, 6vw, 96px); max-width: 860px; }
+  .mk-engine-eyebrow { font-family: var(--mono-x); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 28px; }
+  .mk-engine-title { font-family: var(--display); font-size: clamp(44px, 6.8vw, 84px); line-height: 1.06; letter-spacing: -0.018em; font-weight: 450; color: var(--accent); margin: 0 0 28px; text-wrap: balance; }
+  .mk-engine-sub { font-size: clamp(15px, 1.4vw, 17px); line-height: 1.7; color: rgba(250,250,247,0.68); margin: 0 0 40px; max-width: 580px; }
+  .mk-engine-cta { border-color: var(--accent) !important; color: var(--accent) !important; background: transparent !important; }
+  .mk-engine-cta:hover { background: var(--accent) !important; color: #fff7ec !important; }
   .mk-murals { display: grid; grid-template-columns: minmax(240px, 0.5fr) minmax(0, 1.5fr); gap: clamp(24px, 4vw, 48px); align-items: start; margin: 0 calc(clamp(16px, 3vw, 48px) * -1) 80px; padding: clamp(42px, 6vw, 70px) clamp(16px, 3vw, 48px); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: color-mix(in oklab, #eedcc7 72%, var(--bg)); }
   .mk-murals-copy { position: sticky; top: 24px; }
   .mk-murals-copy h2 { font-family: var(--display); font-size: clamp(30px, 4vw, 50px); line-height: 1.03; letter-spacing: -0.012em; margin: 0 0 16px; font-weight: 450; text-wrap: balance; }
@@ -739,6 +771,7 @@ const inlineCss = `
   @supports (animation-timeline: view()) {
     .mk-proof,
     .mk-waitlist,
+    .mk-engine,
     .mk-murals,
     .mk-story,
     .mk-features,
@@ -881,6 +914,7 @@ const inlineCss = `
     .mk-proof-track,
     .mk-audience,
     .mk-waitlist,
+    .mk-engine,
     .mk-murals,
     .mk-story,
     .mk-features,
