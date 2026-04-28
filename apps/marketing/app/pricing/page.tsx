@@ -80,12 +80,25 @@ export default async function PricingPage() {
             aspectRatio: '1440 / 900',
             pointerEvents: 'none',
             zIndex: 1,
-            clipPath: 'inset(0 0 14% 0)',
           }}
         >
           <div style={{ position: 'absolute', inset: 0 }}>
             <PricingHeroScene />
           </div>
+          {/* Geometric parchment block at center-bottom — masks the
+              "Made with unicorn.studio" watermark and reads as an
+              intentional design element. */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 'clamp(160px, 22%, 240px)',
+              aspectRatio: '1 / 1',
+              background: 'var(--bg)',
+            }}
+          />
         </div>
         <div
           className="mk-hero-copy"
