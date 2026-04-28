@@ -13,6 +13,7 @@ import {
   travelAgencyJsonLd,
 } from '@sendero/seo';
 import { Toaster } from '@sendero/ui/sonner';
+import { Analytics } from '@vercel/analytics/next';
 import { Agentation } from 'agentation';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
@@ -139,6 +140,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </NuqsAdapter>
           {process.env.NODE_ENV === 'development' && <Agentation />}
         </ClerkProvider>
+        <Analytics />
       </body>
     </html>
   );
