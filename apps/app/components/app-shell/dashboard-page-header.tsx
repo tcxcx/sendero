@@ -155,7 +155,7 @@ export function DashboardPageHeader() {
               <p className="text-sm text-muted-foreground">{copy.description}</p>
             ) : null}
           </div>
-          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+          {actions ? <div className="flex flex-wrap items-center gap-x-2 gap-y-3">{actions}</div> : null}
         </div>
       ) : null}
     </div>

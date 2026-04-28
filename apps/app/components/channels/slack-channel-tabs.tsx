@@ -3,12 +3,17 @@
 /**
  * SlackChannelTabs — page-level tabs at /dashboard/channels/slack.
  *
- *   Tab 1 "Workspace": connected SlackInstall panel(s) — the operator's
+ *   Tab 1 "Setup": connected SlackInstall panel(s) — the operator's
  *   current state, routing table, disconnect + per-channel leave controls.
  *
  *   Tab 2 "Share install URL": the public install URL share card —
  *   copy/preview/mailto + checklist + how-it-works expander. Surfaces only
  *   when the operator wants to share with a corporate client.
+ *
+ * The pill row is hoisted into the layout-level `SlackChannelNav` slot
+ * via `useSlackChannelNavStore` so it renders justify-end on the same
+ * line as the section nav (Workspace / Inbox). Only the panel content
+ * stays in the page body.
  *
  * Server-rendered children stay as-is — this component is just a thin
  * client wrapper that hides the inactive panel. Avoids hoisting the
@@ -19,16 +24,14 @@
  * happens once per client, not every dashboard refresh.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { PillTabs } from '@sendero/ui/pill-tabs';
 
+import { useSlackChannelNavStore } from './slack-channel-nav-store';
+
 type SlackTabValue = 'workspace' | 'share';
 
-// "Setup" + "Share install URL" inside the page; the section-level nav
-// (apps/app/components/channels/slack-channel-nav.tsx) owns the
-// Workspace ↔ Inbox split and would visually collide with another
-// "Workspace" label here.
 const TABS = [
   { value: 'workspace' as const, label: 'Setup' },
   { value: 'share' as const, label: 'Share install URL' },
@@ -41,9 +44,10 @@ interface SlackChannelTabsProps {
 
 export function SlackChannelTabs({ workspaceContent, shareContent }: SlackChannelTabsProps) {
   const [tab, setTab] = useState<SlackTabValue>('workspace');
+  const setRightSlot = useSlackChannelNavStore(s => s.setRightSlot);
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+  useEffect(() => {
+    setRightSlot(
       <PillTabs<SlackTabValue>
         id="slack-channel-tabs"
         ariaLabel="Slack channel views"
@@ -51,11 +55,17 @@ export function SlackChannelTabs({ workspaceContent, shareContent }: SlackChanne
         value={tab}
         onChange={setTab}
       />
+    );
+    return () => setRightSlot(null);
+  }, [tab, setRightSlot]);
+
+  return (
+    <>
       {/* Render both subtrees — toggle visibility via display so server-
           rendered children's data fetches happen once and tab swaps are
           instant. The hidden subtree stays in the DOM but is not painted. */}
       <div style={{ display: tab === 'workspace' ? 'contents' : 'none' }}>{workspaceContent}</div>
       <div style={{ display: tab === 'share' ? 'contents' : 'none' }}>{shareContent}</div>
-    </div>
+    </>
   );
 }

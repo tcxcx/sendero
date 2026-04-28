@@ -16,6 +16,8 @@ import { useRouter, usePathname } from 'next/navigation';
 
 import { PillTabs, type PillTab } from '@sendero/ui/pill-tabs';
 
+import { useSlackChannelNavStore } from './slack-channel-nav-store';
+
 type SlackTabValue = 'workspace' | 'inbox';
 
 const TABS: ReadonlyArray<PillTab<SlackTabValue> & { href: string }> = [
@@ -27,9 +29,20 @@ export function SlackChannelNav() {
   const router = useRouter();
   const pathname = usePathname() ?? '';
   const active: SlackTabValue = pathname.includes('/slack/inbox') ? 'inbox' : 'workspace';
+  const rightSlot = useSlackChannelNavStore(s => s.rightSlot);
 
   return (
-    <nav aria-label="Slack channel sections" style={{ padding: '12px 20px 4px' }}>
+    <nav
+      aria-label="Slack channel sections"
+      style={{
+        padding: '12px 20px 4px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        flexWrap: 'wrap',
+      }}
+    >
       <PillTabs<SlackTabValue>
         id="slack-channel-section-tabs"
         ariaLabel="Slack section"
@@ -40,6 +53,7 @@ export function SlackChannelNav() {
           if (target && target.href !== pathname) router.push(target.href);
         }}
       />
+      {rightSlot ? <div style={{ display: 'inline-flex' }}>{rightSlot}</div> : null}
     </nav>
   );
 }
