@@ -547,7 +547,6 @@ const inlineCss = `
   .mk-waitlist p { color: var(--muted); max-width: 520px; margin: 0; font-size: 15px; line-height: 1.6; }
   .mk-waitlist-clerk-root { width: 100%; }
   .mk-waitlist-clerk-card { width: 100%; max-width: none; border: 0; box-shadow: none; background: transparent; padding: 0; }
-  .mk-waitlist-clerk-hidden { display: none; }
   .mk-waitlist-clerk-input { border-radius: 0; border-color: var(--border); box-shadow: none; }
   .mk-waitlist-clerk-button { border-radius: 0; background: var(--fg); color: var(--bg); font-family: var(--mono-x); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; box-shadow: none; }
   .mk-waitlist-loading { display: grid; gap: 10px; width: 100%; border: 1px solid var(--border); background: var(--bg); padding: 18px; }
