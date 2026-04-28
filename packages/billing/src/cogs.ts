@@ -164,10 +164,21 @@ export function allowedModelsForCap(maxCostPerTurnMicro: bigint | null): string[
  * Cheapest model under a cap — used as the safe fallback for
  * Slack/WhatsApp agent dispatches when the operator has no live
  * picker UI to make a choice.
+ *
+ * Sorts by `cogsPerTurnMicro` ascending at call time. Doing this here
+ * (rather than relying on registry order) keeps `CHAT_MODEL_COGS`
+ * free to be reordered for picker UX without changing fallback
+ * semantics. Stable on tie-break — original registry order wins
+ * when two models share the same COGS.
  */
 export function defaultModelForCap(maxCostPerTurnMicro: bigint | null): string {
-  const allowed = allowedModelsForCap(maxCostPerTurnMicro);
-  // CHAT_MODEL_COGS sorts by cost ascending so allowed[0] is cheapest.
-  // Fallback to gemini-2.5-flash for the truly-no-models edge case.
-  return allowed[0] ?? 'google/gemini-2.5-flash';
+  const allowed = CHAT_MODEL_COGS.filter(m =>
+    isModelAllowedByCap(m.id, maxCostPerTurnMicro)
+  );
+  if (allowed.length === 0) return 'google/gemini-2.5-flash';
+  let cheapest = allowed[0];
+  for (const m of allowed) {
+    if (m.cogsPerTurnMicro < cheapest.cogsPerTurnMicro) cheapest = m;
+  }
+  return cheapest.id;
 }
