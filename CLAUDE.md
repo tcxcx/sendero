@@ -396,3 +396,72 @@ Three append-mostly tables, all under tenant scoping:
 **Audit hooks.** `WhatsAppClient` config accepts `onSent` (post-success per send) and `onApiCall` (per request attempt, including each retry). Both are truly fire-and-forget — `void Promise.resolve().then(...)` so a downed audit DB never extends send latency on the wire-edge. Writers in `apps/app/lib/whatsapp-audit.ts` (`logOutboundMessage`, `logApiCall`, `logKapsoCall`, `logMetaCall`, `reconcileOutboundStatus`) all swallow Prisma errors fail-soft.
 
 **Operator UI.** `/dashboard/channels/whatsapp/inbox` shows three stacked tables (inbound deliveries / outbound API calls / outbound messages) with empty states, relative-time, redacted recipients, status badges. `apps/app/app/(app)/dashboard/channels/whatsapp/layout.tsx` mounts a pill-tab nav (`WhatsappChannelNav`) so every WhatsApp sub-route inherits **Workspace** + **Inbox** tabs. Active state from `usePathname()`; `router.push` on tab change so URLs stay shareable for support tickets. Add new tabs by extending the `TABS` const in `whatsapp-channel-nav.tsx`.
+
+## Observability + prompt management — Langfuse
+
+`@sendero/langfuse` is the ONLY package that imports `@langfuse/*` directly. All surfaces (engine, app-api, slack, whatsapp, mcp, workflows, ocr) import primitives from there. `apps/app/instrumentation.ts` boots `LangfuseSpanProcessor` on Node.js startup so every AI-SDK call (`generateText`, `streamText`, `generateObject`) emits a Langfuse generation automatically.
+
+### Env vars (all envs)
+
+```
+LANGFUSE_SECRET_KEY=     # Langfuse project secret key (sensitive)
+LANGFUSE_PUBLIC_KEY=     # Langfuse project public key
+LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
+LANGFUSE_PROMPT_MANAGEMENT=false   # flip to true to pull persona slabs from Langfuse
+LANGFUSE_EVALUATORS=false          # flip to true to fire 4 LLM-judges per turn (gpt-4.1-nano)
+LANGFUSE_MCP_AUTH=       # base64(public:secret) — consumed by .mcp.json for in-IDE prompt CRUD
+```
+
+`LANGFUSE_MCP_AUTH` is stored on Vercel for production / preview / development; `vercel env pull .env.local` brings it down so the Langfuse MCP server in `.mcp.json` works without per-dev setup. Compute manually with `echo -n "$LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY" | base64`.
+
+### Persona resolution (system prompts)
+
+Sendero's persona is composed in **`apps/app/lib/agent-persona.ts`** from two halves:
+
+- `sendero-soul` (Langfuse, with `packages/agent/src/soul.ts::SENDERO_SOUL` as fallback) — the canonical voice contract.
+- A surface-specific routing-rules slab — `sendero-chat-routing-rules`, `sendero-dispatch-routing-rules`, `sendero-web-chat-rules`, or `sendero-slack-rules`.
+
+Each surface calls `buildAgentPersona(kind, locale)` (or `buildSlackPersonaWithContext` for Slack, which interleaves a dynamic tenant/channel preamble between SOUL and rules). Variables wired in: `{{locale_lang}}` everywhere, `{{today}}` on web rules. `localeSteering()` in `packages/agent/src/prompt.ts` runs in the `buildSystemPrompt` assembler **after** the Langfuse-managed persona lands — locale detection stays code-side.
+
+When `LANGFUSE_PROMPT_MANAGEMENT=false` the helper returns the hardcoded fallback strings with zero network calls. Production toggles the flag on; fallbacks remain in code as the safety net for Langfuse outages.
+
+**Scripts:**
+- `bun langfuse:prompts:seed` — re-seed all four routing prompts from code fallbacks (versions increment on Langfuse).
+- `bun langfuse:prompts:seed-slack` — re-seed `sendero-slack-rules`.
+- `bun langfuse:prompts:pull` — write live prompts to `scripts/langfuse-prompts.snapshot.json` (committed; PRs that touch prompts must commit the snapshot diff).
+- `bun langfuse:prompts:diff` — compare snapshot vs live, exit 1 on drift.
+
+### Tracing
+
+`runAgentTurn` (`packages/agent/src/run.ts`) wraps every turn in `traceAgent(agentType, metadata, fn)`. Channel-aware `agentType`: `sendero-conversation | sendero-slack | sendero-whatsapp | sendero-mcp`. After the meter write, fire-and-forget `scoreLatency + scoreCost + scoreToolSuccess + evaluateTrace + flushLangfuse`. Direct `streamText` callers (`/api/agent/chat`, `/api/chat`, `/api/inbox/rewrite`, stamp workflows, OCR) pass `experimental_telemetry: aiTelemetryConfig(functionId, metadata)` so spans land in the same project.
+
+**Trace ID flows server → client → server** via `messageMetadata({ part: 'start' })` in `/api/agent/chat`'s stream response. The agent-chat client reads `message.metadata.senderoTraceId` and surfaces it to the operator thumbs UI.
+
+### Scoring + feedback
+
+- Engine fires per turn: `scoreLatency`, `scoreCost`, `scoreToolSuccess`, `evaluateTrace` (when enabled).
+- Operator thumbs (`/dashboard/agent-chat`) → `POST /api/agent/feedback` → `scoreGeneration(traceId, 'up' | 'down')`.
+- Slack HITL approval/reject (`apps/app/app/api/webhooks/slack/interactions/route.ts`) reads `Booking.metadata.traceId` (set by `confirm_booking` via `getActiveTraceId()`) → `scoreGeneration(traceId, 'approved' | 'rejected')`.
+
+### Datasets + regression
+
+`sendero-golden-turns` dataset holds 8 representative agent inputs (search / hold / refund / policy-block / locale-spanish / multi-turn / document-scan / treasury-check). `bun langfuse:regression` (script: `scripts/langfuse-run-regression.ts`) pulls each item, runs it through the LIVE persona prompts via `gpt-4.1-nano`, scores `rule-match` (mustMention / mustNotMention) plus the four LLM-judges, and links each trace to a dataset run. No tools wired in the runner — this is a prompt-quality smoke, not full-stack integration. Filter with `--scenario <name>`; name a run with `--run-name nightly-YYYY-MM-DD`.
+
+`bun langfuse:dataset:seed` re-creates the dataset (additive — items duplicate on re-run; prefer editing in the Langfuse UI thereafter).
+
+### MCP server
+
+`.mcp.json` registers `langfuse` as an HTTP MCP at `https://us.cloud.langfuse.com/api/public/mcp` with `Authorization: Basic ${LANGFUSE_MCP_AUTH}`. Restart Claude Code after first env-pull to load the server. Five tools available: `getPrompt`, `listPrompts`, `createTextPrompt`, `createChatPrompt`, `updatePromptLabels`. Use the `langfuse` skill (`.agents/skills/langfuse/SKILL.md`) for documentation-first workflows.
+
+### When to use what
+
+| Task | Reach for |
+|---|---|
+| Add a new system prompt | `bun langfuse:prompts:seed` (after editing fallback in `agent-persona.ts`) |
+| Edit a live prompt without code change | Langfuse MCP `updatePromptLabels` or the UI; then `bun langfuse:prompts:pull` to commit snapshot |
+| Detect prompt drift in a PR | `bun langfuse:prompts:diff` |
+| Score human feedback on an agent reply | `scoreGeneration(traceId, 'up'|'down'|'approved'|'rejected')` |
+| Score quality automatically | flip `LANGFUSE_EVALUATORS=true`, evaluators fire per turn |
+| Smoke a prompt change against goldens | `bun langfuse:regression --scenario <name>` |
+| Read the active trace inside a tool | `getActiveTraceId()` from `@sendero/langfuse` (returns undefined when no span) |
+| Read prompts from the Anthropic skills system | the `/langfuse` skill — documentation-first, CLI-native |
