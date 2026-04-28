@@ -35,6 +35,7 @@ import {
 } from '@sendero/whatsapp';
 
 import { newTraceId } from '@/lib/api-errors';
+import { resolveActiveTripForChannelIdentity } from '@/lib/trip-events';
 import {
   logMetaCall,
   logOutboundMessage,
@@ -193,6 +194,16 @@ export async function POST(req: NextRequest) {
       const identity = await upsertChannelIdentity(msg);
       if (!identity) continue;
 
+      // Resolve an active trip for this traveler so the dispatch route
+      // can append inbound + outbound events to the canonical Trip
+      // ledger. Null when the traveler has no in-flight trip — dispatch
+      // skips the ledger write and the agent processes the message
+      // anyway (it may create a trip via tool calls).
+      const tripId = await resolveActiveTripForChannelIdentity({
+        tenantId: identity.tenantId,
+        channelIdentityId: identity.id,
+      });
+
       const kind = msg.message.type;
       const text = kind === 'text' ? (msg.message.text?.body ?? '') : mediaCaption(msg.message);
 
@@ -203,6 +214,7 @@ export async function POST(req: NextRequest) {
           text,
           locale: identity.locale,
           turnId: `whatsapp:${msg.messageId}`,
+          tripId,
           req,
         })
           .then(result => {
@@ -232,6 +244,7 @@ export async function POST(req: NextRequest) {
           userId: identity.userId ?? identity.id,
           locale: identity.locale,
           turnId: `whatsapp:${msg.messageId}`,
+          tripId,
           phoneNumberId: msg.tenantPhoneNumberId,
           media: msg.message[kind] as WhatsAppMedia,
           caption: text,
@@ -310,6 +323,7 @@ async function dispatchAgent(args: {
   text: string;
   locale: string;
   turnId: string;
+  tripId: string | null;
   req: NextRequest;
 }): Promise<{ reply: string } | null> {
   return postToDispatch(args.req, {
@@ -319,6 +333,7 @@ async function dispatchAgent(args: {
     text: args.text,
     locale: args.locale,
     turnId: args.turnId,
+    ...(args.tripId ? { tripId: args.tripId } : {}),
   });
 }
 
@@ -327,6 +342,7 @@ async function dispatchMediaTurn(args: {
   userId: string;
   locale: string;
   turnId: string;
+  tripId: string | null;
   phoneNumberId: string;
   media: WhatsAppMedia;
   caption: string;
@@ -370,6 +386,7 @@ async function dispatchMediaTurn(args: {
     text: args.caption,
     locale: args.locale,
     turnId: args.turnId,
+    ...(args.tripId ? { tripId: args.tripId } : {}),
     attachments: [
       {
         kind: args.attachmentKind,

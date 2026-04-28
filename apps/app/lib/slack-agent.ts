@@ -55,6 +55,7 @@ import {
 } from './agent-models';
 import { senderoSlackTools } from './slack-agent-tools';
 import { markThreadSubscribed } from './slack-thread-subscription';
+import { appendTripEvent, resolveActiveTripForUser } from './trip-events';
 
 /**
  * Persisted Slack install — superset of OAuth's `SlackInstall` plus the
@@ -307,6 +308,35 @@ export async function runSlackAgentTurn(
       }
     : undefined;
 
+  // Canonical ledger write — inbound traveler message. Resolved trip
+  // is the most-recent active one for this Sendero user. When null
+  // (no in-flight trip), the write is skipped; the agent still runs
+  // and may create a trip via tool calls. Same fail-soft posture as
+  // the dispatch route's path.
+  const tripIdForLedger = await resolveActiveTripForUser({
+    tenantId: args.install.tenantId,
+    userId: args.senderoUserId,
+  });
+  if (tripIdForLedger && args.text) {
+    await appendTripEvent({
+      tripId: tripIdForLedger,
+      tenantId: args.install.tenantId,
+      event: {
+        id: `inbound_${turnId}`,
+        kind: 'inbox_reply',
+        direction: 'inbound',
+        channel: 'slack',
+        createdAt: new Date().toISOString(),
+        text: args.text,
+        author: {
+          kind: 'traveler',
+          slackUserId: args.userId,
+          userId: args.senderoUserId,
+        },
+      },
+    });
+  }
+
   let result: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
     result = await runAgentTurn({
@@ -451,6 +481,25 @@ export async function runSlackAgentTurn(
       teamId: args.install.teamId,
       channelId: args.channelId,
       threadTs: args.threadTs,
+    });
+  }
+
+  // Canonical ledger write — agent reply. Lands next to the inbound
+  // event written above so the operator sees the full thread on the
+  // trip inbox view. Skipped when no trip resolved or empty reply.
+  if (tripIdForLedger && result.text && result.text.trim().length > 0) {
+    await appendTripEvent({
+      tripId: tripIdForLedger,
+      tenantId: args.install.tenantId,
+      event: {
+        id: `agent_${turnId}`,
+        kind: 'agent_reply',
+        direction: 'outbound',
+        channel: 'slack',
+        createdAt: new Date().toISOString(),
+        text: result.text,
+        author: { kind: 'agent' },
+      },
     });
   }
 

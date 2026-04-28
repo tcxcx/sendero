@@ -48,6 +48,7 @@ import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
 import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
+import { appendTripEvent, type TripEvent } from '@/lib/trip-events';
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
@@ -332,6 +333,34 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Canonical ledger write — inbound traveler message lands on the
+  // trip's events log before the agent processes it. Skipped when the
+  // caller didn't resolve a tripId (pre-trip exploration); the agent
+  // may create a trip via tool calls and future messages will land
+  // there. Best-effort: a Postgres blip never blocks dispatch — the
+  // helper swallows errors and returns false.
+  if (body.tripId && body.text) {
+    const inboundChannel = ledgerChannelFromDispatchChannel(body.channel);
+    if (inboundChannel) {
+      await appendTripEvent({
+        tripId: body.tripId,
+        tenantId: body.tenantId,
+        event: {
+          id: `inbound_${agentInput.turnId}`,
+          kind: 'inbox_reply',
+          direction: 'inbound',
+          channel: inboundChannel,
+          createdAt: new Date().toISOString(),
+          text: body.text,
+          author: {
+            kind: isServiceAccount ? 'system' : 'traveler',
+            userId: body.userId,
+          },
+        },
+      });
+    }
+  }
+
   const tier: ModelTier = 'smart';
   const modelHandle = resolveModel(tier);
   if (!modelHandle) {
@@ -427,6 +456,29 @@ export async function POST(req: NextRequest) {
         latencyMs: result.latencyMs,
       },
     });
+
+    // Canonical ledger write — agent reply lands on the trip's events
+    // log next to the inbound message above. Same skip-when-no-tripId
+    // contract; same fail-soft posture. The pair (inbound + outbound)
+    // is what makes the unified inbox thread legible to operators.
+    if (body.tripId && result.text) {
+      const outboundChannel = ledgerChannelFromDispatchChannel(body.channel);
+      if (outboundChannel) {
+        await appendTripEvent({
+          tripId: body.tripId,
+          tenantId: body.tenantId,
+          event: {
+            id: `agent_${agentInput.turnId}`,
+            kind: 'agent_reply',
+            direction: 'outbound',
+            channel: outboundChannel,
+            createdAt: new Date().toISOString(),
+            text: result.text,
+            author: { kind: 'agent' },
+          },
+        });
+      }
+    }
   }
 
   await flush();
@@ -468,4 +520,25 @@ export async function POST(req: NextRequest) {
       }),
     },
   });
+}
+
+/**
+ * Map a dispatch `Channel` (which includes `mcp`) to a `TripEvent`
+ * channel. MCP-originated turns map to `web` for ledger purposes —
+ * an MCP client is conceptually "the web", just programmatic. Returns
+ * null for unknown channels so the caller skips the ledger write
+ * rather than writing a malformed row.
+ */
+function ledgerChannelFromDispatchChannel(channel: Channel): TripEvent['channel'] | null {
+  switch (channel) {
+    case 'whatsapp':
+    case 'slack':
+    case 'email':
+    case 'web':
+      return channel;
+    case 'mcp':
+      return 'web';
+    default:
+      return null;
+  }
 }
