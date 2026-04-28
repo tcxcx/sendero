@@ -175,11 +175,12 @@ event has no `user.id` (system events, channel-renames, etc.).
 
 ### Slack webhook routes (apps/app)
 
-All three Slack endpoints live on the Next.js app — Vercel Fluid Compute is the only runtime that can hit Prisma + Workflow DevKit. The CF Workers edge adapter was retired.
+All four Slack endpoints live on the Next.js app — Vercel Fluid Compute is the only runtime that can hit Prisma + Workflow DevKit. The CF Workers edge adapter was retired.
 
-- `apps/app/app/api/webhooks/slack/events/route.ts` — Events API (`event_callback`, `app_mention`, DMs, `url_verification`). Verifies HMAC + 5-min replay window, looks up the install via `(teamId, enterpriseId)`, re-validates the resolved row matches the envelope, then defers `runSlackAgentTurn()` from `@sendero/slack/agent` past the 3-second ack via `after()` from `next/server`. 401 on signature failure, 404 on unknown install (NOT 200 — surfaces onboarding misconfig).
-- `apps/app/app/api/webhooks/slack/interactions/route.ts` — Block Kit interactivity (`payload=…` form-urlencoded). Same verify + install-resolve hardening as events; the approval-card flow (`sendero_approval.{approve,reject}`) flips `Booking.status`, swaps the card via `chat.update`, and resumes any paused workflow run waiting on the booking. All handler work runs in `after()` so the Slack ack stays sub-second.
-- `apps/app/app/api/webhooks/slack/oauth-callback/route.ts` — OAuth v2 install callback (Enterprise Grid aware). Verifies signed state (`verifySlackState`), exchanges `code` via `@sendero/slack::exchangeCode`, upserts `SlackInstall` keyed on `(enterpriseId, teamId)`.
+- `apps/app/app/api/webhooks/slack/events/route.ts` — Events API (`event_callback`, `app_mention`, DMs, `url_verification`, `tokens_revoked`, `app_uninstalled`). Verifies HMAC + 5-min replay window, looks up the install via `(teamId, enterpriseId)`, re-validates the resolved row matches the envelope, drops events for already-revoked installs, then defers `runSlackAgentTurn()` from `@sendero/slack/agent` past the 3-second ack via `after()` from `next/server`. Hot-path Redis hardening: dedup on `event_id` (1h SETNX) + single-flight thread lock on `(teamId, channelId, threadTs)`, both fail-open. 401 on signature failure, 404 on unknown install (NOT 200 — surfaces onboarding misconfig).
+- `apps/app/app/api/webhooks/slack/interactions/route.ts` — Block Kit interactivity (`payload=…` form-urlencoded). Branches on `payload.type`: `block_actions` runs in `after()` (approval-card flow), `view_submission` MUST ack synchronously inside the 3s window because Slack reads the response body for modal lifecycle (close / show errors / push next), `view_closed` defers cleanup. The submission router is built per-request so handlers close over `install.tenantId` for cross-tenant gating. Approval-card flow (`sendero_approval.{approve,reject}`) flips `Booking.status`, swaps the card via `chat.update`, resumes any paused workflow run waiting on the booking.
+- `apps/app/app/api/webhooks/slack/commands/route.ts` — slash commands (`/sendero help|status|note`). Same HMAC + replay + install + revocation gates. `/sendero note <trip-id>` opens the trip-note modal via `views.open` synchronously (trigger_id has a 3s TTL — can't defer past `after()`).
+- `apps/app/app/api/webhooks/slack/oauth-callback/route.ts` — OAuth v2 install callback (Enterprise Grid aware). Verifies signed state (`verifySlackState`), exchanges `code` via `@sendero/slack::exchangeCode`, upserts `SlackInstall` keyed on `(enterpriseId, teamId)`. Reinstall clears `revokedAt = null` so the events route resumes dispatching.
 
 ## Circle webhook gates
 
@@ -346,3 +347,52 @@ What Sendero already executes (don't re-invent):
 2. In 12 months, when a TMC operator hears "Sendero", what's the one sentence they say? (If it's "they have a chatbot", we've failed.)
 3. If Sendero disappeared tomorrow, who panics first — corporate buyers, suppliers, or TMC operators? (We want all three. If only one, we've built a feature, not a platform.)
 4. What's the single fastest way Sendero loses its moat? (Likely: a hyperscaler ships a generic travel agent in their API. Defense: depth of vertical integration + on-chain settlement audit story.)
+
+## Slack channel hardening — dedup, locks, lifecycle, step-streaming
+
+The Slack inbound path runs four hot-path safety controls before dispatch:
+
+- **Event-id dedup** (`apps/app/lib/slack-dedup-lock.ts::claimSlackEvent`) — Redis SETNX on `<env>:slack:event:<event_id>` with 1h TTL. Catches Slack's retry-on-non-200 + rare duplicate-after-200 deliveries. Fail-open on Redis outage; the session-store turnId guard is a backstop.
+- **Single-flight thread lock** (`acquireThreadLock` / `releaseThreadLock` in the same file) — Redis SETNX on `<env>:slack:lock:<subjectKey>` (90s TTL). Lua check-and-del release so a TTL'd-out lock taken by another instance isn't accidentally freed. Drops concurrent same-thread events with `{ ok: true, dropped: 'thread_busy' }`.
+- **Subscribed-thread filter** (`apps/app/lib/slack-thread-subscription.ts`) — channel/group messages only trigger the agent when the bot was @-mentioned OR has previously replied in this thread. DMs and explicit mentions always respond. Marked-on-post via `markThreadSubscribed` in `slack-agent.ts` (24h TTL); checked at dispatch time. Fail-conservative on Redis outage (treat as not-subscribed → bot drops the follow-up).
+- **Lifecycle (`SlackInstall.revokedAt`)** — `tokens_revoked` and `app_uninstalled` events stamp `revokedAt = now()`; the events / interactions / commands routes drop traffic for revoked installs. OAuth callback clears `revokedAt = null` on reinstall. Manifest subscribes both lifecycle events (`/dashboard/channels/slack/manifest`).
+
+**Step-based streaming.** `runAgentTurn` accepts an optional `onStepFinish` callback (`packages/agent/src/run.ts`) that fires after each AI SDK step (text gen or tool call). The Slack adapter installs the hook to edit the `_Thinking…_` placeholder between tool calls — `🔎 Searching flights…` → `🔎 Searching flights, Searching hotels…` → final answer. `renderStepStatus` + `toolNameToVerb` mapping in `slack-agent.ts` covers the high-traffic Sendero tools; unknown tools fall through readably as `Running \`<name>\``. Same-content edits are deduped via a `lastStatus` cache — Slack's chat.update Tier 3 limit (50/min) is comfortably under-used. This is *step* streaming, not token streaming. True per-token would require swapping `generateText` → `streamText` in the engine (cross-cutting with `dispatch` + `chat`); intentionally deferred.
+
+## Slack slash commands + view modals
+
+`/sendero help | status <trip-id> | note <trip-id>` — first three subcommands. `SlashCommandRouter` in `@sendero/slack` (`packages/slack/src/slash-commands.ts`) keys on `(command, subcommand)` with fallback support; `parseSlashCommandBody` decodes the URL-encoded payload. Unknown installs respond with a friendly `response_type: 'ephemeral'` install-prompt instead of 404 — better DX in resold workspaces that haven't installed Sendero yet.
+
+`ViewRouter` in the same package keys on `view.callback_id` for `view_submission` + `view_closed` payloads. **Submission MUST ack synchronously** — Slack reads the response body for modal lifecycle (close / errors / push). The interactions route builds a per-request submission router so handlers close over `install.tenantId`. Closed-handler router can be a singleton (no install scope needed).
+
+**Cross-tenant gate is load-bearing.** `private_metadata` is opaque to Slack — opener stuffs `{tripId, channelId, threadTs}` JSON in, Slack passes it back unchanged. The trip-note submit handler MUST verify `trip.tenantId === context.tenantId` AND use that tenant id in the WHERE clause of the write — without both, any Slack user could read/write across tenants by typing a different tenant's tripId into the slash command. The "trip not found" error string is the same on missing-trip vs cross-tenant so existence isn't leaked. Pattern lives in `apps/app/lib/slack-views/trip-note.ts::handleTripNoteSubmission` — copy this shape for every new view handler.
+
+**Atomic JSON append.** `Trip.events` is a Json column with append-only semantics. `handleTripNoteSubmission` uses `prisma.$executeRaw` with Postgres `||` jsonb append:
+
+```sql
+UPDATE trips SET events = COALESCE(events, '[]'::jsonb) || $1::jsonb
+WHERE id = $2 AND "tenantId" = $3;
+```
+
+Atomic in Postgres, concurrent-safe (no read-then-write race that could lose notes). Tenant id is double-bound in the WHERE so a TOCTOU between `findUnique` and the update can't write across tenants.
+
+## WhatsApp inbound hardening — replay window + dedup
+
+Meta's `x-hub-signature-256` only signs the body, not a timestamp, so freshness gating happens per-message off the server-stamped `messages[].timestamp`. Two controls in the route (`apps/app/app/api/webhooks/whatsapp/route.ts`):
+
+- **Replay window** (`apps/app/lib/whatsapp-dedup.ts::isWithinReplayWindow`) — pure function, ±5 min around now. Pure-function so the route can drop stale messages without a Redis round-trip.
+- **Per-wamid dedup** (`claimWhatsAppMessage` in the same file) — Redis SETNX on `<env>:wa:msg:<wamid>` with 1h TTL. Same fail-open posture as Slack.
+
+Bad-signature requests still get logged to `WhatsAppWebhookEvent` for forensics — nobody hits our public endpoint with a wrong sig by accident.
+
+## WhatsApp audit logs + observability
+
+Three append-mostly tables, all under tenant scoping:
+
+- **`WhatsAppWebhookEvent`** (`packages/database/prisma/migrations/20260427193912_whatsapp_audit_logs`) — one row per inbound webhook delivery: signature_valid, replay_window_ok, normalized counts (messages / identityChanges / statusUpdates / droppedReplay / droppedDuplicate / dispatched), duration_ms, traceId, optional rawEnvelope (off by default). Inserted post-200 via `after()` so audit can never extend Meta's ack window.
+- **`WhatsAppOutboundMessage`** (same migration) — one row per send, UNIQUE on `wamid`. Source label (`'agent_reply' | 'otp' | 'security_alert' | …`) separates handlers. Updated by the inbound `messages.statuses` webhook handler with per-status timestamps (`deliveredAt` / `readAt` / `failedAt`) + `failureReason`.
+- **`WhatsAppApiLog`** (`20260427201429_whatsapp_api_log`) — one row per outbound API call to Kapso or Meta: status_code, duration_ms, ok, errorMessage, method, endpoint *shape* (path params replaced with `{id}` so rows aggregate per endpoint pattern). Includes failed health pings + 429-throttled sends + network errors (status_code=0).
+
+**Audit hooks.** `WhatsAppClient` config accepts `onSent` (post-success per send) and `onApiCall` (per request attempt, including each retry). Both are truly fire-and-forget — `void Promise.resolve().then(...)` so a downed audit DB never extends send latency on the wire-edge. Writers in `apps/app/lib/whatsapp-audit.ts` (`logOutboundMessage`, `logApiCall`, `logKapsoCall`, `logMetaCall`, `reconcileOutboundStatus`) all swallow Prisma errors fail-soft.
+
+**Operator UI.** `/dashboard/channels/whatsapp/inbox` shows three stacked tables (inbound deliveries / outbound API calls / outbound messages) with empty states, relative-time, redacted recipients, status badges. `apps/app/app/(app)/dashboard/channels/whatsapp/layout.tsx` mounts a pill-tab nav (`WhatsappChannelNav`) so every WhatsApp sub-route inherits **Workspace** + **Inbox** tabs. Active state from `usePathname()`; `router.push` on tab change so URLs stay shareable for support tickets. Add new tabs by extending the `TABS` const in `whatsapp-channel-nav.tsx`.
