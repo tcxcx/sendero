@@ -32,6 +32,8 @@ import {
   findCustomerUserByEmail,
 } from '@sendero/duffel';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
+import { PLANS, resolvePlan, type PlanTier } from '@sendero/billing/plans';
+import type { BillingTier, SubscriptionStatus } from '@sendero/database';
 
 import { invalidateApiKeyCache } from '@/lib/api-key-auth';
 import { webhookEventStore } from '@/lib/webhook-events';
@@ -106,6 +108,14 @@ async function dispatch(event: { type: string; data: Record<string, unknown> }):
     case 'apiKey.revoked':
     case 'apiKey.deleted':
       return onApiKeyRevoked(event.data);
+    case 'subscription.created':
+    case 'subscription.updated':
+    case 'subscription.active':
+      return onSubscriptionUpsert(event.data, event.type);
+    case 'subscription.past_due':
+      return onSubscriptionStateChange(event.data, 'past_due');
+    case 'subscription.canceled':
+      return onSubscriptionStateChange(event.data, 'canceled');
     default:
       console.log('[webhooks/clerk] unhandled event.type:', event.type);
   }
@@ -666,4 +676,221 @@ async function stampDefaultScopesOnKey(
   } catch (err) {
     console.warn('[webhooks/clerk] failed to stamp default scopes on key', { keyId, err });
   }
+}
+
+// ─── Subscription lifecycle ────────────────────────────────────────
+//
+// Clerk Billing fires `subscription.{created,updated,active,past_due,
+// canceled}` whenever an org's plan changes. These handlers refill
+// `Subscription.meterBalanceMicro` from `PLANS[tier].monthlyIncludedCreditsMicro`
+// — the credit envelope is server-derived, never trusted from the
+// payload. Cycle renewals come through as `subscription.updated` with
+// a new `currentPeriodEnd`, which is the right moment to reset the
+// monthly grant (use-it-or-lose-it; no rollover).
+//
+// **Webhook delivery is NOT reliable enough to be load-bearing alone.**
+// Svix retries handle transient failures, but a missed webhook means a
+// paying customer sees stale balance. The sibling reconciliation cron
+// (cron/reconcile-credits — separate file) sweeps every hour to close
+// the gap. Both paths idempotent on `(tenantId, currentPeriodEnd)`.
+//
+// **Tier enum split.** `PlanTier` (the TypeScript layer) has 4 values
+// (free/basic/pro/enterprise). `BillingTier` (the Prisma enum) has 5
+// (adds `business`). The two diverge for legacy reasons. We map
+// PlanTier → BillingTier here; `business` stays in the DB enum for
+// backward-compatibility but never gets written by this code path.
+
+function planTierToBillingTier(tier: PlanTier): BillingTier {
+  // Identity mapping for the four PlanTier values; satisfies the
+  // BillingTier union by construction.
+  return tier;
+}
+
+/**
+ * Resolve the Clerk Billing plan slug carried in the webhook payload
+ * to a Sendero `PlanTier`. Falls back to `'free'` so a malformed
+ * payload never silently grants a paid envelope.
+ */
+function resolvePlanTierFromPayload(data: Record<string, unknown>): PlanTier {
+  // Common Clerk payload shapes: `{ plan: { slug } }` or `{ plan_slug }`.
+  const planObj =
+    data.plan && typeof data.plan === 'object' ? (data.plan as Record<string, unknown>) : null;
+  const slug =
+    (planObj && typeof planObj.slug === 'string' ? planObj.slug : null) ??
+    (typeof data.plan_slug === 'string' ? data.plan_slug : null);
+  if (!slug) return 'free';
+  const plan = resolvePlan(slug);
+  return plan.tier;
+}
+
+/**
+ * Map Clerk's subscription `status` string to our Prisma enum. Unknown
+ * values fall back to `'active'` so a paying customer is never
+ * accidentally locked out by an unrecognized status code.
+ */
+function resolveSubscriptionStatus(data: Record<string, unknown>): SubscriptionStatus {
+  const raw = typeof data.status === 'string' ? data.status : 'active';
+  const valid: SubscriptionStatus[] = [
+    'active',
+    'trialing',
+    'past_due',
+    'canceled',
+    'paused',
+    'incomplete',
+  ];
+  return (valid as string[]).includes(raw) ? (raw as SubscriptionStatus) : 'active';
+}
+
+/**
+ * Find the tenant for a Clerk subscription event. Clerk's subscription
+ * payload identifies the payer via either `payer_id` (organization id)
+ * or `organization_id`. We look up by `clerkOrgId` on the Tenant
+ * record. Returns null when no match — that means the subscription
+ * fired for an org we haven't seen via `organization.created` yet,
+ * which is rare but svix retries handle the catch-up.
+ */
+async function findTenantForSubscription(
+  data: Record<string, unknown>
+): Promise<{ id: string } | null> {
+  const orgId =
+    (typeof data.payer_id === 'string' ? data.payer_id : null) ??
+    (typeof data.organization_id === 'string' ? data.organization_id : null) ??
+    (data.payer && typeof data.payer === 'object'
+      ? typeof (data.payer as Record<string, unknown>).id === 'string'
+        ? ((data.payer as Record<string, unknown>).id as string)
+        : null
+      : null);
+  if (!orgId) return null;
+  return prisma.tenant.findUnique({
+    where: { clerkOrgId: orgId },
+    select: { id: true },
+  });
+}
+
+function readCurrentPeriodEnd(data: Record<string, unknown>): Date | null {
+  // Clerk uses unix-seconds for period ends. Tolerate ms or ISO strings
+  // for forward-compat; null when absent.
+  const raw =
+    (typeof data.current_period_end === 'number' ? data.current_period_end : null) ??
+    (typeof data.currentPeriodEnd === 'number' ? data.currentPeriodEnd : null) ??
+    (typeof data.current_period_end === 'string' ? data.current_period_end : null) ??
+    (typeof data.currentPeriodEnd === 'string' ? data.currentPeriodEnd : null);
+  if (raw === null) return null;
+  if (typeof raw === 'number') {
+    // Heuristic: < 1e12 means seconds, >= means ms.
+    return new Date(raw < 1e12 ? raw * 1000 : raw);
+  }
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
+}
+
+/**
+ * Upsert the Subscription row for `subscription.{created,updated,active}`.
+ *
+ * Idempotency: keyed on `(tenantId, currentPeriodEnd)`. Calling twice
+ * for the same period (svix retry) is a no-op on the balance —
+ * `meterBalanceMicro` is set to the grant explicitly, not incremented.
+ * If period_end has changed (new cycle), we reset the daily window so
+ * the daily-cap counter starts fresh too.
+ */
+async function onSubscriptionUpsert(
+  data: Record<string, unknown>,
+  eventType: string
+): Promise<void> {
+  const tenant = await findTenantForSubscription(data);
+  if (!tenant) {
+    console.warn('[webhooks/clerk] subscription event for unknown tenant; svix will retry', {
+      eventType,
+      payerId: (data as Record<string, unknown>).payer_id,
+    });
+    return;
+  }
+
+  const planTier = resolvePlanTierFromPayload(data);
+  const plan = PLANS[planTier];
+  const status = resolveSubscriptionStatus(data);
+  const currentPeriodEnd = readCurrentPeriodEnd(data);
+  const clerkSubId =
+    typeof data.id === 'string' ? data.id : typeof data.subscription_id === 'string' ? (data.subscription_id as string) : null;
+
+  // Server-derived grant — never trust a payload-supplied amount.
+  // Free tier returns 0n grant; the unique grant per tier lives in
+  // PlanConfig and is the single source of truth.
+  const grant = plan.monthlyIncludedCreditsMicro ?? 0n;
+
+  // Read prior state so we can decide whether this is a new cycle vs
+  // a same-cycle status change. New cycle ⇒ reset balance + daily
+  // window. Same cycle ⇒ keep the running balance, just refresh
+  // tier/status/period_end.
+  const prior = await prisma.subscription.findUnique({
+    where: { tenantId: tenant.id },
+    select: { currentPeriodEnd: true, tier: true },
+  });
+  const isNewCycle =
+    !prior ||
+    !prior.currentPeriodEnd ||
+    (currentPeriodEnd && prior.currentPeriodEnd.getTime() !== currentPeriodEnd.getTime());
+  const isTierChange = prior && prior.tier !== planTierToBillingTier(planTier);
+
+  // On tier change (upgrade or downgrade), ALWAYS reset balance to the
+  // new tier's grant. Downgrade is destructive on credits per the
+  // locked product decision; upgrade tops up to the new envelope.
+  const shouldResetBalance = isNewCycle || isTierChange;
+
+  await prisma.subscription.upsert({
+    where: { tenantId: tenant.id },
+    create: {
+      tenantId: tenant.id,
+      clerkSubId,
+      tier: planTierToBillingTier(planTier),
+      status,
+      meterBalanceMicro: grant,
+      dailyCreditBurnMicro: 0n,
+      dailyWindowStartedAt: null,
+      currentPeriodEnd,
+    },
+    update: {
+      clerkSubId,
+      tier: planTierToBillingTier(planTier),
+      status,
+      currentPeriodEnd,
+      ...(shouldResetBalance
+        ? {
+            meterBalanceMicro: grant,
+            dailyCreditBurnMicro: 0n,
+            dailyWindowStartedAt: null,
+          }
+        : {}),
+    },
+  });
+}
+
+/**
+ * Handle `subscription.past_due` and `subscription.canceled`.
+ *
+ * Important revenue-leak fix per the autoplan eng review (failure mode
+ * #8): a past_due tenant whose webhook reset the balance would keep
+ * burning credits even though no money is flowing. We mark `status`
+ * here so future preflight calls can reject; we do NOT zero the
+ * balance, so a tenant who pays-up gets their existing credits back.
+ *
+ * The credit deduction path (`apps/app/lib/credit-store.ts`) currently
+ * does not gate on `status` — that's a follow-up. The status field
+ * is set today so the gate can land cleanly in a separate commit.
+ */
+async function onSubscriptionStateChange(
+  data: Record<string, unknown>,
+  status: 'past_due' | 'canceled'
+): Promise<void> {
+  const tenant = await findTenantForSubscription(data);
+  if (!tenant) return;
+  const sub = await prisma.subscription.findUnique({
+    where: { tenantId: tenant.id },
+    select: { id: true },
+  });
+  if (!sub) return; // unknown subscription; nothing to mark
+  await prisma.subscription.update({
+    where: { tenantId: tenant.id },
+    data: { status },
+  });
 }

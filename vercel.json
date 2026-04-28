@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/channel-health",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-credits",
+      "schedule": "7 * * * *"
     }
   ]
 }
