@@ -79,9 +79,17 @@ export const generateStamp = async (args: {
     await writeStampProgress({ type: 'progress', step: 'generate-image', status: 'in_progress' });
     await writeStampProgress({ type: 'progress', step: 'generate-caption', status: 'in_progress' });
 
+    // Resolve both prompts in parallel before kicking off the model
+    // calls — getPromptWithFallback round-trips to Langfuse on cache
+    // miss and we want both fetches overlapping with each other, not
+    // serialized inside the generate steps.
+    const [imagePrompt, captionPrompt] = await Promise.all([
+      imagePromptForKind(ctx),
+      captionPromptForKind(ctx),
+    ]);
     const [imageDataUrl, caption] = await Promise.all([
-      generateStampImage(imagePromptForKind(ctx), imageReferencesForKind(ctx)),
-      generateStampCaption(captionPromptForKind(ctx)),
+      generateStampImage(imagePrompt, imageReferencesForKind(ctx)),
+      generateStampCaption(captionPrompt),
     ]);
 
     await writeStampProgress({
