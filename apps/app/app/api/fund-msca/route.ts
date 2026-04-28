@@ -23,6 +23,18 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
+  // Dev-only kill switch. Without this gate the route accepts any
+  // POST and drains up to 20 USDC per call from Sendero treasury to
+  // any address — `to` is freely set in the body. The matching UI
+  // gate in apps/app/components/deposit-dialog.tsx hides the button
+  // but doesn't close the route. Keep both in sync.
+  if (process.env.NODE_ENV !== 'development') {
+    return NextResponse.json(
+      { error: 'dev_only', message: 'Treasury drip is disabled outside development.' },
+      { status: 403 }
+    );
+  }
+
   const treasuryAddress = env.circleTreasuryAddress();
   const hasCircle = !!env.circleApiKey() && !!env.circleTreasuryWalletId();
   if (!treasuryAddress || !hasCircle) {

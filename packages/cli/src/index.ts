@@ -49,8 +49,23 @@ function readKey(): string | null {
   return null;
 }
 
+// Clerk API keys are `ak_` + a 64-char base62/url-safe payload. We don't
+// pin the exact length (Clerk could add segments), but anything shorter
+// than ~20 chars total or containing whitespace / control bytes is
+// definitely garbage. Validating here saves a confusing 401 on the
+// first real call.
+const KEY_FORMAT_RE = /^ak_[A-Za-z0-9_-]{16,}$/;
+
+function isValidKeyShape(key: string): boolean {
+  return KEY_FORMAT_RE.test(key);
+}
+
 function writeKey(key: string): void {
-  mkdirSync(join(homedir(), '.sendero'), { recursive: true });
+  // 0o700 on the directory matches the 0o600 on the file — without
+  // this, the dir is world-readable (umask default) and any other
+  // local user can enumerate that you have a Sendero key, even if
+  // they can't read its contents.
+  mkdirSync(join(homedir(), '.sendero'), { recursive: true, mode: 0o700 });
   writeFileSync(KEY_FILE, `${key}\n`, { mode: 0o600 });
 }
 
@@ -62,8 +77,10 @@ async function authCmd(argv: string[]): Promise<number> {
     );
     process.stdout.write(`\nPaste your key here, then press Enter:\n> `);
     const key = await readLine();
-    if (!key.startsWith('ak_')) {
-      process.stderr.write('Expected key prefix "ak_"; aborting.\n');
+    if (!isValidKeyShape(key)) {
+      process.stderr.write(
+        'Invalid key format. Expected `ak_` followed by 16+ url-safe chars (no whitespace). Re-copy from the dashboard and try again.\n'
+      );
       return 1;
     }
     writeKey(key);

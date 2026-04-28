@@ -66,6 +66,19 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
+  // tenant.clerkOrgId is nullable in the schema. A tenant row without a
+  // Clerk org link is a degenerate state — it can't legitimately back an
+  // API key, since keys are minted via Clerk's `<APIKeys />` against an
+  // org. Surface this as 404 instead of silently shipping `orgId: null`
+  // against the typed contract, which would break any CLI consumer
+  // indexing the field (e.g., building Slack install URLs scoped to org).
+  if (!tenant.clerkOrgId) {
+    return NextResponse.json(
+      { error: 'tenant_misconfigured', message: 'Tenant has no Clerk org link.' },
+      { status: 404, headers: { 'cache-control': 'no-store' } }
+    );
+  }
+
   const body: WhoamiResponse = {
     tenantId: tenant.id,
     orgId: tenant.clerkOrgId,
