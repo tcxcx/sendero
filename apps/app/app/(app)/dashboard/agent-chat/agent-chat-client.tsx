@@ -44,9 +44,16 @@ import { renderForOperator, type ChannelMessage } from '@/lib/channel-render';
 
 interface Props {
   tenantId: string;
+  /**
+   * When true, every turn from this surface posts `playground: true`
+   * in the body. The /api/agent/chat route forces sandbox routing on
+   * the meter and applies per-user + per-IP rate limits when the flag
+   * is set on a Clerk-session caller. Surfaces /playground/page.tsx.
+   */
+  playground?: boolean;
 }
 
-export function AgentChatClient({ tenantId }: Props) {
+export function AgentChatClient({ tenantId, playground = false }: Props) {
   const [input, setInput] = useState('');
 
   const [chatModel] = useChatModel();
@@ -54,9 +61,14 @@ export function AgentChatClient({ tenantId }: Props) {
     () =>
       new DefaultChatTransport({
         api: '/api/agent/chat',
-        body: () => ({ tenantId, channel: 'web', model: chatModel }),
+        body: () => ({
+          tenantId,
+          channel: 'web' as const,
+          model: chatModel,
+          ...(playground ? { playground: true } : {}),
+        }),
       }),
-    [tenantId, chatModel]
+    [tenantId, chatModel, playground]
   );
 
   const { messages, sendMessage, status } = useChat({ transport });
