@@ -28,6 +28,7 @@ import type { MeterStatus } from '@sendero/database';
 import {
   agentSessionId,
   aiTelemetryConfig,
+  evaluateTrace,
   flushLangfuse,
   scoreLatency,
   scoreToolSuccess,
@@ -386,9 +387,13 @@ async function _runAgentTurnInner(
     state: nextState,
   });
 
-  // 8. fire-and-forget Langfuse scoring + flush — must never extend the
-  //    turn's wall-clock or block the channel adapter from sending its
-  //    reply. Errors are swallowed inside each helper.
+  // 8. fire-and-forget Langfuse scoring + LLM-judge eval + flush.
+  //    Must never extend the turn's wall-clock or block the channel
+  //    adapter from sending its reply. Errors are swallowed inside
+  //    each helper. evaluateTrace is no-op unless LANGFUSE_EVALUATORS=true.
+  const toolContextSummary = trail.length
+    ? trail.map(t => `- ${t.toolName} (${t.ok ? 'ok' : 'failed'})`).join('\n')
+    : undefined;
   void Promise.resolve().then(async () => {
     try {
       await scoreLatency(traceId, latencyMs);
@@ -396,6 +401,14 @@ async function _runAgentTurnInner(
         traceId,
         trail.map(t => ({ success: t.ok, toolName: t.toolName }))
       );
+      if (result.text && result.text.trim().length > 0) {
+        await evaluateTrace({
+          traceId,
+          input: input.text,
+          output: result.text,
+          ...(toolContextSummary ? { context: toolContextSummary } : {}),
+        });
+      }
       await flushLangfuse();
     } catch {
       // already logged inside the helpers; never throw out of fire-and-forget
