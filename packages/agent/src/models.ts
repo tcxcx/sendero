@@ -150,9 +150,49 @@ export function vertexProject(): string | null {
   );
 }
 
+/**
+ * Vertex regions where Gemini 2.5 Pro / Flash are GA at time of writing
+ * (2026-04). New regions land regularly — extend rather than narrow.
+ * The check is non-fatal: an unknown value warns once per process and
+ * still flows through to Vertex (so a brand-new region works the day
+ * Google launches it, before this list catches up).
+ */
+const KNOWN_VERTEX_LOCATIONS = new Set([
+  'us-central1',
+  'us-east1',
+  'us-east4',
+  'us-east5',
+  'us-south1',
+  'us-west1',
+  'us-west4',
+  'europe-west1',
+  'europe-west2',
+  'europe-west3',
+  'europe-west4',
+  'europe-west8',
+  'europe-west9',
+  'europe-southwest1',
+  'asia-northeast1',
+  'asia-northeast3',
+  'asia-southeast1',
+  'australia-southeast1',
+  'global',
+]);
+let warnedUnknownVertexLocation = false;
+
 /** Google Cloud region for Vertex AI. Defaults to us-central1. */
 export function vertexLocation(): string {
-  return process.env.GOOGLE_CLOUD_LOCATION || process.env.GOOGLE_VERTEX_LOCATION || 'us-central1';
+  const value =
+    process.env.GOOGLE_CLOUD_LOCATION || process.env.GOOGLE_VERTEX_LOCATION || 'us-central1';
+  if (!KNOWN_VERTEX_LOCATIONS.has(value) && !warnedUnknownVertexLocation) {
+    warnedUnknownVertexLocation = true;
+    console.warn(
+      `[vertexLocation] "${value}" is not in the known Vertex region set — typo? ` +
+        'Falling through anyway. Update KNOWN_VERTEX_LOCATIONS in packages/agent/src/models.ts ' +
+        'if Google added a region.'
+    );
+  }
+  return value;
 }
 
 /**
