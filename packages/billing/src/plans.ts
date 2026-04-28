@@ -212,10 +212,10 @@ export const PLANS: Record<PlanTier, PlanConfig> = {
     monthlyIncludedCreditsMicro: 25_000_000n,
     // 25% of monthly = $6.25/day.
     dailyCreditCapMicro: 6_250_000n,
-    // Cap at $0.05/turn — adds gpt-5, gemini-2.5-pro, and sonnet to
-    // the unlocked picker. Opus ($0.20+/turn worst case) stays locked
-    // until Enterprise.
-    maxCostPerTurnMicro: 50_000n,
+    // Cap at $0.21/turn — unlocks gpt-5, gemini-2.5-pro, all sonnet
+    // variants, and claude-opus-4-1. Opus 4.7 ($0.29+/turn) stays
+    // Enterprise-only. Nanopayment pass-through bounds Sendero exposure.
+    maxCostPerTurnMicro: 210_000n,
     features: [
       BILLING_FEATURES.ADDITIONAL_WORKSPACES,
       BILLING_FEATURES.PRODUCTION_API_KEYS,

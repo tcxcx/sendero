@@ -9,9 +9,10 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { cogsForModel } from '@sendero/billing';
 
-import { ChatModelTrigger, tierDots } from '@/components/chat/chat-model-trigger';
+import { tierDots } from '@/components/chat/chat-model-trigger';
 import { useChatModel } from '@/hooks/use-chat-model';
 
+import { WorkflowVisibilityToggle } from './console/workflow-visibility-toggle';
 import { useSendero } from './store';
 import { useMeterStream, useMeterSummary } from './use-meter';
 import { WorkflowGraph } from './workflow-graph';
@@ -61,50 +62,37 @@ export function WorkflowLog() {
     : runtime?.model
       ? `${runtime.provider}:${runtime.model}`
       : '—';
-  const modelDots = selectedCogs ? tierDots(selectedCogs.cogsPerTurnMicro) : null;
   const estCostUsdc = selectedCogs ? Number(selectedCogs.cogsPerTurnMicro) / 1_000_000 : null;
+  const modelDots = selectedCogs ? tierDots(selectedCogs.cogsPerTurnMicro) : null;
   const toolLabel = runtime ? `${runtime.toolCount} bound` : '—';
 
   return (
     <div className="col">
       <div className="col-head">
         <span className="title">Workflow</span>
-        <ChatModelTrigger />
+      </div>
+      <div
+        style={{
+          padding: '8px 14px',
+          borderBottom: '1px solid var(--hairline-color-soft)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <WorkflowVisibilityToggle layout="inline" />
       </div>
       <div className="col-body log">
         <WorkflowGraph workflow={workflow} />
 
         <div
           style={{
-            padding: '12px 14px',
+            padding: '12px 0px',
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
           }}
         >
           <Row k="run_id" v={runId} vColor="var(--ink)" />
-          <Row
-            k="model"
-            v={
-              modelDots ? (
-                <>
-                  {modelLabel}
-                  <span
-                    aria-hidden
-                    style={{
-                      marginLeft: 6,
-                      letterSpacing: '0.2em',
-                      color: 'var(--text-faint)',
-                    }}
-                  >
-                    {modelDots}
-                  </span>
-                </>
-              ) : (
-                modelLabel
-              )
-            }
-            vColor="var(--ink)"
-          />
+          <Row k="model" v={modelLabel} vColor="var(--ink)" />
           {estCostUsdc !== null ? (
             <Row
               k="cost / turn (est)"

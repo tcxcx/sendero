@@ -61,7 +61,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useChatModel } from '@/hooks/use-chat-model';
 
 // Provider → ProviderSlug mapping. The COGS registry uses the same
@@ -74,12 +74,20 @@ function providerSlug(p: ChatModelProvider): ProviderSlug {
 
 const TIER_ORDER: readonly PlanTier[] = ['free', 'basic', 'pro', 'enterprise'] as const;
 
-/** Five-band cost dot encoding. */
+/**
+ * Five-band cost dot encoding. Logarithmic scale across the
+ * full model range (Flash ~5k → Opus 4.7 ~290k micro/turn):
+ *   ●○○○○  ≤  8k  — free-tier flash / mini
+ *   ●●○○○  ≤ 30k  — haiku, gpt-5, gemini-pro
+ *   ●●●○○  ≤ 60k  — sonnet 4.5 / 4.6
+ *   ●●●●○  ≤ 210k — opus 4.1  (pro ceiling)
+ *   ●●●●●  > 210k — opus 4.7  (enterprise only)
+ */
 export function tierDots(cogsMicro: bigint): string {
-  if (cogsMicro <= 10_000n) return '●○○○○';
+  if (cogsMicro <= 8_000n) return '●○○○○';
   if (cogsMicro <= 30_000n) return '●●○○○';
-  if (cogsMicro <= 50_000n) return '●●●○○';
-  if (cogsMicro <= 100_000n) return '●●●●○';
+  if (cogsMicro <= 60_000n) return '●●●○○';
+  if (cogsMicro <= 210_000n) return '●●●●○';
   return '●●●●●';
 }
 
@@ -179,7 +187,7 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
           variant="outline"
           size="sm"
           aria-label={`Chat model: ${selected.name}`}
-          className="inline-flex items-center gap-2 rounded-md border-[color:var(--hairline-color-soft)] bg-[color:var(--surface-raised)] px-2.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.06em] text-[color:var(--ink)] shadow-none hover:border-[color:var(--hairline-color-strong)] hover:bg-[color:var(--surface-raised)]"
+          className="sd-corner-hover inline-flex items-center gap-2 rounded-md border-[color:var(--hairline-color-soft)] bg-[color:var(--surface-raised)] px-2.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.06em] text-[color:var(--ink)] shadow-none hover:border-[color:var(--hairline-color-strong)] hover:bg-[color:var(--surface-raised)]"
         >
           <ProviderIcon slug={providerSlug(selected.provider)} size={14} />
           <span>{selected.name}</span>
@@ -240,22 +248,28 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
 
                 const wrapInPopover = (children: React.ReactNode) =>
                   m.description ? (
-                    <HoverCard openDelay={250} closeDelay={100}>
-                      <HoverCardTrigger asChild>{children}</HoverCardTrigger>
-                      <HoverCardContent
-                        side="right"
-                        align="start"
-                        className="w-72 text-[12px] leading-relaxed text-[color:var(--midnight)]"
-                      >
-                        <div className="mb-2 flex items-center gap-2">
-                          <ProviderIcon slug={providerSlug(m.provider)} size={14} />
-                          <span className="font-mono text-[10px] uppercase tracking-[0.08em]">
-                            {PROVIDER_LABEL[m.provider]} · cost {dots}
-                          </span>
-                        </div>
-                        <p>{m.description}</p>
-                      </HoverCardContent>
-                    </HoverCard>
+                    <TooltipProvider delayDuration={300}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>{children}</TooltipTrigger>
+                        <TooltipContent
+                          side="right"
+                          align="start"
+                          className="w-72 max-w-none border border-[color:var(--ink)] bg-[color:var(--surface-floating)] p-3 text-[color:var(--midnight)] shadow-[0_4px_16px_rgba(31,42,68,0.12)]"
+                        >
+                          <div className="mb-1.5 flex items-center gap-2">
+                            <span className="opacity-40">
+                              <ProviderIcon slug={providerSlug(m.provider)} size={13} />
+                            </span>
+                            <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] opacity-60">
+                              {PROVIDER_LABEL[m.provider]} · cost {dots}
+                            </span>
+                          </div>
+                          <p className="text-[11.5px] leading-relaxed opacity-75">
+                            {m.description}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   ) : (
                     <>{children}</>
                   );

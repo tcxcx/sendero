@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useSendero, deriveStep } from './store';
 import { AgentChip } from './agent-chip';
+import { WorkflowVisibilityToggle } from './console/workflow-visibility-toggle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { WalletDropdown } from './wallet-dropdown';
 
@@ -512,9 +513,7 @@ export function FooterRail() {
 }
 
 function TweaksToggle() {
-  const showWorkflow = useSendero(s => s.showWorkflow);
   const dark = useSendero(s => s.dark);
-  const setShowWorkflow = useSendero(s => s.setShowWorkflow);
   const setDark = useSendero(s => s.setDark);
 
   const [open, setOpen] = useState(false);
@@ -545,18 +544,7 @@ function TweaksToggle() {
             <button onClick={() => setOpen(false)}>✕</button>
           </div>
           <div className="tweaks-body">
-            <div className="tweak-group">
-              <span className="tk-label">Workflow terminal</span>
-              <div className="tweak-toggle">
-                <div
-                  className={`tw-switch ${showWorkflow ? 'on' : ''}`}
-                  onClick={() => setShowWorkflow(!showWorkflow)}
-                >
-                  <div className="knob" />
-                </div>
-                <span>{showWorkflow ? 'Visible' : 'Hidden'}</span>
-              </div>
-            </div>
+            <WorkflowVisibilityToggle />
 
             <div className="tweak-group">
               <span className="tk-label">Theme</span>
