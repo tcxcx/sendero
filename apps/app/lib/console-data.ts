@@ -12,13 +12,13 @@
 import { prisma } from '@sendero/database';
 import type { Prisma } from '@sendero/database';
 
-import type { ConversationEntry } from '@/components/console/meta-inbox';
 import type { TripRowData, TripState } from '@/components/console/trip-rail';
 import { stringFromJson } from '@/lib/format';
+import { eventsToUnifiedMessages, type UnifiedMessage } from '@/lib/unified-message';
 
 export interface ConsoleData {
   trips: TripRowData[];
-  conversation: ConversationEntry[];
+  conversation: UnifiedMessage[];
   traveler: { name: string; initials: string } | null;
   holdExpires: string | null;
   /**
@@ -109,13 +109,13 @@ export async function loadConsoleData(
     }
   }
 
-  let conversation: ConversationEntry[] = [];
+  let conversation: UnifiedMessage[] = [];
   let traveler: { name: string; initials: string } | null = null;
   const holdExpires: string | null = null;
   let pendingBooking: ConsoleData['pendingBooking'] = null;
 
   if (scopedTripId && focused) {
-    conversation = eventsToConversation(focused.events);
+    conversation = eventsToUnifiedMessages(focused.events);
     const name = focused.traveler?.displayName ?? focused.traveler?.email ?? 'Traveler';
     traveler = { name, initials: initials(name) };
     const earliestPending = await prisma.booking.findFirst({
@@ -133,7 +133,11 @@ export async function loadConsoleData(
     conversation = [
       {
         id: 'sys-intro',
-        role: 'system',
+        at: new Date().toISOString(),
+        channel: 'internal',
+        direction: 'internal',
+        kind: 'system_note',
+        author: { kind: 'system' },
         body: 'Sendero AI · operator console · nothing here is sent to customers · run reports, change policy, ask anything',
       },
     ];
@@ -208,51 +212,4 @@ function initials(name: string): string {
       .join('')
       .toUpperCase() || 'TR'
   );
-}
-
-function eventsToConversation(events: Prisma.JsonValue): ConversationEntry[] {
-  if (!Array.isArray(events)) return [];
-  return events
-    .map((raw, i): ConversationEntry | null => {
-      if (!raw || typeof raw !== 'object') return null;
-      const r = raw as Record<string, unknown>;
-      const id = typeof r.id === 'string' ? r.id : `evt-${i}`;
-      const text = typeof r.text === 'string' ? r.text : undefined;
-      const t =
-        typeof r.createdAt === 'string'
-          ? r.createdAt.slice(11, 16)
-          : typeof r.t === 'string'
-            ? r.t
-            : undefined;
-      const direction = typeof r.direction === 'string' ? r.direction : null;
-      const channel = typeof r.channel === 'string' ? r.channel : undefined;
-      const kind = typeof r.kind === 'string' ? r.kind : null;
-      if (kind === 'inbox_reply' && direction === 'outbound') {
-        return { id, role: 'op', body: text, t };
-      }
-      if (kind === 'inbox_reply' && direction === 'inbound') {
-        return {
-          id,
-          role: 'customer',
-          body: text,
-          t,
-          channel: (channel as ConversationEntry['channel']) ?? 'web',
-        };
-      }
-      if (kind === 'agent_reply' || direction === 'agent') {
-        return { id, role: 'ai', body: text, t };
-      }
-      if (kind === 'tool_call') {
-        return {
-          id,
-          role: 'tool',
-          toolName: typeof r.toolName === 'string' ? r.toolName : 'tool',
-          toolArgs: typeof r.toolArgs === 'string' ? r.toolArgs : undefined,
-          toolCost: typeof r.priceMicroUsdc === 'string' ? `$${r.priceMicroUsdc}` : undefined,
-        };
-      }
-      if (text) return { id, role: 'op', body: text, t };
-      return null;
-    })
-    .filter((e): e is ConversationEntry => e !== null);
 }

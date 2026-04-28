@@ -53,13 +53,13 @@ import { useSendero } from '@/components/store';
 
 import { asChannelKey, type ChannelKey } from './channels';
 import { DemoConversation, type DemoMessage, runDemoTripScript } from './demo-trip';
-import { type ComposerMode, type ConversationEntry, MetaInbox } from './meta-inbox';
+import { type ComposerMode, MetaInbox, type UnifiedMessage } from './meta-inbox';
 import type { TripRowData } from './trip-rail';
 
 interface MetaInboxLiveProps {
   trips: TripRowData[];
   scopedTripId: string | null;
-  initialConversation: ConversationEntry[];
+  initialConversation: UnifiedMessage[];
   traveler?: { name: string; initials: string } | null;
   holdExpires?: string | null;
   pendingBooking?: { id: string; totalUsd: string } | null;
@@ -219,10 +219,10 @@ export function MetaInboxLive({
   useChatStoreSync(messages);
 
   // ── scoped (channel) mode ─────────────────────────────────────────
-  const [optimistic, setOptimistic] = useState<ConversationEntry[]>([]);
+  const [optimistic, setOptimistic] = useState<UnifiedMessage[]>([]);
   const [posting, setPosting] = useState(false);
 
-  const scopedConversation = useMemo<ConversationEntry[]>(
+  const scopedConversation = useMemo<UnifiedMessage[]>(
     () => [...initialConversation, ...optimistic],
     [initialConversation, optimistic]
   );
@@ -265,8 +265,20 @@ export function MetaInboxLive({
     // canonical event log on success.
     if (!scopedTripId) return;
     const id = `optim_${Date.now().toString(36)}`;
-    const stamp = new Date().toTimeString().slice(0, 5);
-    setOptimistic(o => [...o, { id, role: 'op', body: text, t: stamp }]);
+    const optimisticChannel: ChannelKey = focusedChannel === 'internal' ? 'web' : focusedChannel;
+    setOptimistic(o => [
+      ...o,
+      {
+        id,
+        at: new Date().toISOString(),
+        channel: optimisticChannel,
+        direction: 'outbound',
+        kind: 'message',
+        author: { kind: 'operator', displayName: 'you' },
+        body: text,
+        status: 'pending',
+      },
+    ]);
     setPosting(true);
     try {
       const res = await fetch(`/api/inbox/${scopedTripId}/reply`, {
@@ -373,6 +385,9 @@ export function MetaInboxLive({
               style={{ fontSize: 13, maxWidth: '42ch', margin: '0 auto' }}
             >
               Run a report, change policy, or investigate a trip. None of this reaches a customer.
+              Change channels to directly message your user's or let Sendero AI handle it
+              automatically. Use Sendero privately to give better customer support to make trips
+              delightful.
             </div>
           </div>
         ) : (
