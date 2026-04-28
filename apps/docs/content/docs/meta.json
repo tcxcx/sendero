@@ -2,6 +2,7 @@
   "title": "Sendero API",
   "pages": [
     "index",
+    "getting-started",
     "quickstart",
     "api-reference",
     "agent-to-agent-booking",
