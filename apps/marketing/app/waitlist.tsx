@@ -21,7 +21,6 @@ export function MarketingWaitlist() {
       </ClerkLoading>
       <ClerkLoaded>
         <Waitlist
-          afterJoinWaitlistUrl="/"
           appearance={{
             elements: {
               rootBox: 'mk-waitlist-clerk-root',
