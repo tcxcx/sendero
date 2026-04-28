@@ -34,6 +34,7 @@ import {
   aiTelemetryConfig,
   evaluateTrace,
   flushLangfuse,
+  getActiveTraceId,
   scoreLatency,
   scoreToolSuccess,
 } from '@sendero/langfuse';
@@ -48,7 +49,6 @@ import {
   isDuplicateKeyError,
   type ModelTier,
   renderWorkflowsBlock,
-  SENDERO_SOUL,
 } from '@sendero/agent';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
 import { preflight } from '@sendero/billing/meter';
@@ -93,17 +93,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const CHAT_PERSONA = `${SENDERO_SOUL}
-
-## Routing rules
-- Corporate buyers saying "fund a trip", "give my employee a budget", or "prefund this contractor"
-  -> sendero.guest_prefund.
-- Agencies saying "set up a cohort", "fund these 50 people" -> sendero.agency_cohort.
-- Individual traveler booking their own flight -> sendero.book_flight.
-- A group planning together -> sendero.group_trip.
-- Cancel + refund -> sendero.refund.
-- Only call tools directly when none of the canonical workflows fits.
-`;
+// Persona resolution moved to apps/app/lib/agent-persona.ts so the same
+// Langfuse-managed `sendero-soul` + per-surface routing rules feed every
+// surface. The fallback strings inside that helper mirror the original
+// CHAT_PERSONA verbatim — Langfuse Prompt Management is opt-in via
+// LANGFUSE_PROMPT_MANAGEMENT=true.
+import { buildAgentPersona } from '@/lib/agent-persona';
 
 const BodySchema = z.object({
   // useChat sends the running history under `messages`. tenantId +
@@ -413,8 +408,9 @@ export async function POST(req: NextRequest) {
   // client carries it on every turn.
   const localeSlice = getLocaleSlice(locale);
   const trip = body.tripId ? await loadTrip({ tripId: body.tripId, tenantId }) : null;
+  const persona = await buildAgentPersona('chat', locale);
   const systemPrompt = buildSystemPrompt({
-    persona: CHAT_PERSONA,
+    persona,
     locale,
     localeSlice,
     channelHint:
@@ -627,21 +623,24 @@ export async function POST(req: NextRequest) {
       });
 
       // Langfuse scoring + LLM-as-a-judge eval (fire-and-forget).
-      // traceId comes from the OTel span automatically propagated by
-      // initLangfuseOtel → LangfuseSpanProcessor. We score against
-      // the active trace so all spans are grouped correctly.
+      // Read the live OTel trace id from the active span — the AI SDK
+      // call above wrote spans through aiTelemetryConfig, and the
+      // Langfuse trace id IS the OTel trace id. Falls back to turnId
+      // for safety; without the real id, scores would land on phantom
+      // traces. Capture before the fire-and-forget block so the
+      // closure sees a stable value even after onFinish returns.
+      const langfuseTraceId = getActiveTraceId() ?? turnId;
       void Promise.resolve().then(async () => {
-        const traceId = turnId; // turnId used as correlation key; OTel links spans by trace context
         const toolResults = (finish.toolCalls ?? []).map(tc => ({
           toolName: tc.toolName,
           success: true,
         }));
-        await scoreLatency(traceId, latencyMs);
-        if (toolResults.length > 0) await scoreToolSuccess(traceId, toolResults);
+        await scoreLatency(langfuseTraceId, latencyMs);
+        if (toolResults.length > 0) await scoreToolSuccess(langfuseTraceId, toolResults);
         const lastUser = lastUserText(body.messages as UIMessage[]);
         if (lastUser && finish.text) {
           await evaluateTrace({
-            traceId,
+            traceId: langfuseTraceId,
             input: lastUser,
             output: finish.text,
           });
@@ -661,6 +660,18 @@ export async function POST(req: NextRequest) {
   return result.toUIMessageStreamResponse({
     headers: {
       'X-Sendero-Surface': 'agent-chat',
+    },
+    // Surface the live Langfuse trace id on the assistant message so
+    // the operator thumbs UI can score the right trace via
+    // POST /api/agent/feedback. The OTel context is active during
+    // streamText execution, so getActiveTraceId() returns the real
+    // span trace id; falls back to turnId if OTel is unavailable.
+    messageMetadata: ({ part }: { part: { type: string } }) => {
+      if (part.type === 'start') {
+        const traceId = getActiveTraceId() ?? turnId;
+        return { senderoTraceId: traceId };
+      }
+      return undefined;
     },
   });
 }
