@@ -58,17 +58,52 @@ export default async function PricingPage() {
   // Header + footer come from app/layout.tsx (SiteHeader / SiteFooter).
   return (
     <>
-      <section className="mk-hero" style={{ minHeight: 'auto', paddingBottom: 32 }}>
+      <section
+        className="mk-hero mk-hero-pricing"
+        style={{
+          minHeight: 'clamp(420px, 56vw, 560px)',
+          paddingBottom: 32,
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+          alignItems: 'center',
+          gap: 'clamp(24px, 4vw, 64px)',
+          padding: '0 clamp(24px, 6vw, 96px)',
+        }}
+      >
+        <div
+          className="mk-hero-copy"
+          style={{
+            maxWidth: '52ch',
+            position: 'relative',
+            zIndex: 2,
+            width: '100%',
+            margin: 0,
+            padding: 'clamp(48px, 8vw, 96px) 0',
+            justifySelf: 'start',
+          }}
+        >
+          <div className="mk-eyebrow">Pricing</div>
+          <h1 className="mk-title" style={{ fontSize: 'clamp(36px, 4.6vw, 60px)' }}>
+            {content.pricing.heading}
+          </h1>
+          <p className="mk-subtitle">{content.pricing.subheading}</p>
+        </div>
         <div
           aria-hidden="true"
-          style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}
+          className="mk-hero-pricing-scene"
+          style={{
+            position: 'relative',
+            width: '100%',
+            aspectRatio: '4 / 3',
+            maxHeight: '100%',
+            overflow: 'hidden',
+            borderRadius: 8,
+            justifySelf: 'end',
+          }}
         >
-          <PricingHeroScene />
-        </div>
-        <div className="mk-hero-copy" style={{ maxWidth: '70ch', position: 'relative', zIndex: 2 }}>
-          <div className="mk-eyebrow">Pricing</div>
-          <h1 className="mk-title">{content.pricing.heading}</h1>
-          <p className="mk-subtitle">{content.pricing.subheading}</p>
+          <div style={{ position: 'absolute', inset: 0 }}>
+            <PricingHeroScene />
+          </div>
         </div>
       </section>
 

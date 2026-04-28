@@ -1876,4 +1876,32 @@ a:hover {
     transform: none;
   }
 }
+/* Pricing hero — split layout + Unicorn Studio badge hide */
+.mk-hero-pricing {
+  border-bottom: 1px solid var(--border);
+}
+.mk-hero-pricing-scene a[href*="unicorn.studio"],
+.mk-hero-pricing-scene [class*="unicorn-studio"],
+.mk-hero-pricing-scene a[aria-label*="Unicorn" i] {
+  display: none !important;
+}
+/* Suppress the unicorn-react in-canvas error fallback so layout stays clean
+   on devices/contexts without WebGL. */
+.mk-hero-pricing-scene [data-scene-id] > div:not(:has(canvas)) {
+  display: none !important;
+}
+@media (max-width: 860px) {
+  .mk-hero-pricing {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 0 clamp(20px, 6vw, 32px) !important;
+  }
+  .mk-hero-pricing .mk-hero-copy {
+    padding: clamp(40px, 10vw, 64px) 0 0 !important;
+  }
+  .mk-hero-pricing-scene {
+    aspect-ratio: 16 / 10 !important;
+    justify-self: stretch !important;
+    margin-bottom: clamp(32px, 8vw, 56px);
+  }
+}
 /* end marketing chrome */
