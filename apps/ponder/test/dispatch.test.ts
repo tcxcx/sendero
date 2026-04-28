@@ -60,9 +60,9 @@ describe('dispatchClaimLockout', () => {
     const calls = installFetchMock(() => new Response('', { status: 200 }));
 
     const out = await dispatchClaimLockout({
-      tripId: (`0x${'11'.repeat(32)}`) as `0x${string}`,
+      tripId: `0x${'11'.repeat(32)}` as `0x${string}`,
       lockedUntil: '1800000000',
-      txHash: (`0x${'aa'.repeat(32)}`) as `0x${string}`,
+      txHash: `0x${'aa'.repeat(32)}` as `0x${string}`,
       blockNumber: '12345',
     });
 
@@ -75,9 +75,9 @@ describe('dispatchClaimLockout', () => {
     const calls = installFetchMock(() => new Response('{"ok":true}', { status: 200 }));
 
     const out = await dispatchClaimLockout({
-      tripId: (`0x${'11'.repeat(32)}`) as `0x${string}`,
+      tripId: `0x${'11'.repeat(32)}` as `0x${string}`,
       lockedUntil: '1800000000',
-      txHash: (`0x${'aa'.repeat(32)}`) as `0x${string}`,
+      txHash: `0x${'aa'.repeat(32)}` as `0x${string}`,
       blockNumber: '12345',
     });
 
@@ -98,9 +98,9 @@ describe('dispatchClaimLockout', () => {
     const calls = installFetchMock(() => new Response('', { status: 204 }));
 
     await dispatchClaimLockout({
-      tripId: (`0x${'11'.repeat(32)}`) as `0x${string}`,
+      tripId: `0x${'11'.repeat(32)}` as `0x${string}`,
       lockedUntil: '0',
-      txHash: (`0x${'aa'.repeat(32)}`) as `0x${string}`,
+      txHash: `0x${'aa'.repeat(32)}` as `0x${string}`,
       blockNumber: '0',
     });
 
@@ -113,9 +113,9 @@ describe('dispatchClaimLockout', () => {
     installFetchMock(() => new Response('upstream exploded'.repeat(50), { status: 502 }));
 
     const out = await dispatchClaimLockout({
-      tripId: (`0x${'11'.repeat(32)}`) as `0x${string}`,
+      tripId: `0x${'11'.repeat(32)}` as `0x${string}`,
       lockedUntil: '0',
-      txHash: (`0x${'aa'.repeat(32)}`) as `0x${string}`,
+      txHash: `0x${'aa'.repeat(32)}` as `0x${string}`,
       blockNumber: '0',
     });
 
@@ -139,9 +139,9 @@ describe('dispatchClaimLockout', () => {
 
     const out = await dispatchClaimLockout(
       {
-        tripId: (`0x${'11'.repeat(32)}`) as `0x${string}`,
+        tripId: `0x${'11'.repeat(32)}` as `0x${string}`,
         lockedUntil: '0',
-        txHash: (`0x${'aa'.repeat(32)}`) as `0x${string}`,
+        txHash: `0x${'aa'.repeat(32)}` as `0x${string}`,
         blockNumber: '0',
       },
       { timeoutMs: 10 }
@@ -157,13 +157,13 @@ describe('dispatchBookingSettledV2', () => {
     const calls = installFetchMock(() => new Response('', { status: 200 }));
 
     await dispatchBookingSettledV2({
-      bookingId: (`0x${'22'.repeat(32)}`) as `0x${string}`,
-      vendor: (`0x${'33'.repeat(20)}`) as `0x${string}`,
+      bookingId: `0x${'22'.repeat(32)}` as `0x${string}`,
+      vendor: `0x${'33'.repeat(20)}` as `0x${string}`,
       vendorAmount: '1000000',
-      agencyAddress: (`0x${'44'.repeat(20)}`) as `0x${string}`,
+      agencyAddress: `0x${'44'.repeat(20)}` as `0x${string}`,
       agencyAmount: '50000',
       feeAmount: '10000',
-      txHash: (`0x${'aa'.repeat(32)}`) as `0x${string}`,
+      txHash: `0x${'aa'.repeat(32)}` as `0x${string}`,
       blockNumber: '99',
     });
 

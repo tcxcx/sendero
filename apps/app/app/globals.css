@@ -180,6 +180,31 @@
   --ch-internal-tint: #f5ede0;
 }
 
+/* ─── Clerk theme variables (sendero brand) ─────────────────────
+   New @clerk/nextjs ≥6 theming reads these CSS variables at
+   :root, no `appearance` prop needed. Light values are the
+   active set (we run color-scheme: light); dark values stay
+   here so any future dark surface inherits cleanly. */
+:root {
+  --clerk-color-primary: light-dark(#fb542b, #ffffff);
+  --clerk-color-primary-foreground: light-dark(#ffffff, #000000);
+  --clerk-color-danger: #ef4444;
+  --clerk-color-success: #22c543;
+  --clerk-color-warning: #f36b16;
+  --clerk-color-neutral: light-dark(#000000, #ffffff);
+  --clerk-color-foreground: light-dark(#3b3636, #ffffff);
+  --clerk-color-background: light-dark(#fcf1e6, #212126);
+  --clerk-color-input: light-dark(#ffffff, #26262b);
+  --clerk-color-input-foreground: light-dark(#000000, #ffffff);
+  --clerk-color-ring: #000000;
+  --clerk-color-shimmer: #ffffff;
+  --clerk-color-modal-backdrop: #000000;
+  --clerk-border-radius: 0.375rem;
+  --clerk-spacing: 1rem;
+  --clerk-color-muted: #ffffff;
+  --clerk-color-muted-foreground: #fb542b;
+}
+
 /* ─── Sendero type primitives — strict named scale ──────────────
    Use these classes instead of ad-hoc Tailwind sizing whenever the
    design calls for a named token. Mirrors /sendero/project/App

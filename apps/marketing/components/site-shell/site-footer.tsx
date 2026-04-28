@@ -13,7 +13,12 @@ import { getMarketingContent } from '@/lib/content';
  * Keeps `lib/content.ts` agnostic — it can keep storing the canonical
  * prod URLs and we rewrite at render time.
  */
-function rewriteOrigin(href: string, appOrigin: string, docsOrigin: string, helpOrigin: string): string {
+function rewriteOrigin(
+  href: string,
+  appOrigin: string,
+  docsOrigin: string,
+  helpOrigin: string
+): string {
   if (href.startsWith('https://app.sendero.travel')) {
     return href.replace('https://app.sendero.travel', appOrigin);
   }

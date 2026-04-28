@@ -45,7 +45,7 @@ export const UPDATES: UpdateEntry[] = [
     date: '2026-04-28',
     title: 'Platform release — unified inbox, MCPB, /playground, Claude Code plugin',
     summary:
-      "First Sendero platform-wide release. The trip ledger goes unified across WhatsApp, Slack, MCP, and the operator console. We ship a one-click .mcpb installer for Claude Desktop, a versioned plugin for Claude Code with a /sendero:travel-booking skill, the new /playground sandbox surface, and a hardened settle-action TOCTOU close.",
+      'First Sendero platform-wide release. The trip ledger goes unified across WhatsApp, Slack, MCP, and the operator console. We ship a one-click .mcpb installer for Claude Desktop, a versioned plugin for Claude Code with a /sendero:travel-booking skill, the new /playground sandbox surface, and a hardened settle-action TOCTOU close.',
     highlights: [
       'Unified inbox ledger — WhatsApp + Slack + dispatch all write to a single Trip.events stream',
       'Operator console KPIs (Today / Settled-30d / Avg-response) computed from real Trip.events latency',
@@ -69,7 +69,7 @@ export const UPDATES: UpdateEntry[] = [
       'cursor.com/install-mcp deep link (b64-encoded Sendero config)',
       'vscode:mcp/install URL for VS Code one-click adoption',
       'apps/docs/content/docs/mcp-integration.mdx — full integration guide',
-      "OpenAPI 3.1 spec at /api/openapi.json — single source of truth for tools and llms.txt",
+      'OpenAPI 3.1 spec at /api/openapi.json — single source of truth for tools and llms.txt',
     ],
     categories: ['mcp', 'docs'],
   },

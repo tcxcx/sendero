@@ -23,13 +23,9 @@ export default function SignInForm() {
             appearance={{
               elements: {
                 rootBox: '!w-full',
+                cardBox: '!w-full !max-w-none',
                 header: 'hidden',
                 footer: 'hidden',
-                cardBox: '!w-full !max-w-none shadow-none rounded-none',
-                card: '!w-full shadow-none rounded-none border border-[var(--border)] bg-[var(--bg-elev)]',
-                formButtonPrimary:
-                  'rounded-none bg-[var(--ink)] font-mono text-[11px] uppercase tracking-[0.12em] text-white shadow-none hover:bg-[var(--ink)]/90',
-                formFieldInput: 'rounded-none border-[var(--border)] shadow-none',
               },
             }}
           />

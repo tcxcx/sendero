@@ -4,7 +4,7 @@ import { createPageMetadata } from '@/lib/metadata';
 export const metadata = createPageMetadata({
   title: 'Privacy Policy · Sendero',
   description:
-    "How Sendero collects, uses, and protects your data. Travel-ops platform with on-chain settlement — covers traveler data, agent telemetry, payment data, and our Clerk + Circle + Duffel sub-processor chain.",
+    'How Sendero collects, uses, and protects your data. Travel-ops platform with on-chain settlement — covers traveler data, agent telemetry, payment data, and our Clerk + Circle + Duffel sub-processor chain.',
   path: '/policy',
   og: {
     title: 'Privacy Policy',
@@ -26,26 +26,28 @@ export default function PolicyPage() {
       <h3>1a. Account &amp; workspace data</h3>
       <ul>
         <li>
-          Email, name, organization name, and role — from <strong>Clerk</strong>, our
-          authentication provider. We don't store your password; Clerk does.
+          Email, name, organization name, and role — from <strong>Clerk</strong>, our authentication
+          provider. We don't store your password; Clerk does.
         </li>
-        <li>API keys you mint via Clerk's <code>&lt;APIKeys /&gt;</code> component. We hold the
-          token hash, not the raw key.
+        <li>
+          API keys you mint via Clerk's <code>&lt;APIKeys /&gt;</code> component. We hold the token
+          hash, not the raw key.
         </li>
-        <li>Plan tier (Free / Basic / Pro / Enterprise) and billing identity from Clerk Billing.</li>
+        <li>
+          Plan tier (Free / Basic / Pro / Enterprise) and billing identity from Clerk Billing.
+        </li>
       </ul>
 
       <h3>1b. Trip &amp; agent data</h3>
       <ul>
         <li>
           Travel records (legs, travelers, holds, bookings, settlements) created when your agent
-          calls Sendero tools. Stored in our Postgres database hosted on{' '}
-          <strong>Neon</strong>, region{' '}
-          <code>aws-us-east-1</code>.
+          calls Sendero tools. Stored in our Postgres database hosted on <strong>Neon</strong>,
+          region <code>aws-us-east-1</code>.
         </li>
         <li>
-          Agent transcripts and tool-call logs (input/output of every metered call). Used to
-          serve replays, debugging, and Langfuse-based quality tracking.
+          Agent transcripts and tool-call logs (input/output of every metered call). Used to serve
+          replays, debugging, and Langfuse-based quality tracking.
         </li>
       </ul>
 
@@ -55,7 +57,8 @@ export default function PolicyPage() {
           On-chain wallet addresses and USDC settlement records from <strong>Circle</strong>{' '}
           (Arc-Testnet today; Arc-Mainnet at GA). Wallet addresses are public on-chain by design.
         </li>
-        <li>Card-and-fiat data (subscriptions) is handled entirely by{' '}
+        <li>
+          Card-and-fiat data (subscriptions) is handled entirely by{' '}
           <strong>Stripe via Clerk Billing</strong>. We never see card numbers.
         </li>
       </ul>
@@ -69,50 +72,85 @@ export default function PolicyPage() {
 
       <h2>2. Why we collect it</h2>
       <ul>
-        <li><strong>Run the service.</strong> We can't book a flight without knowing the route.</li>
-        <li><strong>Bill correctly.</strong> Plan tier + per-call meter events drive your invoice.</li>
-        <li><strong>Audit.</strong> Every settlement writes an on-chain row + a meter event. Auditors and finance teams need the trail.</li>
-        <li><strong>Improve quality.</strong> Langfuse traces let us catch regressions in agent behavior (tool-call success rate, latency).</li>
-        <li><strong>Comply.</strong> Anti-fraud, anti-money-laundering, regulatory holds.</li>
+        <li>
+          <strong>Run the service.</strong> We can't book a flight without knowing the route.
+        </li>
+        <li>
+          <strong>Bill correctly.</strong> Plan tier + per-call meter events drive your invoice.
+        </li>
+        <li>
+          <strong>Audit.</strong> Every settlement writes an on-chain row + a meter event. Auditors
+          and finance teams need the trail.
+        </li>
+        <li>
+          <strong>Improve quality.</strong> Langfuse traces let us catch regressions in agent
+          behavior (tool-call success rate, latency).
+        </li>
+        <li>
+          <strong>Comply.</strong> Anti-fraud, anti-money-laundering, regulatory holds.
+        </li>
       </ul>
 
       <h2>3. Sub-processors</h2>
       <p>
-        Sendero uses the following sub-processors. Each receives only the data they need to
-        perform their function. Your access to your own data is not throttled by them.
+        Sendero uses the following sub-processors. Each receives only the data they need to perform
+        their function. Your access to your own data is not throttled by them.
       </p>
       <ul>
-        <li><strong>Clerk</strong> — auth + billing UI</li>
-        <li><strong>Stripe</strong> — payment processing (via Clerk)</li>
-        <li><strong>Circle</strong> — USDC custody + Arc settlement</li>
-        <li><strong>Duffel</strong> — flight search + booking</li>
-        <li><strong>Neon (Postgres)</strong> — primary database</li>
-        <li><strong>Upstash</strong> — Redis cache + rate-limit state</li>
-        <li><strong>Langfuse</strong> — agent observability</li>
-        <li><strong>Vercel</strong> — hosting (apps/app, apps/docs, apps/marketing)</li>
-        <li><strong>Cloudflare</strong> — edge proxy (apps/edge)</li>
-        <li><strong>Resend</strong> — transactional email</li>
+        <li>
+          <strong>Clerk</strong> — auth + billing UI
+        </li>
+        <li>
+          <strong>Stripe</strong> — payment processing (via Clerk)
+        </li>
+        <li>
+          <strong>Circle</strong> — USDC custody + Arc settlement
+        </li>
+        <li>
+          <strong>Duffel</strong> — flight search + booking
+        </li>
+        <li>
+          <strong>Neon (Postgres)</strong> — primary database
+        </li>
+        <li>
+          <strong>Upstash</strong> — Redis cache + rate-limit state
+        </li>
+        <li>
+          <strong>Langfuse</strong> — agent observability
+        </li>
+        <li>
+          <strong>Vercel</strong> — hosting (apps/app, apps/docs, apps/marketing)
+        </li>
+        <li>
+          <strong>Cloudflare</strong> — edge proxy (apps/edge)
+        </li>
+        <li>
+          <strong>Resend</strong> — transactional email
+        </li>
       </ul>
 
       <h2>4. Your rights</h2>
       <p>You can:</p>
       <ul>
-        <li><strong>Access</strong> your data — every workspace surface in the dashboard exposes it.</li>
         <li>
-          <strong>Export</strong> trip and settlement data via{' '}
-          <code>export_audit_log</code>, <code>export_trip_summary</code>, and the OpenAPI surface.
+          <strong>Access</strong> your data — every workspace surface in the dashboard exposes it.
         </li>
-        <li><strong>Correct</strong> data — open a ticket via the dashboard or email below.</li>
+        <li>
+          <strong>Export</strong> trip and settlement data via <code>export_audit_log</code>,{' '}
+          <code>export_trip_summary</code>, and the OpenAPI surface.
+        </li>
+        <li>
+          <strong>Correct</strong> data — open a ticket via the dashboard or email below.
+        </li>
         <li>
           <strong>Delete</strong> your workspace — email{' '}
           <a href="mailto:privacy@sendero.travel">privacy@sendero.travel</a>. We honor deletion
           within 30 days, except where retention is required by law (financial records: 7 years).
         </li>
         <li>
-          <strong>Withdraw consent</strong> for telemetry — set{' '}
-          <code>SENDERO_TELEMETRY=off</code> in your CLI env. Server-side telemetry is
-          load-bearing for the service and can't be opted out individually; deleting the workspace
-          is the path.
+          <strong>Withdraw consent</strong> for telemetry — set <code>SENDERO_TELEMETRY=off</code>{' '}
+          in your CLI env. Server-side telemetry is load-bearing for the service and can't be opted
+          out individually; deleting the workspace is the path.
         </li>
       </ul>
 
@@ -151,8 +189,8 @@ export default function PolicyPage() {
       <h2>9. Changes to this policy</h2>
       <p>
         We update this page when sub-processors or practices change. The effective date at the top
-        always reflects the active version. Material changes are emailed to workspace owners 14
-        days before they take effect.
+        always reflects the active version. Material changes are emailed to workspace owners 14 days
+        before they take effect.
       </p>
 
       <h2>10. Contact</h2>

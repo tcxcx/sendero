@@ -123,7 +123,7 @@ export default function UpdatesPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {update.categories.map((cat) => (
+                  {update.categories.map(cat => (
                     <span
                       key={cat}
                       style={{
@@ -182,7 +182,7 @@ export default function UpdatesPage() {
                     color: 'color-mix(in oklab, var(--fg) 72%, transparent)',
                   }}
                 >
-                  {update.highlights.map((line) => (
+                  {update.highlights.map(line => (
                     <li
                       key={line}
                       style={{

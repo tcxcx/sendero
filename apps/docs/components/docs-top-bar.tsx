@@ -20,7 +20,14 @@
 
 import { resolvePublicOrigin } from '@sendero/seo';
 import { buildLocaleApiHrefs, SenderoLanguageSelector } from '@sendero/ui/language-selector';
-import { ArrowUpRightIcon, BookOpenIcon, KeyIcon, PlayCircleIcon, PlugIcon, ZapIcon } from 'lucide-react';
+import {
+  ArrowUpRightIcon,
+  BookOpenIcon,
+  KeyIcon,
+  PlayCircleIcon,
+  PlugIcon,
+  ZapIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 
 import { getDocsRequestLocale } from '@/lib/request-locale';
@@ -29,10 +36,7 @@ const APP_ORIGIN = resolvePublicOrigin(
   process.env.NEXT_PUBLIC_APP_URL,
   'https://app.sendero.travel'
 );
-const SITE_ORIGIN = resolvePublicOrigin(
-  process.env.NEXT_PUBLIC_SITE_URL,
-  'https://sendero.travel'
-);
+const SITE_ORIGIN = resolvePublicOrigin(process.env.NEXT_PUBLIC_SITE_URL, 'https://sendero.travel');
 
 interface NavLink {
   label: string;
@@ -95,7 +99,7 @@ export async function DocsTopBar() {
       {/* Primary nav. Hidden on narrow viewports — the Fumadocs sidebar
           covers in-docs navigation for mobile. */}
       <nav className="docs-top-bar-nav" aria-label="Sendero developer surfaces">
-        {links.map((link) => (
+        {links.map(link => (
           <Link
             key={link.label}
             href={link.href}
@@ -108,11 +112,7 @@ export async function DocsTopBar() {
             </span>
             {link.label}
             {link.external ? (
-              <ArrowUpRightIcon
-                size={11}
-                aria-hidden="true"
-                className="docs-top-bar-nav-ext"
-              />
+              <ArrowUpRightIcon size={11} aria-hidden="true" className="docs-top-bar-nav-ext" />
             ) : null}
           </Link>
         ))}
@@ -125,12 +125,7 @@ export async function DocsTopBar() {
           currentLocale={locale}
           hrefs={buildLocaleApiHrefs('/docs', { includeLocalizedPath: false })}
         />
-        <Link
-          href={apiKeysHref}
-          className="docs-top-bar-cta"
-          target="_blank"
-          rel="noreferrer"
-        >
+        <Link href={apiKeysHref} className="docs-top-bar-cta" target="_blank" rel="noreferrer">
           <KeyIcon size={13} aria-hidden="true" />
           <span>Get API key</span>
         </Link>

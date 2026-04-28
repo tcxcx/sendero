@@ -19,6 +19,7 @@
     "./roles": "./src/roles.ts",
     "./webhooks": "./src/webhooks.ts",
     "./proxy": "./src/proxy.ts",
+    "./clerk-appearance": "./src/clerk-appearance.ts",
     "./components/sign-in": "./src/components/sign-in.tsx",
     "./components/sign-up": "./src/components/sign-up.tsx",
     "./components/clerk-form-skeleton": "./src/components/clerk-form-skeleton.tsx",

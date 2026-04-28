@@ -101,8 +101,7 @@ describe('getCirclePublicKey', () => {
   });
 
   test('passes through pre-wrapped PEM unchanged', async () => {
-    const prewrapped =
-      '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG\n-----END PUBLIC KEY-----\n';
+    const prewrapped = '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG\n-----END PUBLIC KEY-----\n';
     installFetch(() => Response.json({ data: { publicKey: prewrapped } }));
 
     const pem = await getCirclePublicKey('44444444-5555-6666-7777-888888888888');
@@ -111,7 +110,9 @@ describe('getCirclePublicKey', () => {
   });
 
   test('returns null on non-200 from Circle', async () => {
-    installFetch(() => new Response('{"code":2,"message":"API parameter invalid"}', { status: 404 }));
+    installFetch(
+      () => new Response('{"code":2,"message":"API parameter invalid"}', { status: 404 })
+    );
 
     const result = await getCirclePublicKey('55555555-6666-7777-8888-999999999999');
 

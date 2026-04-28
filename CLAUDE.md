@@ -407,8 +407,8 @@ Three append-mostly tables, all under tenant scoping:
 LANGFUSE_SECRET_KEY=     # Langfuse project secret key (sensitive)
 LANGFUSE_PUBLIC_KEY=     # Langfuse project public key
 LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
-LANGFUSE_PROMPT_MANAGEMENT=false   # flip to true to pull persona slabs from Langfuse
-LANGFUSE_EVALUATORS=false          # flip to true to fire 4 LLM-judges per turn (gpt-4.1-nano)
+LANGFUSE_PROMPT_MANAGEMENT=true    # pulls persona slabs from Langfuse (set on prod + all preview; verify with `vercel env ls`)
+LANGFUSE_EVALUATORS=true           # fires 4 LLM-judges per turn (gpt-4.1-nano)
 LANGFUSE_MCP_AUTH=       # base64(public:secret) — consumed by .mcp.json for in-IDE prompt CRUD
 ```
 
@@ -465,6 +465,43 @@ When `LANGFUSE_PROMPT_MANAGEMENT=false` the helper returns the hardcoded fallbac
 | Smoke a prompt change against goldens | `bun langfuse:regression --scenario <name>` |
 | Read the active trace inside a tool | `getActiveTraceId()` from `@sendero/langfuse` (returns undefined when no span) |
 | Read prompts from the Anthropic skills system | the `/langfuse` skill — documentation-first, CLI-native |
+
+## Vercel env vars: scope to all preview, never to a single branch
+
+`vercel env add NAME preview <branch>` scopes a variable to one git branch. New branches cut from main inherit nothing — they fall back to whatever broader-scope record exists, or to the code default. The dashboard reveals it as `Preview · <branch>`; the CLI hides it.
+
+**The rule:** when running `vercel env add`, omit the `<branch>` argument. Targets that should follow the app — keys, flags, service URLs, model configs — go to `production`, `preview` (no branch), `development`. Branch-scoping is reserved for genuinely branch-specific values (per-PR mock URL, sandbox creds for one test).
+
+**The CLI is broken for the bulk widening case.** `vercel env add NAME preview --value true --yes` (no branch) returns `git_branch_required` even with `--non-interactive --force --yes`. The Claude plugin returns the same command back as a "next" suggestion → infinite loop. Use the REST API instead:
+
+```bash
+TOKEN=$(jq -r .token ~/Library/Application\ Support/com.vercel.cli/auth.json)
+PROJECT_ID=$(jq -r .projectId .vercel/project.json)
+TEAM_ID=$(jq -r .orgId .vercel/project.json)
+
+# Add (or upsert) at all-preview scope.
+# type=encrypted is the typical default — value is decryptable via API/CLI.
+# Use type=sensitive ONLY when you want to lock readback to the dashboard
+# (real secrets you've decided no one should ever pull down again).
+# `upsert=true` keeps the existing type if the var already exists, so this
+# block is safe to re-run after an audit.
+curl -X POST "https://api.vercel.com/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID&upsert=true" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"key":"NAME","value":"VALUE","type":"encrypted","target":["preview"]}'
+
+# Audit what's branch-scoped that shouldn't be
+curl -s "https://api.vercel.com/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID&decrypt=true" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.envs[] | select(.target | index("preview")) | select(.gitBranch != null) | {key, gitBranch, id}'
+
+# Delete a branch-scoped record by id (after replacing with all-preview version)
+curl -X DELETE "https://api.vercel.com/v10/projects/$PROJECT_ID/env/$ENV_ID?teamId=$TEAM_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+`target:["preview"]` with no `gitBranch` field = all preview branches. `decrypt=true` returns plaintext for non-sensitive vars; sensitive vars come back with empty `value`, so widening them needs the plaintext from `.env.local` (root or `apps/app/.env.local`).
+
+History: a backfill audit once found 11 vars (LANGFUSE keys + flags, AI_GATEWAY_API_KEY, GOOGLE_CLOUD_*, GOOGLE_API_KEY, NEXT_PUBLIC_DEMO_TRIP_*) all stuck on a single ship branch's preview scope. Widened in bulk via the curl loop; full lesson in `lessons.md`. Re-run the audit query above before any release to catch new drift.
 
 ## Mainnet cutover gating — distribution surfaces
 

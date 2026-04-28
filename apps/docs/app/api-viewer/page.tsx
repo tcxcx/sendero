@@ -114,12 +114,12 @@ export default function ApiViewerPage() {
             maxWidth: '62ch',
           }}
         >
-          Sendero exposes ~49 tools through a single OpenAPI 3.1 surface and an MCP endpoint
-          that mirrors it. Pick the entry point that fits your client.
+          Sendero exposes ~49 tools through a single OpenAPI 3.1 surface and an MCP endpoint that
+          mirrors it. Pick the entry point that fits your client.
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {SURFACES.map((surface) => (
+          {SURFACES.map(surface => (
             <a
               key={surface.href}
               href={surface.href}
@@ -189,8 +189,8 @@ export default function ApiViewerPage() {
             fontFamily: 'var(--mono)',
           }}
         >
-          The interactive Scalar viewer is temporarily disabled — see /api-viewer/page.tsx for
-          the zod version-resolution note.
+          The interactive Scalar viewer is temporarily disabled — see /api-viewer/page.tsx for the
+          zod version-resolution note.
         </p>
       </div>
 

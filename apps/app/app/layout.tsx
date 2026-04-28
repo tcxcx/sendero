@@ -2,6 +2,7 @@ import type { Viewport } from 'next';
 import Script from 'next/script';
 
 import { ClerkProvider } from '@clerk/nextjs';
+import { senderoClerkAppearance } from '@sendero/auth/clerk-appearance';
 import { senderoFontVars } from '@sendero/fonts';
 import { SUPPORTED_LOCALES } from '@sendero/locale';
 import {
@@ -132,6 +133,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           />
         )}
         <ClerkProvider
+          appearance={senderoClerkAppearance}
           signInUrl="/sign-in"
           signUpUrl="/sign-up"
           waitlistUrl="/waitlist"

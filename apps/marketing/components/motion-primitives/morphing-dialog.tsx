@@ -18,22 +18,8 @@
  */
 
 import { X } from 'lucide-react';
-import {
-  AnimatePresence,
-  MotionConfig,
-  motion,
-  type Transition,
-  type Variant,
-} from 'motion/react';
-import React, {
-  useCallback,
-  useContext,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { AnimatePresence, MotionConfig, motion, type Transition, type Variant } from 'motion/react';
+import React, { useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import useClickOutside from '../agents/use-click-outside';
@@ -94,13 +80,13 @@ export type MorphingDialogTriggerProps = {
 export function MorphingDialogTrigger({ children, className, style }: MorphingDialogTriggerProps) {
   const { setIsOpen, isOpen, uniqueId, triggerRef } = useMorphingDialog();
 
-  const onClick = useCallback(() => setIsOpen((v) => !v), [setIsOpen]);
+  const onClick = useCallback(() => setIsOpen(v => !v), [setIsOpen]);
 
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        setIsOpen((v) => !v);
+        setIsOpen(v => !v);
       }
     },
     [setIsOpen]
@@ -131,11 +117,7 @@ export type MorphingDialogContentProps = {
   style?: React.CSSProperties;
 };
 
-export function MorphingDialogContent({
-  children,
-  className,
-  style,
-}: MorphingDialogContentProps) {
+export function MorphingDialogContent({ children, className, style }: MorphingDialogContentProps) {
   const { setIsOpen, isOpen, uniqueId, triggerRef } = useMorphingDialog();
   const containerRef = useRef<HTMLDivElement>(null);
   const [firstFocusable, setFirstFocusable] = useState<HTMLElement | null>(null);
@@ -306,9 +288,7 @@ export function MorphingDialogDescription({
   return (
     <motion.div
       key={`dialog-description-${uniqueId}`}
-      layoutId={
-        disableLayoutAnimation ? undefined : `dialog-description-content-${uniqueId}`
-      }
+      layoutId={disableLayoutAnimation ? undefined : `dialog-description-content-${uniqueId}`}
       variants={variants}
       className={className}
       initial="initial"

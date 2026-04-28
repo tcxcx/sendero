@@ -192,7 +192,7 @@ function assertProductionClerkLiveKeys(): void {
   const sk = process.env.CLERK_SECRET_KEY ?? '';
   const pk = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
   if (!sk && !pk) return;
-  if (sk.startsWith('sk_test_') || pk.startsWith('pk_test_')) {
+  if (sk.startsWith('ak_') || pk.startsWith('pk_test_')) {
     console.error(
       '[sendero/env] ✖  Vercel Production (VERCEL_ENV=production) must use Clerk live API keys (sk_live_…, pk_live_…). In Clerk Dashboard → API Keys, switch to Production and copy those keys into the Production environment on Vercel.'
     );

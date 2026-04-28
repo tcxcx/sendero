@@ -32,6 +32,29 @@
     var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --display: var(--font-display), ui-serif, Georgia, "Times New Roman", serif;
   --mono-x: var(--font-mono-x), var(--mono);
+
+  /* Clerk theme variables (sendero brand). Picked up by Clerk's
+     CSS-variable theming so embedded forms (waitlist, redirected
+     sign-in) inherit parchment + vermillion without an `appearance`
+     prop. Mirrors the apps/app set so brand stays consistent across
+     marketing and the dashboard. */
+  --clerk-color-primary: light-dark(#fb542b, #ffffff);
+  --clerk-color-primary-foreground: light-dark(#ffffff, #000000);
+  --clerk-color-danger: #ef4444;
+  --clerk-color-success: #22c543;
+  --clerk-color-warning: #f36b16;
+  --clerk-color-neutral: light-dark(#000000, #ffffff);
+  --clerk-color-foreground: light-dark(#3b3636, #ffffff);
+  --clerk-color-background: light-dark(#fcf1e6, #212126);
+  --clerk-color-input: light-dark(#ffffff, #26262b);
+  --clerk-color-input-foreground: light-dark(#000000, #ffffff);
+  --clerk-color-ring: #000000;
+  --clerk-color-shimmer: #ffffff;
+  --clerk-color-modal-backdrop: #000000;
+  --clerk-border-radius: 0.375rem;
+  --clerk-spacing: 1rem;
+  --clerk-color-muted: #ffffff;
+  --clerk-color-muted-foreground: #fb542b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -474,21 +497,9 @@ a:hover {
   background: transparent;
   padding: 0;
 }
-.mk-waitlist-clerk-input {
-  border-radius: 0;
-  border-color: var(--border);
-  box-shadow: none;
-}
-.mk-waitlist-clerk-button {
-  border-radius: 0;
-  background: var(--fg);
-  color: var(--bg);
-  font-family: var(--mono-x);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  box-shadow: none;
-}
+/* Embedded waitlist defers to the Clerk CSS-variable theme
+   (vermillion primary, parchment bg, 0.375rem radius). Only the
+   transparent embed wrapper above is local. */
 .mk-waitlist-loading {
   display: grid;
   gap: 10px;
@@ -1879,6 +1890,42 @@ a:hover {
 /* Pricing hero — split layout + Unicorn Studio badge hide */
 .mk-hero-pricing {
   border-bottom: 1px solid var(--border);
+}
+/* Entrance choreography — Emil discipline: custom curves, sub-500ms,
+   reduced-motion respected. The bare-text reveals are handled by
+   `.s-enter`; the pill wipe and emblem rise are bespoke because they
+   carry their own anchor transforms (mk-title-em is a baseline span,
+   the emblem is translate(-50%) centered). */
+@media (prefers-reduced-motion: no-preference) {
+  .mk-hero-pricing .mk-title-em {
+    animation: mk-pricing-pill 560ms var(--s-ease-out) 280ms both;
+  }
+  @keyframes mk-pricing-pill {
+    0% {
+      clip-path: inset(0 100% 0 0);
+    }
+    100% {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+  .mk-hero-pricing-emblem {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.94);
+    transform-origin: 50% 100%;
+    animation: mk-pricing-emblem 720ms var(--s-ease-out) 360ms both;
+    will-change: transform, opacity;
+  }
+  @keyframes mk-pricing-emblem {
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-hero-pricing-emblem {
+    transform: translateX(-50%);
+  }
 }
 .mk-hero-pricing-scene a[href*="unicorn.studio"],
 .mk-hero-pricing-scene [class*="unicorn-studio"],

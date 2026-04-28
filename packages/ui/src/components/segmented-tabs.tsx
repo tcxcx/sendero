@@ -37,10 +37,7 @@ export const SegmentedTabsList = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={cn(
-      'inline-flex h-9 w-full justify-stretch gap-1 bg-transparent p-0',
-      className
-    )}
+    className={cn('inline-flex h-9 w-full justify-stretch gap-1 bg-transparent p-0', className)}
     {...props}
   />
 ));
@@ -56,7 +53,7 @@ export const SegmentedTabsTrigger = React.forwardRef<
       // Layout
       'flex-1 h-9 rounded-sm px-3',
       // Type
-      "font-mono text-[11px] uppercase tracking-[0.14em]",
+      'font-mono text-[11px] uppercase tracking-[0.14em]',
       // Inactive: subtle ink wash + ink text
       'bg-[color-mix(in_oklab,var(--ink,#fb542b)_8%,transparent)]',
       'text-[color-mix(in_oklab,var(--fg,#111)_70%,transparent)]',

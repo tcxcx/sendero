@@ -85,20 +85,35 @@ export default async function PricingPage() {
           <div style={{ position: 'absolute', inset: 0 }}>
             <PricingHeroScene />
           </div>
-          {/* Geometric parchment block at center-bottom — masks the
-              "Made with unicorn.studio" watermark and reads as an
-              intentional design element. */}
+          {/* Geometric ink block with topography linework at center-bottom
+              — masks the "Made with unicorn.studio" watermark and reads
+              as a deliberate cartographic emblem. */}
           <div
+            className="mk-hero-pricing-emblem"
             style={{
               position: 'absolute',
               bottom: 0,
               left: '50%',
-              transform: 'translateX(-50%)',
               width: 'clamp(160px, 22%, 240px)',
               aspectRatio: '1 / 1',
-              background: 'var(--bg)',
+              background: 'var(--ink)',
+              overflow: 'hidden',
             }}
-          />
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'var(--bg)',
+                WebkitMaskImage: 'url(/patterns/topography.svg)',
+                maskImage: 'url(/patterns/topography.svg)',
+                WebkitMaskSize: '160px 160px',
+                maskSize: '160px 160px',
+                WebkitMaskRepeat: 'repeat',
+                maskRepeat: 'repeat',
+              }}
+            />
+          </div>
         </div>
         <div
           className="mk-hero-copy"
@@ -111,18 +126,29 @@ export default async function PricingPage() {
             padding: 'clamp(48px, 8vw, 96px) 0',
           }}
         >
-          <div className="mk-eyebrow">Pricing</div>
+          <div className="mk-eyebrow s-enter s-enter-1">Pricing</div>
           <h1
-            className="mk-title"
+            className="mk-title s-enter s-enter-2"
             style={{
               fontSize: 'clamp(28px, 3.6vw, 52px)',
               whiteSpace: 'nowrap',
               maxWidth: 'none',
             }}
           >
-            {content.pricing.heading}
+            {(() => {
+              const heading = content.pricing.heading;
+              const splitAt = heading.indexOf('. ');
+              if (splitAt < 0) return heading;
+              const first = heading.slice(0, splitAt + 1);
+              const second = heading.slice(splitAt + 2);
+              return (
+                <>
+                  {first} <span className="mk-title-em">{second}</span>
+                </>
+              );
+            })()}
           </h1>
-          <p className="mk-subtitle">{content.pricing.subheading}</p>
+          <p className="mk-subtitle s-enter s-enter-3">{content.pricing.subheading}</p>
         </div>
       </section>
 

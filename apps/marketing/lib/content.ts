@@ -273,7 +273,7 @@ const EN_US: MarketingContent = {
     agents: 'For AI agents',
   },
   hero: {
-    eyebrow: 'Live on Circle Arc',
+    eyebrow: 'Live on Testnet',
     title: 'Travel infrastructure for the agent era.',
     subtitle:
       'Bookings, prepaid escrow, USDC settlement, and trip support — in one persistent thread.',
@@ -282,7 +282,7 @@ const EN_US: MarketingContent = {
   },
   proof: {
     items: [
-      'Live on Circle Arc',
+      'Live on Testnet',
       'USDC + EURC settlement',
       'MCP + x402 native',
       'WhatsApp + Slack + web',

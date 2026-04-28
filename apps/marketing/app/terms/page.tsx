@@ -26,13 +26,14 @@ export default function TermsPage() {
       <p>
         Sendero is a B2B travel-ops platform. Agents (yours, ours, or third-party MCP clients)
         search travel inventory, place holds, ticket bookings, and settle on-chain in USDC. We
-        provide the software and the rails; you (or your travelers) own the trips and the
-        outcomes.
+        provide the software and the rails; you (or your travelers) own the trips and the outcomes.
       </p>
 
       <h2>2. Eligibility &amp; accounts</h2>
       <ul>
-        <li>You must be at least 18 and authorized to enter contracts on behalf of your organization.</li>
+        <li>
+          You must be at least 18 and authorized to enter contracts on behalf of your organization.
+        </li>
         <li>Workspace owners are responsible for the actions of all users they invite.</li>
         <li>API keys are credentials. Treat them like passwords — never check them into git.</li>
       </ul>
@@ -48,8 +49,8 @@ export default function TermsPage() {
           nanopay rates, 5% off booking take-rate.
         </li>
         <li>
-          <strong>Pro</strong> ($60/mo, $50/mo annual, 14-day trial without card): $20,000 cap,
-          25 production keys, 30% off nanopay, 10% off take-rate. Unlimited workspaces.
+          <strong>Pro</strong> ($60/mo, $50/mo annual, 14-day trial without card): $20,000 cap, 25
+          production keys, 30% off nanopay, 10% off take-rate. Unlimited workspaces.
         </li>
         <li>
           <strong>Enterprise</strong> (contact sales): custom cap + production-key allowance, 50%
@@ -59,25 +60,24 @@ export default function TermsPage() {
 
       <h3>3a. Per-call nanopayments</h3>
       <p>
-        On top of the monthly subscription, every metered tool call charges a small amount of
-        USDC from your workspace's Arc wallet. Discounts compound: a Pro tenant pays 70% of base
-        nanopay rate per call, and the discount is materialized into{' '}
-        <code>MeterEvent.priceMicroUsdc</code> at dispatch time.
+        On top of the monthly subscription, every metered tool call charges a small amount of USDC
+        from your workspace's Arc wallet. Discounts compound: a Pro tenant pays 70% of base nanopay
+        rate per call, and the discount is materialized into <code>MeterEvent.priceMicroUsdc</code>{' '}
+        at dispatch time.
       </p>
 
       <h3>3b. Take-rate on settled bookings</h3>
       <p>
-        We charge a take-rate (default 50bps, lower with higher plans) on every booking your
-        agent confirms. This is added on top of the carrier/supplier fare. Itemized on the
-        invoice.
+        We charge a take-rate (default 50bps, lower with higher plans) on every booking your agent
+        confirms. This is added on top of the carrier/supplier fare. Itemized on the invoice.
       </p>
 
       <h3>3c. Refunds</h3>
       <p>
-        Subscription fees: pro-rated refund within 14 days of a charge if you've made fewer than
-        10 production-key calls. Nanopayments are non-refundable once a tool call has executed.
-        Booking refunds follow the underlying carrier's policy; we don't refund take-rate on a
-        cancelled booking but we don't add new take-rate on the refund either.
+        Subscription fees: pro-rated refund within 14 days of a charge if you've made fewer than 10
+        production-key calls. Nanopayments are non-refundable once a tool call has executed. Booking
+        refunds follow the underlying carrier's policy; we don't refund take-rate on a cancelled
+        booking but we don't add new take-rate on the refund either.
       </p>
 
       <h2>4. Acceptable use</h2>
@@ -97,8 +97,8 @@ export default function TermsPage() {
           surfaces an Arcscan URL in the response payload.
         </li>
         <li>
-          On-chain transactions are <strong>final</strong>. We can't reverse a settled
-          transaction; refunds are forward transactions back to your wallet.
+          On-chain transactions are <strong>final</strong>. We can't reverse a settled transaction;
+          refunds are forward transactions back to your wallet.
         </li>
         <li>
           During the testnet beta, Arc-Testnet USDC is used. No real value moves. We'll flip the
@@ -109,8 +109,8 @@ export default function TermsPage() {
       <h2>6. Liability</h2>
       <ul>
         <li>
-          Sendero is software; the trip is between you and the carrier/hotel/supplier. We act as
-          an intermediary, not a fiduciary.
+          Sendero is software; the trip is between you and the carrier/hotel/supplier. We act as an
+          intermediary, not a fiduciary.
         </li>
         <li>
           We do <strong>not</strong> indemnify you for missed flights, cancelled hotels, or
@@ -121,8 +121,8 @@ export default function TermsPage() {
           fees you paid Sendero in that period, or (b) $1,000.
         </li>
         <li>
-          We are not liable for indirect, consequential, special, incidental, or punitive
-          damages — including lost profits, lost trips, or lost goodwill.
+          We are not liable for indirect, consequential, special, incidental, or punitive damages —
+          including lost profits, lost trips, or lost goodwill.
         </li>
       </ul>
 
@@ -137,21 +137,20 @@ export default function TermsPage() {
       <ul>
         <li>You may close your workspace at any time from the dashboard.</li>
         <li>
-          We may suspend a workspace for unpaid invoices, abuse, or regulatory holds — with
-          notice when reasonable.
+          We may suspend a workspace for unpaid invoices, abuse, or regulatory holds — with notice
+          when reasonable.
         </li>
         <li>
-          On termination: API keys are revoked, holds are released within 24 hours, and your data
-          is deleted per our{' '}
-          <a href="/policy">Privacy Policy</a>'s retention schedule.
+          On termination: API keys are revoked, holds are released within 24 hours, and your data is
+          deleted per our <a href="/policy">Privacy Policy</a>'s retention schedule.
         </li>
       </ul>
 
       <h2>9. Changes to these terms</h2>
       <p>
         We update these terms when the platform or law changes. Material changes are emailed to
-        workspace owners 14 days before the new version takes effect. Continued use after that
-        date constitutes acceptance.
+        workspace owners 14 days before the new version takes effect. Continued use after that date
+        constitutes acceptance.
       </p>
 
       <h2>10. Governing law</h2>
@@ -166,8 +165,8 @@ export default function TermsPage() {
       <p>
         General: <a href="mailto:legal@sendero.travel">legal@sendero.travel</a>
         <br />
-        Disputes: <a href="mailto:legal@sendero.travel">legal@sendero.travel</a> with subject
-        line "DISPUTE — &lt;workspace name&gt;"
+        Disputes: <a href="mailto:legal@sendero.travel">legal@sendero.travel</a> with subject line
+        "DISPUTE — &lt;workspace name&gt;"
       </p>
     </LegalPage>
   );
