@@ -15,7 +15,6 @@ import { heroTitleWithHighlights } from '@/lib/hero-title';
 
 import { MarketingBrandHoverCard } from './brand-hover-card';
 import { MarketingEngineScene } from './marketing-engine-scene';
-import { MarketingHeroScene } from './marketing-hero-scene';
 import { MarketingWaitlist } from './waitlist';
 
 export const revalidate = 300; // 5 minutes; basehub will push on-demand in Phase 4
@@ -127,7 +126,18 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
 
       <section className="mk-hero">
         <div className="mk-hero-art s-fade s-fade-1" aria-hidden="true">
-          <MarketingHeroScene />
+          <img
+            alt=""
+            className="mk-hero-art-img"
+            decoding="async"
+            src="/brand/marketing-hero-wide.png"
+          />
+          <img
+            alt=""
+            className="mk-hero-art-edge"
+            decoding="async"
+            src="/brand/marketing-hero-transparent-edge.png"
+          />
         </div>
         <div className="mk-hero-copy">
           <div className="mk-eyebrow s-enter s-enter-1">{content.hero.eyebrow}</div>
@@ -201,26 +211,6 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           <p>{content.waitlist.body}</p>
         </div>
         <MarketingWaitlist />
-      </section>
-
-      <section className="mk-engine" aria-labelledby="mk-engine-title">
-        <MarketingEngineScene />
-        <div className="mk-engine-copy">
-          <div className="mk-engine-eyebrow">The Sendero Engine</div>
-          <h2 id="mk-engine-title" className="mk-engine-title">
-            Every route planned.
-            <br />
-            Every seat settled.
-          </h2>
-          <p className="mk-engine-sub">
-            One agent handles the full loop — fare search, policy check, seat hold, approval
-            routing, commission split, on-chain receipt. From the first Slack message to final USDC
-            settlement, no human in the loop unless you want one.
-          </p>
-          <a href={toAppHref('/dashboard')} className="mk-cta mk-engine-cta">
-            Start booking →
-          </a>
-        </div>
       </section>
 
       <section className="mk-murals" aria-labelledby="mk-murals-title">
@@ -323,6 +313,10 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           </div>
         </div>
       </section>
+
+      <div className="mk-scene-banner" aria-hidden="true">
+        <MarketingEngineScene />
+      </div>
 
       <section className="mk-pricing" id="pricing">
         <div className="mk-pricing-banner">
@@ -494,8 +488,10 @@ const inlineCss = `
   .mk-hero::after { content: ""; position: absolute; z-index: 1; inset: 36% 0 0; background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--bg) 92%, transparent) 72%); pointer-events: none; }
   .mk-hero-art { position: absolute; inset: 0; overflow: hidden; opacity: 0; animation: mkHeroImageIn 1100ms var(--mk-hero-ease) 80ms both; will-change: opacity; }
   .mk-hero-art::after { content: ""; position: absolute; inset: auto 9% 12% auto; width: min(34vw, 420px); height: 1px; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 76%, #111) 22%, color-mix(in oklab, var(--accent) 76%, #111) 72%, transparent); opacity: 0.72; transform-origin: left center; animation: mkRouteTrace 1300ms var(--mk-hero-ease) 520ms both; }
-  .mk-hero-scene-wrap { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  .mk-hero-scene-wrap > * { width: 100% !important; height: 100% !important; }
+  .mk-hero-art-img,
+  .mk-hero-art-edge { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .mk-hero-art-img { object-position: center top; filter: saturate(0.96) contrast(0.98); }
+  .mk-hero-art-edge { opacity: 0.52; object-position: center top; mix-blend-mode: multiply; }
   .mk-hero-copy { position: relative; z-index: 2; width: min(820px, calc(100% - clamp(48px, 14vw, 192px))); margin: 0 auto clamp(40px, 7vh, 96px); padding: 0 0 clamp(40px, 6vw, 72px); }
   .mk-hero-copy > * { opacity: 0; transform: translateY(10px); animation: mkHeroTextIn 760ms var(--mk-hero-ease) both; will-change: opacity, transform; }
   /* Hero kicker: same fill as SenderoLanguageSelector active (.is-active / --sendero-language-ink + #fafaf7) */
@@ -566,17 +562,6 @@ const inlineCss = `
   @keyframes mkHeroImageIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes mkHeroTextIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes mkRouteTrace { from { opacity: 0; transform: scaleX(0); } to { opacity: 0.72; transform: scaleX(1); } }
-  /* Engine section — full-bleed dark cinematic with WebGL route visualization */
-  .mk-engine { position: relative; isolation: isolate; width: 100vw; margin: 0 calc(50% - 50vw) 0; min-height: clamp(560px, 68vw, 780px); display: grid; place-items: center; overflow: hidden; background: #0d0d0d; }
-  .mk-engine-scene { position: absolute; inset: 0; pointer-events: none; }
-  .mk-engine-scene > * { width: 100% !important; height: 100% !important; }
-  .mk-engine::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 80%, transparent 20%, rgba(13,13,13,0.55) 100%); pointer-events: none; z-index: 1; }
-  .mk-engine-copy { position: relative; z-index: 2; display: grid; place-items: center; text-align: center; padding: clamp(64px, 10vw, 120px) clamp(24px, 6vw, 96px); max-width: 860px; }
-  .mk-engine-eyebrow { font-family: var(--mono-x); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); margin-bottom: 28px; }
-  .mk-engine-title { font-family: var(--display); font-size: clamp(44px, 6.8vw, 84px); line-height: 1.06; letter-spacing: -0.018em; font-weight: 450; color: var(--accent); margin: 0 0 28px; text-wrap: balance; }
-  .mk-engine-sub { font-size: clamp(15px, 1.4vw, 17px); line-height: 1.7; color: rgba(250,250,247,0.68); margin: 0 0 40px; max-width: 580px; }
-  .mk-engine-cta { border-color: var(--accent) !important; color: var(--accent) !important; background: transparent !important; }
-  .mk-engine-cta:hover { background: var(--accent) !important; color: #fff7ec !important; }
   .mk-murals { display: grid; grid-template-columns: minmax(240px, 0.5fr) minmax(0, 1.5fr); gap: clamp(24px, 4vw, 48px); align-items: start; margin: 0 calc(clamp(16px, 3vw, 48px) * -1) 80px; padding: clamp(42px, 6vw, 70px) clamp(16px, 3vw, 48px); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: color-mix(in oklab, #eedcc7 72%, var(--bg)); }
   .mk-murals-copy { position: sticky; top: 24px; }
   .mk-murals-copy h2 { font-family: var(--display); font-size: clamp(30px, 4vw, 50px); line-height: 1.03; letter-spacing: -0.012em; margin: 0 0 16px; font-weight: 450; text-wrap: balance; }
@@ -648,6 +633,8 @@ const inlineCss = `
   .mk-postcard figcaption strong { font-size: 14px; line-height: 1.2; font-weight: 600; letter-spacing: 0; color: var(--fg); }
   .mk-postcard figcaption small { font-size: 12px; line-height: 1.25; color: #4d463d; }
   .mk-postcard figcaption p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .mk-scene-banner { width: 100vw; margin: 0 calc(50% - 50vw) 80px; height: 900px; overflow: hidden; display: flex; align-items: stretch; }
+  .mk-scene-banner > * { flex: 1 1 auto; min-width: 0; }
   .mk-pricing { margin: 0 0 80px; }
   .mk-pricing h2 { font-family: var(--display); font-size: clamp(28px, 3.5vw, 44px); letter-spacing: -0.01em; margin: 0 0 12px; font-weight: 450; }
   .mk-pricing-sub { color: var(--muted); max-width: 620px; margin: 0 0 32px; }
@@ -771,7 +758,6 @@ const inlineCss = `
   @supports (animation-timeline: view()) {
     .mk-proof,
     .mk-waitlist,
-    .mk-engine,
     .mk-murals,
     .mk-story,
     .mk-features,
@@ -838,6 +824,8 @@ const inlineCss = `
     .mk-nav-right a { display: flex; min-height: 40px; align-items: center; justify-content: center; border: 1px solid var(--border); padding: 8px 10px; text-align: center; line-height: 1.15; text-decoration: none; }
     .mk-nav-right .mk-cta { border-color: var(--fg); white-space: normal; }
     .mk-hero { min-height: 620px; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); margin-bottom: 64px; }
+    .mk-hero-art-img { object-position: 58% top; }
+    .mk-hero-art-edge { opacity: 0.42; object-position: 58% top; }
     .mk-hero-copy { width: calc(100% - 28px); margin-bottom: clamp(32px, 6vh, 72px); padding-bottom: 40px; }
     .mk-title { font-size: clamp(42px, 14vw, 56px); line-height: 1.03; letter-spacing: 0; }
     .mk-subtitle { font-size: 17px; line-height: 1.55; }
@@ -914,7 +902,6 @@ const inlineCss = `
     .mk-proof-track,
     .mk-audience,
     .mk-waitlist,
-    .mk-engine,
     .mk-murals,
     .mk-story,
     .mk-features,

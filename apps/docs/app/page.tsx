@@ -6,7 +6,6 @@ import { buildLocaleApiHrefs, SenderoLanguageSelector } from '@sendero/ui/langua
 import { getDocsRequestLocale } from '@/lib/request-locale';
 
 import { type DocsPathCard, DocsPathCards } from './docs-path-cards';
-import { DocsHeroScene } from './docs-hero-scene';
 
 const DOC_PATHS: readonly DocsPathCard[] = [
   {
@@ -81,9 +80,11 @@ export default async function HomePage() {
           </div>
         </div>
         <figure className="docs-hero-visual">
-          <div className="docs-hero-scene">
-            <DocsHeroScene />
-          </div>
+          <img
+            alt="Sendero world map panorama showing route marks, envelopes, destinations, and a traveler."
+            decoding="async"
+            src="/brand/generated/traveler-world-panorama.jpg"
+          />
           <figcaption>
             <span>Agent-native routing</span>
             <strong>One graph from traveler intent to final receipt.</strong>
@@ -120,7 +121,8 @@ const inlineCss = `
   .docs-actions a:first-child { background: var(--ink); color: #fafaf7; }
   .docs-actions a:last-child { color: var(--ink); }
   .docs-hero-visual { margin: 0; min-width: 0; animation: docsHeroImageIn 740ms var(--docs-ease-out) 120ms both; }
-  .docs-hero-scene { display: block; width: 100%; overflow: hidden; border: 1px solid var(--border); background: #0d0d0d; }
+  .docs-hero-visual img { display: block; width: 100%; aspect-ratio: 1.75; object-fit: cover; object-position: center; border: 1px solid var(--border); background: #eedcc7; filter: saturate(0.98) contrast(0.98); transition: filter 220ms var(--docs-ease-out), transform 520ms var(--docs-ease-out); }
+  .docs-hero-visual:hover img { filter: saturate(1.03) contrast(1); transform: scale(1.012); }
   .docs-hero-visual figcaption { display: grid; gap: 6px; padding-top: 12px; }
   .docs-hero-visual figcaption span,
   .docs-path-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink); }
