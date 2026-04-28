@@ -125,10 +125,7 @@ function diff(snapshot: SnapshotEntry[], live: SnapshotEntry[]): string[] {
 }
 
 async function main(): Promise<void> {
-  const [snapshot, live] = await Promise.all([
-    Promise.resolve(loadSnapshot()),
-    fetchLive(),
-  ]);
+  const [snapshot, live] = await Promise.all([Promise.resolve(loadSnapshot()), fetchLive()]);
   const drifts = diff(snapshot, live);
 
   if (drifts.length === 0) {

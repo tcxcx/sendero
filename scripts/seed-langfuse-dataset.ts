@@ -89,7 +89,7 @@ const ITEMS: DatasetItem[] = [
   },
   {
     input: {
-      text: "Make it for two people instead — the flight you just quoted me.",
+      text: 'Make it for two people instead — the flight you just quoted me.',
       locale: 'en-US',
       channel: 'web',
     },
