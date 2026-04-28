@@ -27,7 +27,7 @@ export const dynamic = 'force-static';
 export const revalidate = 3600;
 
 export function GET() {
-  const origin = resolvePublicOrigin(process.env.NEXT_PUBLIC_APP_URL, 'https://www.sendero.travel');
+  const origin = resolvePublicOrigin(process.env.NEXT_PUBLIC_APP_URL, 'https://app.sendero.travel');
   const doc = buildOpenApiDoc({
     // Bumped 2026-04-25 with the tenant-markup v1 release. Adds
     // `confirm_booking` (extended), `get_tenant_pricing_policy`, and
