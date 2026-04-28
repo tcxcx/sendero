@@ -118,6 +118,14 @@ const BodySchema = z.object({
    * internal models (OCR, embeddings) ignore this field.
    */
   model: z.string().optional(),
+  /**
+   * Public sandbox playground mode. Forces every meter event from this
+   * turn to status='sandbox' regardless of plan tier or env, and
+   * activates per-user + per-IP rate limiting. Only honored on
+   * Clerk-session-authed callers (the public /playground UI); API key
+   * callers can already get sandbox routing via their key type.
+   */
+  playground: z.boolean().default(false),
 });
 
 export async function POST(req: NextRequest) {
@@ -237,6 +245,45 @@ export async function POST(req: NextRequest) {
     }
     tenantId = body.tenantId;
     userId = body.userId;
+  }
+
+  // Public-sandbox-playground rate limit. Only honored on Clerk-session
+  // callers — API-key callers and the dispatch shared-secret path are
+  // not subject to playground caps. Per-user (30 turns / 10 min) and
+  // per-IP (60 turns / 10 min) so multi-account abuse from one machine
+  // still hits the wall. Rate limit fails open on Redis outages.
+  const playgroundMode = body.playground === true && Boolean(clerkSession);
+  if (playgroundMode) {
+    const { checkRateLimit, clientIp } = await import('@/lib/rate-limit');
+    const ip = clientIp(req.headers);
+    const [userLimit, ipLimit] = await Promise.all([
+      checkRateLimit({
+        bucket: 'playground-chat-user',
+        key: userId,
+        windowS: 600,
+        limit: 30,
+      }),
+      checkRateLimit({
+        bucket: 'playground-chat-ip',
+        key: ip,
+        windowS: 600,
+        limit: 60,
+      }),
+    ]);
+    const blocked = !userLimit.ok || !ipLimit.ok;
+    if (blocked) {
+      const retryAfter = Math.max(userLimit.retryAfterS, ipLimit.retryAfterS);
+      return NextResponse.json(
+        {
+          error: 'rate_limited',
+          message:
+            'Playground rate limit reached. The cap is 30 turns / 10 min per account, or 60 turns / 10 min per network. Wait or sign in with a paid workspace to drop the limit.',
+          scope: !userLimit.ok ? 'user' : 'ip',
+          retryAfterS: retryAfter,
+        },
+        { status: 429, headers: { 'retry-after': String(retryAfter) } }
+      );
+    }
   }
 
   const isServiceAccount = Boolean(apiKey);
@@ -451,7 +498,10 @@ export async function POST(req: NextRequest) {
   // 'paid' write as before, so this swap is backward-compatible.
   const meterStore = makeCreditAwareMeterStore({
     plan: resolvePlan(planTier),
-    sandbox: apiKey?.effectiveKeyType === 'sandbox',
+    // Playground mode (Clerk-authed turn from /playground) forces
+    // sandbox routing, so paid users can experiment without burning
+    // their cap and free-tier users can demo without us settling.
+    sandbox: apiKey?.effectiveKeyType === 'sandbox' || playgroundMode,
     segment,
   });
   const sessionStore = makeSessionStore();
