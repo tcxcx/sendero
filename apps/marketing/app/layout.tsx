@@ -13,6 +13,7 @@ import {
   travelAgencyJsonLd,
 } from '@sendero/seo';
 import { buildOgImageUrl } from '@sendero/seo/og';
+import { Analytics } from '@vercel/analytics/next';
 import { Agentation } from 'agentation';
 
 import { SiteFooter } from '@/components/site-shell/site-footer';
@@ -119,6 +120,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </div>
         </Providers>
         {process.env.NODE_ENV === 'development' && <Agentation />}
+        <Analytics />
       </body>
     </html>
   );
