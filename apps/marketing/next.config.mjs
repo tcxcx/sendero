@@ -40,12 +40,30 @@ loadLocalRootEnv();
 
 const publicClerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
+// Marketing has no auth surface — sign-in/sign-up live on the app
+// (Clerk-hosted there). Redirect /sign-in and /sign-up (with any
+// subpath / query string) to the app origin so deep-links from press,
+// docs, or stale bookmarks land on the real auth screen instead of a
+// marketing 404.
+const appOrigin = (process.env.NEXT_PUBLIC_APP_URL || 'https://app.sendero.travel').replace(
+  /\/$/,
+  ''
+);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   turbopack: { root: workspaceRoot },
   outputFileTracingRoot: workspaceRoot,
   reactStrictMode: true,
+  async redirects() {
+    return [
+      { source: '/sign-in', destination: `${appOrigin}/sign-in`, permanent: false },
+      { source: '/sign-in/:path*', destination: `${appOrigin}/sign-in/:path*`, permanent: false },
+      { source: '/sign-up', destination: `${appOrigin}/sign-up`, permanent: false },
+      { source: '/sign-up/:path*', destination: `${appOrigin}/sign-up/:path*`, permanent: false },
+    ];
+  },
   ...(publicClerkPublishableKey
     ? { env: { NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: publicClerkPublishableKey } }
     : {}),

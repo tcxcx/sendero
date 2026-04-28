@@ -3,6 +3,7 @@ import Script from 'next/script';
 
 import { ClerkProvider } from '@clerk/nextjs';
 import { senderoFontVars } from '@sendero/fonts';
+import { senderoClerkAppearance } from '@sendero/ui/clerk-appearance';
 import { SUPPORTED_LOCALES } from '@sendero/locale';
 import {
   buildClerkAllowedRedirectOrigins,
@@ -12,6 +13,7 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { buildOgImageUrl } from '@sendero/seo/og';
 import { Toaster } from '@sendero/ui/sonner';
 import { Analytics } from '@vercel/analytics/next';
 import { Agentation } from 'agentation';
@@ -49,6 +51,12 @@ export const metadata = buildMetadata({
   defaultLocale: 'en-US',
   siteUrl: APP_URL,
   siteName: 'Sendero App',
+  ogImage: buildOgImageUrl(APP_URL, {
+    title: 'AI travel operations console',
+    description:
+      'Prepaid traveler links, WhatsApp + Slack journeys, MCP tools, invoices, spend controls, and Arc USDC settlement.',
+    eyebrow: 'apps.sendero.travel',
+  }),
   ogImageAlt: 'Sendero app social preview for AI travel operations and booking workflows.',
   keywords: [
     'agent-native travel app',
@@ -126,6 +134,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           />
         )}
         <ClerkProvider
+          appearance={senderoClerkAppearance}
           signInUrl="/sign-in"
           signUpUrl="/sign-up"
           waitlistUrl="/waitlist"

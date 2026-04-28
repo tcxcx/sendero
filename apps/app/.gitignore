@@ -4,3 +4,4 @@
 # browse smoke tests). Lives under apps/app so the screenshot tool can
 # write under the dev server's CWD. Never checked in.
 .gstack-screenshots/
+.vercel

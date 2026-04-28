@@ -78,6 +78,9 @@ qa-logins.local.json
 .tmp-*.json
 .wrangler/
 
+# Generated OG/share image previews (regenerable artifacts)
+og-previews/
+
 # macOS Finder noise
 .DS_Store
 **/.DS_Store

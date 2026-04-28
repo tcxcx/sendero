@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 
 import { ClerkProvider } from '@clerk/nextjs';
+import { senderoClerkAppearance } from '@sendero/ui/clerk-appearance';
 
 export function Providers({
   children,
@@ -11,5 +12,12 @@ export function Providers({
   children: ReactNode;
   allowedRedirectOrigins?: string[];
 }) {
-  return <ClerkProvider allowedRedirectOrigins={allowedRedirectOrigins}>{children}</ClerkProvider>;
+  return (
+    <ClerkProvider
+      appearance={senderoClerkAppearance}
+      allowedRedirectOrigins={allowedRedirectOrigins}
+    >
+      {children}
+    </ClerkProvider>
+  );
 }

@@ -362,12 +362,20 @@ export function ErrorBanner() {
 import { useMeterSummary } from './use-meter';
 import { DigitTicker, SmoothNumber } from './footer-numbers';
 
+// Dev/demo telemetry strip — block ticker, treasury balance, meter
+// rate. Useful when shaking out flows locally; visual noise + a
+// surface for stale data in prod. NODE_ENV is inlined at build time
+// so the entire branch tree-shakes out of the prod bundle.
+const SHOW_FOOTER_RAIL = process.env.NODE_ENV === 'development';
+
 export function FooterRail() {
   const treasury = useSendero(s => s.treasury);
   const holdOrder = useSendero(s => s.holdOrder);
   const settlementPhase = useSendero(s => s.settlement.phase);
   const onChainSettlement = useSendero(s => s.onChainSettlement);
   const { summary: meter } = useMeterSummary(1500);
+
+  if (!SHOW_FOOTER_RAIL) return null;
 
   const treasuryAddr = treasury?.treasuryAddress ?? null;
   const usdc = treasury?.balances.find(b => b.symbol === 'USDC');

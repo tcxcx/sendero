@@ -41,7 +41,7 @@ The full markup pipeline is live. Tenants set their own margin, customers pay on
 ## OpenAPI + DX
 
 - **OpenAPI spec bumped to `1.1.0`.** Source: `packages/tools/src/openapi.ts`. The new spec adds `confirm_booking` (extended), `get_tenant_pricing_policy`, and `activate_tenant_pricing_policy` to the catalog.
-- **v1.0.0 snapshot pinned.** Old spec preserved at [`/openapi/v1.0.0.json`](https://docs.sendero.travel/openapi/v1.0.0.json) for clients that need the previous shape during a phased rollout. Live spec stays at [`/api/openapi.json`](https://www.sendero.travel/api/openapi.json).
+- **v1.0.0 snapshot pinned.** Old spec preserved at [`/openapi/v1.0.0.json`](https://docs.sendero.travel/openapi/v1.0.0.json) for clients that need the previous shape during a phased rollout. Live spec stays at [`/api/openapi.json`](https://app.sendero.travel/api/openapi.json).
 - **Per-page `.md`.** Every new docs page is automatically available as plain markdown — append `.md` to any URL. Mirrors Sherpa's "Trips LLM Friendly" pattern.
 - **`llms.txt` updated.** The two new tools (`get_tenant_pricing_policy`, `activate_tenant_pricing_policy`) are listed in `AGENT_TOOL_CATALOG` with deep-links to the activation flow.
 

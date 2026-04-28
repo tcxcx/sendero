@@ -325,8 +325,6 @@ function LandingWaitlist() {
               cardBox: 'hero-waitlist-clerk-card',
               header: 'hero-waitlist-clerk-hidden',
               footer: 'hero-waitlist-clerk-hidden',
-              formButtonPrimary: 'hero-waitlist-clerk-button',
-              formFieldInput: 'hero-waitlist-clerk-input',
             },
           }}
         />
@@ -809,21 +807,6 @@ const heroStyles = `
   }
   :global(.hero-waitlist-clerk-hidden) {
     display: none;
-  }
-  :global(.hero-waitlist-clerk-input) {
-    border-radius: 0;
-    border-color: var(--border);
-    box-shadow: none;
-  }
-  :global(.hero-waitlist-clerk-button) {
-    border-radius: 0;
-    background: var(--ink);
-    color: var(--bg-elev);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    box-shadow: none;
   }
   .hero-waitlist-loading {
     display: grid;

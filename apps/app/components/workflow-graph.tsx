@@ -187,7 +187,7 @@ export function WorkflowGraph({ workflow }: WorkflowGraphProps) {
         position="top-left"
       >
         <span className="px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--text-faint)]">
-          Sendero workflow map
+           View Diagram
         </span>
         <button
           type="button"
@@ -225,7 +225,7 @@ export function WorkflowGraph({ workflow }: WorkflowGraphProps) {
             borderRadius: 12,
           }}
         >
-          <DialogTitle className="sr-only">Sendero workflow map</DialogTitle>
+          <DialogTitle className="sr-only">View Diagramp</DialogTitle>
           <div style={{ flex: 1, minHeight: 0 }}>{renderCanvas('dialog')}</div>
         </DialogContent>
       </Dialog>

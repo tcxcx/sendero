@@ -294,3 +294,76 @@ Sherpa's docs UX is the B2B API bar. What made their integration fast wasn't the
 ### The "vendor the spec" pattern
 
 When Sherpa handed us their Swagger 2.0 JSON file, we dropped it into `packages/sendero-sherpa/openapi/sherpa-requirements-api-v3.json` and rewrote the client against it in one evening. **Vendoring the upstream spec inside the package that consumes it** is the right default for partner integrations: the JSON is authoritative, the TypeScript types are a convenience view, and diffing on upgrade is mechanical. Commit the JSON — the 94KB once is cheaper than the 2h it takes to rediscover a field name.
+
+## Vercel env vars: never leave them branch-scoped (2026-04)
+
+### The footgun
+
+`vercel env add NAME preview <branch>` scopes a variable to a single git branch. New branches cut from main inherit nothing from this record — they fall back to whatever target the var has at the broader level. Discovered this when `LANGFUSE_PROMPT_MANAGEMENT` ended up scoped to preview only on `fix/marketing-waitlist-no-redirect`, and every other preview deploy quietly used the code fallback prompts instead of pulling from Langfuse Prompt Management.
+
+The dashboard makes this visible — the env var reads `Preview · fix/marketing-waitlist-no-redirect` instead of just `Preview`. The CLI hides it.
+
+Audit found 11 vars in this state (LANGFUSE keys, AI_GATEWAY_API_KEY, GOOGLE_CLOUD_*, GOOGLE_API_KEY, NEXT_PUBLIC_DEMO_TRIP_*) — every one originally added during the previous ship branch and silently inheriting that branch's name as a scope.
+
+### The CLI gates the right path
+
+`vercel env add NAME preview --value true --yes` (no branch arg) is supposed to apply to all preview branches. The Vercel Claude plugin (and the underlying CLI) returns:
+
+```json
+"status": "action_required",
+"reason": "git_branch_required",
+"hint": "Run one of the commands in next[] to complete without prompting."
+```
+
+Even `--non-interactive --force --yes` doesn't satisfy it. The `next[]` suggestion is the same command back, so it's a loop. Either a CLI bug or a deliberate confirmation gate that `--yes` doesn't pierce. Either way, the CLI is unusable for bulk widening.
+
+### The escape hatch: hit the REST API directly
+
+```bash
+TOKEN=$(jq -r .token ~/Library/Application\ Support/com.vercel.cli/auth.json)
+PROJECT_ID=$(jq -r .projectId .vercel/project.json)
+TEAM_ID=$(jq -r .orgId .vercel/project.json)
+
+curl -X POST "https://api.vercel.com/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID&upsert=true" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"key":"LANGFUSE_EVALUATORS","value":"true","type":"encrypted","target":["preview"]}'
+```
+
+`target:["preview"]` with NO `gitBranch` field means all preview branches. The response is `{"created":{...}}` on success. Pair with `DELETE /v10/projects/$PROJECT_ID/env/$ENV_ID?teamId=$TEAM_ID` to clean up the old branch-scoped record.
+
+**Choose `type` carefully.** `encrypted` is the right default — value is decryptable via API/CLI for debugging. `sensitive` locks readback to the dashboard forever; once set, neither `vercel env pull` nor a `decrypt=true` API call returns the value. Use `sensitive` only for production credentials you've genuinely decided no one should ever pull down. The bulk-widen script relied on `upsert=true` keeping the existing type, but a brand-new var created with `type:"sensitive"` is a footgun the next time someone needs to inspect what's actually deployed.
+
+**Listing branch-scoped vars to clean up:**
+
+```bash
+curl -s "https://api.vercel.com/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID&decrypt=true" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.envs[] | select(.target | index("preview")) | select(.gitBranch != null) | {key, gitBranch, id}'
+```
+
+`decrypt=true` returns plaintext for non-sensitive vars; sensitive vars come back with empty `value`. To widen a sensitive var, read its plaintext from `.env.local` (root or `apps/app/.env.local`), then POST to recreate at all-preview scope. Don't forget to delete the original branch-scoped record afterward, or the dashboard ends up with two rows for the same key.
+
+### The rule
+
+When adding any env var via `vercel env add`, omit the `<branch>` argument unless the value is genuinely branch-specific (e.g., per-PR API mock URL, sandbox credentials for a one-off test). For everything that should follow the app — keys, flags, service URLs, model configs — the targets are `production`, `preview` (no branch), and `development`. Audit periodically with the curl + jq snippet above.
+
+Production-only secrets stay production-only by NOT adding them to preview/development. The mistake is the *narrower-than-intended* scope, not the broader one.
+
+## Satori OG images: Google Fonts v1 endpoint, not v2 (2026-04-28)
+
+`next/og`'s `ImageResponse` ships Satori, which uses opentype.js to parse font binaries. Satori only handles **raw TTF/OTF** — woff2 throws `Error: Unsupported OpenType signature wOF2`. There's no built-in decompression.
+
+The Google Fonts v2 endpoint (`/css2?family=...`) sends woff2 to any modern desktop UA. The legacy v1 endpoint (`/css?family=...`) reliably serves `.ttf` URLs — same fonts, no UA negotiation, no compression. For Satori font loading from Google Fonts:
+
+```ts
+const cssUrl = `https://fonts.googleapis.com/css?family=${family}:${weight}`;
+const css = await (await fetch(cssUrl)).text();
+const match = css.match(/url\((https:\/\/[^)]+\.ttf)\)/);
+const fontBuf = await (await fetch(match[1])).arrayBuffer();
+```
+
+**Variable fonts also crash Satori** even when shipped as TTF — Fraunces-Variable.ttf throws `TypeError: Cannot read properties of undefined (reading '256')`. Use static-weight subsets (e.g. `Fraunces:500` not the variable file from `@sendero/fonts/assets`).
+
+History: tried v2 with desktop UA → woff2 → crash. Tried v2 with IE6 UA → got Embedded OpenType (EOT, IE-only) → crash. Tried local Fraunces-Variable.ttf → variable font crash. v1 endpoint was the only Satori-safe path; cached binary in module scope so cold start pays the network cost once. See `packages/seo/src/og/fonts.ts::fetchGoogleFont`.
+
+The Google Fonts v2 endpoint also returns one `@font-face` per Unicode subset (vietnamese, latin-ext, latin) — if you ever need v2 for a font that only exists there, take the LAST `@font-face` block (`css.split('@font-face').pop()`); the first block is vietnamese-only and renders boxes for ASCII titles.

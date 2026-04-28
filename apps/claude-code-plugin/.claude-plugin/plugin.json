@@ -1,0 +1,24 @@
+{
+  "name": "sendero",
+  "description": "AI travel booking with on-chain settlement. Search flights, place holds, settle in USDC, and audit every step — all from inside Claude Code.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Sendero",
+    "email": "team@sendero.travel",
+    "url": "https://sendero.travel"
+  },
+  "homepage": "https://sendero.travel",
+  "repository": "https://github.com/tcxcx/sendero",
+  "license": "Apache-2.0",
+  "keywords": [
+    "travel",
+    "booking",
+    "flights",
+    "hotels",
+    "usdc",
+    "stablecoin",
+    "duffel",
+    "sendero",
+    "mcp"
+  ]
+}
