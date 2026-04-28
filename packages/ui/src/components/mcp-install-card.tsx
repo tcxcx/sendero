@@ -47,7 +47,7 @@ interface McpInstallCardProps {
   iconSrc?: string;
 }
 
-type ClientKey = 'claude-desktop' | 'claude-code' | 'codex' | 'cursor';
+type ClientKey = 'claude-desktop' | 'claude-code' | 'codex' | 'cursor' | 'vscode';
 
 interface SnippetMeta {
   label: string;
@@ -57,6 +57,47 @@ interface SnippetMeta {
   text: string;
   /** Anchor fragment on the docs page so each tab can deep-link. */
   docsAnchor: string;
+  /** Optional one-click install URL. Cursor + VS Code both publish a
+   *  URL scheme that pre-fills the MCP config; Claude Desktop / Code /
+   *  Codex are file-edit or CLI-driven so they have no install URL. */
+  installUrl?: string;
+  /** Label for the install button. Falls back to "Install in <label>". */
+  installLabel?: string;
+}
+
+/**
+ * Build a Cursor click-to-install URL.
+ * Format: https://cursor.com/install-mcp?name=<name>&config=<base64(config)>
+ * The config is the inner mcp-server entry (url + headers), NOT the
+ * outer { mcpServers: { ... } } wrapper.
+ */
+function cursorInstallUrl(mcpUrl: string): string {
+  const config = JSON.stringify({
+    url: mcpUrl,
+    headers: { Authorization: 'Bearer ak_REPLACE_WITH_YOUR_KEY' },
+  });
+  // btoa is browser-safe; this component is `'use client'`.
+  const b64 =
+    typeof btoa === 'function'
+      ? btoa(config)
+      : Buffer.from(config, 'utf-8').toString('base64');
+  return `https://cursor.com/install-mcp?name=sendero&config=${encodeURIComponent(b64)}`;
+}
+
+/**
+ * Build a VS Code click-to-install URL.
+ * vscode:mcp/install?<urlencoded JSON> opens VS Code (or prompts to)
+ * with the MCP server preloaded. Works in any browser; users without
+ * VS Code installed see a "Open with..." dialog and can copy the
+ * snippet instead.
+ */
+function vscodeInstallUrl(mcpUrl: string): string {
+  const config = {
+    name: 'sendero',
+    url: mcpUrl,
+    headers: { Authorization: 'Bearer ak_REPLACE_WITH_YOUR_KEY' },
+  };
+  return `vscode:mcp/install?${encodeURIComponent(JSON.stringify(config))}`;
 }
 
 export function McpInstallCard({
@@ -104,13 +145,34 @@ url = "${mcpUrl}"
 headers = { Authorization = "Bearer ak_..." }`,
     },
     cursor: {
-      label: 'Cursor / IDE',
+      label: 'Cursor',
       filename: '.cursor/mcp.json',
       lang: 'json',
       rows: 11,
       docsAnchor: 'cursor',
+      installUrl: cursorInstallUrl(mcpUrl),
+      installLabel: 'Add to Cursor',
       text: `{
   "mcpServers": {
+    "sendero": {
+      "url": "${mcpUrl}",
+      "headers": {
+        "Authorization": "Bearer ak_..."
+      }
+    }
+  }
+}`,
+    },
+    vscode: {
+      label: 'VS Code',
+      filename: '.vscode/mcp.json',
+      lang: 'json',
+      rows: 11,
+      docsAnchor: 'vscode',
+      installUrl: vscodeInstallUrl(mcpUrl),
+      installLabel: 'Add to VS Code',
+      text: `{
+  "servers": {
     "sendero": {
       "url": "${mcpUrl}",
       "headers": {
@@ -273,6 +335,17 @@ headers = { Authorization = "Bearer ak_..." }`,
                 Docs ↗
               </a>
             ) : null}
+            {active.installUrl ? (
+              <a
+                href={active.installUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={installButtonStyle}
+                title={`One-click install in ${active.label}. Replace ak_REPLACE_WITH_YOUR_KEY with your real Sendero API key after.`}
+              >
+                {active.installLabel ?? `Install in ${active.label}`} →
+              </a>
+            ) : null}
             <button type="button" onClick={copy} style={ghostCopyBtn}>
               {copied ? 'Copied' : 'Copy snippet'}
             </button>
@@ -375,6 +448,24 @@ const ghostLinkStyle: React.CSSProperties = {
   background: 'transparent',
   color: 'var(--ink, #1f2a44)',
   border: '1px solid color-mix(in oklab, var(--ink, #1f2a44) 18%, transparent)',
+  borderRadius: 6,
+  fontSize: 10,
+  fontFamily: 'var(--font-mono-x, ui-monospace, monospace)',
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  fontWeight: 600,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  textDecoration: 'none',
+};
+
+const installButtonStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '4px 10px',
+  background: 'var(--vermillion, #fb542b)',
+  color: '#fdfbf7',
+  border: '1px solid var(--vermillion, #fb542b)',
   borderRadius: 6,
   fontSize: 10,
   fontFamily: 'var(--font-mono-x, ui-monospace, monospace)',
