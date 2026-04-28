@@ -1,0 +1,123 @@
+---
+title: Claude Code plugin
+description: Install Sendero as a versioned Claude Code plugin — bundles the MCP server and a travel-booking skill.
+---
+
+Sendero ships as a first-class plugin for [Claude Code](https://claude.com/claude-code).
+The plugin bundles the Sendero MCP server (`https://app.sendero.travel/api/mcp`)
+plus a `/sendero:travel-booking` skill that teaches Claude when and how to
+use the tool surface safely.
+
+If you want to wire MCP up by hand (without the skill, without versioning),
+use the [MCP integration guide](/docs/mcp-integration) instead.
+
+## What the plugin gives you
+
+- **~49 MCP tools** auto-discovered via the bundled `.mcp.json`:
+  `search_flights`, `hold`, `confirm_booking`, `settle_*`, `wallet_balance`,
+  `export_*`, ERC-8004 identity registries, and more.
+- **A trigger skill** (`/sendero:travel-booking`) that teaches Claude to:
+  - confirm scope before `confirm_booking` (it moves real USDC),
+  - never fabricate offer IDs (re-search if more than 5 minutes have passed),
+  - respect plan-tier caps and propose upgrades when relevant,
+  - surface the Arcscan audit URL after every settlement.
+- **Stateless credentials** — your API key lives in your env, not in the
+  plugin manifest. Rotate keys from the dashboard without re-installing.
+
+## Install
+
+### Option A: clone and load locally (today)
+
+```bash
+git clone https://github.com/tcxcx/sendero.git
+export SENDERO_API_KEY=ak_your_key_here
+claude --plugin-dir ./sendero/apps/claude-code-plugin
+```
+
+Verify with `/help` — the Sendero MCP server and the
+`/sendero:travel-booking` skill should both be listed.
+
+### Option B: download the .zip
+
+```bash
+curl -LO https://app.sendero.travel/downloads/sendero-claude-code-plugin.zip
+unzip sendero-claude-code-plugin.zip -d sendero-plugin
+export SENDERO_API_KEY=ak_your_key_here
+claude --plugin-dir ./sendero-plugin
+```
+
+### Option C: plugin marketplace (once published)
+
+```bash
+/plugin marketplace add tcxcx/sendero
+/plugin install sendero@sendero
+```
+
+## Get an API key
+
+Mint one at [app.sendero.travel/dashboard/settings/api-keys](https://app.sendero.travel/dashboard/settings/api-keys).
+
+- **Sandbox keys** auto-mint on workspace creation. Every meter event lands
+  in `MeterEvent.status = 'sandbox'` — no real USDC moves.
+- **Production keys** settle on Arc. Your plan tier sets the monthly cap and
+  how many production keys you can hold.
+
+| Tier | Monthly cap | Production keys | Nanopay discount |
+|---|---|---|---|
+| Free | $100 | 0 (sandbox only) | 0% |
+| Basic ($19/mo) | $2,000 | 3 | 15% |
+| Pro ($60/mo) | $20,000 | 25 | 30% |
+| Enterprise (contact) | unlimited | unlimited | 50% |
+
+Pro plan: 14-day trial, no card required.
+
+## First call
+
+After install + key, ask Claude something like:
+
+> "Use Sendero to find a refundable flight from BUE to MIA on May 12 for one passenger."
+
+The skill nudges Claude to call `search_flights` first, surface offers,
+ask for confirmation, then `hold` or `confirm_booking` based on your reply.
+
+## Plugin vs. raw MCP
+
+Claude Code can talk to the Sendero MCP endpoint directly via
+`claude mcp add sendero --transport http --url … --header "Authorization: …"`.
+That works fine for one-off setups. The plugin path adds:
+
+- **Versioning.** Updates flow through the marketplace, not manual re-runs.
+- **The skill.** Without it, Claude knows the tools exist but doesn't know
+  when to use them or what the safe call patterns are.
+- **Namespacing.** All Sendero skills/agents are scoped under `sendero:` so
+  there's no collision with other plugins.
+- **Distributability.** A team can install the plugin once and share it.
+
+## Troubleshooting
+
+**`/help` doesn't show Sendero.**
+The plugin manifest didn't load. Check that `apps/claude-code-plugin/.claude-plugin/plugin.json`
+exists and that you passed the right path to `--plugin-dir`.
+
+**MCP tools fail with `-32001`.**
+`SENDERO_API_KEY` isn't reaching the plugin's environment. Confirm:
+```bash
+echo $SENDERO_API_KEY    # should print ak_...
+```
+Then restart Claude Code so it picks up the variable.
+
+**MCP tools fail with `-32603`.**
+Upstream Sendero is throwing a 5xx. Try once more. If it persists, copy the
+trace ID from the response headers (`x-sendero-trace-id`) and share it with
+support.
+
+**Cap exceeded.**
+Your workspace hit its monthly spend cap. Upgrade tiers at
+[app.sendero.travel/billing](https://app.sendero.travel/billing) or wait for
+the next billing cycle.
+
+## Source
+
+The plugin lives at [`apps/claude-code-plugin/`](https://github.com/tcxcx/sendero/tree/main/apps/claude-code-plugin)
+in the Sendero repo. See the [README](https://github.com/tcxcx/sendero/blob/main/apps/claude-code-plugin/README.md)
+for layout details and the packaging script.

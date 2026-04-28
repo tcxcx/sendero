@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "sendero": {
+      "type": "http",
+      "url": "${SENDERO_MCP_URL:-https://app.sendero.travel/api/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${SENDERO_API_KEY}",
+        "User-Agent": "sendero-claude-code-plugin/0.1.0"
+      }
+    }
+  }
+}

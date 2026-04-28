@@ -15,4 +15,4 @@
 
 export { ProviderIcon, PROVIDER_ICON_SOURCES, PROVIDER_LABEL } from './providers';
 export type { ProviderSlug } from './providers';
-export { McpMark, BufiLogo, BufiLogoSrc } from './integrations';
+export { ClaudeCodePluginMark, McpMark, BufiLogo, BufiLogoSrc } from './integrations';
