@@ -39,7 +39,7 @@ import {
 } from '@/components/ai-elements/tool';
 
 import { refreshTreasury } from './actions';
-import { registerChatBridge } from './chat-bridge';
+import { registerChatBridge, registerChatNote } from './chat-bridge';
 import { runtimeContext, useSendero } from './store';
 import { TripToolCard } from './trip-tool-cards';
 
@@ -87,7 +87,7 @@ export function ChatCol() {
   // Send the signed-in traveler alongside every chat request so server-side
   // tools (book_flight) can authoritatively fill passenger name + email +
   // phone without the LLM having to guess.
-  const { messages, sendMessage, status, error, stop } = useChat({
+  const { messages, sendMessage, setMessages, status, error, stop } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
       body: () => ({
@@ -112,6 +112,22 @@ export function ChatCol() {
   // `sendMessage` is reference-stable; re-registering each render is
   // idempotent and avoids the useEffect mount/unmount churn.
   registerChatBridge((text: string) => sendMessage({ text }));
+
+  // HoldCard / FundCard call noteToChat() AFTER a direct API call
+  // succeeds (POST /api/bookings/hold, POST /api/bookings/pay). The
+  // synthetic system message keeps the agent's chat history coherent
+  // with the booking state, so multi-turn questions ("what PNR did
+  // you hold?") work and reload preserves the note.
+  registerChatNote((text: string) => {
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `sys_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        role: 'system' as const,
+        parts: [{ type: 'text' as const, text }],
+      },
+    ]);
+  });
 
   // Every tool call the agent makes drives the store so that Stage,
   // StepRail, WorkflowLog, FooterRail and AgentCard all move in lockstep

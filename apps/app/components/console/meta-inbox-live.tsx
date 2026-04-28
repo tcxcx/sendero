@@ -50,7 +50,7 @@ import {
 } from '@/components/ai-elements/tool';
 import { useChatStoreSync } from '@/components/use-chat-store-sync';
 import { useSendero } from '@/components/store';
-import { registerChatBridge } from '@/components/chat-bridge';
+import { registerChatBridge, registerChatNote } from '@/components/chat-bridge';
 
 import { asChannelKey, type ChannelKey } from './channels';
 import { DemoConversation, type DemoMessage, runDemoTripScript } from './demo-trip';
@@ -232,6 +232,20 @@ export function MetaInboxLive({
   // stable across renders (memoized inside useChat), so re-registering
   // every render is idempotent and a hook-free path is safe here.
   registerChatBridge((text: string) => sendMessage({ text }));
+
+  // HoldCard / FundCard call noteToChat() AFTER a direct API call
+  // succeeds. Synthetic system message keeps the chat history
+  // coherent with the booking state without an LLM round-trip.
+  registerChatNote((text: string) => {
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `sys_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        role: 'system' as const,
+        parts: [{ type: 'text' as const, text }],
+      },
+    ]);
+  });
 
   // Pump every tool call into the SenderoApp store so:
   //   · Stage renders the right artifact (offer cards / hold card /
