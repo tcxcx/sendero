@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { resolvePublicOrigin } from '@sendero/seo';
+import { buildOgImageUrl } from '@sendero/seo/og';
 
 /**
  * createPageMetadata — Sendero adaptation of Midday's helper at
@@ -33,10 +34,18 @@ export function createPageMetadata(opts: PageMetadataOptions): Metadata {
   const ogTitle = opts.og?.title ?? opts.title;
   const ogDesc = opts.og?.description ?? opts.description;
 
-  // Static fallback OG until /api/og dynamic route lands. Marketing site
-  // already ships /brand/marketing-hero-wide.png as a usable share image.
-  const fallbackImage = `${SITE_URL}/brand/marketing-hero-wide.png`;
-  const images = [{ url: fallbackImage, width: 1200, height: 630, alt: ogTitle }];
+  // Per-page Satori card via the shared `/api/og` route. Strips the
+  // trailing "· Sendero" suffix (already implied by the wordmark in
+  // the card itself) and uses the route path as the eyebrow when the
+  // caller hasn't named one explicitly.
+  const cardTitle = ogTitle.replace(/\s*[·—-]\s*Sendero\s*$/i, '');
+  const cardEyebrow = pathToEyebrow(opts.path);
+  const dynamicImage = buildOgImageUrl(SITE_URL, {
+    title: cardTitle,
+    description: ogDesc,
+    eyebrow: cardEyebrow,
+  });
+  const images = [{ url: dynamicImage, width: 1200, height: 630, alt: ogTitle }];
 
   return {
     title: opts.title,
@@ -58,4 +67,10 @@ export function createPageMetadata(opts: PageMetadataOptions): Metadata {
     },
     ...(opts.canonical !== false && { alternates: { canonical: url } }),
   };
+}
+
+function pathToEyebrow(path: string): string {
+  if (!path || path === '/') return 'sendero.travel';
+  const seg = path.replace(/^\/+/, '').split('/')[0]?.replace(/-/g, ' ');
+  return seg ? `sendero · ${seg}` : 'sendero.travel';
 }

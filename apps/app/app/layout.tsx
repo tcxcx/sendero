@@ -12,6 +12,7 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { buildOgImageUrl } from '@sendero/seo/og';
 import { Toaster } from '@sendero/ui/sonner';
 import { Agentation } from 'agentation';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
@@ -48,6 +49,12 @@ export const metadata = buildMetadata({
   defaultLocale: 'en-US',
   siteUrl: APP_URL,
   siteName: 'Sendero App',
+  ogImage: buildOgImageUrl(APP_URL, {
+    title: 'AI travel operations console',
+    description:
+      'Prepaid traveler links, WhatsApp + Slack journeys, MCP tools, invoices, spend controls, and Arc USDC settlement.',
+    eyebrow: 'apps.sendero.travel',
+  }),
   ogImageAlt: 'Sendero app social preview for AI travel operations and booking workflows.',
   keywords: [
     'agent-native travel app',

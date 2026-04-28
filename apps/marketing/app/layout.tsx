@@ -12,6 +12,7 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { buildOgImageUrl } from '@sendero/seo/og';
 import { Agentation } from 'agentation';
 
 import { SiteFooter } from '@/components/site-shell/site-footer';
@@ -36,6 +37,12 @@ export const metadata = buildMetadata({
   defaultLocale: 'en-US',
   siteUrl: SITE_URL,
   siteName: 'Sendero',
+  ogImage: buildOgImageUrl(SITE_URL, {
+    title: 'Agent-native travel, settled on Arc',
+    description:
+      'Real inventory, policy checks, prepaid escrow, PNR issuance, USDC settlement, and trip support — orchestrated by AI agents.',
+    eyebrow: 'sendero.travel',
+  }),
   ogImageAlt: 'Sendero social preview with the binoculars mark and agent-native travel copy.',
   keywords: [
     'AI travel booking',

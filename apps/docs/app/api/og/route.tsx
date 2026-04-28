@@ -15,6 +15,7 @@ import { ImageResponse } from 'next/og';
 import type { NextRequest } from 'next/server';
 
 import {
+  loadHalftoneHeroDataUrl,
   loadOgFonts,
   OG_IMAGE_SIZE,
   parseOgQueryParams,
@@ -30,11 +31,14 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     const params = parseOgQueryParams(new URL(request.url).searchParams);
-    const fonts = await loadOgFonts();
-    return new ImageResponse(<SenderoOgCard site="docs.sendero.travel" {...params} />, {
-      ...OG_IMAGE_SIZE,
-      fonts,
-    });
+    const [fonts, heroSrc] = await Promise.all([loadOgFonts(), loadHalftoneHeroDataUrl()]);
+    return new ImageResponse(
+      <SenderoOgCard {...params} site={params.site ?? 'docs.sendero.travel'} heroSrc={heroSrc} />,
+      {
+        ...OG_IMAGE_SIZE,
+        fonts,
+      }
+    );
   } catch (err) {
     console.error('[og] docs render failed', err);
     return new Response('og render failed', { status: 500 });

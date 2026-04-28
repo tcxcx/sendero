@@ -11,6 +11,7 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { buildOgImageUrl } from '@sendero/seo/og';
 import 'fumadocs-ui/style.css';
 
 import { DocsRootProvider } from '@/app/docs-root-provider';
@@ -44,6 +45,12 @@ export const metadata = buildMetadata({
   defaultLocale: 'en-US',
   siteUrl: DOCS_URL,
   siteName: 'Sendero Developer Docs',
+  ogImage: buildOgImageUrl(DOCS_URL, {
+    title: 'Developer Docs',
+    description:
+      'MCP travel tools, x402 nanopayments, Arc settlement, Duffel booking flows, and agent-to-agent travel orchestration.',
+    eyebrow: 'docs.sendero.travel',
+  }),
   ogImageAlt: 'Sendero developer docs social preview for MCP travel tools.',
   keywords: [
     'Sendero API',
