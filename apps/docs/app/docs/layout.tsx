@@ -1,11 +1,25 @@
 import type { ReactNode } from 'react';
 
 import { buildLocaleApiHrefs, SenderoLanguageSelector } from '@sendero/ui/language-selector';
+import { resolvePublicOrigin } from '@sendero/seo';
 import { DocsLayout, type LinkItemType } from 'fumadocs-ui/layouts/docs';
 import { BookOpenIcon, KeyIcon, PlugIcon } from 'lucide-react';
 
 import { getDocsRequestLocale } from '@/lib/request-locale';
 import { source } from '@/lib/source';
+
+/*
+  Dynamic origins. In prod these resolve to the canonical
+  https://app.sendero.travel + https://www.sendero.travel; in dev they
+  collapse to the localhost ports each surface runs on, so "Get API
+  key" routes to the local app dashboard instead of 404'ing on a
+  marketing URL that doesn't exist locally. Same shape as marketing's
+  SiteHeader.
+*/
+const APP_ORIGIN = resolvePublicOrigin(
+  process.env.NEXT_PUBLIC_APP_URL,
+  'https://app.sendero.travel'
+);
 
 /**
  * Top-nav links — Stripe / Sherpa pattern, one click past their gated form.
@@ -31,7 +45,7 @@ const TOP_NAV_LINKS: LinkItemType[] = [
   {
     type: 'main',
     text: 'Get API key',
-    url: 'https://www.sendero.travel/dashboard/settings/api-keys',
+    url: `${APP_ORIGIN.replace(/\/$/, '')}/dashboard/settings/api-keys`,
     external: true,
     icon: <KeyIcon className="size-3.5" aria-hidden="true" />,
   },
