@@ -23,11 +23,11 @@ import {
   googleGenerativeAiKey,
   type ModelTier,
   renderWorkflowsBlock,
-  SENDERO_SOUL,
   selectModel,
   vertexLocation,
   vertexProject,
 } from '@sendero/agent';
+import { buildAgentPersona } from '@/lib/agent-persona';
 import { prisma, type Prisma } from '@sendero/database';
 import { aiTelemetryConfig } from '@sendero/langfuse';
 import { detectLocale, getLocaleSlice, LOCALE_COOKIE_NAME } from '@sendero/locale';
@@ -61,46 +61,11 @@ import { preflight } from '@sendero/billing/meter';
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-const WEB_CHAT_RULES = `## Web console rules
-
-You book flights for corporate travelers through first-party supplier integrations, and every booking is
-settled on-chain via an ERC-8183 job backed by USDC escrow. You have an
-ERC-8004 agent identity and an accumulating reputation score.
-
-Booking flow — ALWAYS in this order:
-  1. search_flights   — confirm origin/destination/date with the user first
-  2. book_flight      — after the user picks an offer; issues a real PNR
-
-CRITICAL — don't duplicate the UI:
-  • After search_flights returns, the Stage already renders every offer as a
-    rich card. DO NOT list airline/price/duration in the chat. Reply in ONE
-    short sentence pointing the user to the Stage ("Three premium-economy
-    options on the right — click Hold seat to book.") and stop.
-  • After book_flight returns a PNR, the UI renders a HoldCard and a
-    Settlement panel. DO NOT recap the price or PNR. Reply in ONE sentence
-    telling the user to sign the three userOps in the Settlement panel to
-    finalize on Arc.
-  • Do not try to call any settle tool — the UI drives the user through the
-    three passkey-signed user operations itself.
-
-Hotels are a separate flow. Use search_hotels when the user asks for
-lodging. The Stage renders up to six property cards — DO NOT list them in
-the chat, same rule as flights.
-
-Treasury rebalance tools (Sendero corporate wallet on Arc):
-  • check_treasury         — read current USDC + EURC balances
-  • gateway_balance        — unified USDC across every Gateway testnet
-  • gateway_transfer       — sub-500ms burn+mint between Gateway chains
-  • swap_tokens            — USDC ↔ EURC on Arc via Circle App Kit
-  • send_tokens            — transfer USDC/EURC to any Arc address
-  • bridge_to_arc          — CCTP v2 bridge into Arc (slower than Gateway)
-  • swap_and_bridge        — composed: CCTP into Arc then swap to EURC
-  • settle_split           — atomic commission fan-out on Arc
-
-Keep every response under 2 sentences unless the user asks a question. When
-you call a tool, a single clause like "Searching flights…" is enough.
-
-Today's date: ${new Date().toISOString().split('T')[0]}.`;
+// Persona resolution moved to apps/app/lib/agent-persona.ts. Resolves
+// `sendero-soul` + `sendero-web-chat-rules` from Langfuse Prompt Management
+// when LANGFUSE_PROMPT_MANAGEMENT=true; otherwise the hardcoded fallback
+// inside that helper ships verbatim. Today's date flows in as the
+// `{{today}}` template variable so prompt-side authors can reference it.
 
 type Picked = { model: LanguageModel | string; label: string; tier: ModelTier };
 
@@ -449,7 +414,7 @@ export async function POST(req: NextRequest) {
   // every channel sees the workflow catalog as the canonical orchestration
   // surface, not ad-hoc tool chains.
   const systemPrompt = buildSystemPrompt({
-    persona: `${SENDERO_SOUL}\n\n${WEB_CHAT_RULES}`,
+    persona: await buildAgentPersona('web', locale),
     locale,
     localeSlice: getLocaleSlice(locale),
     channelHint:

@@ -24,8 +24,8 @@ import {
   gatewayErrorAllowsDirectRetry,
   type ModelTier,
   runAgentTurn,
-  SENDERO_SOUL,
 } from '@sendero/agent';
+import { buildAgentPersona } from '@/lib/agent-persona';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
 
 import {
@@ -101,17 +101,10 @@ const BodySchema = z.object({
   attachments: z.array(MediaAttachmentSchema).max(MAX_ATTACHMENTS).optional(),
 });
 
-const DISPATCH_PERSONA = `${SENDERO_SOUL}
-
-## Routing rules
-- Corporate buyers saying "fund a trip", "give my employee a budget", or "prefund this contractor"
-  → sendero.guest_prefund.
-- Agencies saying "set up a cohort", "fund these 50 people" → sendero.agency_cohort.
-- Individual traveler booking their own flight → sendero.book_flight.
-- A group planning together → sendero.group_trip.
-- Cancel + refund → sendero.refund.
-- Only call tools directly when none of the canonical workflows fits.
-`;
+// Persona resolution moved to apps/app/lib/agent-persona.ts. Resolves
+// `sendero-soul` + `sendero-dispatch-routing-rules` from Langfuse Prompt
+// Management when LANGFUSE_PROMPT_MANAGEMENT=true; otherwise the hardcoded
+// fallbacks inside that helper ship verbatim.
 
 export async function POST(req: NextRequest) {
   // Two valid auth modes:
@@ -388,6 +381,11 @@ export async function POST(req: NextRequest) {
     segment: dispatchSegment,
   });
 
+  // Resolve persona once — covers both the gateway attempt and any direct
+  // retry below. getPromptWithFallback caches Langfuse fetches for 60s, so
+  // this is one network round-trip per minute per server instance.
+  const dispatchPersona = await buildAgentPersona('dispatch', agentInput.actor.locale);
+
   let result: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
     result = await runAgentTurn({
@@ -401,7 +399,7 @@ export async function POST(req: NextRequest) {
       resolveSegment,
       pricingOverrides,
       loadTrip,
-      persona: DISPATCH_PERSONA,
+      persona: dispatchPersona,
     });
   } catch (err) {
     const retryModels = gatewayErrorAllowsDirectRetry(err) ? resolveDirectModels(tier) : [];
@@ -422,7 +420,7 @@ export async function POST(req: NextRequest) {
           resolveSegment,
           pricingOverrides,
           loadTrip,
-          persona: DISPATCH_PERSONA,
+          persona: dispatchPersona,
         });
         retryError = null;
         break;

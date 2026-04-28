@@ -122,9 +122,7 @@ export function imageReferencesForKind(ctx: StampContext): MoodboardRef[] {
 export function moodboardGuidanceText(ctx: StampContext): string {
   const refs = moodboardForKind(ctx.kind);
   if (refs.length === 0) return '';
-  const lines = refs.map(
-    (r, i) => `Reference image ${i + 1} (${r.role}): ${r.guidance}`
-  );
+  const lines = refs.map((r, i) => `Reference image ${i + 1} (${r.role}): ${r.guidance}`);
   return ['Reference images attached:', ...lines].join('\n');
 }
 
