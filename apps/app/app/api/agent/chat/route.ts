@@ -27,7 +27,7 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { createVertex } from '@ai-sdk/google-vertex';
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse, after } from 'next/server';
 
 import {
   agentSessionId,
@@ -35,6 +35,7 @@ import {
   evaluateTrace,
   flushLangfuse,
   getActiveTraceId,
+  scoreCost,
   scoreLatency,
   scoreToolSuccess,
 } from '@sendero/langfuse';
@@ -677,25 +678,73 @@ export async function POST(req: NextRequest) {
       // call above wrote spans through aiTelemetryConfig, and the
       // Langfuse trace id IS the OTel trace id. Falls back to turnId
       // for safety; without the real id, scores would land on phantom
-      // traces. Capture before the fire-and-forget block so the
-      // closure sees a stable value even after onFinish returns.
+      // traces. Capture before the after() block so the closure sees a
+      // stable value even after onFinish returns.
+      //
+      // Walk finish.steps to aggregate all tool calls + their success.
+      // finish.toolCalls only returns the FINAL step's calls, so a
+      // tool→summarize turn would record 0 tools. Read step.toolResults
+      // to compute success per call instead of hardcoding `true` (the
+      // judge needs honest signal, not optimistic noise). Same fix as
+      // /api/chat (Step 1).
       const langfuseTraceId = getActiveTraceId() ?? turnId;
-      void Promise.resolve().then(async () => {
-        const toolResults = (finish.toolCalls ?? []).map(tc => ({
-          toolName: tc.toolName,
-          success: true,
-        }));
-        await scoreLatency(langfuseTraceId, latencyMs);
-        if (toolResults.length > 0) await scoreToolSuccess(langfuseTraceId, toolResults);
-        const lastUser = lastUserText(body.messages as UIMessage[]);
-        if (lastUser && finish.text) {
-          await evaluateTrace({
-            traceId: langfuseTraceId,
-            input: lastUser,
-            output: finish.text,
-          });
+      const stepsArr = Array.isArray((finish as { steps?: unknown[] }).steps)
+        ? ((finish as { steps?: unknown[] }).steps as Array<{
+            toolCalls?: Array<{ toolName?: string; toolCallId?: string }>;
+            toolResults?: Array<{
+              toolCallId?: string;
+              output?: unknown;
+              error?: unknown;
+              errorText?: string;
+            }>;
+          }>)
+        : [];
+      const allInvokedTools: Array<{ toolName: string; success: boolean }> = [];
+      for (const step of stepsArr) {
+        const calls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
+        const results = Array.isArray(step?.toolResults) ? step.toolResults : [];
+        for (const call of calls) {
+          if (typeof call?.toolName !== 'string') continue;
+          const r = results.find(x => x.toolCallId === call.toolCallId);
+          const out = r?.output;
+          const success =
+            !r ||
+            (!r.error &&
+              !r.errorText &&
+              !(out && typeof out === 'object' && 'error' in (out as Record<string, unknown>)));
+          allInvokedTools.push({ toolName: call.toolName, success });
         }
-        await flushLangfuse();
+      }
+      if (allInvokedTools.length === 0) {
+        for (const tc of finish.toolCalls ?? []) {
+          allInvokedTools.push({ toolName: tc.toolName, success: true });
+        }
+      }
+
+      // Wrap fire-and-forget LLM-judge calls in after() — without it
+      // Vercel teardown orphans the four gpt-4.1-nano completions when
+      // the stream closes before they return.
+      after(async () => {
+        try {
+          await scoreLatency(langfuseTraceId, latencyMs);
+          // scoreCost — was missing on this surface (Step 2). Reuses
+          // turnPrice already computed for the meter write above.
+          await scoreCost(langfuseTraceId, turnPrice);
+          if (allInvokedTools.length > 0) {
+            await scoreToolSuccess(langfuseTraceId, allInvokedTools);
+          }
+          const lastUser = lastUserText(body.messages as UIMessage[]);
+          if (lastUser && finish.text) {
+            await evaluateTrace({
+              traceId: langfuseTraceId,
+              input: lastUser,
+              output: finish.text,
+            });
+          }
+          await flushLangfuse();
+        } catch (err) {
+          console.warn('[agent/chat] langfuse scoring failed (non-fatal):', err);
+        }
       });
 
       await flush();

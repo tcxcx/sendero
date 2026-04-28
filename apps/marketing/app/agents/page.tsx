@@ -92,23 +92,63 @@ export default function Page() {
             }
 
             /*
-              Pixel wordmark selection. The global ::selection in
-              apps/marketing/app/globals.css paints vermillion-on-
-              vermillion (ink bg + parchment text). On the dark
-              terminal that reads as a hot orange block. Scope a
-              wordmark-specific rule that flips to parchment-bg + ink-
-              text — same palette, inverted, intentional.
+              Pixel wordmark selection. We let the global vermillion
+              selection rule from apps/marketing/app/globals.css win
+              (vermillion bg + parchment text). The earlier local
+              parchment-on-ink override read backwards against the
+              rest of the marketing site's selection.
             */
-            .agents-route .sendero-wordmark::selection {
+
+            /*
+              Get-started CTA topography wash. Mask-image sources the
+              same /patterns/topography.svg the dashboard uses; the
+              fill is a vermillion-tinted ink. Lives in front of the
+              card bg, behind the content via a dedicated absolute
+              span on the .agents-cta-topography class.
+            */
+            /*
+              Code-block selection on dark surfaces. The global
+              vermillion-bg + parchment-fg selection looks like a hot
+              orange wash on the deep-navy code blocks inside the
+              McpInstaller. Scope a parchment-bg + ink selection so
+              highlighted text on a dark code surface stays readable.
+            */
+            .agents-route .mcp-installer pre::selection,
+            .agents-route .mcp-installer pre *::selection {
               background: #fdfbf7;
               color: #111;
               -webkit-text-fill-color: #111;
               text-shadow: none;
             }
-            .agents-route .sendero-wordmark::-moz-selection {
+            .agents-route .mcp-installer pre::-moz-selection,
+            .agents-route .mcp-installer pre *::-moz-selection {
               background: #fdfbf7;
               color: #111;
               text-shadow: none;
+            }
+
+            /*
+              CopyInstall hover inversion text color — the marketing
+              a:hover global underline + Tailwind's text-foreground
+              cascade together can leave the icon stuck on parchment
+              instead of inverting. Scope an explicit text-color for
+              the hover state so the entire button reads as a coherent
+              ink-on-parchment-flip.
+            */
+            .agents-route .copy-install:hover span,
+            .agents-route .copy-install:hover svg {
+              color: var(--bg) !important;
+            }
+
+            .agents-route .agents-cta-topography {
+              background-color: color-mix(in oklab, var(--ink) 32%, transparent);
+              -webkit-mask-image: url("/patterns/topography.svg");
+              mask-image: url("/patterns/topography.svg");
+              -webkit-mask-repeat: repeat;
+              mask-repeat: repeat;
+              -webkit-mask-size: 520px 520px;
+              mask-size: 520px 520px;
+              opacity: 0.42;
             }
 
             /*

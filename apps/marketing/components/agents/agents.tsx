@@ -153,6 +153,14 @@ const ORA_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇
 
 type Phase = 'typing-1' | 'spin-1' | 'result-1' | 'typing-2' | 'spin-2' | 'result-2' | 'done';
 
+/*
+  Architecture is a special tab past the four animated scenarios — it
+  shows the static InfraDiagram instead of running the typed-cmd flow.
+  Treating it as `activeTab === ARCHITECTURE_TAB_INDEX` keeps the
+  scenario animation logic untouched.
+*/
+const ARCHITECTURE_TAB_LABEL = 'Architecture';
+
 const PHASES: Phase[] = [
   'typing-1',
   'spin-1',
@@ -315,7 +323,11 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   const [cursorOn, setCursorOn] = useState(true);
   const termRef = useRef<HTMLDivElement>(null);
 
-  const scenario = SCENARIOS[activeTab] as Scenario;
+  // The architecture tab sits past the four animated SCENARIOS — it
+  // renders the static InfraDiagram instead of a typed-cmd flow.
+  const ARCHITECTURE_TAB_INDEX = SCENARIOS.length;
+  const isArchitectureTab = activeTab === ARCHITECTURE_TAB_INDEX;
+  const scenario = SCENARIOS[isArchitectureTab ? 0 : activeTab] as Scenario;
 
   const resetAnimation = useCallback(() => {
     setPhase('typing-1');
@@ -338,7 +350,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   }, []);
 
   useEffect(() => {
-    if (phase !== 'typing-1') return;
+    if (phase !== 'typing-1' || isArchitectureTab) return;
     let i = 0;
     const id = setInterval(() => {
       if (i <= scenario.cmd1.length) {
@@ -350,7 +362,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
       }
     }, 40);
     return () => clearInterval(id);
-  }, [phase, scenario.cmd1]);
+  }, [phase, scenario.cmd1, isArchitectureTab]);
 
   useEffect(() => {
     if (phase !== 'spin-1' && phase !== 'spin-2') return;
@@ -394,12 +406,13 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   }, [phase]);
 
   useEffect(() => {
-    if (phase !== 'done') return;
+    if (phase !== 'done' || isArchitectureTab) return;
     const t = setTimeout(() => {
+      // Cycle only through animated scenarios — Architecture is opt-in.
       setActiveTab(prev => (prev + 1) % SCENARIOS.length);
     }, 2000);
     return () => clearTimeout(t);
-  }, [phase]);
+  }, [phase, isArchitectureTab]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -459,77 +472,101 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
         </div>
 
         <div className="flex bg-muted/40">
-          {SCENARIOS.map((s, i) => (
+          {[...SCENARIOS.map(s => s.label), ARCHITECTURE_TAB_LABEL].map((label, i) => (
             <button
-              key={s.label}
+              key={label}
               type="button"
               onClick={() => handleTabClick(i)}
               className={cn(
-                'relative flex-1 px-4 py-1.5 text-[11px] tracking-wide transition-colors border-b',
+                'relative flex-1 px-4 py-1.5 text-[11px] uppercase tracking-[0.12em] transition-colors',
+                // Active: solid vermillion + parchment text — matches the
+                // SegmentedTabs treatment used everywhere else.
                 i === activeTab
-                  ? 'bg-background text-foreground border-b-transparent'
-                  : 'text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] hover:text-foreground border-b-border',
-                i > 0 && 'border-l border-l-border'
+                  ? 'bg-[var(--ink)] text-[#fdfbf7]'
+                  : 'text-[color:color-mix(in_oklab,#fdfbf7_70%,transparent)] hover:text-[#fdfbf7] hover:bg-[color:color-mix(in_oklab,#fdfbf7_8%,transparent)]',
+                i > 0 && 'border-l border-l-[color:color-mix(in_oklab,#fdfbf7_15%,transparent)]'
               )}
             >
-              {s.label}
+              {label}
             </button>
           ))}
         </div>
 
         <div
           ref={termRef}
-          className="overflow-y-auto h-[380px] md:h-[460px] scroll-smooth p-5 bg-background text-[13px] leading-[1.7] text-foreground"
+          className="overflow-auto h-[380px] md:h-[460px] scroll-smooth p-5 bg-background text-[13px] leading-[1.7] text-foreground"
         >
-          <div>{prompt}npx @sendero/cli@latest</div>
-
-          {/*
-            Pixel wordmark — capital S to mirror the brand mark, with
-            a custom `::selection` decorator so highlighting the
-            wordmark on the dark terminal surface paints parchment-on-
-            ink instead of the global vermillion-on-vermillion wash.
-            The selection style lives next to the element so it's
-            scoped, not global.
-          */}
-          <div className={cn('sendero-wordmark text-7xl sm:text-8xl text-foreground mt-3', pixelFontClass)}>
-            Sendero
-          </div>
-          <div className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-[10px] tracking-widest mt-1.5 mb-5">
-            v0.1.0 · agent@workspace · Sendero Travel Ops
-          </div>
-
-          <div>
-            {prompt}
-            {typed1}
-            {phase === 'typing-1' && cursor}
-          </div>
-
-          {phase === 'spin-1' && <div className="mt-1">{spin(scenario.spin1)}</div>}
-
-          {past('result-1') && scenario.result1}
-
-          {past('typing-2') && (
-            <div className="mt-2">
-              {prompt}
-              {typed2}
-              {phase === 'typing-2' && cursor}
+          {isArchitectureTab ? (
+            /*
+              Architecture tab: render the static InfraDiagram inside
+              the terminal so the "system overview" lives where users
+              are already looking, no separate section needed.
+            */
+            <div>
+              <div>{prompt}sendero infra --map</div>
+              <div className="text-[color:color-mix(in_oklab,#fdfbf7_55%,transparent)] text-[10px] tracking-widest mt-1.5 mb-4">
+                Sendero is the backbone. Agents connect via MCP, CLI, or REST.
+              </div>
+              <pre
+                className="text-[10px] sm:text-[11px] leading-[1.4] text-foreground"
+                style={{
+                  fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
+                  whiteSpace: 'pre',
+                }}
+              >
+                <InfraDiagram />
+              </pre>
             </div>
-          )}
-
-          {phase === 'spin-2' && <div className="mt-1">{spin(scenario.spin2)}</div>}
-
-          {past('result-2') && (
+          ) : (
             <>
-              <div className="mt-1">{done(scenario.done2)}</div>
-              <div className="mt-1">{scenario.result2Line}</div>
-            </>
-          )}
+              <div>{prompt}npx @sendero/cli@latest</div>
 
-          {phase === 'done' && (
-            <div className="mt-3">
-              {prompt}
-              {cursor}
-            </div>
+              <div
+                className={cn(
+                  'sendero-wordmark text-7xl sm:text-8xl text-foreground mt-3',
+                  pixelFontClass
+                )}
+              >
+                Sendero
+              </div>
+              <div className="text-[color:color-mix(in_oklab,#fdfbf7_55%,transparent)] text-[10px] tracking-widest mt-1.5 mb-5">
+                v0.1.0 · agent@workspace · Sendero Travel Ops
+              </div>
+
+              <div>
+                {prompt}
+                {typed1}
+                {phase === 'typing-1' && cursor}
+              </div>
+
+              {phase === 'spin-1' && <div className="mt-1">{spin(scenario.spin1)}</div>}
+
+              {past('result-1') && scenario.result1}
+
+              {past('typing-2') && (
+                <div className="mt-2">
+                  {prompt}
+                  {typed2}
+                  {phase === 'typing-2' && cursor}
+                </div>
+              )}
+
+              {phase === 'spin-2' && <div className="mt-1">{spin(scenario.spin2)}</div>}
+
+              {past('result-2') && (
+                <>
+                  <div className="mt-1">{done(scenario.done2)}</div>
+                  <div className="mt-1">{scenario.result2Line}</div>
+                </>
+              )}
+
+              {phase === 'done' && (
+                <div className="mt-3">
+                  {prompt}
+                  {cursor}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -537,125 +574,6 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   );
 }
 
-const FEATURES = [
-  {
-    title: 'Search any inventory',
-    description:
-      'Agents call search_flights, search_stays, and search_ground against Duffel and direct supplier rates. One canonical schema across carriers and chains.',
-  },
-  {
-    title: 'Hold without committing',
-    description:
-      'Place a 24h hold while finance approves, the traveler reconfirms, or policy gates resolve. Release on a timer if not confirmed.',
-  },
-  {
-    title: 'Settle on-chain in USDC',
-    description:
-      'confirm_booking tickets the offer and writes the on-chain audit row in the same call. Arcscan URL surfaces in the response for finance.',
-  },
-  {
-    title: 'Reconcile autonomously',
-    description:
-      "Settlements without paired bookings get auto-matched on holdId + amount. Anomalies surface on a queue, not in someone's inbox.",
-  },
-  {
-    title: 'Pull reports on demand',
-    description:
-      'export_trip_summary, export_audit_log, export_route_map. Structured outputs for travelers, finance, auditors — same agent surface.',
-  },
-  {
-    title: 'Respect plan caps',
-    description:
-      'Every workspace has a monthly spend ceiling. Agents read cap_status and refuse to settle past it; they propose tier upgrades instead.',
-  },
-  {
-    title: 'Sandbox by default',
-    description:
-      'Sandbox API keys mint automatically on workspace creation. Practice the full flow without moving real USDC; flip a flag to go live.',
-  },
-  {
-    title: 'Locale aware',
-    description:
-      'Reply in the same language the user wrote in — Spanish, Portuguese, English. The tool surface is locale-agnostic; the skill teaches Claude to mirror.',
-  },
-  {
-    title: 'Cross-channel by design',
-    description:
-      'Same agent runs in WhatsApp, Slack, MCP, the web console, email. One Trip.events ledger; every channel reads and writes to it.',
-  },
-  {
-    title: 'Identity on ERC-8004',
-    description:
-      'register_agent and register_identity tools mint on-chain identity for downstream auditors. Pair every settlement with a verifiable agent ID.',
-  },
-  {
-    title: 'Works with any MCP client',
-    description:
-      'Claude Code, Claude Desktop, Cursor, Codex, VS Code, Raycast, your own agent. Same ~49 tools, same auth gate, any MCP transport.',
-  },
-  {
-    title: 'Zero setup',
-    description:
-      'One npx command. Browser-based key mint. No API keys to manage, no config files. Operational in seconds.',
-  },
-];
-
-const POSSIBILITIES = [
-  {
-    agent: 'Claude',
-    title: 'Plan a trip in three turns',
-    description:
-      'Ask Claude to find a refundable flight, hold the best option, and ticket it once finance approves — all without leaving the chat.',
-  },
-  {
-    agent: 'Cursor',
-    title: 'Bill while you build',
-    description:
-      'Cursor logs your time, drafts the invoice, and sends it via Sendero. Agencies bill clients without context-switching.',
-  },
-  {
-    agent: 'Slack',
-    title: 'Approve from #travel',
-    description:
-      'Approval card lands in your channel. Click ✓; the bot tickets the offer, surfaces the Arcscan audit URL, stamps Trip.events.',
-  },
-  {
-    agent: 'WhatsApp',
-    title: 'Travelers on the road',
-    description:
-      'Traveler texts "I missed my flight." Agent finds the next available, holds it, pings the operator on Slack for the override.',
-  },
-  {
-    agent: 'Your agent',
-    title: 'Build a custom workflow',
-    description:
-      'REST + MCP + OpenAPI 3.1 + llms.txt. Pull offers, settle on-chain, push receipts to your ERP. Your logic, your rules.',
-  },
-  {
-    agent: 'Any MCP client',
-    title: 'One protocol, every client',
-    description:
-      'Cursor, Claude Code, Codex, VS Code, Raycast — install once, ~49 tools instantly. No custom integration code.',
-  },
-  {
-    agent: 'Manus',
-    title: 'Reconcile while you sleep',
-    description:
-      'Manus matches settlements to bookings overnight, flags anomalies, runs the export. Ready for review when you wake up.',
-  },
-  {
-    agent: 'Cron',
-    title: 'A 20-line script',
-    description:
-      'Nightly: fetch unmatched settlements, match by holdId, push exceptions to Linear. The CLI is structured-output by default.',
-  },
-  {
-    agent: 'OpenClaw',
-    title: 'A 24/7 ops desk',
-    description:
-      'OpenClaw watches WhatsApp + Slack + email, escalates by policy, ticketing only after multi-step confirmation. Audit trail on-chain.',
-  },
-];
 
 export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
   return (
@@ -747,50 +665,12 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
 
         <SectionDivider />
 
-        <div className="mt-12">
-          <h3 className="font-sans text-2xl text-foreground">Features</h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-4">
-            {FEATURES.map(feature => (
-              <div className="border border-border p-1 -mt-[1px] -ml-[1px]" key={feature.title}>
-                <div className="p-4">
-                  <div className="space-y-4">
-                    <h3 className="text-sm text-foreground">{feature.title}</h3>
-                    <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">
-                      {feature.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <SectionDivider />
-
-        <div>
-          <h3 className="font-sans text-2xl text-foreground">Possibilities</h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-4">
-            {POSSIBILITIES.map(item => (
-              <div className="border border-border p-1 -mt-[1px] -ml-[1px]" key={item.title}>
-                <div className="p-4">
-                  <div className="space-y-3">
-                    <span className="text-xs text-[color:var(--ink)] uppercase tracking-widest">
-                      {item.agent}
-                    </span>
-                    <h3 className="text-sm text-foreground">{item.title}</h3>
-                    <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <SectionDivider />
+        {/*
+          Features + Possibilities sections removed — the install panel
+          + the in-terminal scenarios already cover what those grids
+          said, and the page reads tighter without the 21 cards. The
+          Architecture section is now a tab inside the terminal hero.
+        */}
 
         <div className="grid grid-cols-1 md:grid-cols-3 mt-4">
           <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
@@ -842,34 +722,31 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
           </Link>
         </div>
 
-        <div className="hidden md:block">
-          <SectionDivider />
-        </div>
-
-        <div className="hidden md:block text-center">
-          <h2 className="font-sans text-2xl sm:text-3xl text-foreground">Infrastructure</h2>
-          <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-base leading-normal mt-4 max-w-md mx-auto">
-            Sendero is the backbone. Agents connect via MCP, CLI, or REST. Every operation syncs
-            back to the workspace ledger and on-chain audit trail.
-          </p>
-
-          <div className="hidden md:flex flex-col items-center justify-center mt-2">
-            <pre
-              className="p-4 text-sm leading-5 md:scale-[0.8] transform-gpu text-foreground"
-              style={{
-                fontFamily: 'monospace',
-                whiteSpace: 'pre',
-                textAlign: 'left',
-              }}
-            >
-              <InfraDiagram />
-            </pre>
-          </div>
-        </div>
+        {/*
+          Standalone Infrastructure section removed — the same diagram
+          is reachable from the terminal hero's Architecture tab.
+        */}
       </div>
 
       <div className="max-w-screen-lg mx-auto mt-16 mb-24 px-4">
-        <div className="bg-background border border-border p-8 lg:p-12 text-center relative before:absolute before:inset-0 before:bg-[repeating-linear-gradient(-60deg,hsla(var(--border),0.4),hsla(var(--border),0.4)_1px,transparent_1px,transparent_6px)] before:pointer-events-none">
+        {/*
+          Get-started CTA panel — parchment surface with the contour-
+          line topography pattern bleeding through (mask-image →
+          color-mix in oklab so the linework picks up the route's
+          ink/vermillion mix). Same hero-pattern source the dashboard
+          uses (apps/app/app/globals.css §"app-shell-root::before").
+        */}
+        <div
+          className="agents-cta border border-border p-8 lg:p-12 text-center relative overflow-hidden"
+          style={{
+            background: 'var(--bg)',
+          }}
+        >
+          {/* Topography wash */}
+          <span
+            aria-hidden="true"
+            className="agents-cta-topography pointer-events-none absolute inset-0"
+          />
           <div className="relative z-10">
             <h2 className="font-sans text-2xl sm:text-3xl text-foreground mb-4">Get started</h2>
             <p className="font-sans text-base text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] mb-6 max-w-lg mx-auto">

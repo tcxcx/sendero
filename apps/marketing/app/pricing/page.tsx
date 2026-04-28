@@ -11,6 +11,8 @@ import { resolvePublicOrigin } from '@sendero/seo';
 import { getMarketingContent } from '@/lib/content';
 import { createPageMetadata } from '@/lib/metadata';
 
+import { PricingHeroScene } from './pricing-hero-scene';
+
 export const metadata = createPageMetadata({
   title: 'Pricing — simple plans for travel-ops agents · Sendero',
   description:
@@ -57,7 +59,13 @@ export default async function PricingPage() {
   return (
     <>
       <section className="mk-hero" style={{ minHeight: 'auto', paddingBottom: 32 }}>
-        <div className="mk-hero-copy" style={{ maxWidth: '70ch' }}>
+        <div
+          aria-hidden="true"
+          style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}
+        >
+          <PricingHeroScene />
+        </div>
+        <div className="mk-hero-copy" style={{ maxWidth: '70ch', position: 'relative', zIndex: 2 }}>
           <div className="mk-eyebrow">Pricing</div>
           <h1 className="mk-title">{content.pricing.heading}</h1>
           <p className="mk-subtitle">{content.pricing.subheading}</p>
