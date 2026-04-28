@@ -61,49 +61,55 @@ export default async function PricingPage() {
       <section
         className="mk-hero mk-hero-pricing"
         style={{
-          minHeight: 'clamp(420px, 56vw, 560px)',
-          paddingBottom: 32,
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-          alignItems: 'center',
-          gap: 'clamp(24px, 4vw, 64px)',
+          minHeight: 'clamp(560px, 64vw, 720px)',
           padding: '0 clamp(24px, 6vw, 96px)',
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          overflow: 'hidden',
         }}
       >
-        <div
-          className="mk-hero-copy"
-          style={{
-            maxWidth: '52ch',
-            position: 'relative',
-            zIndex: 2,
-            width: '100%',
-            margin: 0,
-            padding: 'clamp(48px, 8vw, 96px) 0',
-            justifySelf: 'start',
-          }}
-        >
-          <div className="mk-eyebrow">Pricing</div>
-          <h1 className="mk-title" style={{ fontSize: 'clamp(36px, 4.6vw, 60px)' }}>
-            {content.pricing.heading}
-          </h1>
-          <p className="mk-subtitle">{content.pricing.subheading}</p>
-        </div>
         <div
           aria-hidden="true"
           className="mk-hero-pricing-scene"
           style={{
-            position: 'relative',
-            width: '100%',
-            aspectRatio: '4 / 3',
-            maxHeight: '100%',
-            overflow: 'hidden',
-            borderRadius: 8,
-            justifySelf: 'end',
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            right: 'clamp(16px, 3vw, 64px)',
+            aspectRatio: '1440 / 900',
+            pointerEvents: 'none',
+            zIndex: 1,
+            clipPath: 'inset(0 0 14% 0)',
           }}
         >
           <div style={{ position: 'absolute', inset: 0 }}>
             <PricingHeroScene />
           </div>
+        </div>
+        <div
+          className="mk-hero-copy"
+          style={{
+            maxWidth: '46ch',
+            position: 'relative',
+            zIndex: 2,
+            width: '100%',
+            margin: 0,
+            padding: 'clamp(48px, 8vw, 96px) 0',
+          }}
+        >
+          <div className="mk-eyebrow">Pricing</div>
+          <h1
+            className="mk-title"
+            style={{
+              fontSize: 'clamp(28px, 3.6vw, 52px)',
+              whiteSpace: 'nowrap',
+              maxWidth: 'none',
+            }}
+          >
+            {content.pricing.heading}
+          </h1>
+          <p className="mk-subtitle">{content.pricing.subheading}</p>
         </div>
       </section>
 

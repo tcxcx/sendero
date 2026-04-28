@@ -30,6 +30,7 @@ import { Check, Copy } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
+import { Button } from './button';
 import {
   SegmentedTabs,
   SegmentedTabsContent,
@@ -185,14 +186,14 @@ export function McpInstaller({
       </SegmentedTabs>
 
       <footer
-        className="flex flex-col gap-3 border-t pt-4"
+        className="flex flex-col items-center gap-3 border-t pt-4 text-center"
         style={{ borderColor: 'color-mix(in oklab, var(--fg, #111) 12%, transparent)' }}
       >
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col items-center gap-1">
           <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--fg,#111)]">
             API key
           </span>
-          <p className="text-xs text-[color-mix(in_oklab,var(--fg,#111)_65%,transparent)]">
+          <p className="max-w-prose text-xs text-[color-mix(in_oklab,var(--fg,#111)_65%,transparent)]">
             Sendero keys are minted via Clerk in the dashboard. Sandbox keys ship with every new
             workspace; production keys are gated by your plan tier.
           </p>
@@ -200,15 +201,15 @@ export function McpInstaller({
         {apiKeysSlot ? (
           <div>{apiKeysSlot}</div>
         ) : (
-          <a
-            href={apiKeysHref}
-            target={apiKeysHref.startsWith('http') ? '_blank' : undefined}
-            rel={apiKeysHref.startsWith('http') ? 'noreferrer' : undefined}
-            className="inline-flex h-10 w-fit items-center justify-center px-5 font-mono text-[12px] uppercase tracking-[0.14em] text-[var(--parchment,#fdfbf7)] transition-colors hover:opacity-90"
-            style={{ background: 'var(--fg, #111)' }}
-          >
-            Get an API key →
-          </a>
+          <Button asChild size="lg" className="font-mono text-[12px] uppercase tracking-[0.14em]">
+            <a
+              href={apiKeysHref}
+              target={apiKeysHref.startsWith('http') ? '_blank' : undefined}
+              rel={apiKeysHref.startsWith('http') ? 'noreferrer' : undefined}
+            >
+              Get an API key →
+            </a>
+          </Button>
         )}
       </footer>
     </div>

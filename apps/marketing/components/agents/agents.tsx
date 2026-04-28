@@ -28,61 +28,8 @@ import { McpInstaller } from '@sendero/ui/mcp-installer';
 const SENDERO_MCP_URL = 'https://app.sendero.travel/api/mcp';
 const SENDERO_API_KEYS_URL = 'https://app.sendero.travel/dashboard/settings/api-keys';
 
-const DOT_COLOR = 'color-mix(in oklab, var(--ink) 65%, white)';
-
 function cn(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
-}
-
-function InfraDiagram() {
-  const d = (text: string) => <span style={{ color: DOT_COLOR }}>{text}</span>;
-  return (
-    <>
-      {'                                            ┌──────────────────┐\n'}
-      {'                                            │      Agents      │\n'}
-      {'                                            └────────┬─────────┘\n'}
-      {'                                                     │\n'}
-      {'                                              MCP / CLI / API\n'}
-      {'                                                     │\n'}
-      {
-        ' ┌───────────────────────────────────────────────────┴───────────────────────────────────────────────────┐\n'
-      }
-      {' │'}
-      {d(
-        '░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░'
-      )}
-      {'│\n'}
-      {' │'}
-      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
-      {'  Sendero  '}
-      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
-      {'│\n'}
-      {' │'}
-      {d(
-        '░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░'
-      )}
-      {'│\n'}
-      {' │'}
-      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
-      {'  Travel-ops with on-chain settlement  '}
-      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
-      {'│\n'}
-      {' │'}
-      {d(
-        '░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░'
-      )}
-      {'│\n'}
-      {
-        ' └────┬───────────┬───────────┬───────────┬───────────┬───────────┬───────────┬─────────────────────────┘\n'
-      }
-      {'      │           │           │           │           │           │           │\n'}
-      {'      ▼           ▼           ▼           ▼           ▼           ▼           ▼\n'}
-      {'\n'}
-      {'  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐\n'}
-      {'  │ Search  │ │  Hold   │ │ Ticket  │ │ Settle  │ │  Audit  │ │ Wallet  │ │ Export  │\n'}
-      {'  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘'}
-    </>
-  );
 }
 
 function SectionDivider() {
@@ -153,14 +100,6 @@ const ORA_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇
 
 type Phase = 'typing-1' | 'spin-1' | 'result-1' | 'typing-2' | 'spin-2' | 'result-2' | 'done';
 
-/*
-  Architecture is a special tab past the four animated scenarios — it
-  shows the static InfraDiagram instead of running the typed-cmd flow.
-  Treating it as `activeTab === ARCHITECTURE_TAB_INDEX` keeps the
-  scenario animation logic untouched.
-*/
-const ARCHITECTURE_TAB_LABEL = 'Architecture';
-
 const PHASES: Phase[] = [
   'typing-1',
   'spin-1',
@@ -192,7 +131,10 @@ const SCENARIOS: Scenario[] = [
     done2: 'Hold confirmed.',
     result1: (
       <div className="relative mt-3 border-[0.5px] border-primary text-foreground text-[12px]">
-        <span className="absolute -top-[10px] left-3 bg-background px-1.5 text-[11px] tracking-wide text-foreground">
+        <span
+          className="absolute -top-[10px] left-3 px-1.5 text-[11px] tracking-wide text-foreground"
+          style={{ background: '#15110d' }}
+        >
           BUE → MIA · 12 May 2026 · 3 offers
         </span>
         <table className="w-full mt-2 mb-1">
@@ -257,7 +199,10 @@ const SCENARIOS: Scenario[] = [
     done2: 'Matching 3 settlements to bookings...',
     result1: (
       <div className="relative mt-3 border-[0.5px] border-primary text-foreground text-[12px]">
-        <span className="absolute -top-[10px] left-3 bg-background px-1.5 text-[11px] tracking-wide text-foreground">
+        <span
+          className="absolute -top-[10px] left-3 px-1.5 text-[11px] tracking-wide text-foreground"
+          style={{ background: '#15110d' }}
+        >
           Unmatched settlements [3]
         </span>
         <table className="w-full mt-2 mb-1">
@@ -323,11 +268,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   const [cursorOn, setCursorOn] = useState(true);
   const termRef = useRef<HTMLDivElement>(null);
 
-  // The architecture tab sits past the four animated SCENARIOS — it
-  // renders the static InfraDiagram instead of a typed-cmd flow.
-  const ARCHITECTURE_TAB_INDEX = SCENARIOS.length;
-  const isArchitectureTab = activeTab === ARCHITECTURE_TAB_INDEX;
-  const scenario = SCENARIOS[isArchitectureTab ? 0 : activeTab] as Scenario;
+  const scenario = SCENARIOS[activeTab] as Scenario;
 
   const resetAnimation = useCallback(() => {
     setPhase('typing-1');
@@ -350,7 +291,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   }, []);
 
   useEffect(() => {
-    if (phase !== 'typing-1' || isArchitectureTab) return;
+    if (phase !== 'typing-1') return;
     let i = 0;
     const id = setInterval(() => {
       if (i <= scenario.cmd1.length) {
@@ -362,7 +303,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
       }
     }, 40);
     return () => clearInterval(id);
-  }, [phase, scenario.cmd1, isArchitectureTab]);
+  }, [phase, scenario.cmd1]);
 
   useEffect(() => {
     if (phase !== 'spin-1' && phase !== 'spin-2') return;
@@ -406,13 +347,12 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   }, [phase]);
 
   useEffect(() => {
-    if (phase !== 'done' || isArchitectureTab) return;
+    if (phase !== 'done') return;
     const t = setTimeout(() => {
-      // Cycle only through animated scenarios — Architecture is opt-in.
       setActiveTab(prev => (prev + 1) % SCENARIOS.length);
     }, 2000);
     return () => clearTimeout(t);
-  }, [phase, isArchitectureTab]);
+  }, [phase]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -451,7 +391,10 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
           identical circles. Subtle distinctive detail; reads as a
           real terminal without screaming "Mac chrome."
         */}
-        <div className="select-none flex items-center h-7 px-3 border-b border-border bg-[#1a1f2e]">
+        <div
+          className="agents-terminal-titlebar select-none flex items-center h-7 px-3 border-b border-border"
+          style={{ background: '#1a1410' }}
+        >
           <div className="flex gap-[6px]">
             <span
               className="block w-[10px] h-[10px] rounded-full"
@@ -471,110 +414,85 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
           </span>
         </div>
 
-        <div className="flex bg-muted/40">
-          {[...SCENARIOS.map(s => s.label), ARCHITECTURE_TAB_LABEL].map((label, i) => (
+        <div className="flex" style={{ background: '#1f1814' }}>
+          {SCENARIOS.map((s, i) => (
             <button
-              key={label}
+              key={s.label}
               type="button"
               onClick={() => handleTabClick(i)}
               className={cn(
                 'relative flex-1 px-4 py-1.5 text-[11px] uppercase tracking-[0.12em] transition-colors',
-                // Active: solid vermillion + parchment text — matches the
-                // SegmentedTabs treatment used everywhere else.
                 i === activeTab
                   ? 'bg-[var(--ink)] text-[#fdfbf7]'
                   : 'text-[color:color-mix(in_oklab,#fdfbf7_70%,transparent)] hover:text-[#fdfbf7] hover:bg-[color:color-mix(in_oklab,#fdfbf7_8%,transparent)]',
                 i > 0 && 'border-l border-l-[color:color-mix(in_oklab,#fdfbf7_15%,transparent)]'
               )}
             >
-              {label}
+              {s.label}
             </button>
           ))}
         </div>
 
         <div
           ref={termRef}
-          className="overflow-auto h-[380px] md:h-[460px] scroll-smooth p-5 bg-background text-[13px] leading-[1.7] text-foreground"
+          className="agents-terminal-body overflow-auto h-[380px] md:h-[460px] scroll-smooth p-5 text-[13px] leading-[1.7] text-foreground"
+          style={{
+            background:
+              'radial-gradient(ellipse 120% 100% at 50% 0%, #1c1612 0%, #15110d 60%, #120e0a 100%)',
+          }}
         >
-          {isArchitectureTab ? (
-            /*
-              Architecture tab: render the static InfraDiagram inside
-              the terminal so the "system overview" lives where users
-              are already looking, no separate section needed.
-            */
-            <div>
-              <div>{prompt}sendero infra --map</div>
-              <div className="text-[color:color-mix(in_oklab,#fdfbf7_55%,transparent)] text-[10px] tracking-widest mt-1.5 mb-4">
-                Sendero is the backbone. Agents connect via MCP, CLI, or REST.
-              </div>
-              <pre
-                className="text-[10px] sm:text-[11px] leading-[1.4] text-foreground"
-                style={{
-                  fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
-                  whiteSpace: 'pre',
-                }}
-              >
-                <InfraDiagram />
-              </pre>
+          <div>{prompt}npx @sendero/cli@latest</div>
+
+          <div
+            className={cn(
+              'sendero-wordmark text-7xl sm:text-8xl text-foreground mt-3',
+              pixelFontClass
+            )}
+          >
+            Sendero
+          </div>
+          <div className="text-[color:color-mix(in_oklab,#fdfbf7_55%,transparent)] text-[10px] tracking-widest mt-1.5 mb-5">
+            v0.1.0 · agent@workspace · Sendero Travel Ops
+          </div>
+
+          <div>
+            {prompt}
+            {typed1}
+            {phase === 'typing-1' && cursor}
+          </div>
+
+          {phase === 'spin-1' && <div className="mt-1">{spin(scenario.spin1)}</div>}
+
+          {past('result-1') && scenario.result1}
+
+          {past('typing-2') && (
+            <div className="mt-2">
+              {prompt}
+              {typed2}
+              {phase === 'typing-2' && cursor}
             </div>
-          ) : (
+          )}
+
+          {phase === 'spin-2' && <div className="mt-1">{spin(scenario.spin2)}</div>}
+
+          {past('result-2') && (
             <>
-              <div>{prompt}npx @sendero/cli@latest</div>
-
-              <div
-                className={cn(
-                  'sendero-wordmark text-7xl sm:text-8xl text-foreground mt-3',
-                  pixelFontClass
-                )}
-              >
-                Sendero
-              </div>
-              <div className="text-[color:color-mix(in_oklab,#fdfbf7_55%,transparent)] text-[10px] tracking-widest mt-1.5 mb-5">
-                v0.1.0 · agent@workspace · Sendero Travel Ops
-              </div>
-
-              <div>
-                {prompt}
-                {typed1}
-                {phase === 'typing-1' && cursor}
-              </div>
-
-              {phase === 'spin-1' && <div className="mt-1">{spin(scenario.spin1)}</div>}
-
-              {past('result-1') && scenario.result1}
-
-              {past('typing-2') && (
-                <div className="mt-2">
-                  {prompt}
-                  {typed2}
-                  {phase === 'typing-2' && cursor}
-                </div>
-              )}
-
-              {phase === 'spin-2' && <div className="mt-1">{spin(scenario.spin2)}</div>}
-
-              {past('result-2') && (
-                <>
-                  <div className="mt-1">{done(scenario.done2)}</div>
-                  <div className="mt-1">{scenario.result2Line}</div>
-                </>
-              )}
-
-              {phase === 'done' && (
-                <div className="mt-3">
-                  {prompt}
-                  {cursor}
-                </div>
-              )}
+              <div className="mt-1">{done(scenario.done2)}</div>
+              <div className="mt-1">{scenario.result2Line}</div>
             </>
+          )}
+
+          {phase === 'done' && (
+            <div className="mt-3">
+              {prompt}
+              {cursor}
+            </div>
           )}
         </div>
       </div>
     </div>
   );
 }
-
-
 export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
   return (
     <div className="agents-route relative">
@@ -668,8 +586,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
         {/*
           Features + Possibilities sections removed — the install panel
           + the in-terminal scenarios already cover what those grids
-          said, and the page reads tighter without the 21 cards. The
-          Architecture section is now a tab inside the terminal hero.
+          said, and the page reads tighter without the 21 cards.
         */}
 
         <div className="grid grid-cols-1 md:grid-cols-3 mt-4">
@@ -721,11 +638,6 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
             Start automating
           </Link>
         </div>
-
-        {/*
-          Standalone Infrastructure section removed — the same diagram
-          is reachable from the terminal hero's Architecture tab.
-        */}
       </div>
 
       <div className="max-w-screen-lg mx-auto mt-16 mb-24 px-4">

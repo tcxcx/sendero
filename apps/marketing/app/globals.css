@@ -1892,16 +1892,17 @@ a:hover {
 }
 @media (max-width: 860px) {
   .mk-hero-pricing {
-    grid-template-columns: minmax(0, 1fr) !important;
     padding: 0 clamp(20px, 6vw, 32px) !important;
   }
   .mk-hero-pricing .mk-hero-copy {
-    padding: clamp(40px, 10vw, 64px) 0 0 !important;
+    padding: clamp(48px, 12vw, 96px) 0 clamp(220px, 50vw, 320px) !important;
   }
   .mk-hero-pricing-scene {
-    aspect-ratio: 16 / 10 !important;
-    justify-self: stretch !important;
-    margin-bottom: clamp(32px, 8vw, 56px);
+    width: 100% !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    transform: none !important;
   }
 }
 /* end marketing chrome */
