@@ -2939,19 +2939,19 @@ hr.rule {
   position: relative;
 }
 .sd-corner-hover::before {
-  content: '';
+  content: "";
   position: absolute;
-  inset: -3px;
+  inset: -6px;
   pointer-events: none;
   background:
-    linear-gradient(var(--ink), var(--ink)) top    left  / 7px 1.5px no-repeat,
-    linear-gradient(var(--ink), var(--ink)) top    left  / 1.5px 7px no-repeat,
-    linear-gradient(var(--ink), var(--ink)) top    right / 7px 1.5px no-repeat,
-    linear-gradient(var(--ink), var(--ink)) top    right / 1.5px 7px no-repeat,
-    linear-gradient(var(--ink), var(--ink)) bottom left  / 7px 1.5px no-repeat,
-    linear-gradient(var(--ink), var(--ink)) bottom left  / 1.5px 7px no-repeat,
-    linear-gradient(var(--ink), var(--ink)) bottom right / 7px 1.5px no-repeat,
-    linear-gradient(var(--ink), var(--ink)) bottom right / 1.5px 7px no-repeat;
+    linear-gradient(var(--ink), var(--ink)) top left / 10px 1.5px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top left / 1.5px 10px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top right / 10px 1.5px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top right / 1.5px 10px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom left / 10px 1.5px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom left / 1.5px 10px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom right / 10px 1.5px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom right / 1.5px 10px no-repeat;
   opacity: 0;
   transition: opacity 120ms ease;
   z-index: 1;
