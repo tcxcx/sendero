@@ -55,6 +55,7 @@ import {
 } from '@sendero/billing/markup';
 import type { PlanTier } from '@sendero/billing/plans';
 import { SENDERO_GUEST_ESCROW_ABI } from '@sendero/guest';
+import { getActiveTraceId } from '@sendero/langfuse';
 import { type Address, encodeFunctionData, type Hex } from 'viem';
 import { z } from 'zod';
 
@@ -292,6 +293,14 @@ export interface ConfirmBookingDeps {
      */
     invoiceItemization: InvoiceItemization;
     existingMetadata: Record<string, unknown> | null;
+    /**
+     * Active Langfuse trace id when the agent turn that fired this
+     * confirm ran inside `traceAgent()`. Persisted to
+     * `Booking.metadata.traceId` so the HITL approval flow can score
+     * the originating trace with the human's decision (approve /
+     * reject) — closes the loop on `scoreGeneration`.
+     */
+    traceId?: string;
   }): Promise<void>;
 
   /**
@@ -391,6 +400,10 @@ export function dbDependencies(): ConfirmBookingDeps {
         // confirm time so a tenant edit doesn't re-shape an open
         // invoice.
         invoiceItemization: args.invoiceItemization,
+        // Langfuse correlation — captured when the originating agent
+        // turn ran inside traceAgent(). Read by the Slack HITL
+        // approval handler to score the trace on approve/reject.
+        ...(args.traceId ? { traceId: args.traceId } : {}),
       };
       await prisma.booking.update({
         where: { id: args.bookingId },
@@ -646,6 +659,13 @@ export async function runConfirmBooking(
     readBookingSegment(ctx.booking.metadata)
   );
 
+  // Capture the active Langfuse trace id at confirm time. When the
+  // tool runs inside a `traceAgent()` wrapper (every channel adapter
+  // does), this returns the OTel trace id of the parent agent turn.
+  // Persisted via mergedMetadata.traceId so the HITL approval flow
+  // can score the originating trace with the human's decision.
+  const activeTraceId = getActiveTraceId();
+
   // Persist before encoding so a partial failure leaves the row in a
   // recoverable state (the userOp encode is pure and replayable; the
   // DB write is the side-effect we care about).
@@ -659,6 +679,7 @@ export async function runConfirmBooking(
     snapshot,
     invoiceItemization,
     existingMetadata: ctx.booking.metadata,
+    ...(activeTraceId ? { traceId: activeTraceId } : {}),
   });
 
   // Encode commitBookingV2. Three amounts, three recipients (vendor +

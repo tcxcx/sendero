@@ -40,6 +40,7 @@ export {
 export {
   aiTelemetryConfig,
   extractTraceId,
+  getActiveTraceId,
   propagateTraceHeaders,
   traceAgent,
 } from './traces';

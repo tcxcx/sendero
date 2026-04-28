@@ -42,18 +42,26 @@ export async function traceAgent<T>(
   metadata: TraceMetadata,
   fn: (ctx: { traceId: string; observationId: string }) => Promise<T>
 ): Promise<TraceResult<T>> {
-  const traceId = metadata.parentTraceId ?? crypto.randomUUID();
+  const fallbackTraceId = metadata.parentTraceId ?? crypto.randomUUID();
   const observationId = crypto.randomUUID();
 
   const tracing = getTracing();
 
   if (!tracing || !isLangfuseEnabled()) {
-    const result = await fn({ traceId, observationId });
-    return { result, traceId, observationId };
+    const result = await fn({ traceId: fallbackTraceId, observationId });
+    return { result, traceId: fallbackTraceId, observationId };
   }
+
+  // Captured inside startActiveObservation so the returned traceId is the
+  // real OTel/Langfuse trace id, not a synthetic UUID. Scoring tagged with
+  // this id will land on the correct trace in the Langfuse UI.
+  let resolvedTraceId = fallbackTraceId;
 
   try {
     const result = await tracing.startActiveObservation(agentType, async span => {
+      const liveTraceId = tracing.getActiveTraceId();
+      if (liveTraceId) resolvedTraceId = liveTraceId;
+
       tracing.updateActiveTrace({
         name: agentType,
         userId: metadata.userId,
@@ -95,18 +103,35 @@ export async function traceAgent<T>(
           metadata: propagateMeta,
           tags: [agentType, metadata.surface].filter((t): t is string => Boolean(t)),
         },
-        async () => fn({ traceId, observationId })
+        async () => fn({ traceId: resolvedTraceId, observationId })
       );
     });
 
-    return { result, traceId, observationId };
+    return { result, traceId: resolvedTraceId, observationId };
   } catch (err) {
     console.warn(
       '[langfuse] traceAgent failed, running untraced:',
       err instanceof Error ? err.message : err
     );
-    const result = await fn({ traceId, observationId });
-    return { result, traceId, observationId };
+    const result = await fn({ traceId: fallbackTraceId, observationId });
+    return { result, traceId: fallbackTraceId, observationId };
+  }
+}
+
+/**
+ * Read the active OTel trace ID from the current context. Returns
+ * undefined when called outside a Langfuse-traced operation. Tools and
+ * downstream code use this to tag side effects (e.g., writing
+ * `traceId` to a Booking row so HITL approvals can score the trace
+ * later) without plumbing the id through every function signature.
+ */
+export function getActiveTraceId(): string | undefined {
+  const tracing = getTracing();
+  if (!tracing) return undefined;
+  try {
+    return tracing.getActiveTraceId();
+  } catch {
+    return undefined;
   }
 }
 
