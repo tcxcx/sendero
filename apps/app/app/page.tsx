@@ -14,13 +14,25 @@ export default async function Page() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)]">
-      {/* Cloud background */}
+      {/* Cloud background — centered cover */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0"
-        style={{ width: '100%', height: '100%' }}
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
       >
-        <AppHeroScene />
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '1440px',
+            height: '900px',
+            minWidth: '100%',
+            minHeight: '100%',
+          }}
+        >
+          <AppHeroScene />
+        </div>
       </div>
 
       {/* Gradient fade so text stays legible */}
@@ -66,7 +78,10 @@ export default async function Page() {
         </div>
       </nav>
 
-      <section className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start justify-end px-5 pb-16 pt-10 sm:px-8 sm:pt-14" style={{ minHeight: 'calc(100vh - 68px)' }}>
+      <section
+        className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-start justify-end px-5 pb-16 pt-10 sm:px-8 sm:pt-14"
+        style={{ minHeight: 'calc(100vh - 68px)' }}
+      >
         <div className="max-w-3xl">
           <div className="s-enter s-enter-1 mb-6 inline-flex items-center gap-2 border border-[var(--border)] bg-[var(--bg)]/70 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-dim)] backdrop-blur-sm">
             <span
