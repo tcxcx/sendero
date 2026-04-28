@@ -14,6 +14,7 @@ import { getMarketingContent } from '@/lib/content';
 import { heroTitleWithHighlights } from '@/lib/hero-title';
 
 import { MarketingBrandHoverCard } from './brand-hover-card';
+import { MarketingHeroScene } from './marketing-hero-scene';
 import { MarketingWaitlist } from './waitlist';
 
 export const revalidate = 300; // 5 minutes; basehub will push on-demand in Phase 4
@@ -125,18 +126,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
 
       <section className="mk-hero">
         <div className="mk-hero-art s-fade s-fade-1" aria-hidden="true">
-          <img
-            alt=""
-            className="mk-hero-art-img"
-            decoding="async"
-            src="/brand/marketing-hero-wide.png"
-          />
-          <img
-            alt=""
-            className="mk-hero-art-edge"
-            decoding="async"
-            src="/brand/marketing-hero-transparent-edge.png"
-          />
+          <MarketingHeroScene />
         </div>
         <div className="mk-hero-copy">
           <div className="mk-eyebrow s-enter s-enter-1">{content.hero.eyebrow}</div>
@@ -483,10 +473,8 @@ const inlineCss = `
   .mk-hero::after { content: ""; position: absolute; z-index: 1; inset: 36% 0 0; background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--bg) 92%, transparent) 72%); pointer-events: none; }
   .mk-hero-art { position: absolute; inset: 0; overflow: hidden; opacity: 0; animation: mkHeroImageIn 1100ms var(--mk-hero-ease) 80ms both; will-change: opacity; }
   .mk-hero-art::after { content: ""; position: absolute; inset: auto 9% 12% auto; width: min(34vw, 420px); height: 1px; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 76%, #111) 22%, color-mix(in oklab, var(--accent) 76%, #111) 72%, transparent); opacity: 0.72; transform-origin: left center; animation: mkRouteTrace 1300ms var(--mk-hero-ease) 520ms both; }
-  .mk-hero-art-img,
-  .mk-hero-art-edge { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
-  .mk-hero-art-img { object-position: center top; filter: saturate(0.96) contrast(0.98); }
-  .mk-hero-art-edge { opacity: 0.52; object-position: center top; mix-blend-mode: multiply; }
+  .mk-hero-scene-wrap { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .mk-hero-scene-wrap > * { width: 100% !important; height: 100% !important; }
   .mk-hero-copy { position: relative; z-index: 2; width: min(820px, calc(100% - clamp(48px, 14vw, 192px))); margin: 0 auto clamp(40px, 7vh, 96px); padding: 0 0 clamp(40px, 6vw, 72px); }
   .mk-hero-copy > * { opacity: 0; transform: translateY(10px); animation: mkHeroTextIn 760ms var(--mk-hero-ease) both; will-change: opacity, transform; }
   /* Hero kicker: same fill as SenderoLanguageSelector active (.is-active / --sendero-language-ink + #fafaf7) */
@@ -817,8 +805,6 @@ const inlineCss = `
     .mk-nav-right a { display: flex; min-height: 40px; align-items: center; justify-content: center; border: 1px solid var(--border); padding: 8px 10px; text-align: center; line-height: 1.15; text-decoration: none; }
     .mk-nav-right .mk-cta { border-color: var(--fg); white-space: normal; }
     .mk-hero { min-height: 620px; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); margin-bottom: 64px; }
-    .mk-hero-art-img { object-position: 58% top; }
-    .mk-hero-art-edge { opacity: 0.42; object-position: 58% top; }
     .mk-hero-copy { width: calc(100% - 28px); margin-bottom: clamp(32px, 6vh, 72px); padding-bottom: 40px; }
     .mk-title { font-size: clamp(42px, 14vw, 56px); line-height: 1.03; letter-spacing: 0; }
     .mk-subtitle { font-size: 17px; line-height: 1.55; }
