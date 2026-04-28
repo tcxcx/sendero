@@ -627,13 +627,36 @@ export function buildSenderoAppLlms(options: SurfaceOptions = {}): LlmsTxtConfig
       },
       {
         heading: 'Managed Tool Catalog',
-        body: 'The current tool registry is larger than the original hackathon list. Prefer `tools/list` from the MCP endpoint when exact JSON schemas are required.',
+        body: 'The catalog below is a stable abbreviated index. The authoritative registry is the live MCP endpoint. Call `tools/list` on `/api/mcp` for exact JSON schemas, names, and per-tool prices. Append `/api/openapi.json` to the app origin for the same surface as an OpenAPI 3.1 doc.',
         items: AGENT_TOOL_CATALOG,
       },
       {
         heading: 'Managed Workflow Catalog',
-        body: 'Workflows are named plans for agents that want Sendero to orchestrate multiple tool calls, external pauses, escrow transitions, and invoice generation.',
+        body: 'Workflows are named plans for agents that want Sendero to orchestrate multiple tool calls, external pauses, escrow transitions, and invoice generation. Discover the live set via the MCP endpoint or `/api/workflows/list`.',
         items: AGENT_WORKFLOW_CATALOG,
+      },
+      {
+        heading: 'One-Click MCP Install',
+        body: 'Pre-built installers that wire Sendero into popular MCP clients. Each one prompts the user for an API key on first run; the key is stored in the OS keychain via the host application.',
+        items: withOrigin(o.app, [
+          {
+            label: 'Claude Desktop (.mcpb)',
+            href: '/downloads/sendero.mcpb',
+            description:
+              'One-click installer bundle. Drop into Claude Desktop → Settings → Extensions. Bundles a local stdio→HTTP proxy that forwards JSON-RPC to /api/mcp with the user-supplied Bearer token.',
+          },
+          {
+            label: 'Claude Desktop install guide',
+            href: '/docs/claude-desktop-install',
+            description: 'Step-by-step walkthrough, troubleshooting, and configuration reference.',
+          },
+          {
+            label: 'Cursor / VS Code / Claude Code / Codex CLI',
+            href: '/docs/mcp-integration',
+            description:
+              'Deep-link install URLs for Cursor and VS Code; one-line CLI commands for Claude Code and Codex.',
+          },
+        ]),
       },
       agentGuidanceSection(),
       computerUseShortcutsSection(),
@@ -690,19 +713,19 @@ export function buildSenderoMarketingLlms(options: SurfaceOptions = {}): LlmsTxt
         heading: 'Launch State',
         items: [
           {
-            label: 'Testnet beta',
+            label: 'Public beta on Arc testnet',
             description:
-              'The product currently runs against Arc testnet and sandbox/provider test credentials.',
+              'Sendero is in public beta. Settlement runs on Arc testnet USDC; sandbox keys auto-issued, production keys self-serve at /dashboard/settings/api-keys. Real bookings go through Duffel sandbox today; mainnet flip happens once Circle promotes Arc mainnet.',
           },
           {
-            label: 'Waitlist first',
+            label: 'Self-serve onboarding',
             description:
-              'Humans should join the waitlist for mainnet launch and production onboarding.',
+              'Sign in with a Clerk account, the workspace + sandbox key are minted on first auth. No sales call required. Paid plans (Basic, Pro, Enterprise) are subscribable directly from /dashboard/settings/billing.',
           },
           {
             label: 'Agent integration',
             description:
-              'Agents should read docs and MCP manifests before attempting paid booking or settlement flows.',
+              'MCP, OpenAPI, and direct HTTP surfaces are all live. Agents should read /docs/getting-started for the 60-second hello-world, then /docs/mcp-integration for one-click client installs.',
           },
         ],
       },
@@ -916,10 +939,12 @@ export function buildSenderoDocsLlms(options: SurfaceOptions = {}): LlmsTxtConfi
       },
       {
         heading: 'Managed Tool Catalog',
+        body: 'Stable abbreviated index. For exact JSON schemas + per-tool prices, call `tools/list` on the live MCP endpoint or fetch `/api/openapi.json` from the app origin.',
         items: AGENT_TOOL_CATALOG,
       },
       {
         heading: 'Managed Workflow Catalog',
+        body: 'Live workflow registry: `/api/workflows/list`.',
         items: AGENT_WORKFLOW_CATALOG,
       },
       agentGuidanceSection(),
@@ -958,6 +983,7 @@ export function buildSenderoEdgeLlms(options: SurfaceOptions = {}): LlmsTxtConfi
       },
       {
         heading: 'Managed Tool Catalog',
+        body: 'Stable abbreviated index. Live registry: `tools/list` on `/mcp` (this surface) or on the app origin at `/api/mcp`.',
         items: AGENT_TOOL_CATALOG,
       },
       {

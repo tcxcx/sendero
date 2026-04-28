@@ -17,8 +17,7 @@ export const runtime = 'edge';
 export const dynamic = 'force-static';
 export const revalidate = 300; // 5 min; the latest-download URL rarely changes
 
-const LATEST_MCPB_URL =
-  'https://github.com/tcxcx/sendero/releases/latest/download/sendero.mcpb';
+const LATEST_MCPB_URL = 'https://github.com/tcxcx/sendero/releases/latest/download/sendero.mcpb';
 
 export async function GET(): Promise<Response> {
   return NextResponse.redirect(LATEST_MCPB_URL, {

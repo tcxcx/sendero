@@ -24,7 +24,17 @@
     { "src": "icons/icon-512.png", "size": "512x512" }
   ],
   "license": "Apache-2.0",
-  "keywords": ["travel", "booking", "flights", "hotels", "usdc", "on-chain", "stablecoin", "duffel", "sendero"],
+  "keywords": [
+    "travel",
+    "booking",
+    "flights",
+    "hotels",
+    "usdc",
+    "on-chain",
+    "stablecoin",
+    "duffel",
+    "sendero"
+  ],
   "privacy_policies": ["https://sendero.travel/legal/privacy"],
   "compatibility": {
     "claude_desktop": ">=0.10.0",
