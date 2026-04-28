@@ -39,6 +39,7 @@ import {
 } from '@/components/ai-elements/tool';
 
 import { refreshTreasury } from './actions';
+import { registerChatBridge } from './chat-bridge';
 import { runtimeContext, useSendero } from './store';
 import { TripToolCard } from './trip-tool-cards';
 
@@ -104,6 +105,13 @@ export function ChatCol() {
   });
   const startedToolIds = useRef<Set<string>>(new Set());
   const doneToolIds = useRef<Set<string>>(new Set());
+
+  // Stage SearchForm + quick-command surfaces dispatch through this
+  // singleton so form-driven tool runs land in chat history (and
+  // rehydrate on reload) instead of hitting /api/flights/search direct.
+  // `sendMessage` is reference-stable; re-registering each render is
+  // idempotent and avoids the useEffect mount/unmount churn.
+  registerChatBridge((text: string) => sendMessage({ text }));
 
   // Every tool call the agent makes drives the store so that Stage,
   // StepRail, WorkflowLog, FooterRail and AgentCard all move in lockstep

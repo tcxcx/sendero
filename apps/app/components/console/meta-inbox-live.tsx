@@ -50,6 +50,7 @@ import {
 } from '@/components/ai-elements/tool';
 import { useChatStoreSync } from '@/components/use-chat-store-sync';
 import { useSendero } from '@/components/store';
+import { registerChatBridge } from '@/components/chat-bridge';
 
 import { asChannelKey, type ChannelKey } from './channels';
 import { DemoConversation, type DemoMessage, runDemoTripScript } from './demo-trip';
@@ -225,6 +226,12 @@ export function MetaInboxLive({
   useEffect(() => {
     if (error) console.error('[meta-inbox-live] useChat error state:', error);
   }, [error]);
+
+  // Expose `sendMessage` to Stage SearchForm + quick-command surfaces
+  // through a module-level singleton. `sendMessage` is reference-
+  // stable across renders (memoized inside useChat), so re-registering
+  // every render is idempotent and a hook-free path is safe here.
+  registerChatBridge((text: string) => sendMessage({ text }));
 
   // Pump every tool call into the SenderoApp store so:
   //   · Stage renders the right artifact (offer cards / hold card /
