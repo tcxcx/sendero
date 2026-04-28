@@ -372,10 +372,10 @@ function crossSurfaceLinks(o: Record<SenderoSurface, string>, current: SenderoSu
 }
 
 const securityNotes = [
-  'Treat Sendero as testnet beta until the relevant tenant, Clerk organization, wallet, and invoice state prove otherwise.',
+  'Sendero is public beta on Arc testnet. The `effectiveKeyType` resolved per request determines whether a `MeterEvent` settles on-chain (`paid`) or stays sandbox-routed (`sandbox`). Trust the meter status, not the key type, when deciding if real USDC moved.',
   'Do not log or persist guest private-link fragments, plaintext claim codes, Clerk secrets, Circle secrets, webhook secrets, or user travel documents.',
-  'Paid or on-chain tools must be idempotent. Reuse caller-supplied idempotency keys when present.',
-  'Use tenant-scoped routes and Clerk organization context for buyer data. Never infer tenant access from an email domain alone.',
+  'Paid or on-chain tools must be idempotent. Reuse caller-supplied idempotency keys when present. Sendero responses carry `x-sendero-trace-id`, `x-sendero-meter-id`, and `x-sendero-sig` headers — verify the signature on receipt to detect cached-response replay.',
+  'Use tenant-scoped routes and Clerk organization context for buyer data. Never infer tenant access from an email domain alone. API keys pin the tenant server-side; ignore any caller-supplied tenantId when both are present.',
 ];
 
 function productSection(): LlmsSection {
