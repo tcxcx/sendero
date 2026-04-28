@@ -130,9 +130,13 @@ jobs:
             }
 
             const apiBase = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/workers/scripts/${CF_WORKER_NAME}/builds`;
+            // The /builds endpoint content-negotiates: without `Accept: application/json`
+            // it returns multipart/form-data with the build artifacts (the WASM + JS
+            // files). We want the metadata listing — set Accept explicitly so CF picks
+            // the JSON branch.
             const headers = {
               Authorization: `Bearer ${CF_API_TOKEN}`,
-              'Content-Type': 'application/json',
+              Accept: 'application/json',
             };
 
             const fetchBuilds = async () => {
