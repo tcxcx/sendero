@@ -27,10 +27,8 @@ export default async function ConsolePage(props: ConsolePageProps) {
   const scopedTripId = params.tripId ?? null;
   const { tenant } = await requireCurrentTenant();
 
-  const { trips, conversation, traveler, holdExpires, pendingBooking } = await loadConsoleData(
-    tenant.id,
-    scopedTripId
-  );
+  const { trips, conversation, traveler, holdExpires, pendingBooking, kpis } =
+    await loadConsoleData(tenant.id, scopedTripId);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
@@ -41,6 +39,7 @@ export default async function ConsolePage(props: ConsolePageProps) {
         traveler={traveler}
         holdExpires={holdExpires}
         pendingBooking={pendingBooking}
+        kpis={kpis}
       />
     </div>
   );

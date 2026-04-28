@@ -7,7 +7,8 @@
   },
   "crons": [
     { "path": "/api/cron/generate-platform-bills", "schedule": "0 2 1 * *" },
-    { "path": "/api/cron/retry-wallet-provision", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/retry-wallet-provision", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/reconcile-booking-holds", "schedule": "*/10 * * * *" }
   ],
   "ignoreCommand": "bash -c '[[ \"$VERCEL_GIT_COMMIT_REF\" == \"main\" || \"$VERCEL_GIT_COMMIT_REF\" == \"development\" ]] && exec npx turbo-ignore @sendero/app; exit 0'"
 }

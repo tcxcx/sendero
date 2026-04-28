@@ -14,7 +14,6 @@ import Link from 'next/link';
 
 import { prisma } from '@sendero/database';
 
-import { Crumb } from '@/components/console/crumb';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -55,7 +54,7 @@ export default async function PoliciesPage({
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -63,8 +62,6 @@ export default async function PoliciesPage({
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Money & policy', 'Caps', 'Policies']} />
-
       <div
         style={{
           display: 'flex',

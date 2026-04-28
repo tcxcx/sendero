@@ -9,7 +9,7 @@
 
 import Link from 'next/link';
 
-import { formatDate, formatMicroUsd } from '@/lib/format';
+import { formatDate, formatMicroUsdPrecise } from '@/lib/format';
 
 interface InvoiceRow {
   id: string;
@@ -96,7 +96,7 @@ export function InvoicesGrid({ invoices }: { invoices: InvoiceRow[] }) {
               </span>
             </div>
             <div className="t-num-md" style={{ fontSize: 18, textAlign: 'right' }}>
-              {formatMicroUsd(inv.totalMicro)}
+              {formatMicroUsdPrecise(inv.totalMicro)}
             </div>
           </Link>
         );

@@ -2,6 +2,7 @@
   "title": "Sendero API",
   "pages": [
     "index",
+    "getting-started",
     "quickstart",
     "api-reference",
     "agent-to-agent-booking",
@@ -22,6 +23,7 @@
     "---Protocol---",
     "x402-nanopayments",
     "mcp-integration",
+    "claude-desktop-install",
     "security",
     "security/claim-code",
     "---Changelog---",

@@ -33,6 +33,7 @@ datasource db {
 
 enum BillingTier {
   free
+  basic
   pro
   business
   enterprise
@@ -118,6 +119,10 @@ enum MeterStatus {
   /// key downgraded during testnet-beta network mode). Row is kept for
   /// analytics; NanopayBatch excludes `status='sandbox'` from settlement.
   sandbox
+  /// Paid from the tenant's SaaS-included credit grant (Subscription.meterBalanceMicro).
+  /// Excluded from NanopayBatch settlement and from CapStore.spentInWindow so the
+  /// monthly spend cap only counts actual out-of-pocket overage.
+  credit
 }
 
 enum SettlementStatus {
@@ -267,6 +272,7 @@ model Tenant {
   slackInstalls       SlackInstall[]
   slackUserBindings   SlackUserBinding[]
   whatsappInstall     WhatsAppInstall?
+  whatsappOutbound    WhatsAppOutboundMessage[]
   whatsappLinkTokens  WhatsAppLinkToken[]
   bookingPayTokens    BookingPayToken[]
   spendCaps           TenantSpendCap[]
@@ -422,7 +428,17 @@ model Subscription {
   status            SubscriptionStatus @default(active)
   currentPeriodEnd  DateTime?          @db.Timestamptz(6)
   /// Signed micro-USDC balance for the current billing period (negative = owed).
+  /// Refilled by the Clerk subscription.created/subscription.updated webhook on
+  /// cycle renewal. Use-it-or-lose-it: no rollover.
   meterBalanceMicro BigInt             @default(0)
+  /// Sum of `status='credit'` MeterEvents inside the current daily window.
+  /// Persisted so the atomic preflight UPDATE can enforce the daily sub-cap
+  /// (typically 25% of monthlyIncludedCreditsMicro) without a separate
+  /// aggregate read race.
+  dailyCreditBurnMicro BigInt          @default(0)
+  /// UTC timestamp when the current daily window opened. Reset by preflight
+  /// when wall clock crosses (dailyWindowStartedAt + 24h).
+  dailyWindowStartedAt DateTime?       @db.Timestamptz(6)
   metadata          Json?
   createdAt         DateTime           @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
@@ -1054,8 +1070,13 @@ model SlackInstall {
   scope               String
   isEnterpriseInstall Boolean  @default(false)
   authedUserId        String
-  installedAt         DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+  installedAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  /// Set when Slack delivers `tokens_revoked` or `app_uninstalled` for
+  /// this install. Non-null means the bot token is dead — keep the
+  /// row for audit trail (meter_events.userId references survive) but
+  /// every webhook handler must treat the install as gone.
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(6)
   raw                 Json?
   /// Channel routing config from the Slack setup wizard:
   /// { defaultChannel, routes: [{ eventClass, channel, mode }] }.
@@ -1069,6 +1090,7 @@ model SlackInstall {
 
   @@unique([enterpriseId, teamId])
   @@index([tenantId])
+  @@index([revokedAt])
   @@map("slack_installs")
 }
 
@@ -1192,6 +1214,114 @@ model WhatsAppInstall {
   @@map("whatsapp_installs")
 }
 
+/// Audit row for every WhatsApp webhook delivery.
+///
+/// Closes the operator visibility gap: when a customer says "I sent a
+/// message and the bot didn't respond," ops looks up by wamid (or
+/// timestamp) and sees the verify outcome, replay-window decision,
+/// dedup decision, and how many normalized messages were dispatched.
+/// Inserted fire-and-forget after the 200 ack so it never blocks
+/// Slack/Meta's retry-on-non-200 logic.
+model WhatsAppWebhookEvent {
+  id                    String    @id @default(cuid())
+  tenantId              String?   @map("tenant_id")
+  receivedAt            DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  signatureValid        Boolean   @map("signature_valid")
+  replayWindowOk        Boolean?  @map("replay_window_ok")
+  payloadHash           String    @map("payload_hash")
+  messageCount          Int       @default(0) @map("message_count")
+  identityChangeCount   Int       @default(0) @map("identity_change_count")
+  statusUpdateCount     Int       @default(0) @map("status_update_count")
+  droppedReplayCount    Int       @default(0) @map("dropped_replay_count")
+  droppedDuplicateCount Int       @default(0) @map("dropped_duplicate_count")
+  dispatchedCount       Int       @default(0) @map("dispatched_count")
+  durationMs            Int?      @map("duration_ms")
+  traceId               String?   @map("trace_id")
+  /// Optional raw envelope — null in production unless the tenant
+  /// opts in via `WhatsAppInstall.metadata.auditRawPayloads`.
+  rawEnvelope           Json?     @map("raw_envelope")
+
+  @@index([tenantId, receivedAt(sort: Desc)])
+  @@index([traceId])
+  @@map("whatsapp_webhook_events")
+}
+
+/// Audit row for every external API call we make to Kapso or Meta.
+///
+/// Closes the last gap in Bucket 5 (observability): operators want to
+/// know not just "did the inbound webhook arrive" but also "are our
+/// outbound calls succeeding". Failed Kapso health pings, slow Meta
+/// template publishes, 429-throttled sends — all show up here with
+/// duration + status_code + endpoint shape so ops can grep the whole
+/// outbound surface from one table.
+///
+/// `tenantId` is nullable: install-time setup links happen before a
+/// tenant binding exists. Endpoint paths are normalized
+/// (`/customers/{id}/setup_links`) so the same shape aggregates
+/// cleanly without exploding row count per id.
+model WhatsAppApiLog {
+  id           String   @id @default(cuid())
+  tenantId     String?  @map("tenant_id")
+  calledAt     DateTime @default(now()) @map("called_at") @db.Timestamptz(6)
+  /// 'kapso' | 'meta' — extend as new outbound surfaces land.
+  target       String
+  method       String
+  /// Endpoint shape with path params replaced (`/messages`,
+  /// `/customers/{id}/setup_links`). Static prefix so groupings work.
+  endpoint     String
+  /// 0 when the request never completed (DNS / network / timeout).
+  statusCode   Int      @map("status_code")
+  durationMs   Int      @map("duration_ms")
+  ok           Boolean
+  errorMessage String?  @map("error_message")
+  traceId      String?  @map("trace_id")
+
+  @@index([tenantId, calledAt(sort: Desc)])
+  @@index([target, calledAt(sort: Desc)])
+  @@map("whatsapp_api_logs")
+}
+
+/// Audit row for every WhatsApp outbound send.
+///
+/// One row per `wamid` (UNIQUE). Inserted at send time; updated by the
+/// inbound `messages.statuses` webhook handler (already wired in the
+/// route). Source labels separate agent replies from OTP drops from
+/// security alerts so ops can answer "did the OTP land?" without
+/// grepping handlers.
+model WhatsAppOutboundMessage {
+  id              String    @id @default(cuid())
+  tenantId        String    @map("tenant_id")
+  wamid           String    @unique
+  phoneNumberId   String    @map("phone_number_id")
+  /// E.164 or BSUID, whichever was used at send time.
+  recipientId     String    @map("recipient_id")
+  /// 'text' | 'template' | 'interactive' | 'image' | 'document' | 'video' | …
+  kind            String
+  /// 'agent_reply' | 'otp' | 'security_alert' | 'manual' | etc.
+  source          String
+  templateName    String?   @map("template_name")
+  /// Up to 280-char preview (PII-light). For `template` sends, the
+  /// template name + first body parameter; for `text`, the body
+  /// truncated.
+  preview         String?
+  sentAt          DateTime  @default(now()) @map("sent_at") @db.Timestamptz(6)
+  /// Initialised to `'sent'` at insert. Updated by the inbound status
+  /// webhook to `'delivered' | 'read' | 'failed'`.
+  deliveryStatus  String    @default("sent") @map("delivery_status")
+  failureReason   String?   @map("failure_reason")
+  deliveredAt     DateTime? @map("delivered_at") @db.Timestamptz(6)
+  readAt          DateTime? @map("read_at") @db.Timestamptz(6)
+  failedAt        DateTime? @map("failed_at") @db.Timestamptz(6)
+  traceId         String?   @map("trace_id")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sentAt(sort: Desc)])
+  @@index([tenantId, deliveryStatus])
+  @@index([tenantId, source])
+  @@map("whatsapp_outbound_messages")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BILLING — tenant caps + batched nanopayment settlement
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1302,6 +1432,12 @@ model TransferAttempt {
   @@index([tenantId, status, createdAt])
   @@index([tenantId, travelerId, createdAt])
   @@index([tenantId, kind, createdAt])
+  /// Partial UNIQUE index on (tenantId, metadata->>'bookingId') WHERE
+  /// status IN (pending, passed, executed) — closes the settle-action
+  /// TOCTOU race so a booking can only have one in-flight / settled
+  /// attempt. Lives in
+  /// `migrations/20260428_transfer_attempt_booking_idempotency/migration.sql`
+  /// because Prisma can't express partial indexes natively.
   @@map("transfer_attempts")
 }
 

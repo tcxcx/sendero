@@ -20,11 +20,16 @@
  * keeps running on the agent side regardless of UI mode.
  */
 
-import { useState } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 
 import { type ChannelKey, CHANNELS } from './channels';
 
 export type ComposerMode = 'internal' | 'channel';
+
+/** Imperative handle exposed via forwardRef so parent can seed text. */
+export interface ComposerHandle {
+  seed(text: string): void;
+}
 
 interface ComposerProps {
   /**
@@ -48,16 +53,21 @@ interface ComposerProps {
   disabled?: boolean;
 }
 
-export function ConsoleComposer({
-  mode,
-  tripChannel,
-  onModeChange,
-  suggestions = [],
-  onSubmit,
-  disabled,
-}: ComposerProps) {
+export const ConsoleComposer = forwardRef<ComposerHandle, ComposerProps>(function ConsoleComposer(
+  { mode, tripChannel, onModeChange, suggestions = [], onSubmit, disabled }: ComposerProps,
+  ref
+) {
   const [text, setText] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const isInternal = mode === 'internal';
+
+  useImperativeHandle(ref, () => ({
+    seed(cmd: string) {
+      setText(cmd);
+      // Small delay so React commits the state before focusing.
+      setTimeout(() => inputRef.current?.focus(), 0);
+    },
+  }));
   // The visual surface picks up the channel tint in channel mode and
   // falls back to the trip's channel descriptor for the dropdown
   // label. Unscoped state passes `tripChannel='internal'` so only the
@@ -101,10 +111,12 @@ export function ConsoleComposer({
 
       <div
         style={{
-          boxShadow: isInternal
-            ? 'inset 0 0 0 1px rgba(253,251,247,0.16)'
-            : `inset 0 0 0 1px ${c.accent}`,
-          padding: '12px 14px',
+          // Ink border shared by every mode — keeps the silhouette
+          // consistent across PRIVATE (ink surface) and CHANNEL (tinted
+          // surfaces). Tint + eyebrow icon + dropdown carry the channel
+          // cue without needing a coloured ring.
+          border: '1px solid var(--ink)',
+          padding: '12px 0 8px',
           background: isInternal ? 'var(--ink)' : c.tint,
           color: isInternal ? '#fdfbf7' : 'inherit',
           borderRadius: 10,
@@ -113,22 +125,17 @@ export function ConsoleComposer({
           gap: 8,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {isInternal ? (
-            <span
-              className="t-mono"
-              style={{ fontSize: 11, color: 'rgba(253,251,247,0.85)', fontWeight: 600 }}
-            >
-              $ sendero --internal
-            </span>
-          ) : (
-            <>
-              <span style={{ flexShrink: 0 }}>{c.icon(14)}</span>
-              <span className="t-meta" style={{ color: c.accent }}>
-                Reply via {c.name}
-              </span>
-            </>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 4px' }}>
+          <ComposerEyebrowIcon mode={mode} channel={surfaceChannel} channelIcon={c.icon} />
+          <span
+            className="t-meta"
+            style={{
+              fontSize: 9,
+              color: isInternal ? 'rgba(253,251,247,0.85)' : c.accent,
+            }}
+          >
+            {isInternal ? 'Sendero · internal' : `Reply via ${c.name}`}
+          </span>
           <span style={{ flex: 1 }} />
           {/* Destination dropdown — supersedes the old static PRIVATE
               pill. PRIVATE is always available; the channel option
@@ -140,15 +147,11 @@ export function ConsoleComposer({
             onChange={onModeChange}
             isInternalSurface={isInternal}
           />
-          {!isInternal ? (
-            <span className="t-mono ink-60" style={{ fontSize: 10 }}>
-              {c.handle}
-            </span>
-          ) : null}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 4px' }}>
           <input
+            ref={inputRef}
             type="text"
             value={text}
             onChange={e => setText(e.target.value)}
@@ -199,6 +202,63 @@ export function ConsoleComposer({
       </div>
     </div>
   );
+});
+
+/**
+ * Eyebrow icon for the composer header. Brand PNG for the two
+ * Sendero-owned surfaces (Internal · Web), channel SVG marks for
+ * the third-party channels (WhatsApp, Slack, SMS, Email).
+ */
+function ComposerEyebrowIcon({
+  mode,
+  channel,
+  channelIcon,
+}: {
+  mode: ComposerMode;
+  channel: ChannelKey;
+  channelIcon: (size?: number) => React.ReactNode;
+}) {
+  if (mode === 'internal') {
+    // North-star PNG is dark linework — needs a parchment puck behind
+    // it so it reads on the ink composer surface.
+    return (
+      <span
+        aria-hidden
+        style={{
+          flexShrink: 0,
+          width: 18,
+          height: 18,
+          borderRadius: 9,
+          background: '#fdfbf7',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <img
+          src="/brand/icons/02-north-star.png"
+          alt=""
+          width={14}
+          height={14}
+          style={{ display: 'block' }}
+        />
+      </span>
+    );
+  }
+  if (channel === 'web') {
+    return (
+      <img
+        src="/brand/icons/04-courier-profile.png"
+        alt=""
+        width={16}
+        height={16}
+        style={{ flexShrink: 0, display: 'block' }}
+      />
+    );
+  }
+  // WhatsApp / Slack / SMS / Email — keep the channel's brand SVG so the
+  // composer matches the trip rail's channel mark.
+  return <span style={{ flexShrink: 0, display: 'inline-flex' }}>{channelIcon(14)}</span>;
 }
 
 /**
@@ -287,8 +347,8 @@ function DestinationSelect({
           --sd-pill-ring-active: color-mix(in oklab, var(--ink) 30%, transparent);
         }
         .sd-composer-dest-pill {
-          font-size: 10px;
-          padding: 2px 18px 2px 6px;
+          font-size: 9px;
+          padding: 2px 16px 2px 6px;
           background: var(--sd-pill-bg);
           color: var(--sd-pill-fg);
           border-radius: 3px;
@@ -305,10 +365,10 @@ function DestinationSelect({
         }
         .sd-composer-dest-caret {
           position: absolute;
-          right: 6px;
+          right: 5px;
           top: 50%;
           transform: translateY(-50%);
-          font-size: 8px;
+          font-size: 7px;
           opacity: 0.45;
           transition: opacity 120ms ease;
         }

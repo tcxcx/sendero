@@ -150,6 +150,7 @@ export async function exchangeCode(config: ExchangeCodeConfig): Promise<SlackIns
  * `users:read.email` (TODO: sibling agent — UI banner).
  */
 export const DEFAULT_BOT_SCOPES = [
+  'app_mentions:read',
   'chat:write',
   'chat:write.public',
   'commands',

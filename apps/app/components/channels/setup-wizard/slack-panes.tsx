@@ -8,7 +8,9 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ExternalLink, Loader2 } from 'lucide-react';
+
+import { Tooltip, TooltipContent, TooltipTrigger } from '@sendero/ui/tooltip';
+import { Check, ExternalLink, Info, Loader2 } from 'lucide-react';
 
 import type { WizardPaneProps, WizardPaneRenderer } from './types';
 
@@ -35,12 +37,43 @@ interface SlackInstallSummary {
 }
 
 const EVENT_CLASSES = [
-  { id: 'trip_events', label: 'All trip events', defaultMode: 'route' as const },
-  { id: 'settlements', label: 'Settlements + invoices', defaultMode: 'route' as const },
-  { id: 'cap_warnings', label: 'Spend-cap warnings', defaultMode: 'filter' as const },
-  { id: 'escalations', label: 'Cap breaches + over-policy', defaultMode: 'route' as const },
-  { id: 'silent', label: 'Health pings (suppressed)', defaultMode: 'silent' as const },
+  {
+    id: 'trip_events',
+    label: 'All trip events',
+    defaultMode: 'route' as const,
+    description: 'Search results, holds, ticketing, cancels — every step of a trip lifecycle.',
+  },
+  {
+    id: 'settlements',
+    label: 'Settlements + invoices',
+    defaultMode: 'route' as const,
+    description: 'Posts when nanopayment batches settle on chain and when traveler invoices issue.',
+  },
+  {
+    id: 'cap_warnings',
+    label: 'Spend-cap warnings',
+    defaultMode: 'filter' as const,
+    description: 'Heads-up alerts when a trip or org approaches its spend ceiling (75%, 90%).',
+  },
+  {
+    id: 'escalations',
+    label: 'Cap breaches + over-policy',
+    defaultMode: 'route' as const,
+    description: 'Hard escalations: cap exceeded or a trip violates your org travel policy.',
+  },
+  {
+    id: 'silent',
+    label: 'Health pings (suppressed)',
+    defaultMode: 'silent' as const,
+    description: 'Internal heartbeats; suppressed by default to keep your channel clean.',
+  },
 ];
+
+const COLUMN_HELP = {
+  eventClass: 'Activity category Sendero will route from your tenant into Slack.',
+  channel: 'Which Slack channel receives this event class. Defaults to the channel above.',
+  mode: 'ROUTE = always post · FILTER = post only when relevant · SILENT = never post.',
+};
 
 export const slackPanes: Record<string, WizardPaneRenderer> = {
   'slack.install': InstallPane,
@@ -261,7 +294,16 @@ function RouteChannelsPane({ scratchpad, setResolution }: WizardPaneProps) {
   if (channels.length === 0) {
     return (
       <p className="text-sm text-[color:var(--text-dim)]">
-        Sendero couldn&rsquo;t list channels (missing scope?). Reinstall with the right scopes.
+        Sendero couldn&rsquo;t list channels (missing scope?).{' '}
+        <a
+          href="https://api.slack.com/apps"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline underline-offset-2 text-[color:var(--ink)] hover:text-[color:var(--accent-rose)]"
+        >
+          Reinstall
+        </a>{' '}
+        with the right scopes.
       </p>
     );
   }
@@ -287,9 +329,15 @@ function RouteChannelsPane({ scratchpad, setResolution }: WizardPaneProps) {
       <table className="w-full table-fixed border-collapse">
         <thead>
           <tr className="text-left">
-            <th className={`${FIELD_LABEL} pb-2`}>Event class</th>
-            <th className={`${FIELD_LABEL} pb-2`}>Channel</th>
-            <th className={`${FIELD_LABEL} w-32 pb-2`}>Mode</th>
+            <th className={`${FIELD_LABEL} pb-2`}>
+              <HeaderWithHint label="Event class" hint={COLUMN_HELP.eventClass} />
+            </th>
+            <th className={`${FIELD_LABEL} pb-2`}>
+              <HeaderWithHint label="Channel" hint={COLUMN_HELP.channel} />
+            </th>
+            <th className={`${FIELD_LABEL} w-32 pb-2`}>
+              <HeaderWithHint label="Mode" hint={COLUMN_HELP.mode} />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -300,7 +348,28 @@ function RouteChannelsPane({ scratchpad, setResolution }: WizardPaneProps) {
                 key={cls.id}
                 className="border-t border-[color:color-mix(in_oklab,var(--ink)_8%,transparent)]"
               >
-                <td className="py-2 pr-3 text-[13px] text-[color:var(--ink)]">{cls.label}</td>
+                <td className="py-2 pr-3 text-[13px] text-[color:var(--ink)]">
+                  <span className="flex items-center justify-between gap-2">
+                    <span>{cls.label}</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`What is "${cls.label}"?`}
+                          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--ink)] focus:text-[color:var(--ink)] focus:outline-none"
+                        >
+                          <Info className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        className="max-w-xs border border-[color:var(--hairline-color-soft)] bg-[color:var(--surface-raised)] text-xs text-[color:var(--ink)] shadow-none"
+                      >
+                        {cls.description}
+                      </TooltipContent>
+                    </Tooltip>
+                  </span>
+                </td>
                 <td className="py-2 pr-3">
                   <select
                     value={route?.channelId ?? defaultChannelId ?? ''}
@@ -353,9 +422,12 @@ function RouteChannelsPane({ scratchpad, setResolution }: WizardPaneProps) {
 // ─── 4. invite bot ───────────────────────────────────────────────────
 
 function InviteBotPane({ scratchpad, setResolution }: WizardPaneProps) {
+  const installId = (scratchpad.pick_workspace as { installId?: string } | undefined)?.installId;
+  const teamId = (scratchpad.pick_workspace as { teamId?: string } | undefined)?.teamId;
   const routes = scratchpad.route_channels as
     | { routes?: Array<{ channelId: string; mode: string }>; defaultChannelId?: string }
     | undefined;
+
   const channelIds = useMemo(() => {
     const ids = new Set<string>();
     if (routes?.defaultChannelId) ids.add(routes.defaultChannelId);
@@ -365,6 +437,29 @@ function InviteBotPane({ scratchpad, setResolution }: WizardPaneProps) {
     return Array.from(ids);
   }, [routes]);
 
+  // Resolve channel names + privacy off the same endpoint RouteChannelsPane
+  // uses, so cards show `#marketing (private · already a member)` instead
+  // of a raw `C080ZB9PREF`.
+  const [meta, setMeta] = useState<Record<string, SlackChannel> | null>(null);
+  useEffect(() => {
+    if (!installId) return;
+    let cancelled = false;
+    fetch(`/api/channels/slack/channels?installId=${installId}`)
+      .then(r => r.json())
+      .then((data: { channels?: SlackChannel[] }) => {
+        if (cancelled) return;
+        const map: Record<string, SlackChannel> = {};
+        for (const c of data.channels ?? []) map[c.id] = c;
+        setMeta(map);
+      })
+      .catch(() => {
+        if (!cancelled) setMeta({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [installId]);
+
   useEffect(() => {
     if (channelIds.length > 0) {
       setResolution({ channelIds });
@@ -373,37 +468,162 @@ function InviteBotPane({ scratchpad, setResolution }: WizardPaneProps) {
     }
   }, [channelIds, setResolution]);
 
+  const [copied, setCopied] = useState<string | null>(null);
+  const copyInvite = async (channelId: string) => {
+    try {
+      await navigator.clipboard.writeText('/invite @sendero');
+      setCopied(channelId);
+      setTimeout(() => setCopied(null), 1600);
+    } catch {
+      /* clipboard blocked — the slash command is visible in the card */
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      <p className="max-w-[60ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
-        Sendero will join these channels so it can post without hitting{' '}
-        <code className="font-mono">not_in_channel</code>. We invite ourselves; you don&rsquo;t have
-        to do it manually.
+      <p className="max-w-[64ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
+        Sendero adds itself to <strong>public</strong> channels using{' '}
+        <code className="font-mono text-[12px]">conversations.join</code> — no manual step. For{' '}
+        <strong>private</strong> channels Slack requires a member to run{' '}
+        <code className="font-mono text-[12px]">/invite @sendero</code> inside the channel.
       </p>
-      <ul className="flex flex-col gap-1 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-3">
-        {channelIds.map(id => (
-          <li key={id} className="font-mono text-[12px] text-[color:var(--ink)]">
-            ↪ {id}
-          </li>
-        ))}
-        {channelIds.length === 0 ? (
-          <li className="text-[12px] text-[color:var(--text-dim)]">
-            No channels referenced. Go back and pick at least one.
-          </li>
-        ) : null}
-      </ul>
+
+      {channelIds.length === 0 ? (
+        <p className="rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-3 text-[12px] text-[color:var(--text-dim)]">
+          No channels referenced. Go back and pick at least one.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {channelIds.map(id => {
+            const ch = meta?.[id];
+            const name = ch?.name ?? null;
+            const isPrivate = ch?.isPrivate ?? false;
+            const isMember = ch?.isMember ?? false;
+            const status: 'ready' | 'public-auto' | 'manual' | 'unknown' = ch
+              ? isMember
+                ? 'ready'
+                : isPrivate
+                  ? 'manual'
+                  : 'public-auto'
+              : 'unknown';
+            const deepLink = teamId
+              ? `slack://channel?team=${teamId}&id=${id}`
+              : `slack://channel?id=${id}`;
+
+            return (
+              <li
+                key={id}
+                className="flex items-center gap-3 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] px-3 py-2.5"
+              >
+                <span
+                  aria-hidden
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] text-[14px] text-[color:var(--ink)]"
+                >
+                  {isPrivate ? '🔒' : '#'}
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[13px] font-medium text-[color:var(--ink)]">
+                      {name ? `#${name}` : id}
+                    </span>
+                    {isPrivate ? (
+                      <span className={PILL_FONT}>private</span>
+                    ) : (
+                      <span className={PILL_FONT}>public</span>
+                    )}
+                  </div>
+                  <div className="font-mono text-[10px] text-[color:var(--text-faint)]">{id}</div>
+                </div>
+                <StatusChip status={status} />
+                {status === 'manual' ? (
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <a
+                      href={deepLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] bg-white px-2.5 py-1 text-[11px] font-medium text-[color:var(--ink)] transition-colors hover:border-[color:var(--ink)]"
+                    >
+                      Open <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => copyInvite(id)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] bg-white px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[color:var(--ink)] transition-colors hover:border-[color:var(--ink)]"
+                    >
+                      {copied === id ? 'Copied' : 'Copy /invite'}
+                    </button>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
+  );
+}
+
+function StatusChip({ status }: { status: 'ready' | 'public-auto' | 'manual' | 'unknown' }) {
+  if (status === 'unknown') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-[color:color-mix(in_oklab,var(--ink)_14%,transparent)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[color:var(--text-faint)]">
+        <Loader2 className="h-2.5 w-2.5 animate-spin" aria-hidden />
+        checking
+      </span>
+    );
+  }
+  if (status === 'ready') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[color:color-mix(in_oklab,var(--accent-green,#6A8570)_18%,transparent)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[color:var(--accent-green,#6A8570)]">
+        <Check className="h-2.5 w-2.5" aria-hidden />
+        member
+      </span>
+    );
+  }
+  if (status === 'public-auto') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[color:var(--ink)]">
+        auto-join
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-[color:color-mix(in_oklab,var(--accent-rose,#fb542b)_14%,transparent)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-[color:var(--accent-rose,#fb542b)]">
+      manual /invite
+    </span>
   );
 }
 
 // ─── 5. send test ────────────────────────────────────────────────────
 
 function SendTestPane({ scratchpad, setResolution }: WizardPaneProps) {
+  const installId = (scratchpad.pick_workspace as { installId?: string } | undefined)?.installId;
+  const teamName = (scratchpad.pick_workspace as { teamName?: string } | undefined)?.teamName;
   const routes = scratchpad.route_channels as { defaultChannelId?: string } | undefined;
   const [channelId, setChannelId] = useState<string>(routes?.defaultChannelId ?? '');
   const [text, setText] = useState(
     "🌅 Sendero is connected. I'll post trip events, settlements, and cap warnings here per your routing rules."
   );
+
+  // Pull channel list so the select shows #names instead of raw IDs.
+  // Same endpoint RouteChannelsPane / InviteBotPane use; cached at the
+  // browser layer.
+  const [channels, setChannels] = useState<SlackChannel[] | null>(null);
+  useEffect(() => {
+    if (!installId) return;
+    let cancelled = false;
+    fetch(`/api/channels/slack/channels?installId=${installId}`)
+      .then(r => r.json())
+      .then((data: { channels?: SlackChannel[] }) => {
+        if (!cancelled) setChannels(data.channels ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setChannels([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [installId]);
 
   useEffect(() => {
     if (!channelId) {
@@ -413,28 +633,113 @@ function SendTestPane({ scratchpad, setResolution }: WizardPaneProps) {
     setResolution({ channelId, text });
   }, [channelId, text, setResolution]);
 
+  const focused = channels?.find(c => c.id === channelId);
+  const channelLabel = focused ? `#${focused.name}` : channelId;
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1.5">
-        <label className={FIELD_LABEL}>Send test to</label>
-        <input
-          type="text"
-          value={channelId}
-          onChange={e => setChannelId(e.target.value)}
-          placeholder="C0123456789"
-          className="w-full max-w-md rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] bg-white px-3 py-2 font-mono text-sm text-[color:var(--ink)] focus:border-[color:var(--ink)] focus:outline-none"
-        />
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <div className="flex flex-1 flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label className={FIELD_LABEL}>Send test to</label>
+          {channels === null ? (
+            <div className="inline-flex h-9 w-full max-w-md items-center gap-2 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] bg-white px-3 text-[12px] text-[color:var(--text-dim)]">
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              loading channels…
+            </div>
+          ) : channels.length === 0 ? (
+            <input
+              type="text"
+              value={channelId}
+              onChange={e => setChannelId(e.target.value)}
+              placeholder="C0123456789"
+              className="w-full max-w-md rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] bg-white px-3 py-2 font-mono text-sm text-[color:var(--ink)] focus:border-[color:var(--ink)] focus:outline-none"
+            />
+          ) : (
+            <select
+              value={channelId}
+              onChange={e => setChannelId(e.target.value)}
+              className="w-full max-w-md rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] bg-white px-3 py-2 text-sm text-[color:var(--ink)] focus:border-[color:var(--ink)] focus:outline-none"
+            >
+              {channels.map(c => (
+                <option key={c.id} value={c.id}>
+                  #{c.name}
+                  {c.isPrivate ? ' (private)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className={FIELD_LABEL}>Message body</label>
+          <textarea
+            rows={4}
+            value={text}
+            maxLength={2000}
+            onChange={e => setText(e.target.value)}
+            className="w-full max-w-2xl rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] bg-white px-3 py-2 text-sm leading-relaxed text-[color:var(--ink)] focus:border-[color:var(--ink)] focus:outline-none"
+          />
+          <span className="font-mono text-[10px] text-[color:var(--text-faint)]">
+            {text.length} / 2000
+          </span>
+        </div>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <label className={FIELD_LABEL}>Message body</label>
-        <textarea
-          rows={3}
-          value={text}
-          maxLength={2000}
-          onChange={e => setText(e.target.value)}
-          className="w-full max-w-2xl rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] bg-white px-3 py-2 text-sm leading-relaxed text-[color:var(--ink)] focus:border-[color:var(--ink)] focus:outline-none"
-        />
-      </div>
+
+      {/* Slack-style preview — what the operator will see in {channel}.
+          Markup mirrors the connected pane's bot-row rendering so the
+          preview is faithful (avatar block, app badge, body, timestamp). */}
+      <aside className="w-full max-w-md shrink-0 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className={FIELD_LABEL}>Preview · {channelLabel}</span>
+          {teamName ? (
+            <span className="font-mono text-[10px] text-[color:var(--text-faint)]">{teamName}</span>
+          ) : null}
+        </div>
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[color:color-mix(in_oklab,var(--ink)_85%,transparent)] font-display text-[14px] font-medium text-[color:var(--surface-base,#FDFBF7)]"
+          >
+            S
+          </span>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[13px] font-semibold text-[color:var(--ink)]">Sendero</span>
+              <span className="rounded-sm bg-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] px-1 font-mono text-[8.5px] uppercase tracking-[0.08em] text-[color:var(--text-dim)]">
+                APP
+              </span>
+              <span className="font-mono text-[10px] text-[color:var(--text-faint)]">just now</span>
+            </div>
+            <p className="text-[13px] leading-relaxed text-[color:var(--ink)] whitespace-pre-wrap">
+              {text || 'Type a message to preview…'}
+            </p>
+          </div>
+        </div>
+      </aside>
     </div>
+  );
+}
+
+function HeaderWithHint({ label, hint }: { label: string; hint: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={`About ${label}`}
+            className="inline-flex h-3 w-3 items-center justify-center text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--ink)] focus:text-[color:var(--ink)] focus:outline-none"
+          >
+            <Info className="h-2.5 w-2.5" aria-hidden="true" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="top"
+          className="max-w-xs border border-[color:var(--hairline-color-soft)] bg-[color:var(--surface-raised)] text-xs normal-case tracking-normal text-[color:var(--ink)] shadow-none"
+        >
+          {hint}
+        </TooltipContent>
+      </Tooltip>
+    </span>
   );
 }

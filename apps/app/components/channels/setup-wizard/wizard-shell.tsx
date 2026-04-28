@@ -20,8 +20,6 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { Check, ChevronLeft, Loader2 } from 'lucide-react';
 
-import { Crumb } from '@/components/console/crumb';
-
 import type {
   WizardPaneRenderer,
   WizardResolution,
@@ -95,7 +93,7 @@ export function ChannelSetupWizard(props: WizardShellProps) {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -104,8 +102,6 @@ export function ChannelSetupWizard(props: WizardShellProps) {
         width: '100%',
       }}
     >
-      <Crumb trail={[channelName, 'Connect']} />
-
       <div
         style={{
           flex: 1,
@@ -125,12 +121,14 @@ export function ChannelSetupWizard(props: WizardShellProps) {
         />
         <div
           style={{
-            paddingLeft: 32,
+            paddingLeft: 24,
             display: 'flex',
             flexDirection: 'column',
             gap: 18,
             minHeight: 0,
-            overflow: 'hidden',
+            minWidth: 0,
+            overflowY: 'auto',
+            overflowX: 'auto',
           }}
         >
           {isComplete ? (

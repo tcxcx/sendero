@@ -111,6 +111,9 @@ Uses Clerk's native API keys (GA'd 2026-04-17). We don't mint/hash/revoke; Clerk
   - `/api/mcp` — POST requires a key (returns JSON-RPC error `-32001` if missing). GET discovery doc stays public.
   - `/api/agent/dispatch` — accepts either a Clerk API key OR the legacy `AGENT_DISPATCH_SECRET` shared secret (internal webhooks). Body `tenantId` must match the key's tenant.
 - Meter routing: sandbox keys → `MeterEvent.status = 'sandbox'`. `NanopayBatch` excludes sandbox rows from settlement, so no real USDC moves.
+- **Testnet downgrade chokepoints — both must be wired or the flag silently doesn't apply:**
+  - **Tool context propagation.** Every surface that calls `buildMcpCatalog` / runs the tool registry MUST set `ctx.caller = { scopes, keyType, effectiveKeyType }` from the resolved key. Without it, tools that gate on `ctx.caller.effectiveKeyType` (`confirm_booking`'s markup-override, `confirm_booking`'s meter-status routing) silently see `undefined` and fall through to default behavior. MCP path: `apps/app/app/api/mcp/_mcp-app.ts::buildRequestCatalog`. Dispatch path: `apps/app/app/api/agent/dispatch/route.ts` already does this via `apiKey` plumbing.
+  - **`confirm_booking` meter status.** `ConfirmBookingDeps.recordMeter` requires a `status: 'paid' | 'sandbox'` arg — the handler computes it from `input.callerKeyType` (which factors in `effectiveKeyType` via the existing precedence chain) and **fails closed** to `'sandbox'` when caller info is absent. Was previously hardcoded to `'paid'` in default `dbDependencies()`, which broke the testnet downgrade for the booking-commission meter on **both** dispatch and MCP. Don't reintroduce a default `'paid'` — make callers be explicit.
 - Plan-tier limits (`PLANS[tier].productionApiKeyLimit`): enforced via the Clerk `apiKey.created` webhook in `apps/app/app/api/webhooks/clerk/route.ts::onApiKeyCreated`. On mint, the handler lists the org's active production keys (skips sandbox-claimed ones) and revokes the new key if it breaks the plan limit. Requires `apiKey.created` to be added to the webhook subscription in the Clerk dashboard. Enterprise (`productionApiKeyLimit: null`) skips enforcement.
 - **Fails closed on list errors.** If `clerkClient.apiKeys.list()` is unavailable or throws, the newly-minted key is revoked with a `list_api_unavailable` / `list_api_error` reason rather than let through. Count includes the fresh key synthetically in case Clerk's list hasn't caught up. See `revokeKey` helper in the same file.
 - **Revoke cache invalidation.** `apiKey.revoked` and `apiKey.deleted` webhooks call `invalidateApiKeyCache(keyId)` in `apps/app/lib/api-key-auth.ts` — drops the cached verify entry immediately instead of waiting up to 60s for TTL. Both subscriptions must be enabled in the Clerk dashboard alongside `apiKey.created`.
@@ -172,11 +175,12 @@ event has no `user.id` (system events, channel-renames, etc.).
 
 ### Slack webhook routes (apps/app)
 
-All three Slack endpoints live on the Next.js app — Vercel Fluid Compute is the only runtime that can hit Prisma + Workflow DevKit. The CF Workers edge adapter was retired.
+All four Slack endpoints live on the Next.js app — Vercel Fluid Compute is the only runtime that can hit Prisma + Workflow DevKit. The CF Workers edge adapter was retired.
 
-- `apps/app/app/api/webhooks/slack/events/route.ts` — Events API (`event_callback`, `app_mention`, DMs, `url_verification`). Verifies HMAC + 5-min replay window, looks up the install via `(teamId, enterpriseId)`, re-validates the resolved row matches the envelope, then defers `runSlackAgentTurn()` from `@sendero/slack/agent` past the 3-second ack via `after()` from `next/server`. 401 on signature failure, 404 on unknown install (NOT 200 — surfaces onboarding misconfig).
-- `apps/app/app/api/webhooks/slack/interactions/route.ts` — Block Kit interactivity (`payload=…` form-urlencoded). Same verify + install-resolve hardening as events; the approval-card flow (`sendero_approval.{approve,reject}`) flips `Booking.status`, swaps the card via `chat.update`, and resumes any paused workflow run waiting on the booking. All handler work runs in `after()` so the Slack ack stays sub-second.
-- `apps/app/app/api/webhooks/slack/oauth-callback/route.ts` — OAuth v2 install callback (Enterprise Grid aware). Verifies signed state (`verifySlackState`), exchanges `code` via `@sendero/slack::exchangeCode`, upserts `SlackInstall` keyed on `(enterpriseId, teamId)`.
+- `apps/app/app/api/webhooks/slack/events/route.ts` — Events API (`event_callback`, `app_mention`, DMs, `url_verification`, `tokens_revoked`, `app_uninstalled`). Verifies HMAC + 5-min replay window, looks up the install via `(teamId, enterpriseId)`, re-validates the resolved row matches the envelope, drops events for already-revoked installs, then defers `runSlackAgentTurn()` from `@sendero/slack/agent` past the 3-second ack via `after()` from `next/server`. Hot-path Redis hardening: dedup on `event_id` (1h SETNX) + single-flight thread lock on `(teamId, channelId, threadTs)`, both fail-open. 401 on signature failure, 404 on unknown install (NOT 200 — surfaces onboarding misconfig).
+- `apps/app/app/api/webhooks/slack/interactions/route.ts` — Block Kit interactivity (`payload=…` form-urlencoded). Branches on `payload.type`: `block_actions` runs in `after()` (approval-card flow), `view_submission` MUST ack synchronously inside the 3s window because Slack reads the response body for modal lifecycle (close / show errors / push next), `view_closed` defers cleanup. The submission router is built per-request so handlers close over `install.tenantId` for cross-tenant gating. Approval-card flow (`sendero_approval.{approve,reject}`) flips `Booking.status`, swaps the card via `chat.update`, resumes any paused workflow run waiting on the booking.
+- `apps/app/app/api/webhooks/slack/commands/route.ts` — slash commands (`/sendero help|status|note`). Same HMAC + replay + install + revocation gates. `/sendero note <trip-id>` opens the trip-note modal via `views.open` synchronously (trigger_id has a 3s TTL — can't defer past `after()`).
+- `apps/app/app/api/webhooks/slack/oauth-callback/route.ts` — OAuth v2 install callback (Enterprise Grid aware). Verifies signed state (`verifySlackState`), exchanges `code` via `@sendero/slack::exchangeCode`, upserts `SlackInstall` keyed on `(enterpriseId, teamId)`. Reinstall clears `revokedAt = null` so the events route resumes dispatching.
 
 ## Circle webhook gates
 
@@ -293,3 +297,171 @@ Single source of truth for cross-channel share images. When a tool's `share` pay
 - **Tests**: `apps/app/lib/og/__tests__/share-url.test.ts` — HMAC roundtrip, payload tamper, signature tamper, wrong-secret rejection, malformed token, secret-unset fail-soft, weak-secret rejection.
 
 The canonical `share` contract: any tool can return a `share` block on `tool_result` (`{ title, body, bullets, primaryCta, secondaryCtas, imageUrl? }`). That single shape renders as a Slack block kit card, a WhatsApp interactive message, an email body card, and a web card. **If a field matters to the UX, it lives in `share` — never hard-coded in one adapter.**
+
+## Wedge findings (a16z + YC RFS, applied)
+
+Strategic synthesis after reviewing a16z Speedrun's "Come for the Agent, Stay for the Network" thesis (Speedrun 2026) + YC Summer 2026 RFS. Re-read this when scoping any new product surface — the network is the moat, every decision should compound it.
+
+The expanded template is in `BUILD_VERTICAL_AI_AGENT.md` (root); this section is the Sendero-specific applied version.
+
+**Six-precondition self-test for travel ops: 5.5/6.** ✅ Fragmented supply (Duffel aggregates 100s carriers/hotels), ✅ offline suppliers (corporate rate negotiations are still phone/email/PDF), ✅ opaque pricing (corporate fares vs published, dynamic surge, ancillary fees), ✅ frequent purchases (corporate travel = monthly+ per company), ✅ different SKUs (every flight, every hotel night, every ground leg), ⚠️ commoditized (Hyatt night = Hyatt night; SFO→LHR direct at 16:00 isn't fully fungible). **Travel ops clears the framework — agent-procurement-network economics apply.**
+
+What Sendero already executes (don't re-invent):
+- **Agent wedge**: `book_flight`, `search_flights`, `hold`, `book_stay`, `settle_*` end-to-end, no human-in-the-loop. Shipped.
+- **Multi-channel surface**: Slack + WhatsApp + MCP + web + email. One `runAgentTurn` engine, channel-shaped wrappers at the edges.
+- **% of revenue model**: take-rate on confirm_booking (`packages/billing/src/pricing.ts` 50bps default) + nanopay margin per tool call. Two-leg: take-rate + nanopay defends each leg against the other being commoditized.
+- **Settlement rail differentiator**: USDC on Arc with on-chain audit trail. Not in a16z's framework — a16z's portfolio companies (Heavi, Vereda) settle in fiat. Sendero's auditable network effect is differentiated for regulated-industry TMCs (financial services, healthcare, public sector).
+- **Tier 2 GTM (co-branded resale)**: per-tenant install URL `/install/slack?tenant=<slug>` lets a tenant share Sendero with their corporate customers without white-label friction. Bot is "Sendero" in workspace; tenant owns the dashboard relationship + billing. Stage 1 of the multi-tenant channel platform plan.
+
+**What's missing — the "Stay for the Network" half (priority order):**
+
+1. **Pricing benchmark surface** (~1 week CC, low risk). Per-booking, log every `search_flights` result set, picked offer, and supplier rate. Per-tenant view: "Your SFO→LHR cost was $1,820. Median across N platform bookings on this route this month: $1,640. You paid 11% above median." Cross-tenant aggregation gated by k-anonymity (n≥20). This is the first network hook — without it, every Sendero install is an island. Required before Stage 2/3 of the channel platform pays off.
+2. **Demand aggregation MVP** (~3 weeks CC, medium risk). TMC dashboard surfacing "Your N corporate clients booked X trips on these top 5 routes — want to request a corporate rate?" Manual negotiation tooling first; automation later. Higher ceiling than #1; needs supplier engagement to prove value.
+3. **Direct supplier rates** (multi-quarter, high risk). Sendero negotiates with one airline + two hotel chains for Sendero-only corporate rates. Suppliers compete to be on the network. The actual a16z moat. Heavy GTM lift — only after #1 and #2 prove out.
+
+**Stage 2 (tenant brand fields) and Stage 3 (full per-tenant SlackApp + WhatsAppApp model with KMS) of the channel platform plan support the network-effect thesis but don't BUILD it.** They're distribution infrastructure — necessary scaffolding for resale-led GTM. The pricing benchmark surface above is what creates the lock-in once the distribution exists.
+
+**Reframing implications:**
+
+- Lead with "Stay for the Network" in TMC-facing copy. Today the README leads with the agent surface ("AI travel agent with on-chain settlement"). The right pitch at scale is "the more TMCs use Sendero, the better every TMC's pricing gets."
+- The `/install/slack?tenant=` flow IS the entry point to the network. Tell that story explicitly: install → contribute to network → benefit from network insights.
+- For regulated-industry TMCs (finserv, healthcare, public sector), lead with the auditable-settlement-rail moat, not the agent surface.
+
+**Anti-patterns to refuse:**
+
+- ❌ Pricing per seat as the primary axis — caps Sendero at HR-budget logic; commoditizes against Concur/Navan
+- ❌ Building a chatbot bolted onto the existing booking surface — Sendero is agent-native, not copilot
+- ❌ Internal-only tools that don't generate buyer × supplier graph data
+- ❌ Spending engineering cycles on Stage 3 (full white-label) before a TMC has signed for it — speculative platform engineering before customer demand
+
+**YC RFS items Sendero already maps to (for fundraising / messaging):**
+
+- "AI-Native Service Companies" (Alströmer): Sendero IS this for travel ops. We don't sell software; the TMC sells the trip getting booked.
+- "Software for Agents" (Epstein): MCP server, OpenAPI surface, `/llms.txt`, ERC-8004 agent identity. Sendero is a first-class citizen for agent consumers.
+- "AI Operating System for Companies" (Diana Hu): Sendero is the closed loop for corporate travel ops — agent watches trips → flags policy violations → routes to approver → settles → audits.
+- "Company Brain" (Blomfield): adjacent — per-tenant travel policy + cap exceptions + traveler memory. Productizable as a future surface.
+
+**Founder forcing questions to revisit quarterly:**
+
+1. What's the smallest bundle of our buyers that moves an airline's price by 5%? (If we can't answer, we don't have demand-side leverage yet.)
+2. In 12 months, when a TMC operator hears "Sendero", what's the one sentence they say? (If it's "they have a chatbot", we've failed.)
+3. If Sendero disappeared tomorrow, who panics first — corporate buyers, suppliers, or TMC operators? (We want all three. If only one, we've built a feature, not a platform.)
+4. What's the single fastest way Sendero loses its moat? (Likely: a hyperscaler ships a generic travel agent in their API. Defense: depth of vertical integration + on-chain settlement audit story.)
+
+## Slack channel hardening — dedup, locks, lifecycle, step-streaming
+
+The Slack inbound path runs four hot-path safety controls before dispatch:
+
+- **Event-id dedup** (`apps/app/lib/slack-dedup-lock.ts::claimSlackEvent`) — Redis SETNX on `<env>:slack:event:<event_id>` with 1h TTL. Catches Slack's retry-on-non-200 + rare duplicate-after-200 deliveries. Fail-open on Redis outage; the session-store turnId guard is a backstop.
+- **Single-flight thread lock** (`acquireThreadLock` / `releaseThreadLock` in the same file) — Redis SETNX on `<env>:slack:lock:<subjectKey>` (90s TTL). Lua check-and-del release so a TTL'd-out lock taken by another instance isn't accidentally freed. Drops concurrent same-thread events with `{ ok: true, dropped: 'thread_busy' }`.
+- **Subscribed-thread filter** (`apps/app/lib/slack-thread-subscription.ts`) — channel/group messages only trigger the agent when the bot was @-mentioned OR has previously replied in this thread. DMs and explicit mentions always respond. Marked-on-post via `markThreadSubscribed` in `slack-agent.ts` (24h TTL); checked at dispatch time. Fail-conservative on Redis outage (treat as not-subscribed → bot drops the follow-up).
+- **Lifecycle (`SlackInstall.revokedAt`)** — `tokens_revoked` and `app_uninstalled` events stamp `revokedAt = now()`; the events / interactions / commands routes drop traffic for revoked installs. OAuth callback clears `revokedAt = null` on reinstall. Manifest subscribes both lifecycle events (`/dashboard/channels/slack/manifest`).
+
+**Step-based streaming.** `runAgentTurn` accepts an optional `onStepFinish` callback (`packages/agent/src/run.ts`) that fires after each AI SDK step (text gen or tool call). The Slack adapter installs the hook to edit the `_Thinking…_` placeholder between tool calls — `🔎 Searching flights…` → `🔎 Searching flights, Searching hotels…` → final answer. `renderStepStatus` + `toolNameToVerb` mapping in `slack-agent.ts` covers the high-traffic Sendero tools; unknown tools fall through readably as `Running \`<name>\``. Same-content edits are deduped via a `lastStatus` cache — Slack's chat.update Tier 3 limit (50/min) is comfortably under-used. This is *step* streaming, not token streaming. True per-token would require swapping `generateText` → `streamText` in the engine (cross-cutting with `dispatch` + `chat`); intentionally deferred.
+
+## Slack slash commands + view modals
+
+`/sendero help | status <trip-id> | note <trip-id>` — first three subcommands. `SlashCommandRouter` in `@sendero/slack` (`packages/slack/src/slash-commands.ts`) keys on `(command, subcommand)` with fallback support; `parseSlashCommandBody` decodes the URL-encoded payload. Unknown installs respond with a friendly `response_type: 'ephemeral'` install-prompt instead of 404 — better DX in resold workspaces that haven't installed Sendero yet.
+
+`ViewRouter` in the same package keys on `view.callback_id` for `view_submission` + `view_closed` payloads. **Submission MUST ack synchronously** — Slack reads the response body for modal lifecycle (close / errors / push). The interactions route builds a per-request submission router so handlers close over `install.tenantId`. Closed-handler router can be a singleton (no install scope needed).
+
+**Cross-tenant gate is load-bearing.** `private_metadata` is opaque to Slack — opener stuffs `{tripId, channelId, threadTs}` JSON in, Slack passes it back unchanged. The trip-note submit handler MUST verify `trip.tenantId === context.tenantId` AND use that tenant id in the WHERE clause of the write — without both, any Slack user could read/write across tenants by typing a different tenant's tripId into the slash command. The "trip not found" error string is the same on missing-trip vs cross-tenant so existence isn't leaked. Pattern lives in `apps/app/lib/slack-views/trip-note.ts::handleTripNoteSubmission` — copy this shape for every new view handler.
+
+**Atomic JSON append.** `Trip.events` is a Json column with append-only semantics. `handleTripNoteSubmission` uses `prisma.$executeRaw` with Postgres `||` jsonb append:
+
+```sql
+UPDATE trips SET events = COALESCE(events, '[]'::jsonb) || $1::jsonb
+WHERE id = $2 AND "tenantId" = $3;
+```
+
+Atomic in Postgres, concurrent-safe (no read-then-write race that could lose notes). Tenant id is double-bound in the WHERE so a TOCTOU between `findUnique` and the update can't write across tenants.
+
+## WhatsApp inbound hardening — replay window + dedup
+
+Meta's `x-hub-signature-256` only signs the body, not a timestamp, so freshness gating happens per-message off the server-stamped `messages[].timestamp`. Two controls in the route (`apps/app/app/api/webhooks/whatsapp/route.ts`):
+
+- **Replay window** (`apps/app/lib/whatsapp-dedup.ts::isWithinReplayWindow`) — pure function, ±5 min around now. Pure-function so the route can drop stale messages without a Redis round-trip.
+- **Per-wamid dedup** (`claimWhatsAppMessage` in the same file) — Redis SETNX on `<env>:wa:msg:<wamid>` with 1h TTL. Same fail-open posture as Slack.
+
+Bad-signature requests still get logged to `WhatsAppWebhookEvent` for forensics — nobody hits our public endpoint with a wrong sig by accident.
+
+## WhatsApp audit logs + observability
+
+Three append-mostly tables, all under tenant scoping:
+
+- **`WhatsAppWebhookEvent`** (`packages/database/prisma/migrations/20260427193912_whatsapp_audit_logs`) — one row per inbound webhook delivery: signature_valid, replay_window_ok, normalized counts (messages / identityChanges / statusUpdates / droppedReplay / droppedDuplicate / dispatched), duration_ms, traceId, optional rawEnvelope (off by default). Inserted post-200 via `after()` so audit can never extend Meta's ack window.
+- **`WhatsAppOutboundMessage`** (same migration) — one row per send, UNIQUE on `wamid`. Source label (`'agent_reply' | 'otp' | 'security_alert' | …`) separates handlers. Updated by the inbound `messages.statuses` webhook handler with per-status timestamps (`deliveredAt` / `readAt` / `failedAt`) + `failureReason`.
+- **`WhatsAppApiLog`** (`20260427201429_whatsapp_api_log`) — one row per outbound API call to Kapso or Meta: status_code, duration_ms, ok, errorMessage, method, endpoint *shape* (path params replaced with `{id}` so rows aggregate per endpoint pattern). Includes failed health pings + 429-throttled sends + network errors (status_code=0).
+
+**Audit hooks.** `WhatsAppClient` config accepts `onSent` (post-success per send) and `onApiCall` (per request attempt, including each retry). Both are truly fire-and-forget — `void Promise.resolve().then(...)` so a downed audit DB never extends send latency on the wire-edge. Writers in `apps/app/lib/whatsapp-audit.ts` (`logOutboundMessage`, `logApiCall`, `logKapsoCall`, `logMetaCall`, `reconcileOutboundStatus`) all swallow Prisma errors fail-soft.
+
+**Operator UI.** `/dashboard/channels/whatsapp/inbox` shows three stacked tables (inbound deliveries / outbound API calls / outbound messages) with empty states, relative-time, redacted recipients, status badges. `apps/app/app/(app)/dashboard/channels/whatsapp/layout.tsx` mounts a pill-tab nav (`WhatsappChannelNav`) so every WhatsApp sub-route inherits **Workspace** + **Inbox** tabs. Active state from `usePathname()`; `router.push` on tab change so URLs stay shareable for support tickets. Add new tabs by extending the `TABS` const in `whatsapp-channel-nav.tsx`.
+
+## Observability + prompt management — Langfuse
+
+`@sendero/langfuse` is the ONLY package that imports `@langfuse/*` directly. All surfaces (engine, app-api, slack, whatsapp, mcp, workflows, ocr) import primitives from there. `apps/app/instrumentation.ts` boots `LangfuseSpanProcessor` on Node.js startup so every AI-SDK call (`generateText`, `streamText`, `generateObject`) emits a Langfuse generation automatically.
+
+### Env vars (all envs)
+
+```
+LANGFUSE_SECRET_KEY=     # Langfuse project secret key (sensitive)
+LANGFUSE_PUBLIC_KEY=     # Langfuse project public key
+LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
+LANGFUSE_PROMPT_MANAGEMENT=false   # flip to true to pull persona slabs from Langfuse
+LANGFUSE_EVALUATORS=false          # flip to true to fire 4 LLM-judges per turn (gpt-4.1-nano)
+LANGFUSE_MCP_AUTH=       # base64(public:secret) — consumed by .mcp.json for in-IDE prompt CRUD
+```
+
+`LANGFUSE_MCP_AUTH` is stored on Vercel for production / preview / development; `vercel env pull .env.local` brings it down so the Langfuse MCP server in `.mcp.json` works without per-dev setup. Compute manually with `echo -n "$LANGFUSE_PUBLIC_KEY:$LANGFUSE_SECRET_KEY" | base64`.
+
+### Persona resolution (system prompts)
+
+Sendero's persona is composed in **`apps/app/lib/agent-persona.ts`** from two halves:
+
+- `sendero-soul` (Langfuse, with `packages/agent/src/soul.ts::SENDERO_SOUL` as fallback) — the canonical voice contract.
+- A surface-specific routing-rules slab — `sendero-chat-routing-rules`, `sendero-dispatch-routing-rules`, `sendero-web-chat-rules`, or `sendero-slack-rules`.
+
+Each surface calls `buildAgentPersona(kind, locale)` (or `buildSlackPersonaWithContext` for Slack, which interleaves a dynamic tenant/channel preamble between SOUL and rules). Variables wired in: `{{locale_lang}}` everywhere, `{{today}}` on web rules. `localeSteering()` in `packages/agent/src/prompt.ts` runs in the `buildSystemPrompt` assembler **after** the Langfuse-managed persona lands — locale detection stays code-side.
+
+When `LANGFUSE_PROMPT_MANAGEMENT=false` the helper returns the hardcoded fallback strings with zero network calls. Production toggles the flag on; fallbacks remain in code as the safety net for Langfuse outages.
+
+**Scripts:**
+- `bun langfuse:prompts:seed` — re-seed all four routing prompts from code fallbacks (versions increment on Langfuse).
+- `bun langfuse:prompts:seed-slack` — re-seed `sendero-slack-rules`.
+- `bun langfuse:prompts:pull` — write live prompts to `scripts/langfuse-prompts.snapshot.json` (committed; PRs that touch prompts must commit the snapshot diff).
+- `bun langfuse:prompts:diff` — compare snapshot vs live, exit 1 on drift.
+
+### Tracing
+
+`runAgentTurn` (`packages/agent/src/run.ts`) wraps every turn in `traceAgent(agentType, metadata, fn)`. Channel-aware `agentType`: `sendero-conversation | sendero-slack | sendero-whatsapp | sendero-mcp`. After the meter write, fire-and-forget `scoreLatency + scoreCost + scoreToolSuccess + evaluateTrace + flushLangfuse`. Direct `streamText` callers (`/api/agent/chat`, `/api/chat`, `/api/inbox/rewrite`, stamp workflows, OCR) pass `experimental_telemetry: aiTelemetryConfig(functionId, metadata)` so spans land in the same project.
+
+**Trace ID flows server → client → server** via `messageMetadata({ part: 'start' })` in `/api/agent/chat`'s stream response. The agent-chat client reads `message.metadata.senderoTraceId` and surfaces it to the operator thumbs UI.
+
+### Scoring + feedback
+
+- Engine fires per turn: `scoreLatency`, `scoreCost`, `scoreToolSuccess`, `evaluateTrace` (when enabled).
+- Operator thumbs (`/dashboard/agent-chat`) → `POST /api/agent/feedback` → `scoreGeneration(traceId, 'up' | 'down')`.
+- Slack HITL approval/reject (`apps/app/app/api/webhooks/slack/interactions/route.ts`) reads `Booking.metadata.traceId` (set by `confirm_booking` via `getActiveTraceId()`) → `scoreGeneration(traceId, 'approved' | 'rejected')`.
+
+### Datasets + regression
+
+`sendero-golden-turns` dataset holds 8 representative agent inputs (search / hold / refund / policy-block / locale-spanish / multi-turn / document-scan / treasury-check). `bun langfuse:regression` (script: `scripts/langfuse-run-regression.ts`) pulls each item, runs it through the LIVE persona prompts via `gpt-4.1-nano`, scores `rule-match` (mustMention / mustNotMention) plus the four LLM-judges, and links each trace to a dataset run. No tools wired in the runner — this is a prompt-quality smoke, not full-stack integration. Filter with `--scenario <name>`; name a run with `--run-name nightly-YYYY-MM-DD`.
+
+`bun langfuse:dataset:seed` re-creates the dataset (additive — items duplicate on re-run; prefer editing in the Langfuse UI thereafter).
+
+### MCP server
+
+`.mcp.json` registers `langfuse` as an HTTP MCP at `https://us.cloud.langfuse.com/api/public/mcp` with `Authorization: Basic ${LANGFUSE_MCP_AUTH}`. Restart Claude Code after first env-pull to load the server. Five tools available: `getPrompt`, `listPrompts`, `createTextPrompt`, `createChatPrompt`, `updatePromptLabels`. Use the `langfuse` skill (`.agents/skills/langfuse/SKILL.md`) for documentation-first workflows.
+
+### When to use what
+
+| Task | Reach for |
+|---|---|
+| Add a new system prompt | `bun langfuse:prompts:seed` (after editing fallback in `agent-persona.ts`) |
+| Edit a live prompt without code change | Langfuse MCP `updatePromptLabels` or the UI; then `bun langfuse:prompts:pull` to commit snapshot |
+| Detect prompt drift in a PR | `bun langfuse:prompts:diff` |
+| Score human feedback on an agent reply | `scoreGeneration(traceId, 'up'|'down'|'approved'|'rejected')` |
+| Score quality automatically | flip `LANGFUSE_EVALUATORS=true`, evaluators fire per turn |
+| Smoke a prompt change against goldens | `bun langfuse:regression --scenario <name>` |
+| Read the active trace inside a tool | `getActiveTraceId()` from `@sendero/langfuse` (returns undefined when no span) |
+| Read prompts from the Anthropic skills system | the `/langfuse` skill — documentation-first, CLI-native |

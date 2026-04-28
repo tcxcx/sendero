@@ -25,6 +25,16 @@ import type { CapStore } from '@sendero/billing/caps';
 import { type MeterStore, type PreflightArgs, preflight } from '@sendero/billing/meter';
 import type { BillingSegment } from '@sendero/billing/pricing';
 import type { MeterStatus } from '@sendero/database';
+import {
+  agentSessionId,
+  aiTelemetryConfig,
+  evaluateTrace,
+  flushLangfuse,
+  scoreCost,
+  scoreLatency,
+  scoreToolSuccess,
+  traceAgent,
+} from '@sendero/langfuse';
 import { getLocaleSlice } from '@sendero/locale';
 import { listWorkflows } from '@sendero/workflows';
 import type { LanguageModel, ToolSet } from 'ai';
@@ -80,6 +90,39 @@ export interface RunAgentTurnArgs {
   loadTrip?: (args: { tripId: string; tenantId: string }) => Promise<TripSnapshot | null>;
   /** Persona string appended after the context block. */
   persona: string;
+  /**
+   * Optional callback fired after each AI SDK step (text generation OR
+   * tool call). Adapters use this for incremental UI updates — e.g.
+   * the Slack adapter edits its placeholder message between tool
+   * calls so users see "Searching flights…" → "Comparing options…"
+   * instead of staring at "_Thinking…_" for the full turn.
+   *
+   * Step-based, not token-based: keeps the engine on `generateText`
+   * so cap/meter/session integrity is unchanged. True token streaming
+   * (post-then-edit every 750ms while generating) is a separate
+   * `streamText` refactor.
+   *
+   * Failures are caught here — adapter audit hooks must not break the
+   * agent turn.
+   */
+  onStepFinish?: (event: AgentStepEvent) => Promise<void> | void;
+}
+
+/**
+ * Step boundary the engine surfaces to the optional `onStepFinish`
+ * callback. Mirrors AI SDK's `StepResult` but in a stable shape we
+ * own — adapters import this, not the AI SDK type, so an SDK upgrade
+ * doesn't ripple into Slack/WhatsApp adapter code.
+ */
+export interface AgentStepEvent {
+  /** 1-indexed step number within the turn. */
+  stepNumber: number;
+  /** Names of tools called in this step (empty array on text-only steps). */
+  toolNames: string[];
+  /** Plain-text fragment generated in this step (empty when none). */
+  text: string;
+  /** AI SDK's `finishReason` for this step. */
+  finishReason: string;
 }
 
 export interface AgentTurnResult extends AgentOutput {
@@ -96,6 +139,42 @@ export interface AgentTurnResult extends AgentOutput {
 
 export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnResult> {
   const startedAt = Date.now();
+  const input = args.input;
+
+  const agentType =
+    input.channel === 'slack'
+      ? 'sendero-slack'
+      : input.channel === 'whatsapp'
+        ? 'sendero-whatsapp'
+        : input.channel === 'mcp'
+          ? 'sendero-mcp'
+          : 'sendero-conversation';
+
+  const traced = await traceAgent(
+    agentType,
+    {
+      tenantId: input.actor.tenantId,
+      ...(input.actor.userId ? { userId: input.actor.userId } : {}),
+      sessionId: agentSessionId(input.actor.tenantId, input.channel),
+      surface: 'agent-turn',
+      trigger: 'user',
+      channel: input.channel,
+      ...(input.actor.tripId ? { tripId: input.actor.tripId } : {}),
+      turnId: input.turnId,
+      ...(typeof args.model === 'string' ? { model: args.model } : {}),
+    },
+    ({ traceId }) => _runAgentTurnInner(args, startedAt, agentType, traceId)
+  );
+
+  return traced.result;
+}
+
+async function _runAgentTurnInner(
+  args: RunAgentTurnArgs,
+  startedAt: number,
+  agentType: 'sendero-conversation' | 'sendero-slack' | 'sendero-whatsapp' | 'sendero-mcp',
+  traceId: string
+): Promise<AgentTurnResult> {
   const input = args.input;
 
   // 1. cap preflight
@@ -176,6 +255,47 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
   const tier: ModelTier = hasMedia ? 'smart' : (args.tier ?? 'smart');
   const providerOptions: AgentProviderOptions | undefined =
     typeof args.model === 'string' ? buildProviderOptions(tier) : undefined;
+  // Wrap caller's `onStepFinish` so AI SDK errors in the listener
+  // never bubble out of the engine. The adapter audit hooks are
+  // optional UX — the agent turn must keep running even if a Slack
+  // chat.update fails mid-stream.
+  let stepCounter = 0;
+  const adaptedOnStepFinish = args.onStepFinish
+    ? async (step: {
+        text?: string;
+        toolCalls?: Array<{ toolName: string }>;
+        finishReason: string;
+      }) => {
+        stepCounter += 1;
+        try {
+          await args.onStepFinish?.({
+            stepNumber: stepCounter,
+            toolNames: (step.toolCalls ?? []).map(tc => tc.toolName),
+            text: step.text ?? '',
+            finishReason: step.finishReason,
+          });
+        } catch (err) {
+          console.error('[agent.run] onStepFinish hook failed (non-fatal)', {
+            stepNumber: stepCounter,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    : undefined;
+
+  const telemetry = aiTelemetryConfig(agentType, {
+    tenantId: input.actor.tenantId,
+    ...(input.actor.userId ? { userId: input.actor.userId } : {}),
+    sessionId: agentSessionId(input.actor.tenantId, input.channel),
+    surface: 'agent-turn',
+    trigger: 'user',
+    channel: input.channel,
+    ...(input.actor.tripId ? { tripId: input.actor.tripId } : {}),
+    turnId: input.turnId,
+    ...(typeof args.model === 'string' ? { model: args.model } : {}),
+    scope: 'run-agent-turn',
+  });
+
   const result = hasMedia
     ? await generateText({
         model: args.model,
@@ -193,6 +313,8 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
         stopWhen: stepCountIs(4),
         maxRetries: 2,
         providerOptions,
+        experimental_telemetry: telemetry,
+        ...(adaptedOnStepFinish ? { onStepFinish: adaptedOnStepFinish } : {}),
       })
     : await generateText({
         model: args.model,
@@ -202,6 +324,8 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
         stopWhen: stepCountIs(4),
         maxRetries: 2,
         providerOptions,
+        experimental_telemetry: telemetry,
+        ...(adaptedOnStepFinish ? { onStepFinish: adaptedOnStepFinish } : {}),
       });
 
   const latencyMs = Date.now() - startedAt;
@@ -262,6 +386,35 @@ export async function runAgentTurn(args: RunAgentTurnArgs): Promise<AgentTurnRes
     userId: input.actor.userId ?? null,
     subjectKey: subjectKeyFromActor(input),
     state: nextState,
+  });
+
+  // 8. fire-and-forget Langfuse scoring + LLM-judge eval + flush.
+  //    Must never extend the turn's wall-clock or block the channel
+  //    adapter from sending its reply. Errors are swallowed inside
+  //    each helper. evaluateTrace is no-op unless LANGFUSE_EVALUATORS=true.
+  const toolContextSummary = trail.length
+    ? trail.map(t => `- ${t.toolName} (${t.ok ? 'ok' : 'failed'})`).join('\n')
+    : undefined;
+  void Promise.resolve().then(async () => {
+    try {
+      await scoreLatency(traceId, latencyMs);
+      await scoreCost(traceId, pre.priceMicroUsdc);
+      await scoreToolSuccess(
+        traceId,
+        trail.map(t => ({ success: t.ok, toolName: t.toolName }))
+      );
+      if (result.text && result.text.trim().length > 0) {
+        await evaluateTrace({
+          traceId,
+          input: input.text,
+          output: result.text,
+          ...(toolContextSummary ? { context: toolContextSummary } : {}),
+        });
+      }
+      await flushLangfuse();
+    } catch {
+      // already logged inside the helpers; never throw out of fire-and-forget
+    }
   });
 
   return {
@@ -384,13 +537,16 @@ function renderAttachmentsHint(input: AgentInput): string {
     `The traveler attached ${media.length} document${media.length === 1 ? '' : 's'}:`,
     manifest,
     '',
-    'Reach for the `scan_document` tool to pull structured fields before replying. Pick `kind` from context:',
-    '- Receipt (coffee, taxi, hotel folio, grocery till, ride-share e-receipt) → `kind: "receipt"`',
-    '- Invoice / SaaS bill / contractor invoice / supplier bill → `kind: "invoice"`',
-    '- Airline boarding pass (mobile, PDF, screenshot) → `kind: "boarding_pass"`',
-    '- Government ID / passport / driver license → refuse, these are compliance-gated',
+    'Default behavior: call `scan_document_auto` on each attachment. The tool runs Gemini classification + extraction in one shot, so you do NOT have to know the document kind ahead of time. Pass the same `data + mediaType` (or `documentUrl`) you see on the turn.',
     '',
-    'The attachment is already on the turn; call `scan_document` with the same `data + mediaType` you see. One short sentence like "Reading the receipt…" is enough before the tool call — after the tool returns, confirm what you extracted in one line and offer the next useful action (log as expense, reconcile to trip, verify PNR). Never transcribe the full extraction back — the UI already renders a card.',
+    'Decision rules after the tool returns:',
+    '- `detectedKind === "id_document"` → the traveler\'s passport vault is updated automatically when they\'re signed in (`vaultSaved` is set). Confirm in one short line ("Saved your passport — nationality USA, expires 2030-04-12.") and offer the next action (continue booking, ask for missing fields).',
+    '- `detectedKind === "invoice" | "receipt" | "boarding_pass"` → the structured fields are in `extraction.data`. Confirm what you extracted in one line and offer the next useful action (log as expense, reconcile to trip, verify PNR). Never transcribe the full extraction back — the UI already renders a card.',
+    '- `detectedKind === "unknown"` or `classifierConfidence < 0.55` → ask the traveler to clarify what the document is rather than guessing.',
+    '',
+    'When you ALREADY know the kind from context (the user said "here\'s the receipt"), prefer the cheaper `scan_document` with the explicit `kind` to skip the classifier round-trip. Otherwise default to `scan_document_auto`.',
+    '',
+    'One short sentence like "Reading that document…" is enough before the tool call — never describe the attachment in prose without first running a scanner.',
   ].join('\n');
 }
 

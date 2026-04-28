@@ -9,7 +9,6 @@ import { TooltipProvider } from '@sendero/ui/tooltip';
 
 import { AppHeader } from '@/components/app-shell/app-header';
 import { AppShellFooter } from '@/components/app-shell/app-shell-footer';
-import { DashboardBreadcrumb } from '@/components/app-shell/dashboard-breadcrumb';
 import { DashboardPageHeader } from '@/components/app-shell/dashboard-page-header';
 import { AppSidebar } from '@/components/app-sidebar';
 import { BridgeDialog } from '@/components/bridge-dialog';
@@ -31,10 +30,12 @@ export function AppChrome({
   children,
   headerCopy,
   locale,
+  defaultSidebarOpen = true,
 }: {
   children: React.ReactNode;
   headerCopy: ShellHeaderCopy;
   locale: string;
+  defaultSidebarOpen?: boolean;
 }) {
   const pathname = usePathname() ?? '';
 
@@ -50,7 +51,7 @@ export function AppChrome({
     pathname.startsWith('/dashboard/inbox/') ||
     pathname.startsWith('/dashboard/console')
       ? 'p-0'
-      : 'px-6 pb-6 pt-0';
+      : 'px-6 pb-6 pt-2';
 
   const mainFlex = pathname.startsWith('/dashboard/console') ? 'flex min-h-0 flex-1 flex-col' : '';
 
@@ -58,7 +59,7 @@ export function AppChrome({
     <div className="app-shell-root flex h-svh w-full flex-col">
       <ClerkWalletBridge />
       <TooltipProvider delayDuration={120} skipDelayDuration={300}>
-        <SidebarProvider className="min-h-0 flex-1">
+        <SidebarProvider className="min-h-0 flex-1" defaultOpen={defaultSidebarOpen}>
           <AppSidebar />
           {/* DESIGN.md §12 — the main content surface floats as a single
             raised card on the grainy gradient. Margin on ≥lg, rounded
@@ -72,7 +73,6 @@ export function AppChrome({
               locale={locale}
               startSlot={<SidebarTrigger className="-ml-1 shrink-0" aria-label="Toggle sidebar" />}
             />
-            <DashboardBreadcrumb />
             <DashboardPageHeader />
             <main
               className={cn('app-shell-main min-h-0 flex-1 overflow-auto my-2', mainPad, mainFlex)}

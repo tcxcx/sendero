@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Search } from 'lucide-react';
 
@@ -45,7 +46,29 @@ export function SearchForm({
   // one to the other never dips both false simultaneously.
   const [triggerRef, triggerHovered] = useHover<HTMLButtonElement>();
   const [contentRef, contentHovered] = useHover<HTMLDivElement>();
-  const hoverIntent = triggerHovered || contentHovered;
+  const rawHoverIntent = triggerHovered || contentHovered;
+
+  // Only count hover as intent AFTER an explicit enter event on the
+  // trigger (or the panel) since the last pathname change. Without this
+  // gate, navigating between pages can leave a stale-positive hover
+  // state that auto-opens the palette over the new page — a UI ghost.
+  //
+  // Implementation: track previous values of triggerHovered/contentHovered
+  // and flip `hasIntent` true only on a `false → true` transition.
+  // Pure-mount renders (where useHover starts at false) never flip the
+  // gate; only an actual pointer-enter does. Pathname change resets the
+  // gate AND the previous-value refs so each new page starts fresh.
+  const prevTriggerRef = useRef(false);
+  const prevContentRef = useRef(false);
+  const [hasIntent, setHasIntent] = useState(false);
+  useEffect(() => {
+    const triggerEntered = !prevTriggerRef.current && triggerHovered;
+    const contentEntered = !prevContentRef.current && contentHovered;
+    prevTriggerRef.current = triggerHovered;
+    prevContentRef.current = contentHovered;
+    if (triggerEntered || contentEntered) setHasIntent(true);
+  }, [triggerHovered, contentHovered]);
+  const hoverIntent = hasIntent && rawHoverIntent;
 
   // `manualOpen` is sticky state for ⌘K / click / focus. `hoverIntent`
   // is transient. The Radix open is `manualOpen || hoverIntent`, but
@@ -54,6 +77,21 @@ export function SearchForm({
   const [manualOpen, setManualOpen] = useState(false);
 
   useSearchHotkey(() => setManualOpen(true));
+
+  // Close the palette on route change AND require a fresh hover-leave
+  // before hover-intent counts again. Without this gate, navigating
+  // between pages while the cursor happens to be over the trigger
+  // auto-opens the palette on the new page — a UI ghost. Resetting
+  // `hasLeftSinceMount` on every pathname change forces an explicit
+  // leave→enter cycle per page.
+  const pathname = usePathname();
+  useEffect(() => {
+    setManualOpen(false);
+    setOpen(false);
+    setHasIntent(false);
+    prevTriggerRef.current = false;
+    prevContentRef.current = false;
+  }, [pathname, setOpen]);
 
   // Drive the global store from local derived state. A single effect
   // so we don't get stuck with open=true after the user moves away.

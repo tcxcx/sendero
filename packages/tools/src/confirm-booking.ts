@@ -45,26 +45,27 @@
  */
 
 import {
-  computeMarkupBreakdown,
-  MarkupAmbiguousInputError,
-  MarkupStrategyNotSupportedV1,
   type BookingKind,
   type BookingPolicySnapshot,
+  computeMarkupBreakdown,
+  MarkupAmbiguousInputError,
   type MarkupBreakdown,
   type MarkupConfig,
+  MarkupStrategyNotSupportedV1,
 } from '@sendero/billing/markup';
-import { type PlanTier } from '@sendero/billing/plans';
-import { TOOL_PRICING, usdcAtomic } from './pricing';
-import { hasScope, type KeyScope } from './scopes';
-import {
-  defaultItemizationForSegment,
-  readBookingSegment,
-  type InvoiceItemization,
-} from './booking-metadata';
-import { encodeFunctionData, type Address, type Hex } from 'viem';
+import type { PlanTier } from '@sendero/billing/plans';
 import { SENDERO_GUEST_ESCROW_ABI } from '@sendero/guest';
+import { getActiveTraceId } from '@sendero/langfuse';
+import { type Address, encodeFunctionData, type Hex } from 'viem';
 import { z } from 'zod';
 
+import {
+  defaultItemizationForSegment,
+  type InvoiceItemization,
+  readBookingSegment,
+} from './booking-metadata';
+import { TOOL_PRICING, usdcAtomic } from './pricing';
+import { hasScope, type KeyScope } from './scopes';
 import type { ToolDef } from './types';
 
 // ─── Errors (DX D6) ────────────────────────────────────────────────────
@@ -292,16 +293,32 @@ export interface ConfirmBookingDeps {
      */
     invoiceItemization: InvoiceItemization;
     existingMetadata: Record<string, unknown> | null;
+    /**
+     * Active Langfuse trace id when the agent turn that fired this
+     * confirm ran inside `traceAgent()`. Persisted to
+     * `Booking.metadata.traceId` so the HITL approval flow can score
+     * the originating trace with the human's decision (approve /
+     * reject) — closes the loop on `scoreGeneration`.
+     */
+    traceId?: string;
   }): Promise<void>;
 
   /**
    * Append a `MeterEvent` row. `priceMicroUsdc` already includes the
    * Sendero take + the per-call x402 fee.
+   *
+   * `status` MUST be passed by callers — sandbox/testnet keys route
+   * to `'sandbox'` so `NanopayBatch` skips them. Defaulting to `'paid'`
+   * here used to be a silent footgun: the testnet-beta downgrade flag
+   * never reached this writer, so production-claims keys settled real
+   * USDC even on testnet. The handler now derives status from
+   * `callerKeyType` (which already factors in `effectiveKeyType`).
    */
   recordMeter(args: {
     tenantId: string;
     toolName: 'confirm_booking';
     priceMicroUsdc: bigint;
+    status: 'paid' | 'sandbox';
     note: string;
     metadata: Record<string, unknown>;
   }): Promise<void>;
@@ -383,6 +400,10 @@ export function dbDependencies(): ConfirmBookingDeps {
         // confirm time so a tenant edit doesn't re-shape an open
         // invoice.
         invoiceItemization: args.invoiceItemization,
+        // Langfuse correlation — captured when the originating agent
+        // turn ran inside traceAgent(). Read by the Slack HITL
+        // approval handler to score the trace on approve/reject.
+        ...(args.traceId ? { traceId: args.traceId } : {}),
       };
       await prisma.booking.update({
         where: { id: args.bookingId },
@@ -404,7 +425,7 @@ export function dbDependencies(): ConfirmBookingDeps {
           tenantId: args.tenantId,
           toolName: args.toolName,
           priceMicroUsdc: args.priceMicroUsdc,
-          status: 'paid',
+          status: args.status,
           note: args.note,
           metadata: args.metadata as object,
         },
@@ -638,6 +659,13 @@ export async function runConfirmBooking(
     readBookingSegment(ctx.booking.metadata)
   );
 
+  // Capture the active Langfuse trace id at confirm time. When the
+  // tool runs inside a `traceAgent()` wrapper (every channel adapter
+  // does), this returns the OTel trace id of the parent agent turn.
+  // Persisted via mergedMetadata.traceId so the HITL approval flow
+  // can score the originating trace with the human's decision.
+  const activeTraceId = getActiveTraceId();
+
   // Persist before encoding so a partial failure leaves the row in a
   // recoverable state (the userOp encode is pure and replayable; the
   // DB write is the side-effect we care about).
@@ -651,6 +679,7 @@ export async function runConfirmBooking(
     snapshot,
     invoiceItemization,
     existingMetadata: ctx.booking.metadata,
+    ...(activeTraceId ? { traceId: activeTraceId } : {}),
   });
 
   // Encode commitBookingV2. Three amounts, three recipients (vendor +
@@ -671,13 +700,21 @@ export async function runConfirmBooking(
     ],
   });
 
-  // Meter — Sendero take + per-call x402 fee.
+  // Meter — Sendero take + per-call x402 fee. Sandbox / testnet-beta
+  // routes to `status: 'sandbox'` so `NanopayBatch` skips it; production
+  // (Arc mainnet) routes to `'paid'` so settlement picks it up. Source
+  // of truth is `input.callerKeyType`, which the tool's handler derives
+  // from `ctx.caller.effectiveKeyType ?? ctx.caller.keyType` (downgrade-
+  // aware). Falling back to `'sandbox'` when caller info is absent is
+  // intentional fail-closed — never silently bill real USDC.
   const callMicro = perCallMicro();
   const meterMicro = breakdown.senderoTakeMicroUsdc + callMicro;
+  const meterStatus: 'paid' | 'sandbox' = input.callerKeyType === 'production' ? 'paid' : 'sandbox';
   await deps.recordMeter({
     tenantId: ctx.booking.tenantId,
     toolName: 'confirm_booking',
     priceMicroUsdc: meterMicro,
+    status: meterStatus,
     note: `confirm_booking · cost=${breakdown.costMicroUsdc} markup=${breakdown.markupMicroUsdc}`,
     metadata: {
       bookingId: ctx.booking.id,

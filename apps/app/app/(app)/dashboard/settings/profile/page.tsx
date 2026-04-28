@@ -2,7 +2,7 @@ import { UserProfile } from '@clerk/nextjs';
 
 export default function ProfilePage() {
   return (
-    <main className="flex justify-center">
+    <div className="flex justify-center">
       <UserProfile
         appearance={{
           elements: {
@@ -11,6 +11,6 @@ export default function ProfilePage() {
           },
         }}
       />
-    </main>
+    </div>
   );
 }

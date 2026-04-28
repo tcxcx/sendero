@@ -22,7 +22,7 @@
  * passed in by the page-level RSC.  All client state stays here.
  */
 
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 
 import Link from 'next/link';
 
@@ -30,30 +30,19 @@ import { Stage } from '@/components/stage';
 import { useSendero } from '@/components/store';
 import { SettleHoldButton } from '@/components/trips/settle-hold-button';
 import { WorkflowLog } from '@/components/workflow-log';
+import type { UnifiedMessage } from '@/lib/unified-message';
 
 import { ChannelHeader } from './channel-header';
 import { asChannelKey, CHANNELS, type ChannelKey } from './channels';
-import { type ComposerMode, ConsoleComposer } from './composer';
+import { type ComposerHandle, type ComposerMode, ConsoleComposer } from './composer';
+import { ConsoleHero, TripHero } from './console-hero';
 import { InboxRail } from './inbox-rail';
 import type { TripRowData } from './trip-rail';
 
 export type { ComposerMode };
 
-export interface ConversationEntry {
-  id: string;
-  role: 'system' | 'op' | 'ai' | 'tool' | 'customer' | 'result';
-  body?: string;
-  /** When role === 'tool' or 'result'. */
-  toolName?: string;
-  toolArgs?: string;
-  toolCost?: string;
-  /** When role === 'customer' — which channel the message arrived on. */
-  channel?: ChannelKey;
-  /** Local-clock timestamp like "14:02". */
-  t?: string;
-  /** When role === 'result' — short table preview. */
-  rows?: Array<Record<string, unknown>>;
-}
+/** Re-exported so MetaInboxLive can build optimistic rows in the same shape. */
+export type { UnifiedMessage } from '@/lib/unified-message';
 
 interface MetaInboxProps {
   trips: TripRowData[];
@@ -64,10 +53,10 @@ interface MetaInboxProps {
    * `conversationSlot` instead, which streams from useChat through
    * AI Elements.
    */
-  conversation: ConversationEntry[];
+  conversation: UnifiedMessage[];
   /**
    * Pre-rendered conversation surface (AI Elements). When provided,
-   * replaces the inline ConversationEntry render. MetaInboxLive uses
+   * replaces the inline UnifiedMessage render. MetaInboxLive uses
    * this to drive internal-mode chat through the same Conversation /
    * Message / Tool / Reasoning stack the working `/dashboard/agent-chat`
    * test bench uses.
@@ -87,6 +76,12 @@ interface MetaInboxProps {
    * in unscoped console mode.
    */
   pendingBooking?: { id: string; totalUsd: string } | null;
+  /** Workspace-mode header KPIs. Ignored in scoped (trip) mode. */
+  kpis?: {
+    settled30dCount: number;
+    settled30dFare: string | null;
+    avgResponseLabel: string | null;
+  };
   /**
    * Active composer mode. In unscoped (no tripId) mode this is forced
    * to 'internal'. In scoped mode the operator can flip via the footer
@@ -109,6 +104,7 @@ export function MetaInbox({
   traveler,
   holdExpires,
   pendingBooking,
+  kpis,
   composerMode,
   onComposerModeChange,
   onSubmit,
@@ -116,6 +112,10 @@ export function MetaInbox({
 }: MetaInboxProps) {
   const [customerPanelOpen, setCustomerPanelOpen] = useState(false);
   const showWorkflow = useSendero(s => s.showWorkflow);
+  const composerRef = useRef<ComposerHandle | null>(null);
+  const onCommand = useCallback((cmd: string) => {
+    composerRef.current?.seed(cmd);
+  }, []);
 
   const focused = scopedTripId
     ? (trips.find(t => t.id === scopedTripId) ?? null)
@@ -144,8 +144,7 @@ export function MetaInbox({
   // more room. Operators can pop the conversation into a full-screen dialog
   // via the expand button on the SENDERO AI header.
   const baseCols = 'auto 380px 1fr';
-  const cols =
-    baseCols + (isTrip && customerPanelOpen ? ' 300px' : '') + (showWorkflow ? ' 240px' : '');
+  const cols = baseCols + (showWorkflow ? ' 240px' : '');
 
   return (
     <div
@@ -154,93 +153,75 @@ export function MetaInbox({
         background: isTrip
           ? 'var(--surface-base)'
           : 'linear-gradient(135deg, rgba(245,237,224,0.55) 0%, rgba(239,228,210,0.55) 100%)',
-        padding: '12px 14px',
         flex: 1,
         minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
       }}
     >
-      {/* INTERNAL watermark — only when unscoped. */}
-      {!isTrip && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            top: '52%',
-            left: '50%',
-            transform: 'translate(-50%,-50%) rotate(-12deg)',
-            fontFamily: 'var(--font-display)',
-            fontSize: 120,
-            fontWeight: 500,
-            color: 'rgba(31,42,68,0.05)',
-            pointerEvents: 'none',
-            userSelect: 'none',
-            zIndex: 0,
-            letterSpacing: '-0.02em',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          INTERNAL · OPERATOR
-        </div>
-      )}
-
       <div
         style={{
           position: 'relative',
           zIndex: 1,
           display: 'flex',
           flexDirection: 'column',
-          gap: 12,
           flex: 1,
           minHeight: 0,
         }}
       >
         {isTrip ? (
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: 8,
-              alignItems: 'center',
-            }}
-          >
-            {!customerPanelOpen ? (
-              <button
-                type="button"
-                onClick={() => setCustomerPanelOpen(true)}
-                className="t-mono"
-                style={{
-                  padding: '6px 12px',
-                  background: 'var(--midnight)',
-                  color: '#fdfbf7',
-                  border: 0,
-                  borderRadius: 5,
-                  fontSize: 11,
-                  cursor: 'pointer',
-                }}
-              >
-                ◧ Show customer panel
-              </button>
-            ) : null}
-            <Link
-              href="/dashboard/console"
-              className="sd-pill sd-pill-outline"
-              style={{ padding: '6px 12px', fontSize: 11, textDecoration: 'none' }}
-            >
-              ↑ Pop to console
-            </Link>
-            {pendingBooking && scopedTripId ? (
-              <SettleHoldButton
-                tripId={scopedTripId}
-                bookingId={pendingBooking.id}
-                amountUsd={pendingBooking.totalUsd}
-                variant="inbox"
-              />
-            ) : null}
-          </div>
-        ) : null}
+          <TripHero
+            traveler={focused?.who ?? 'Traveler'}
+            route={focused?.route ?? ''}
+            tripId={scopedTripId ?? focused?.id ?? ''}
+            channel={channel}
+            hold={holdExpires ?? null}
+            onCommand={onCommand}
+            toolbarSlot={
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCustomerPanelOpen(v => !v)}
+                  className="t-mono"
+                  style={{
+                    padding: '5px 10px',
+                    background: customerPanelOpen ? 'transparent' : 'var(--midnight)',
+                    color: customerPanelOpen ? 'var(--midnight)' : '#fdfbf7',
+                    border: customerPanelOpen ? '1px solid var(--hairline-color)' : 0,
+                    borderRadius: 5,
+                    fontSize: 10.5,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {customerPanelOpen ? '◨ Close panel' : '◧ Show customer panel'}
+                </button>
+                <Link
+                  href="/dashboard/console"
+                  className="sd-pill sd-pill-outline"
+                  style={{ padding: '5px 10px', fontSize: 10.5, textDecoration: 'none' }}
+                >
+                  ↑ Pop to console
+                </Link>
+                {pendingBooking && scopedTripId ? (
+                  <SettleHoldButton
+                    tripId={scopedTripId}
+                    bookingId={pendingBooking.id}
+                    amountUsd={pendingBooking.totalUsd}
+                    variant="inbox"
+                  />
+                ) : null}
+              </>
+            }
+          />
+        ) : (
+          <ConsoleHero
+            trips={trips}
+            settled30dCount={kpis?.settled30dCount ?? null}
+            settled30dFare={kpis?.settled30dFare ?? null}
+            avgResponseLabel={kpis?.avgResponseLabel ?? null}
+            onCommand={onCommand}
+          />
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 0, flex: 1, minHeight: 0 }}>
           {/* LEFT — collapsible inbox rail. Default-collapsed thin
@@ -256,7 +237,7 @@ export function MetaInbox({
           {/* CENTER — conversation */}
           <div
             style={{
-              padding: '0 16px',
+              padding: '8px 16px',
               display: 'flex',
               flexDirection: 'column',
               gap: 12,
@@ -281,22 +262,17 @@ export function MetaInbox({
                 paddingRight: 4,
               }}
             >
-              {conversationSlot ??
-                (conversation.length === 0 ? (
-                  <EmptyConversation isTrip={isTrip} />
-                ) : (
-                  conversation.map(entry => (
-                    <ConversationRow
-                      key={entry.id}
-                      entry={entry}
-                      isTrip={isTrip}
-                      travelerInitials={traveler?.initials}
-                    />
-                  ))
-                ))}
+              {conversationSlot ?? (
+                <UnifiedConversation
+                  messages={conversation}
+                  isTrip={isTrip}
+                  travelerInitials={traveler?.initials}
+                />
+              )}
             </div>
 
             <ConsoleComposer
+              ref={composerRef}
               mode={effectiveMode}
               tripChannel={tripChannelKey}
               onModeChange={onComposerModeChange ?? (() => {})}
@@ -338,32 +314,28 @@ export function MetaInbox({
           {isTrip && customerPanelOpen ? (
             <div
               style={{
-                borderLeft: '1px solid var(--ink-soft)',
-                paddingLeft: 18,
+                borderLeft: '1px solid var(--ink)',
+                width: 220,
+                flexShrink: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 14,
-                overflow: 'auto',
+                overflow: 'hidden',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              {/* Panel header */}
+              <div
+                style={{
+                  padding: '10px 16px',
+                  borderBottom: '1px solid var(--ink)',
+                  flexShrink: 0,
+                }}
+              >
                 <span className="t-meta">Customer</span>
-                <span style={{ flex: 1 }} />
-                <button
-                  type="button"
-                  onClick={() => setCustomerPanelOpen(false)}
-                  className="t-mono ink-60"
-                  style={{
-                    fontSize: 10,
-                    cursor: 'pointer',
-                    background: 'transparent',
-                    border: 0,
-                  }}
-                >
-                  hide ✕
-                </button>
               </div>
-              {focused ? <TripContextCards trip={focused} channel={channel} /> : null}
+              {/* Panel body */}
+              <div style={{ flex: 1, overflow: 'auto', padding: '0 16px' }}>
+                {focused ? <TripContextCards trip={focused} channel={channel} /> : null}
+              </div>
             </div>
           ) : null}
 
@@ -375,6 +347,7 @@ export function MetaInbox({
             <div
               style={{
                 paddingLeft: 12,
+                paddingRight: 8,
                 minWidth: 0,
                 display: 'flex',
                 flexDirection: 'column',
@@ -392,17 +365,124 @@ export function MetaInbox({
 
 // ─── atoms ────────────────────────────────────────────────────────
 
-function ConversationRow({
-  entry,
+const FILTER_OPTIONS: ReadonlyArray<{ key: 'all' | ChannelKey; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'internal', label: 'Private' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'slack', label: 'Slack' },
+  { key: 'web', label: 'Web' },
+  { key: 'email', label: 'Email' },
+  { key: 'sms', label: 'SMS' },
+];
+
+function UnifiedConversation({
+  messages,
   isTrip,
   travelerInitials,
 }: {
-  entry: ConversationEntry;
+  messages: UnifiedMessage[];
   isTrip: boolean;
   travelerInitials?: string;
 }) {
-  const channel = entry.channel ? CHANNELS[entry.channel] : null;
-  if (entry.role === 'system') {
+  const [filter, setFilter] = useState<'all' | ChannelKey>('all');
+
+  // Only show the chip rail when there's enough variety to filter on.
+  // Single-channel threads don't benefit from chips and the rail steals
+  // vertical space from the conversation.
+  const channelsPresent = useMemo(() => {
+    const set = new Set<ChannelKey>();
+    for (const m of messages) set.add(m.channel);
+    return set;
+  }, [messages]);
+  const showChips = channelsPresent.size > 1;
+
+  const visible = useMemo(
+    () => (filter === 'all' ? messages : messages.filter(m => m.channel === filter)),
+    [filter, messages]
+  );
+
+  if (messages.length === 0) {
+    return <EmptyConversation isTrip={isTrip} />;
+  }
+
+  return (
+    <>
+      {showChips ? (
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            flexWrap: 'wrap',
+            paddingBottom: 4,
+            borderBottom: '1px solid var(--hairline-color-soft)',
+            marginBottom: 4,
+          }}
+        >
+          {FILTER_OPTIONS.filter(o => o.key === 'all' || channelsPresent.has(o.key)).map(o => {
+            const active = filter === o.key;
+            return (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => setFilter(o.key)}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 9.5,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  padding: '3px 9px',
+                  border: '1px solid var(--ink)',
+                  borderRadius: 12,
+                  background: active ? 'var(--ink)' : 'transparent',
+                  color: active ? '#fdfbf7' : 'var(--ink)',
+                  cursor: 'pointer',
+                }}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      {visible.length === 0 ? (
+        <div
+          style={{
+            padding: '16px 12px',
+            color: 'var(--text-dim)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            textAlign: 'center',
+          }}
+        >
+          {`No messages on ${filter}.`}
+        </div>
+      ) : (
+        visible.map(m => (
+          <ConversationRow
+            key={m.id}
+            message={m}
+            isTrip={isTrip}
+            travelerInitials={travelerInitials}
+          />
+        ))
+      )}
+    </>
+  );
+}
+
+function ConversationRow({
+  message,
+  isTrip,
+  travelerInitials,
+}: {
+  message: UnifiedMessage;
+  isTrip: boolean;
+  travelerInitials?: string;
+}) {
+  const channel = CHANNELS[message.channel];
+  const t = message.at ? new Date(message.at).toTimeString().slice(0, 5) : '';
+
+  if (message.kind === 'system_note') {
     return (
       <div
         className="sd-card-flat"
@@ -431,107 +511,13 @@ function ConversationRow({
           🛡
         </span>
         <div className="t-body" style={{ fontSize: 12.5 }}>
-          {entry.body}
+          {message.body}
         </div>
       </div>
     );
   }
-  if (entry.role === 'op') {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <div style={{ maxWidth: '72%' }}>
-          <div
-            className="sd-card-flat"
-            style={{
-              padding: '10px 14px',
-              background: 'var(--surface-floating)',
-              boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
-              borderRadius: 10,
-            }}
-          >
-            <div className="t-body" style={{ fontSize: 13, lineHeight: 1.5 }}>
-              {entry.body}
-            </div>
-          </div>
-          <div className="t-mono ink-60" style={{ fontSize: 10, marginTop: 4, textAlign: 'right' }}>
-            {entry.t} · you {isTrip ? `· via ${channel?.name ?? 'web'}` : '(private)'}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (entry.role === 'customer' && channel) {
-    return (
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-        <div
-          style={{
-            maxWidth: '56ch',
-            background: channel.tint,
-            boxShadow: 'var(--shadow-sm)',
-            padding: '10px 14px',
-            borderRadius: 14,
-          }}
-        >
-          <div className="t-body" style={{ fontSize: 14 }}>
-            {entry.body}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-            {channel.icon(10)}
-            <span className="t-mono" style={{ fontSize: 11, color: channel.accent }}>
-              via {channel.name} · {entry.t}
-            </span>
-          </div>
-        </div>
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 15,
-            background: 'var(--midnight)',
-            color: '#fdfbf7',
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: 12,
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          {travelerInitials ?? 'TR'}
-        </div>
-      </div>
-    );
-  }
-  if (entry.role === 'ai') {
-    return (
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-        <span
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: 12,
-            background: 'var(--vermillion)',
-            color: '#fdfbf7',
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: 11,
-            fontWeight: 700,
-            flexShrink: 0,
-          }}
-        >
-          S
-        </span>
-        <div style={{ maxWidth: '72%' }}>
-          <div className="t-body" style={{ fontSize: 13, lineHeight: 1.55 }}>
-            {entry.body}
-          </div>
-          <div className="t-mono ink-60" style={{ fontSize: 10, marginTop: 4 }}>
-            {entry.t} · sendero {isTrip ? `· sent to ${channel?.name ?? 'channel'}` : '(private)'}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (entry.role === 'tool') {
+
+  if (message.kind === 'tool_call') {
     return (
       <div
         style={{
@@ -554,22 +540,23 @@ function ConversationRow({
           className="t-mono"
           style={{ fontSize: 11, color: 'var(--vermillion)', fontWeight: 500 }}
         >
-          {entry.toolName}
+          {message.toolName}
         </span>
-        {entry.toolArgs ? (
+        {message.toolArgs ? (
           <span className="t-mono ink-60" style={{ fontSize: 10 }}>
-            {entry.toolArgs}
+            {message.toolArgs}
           </span>
         ) : null}
-        {entry.toolCost ? (
+        {message.toolCost ? (
           <span className="t-mono ink-60" style={{ fontSize: 10 }}>
-            {entry.toolCost}
+            {message.toolCost}
           </span>
         ) : null}
       </div>
     );
   }
-  if (entry.role === 'result' && entry.rows) {
+
+  if (message.kind === 'tool_result' && message.rows) {
     return (
       <div
         className="sd-card-flat"
@@ -586,13 +573,13 @@ function ConversationRow({
             className="t-mono"
             style={{ fontSize: 11, color: 'var(--vermillion)', fontWeight: 600 }}
           >
-            {entry.toolName}
+            {message.toolName}
           </span>
           <span className="t-mono ink-60" style={{ fontSize: 10 }}>
-            · {entry.rows.length} results
+            · {message.rows.length} results
           </span>
         </div>
-        {entry.rows.map((r, ri) => (
+        {message.rows.map((r, ri) => (
           <div
             key={ri}
             style={{
@@ -624,7 +611,149 @@ function ConversationRow({
       </div>
     );
   }
-  return null;
+
+  // ─── kind: 'message' ─────────────────────────────────────────────
+  // Three render lanes from the (direction, author.kind) tuple:
+  //
+  //   inbound  · traveler → channel-tinted left-or-right bubble + traveler avatar
+  //   outbound · operator → ink-border right bubble with channel watermark
+  //   outbound · agent    → vermillion S avatar + channel watermark
+  //   internal · operator → muted right bubble, "(private)" tag
+  //   internal · agent    → vermillion S avatar, "(private)" tag
+
+  if (message.direction === 'inbound' && message.author.kind === 'traveler') {
+    return (
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+        <div
+          style={{
+            maxWidth: '56ch',
+            background: channel.tint,
+            boxShadow: 'var(--shadow-sm)',
+            padding: '10px 14px',
+            borderRadius: 14,
+          }}
+        >
+          <div className="t-body" style={{ fontSize: 14 }}>
+            {message.body}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+            {channel.icon(10)}
+            <span className="t-mono" style={{ fontSize: 11, color: channel.accent }}>
+              via {channel.name} · {t}
+            </span>
+          </div>
+        </div>
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 15,
+            background: 'var(--midnight)',
+            color: '#fdfbf7',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 12,
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          {travelerInitials ?? 'TR'}
+        </div>
+      </div>
+    );
+  }
+
+  if (message.author.kind === 'agent') {
+    const isPrivate = message.direction === 'internal';
+    return (
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            background: 'var(--vermillion)',
+            color: '#fdfbf7',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: 11,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          S
+        </span>
+        <div style={{ maxWidth: '72%' }}>
+          <div className="t-body" style={{ fontSize: 13, lineHeight: 1.55 }}>
+            {message.body}
+          </div>
+          <div
+            className="t-mono ink-60"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, marginTop: 4 }}
+          >
+            <span>{t}</span>
+            <span>·</span>
+            <span>sendero</span>
+            {isPrivate ? (
+              <span style={{ color: 'var(--midnight)' }}>(private)</span>
+            ) : (
+              <>
+                <span>·</span>
+                {channel.icon(10)}
+                <span style={{ color: channel.accent }}>sent to {channel.name}</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // operator outbound (channel) OR internal — right-aligned bubble.
+  const isPrivate = message.direction === 'internal';
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ maxWidth: '72%' }}>
+        <div
+          className="sd-card-flat"
+          style={{
+            padding: '10px 14px',
+            background: 'var(--surface-floating)',
+            boxShadow: 'inset 0 0 0 1px var(--ink)',
+            borderRadius: 10,
+          }}
+        >
+          <div className="t-body" style={{ fontSize: 13, lineHeight: 1.5 }}>
+            {message.body}
+          </div>
+        </div>
+        <div
+          className="t-mono ink-60"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 6,
+            fontSize: 10,
+            marginTop: 4,
+          }}
+        >
+          <span>{t}</span>
+          <span>·</span>
+          <span>{message.author.displayName ?? 'you'}</span>
+          {isPrivate ? (
+            <span style={{ color: 'var(--midnight)' }}>(private)</span>
+          ) : (
+            <>
+              <span>·</span>
+              {channel.icon(10)}
+              <span style={{ color: channel.accent }}>via {channel.name}</span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function EmptyConversation({ isTrip }: { isTrip: boolean }) {
@@ -646,11 +775,17 @@ function EmptyConversation({ isTrip }: { isTrip: boolean }) {
         <div className="t-body ink-70" style={{ fontSize: 13, maxWidth: '42ch', margin: '0 auto' }}>
           {isTrip
             ? "Once the traveler replies on their channel, you'll see it here. Compose a draft below to start."
-            : 'Run a report, change policy, or investigate a trip. None of this reaches a customer.'}
+            : 'Run a report, change policy, or investigate a trip. None of this reaches a customer. Change channels to directly message your users or let Sendero AI handle it automatically. Use Sendero privately to give better customer support to make trips delightful.'}
         </div>
       </div>
     </div>
   );
+}
+
+function customerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function TripContextCards({
@@ -660,41 +795,104 @@ function TripContextCards({
   trip: TripRowData;
   channel: ReturnType<typeof CHANNELS extends Record<string, infer V> ? () => V : never>;
 }) {
+  const initials = customerInitials(trip.who || 'Traveler');
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Traveler profile */}
       <div
-        className="sd-card-flat"
-        style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '12px 14px' }}
+        style={{
+          padding: '20px 0 18px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 10,
+          textAlign: 'center',
+        }}
       >
-        <div className="t-meta">Channel</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-          {channel.icon(16)}
-          <span className="t-body" style={{ fontWeight: 600, fontSize: 13 }}>
+        <div
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            border: '1.5px solid var(--ink)',
+            background: '#fdfbf7',
+            display: 'grid',
+            placeItems: 'center',
+            fontFamily: 'var(--font-mono-x)',
+            fontSize: 15,
+            fontWeight: 700,
+            color: 'var(--ink)',
+            letterSpacing: '0.04em',
+            flexShrink: 0,
+          }}
+        >
+          {initials}
+        </div>
+        <div>
+          <div
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 20,
+              color: 'var(--ink)',
+              lineHeight: 1.1,
+            }}
+          >
+            {trip.who || 'Traveler'}
+          </div>
+          {trip.route ? (
+            <div className="t-mono ink-60" style={{ fontSize: 10, marginTop: 3 }}>
+              {trip.route}
+            </div>
+          ) : null}
+          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}>
+            <span
+              className={`sd-pill sd-pill-${trip.tone}`}
+              style={{ fontSize: 8, padding: '2px 7px' }}
+            >
+              {trip.state}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Trip ID row */}
+      <div
+        style={{
+          borderTop: '1px solid var(--hairline-color-soft, rgba(31,42,68,0.08))',
+          padding: '10px 0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        <span className="t-meta">Trip</span>
+        <span
+          className="t-mono"
+          style={{ fontSize: 10, color: 'var(--midnight)', wordBreak: 'break-all' }}
+        >
+          {trip.id}
+        </span>
+      </div>
+
+      {/* Channel row */}
+      <div
+        style={{
+          borderTop: '1px solid var(--hairline-color-soft, rgba(31,42,68,0.08))',
+          padding: '10px 0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+        }}
+      >
+        <span className="t-meta">Channel</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          {channel.icon(13)}
+          <span className="t-body" style={{ fontWeight: 600, fontSize: 12 }}>
             {channel.name}
           </span>
         </div>
-        <div className="t-mono ink-60" style={{ fontSize: 11, marginTop: 4 }}>
+        <div className="t-mono ink-60" style={{ fontSize: 10 }}>
           {channel.handle}
-        </div>
-      </div>
-      <div
-        className="sd-card-flat"
-        style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '12px 14px' }}
-      >
-        <div className="t-meta">Trip</div>
-        <div className="t-body" style={{ fontSize: 13, fontWeight: 500, marginTop: 6 }}>
-          {trip.who}
-        </div>
-        <div className="t-mono ink-60" style={{ fontSize: 11, marginTop: 4 }}>
-          {trip.id} · {trip.route}
-        </div>
-        <div style={{ marginTop: 8 }}>
-          <span
-            className={`sd-pill sd-pill-${trip.tone}`}
-            style={{ fontSize: 9, padding: '2px 7px' }}
-          >
-            {trip.state}
-          </span>
         </div>
       </div>
     </div>

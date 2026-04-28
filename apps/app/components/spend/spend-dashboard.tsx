@@ -16,7 +16,7 @@
 import Link from 'next/link';
 
 import { Crumb } from '@/components/console/crumb';
-import { formatDateTime, formatMicroUsd } from '@/lib/format';
+import { formatDateTime, formatMicroUsd, formatMicroUsdPrecise } from '@/lib/format';
 
 type SpendSummary = {
   totalMicro: bigint;
@@ -39,6 +39,13 @@ type BatchRow = {
   txHash: string | null;
   settledAt: Date | null;
   createdAt: Date;
+};
+
+type SettlementSplit = {
+  pendingMicro: bigint;
+  pendingCount: number;
+  reconciledMicro: bigint;
+  reconciledCount: number;
 };
 
 export type SpendRange = 'W' | 'M' | 'Y';
@@ -68,6 +75,7 @@ export function SpendDashboard({
   summary,
   caps,
   recentBatches,
+  settlementSplit,
 }: {
   tenantName: string;
   tier: string;
@@ -75,6 +83,7 @@ export function SpendDashboard({
   summary: SpendSummary;
   caps: CapRow[];
   recentBatches: BatchRow[];
+  settlementSplit?: SettlementSplit;
 }) {
   const avgMicro = summary.totalCalls > 0 ? summary.totalMicro / BigInt(summary.totalCalls) : 0n;
   const capCeilingMicro = capCeilingForRange(range, caps);
@@ -132,7 +141,10 @@ export function SpendDashboard({
           },
           {
             label: 'Avg cost',
-            value: summary.totalCalls === 0 ? '—' : formatMicroUsd(avgMicro),
+            // Per-call cost is sub-cent for nanopayments — render with
+            // micro-USDC precision (6 decimals) so the value is
+            // readable instead of `$0.00`.
+            value: summary.totalCalls === 0 ? '—' : formatMicroUsdPrecise(avgMicro),
             sub: 'per call',
           },
           {
@@ -145,6 +157,8 @@ export function SpendDashboard({
           },
         ]}
       />
+
+      {settlementSplit ? <SettlementStrip split={settlementSplit} /> : null}
 
       <div
         className="sd-card-raised"
@@ -245,7 +259,7 @@ export function SpendDashboard({
                       className="t-num-md"
                       style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums' }}
                     >
-                      {formatMicroUsd(row.micro)}
+                      {formatMicroUsdPrecise(row.micro)}
                     </div>
                     <div className="t-mono ink-60" style={{ fontSize: 11 }}>
                       {sharePct}%
@@ -655,4 +669,69 @@ function pickAxisLabels(points: SpendSummary['timeseries']): string[] {
       day: 'numeric',
     });
   });
+}
+
+// Pending vs reconciled — surfaces what's already settled on-chain
+// vs what's queued for the next */5 cron sweep. Lets the operator see
+// what they've paid AND what they're about to pay without waiting.
+function SettlementStrip({ split }: { split: SettlementSplit }) {
+  const total = split.pendingMicro + split.reconciledMicro;
+  const reconciledPct =
+    total > 0n ? Math.round((Number(split.reconciledMicro) / Number(total)) * 100) : 0;
+  return (
+    <div
+      className="sd-card-flat"
+      style={{
+        padding: '14px 18px',
+        boxShadow: 'inset 0 0 0 1px var(--ink-soft)',
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr auto',
+        gap: 24,
+        alignItems: 'center',
+      }}
+    >
+      <div>
+        <div className="t-meta" style={{ color: 'var(--accent-green, #2f7a52)' }}>
+          Reconciled · on-chain
+        </div>
+        <div
+          className="t-num-lg"
+          style={{ fontSize: 24, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}
+        >
+          {formatMicroUsdPrecise(split.reconciledMicro)}
+        </div>
+        <div className="t-mono ink-60" style={{ fontSize: 11, marginTop: 2 }}>
+          {split.reconciledCount.toLocaleString()} call
+          {split.reconciledCount === 1 ? '' : 's'} settled
+        </div>
+      </div>
+      <div>
+        <div className="t-meta" style={{ color: 'var(--vermillion)' }}>
+          Pending · next sweep ≤5 min
+        </div>
+        <div
+          className="t-num-lg"
+          style={{ fontSize: 24, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}
+        >
+          {formatMicroUsdPrecise(split.pendingMicro)}
+        </div>
+        <div className="t-mono ink-60" style={{ fontSize: 11, marginTop: 2 }}>
+          {split.pendingCount.toLocaleString()} call
+          {split.pendingCount === 1 ? '' : 's'} queued
+        </div>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <div className="t-meta">Reconciled</div>
+        <div
+          className="t-num-lg"
+          style={{ fontSize: 24, marginTop: 4, fontVariantNumeric: 'tabular-nums' }}
+        >
+          {reconciledPct}%
+        </div>
+        <div className="t-mono ink-60" style={{ fontSize: 11, marginTop: 2 }}>
+          of total in window
+        </div>
+      </div>
+    </div>
+  );
 }

@@ -14,6 +14,7 @@ import { getMarketingContent } from '@/lib/content';
 import { heroTitleWithHighlights } from '@/lib/hero-title';
 
 import { MarketingBrandHoverCard } from './brand-hover-card';
+import { MarketingEngineScene } from './marketing-engine-scene';
 import { MarketingWaitlist } from './waitlist';
 
 export const revalidate = 300; // 5 minutes; basehub will push on-demand in Phase 4
@@ -68,7 +69,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
   const normalized = normalizeLocale(content.locale) ?? DEFAULT_LOCALE;
   const appOrigin = resolvePublicOrigin(
     process.env.NEXT_PUBLIC_APP_URL,
-    'https://www.sendero.travel'
+    'https://app.sendero.travel'
   );
   // Marketing site lives on a different host from the app. Resolve any
   // app-relative path (/dashboard, /onboarding) to the app origin so it
@@ -312,6 +313,10 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
           </div>
         </div>
       </section>
+
+      <div className="mk-scene-banner" aria-hidden="true">
+        <MarketingEngineScene />
+      </div>
 
       <section className="mk-pricing" id="pricing">
         <div className="mk-pricing-banner">
@@ -628,6 +633,8 @@ const inlineCss = `
   .mk-postcard figcaption strong { font-size: 14px; line-height: 1.2; font-weight: 600; letter-spacing: 0; color: var(--fg); }
   .mk-postcard figcaption small { font-size: 12px; line-height: 1.25; color: #4d463d; }
   .mk-postcard figcaption p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .mk-scene-banner { width: 100vw; margin: 0 calc(50% - 50vw) 80px; height: 900px; overflow: hidden; display: flex; align-items: stretch; }
+  .mk-scene-banner > * { flex: 1 1 auto; min-width: 0; }
   .mk-pricing { margin: 0 0 80px; }
   .mk-pricing h2 { font-family: var(--display); font-size: clamp(28px, 3.5vw, 44px); letter-spacing: -0.01em; margin: 0 0 12px; font-weight: 450; }
   .mk-pricing-sub { color: var(--muted); max-width: 620px; margin: 0 0 32px; }

@@ -25,6 +25,7 @@
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+import { aiTelemetryConfig } from '@sendero/langfuse';
 import { type LanguageModel, generateText } from 'ai';
 
 // As of Apr 2026: AI Studio renamed the public image model from
@@ -139,7 +140,7 @@ export const generateStampImage = async (
             role: 'user' as const,
             content: [
               { type: 'text' as const, text: fullText },
-              ...usableRefs.map((r) => ({
+              ...usableRefs.map(r => ({
                 type: 'image' as const,
                 image: r.url,
               })),
@@ -152,6 +153,12 @@ export const generateStampImage = async (
     model: picked.model,
     messages,
     maxRetries: 2,
+    experimental_telemetry: aiTelemetryConfig('sendero-stamp-gen', {
+      surface: 'app-api',
+      trigger: 'system',
+      model: GATEWAY_MODEL,
+      scope: 'stamp-image',
+    }),
   });
 
   const file = files.at(0);

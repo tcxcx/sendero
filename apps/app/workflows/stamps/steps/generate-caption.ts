@@ -19,6 +19,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+import { aiTelemetryConfig } from '@sendero/langfuse';
 import { type LanguageModel, generateText } from 'ai';
 
 interface PickedTextProvider {
@@ -80,6 +81,11 @@ export const generateStampCaption = async (prompt: string): Promise<string> => {
     model: picked.model,
     prompt,
     maxRetries: 2,
+    experimental_telemetry: aiTelemetryConfig('sendero-stamp-gen', {
+      surface: 'app-api',
+      trigger: 'system',
+      scope: 'stamp-caption',
+    }),
   });
 
   // Strip wrapping quotes / backticks / smart quotes; trim leading

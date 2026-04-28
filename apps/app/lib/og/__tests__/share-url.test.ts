@@ -14,7 +14,7 @@
  *      ShareCardProps fields.
  *   2. Tamper: flipping a byte in the payload half OR the signature
  *      half causes verify to throw.
- *   3. Fail-soft: when `INVOICE_SIGNING_SECRET` is unset,
+ *   3. Fail-soft: when `OG_SHARE_SIGNING_SECRET` is unset,
  *      `buildShareImageUrl` returns null (channel renderers treat null
  *      as "no fallback image" rather than crashing).
  *   4. TTL gap (documented): the current token format carries no
@@ -40,19 +40,19 @@ const SAMPLE: SignedSharePayload = {
   ctaLabel: 'View itinerary',
 };
 
-const ORIGINAL_SECRET = process.env.INVOICE_SIGNING_SECRET;
+const ORIGINAL_SECRET = process.env.OG_SHARE_SIGNING_SECRET;
 const ORIGINAL_BASE = process.env.NEXT_PUBLIC_APP_URL;
 
 beforeAll(() => {
-  process.env.INVOICE_SIGNING_SECRET = TEST_SECRET;
+  process.env.OG_SHARE_SIGNING_SECRET = TEST_SECRET;
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.sendero.travel';
 });
 
 afterAll(() => {
   if (ORIGINAL_SECRET === undefined) {
-    delete process.env.INVOICE_SIGNING_SECRET;
+    delete process.env.OG_SHARE_SIGNING_SECRET;
   } else {
-    process.env.INVOICE_SIGNING_SECRET = ORIGINAL_SECRET;
+    process.env.OG_SHARE_SIGNING_SECRET = ORIGINAL_SECRET;
   }
   if (ORIGINAL_BASE === undefined) {
     delete process.env.NEXT_PUBLIC_APP_URL;
@@ -148,9 +148,9 @@ describe('share-url tamper detection', () => {
 });
 
 describe('share-url fail-soft behavior', () => {
-  test('buildShareImageUrl returns null when INVOICE_SIGNING_SECRET is unset', async () => {
-    const saved = process.env.INVOICE_SIGNING_SECRET;
-    delete process.env.INVOICE_SIGNING_SECRET;
+  test('buildShareImageUrl returns null when OG_SHARE_SIGNING_SECRET is unset', async () => {
+    const saved = process.env.OG_SHARE_SIGNING_SECRET;
+    delete process.env.OG_SHARE_SIGNING_SECRET;
     try {
       const url = await buildShareImageUrl({
         title: 'Hi',
@@ -158,7 +158,7 @@ describe('share-url fail-soft behavior', () => {
       });
       expect(url).toBeNull();
     } finally {
-      process.env.INVOICE_SIGNING_SECRET = saved;
+      process.env.OG_SHARE_SIGNING_SECRET = saved;
     }
   });
 

@@ -48,7 +48,13 @@ import {
   SidebarRail,
 } from '@/components/ui/sidebar';
 
-type NavSub = { title: string; url: string; icon: LucideIcon };
+/**
+ * NavSub rendering: when `iconSrc` is set, the brand SVG (full-color
+ * trademark mark from `/public/brand/app-store/*`) renders instead of
+ * the Lucide glyph. Keeps WhatsApp / Slack / MCP visually consistent
+ * with the dashboard ChannelPill row and the connect-flow chrome.
+ */
+type NavSub = { title: string; url: string; icon: LucideIcon; iconSrc?: string };
 
 type NavSection = { title: string; items: NavSub[] };
 
@@ -75,9 +81,24 @@ const sections: NavSection[] = [
   {
     title: 'Channels',
     items: [
-      { title: 'WhatsApp', url: '/dashboard/channels/whatsapp', icon: MessageCircle },
-      { title: 'Slack', url: '/dashboard/channels/slack', icon: Landmark },
-      { title: 'API keys / MCP', url: '/dashboard/integrations/mcp', icon: Sparkles },
+      {
+        title: 'WhatsApp',
+        url: '/dashboard/channels/whatsapp',
+        icon: MessageCircle,
+        iconSrc: '/brand/app-store/whatsapp.svg',
+      },
+      {
+        title: 'Slack',
+        url: '/dashboard/channels/slack',
+        icon: Landmark,
+        iconSrc: '/brand/app-store/slack.svg',
+      },
+      {
+        title: 'API keys / MCP',
+        url: '/dashboard/integrations/mcp',
+        icon: Sparkles,
+        iconSrc: '/brand/app-store/mcp.svg',
+      },
     ],
   },
 ];
@@ -145,7 +166,19 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                           <SidebarMenuSubItem key={item.url}>
                             <SidebarMenuSubButton asChild isActive={active}>
                               <Link href={item.url}>
-                                <item.icon className="size-4" />
+                                {item.iconSrc ? (
+                                  /* eslint-disable-next-line @next/next/no-img-element -- trademark-locked brand SVG */
+                                  <img
+                                    src={item.iconSrc}
+                                    alt=""
+                                    width={20}
+                                    height={20}
+                                    className="size-5 shrink-0"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <item.icon className="size-4" />
+                                )}
                                 <span>{item.title}</span>
                               </Link>
                             </SidebarMenuSubButton>
@@ -172,7 +205,19 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild isActive={active} tooltip={item.title}>
                       <Link href={item.url}>
-                        <item.icon className="size-4" />
+                        {item.iconSrc ? (
+                          /* eslint-disable-next-line @next/next/no-img-element -- trademark-locked brand SVG */
+                          <img
+                            src={item.iconSrc}
+                            alt=""
+                            width={20}
+                            height={20}
+                            className="size-5 shrink-0"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <item.icon className="size-4" />
+                        )}
                         <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>

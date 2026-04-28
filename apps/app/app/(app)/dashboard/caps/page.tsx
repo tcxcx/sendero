@@ -20,7 +20,7 @@ import { prisma } from '@sendero/database';
 
 import { CapsGauge } from '@/components/caps/caps-gauge';
 import { CapsTable, type CapTableRow } from '@/components/caps/caps-table';
-import { Crumb } from '@/components/console/crumb';
+import { PageActions } from '@/components/dashboard/page-actions';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -73,7 +73,7 @@ export default async function CapsPage() {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -81,73 +81,54 @@ export default async function CapsPage() {
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Money & policy', 'Caps']} />
-
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: 24,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <h1 className="t-h1">Caps</h1>
-          <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-            Spend ceilings per tenant and period. Hard caps reject calls atomically; soft caps keep
-            going but fire your alert webhook.
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link
-            href="/dashboard/caps/policies"
-            style={{
-              padding: '8px 14px',
-              background: 'transparent',
-              color: 'var(--midnight)',
-              border: 0,
-              boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
-              borderRadius: 8,
-              fontSize: 11,
-              fontWeight: 600,
-              fontFamily: 'var(--font-mono-x)',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              textDecoration: 'none',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-            }}
-          >
-            Manage policies →
-          </Link>
-          <Link
-            href="/dashboard/caps/new"
-            style={{
-              padding: '8px 18px',
-              background: 'var(--vermillion)',
-              color: '#fdfbf7',
-              border: 0,
-              borderRadius: 8,
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: 'var(--font-mono-x)',
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              textDecoration: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            {caps.length === 0 ? 'New cap policy' : 'Add cap'}
-          </Link>
-        </div>
-      </div>
+      <PageActions>
+        <Link
+          href="/dashboard/caps/policies"
+          style={{
+            padding: '8px 14px',
+            background: 'transparent',
+            color: 'var(--midnight)',
+            border: 0,
+            boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+            borderRadius: 8,
+            fontSize: 11,
+            fontWeight: 600,
+            fontFamily: 'var(--font-mono-x)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            textDecoration: 'none',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+          }}
+        >
+          Manage policies →
+        </Link>
+        <Link
+          href="/dashboard/caps/new"
+          style={{
+            padding: '8px 18px',
+            background: 'var(--vermillion)',
+            color: '#fdfbf7',
+            border: 0,
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: 'var(--font-mono-x)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            textDecoration: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          {caps.length === 0 ? 'New cap policy' : 'Add cap'}
+        </Link>
+      </PageActions>
 
       <div
         className="sd-card-raised"
         style={{
-          padding: '24px 28px',
+          padding: '0 20px 20px',
           display: 'flex',
           gap: 0,
           alignItems: 'stretch',

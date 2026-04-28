@@ -11,7 +11,6 @@ import { notFound } from 'next/navigation';
 
 import { prisma } from '@sendero/database';
 
-import { Crumb } from '@/components/console/crumb';
 import { TripChannelBindingsEditor } from '@/components/trips/trip-channel-bindings-editor';
 import { TripDetailCard } from '@/components/trips/trip-detail-card';
 import { TripStepper } from '@/components/trips/trip-stepper';
@@ -62,7 +61,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -70,8 +69,6 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Trips', `${shortId} · ${destination}`]} />
-
       <div
         style={{
           display: 'flex',

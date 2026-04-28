@@ -73,7 +73,7 @@ export default async function NewCapPage({
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
@@ -110,7 +110,7 @@ export default async function NewCapPage({
           }}
           className="sd-card-raised"
           style={{
-            padding: '24px 28px',
+            padding: '0 20px 20px',
             display: 'flex',
             flexDirection: 'column',
             gap: 18,

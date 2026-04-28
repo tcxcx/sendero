@@ -42,7 +42,7 @@ export interface ApiErrorOptions {
   traceId?: string;
 }
 
-function newTraceId(): string {
+export function newTraceId(): string {
   // crypto.randomUUID is available in Node 19+ and the Edge runtime.
   // Falling back to Math.random would defeat the purpose of trace
   // correlation, so just use crypto.

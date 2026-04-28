@@ -10,11 +10,11 @@
  * mutate tenant B's resources.
  */
 
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildMcpCatalog, type McpToolEntry } from '@sendero/tools/adapters/mcp';
 import type { ToolContext } from '@sendero/tools/types';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 
 import type { ResolvedApiKey } from '@/lib/api-key-auth';
 
@@ -139,6 +139,18 @@ function buildRequestCatalog(resolved: ResolvedApiKey): Record<string, McpToolEn
     traveler: {
       tenantId: resolved.tenantId,
       userId: `svc:${resolved.keyId}`,
+    },
+    // ctx.caller MUST be propagated from the resolved key — tools that
+    // gate on `caller.effectiveKeyType` (e.g. confirm_booking's markup
+    // override + meter-status routing) silently see `undefined` if this
+    // is omitted, which means production-claims keys would write paid
+    // MeterEvents during testnet-beta. Mirrors the dispatch route's
+    // `apiKey` plumbing so the testnet downgrade applies on every
+    // surface that talks to the same tool registry.
+    caller: {
+      scopes: resolved.scopes,
+      keyType: resolved.keyType,
+      effectiveKeyType: resolved.effectiveKeyType,
     },
   };
   return buildMcpCatalog(PUBLIC_TOOLS, ctx);

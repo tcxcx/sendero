@@ -7,6 +7,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { cogsForModel } from '@sendero/billing';
+
+import { tierDots } from '@/components/chat/chat-model-trigger';
+import { useChatModel } from '@/hooks/use-chat-model';
+
+import { WorkflowVisibilityToggle } from './console/workflow-visibility-toggle';
 import { useSendero } from './store';
 import { useMeterStream, useMeterSummary } from './use-meter';
 import { WorkflowGraph } from './workflow-graph';
@@ -36,6 +42,13 @@ export function WorkflowLog() {
   const { events: meterEvents, connected: meterConnected } = useMeterStream(30);
   const { summary: meterSummary } = useMeterSummary(1500);
 
+  // Live picker state — same hook backing ChatModelTrigger above. The
+  // workflow log's `model` row reflects the user's actual choice (which
+  // is what /api/chat + /api/agent/chat will route to), not the static
+  // server-default returned by /api/agent/runtime.
+  const [selectedModelId] = useChatModel();
+  const selectedCogs = useMemo(() => cogsForModel(selectedModelId), [selectedModelId]);
+
   // Group events by `group` name, preserving order.
   const grouped = workflow.reduce<Record<string, typeof workflow>>((acc, evt) => {
     const bucket = acc[evt.group] ?? [];
@@ -44,7 +57,13 @@ export function WorkflowLog() {
     return acc;
   }, {});
 
-  const modelLabel = runtime?.model ? `${runtime.provider}:${runtime.model}` : '—';
+  const modelLabel = selectedCogs
+    ? selectedModelId
+    : runtime?.model
+      ? `${runtime.provider}:${runtime.model}`
+      : '—';
+  const estCostUsdc = selectedCogs ? Number(selectedCogs.cogsPerTurnMicro) / 1_000_000 : null;
+  const modelDots = selectedCogs ? tierDots(selectedCogs.cogsPerTurnMicro) : null;
   const toolLabel = runtime ? `${runtime.toolCount} bound` : '—';
 
   return (
@@ -52,18 +71,44 @@ export function WorkflowLog() {
       <div className="col-head">
         <span className="title">Workflow</span>
       </div>
+      <div
+        style={{
+          padding: '8px 14px',
+          borderBottom: '1px solid var(--hairline-color-soft)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <WorkflowVisibilityToggle layout="inline" />
+      </div>
       <div className="col-body log">
         <WorkflowGraph workflow={workflow} />
 
         <div
           style={{
-            padding: '12px 14px',
+            padding: '12px 0px',
             fontFamily: 'var(--font-mono)',
             fontSize: 11,
           }}
         >
           <Row k="run_id" v={runId} vColor="var(--ink)" />
-          <Row k="model" v={modelLabel} />
+          <Row k="model" v={modelLabel} vColor="var(--ink)" />
+          {estCostUsdc !== null ? (
+            <Row
+              k="cost / turn (est)"
+              v={
+                <span
+                  style={{
+                    color: 'var(--usdc)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                  title="Worst-case COGS per typical agentic turn (4k input, 1k output, ~3 tool round-trips, no caching). Source: @sendero/billing/cogs."
+                >
+                  ${estCostUsdc.toFixed(6)} USDC
+                </span>
+              }
+            />
+          ) : null}
           <Row k="tools" v={toolLabel} />
           <Row k="chain" v={`Arc L2 · ${treasury?.arc?.chainId ?? '—'}`} />
           <Row
@@ -146,6 +191,32 @@ export function WorkflowLog() {
               gap: 2,
             }}
           >
+            <span title="The chat model picked above. Each turn's tool calls are paid for at the prices below.">
+              via model
+            </span>
+            <span
+              style={{
+                color: 'var(--ink)',
+                textAlign: 'right',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {selectedCogs ? (
+                <>
+                  {selectedCogs.name}
+                  {modelDots ? (
+                    <span
+                      aria-hidden
+                      style={{ marginLeft: 4, color: 'var(--text-faint)', letterSpacing: '0.2em' }}
+                    >
+                      {modelDots}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                modelLabel
+              )}
+            </span>
             <span title="Total USDC paid as Arc gas (nUSDC = nano-USDC)">arc paid (nUSDC)</span>
             <span
               style={{

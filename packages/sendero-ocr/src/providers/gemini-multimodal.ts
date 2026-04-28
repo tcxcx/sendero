@@ -19,6 +19,7 @@
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+import { aiTelemetryConfig } from '@sendero/langfuse';
 import { type LanguageModel, Output, generateText } from 'ai';
 import type { ZodTypeAny, z } from 'zod';
 
@@ -127,6 +128,12 @@ export async function extractWithGemini<TSchema extends ZodTypeAny>(
     maxRetries: 2,
     temperature: 0,
     abortSignal,
+    experimental_telemetry: aiTelemetryConfig('sendero-ocr', {
+      surface: 'app-api',
+      trigger: 'user',
+      model: gatewayModelId,
+      scope: 'ocr-extract',
+    }),
     // Strip thinking budget when Pro is selected. Pro defaults to
     // reasoning-on, but OCR is a non-reasoning task: the schema pins
     // the output, there's nothing for the model to "think" about.

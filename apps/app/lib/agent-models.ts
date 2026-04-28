@@ -35,6 +35,15 @@ import {
   vertexLocation,
   vertexProject,
 } from '@sendero/agent';
+import {
+  allowedModelsForCap,
+  cogsForModel,
+  defaultModelForCap,
+  isModelAllowedByCap,
+  PLANS,
+  type PlanConfig,
+  type PlanTier,
+} from '@sendero/billing';
 import type { LanguageModel } from 'ai';
 
 export type { ModelTier };
@@ -76,6 +85,128 @@ export function resolveDirectModels(
     if (model) models.push({ label: candidate, model });
   }
   return models;
+}
+
+/**
+ * Server-side model gating envelope. Returned to callers when the user
+ * (or AI agent) requests a model that exceeds their plan's per-turn
+ * COGS ceiling. The 403 envelope includes everything an LLM caller
+ * needs to self-recover: allowed models for this tier, the next
+ * upgrade target, and a docs deep-link.
+ *
+ * Match the existing `signature_required` envelope format from
+ * `apps/app/app/api/agent/dispatch/route.ts` for consistency with
+ * the rest of the developer surface.
+ */
+export interface LockedModelError {
+  error: 'model_locked';
+  code: 'BILLING_MODEL_LOCKED';
+  message: string;
+  requestedModel: string;
+  currentTier: PlanTier;
+  /** Lowest tier whose `maxCostPerTurnMicro` would unlock the model. */
+  requiredTier: PlanTier | 'enterprise';
+  /** Models the calling tier IS allowed to invoke right now. */
+  allowedModels: string[];
+  /** Deep-link to the upgrade flow with context (model, key, source). */
+  upgradeUrl: string;
+  /** Public docs page explaining the model-tier policy. */
+  docs: string;
+}
+
+export type ResolveChatModelResult =
+  | { ok: true; modelId: string; model: LanguageModel | string }
+  | { ok: false; locked: LockedModelError };
+
+const TIER_ORDER: readonly PlanTier[] = ['free', 'basic', 'pro', 'enterprise'] as const;
+
+/**
+ * Resolve a user-picked model against the tenant's plan's per-turn
+ * COGS ceiling. Returns either the model handle ready for streamText
+ * OR a structured 403 envelope.
+ *
+ * Critical security property: the model parameter is server-validated
+ * here. Routes MUST NOT pass the requested model directly to streamText
+ * without going through this gate, otherwise a Free-tier API caller
+ * could call opus by guessing the model ID.
+ *
+ * For auto-routed flows (Slack agent dispatch, no user picker), pass
+ * `defaultModelForCap(plan.maxCostPerTurnMicro)` as the modelId — the
+ * helper resolves to the cheapest allowed model for the tier.
+ */
+export function resolveChatModel(
+  modelId: string,
+  plan: PlanConfig,
+  options: { keyId?: string; source?: 'web' | 'api' | 'slack' | 'whatsapp' } = {}
+): ResolveChatModelResult {
+  if (!isModelAllowedByCap(modelId, plan.maxCostPerTurnMicro)) {
+    const cogs = cogsForModel(modelId);
+    const cogsValue = cogs?.cogsPerTurnMicro ?? null;
+    const requiredTier =
+      TIER_ORDER.find(t => {
+        if (t === plan.tier) return false;
+        const cap = PLANS[t]?.maxCostPerTurnMicro;
+        if (cap === null || cap === undefined) return true; // unbounded
+        if (cogsValue === null) return false;
+        return cogsValue <= cap;
+      }) ?? ('enterprise' as const);
+
+    const upgradeQS = new URLSearchParams({
+      upgrade: requiredTier,
+      from: options.source ?? 'web',
+      model: modelId,
+      ...(options.keyId ? { keyId: options.keyId } : {}),
+    });
+
+    return {
+      ok: false,
+      locked: {
+        error: 'model_locked',
+        code: 'BILLING_MODEL_LOCKED',
+        message: `Model '${modelId}' requires ${requiredTier} tier or higher.`,
+        requestedModel: modelId,
+        currentTier: plan.tier,
+        requiredTier,
+        allowedModels: allowedModelsForCap(plan.maxCostPerTurnMicro),
+        upgradeUrl: `/dashboard/settings/billing?${upgradeQS.toString()}`,
+        docs: 'https://docs.sendero.travel/docs/pricing#model-tiers',
+      },
+    };
+  }
+
+  // Allowed — resolve the model handle. Gateway path returns the
+  // string form so the AI SDK auto-routes; direct path constructs
+  // the provider-specific model handle via `directModelFromString`.
+  if (gatewayConfigured()) {
+    return { ok: true, modelId, model: modelId };
+  }
+  const direct = directModelFromString(modelId);
+  if (!direct) {
+    // No gateway, no direct credentials, but model is technically
+    // allowed by the tier cap. Fall back to tier default so Slack
+    // dispatch still works rather than 503ing the whole turn.
+    const fallbackId = defaultModelForCap(plan.maxCostPerTurnMicro);
+    const fallback = directModelFromString(fallbackId);
+    if (!fallback) {
+      // Truly nothing available — caller should 503.
+      return {
+        ok: false,
+        locked: {
+          error: 'model_locked',
+          code: 'BILLING_MODEL_LOCKED',
+          message: `No model handle available for '${modelId}'; check provider credentials.`,
+          requestedModel: modelId,
+          currentTier: plan.tier,
+          requiredTier: plan.tier,
+          allowedModels: allowedModelsForCap(plan.maxCostPerTurnMicro),
+          upgradeUrl: `/dashboard/settings/billing`,
+          docs: 'https://docs.sendero.travel/docs/pricing#model-tiers',
+        },
+      };
+    }
+    return { ok: true, modelId: fallbackId, model: fallback };
+  }
+  return { ok: true, modelId, model: direct };
 }
 
 export function directModelFromString(direct: string): LanguageModel | null {

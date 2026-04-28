@@ -1,0 +1,23 @@
+{
+  "name": "@sendero/bu",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bufi (Bu) integration constants — brand palette, copy, and integration metadata. Centralized here so every surface that touches the Bufi card / hand-off / payouts pulls from one source. The Bufi network is a partner integration; we keep its identity isolated to one package so it stays cleanly removable.",
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./brand": "./src/brand.ts",
+    "./integration": "./src/integration.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

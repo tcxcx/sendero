@@ -38,11 +38,19 @@ export type VerifyResult =
   | { kind: 'consumed' }
   | { kind: 'wrong_booking' };
 
+/**
+ * Tokens are 32 random bytes rendered as hex — exactly 64 chars,
+ * lowercase. Anything else is a typo or probe; reject before paying
+ * the DB roundtrip. Format-check is also a cheap defense against
+ * casual brute-force probing.
+ */
+const PAY_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
+
 export async function verifyBookingPayToken(args: {
   token: string;
   bookingId: string;
 }): Promise<VerifyResult> {
-  if (!args.token || args.token.length < 32) return { kind: 'invalid' };
+  if (!args.token || !PAY_TOKEN_PATTERN.test(args.token)) return { kind: 'invalid' };
 
   const row = await prisma.bookingPayToken.findUnique({
     where: { token: args.token },

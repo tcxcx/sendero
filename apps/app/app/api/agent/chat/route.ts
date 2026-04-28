@@ -29,6 +29,16 @@ import { auth } from '@clerk/nextjs/server';
 import { createVertex } from '@ai-sdk/google-vertex';
 import { type NextRequest, NextResponse } from 'next/server';
 
+import {
+  agentSessionId,
+  aiTelemetryConfig,
+  evaluateTrace,
+  flushLangfuse,
+  getActiveTraceId,
+  scoreLatency,
+  scoreToolSuccess,
+} from '@sendero/langfuse';
+
 import { prisma } from '@sendero/database';
 
 import {
@@ -39,10 +49,10 @@ import {
   isDuplicateKeyError,
   type ModelTier,
   renderWorkflowsBlock,
-  SENDERO_SOUL,
 } from '@sendero/agent';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
 import { preflight } from '@sendero/billing/meter';
+import { resolvePlan } from '@sendero/billing/plans';
 import type { MeterStatus } from '@sendero/database';
 import { getLocaleSlice } from '@sendero/locale';
 import { filterPublicTools, toolList } from '@sendero/tools';
@@ -57,7 +67,6 @@ import {
   extractBearerForSigning,
   loadTrip,
   makeCapStore,
-  makeMeterStore,
   makeSessionStore,
   requestLocale,
   resolveDirectModel,
@@ -65,28 +74,31 @@ import {
   resolveSegment,
   resolveTenantPlan,
 } from '@/lib/agent-auth';
+import { makeCreditAwareMeterStore } from '@/lib/credit-store';
 import { detectAttachmentsHint } from '@/lib/agent-attachments-hint';
+import {
+  chatPricingBreakdown,
+  chatTurnPriceMicroUsdc,
+  inferModelId,
+  type ChatUsage,
+} from '@/lib/chat-pricing';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
+import { provisionClerkUserId } from '@/lib/user-provisioning';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const CHAT_PERSONA = `${SENDERO_SOUL}
-
-## Routing rules
-- Corporate buyers saying "fund a trip", "give my employee a budget", or "prefund this contractor"
-  -> sendero.guest_prefund.
-- Agencies saying "set up a cohort", "fund these 50 people" -> sendero.agency_cohort.
-- Individual traveler booking their own flight -> sendero.book_flight.
-- A group planning together -> sendero.group_trip.
-- Cancel + refund -> sendero.refund.
-- Only call tools directly when none of the canonical workflows fits.
-`;
+// Persona resolution moved to apps/app/lib/agent-persona.ts so the same
+// Langfuse-managed `sendero-soul` + per-surface routing rules feed every
+// surface. The fallback strings inside that helper mirror the original
+// CHAT_PERSONA verbatim — Langfuse Prompt Management is opt-in via
+// LANGFUSE_PROMPT_MANAGEMENT=true.
+import { buildAgentPersona } from '@/lib/agent-persona';
 
 const BodySchema = z.object({
   // useChat sends the running history under `messages`. tenantId +
@@ -99,6 +111,21 @@ const BodySchema = z.object({
   tripId: z.string().optional(),
   locale: z.string().optional(),
   turnId: z.string().optional(),
+  /**
+   * Operator-selected gateway model id (e.g. `google/gemini-2.5-flash`).
+   * When set + gateway is configured, the conversational LLM uses this
+   * exact model. Falls back to the standard cascade on miss. Tool-
+   * internal models (OCR, embeddings) ignore this field.
+   */
+  model: z.string().optional(),
+  /**
+   * Public sandbox playground mode. Forces every meter event from this
+   * turn to status='sandbox' regardless of plan tier or env, and
+   * activates per-user + per-IP rate limiting. Only honored on
+   * Clerk-session-authed callers (the public /playground UI); API key
+   * callers can already get sandbox routing via their key type.
+   */
+  playground: z.boolean().default(false),
 });
 
 export async function POST(req: NextRequest) {
@@ -127,12 +154,23 @@ export async function POST(req: NextRequest) {
           { status: 404 }
         );
       }
-      const u = await prisma.user.findUnique({
-        where: { clerkUserId: a.userId },
-        select: { id: true },
-      });
+      // Auto-provision the User row inline if the Clerk webhook hasn't
+      // landed yet. Without this, brand-new sign-ups blow up on first
+      // turn with P2003 (MeterEvent.userId FK) because the old fallback
+      // smuggled a Clerk-format id into a column FK'd to User.id.
+      const userId = await provisionClerkUserId(a.userId);
+      if (!userId) {
+        return NextResponse.json(
+          {
+            error: 'user_not_provisioned',
+            message:
+              'Your account is still finishing setup. Try again in a moment — this should clear within seconds.',
+          },
+          { status: 401 }
+        );
+      }
       clerkSession = {
-        userId: u?.id ?? a.userId,
+        userId,
         orgId: a.orgId,
         tenantId: tenant.id,
       };
@@ -207,6 +245,45 @@ export async function POST(req: NextRequest) {
     }
     tenantId = body.tenantId;
     userId = body.userId;
+  }
+
+  // Public-sandbox-playground rate limit. Only honored on Clerk-session
+  // callers — API-key callers and the dispatch shared-secret path are
+  // not subject to playground caps. Per-user (30 turns / 10 min) and
+  // per-IP (60 turns / 10 min) so multi-account abuse from one machine
+  // still hits the wall. Rate limit fails open on Redis outages.
+  const playgroundMode = body.playground === true && Boolean(clerkSession);
+  if (playgroundMode) {
+    const { checkRateLimit, clientIp } = await import('@/lib/rate-limit');
+    const ip = clientIp(req.headers);
+    const [userLimit, ipLimit] = await Promise.all([
+      checkRateLimit({
+        bucket: 'playground-chat-user',
+        key: userId,
+        windowS: 600,
+        limit: 30,
+      }),
+      checkRateLimit({
+        bucket: 'playground-chat-ip',
+        key: ip,
+        windowS: 600,
+        limit: 60,
+      }),
+    ]);
+    const blocked = !userLimit.ok || !ipLimit.ok;
+    if (blocked) {
+      const retryAfter = Math.max(userLimit.retryAfterS, ipLimit.retryAfterS);
+      return NextResponse.json(
+        {
+          error: 'rate_limited',
+          message:
+            'Playground rate limit reached. The cap is 30 turns / 10 min per account, or 60 turns / 10 min per network. Wait or sign in with a paid workspace to drop the limit.',
+          scope: !userLimit.ok ? 'user' : 'ip',
+          retryAfterS: retryAfter,
+        },
+        { status: 429, headers: { 'retry-after': String(retryAfter) } }
+      );
+    }
   }
 
   const isServiceAccount = Boolean(apiKey);
@@ -330,7 +407,14 @@ export async function POST(req: NextRequest) {
   const vertexProjectEnv = process.env.GOOGLE_CLOUD_PROJECT;
   const vertexLocationEnv = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
   let modelHandle: ReturnType<typeof resolveModel> = null;
-  if (vertexProjectEnv) {
+  // Operator-picked model wins when the gateway is up — gateway slug
+  // strings flow straight into streamText (AI SDK auto-routes via
+  // AI_GATEWAY_API_KEY). Direct Vertex / direct providers stay as the
+  // server-default fallback below if the operator didn't pick one.
+  if (body.model && process.env.AI_GATEWAY_API_KEY) {
+    modelHandle = body.model;
+  }
+  if (!modelHandle && vertexProjectEnv) {
     let googleAuthOptions: Parameters<typeof createVertex>[0]['googleAuthOptions'];
     const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
     if (saJson) {
@@ -371,8 +455,9 @@ export async function POST(req: NextRequest) {
   // client carries it on every turn.
   const localeSlice = getLocaleSlice(locale);
   const trip = body.tripId ? await loadTrip({ tripId: body.tripId, tenantId }) : null;
+  const persona = await buildAgentPersona('chat', locale);
   const systemPrompt = buildSystemPrompt({
-    persona: CHAT_PERSONA,
+    persona,
     locale,
     localeSlice,
     channelHint:
@@ -406,9 +491,19 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const meterStore = makeMeterStore(
-    apiKey?.effectiveKeyType === 'sandbox' ? { forceStatus: 'sandbox' } : undefined
-  );
+  // Credit-aware meter store — routes every metered action through
+  // `deductAndRecord()` so SaaS-included credits decrement off
+  // `Subscription.meterBalanceMicro` before falling through to
+  // status='paid'. Tenants with no grant (free tier) get the same
+  // 'paid' write as before, so this swap is backward-compatible.
+  const meterStore = makeCreditAwareMeterStore({
+    plan: resolvePlan(planTier),
+    // Playground mode (Clerk-authed turn from /playground) forces
+    // sandbox routing, so paid users can experiment without burning
+    // their cap and free-tier users can demo without us settling.
+    sandbox: apiKey?.effectiveKeyType === 'sandbox' || playgroundMode,
+    segment,
+  });
   const sessionStore = makeSessionStore();
 
   // useChat sends UIMessages; convertToModelMessages narrows them to
@@ -416,13 +511,64 @@ export async function POST(req: NextRequest) {
   const modelMessages = await convertToModelMessages(body.messages as UIMessage[]);
   const startedAt = Date.now();
 
+  // Enable thinking on the conversational LLM so AI Elements'
+  // <Reasoning> bubble has parts to render. Only applies when the model
+  // is a gateway slug; direct Vertex / direct Anthropic handles their
+  // own thinking config via the model handle itself when applicable.
+  // Provider options carry both the thinking config (when applicable)
+  // and the prompt-cache hints (anthropic ephemeral cache, gemini
+  // cachedContent breakpoint). Caching is scoped to the system prompt
+  // + tool definitions only — the user's messages are NEVER cached so
+  // there's no cross-tenant leak surface. ~10× input-token COGS
+  // reduction on agentic loops where system + tools dominate.
+  const chatProviderOptions =
+    typeof modelHandle === 'string'
+      ? {
+          google: {
+            thinkingConfig: { thinkingBudget: 4096, includeThoughts: true },
+          },
+          anthropic: {
+            thinking: { type: 'enabled', budgetTokens: 4096 },
+            // Ephemeral cache breakpoint at the system prompt; the AI
+            // SDK rolls it into the system message for Anthropic. The
+            // tool-definition prefix gets cached automatically by the
+            // provider when tools repeat across turns.
+            cacheControl: { type: 'ephemeral' as const },
+          },
+        }
+      : undefined;
+
   const result = streamText({
     model: modelHandle,
     system: systemPrompt,
     messages: modelMessages,
     tools,
-    stopWhen: stepCountIs(6),
+    // Per-turn step ceiling — runaway-loop defense. Bumped to 8 for
+    // the operator chat surface (richer tool flows than dispatch);
+    // the autoplan eng review's #1 critical-gap insurance plus
+    // explicit user request in the credits-cogs locked decisions.
+    stopWhen: stepCountIs(8),
     maxRetries: 2,
+    providerOptions: chatProviderOptions,
+    // Vercel AI Gateway groups runs by metadata in its observability
+    // dashboard. Tagging every call lets us attribute COGS back to
+    // tenant + tier + model — the autoplan DX-review "magical moment"
+    // recommendation. Also lets the gateway dashboard answer
+    // "which Pro tenants are routing to opus most" without a separate
+    // COGS pipeline. Independent from credits — ships value even if
+    // the deduction loop stops.
+    experimental_telemetry: aiTelemetryConfig('sendero-chat', {
+      userId: userId ?? 'anonymous',
+      tenantId,
+      sessionId: agentSessionId(tenantId, channel),
+      surface: 'app-api',
+      trigger: 'user',
+      channel,
+      turnId,
+      planTier,
+      model: typeof modelHandle === 'string' ? modelHandle : 'direct',
+      scope: 'agent-chat',
+    }),
     // The closure captures everything we need to write the meter
     // event + update the session AFTER the last chunk lands. The
     // client has already received its tokens at this point; meter
@@ -435,15 +581,36 @@ export async function POST(req: NextRequest) {
         turnId,
         eventKind: 'chat_reply',
       });
+      // Token-aware turn price: take the larger of the segment-priced
+      // preflight (covers cap-policy minimums + plan-tier discounts via
+      // pricingOverrides) and the actual provider cost from finish.usage.
+      // Plan-tier discount applies to BOTH paths so paid plans get
+      // their advertised cut even when an expensive thinking model
+      // dominates cost.
+      const modelId = inferModelId(modelHandle);
+      const usage = (finish as { usage?: ChatUsage }).usage;
+      const planConfig = resolvePlan(planTier);
+      const discountBps = planConfig.nanopaymentDiscountBps;
+      const tokenAwarePrice = chatTurnPriceMicroUsdc(modelId, usage, discountBps);
+      const turnPrice = pre.priceMicroUsdc > tokenAwarePrice ? pre.priceMicroUsdc : tokenAwarePrice;
+      const breakdown = chatPricingBreakdown(modelId, usage, discountBps);
+
       try {
         await meterStore.create({
           tenantId,
           userId,
           toolName: 'chat_reply',
-          priceMicroUsdc: pre.priceMicroUsdc,
+          priceMicroUsdc: turnPrice,
           status: 'paid' satisfies MeterStatus,
-          note: `channel=${channel} idem=${idempotencyKey} surface=stream`,
-          metadata: { channel, idempotencyKey, turnId, surface: 'agent_chat_stream' },
+          note: `channel=${channel} idem=${idempotencyKey} surface=stream model=${modelId ?? 'unknown'}`,
+          metadata: {
+            channel,
+            idempotencyKey,
+            turnId,
+            surface: 'agent_chat_stream',
+            pricing: breakdown,
+            preflightMicroUsdc: pre.priceMicroUsdc.toString(),
+          },
         });
       } catch (err) {
         if (!isDuplicateKeyError(err)) {
@@ -504,6 +671,33 @@ export async function POST(req: NextRequest) {
           latencyMs,
         },
       });
+
+      // Langfuse scoring + LLM-as-a-judge eval (fire-and-forget).
+      // Read the live OTel trace id from the active span — the AI SDK
+      // call above wrote spans through aiTelemetryConfig, and the
+      // Langfuse trace id IS the OTel trace id. Falls back to turnId
+      // for safety; without the real id, scores would land on phantom
+      // traces. Capture before the fire-and-forget block so the
+      // closure sees a stable value even after onFinish returns.
+      const langfuseTraceId = getActiveTraceId() ?? turnId;
+      void Promise.resolve().then(async () => {
+        const toolResults = (finish.toolCalls ?? []).map(tc => ({
+          toolName: tc.toolName,
+          success: true,
+        }));
+        await scoreLatency(langfuseTraceId, latencyMs);
+        if (toolResults.length > 0) await scoreToolSuccess(langfuseTraceId, toolResults);
+        const lastUser = lastUserText(body.messages as UIMessage[]);
+        if (lastUser && finish.text) {
+          await evaluateTrace({
+            traceId: langfuseTraceId,
+            input: lastUser,
+            output: finish.text,
+          });
+        }
+        await flushLangfuse();
+      });
+
       await flush();
     },
     onError: event => {
@@ -516,6 +710,18 @@ export async function POST(req: NextRequest) {
   return result.toUIMessageStreamResponse({
     headers: {
       'X-Sendero-Surface': 'agent-chat',
+    },
+    // Surface the live Langfuse trace id on the assistant message so
+    // the operator thumbs UI can score the right trace via
+    // POST /api/agent/feedback. The OTel context is active during
+    // streamText execution, so getActiveTraceId() returns the real
+    // span trace id; falls back to turnId if OTel is unavailable.
+    messageMetadata: ({ part }: { part: { type: string } }) => {
+      if (part.type === 'start') {
+        const traceId = getActiveTraceId() ?? turnId;
+        return { senderoTraceId: traceId };
+      }
+      return undefined;
     },
   });
 }
