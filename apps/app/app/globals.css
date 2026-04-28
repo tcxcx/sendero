@@ -2923,3 +2923,39 @@ hr.rule {
     animation: none;
   }
 }
+
+/* ─── corner-bracket hover ─────────────────────────────────────────
+   Four L-shaped ink tick marks appear at the element's bounding-box
+   corners on hover. Works on any positioned element; use a wrapper
+   div for elements with overflow:hidden + large border-radius.
+
+   The eight background-image gradients draw two 1.5×7px rectangles
+   at each corner — one horizontal, one vertical — forming the L.
+   They sit 3px outside the element's edge so they never occlude
+   content. Transition: 120ms so the appear/disappear feels instant
+   but not jarring.
+   ─────────────────────────────────────────────────────────────────── */
+.sd-corner-hover {
+  position: relative;
+}
+.sd-corner-hover::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--ink), var(--ink)) top    left  / 7px 1.5px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top    left  / 1.5px 7px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top    right / 7px 1.5px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) top    right / 1.5px 7px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom left  / 7px 1.5px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom left  / 1.5px 7px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom right / 7px 1.5px no-repeat,
+    linear-gradient(var(--ink), var(--ink)) bottom right / 1.5px 7px no-repeat;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 1;
+}
+.sd-corner-hover:hover::before {
+  opacity: 1;
+}
