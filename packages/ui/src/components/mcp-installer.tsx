@@ -74,7 +74,42 @@ const DEFAULT_SKILLS: ReadonlyArray<McpInstallerSkill> = [
     slug: 'travel-booking',
     name: 'Travel booking',
     trigger:
-      'Search inventory, place holds, ticket bookings, settle on-chain. The skill that ships with v0.1.0.',
+      'Search inventory, place holds, ticket bookings, settle on-chain. The default skill — covers the happy-path agent surface.',
+  },
+  {
+    slug: 'settlement',
+    name: 'Settlement',
+    trigger:
+      'Confirm bookings + settle on-chain in USDC. Confirm-before-settle pattern, take-rate handling, Arcscan audit URL surfacing.',
+  },
+  {
+    slug: 'reconciliation',
+    name: 'Reconciliation',
+    trigger: 'Match on-chain settlements with workspace bookings. Anomaly flagging + period close.',
+  },
+  {
+    slug: 'cap-management',
+    name: 'Cap management',
+    trigger:
+      'Read workspace spend caps before settling. Refuse CAP_EXCEEDED gracefully, propose tier-upgrade with concrete math.',
+  },
+  {
+    slug: 'audit-export',
+    name: 'Audit & export',
+    trigger:
+      'Trip summary PDFs, audit log CSVs, route maps, receipt zips. Pick the right format for the audience.',
+  },
+  {
+    slug: 'cross-channel',
+    name: 'Cross-channel',
+    trigger:
+      'Reason across WhatsApp, Slack, MCP, web. One Trip.events ledger; approvals route to the operator channel.',
+  },
+  {
+    slug: 'agent-identity',
+    name: 'Agent identity (ERC-8004)',
+    trigger:
+      'Register agents and identities on-chain. Pin verifiable agent ids to settlements for auditors.',
   },
 ];
 
@@ -122,7 +157,7 @@ export function McpInstaller({
         className="flex w-full border-b"
         style={{ borderColor: 'color-mix(in oklab, var(--ink, #1f2a44) 18%, transparent)' }}
       >
-        {TABS.map((t) => {
+        {TABS.map(t => {
           const active = t.value === tab;
           return (
             <button
@@ -163,7 +198,8 @@ export function McpInstaller({
         {tab === 'mcp' ? <McpPanel mcpUrl={mcpUrl} /> : null}
       </div>
 
-      <footer className="flex flex-col gap-3 border-t pt-4"
+      <footer
+        className="flex flex-col gap-3 border-t pt-4"
         style={{ borderColor: 'color-mix(in oklab, var(--ink, #1f2a44) 12%, transparent)' }}
       >
         <div className="flex flex-col gap-1">
@@ -199,7 +235,8 @@ function CliPanel({ mcpUrl }: { mcpUrl: string }) {
     <div className="flex flex-col gap-4">
       <p className="text-sm text-[color-mix(in_oklab,var(--ink,#1f2a44)_70%,transparent)]">
         The fastest path. One <code className="font-mono text-xs">npx</code> command, no global
-        install. Auth runs in your browser and writes <code className="font-mono text-xs">~/.sendero/key</code> with chmod 600.
+        install. Auth runs in your browser and writes{' '}
+        <code className="font-mono text-xs">~/.sendero/key</code> with chmod 600.
       </p>
       <CodeBlock
         label="1 · Mint and save an API key"
@@ -226,11 +263,11 @@ function CliPanel({ mcpUrl }: { mcpUrl: string }) {
           Endpoint override (advanced)
         </summary>
         <p className="mt-2">
-          Set <code className="font-mono">SENDERO_API_URL</code> to a non-prod base (e.g.,
-          staging). The CLI reuses it for both <code className="font-mono">/api/openapi.json</code>
-          {' '}and <code className="font-mono">{mcpUrl.replace(/^https?:\/\/[^/]+/, '')}</code>.
-          Set <code className="font-mono">SENDERO_API_KEY={apiKeyHint}</code> to bypass the saved
-          file (useful in CI).
+          Set <code className="font-mono">SENDERO_API_URL</code> to a non-prod base (e.g., staging).
+          The CLI reuses it for both <code className="font-mono">/api/openapi.json</code> and{' '}
+          <code className="font-mono">{mcpUrl.replace(/^https?:\/\/[^/]+/, '')}</code>. Set{' '}
+          <code className="font-mono">SENDERO_API_KEY={apiKeyHint}</code> to bypass the saved file
+          (useful in CI).
         </p>
       </details>
     </div>
@@ -265,8 +302,8 @@ claude --plugin-dir ./sendero/apps/claude-code-plugin`}
       />
       <p className="text-xs text-[color-mix(in_oklab,var(--ink,#1f2a44)_60%,transparent)]">
         Verify with <code className="font-mono text-xs">/help</code> — the Sendero MCP server and
-        the <code className="font-mono text-xs">/sendero:travel-booking</code> skill should both
-        be listed.
+        the <code className="font-mono text-xs">/sendero:travel-booking</code> skill should both be
+        listed.
       </p>
     </div>
   );
@@ -281,7 +318,7 @@ function SkillsPanel({ skills }: { skills: ReadonlyArray<McpInstallerSkill> }) {
         language.
       </p>
       <div className="flex flex-col gap-3">
-        {skills.map((skill) => (
+        {skills.map(skill => (
           <div
             key={skill.slug}
             className="flex flex-col gap-1.5 border p-4"
@@ -303,11 +340,10 @@ function SkillsPanel({ skills }: { skills: ReadonlyArray<McpInstallerSkill> }) {
             </p>
           </div>
         ))}
-        {skills.length < 4 ? (
-          <p className="text-[11px] uppercase tracking-[0.14em] text-[color-mix(in_oklab,var(--ink,#1f2a44)_55%,transparent)]">
-            More skills shipping in v0.2 (settlement, reconciliation, cap-management, audit-export).
-          </p>
-        ) : null}
+        <p className="text-[11px] uppercase tracking-[0.14em] text-[color-mix(in_oklab,var(--ink,#1f2a44)_55%,transparent)]">
+          Skills auto-load when the plugin is installed. The list will be tuned during the mainnet
+          cutover and locked in v1.0.
+        </p>
       </div>
     </div>
   );

@@ -465,3 +465,72 @@ When `LANGFUSE_PROMPT_MANAGEMENT=false` the helper returns the hardcoded fallbac
 | Smoke a prompt change against goldens | `bun langfuse:regression --scenario <name>` |
 | Read the active trace inside a tool | `getActiveTraceId()` from `@sendero/langfuse` (returns undefined when no span) |
 | Read prompts from the Anthropic skills system | the `/langfuse` skill — documentation-first, CLI-native |
+
+## Mainnet cutover gating — distribution surfaces
+
+The four agent-distribution surfaces — Claude Code plugin, skills,
+MCP server, and `@sendero/cli` — are **built and committed but
+intentionally not published to public registries** until the day Arc
+mainnet ships. The reasons:
+
+1. **Surface area changes during cutover.** Skill copy will get tuned
+   based on real agent regression scores from Langfuse. The CLI's
+   `tools call` shape will tighten when `effectiveKeyType` flips off
+   the testnet-beta downgrade. Publishing now would burn a version
+   number on every tweak.
+
+2. **Plan-tier limits are not final.** Free $100 / Basic $2,000 / Pro
+   $20,000 caps are placeholder values for testnet beta. Mainnet GA
+   may move them; we don't want a published CLI whose error messages
+   reference numbers that no longer match reality.
+
+3. **Marketplace listings are signals.** A `/plugin install
+   sendero@sendero` that lands during testnet beta sends the wrong
+   signal — buyers assume mainnet means production, not "settlements
+   land in test USDC." Hold the marketplace push for the mainnet
+   announcement.
+
+### What stays committed but unpublished today
+
+- `packages/cli/` — runs locally via `bun run dev`. Source is final
+  enough for development; do **not** `npm publish` until the mainnet
+  flag flips.
+- `apps/claude-code-plugin/` — installable via `claude --plugin-dir
+  ./apps/claude-code-plugin`. Do **not** open a marketplace listing
+  yet.
+- `apps/claude-code-plugin/skills/` — seven skills authored
+  (travel-booking, settlement, reconciliation, cap-management,
+  audit-export, cross-channel, agent-identity). Copy is reasonable
+  v0.1 but expects regression-suite tuning before lock-in.
+- `apps/mcpb/` — the .mcpb bundle DOES ship today via GH Releases
+  (Claude Desktop already has a prod-grade install path). Treat as
+  the exception — it's a thin stdio→HTTP proxy that won't change
+  shape during mainnet cutover.
+
+### The cutover playbook (when Arc mainnet flips)
+
+1. **CLI publish.**
+   ```bash
+   cd packages/cli && bun run build
+   npm publish --access public
+   ```
+2. **Plugin marketplace.**
+   - Add `marketplace.json` at repo root pointing at `apps/claude-code-plugin/`.
+   - Push a tag (`plugin-v1.0.0`) → GH Actions release workflow
+     packages the zip and uploads it to the GH Release.
+   - Submit to the Anthropic plugin directory.
+3. **MCP discovery.** Already live at `/api/mcp`. Promote `llms.txt`
+   so directory crawlers see the production endpoint.
+4. **Skills lock.** Run `bun langfuse:regression --scenario <each>`
+   against the Pro-tier prompts; iterate copy until pass rate ≥ 90%.
+   Then bump the plugin version to v1.0.0.
+5. **Documentation freeze.** `apps/docs/content/docs/cli.mdx`,
+   `skills.mdx`, and `installer.mdx` (currently absent) get authored
+   in the cutover sprint and merged together.
+
+Until that flag flips: every install instruction should say "clone
+the repo + run locally" or "load via `--plugin-dir`," NEVER `npx
+@sendero/cli@latest` or `/plugin install sendero@sendero`. Marketing
+copy that promises the npm/marketplace flow is allowed (it's the
+public roadmap), but install snippets users would actually run today
+must use the source-loaded path.
