@@ -104,6 +104,16 @@ export default async function DashboardPage() {
                 />
               );
             }
+            if (s.href === '/dashboard/integrations/mcp') {
+              return (
+                <ChannelPill
+                  key={s.href}
+                  href={s.href}
+                  brand="mcp"
+                  description={s.description}
+                />
+              );
+            }
             const Icon = NEUTRAL_SHORTCUT_ICONS[s.href] ?? Sparkles;
             return (
               <Tooltip key={s.href}>
@@ -243,16 +253,27 @@ function ChannelPill({
   description,
 }: {
   href: string;
-  brand: 'whatsapp' | 'slack';
-  connected: boolean;
+  brand: 'whatsapp' | 'slack' | 'mcp';
+  /** Only meaningful for whatsapp / slack — drives the "Connect" vs "Manage" label. */
+  connected?: boolean;
   description: string;
 }) {
   const isWa = brand === 'whatsapp';
-  const label = (connected ? 'Manage ' : 'Connect ') + (isWa ? 'WhatsApp' : 'Slack');
-  const logoSrc = isWa ? '/brand/app-store/whatsapp.svg' : '/brand/app-store/slack.svg';
+  const isSlack = brand === 'slack';
+  const isMcp = brand === 'mcp';
+  const label = isMcp
+    ? 'MCP & API keys'
+    : (connected ? 'Manage ' : 'Connect ') + (isWa ? 'WhatsApp' : 'Slack');
+  const logoSrc = isWa
+    ? '/brand/app-store/whatsapp.svg'
+    : isSlack
+      ? '/brand/app-store/slack.svg'
+      : '/brand/app-store/mcp.svg';
   const hoverChrome = isWa
     ? 'hover:border-[color:#25D366] hover:bg-[color:#E6FFDA]'
-    : 'hover:border-[color:#611F69] hover:bg-[color:#F3E7F5]';
+    : isSlack
+      ? 'hover:border-[color:#611F69] hover:bg-[color:#F3E7F5]'
+      : 'hover:border-[color:var(--ink)] hover:bg-[color:var(--tint-vermillion-soft)]';
 
   return (
     <Tooltip>
