@@ -76,6 +76,12 @@ interface MetaInboxProps {
    * in unscoped console mode.
    */
   pendingBooking?: { id: string; totalUsd: string } | null;
+  /** Workspace-mode header KPIs. Ignored in scoped (trip) mode. */
+  kpis?: {
+    settled30dCount: number;
+    settled30dFare: string | null;
+    avgResponseLabel: string | null;
+  };
   /**
    * Active composer mode. In unscoped (no tripId) mode this is forced
    * to 'internal'. In scoped mode the operator can flip via the footer
@@ -98,6 +104,7 @@ export function MetaInbox({
   traveler,
   holdExpires,
   pendingBooking,
+  kpis,
   composerMode,
   onComposerModeChange,
   onSubmit,
@@ -207,7 +214,13 @@ export function MetaInbox({
             }
           />
         ) : (
-          <ConsoleHero trips={trips} onCommand={onCommand} />
+          <ConsoleHero
+            trips={trips}
+            settled30dCount={kpis?.settled30dCount ?? null}
+            settled30dFare={kpis?.settled30dFare ?? null}
+            avgResponseLabel={kpis?.avgResponseLabel ?? null}
+            onCommand={onCommand}
+          />
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 0, flex: 1, minHeight: 0 }}>

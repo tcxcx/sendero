@@ -16,6 +16,20 @@ import type { TripRowData, TripState } from '@/components/console/trip-rail';
 import { stringFromJson } from '@/lib/format';
 import { eventsToUnifiedMessages, type UnifiedMessage } from '@/lib/unified-message';
 
+export interface ConsoleKpis {
+  /** Confirmed-or-ticketed Booking count over the last 30d. */
+  settled30dCount: number;
+  /** Sum of Booking.totalUsd over the same window, formatted as USD ("$74,820"). */
+  settled30dFare: string | null;
+  /**
+   * Median wall-clock gap between an inbound traveler message and the
+   * next outbound agent reply, scanned across Trip.events for the
+   * tenant's 12 most-recently-touched trips. Null when no pairs land
+   * in the window — the hero shows "—" rather than a fake number.
+   */
+  avgResponseLabel: string | null;
+}
+
 export interface ConsoleData {
   trips: TripRowData[];
   conversation: UnifiedMessage[];
@@ -27,6 +41,8 @@ export interface ConsoleData {
    * the inbox is unscoped.
    */
   pendingBooking: { id: string; totalUsd: string } | null;
+  /** Workspace-mode header KPIs. Computed once per page load. */
+  kpis: ConsoleKpis;
 }
 
 export async function loadConsoleData(
@@ -143,7 +159,80 @@ export async function loadConsoleData(
     ];
   }
 
-  return { trips, conversation, traveler, holdExpires, pendingBooking };
+  const kpis = await computeKpis(tenantId, recentTrips);
+
+  return { trips, conversation, traveler, holdExpires, pendingBooking, kpis };
+}
+
+async function computeKpis(
+  tenantId: string,
+  recentTrips: Array<{ events: Prisma.JsonValue }>
+): Promise<ConsoleKpis> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [count, sum] = await Promise.all([
+    prisma.booking.count({
+      where: {
+        tenantId,
+        status: { in: ['confirmed', 'ticketed'] },
+        bookedAt: { gte: since },
+      },
+    }),
+    prisma.booking.aggregate({
+      where: {
+        tenantId,
+        status: { in: ['confirmed', 'ticketed'] },
+        bookedAt: { gte: since },
+      },
+      _sum: { totalUsd: true },
+    }),
+  ]);
+  const fareNumber = Number(sum._sum.totalUsd?.toString() ?? '0');
+  const settled30dFare = count > 0 ? formatUsdCompact(fareNumber) : null;
+
+  // Median inbound→outbound latency across the recent trips' events.
+  // Cheaper than aggregating across the whole tenant; this is the
+  // operator's working set anyway.
+  const gapsMs: number[] = [];
+  for (const t of recentTrips) {
+    if (!Array.isArray(t.events)) continue;
+    let lastInboundAt: number | null = null;
+    for (const raw of t.events) {
+      if (!raw || typeof raw !== 'object') continue;
+      const evt = raw as Record<string, unknown>;
+      const direction = evt.direction;
+      const at = typeof evt.createdAt === 'string' ? Date.parse(evt.createdAt) : Number.NaN;
+      if (Number.isNaN(at)) continue;
+      if (direction === 'inbound') {
+        lastInboundAt = at;
+      } else if (direction === 'outbound' && lastInboundAt !== null) {
+        const gap = at - lastInboundAt;
+        if (gap > 0 && gap < 60 * 60 * 1000) gapsMs.push(gap);
+        lastInboundAt = null;
+      }
+    }
+  }
+  const avgResponseLabel = gapsMs.length > 0 ? formatLatency(median(gapsMs)) : null;
+
+  return { settled30dCount: count, settled30dFare, avgResponseLabel };
+}
+
+function formatUsdCompact(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '$0';
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 10_000) return `$${Math.round(n / 1_000)}k`;
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+}
+
+function formatLatency(ms: number): string {
+  if (ms < 1_000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1_000).toFixed(1)}s`;
+  return `${Math.round(ms / 60_000)}m`;
+}
+
+function median(xs: number[]): number {
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
 // ── helpers ─────────────────────────────────────────────────────
