@@ -20,6 +20,7 @@
 
 import { prisma } from '@sendero/database';
 
+import { InboxSectionCard } from '@/components/channels/inbox-section-card';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
@@ -66,57 +67,72 @@ export default async function SlackInboxPage() {
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-screen-xl space-y-8 px-4 py-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Slack inbox audit</h1>
-        <p className="text-sm text-muted-foreground">
-          Every agent turn we ran for a Slack message and the install state behind it. Use this
-          when a customer reports a missing reply or a workspace that stopped responding.
+    <main
+      style={{
+        padding: '0 20px 20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 18,
+        flex: 1,
+        minHeight: 0,
+      }}
+    >
+      <header style={{ paddingTop: 4 }}>
+        <h1 className="t-h1">Slack inbox audit</h1>
+        <p className="t-body ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
+          Every agent turn we ran for a Slack message and the install state behind it. Use this when
+          a customer reports a missing reply or a workspace that stopped responding.
         </p>
       </header>
 
-      <section aria-labelledby="turns-heading" className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 id="turns-heading" className="text-lg font-medium">
-            Agent turns
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Last {Math.min(agentTurns.length, PAGE_SIZE)} of newest-first · derived from MeterEvent
-          </p>
-        </div>
+      <InboxSectionCard
+        id="turns-heading"
+        title="Agent turns"
+        description="Newest-first · derived from MeterEvent"
+        meta={`Last ${Math.min(agentTurns.length, PAGE_SIZE)}`}
+      >
         {agentTurns.length === 0 ? (
           <EmptyState
             title="No Slack agent turns logged yet"
             body="Once a workspace member messages the bot in a connected channel, the meter row lands here."
           />
         ) : (
-          <div className="overflow-x-auto rounded-md border border-border">
+          <TableWrap>
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
+              <thead>
+                <tr style={tableHeadRowStyle}>
                   <Th>Ran</Th>
                   <Th>Tool</Th>
                   <Th>Status</Th>
-                  <Th>Price (µUSDC)</Th>
+                  <Th align="right">µUSDC</Th>
+                  <Th align="right">USDC</Th>
                   <Th>Turn</Th>
                   <Th>User</Th>
                   <Th>Note</Th>
                 </tr>
               </thead>
               <tbody>
-                {agentTurns.map(t => {
-                  const meta = (t.metadata && typeof t.metadata === 'object'
-                    ? (t.metadata as Record<string, unknown>)
-                    : {}) as Record<string, unknown>;
+                {agentTurns.map((t, i) => {
+                  const meta = (
+                    t.metadata && typeof t.metadata === 'object'
+                      ? (t.metadata as Record<string, unknown>)
+                      : {}
+                  ) as Record<string, unknown>;
                   const turnId = typeof meta.turnId === 'string' ? meta.turnId : '—';
+                  const last = i === agentTurns.length - 1;
                   return (
-                    <tr key={t.id} className="border-t border-border">
+                    <tr key={t.id} style={tableRowStyle(last)}>
                       <Td title={t.at.toISOString()}>{formatRelative(t.at)}</Td>
                       <Td className="font-mono">{t.toolName}</Td>
                       <Td>
                         <StatusBadge status={t.status} />
                       </Td>
-                      <Td className="font-mono">{t.priceMicroUsdc.toString()}</Td>
+                      <Td className="font-mono" align="right">
+                        {t.priceMicroUsdc.toString()}
+                      </Td>
+                      <Td className="font-mono" align="right">
+                        {formatUsdc(t.priceMicroUsdc)}
+                      </Td>
                       <Td className="font-mono text-[11px]" title={turnId}>
                         {turnId.slice(0, 12)}
                       </Td>
@@ -125,36 +141,33 @@ export default async function SlackInboxPage() {
                         className="max-w-[260px] truncate text-[11px]"
                         title={t.note ?? undefined}
                       >
-                        {t.note ?? <span className="text-muted-foreground">—</span>}
+                        {t.note ?? <span className="ink-70">—</span>}
                       </Td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         )}
-      </section>
+      </InboxSectionCard>
 
-      <section aria-labelledby="installs-heading" className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 id="installs-heading" className="text-lg font-medium">
-            Connected installs
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Last {Math.min(installs.length, PAGE_SIZE)} · revoked rows kept for audit
-          </p>
-        </div>
+      <InboxSectionCard
+        id="installs-heading"
+        title="Connected installs"
+        description="Revoked rows kept for audit"
+        meta={`Last ${Math.min(installs.length, PAGE_SIZE)}`}
+      >
         {installs.length === 0 ? (
           <EmptyState
             title="No installs on this tenant yet"
             body="Connect a Slack workspace from the Workspace tab. Each install lands as a row here, even after revocation."
           />
         ) : (
-          <div className="overflow-x-auto rounded-md border border-border">
+          <TableWrap>
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
+              <thead>
+                <tr style={tableHeadRowStyle}>
                   <Th>Workspace</Th>
                   <Th>Team ID</Th>
                   <Th>Bot user</Th>
@@ -164,59 +177,93 @@ export default async function SlackInboxPage() {
                 </tr>
               </thead>
               <tbody>
-                {installs.map(i => (
-                  <tr key={i.id} className="border-t border-border">
-                    <Td>
-                      <div className="space-y-0.5">
-                        <div>{i.teamName}</div>
-                        {i.enterpriseName ? (
-                          <div className="text-[10px] text-muted-foreground">
-                            Grid · {i.enterpriseName}
-                          </div>
-                        ) : null}
-                      </div>
-                    </Td>
-                    <Td className="font-mono text-[11px]">{i.teamId}</Td>
-                    <Td className="font-mono text-[11px]">{i.botUserId}</Td>
-                    <Td>
-                      {i.revokedAt ? (
-                        <Badge tone="fail">revoked</Badge>
-                      ) : (
-                        <Badge tone="ok">active</Badge>
-                      )}
-                    </Td>
-                    <Td title={i.installedAt.toISOString()}>{formatRelative(i.installedAt)}</Td>
-                    <Td className="max-w-[220px] truncate text-[11px]" title={i.scope}>
-                      {i.scope}
-                    </Td>
-                  </tr>
-                ))}
+                {installs.map((i, idx) => {
+                  const last = idx === installs.length - 1;
+                  return (
+                    <tr key={i.id} style={tableRowStyle(last)}>
+                      <Td>
+                        <div className="space-y-0.5">
+                          <div>{i.teamName}</div>
+                          {i.enterpriseName ? (
+                            <div className="text-[10px] ink-70">Grid · {i.enterpriseName}</div>
+                          ) : null}
+                        </div>
+                      </Td>
+                      <Td className="font-mono text-[11px]">{i.teamId}</Td>
+                      <Td className="font-mono text-[11px]">{i.botUserId}</Td>
+                      <Td>
+                        {i.revokedAt ? (
+                          <Badge tone="fail">revoked</Badge>
+                        ) : (
+                          <Badge tone="ok">active</Badge>
+                        )}
+                      </Td>
+                      <Td title={i.installedAt.toISOString()}>{formatRelative(i.installedAt)}</Td>
+                      <Td className="max-w-[220px] truncate text-[11px]" title={i.scope}>
+                        {i.scope}
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         )}
-      </section>
+      </InboxSectionCard>
     </main>
   );
 }
 
 // ─── tiny presentational helpers ─────────────────────────────────────
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 font-medium">{children}</th>;
+const tableHeadRowStyle: React.CSSProperties = {
+  background: 'color-mix(in oklab, var(--ink) 3%, transparent)',
+  borderBottom: '1px solid var(--hairline-color-soft)',
+};
+
+function tableRowStyle(last: boolean): React.CSSProperties {
+  return {
+    borderBottom: last ? 'none' : '1px solid var(--hairline-color-soft)',
+  };
+}
+
+function TableWrap({ children }: { children: React.ReactNode }) {
+  return <div style={{ overflowX: 'auto' }}>{children}</div>;
+}
+
+function Th({ children, align }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+  return (
+    <th
+      className="t-meta"
+      style={{
+        padding: '10px 24px',
+        textAlign: align ?? 'left',
+        fontWeight: 600,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </th>
+  );
 }
 
 function Td({
   children,
   className,
   title,
+  align,
 }: {
   children: React.ReactNode;
   className?: string;
   title?: string;
+  align?: 'left' | 'right';
 }) {
   return (
-    <td className={`px-3 py-2 align-top ${className ?? ''}`} title={title}>
+    <td
+      className={`align-top ${className ?? ''}`}
+      style={{ padding: '12px 24px', textAlign: align ?? 'left' }}
+      title={title}
+    >
       {children}
     </td>
   );
@@ -244,9 +291,21 @@ function StatusBadge({ status }: { status: string }) {
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-md border border-dashed border-border bg-muted/20 px-6 py-8 text-center">
-      <p className="text-sm font-medium">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{body}</p>
+    <div
+      style={{
+        padding: '24px',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+      }}
+    >
+      <span className="t-body" style={{ fontSize: 13, color: 'var(--midnight)' }}>
+        {title}
+      </span>
+      <span className="t-body ink-70" style={{ fontSize: 12 }}>
+        {body}
+      </span>
     </div>
   );
 }
@@ -261,4 +320,19 @@ function formatRelative(at: Date): string {
   if (hr < 24) return `${hr}h ago`;
   const day = Math.round(hr / 24);
   return `${day}d ago`;
+}
+
+/** µUSDC → USDC, formatted with 4–6 fraction digits to keep alignment compact. */
+function formatUsdc(microUsdc: bigint | number | string): string {
+  const m =
+    typeof microUsdc === 'bigint'
+      ? Number(microUsdc)
+      : typeof microUsdc === 'string'
+        ? Number(microUsdc)
+        : microUsdc;
+  if (!Number.isFinite(m)) return '—';
+  return (m / 1_000_000).toLocaleString('en-US', {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 6,
+  });
 }
