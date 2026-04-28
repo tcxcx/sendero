@@ -78,9 +78,7 @@ function cursorInstallUrl(mcpUrl: string): string {
   });
   // btoa is browser-safe; this component is `'use client'`.
   const b64 =
-    typeof btoa === 'function'
-      ? btoa(config)
-      : Buffer.from(config, 'utf-8').toString('base64');
+    typeof btoa === 'function' ? btoa(config) : Buffer.from(config, 'utf-8').toString('base64');
   return `https://cursor.com/install-mcp?name=sendero&config=${encodeURIComponent(b64)}`;
 }
 

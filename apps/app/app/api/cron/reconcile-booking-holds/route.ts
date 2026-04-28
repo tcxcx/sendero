@@ -80,9 +80,9 @@ export async function GET(req: NextRequest) {
 
   const results: SweepResult[] = [];
   for (const c of candidates) {
-    const meta = (c.metadata && typeof c.metadata === 'object'
-      ? (c.metadata as Record<string, unknown>)
-      : {}) as Record<string, unknown>;
+    const meta = (
+      c.metadata && typeof c.metadata === 'object' ? (c.metadata as Record<string, unknown>) : {}
+    ) as Record<string, unknown>;
     const bookingId = typeof meta.bookingId === 'string' ? meta.bookingId : null;
     if (!bookingId) continue;
 
