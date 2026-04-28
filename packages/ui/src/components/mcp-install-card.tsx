@@ -66,6 +66,22 @@ interface SnippetMeta {
 }
 
 /**
+ * Resolve a path on the same origin as the MCP endpoint. Lets the
+ * Claude Desktop tab's "Install .mcpb" button stay absolute when
+ * this card is embedded in a Slack share message or external page.
+ * Falls back to the raw path when mcpUrl is malformed (the consumer
+ * decides whether to absolute-prefix at the call site).
+ */
+function buildDownloadUrl(mcpUrl: string, path: string): string {
+  try {
+    const u = new URL(mcpUrl);
+    return `${u.origin}${path}`;
+  } catch {
+    return path;
+  }
+}
+
+/**
  * Build a Cursor click-to-install URL.
  * Format: https://cursor.com/install-mcp?name=<name>&config=<base64(config)>
  * The config is the inner mcp-server entry (url + headers), NOT the
@@ -112,6 +128,13 @@ export function McpInstallCard({
       lang: 'json',
       rows: 9,
       docsAnchor: 'claude-desktop',
+      // One-click .mcpb install. Bundle is built by `apps/mcpb` and
+      // published to GitHub Releases via the mcpb-release workflow;
+      // /downloads/sendero.mcpb 302s to the latest artifact.
+      // Derived from mcpUrl so the URL stays absolute when this card
+      // renders inside a Slack share message or external embed.
+      installUrl: buildDownloadUrl(mcpUrl, '/downloads/sendero.mcpb'),
+      installLabel: 'Install .mcpb',
       text: `{
   "mcpServers": {
     "sendero": {
