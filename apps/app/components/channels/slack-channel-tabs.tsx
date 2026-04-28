@@ -25,8 +25,12 @@ import { PillTabs } from '@sendero/ui/pill-tabs';
 
 type SlackTabValue = 'workspace' | 'share';
 
+// "Setup" + "Share install URL" inside the page; the section-level nav
+// (apps/app/components/channels/slack-channel-nav.tsx) owns the
+// Workspace ↔ Inbox split and would visually collide with another
+// "Workspace" label here.
 const TABS = [
-  { value: 'workspace' as const, label: 'Workspace' },
+  { value: 'workspace' as const, label: 'Setup' },
   { value: 'share' as const, label: 'Share install URL' },
 ] as const;
 
