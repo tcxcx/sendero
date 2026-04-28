@@ -288,9 +288,9 @@ function ChannelPill({
           <img
             src={logoSrc}
             alt=""
-            width={28}
-            height={28}
-            className="size-7 shrink-0"
+            width={isMcp ? 28 : 32}
+            height={isMcp ? 28 : 32}
+            className={isMcp ? 'size-7 shrink-0' : 'size-8 shrink-0'}
             aria-hidden="true"
           />
         </Link>
