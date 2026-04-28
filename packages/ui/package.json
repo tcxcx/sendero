@@ -48,6 +48,7 @@
     "./sonner": "./src/components/sonner.tsx",
     "./table": "./src/components/table.tsx",
     "./tabs": "./src/components/tabs.tsx",
+    "./segmented-tabs": "./src/components/segmented-tabs.tsx",
     "./textarea": "./src/components/textarea.tsx",
     "./tiptap": "./src/components/tiptap/index.ts",
     "./tooltip": "./src/components/tooltip.tsx"

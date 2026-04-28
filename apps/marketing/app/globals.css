@@ -1,6 +1,17 @@
 @import "tailwindcss";
 @import "@sendero/ui/motion.css";
 
+/*
+  Tailwind v4 content scanning. The default scan picks up
+  `apps/marketing/**` but not `packages/ui/src/**`, so any utility
+  classes used by shared components (e.g. SegmentedTabs) never get
+  CSS generated. `@source` extends the scan into the workspace
+  package so shared components Just Work without us inlining every
+  style. `@source` is *not* an `@import`, so it lives below the
+  imports per the CSS spec (Biome's noInvalidPositionAtImportRule).
+*/
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
+
 :root {
   --bg: #eedcc7;
   --fg: #111111;

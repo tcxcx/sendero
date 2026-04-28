@@ -90,6 +90,45 @@ export default function Page() {
             .agents-route * {
               scrollbar-color: hsl(var(--border)) transparent;
             }
+
+            /*
+              Pixel wordmark selection. The global ::selection in
+              apps/marketing/app/globals.css paints vermillion-on-
+              vermillion (ink bg + parchment text). On the dark
+              terminal that reads as a hot orange block. Scope a
+              wordmark-specific rule that flips to parchment-bg + ink-
+              text — same palette, inverted, intentional.
+            */
+            .agents-route .sendero-wordmark::selection {
+              background: #fdfbf7;
+              color: #111;
+              -webkit-text-fill-color: #111;
+              text-shadow: none;
+            }
+            .agents-route .sendero-wordmark::-moz-selection {
+              background: #fdfbf7;
+              color: #111;
+              text-shadow: none;
+            }
+
+            /*
+              Copy-install hatch pattern. Lives on the route stylesheet
+              instead of inline so the hover-inverted state can reach
+              it via the cascade. .copy-install:hover swaps the
+              background to ink — full-button inversion.
+            */
+            .agents-route .copy-install {
+              background-image: repeating-linear-gradient(
+                -60deg,
+                color-mix(in oklab, hsl(var(--border)) 100%, transparent),
+                color-mix(in oklab, hsl(var(--border)) 100%, transparent) 1px,
+                transparent 1px,
+                transparent 6px
+              );
+            }
+            .agents-route .copy-install:hover {
+              background-image: none;
+            }
           `,
         }}
       />

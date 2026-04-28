@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { DocsPage, DocsBody, DocsDescription, DocsTitle } from 'fumadocs-ui/page';
 import type { Metadata } from 'next';
 import { source } from '@/lib/source';
+import { getMDXComponents } from '@/mdx-components';
 
 export default async function Page(props: { params: Promise<{ slug?: string[] }> }) {
   const params = await props.params;
@@ -15,7 +16,12 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX />
+        {/*
+          getMDXComponents threads in `<Tabs>` + `<Tab>` so MDX pages
+          (e.g., /docs/mcp-integration) can render per-client install
+          tabs without per-file imports.
+        */}
+        <MDX components={getMDXComponents()} />
       </DocsBody>
     </DocsPage>
   );

@@ -111,27 +111,37 @@ function CopyInstall() {
   };
 
   return (
+    /*
+      Hover inversion as a group: the whole button (background +
+      hatched fill + command text + copy icon) flips to ink-on-
+      parchment in one move. `group` + `group-hover:` keeps the
+      children in lockstep so the icon doesn't lag behind the bg.
+    */
     <button
       type="button"
       onClick={copyCommand}
-      className="flex border border-border p-2 px-4 text-sm w-full relative cursor-pointer hover:bg-[color:color-mix(in_oklab,var(--ink)_18%,white)] transition-colors"
-      style={{
-        backgroundImage:
-          'repeating-linear-gradient(-60deg, hsla(var(--border), 0.4), hsla(var(--border), 0.4) 1px, transparent 1px, transparent 6px)',
-      }}
+      className="copy-install group relative flex w-full cursor-pointer items-center border border-border bg-transparent p-2 px-4 text-sm transition-colors duration-150 hover:bg-[var(--fg)] hover:!border-[var(--fg)]"
     >
-      <span className="text-foreground truncate">$ npx @sendero/cli@latest</span>
+      <span className="truncate text-foreground transition-colors duration-150 group-hover:text-[var(--bg)]">
+        $ npx @sendero/cli@latest
+      </span>
 
-      <div className="flex items-center space-x-2 ml-auto">
+      <div className="ml-auto flex items-center space-x-2">
         {copied ? (
-          <Check size={14} className="text-foreground" />
+          <Check
+            size={14}
+            className="text-foreground transition-colors duration-150 group-hover:text-[var(--bg)]"
+          />
         ) : (
-          <Copy size={14} className="text-foreground" />
+          <Copy
+            size={14}
+            className="text-foreground transition-colors duration-150 group-hover:text-[var(--bg)]"
+          />
         )}
       </div>
 
       {copied && (
-        <div className="absolute left-1/2 -translate-x-1/2 -top-7 text-xs text-foreground animate-in fade-in slide-in-from-bottom-1">
+        <div className="absolute left-1/2 -top-7 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-1 text-xs text-foreground">
           Copied
         </div>
       )}
@@ -430,9 +440,18 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
         */}
         <div className="select-none flex items-center h-7 px-3 border-b border-border bg-[#1a1f2e]">
           <div className="flex gap-[6px]">
-            <span className="block w-[10px] h-[10px] rounded-full" style={{ background: '#e16454' }} />
-            <span className="block w-[10px] h-[10px] rounded-full" style={{ background: '#dba94e' }} />
-            <span className="block w-[10px] h-[10px] rounded-full" style={{ background: '#7fa97a' }} />
+            <span
+              className="block w-[10px] h-[10px] rounded-full"
+              style={{ background: '#e16454' }}
+            />
+            <span
+              className="block w-[10px] h-[10px] rounded-full"
+              style={{ background: '#dba94e' }}
+            />
+            <span
+              className="block w-[10px] h-[10px] rounded-full"
+              style={{ background: '#7fa97a' }}
+            />
           </div>
           <span className="flex-1 text-center text-[10px] tracking-wide text-foreground -ml-10">
             sendero — zsh
@@ -464,8 +483,16 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
         >
           <div>{prompt}npx @sendero/cli@latest</div>
 
-          <div className={cn('text-7xl sm:text-8xl text-foreground mt-3', pixelFontClass)}>
-            sendero
+          {/*
+            Pixel wordmark — capital S to mirror the brand mark, with
+            a custom `::selection` decorator so highlighting the
+            wordmark on the dark terminal surface paints parchment-on-
+            ink instead of the global vermillion-on-vermillion wash.
+            The selection style lives next to the element so it's
+            scoped, not global.
+          */}
+          <div className={cn('sendero-wordmark text-7xl sm:text-8xl text-foreground mt-3', pixelFontClass)}>
+            Sendero
           </div>
           <div className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-[10px] tracking-widest mt-1.5 mb-5">
             v0.1.0 · agent@workspace · Sendero Travel Ops
@@ -632,8 +659,8 @@ const POSSIBILITIES = [
 
 export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
   return (
-    <div className="font-mono relative mt-16">
-      <div className="max-w-screen-xl mx-auto px-4 pt-16 pb-12 md:py-28 flex flex-col lg:flex-row gap-12 justify-between items-center">
+    <div className="agents-route relative">
+      <div className="max-w-screen-xl mx-auto px-4 flex flex-col lg:flex-row gap-12 justify-between items-center">
         <div className="lg:max-w-[590px] space-y-8 w-full">
           <div>
             {/*
@@ -642,7 +669,16 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
               in globals.css). Anchors the route to Sendero's brand
               system instead of a bare h1.
             */}
-            <div className="mk-eyebrow" style={{ display: 'inline-block', background: '#111', color: '#fafaf7', padding: '0.42em 0.72em', marginBottom: 24 }}>
+            <div
+              className="mk-eyebrow"
+              style={{
+                display: 'inline-block',
+                background: '#111',
+                color: '#fafaf7',
+                padding: '0.42em 0.72em',
+                marginBottom: 24,
+              }}
+            >
               For AI agents
             </div>
             <h1

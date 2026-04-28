@@ -82,7 +82,7 @@ const canonical = [
 const hmacKey = createHash('sha256').update(bearer).digest();
 const sig = 'v1=' + createHmac('sha256', hmacKey).update(canonical).digest('hex');
 
-const res = await fetch('https://www.sendero.travel/api/agent/dispatch', {
+const res = await fetch('https://app.sendero.travel/api/agent/dispatch', {
   method: 'POST',
   headers: {
     'authorization':   `Bearer ${bearer}`,

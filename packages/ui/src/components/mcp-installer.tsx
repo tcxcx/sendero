@@ -30,6 +30,12 @@ import { Check, Copy } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
+import {
+  SegmentedTabs,
+  SegmentedTabsContent,
+  SegmentedTabsList,
+  SegmentedTabsTrigger,
+} from './segmented-tabs';
 import { cn } from '../utils/cn';
 
 export type McpInstallerTab = 'cli' | 'plugin' | 'skills' | 'mcp';
@@ -129,8 +135,6 @@ export function McpInstaller({
   className,
   style,
 }: McpInstallerProps) {
-  const [tab, setTab] = useState<McpInstallerTab>(defaultTab);
-
   return (
     <div
       className={cn(
@@ -147,53 +151,38 @@ export function McpInstaller({
         dashboard /integrations/* sub-routes) provide their own
         section heading; this component starts with the tab strip so
         we don't double-up "Install / Install Sendero" titles.
-      */}
-      <nav
-        role="tablist"
-        aria-label="Sendero install paths"
-        className="flex w-full border-b"
-        style={{ borderColor: 'color-mix(in oklab, var(--fg, #111) 18%, transparent)' }}
-      >
-        {TABS.map(t => {
-          const active = t.value === tab;
-          return (
-            <button
-              key={t.value}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              aria-controls={`mcp-installer-panel-${t.value}`}
-              id={`mcp-installer-tab-${t.value}`}
-              onClick={() => setTab(t.value)}
-              className={cn(
-                'relative flex-1 border-b-2 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors',
-                active ? '' : 'hover:text-[var(--fg,#111)]'
-              )}
-              style={{
-                color: active
-                  ? 'var(--ink, #fb542b)'
-                  : 'color-mix(in oklab, var(--fg, #111) 55%, transparent)',
-                borderBottomColor: active ? 'var(--ink, #fb542b)' : 'transparent',
-                marginBottom: '-1px',
-              }}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </nav>
 
-      <div
-        id={`mcp-installer-panel-${tab}`}
-        role="tabpanel"
-        aria-labelledby={`mcp-installer-tab-${tab}`}
-        className="flex flex-col gap-4"
+        SegmentedTabs is the canonical Sendero tab pattern (lifted
+        from apps/app/components/console/inbox-rail.tsx into
+        @sendero/ui/segmented-tabs). Vermillion-on-parchment for the
+        active state, no hand-rolled flex/border markup here.
+      */}
+      <SegmentedTabs
+        defaultValue={defaultTab}
+        aria-label="Sendero install paths"
+        className="flex w-full flex-col gap-4"
       >
-        {tab === 'cli' ? <CliPanel mcpUrl={mcpUrl} /> : null}
-        {tab === 'plugin' ? <PluginPanel /> : null}
-        {tab === 'skills' ? <SkillsPanel skills={skills} /> : null}
-        {tab === 'mcp' ? <McpPanel mcpUrl={mcpUrl} /> : null}
-      </div>
+        <SegmentedTabsList>
+          {TABS.map(t => (
+            <SegmentedTabsTrigger key={t.value} value={t.value}>
+              {t.label}
+            </SegmentedTabsTrigger>
+          ))}
+        </SegmentedTabsList>
+
+        <SegmentedTabsContent value="cli" className="mt-0">
+          <CliPanel mcpUrl={mcpUrl} />
+        </SegmentedTabsContent>
+        <SegmentedTabsContent value="plugin" className="mt-0">
+          <PluginPanel />
+        </SegmentedTabsContent>
+        <SegmentedTabsContent value="skills" className="mt-0">
+          <SkillsPanel skills={skills} />
+        </SegmentedTabsContent>
+        <SegmentedTabsContent value="mcp" className="mt-0">
+          <McpPanel mcpUrl={mcpUrl} />
+        </SegmentedTabsContent>
+      </SegmentedTabs>
 
       <footer
         className="flex flex-col gap-3 border-t pt-4"
