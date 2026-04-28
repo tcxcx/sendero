@@ -3,11 +3,13 @@
 /**
  * Pathname-driven page header for every `/dashboard/*` route.
  *
- * Mounted once in `app-chrome.tsx` directly under `DashboardBreadcrumb`,
- * so every page gets a consistent title + subtitle without each route
- * wiring its own. Copy lives in `DASHBOARD_PAGE_COPY` below; dynamic
- * segments (trip ids, invoice ids) match a small set of regexes and
- * fall back to a generic label.
+ * Mounted once in `app-chrome.tsx`. Renders breadcrumb crumbs ON TOP
+ * of the page title + subtitle so every dashboard route gets a single
+ * consistent header block — no per-page `<header>` needed.
+ *
+ * Copy lives in `DASHBOARD_PAGE_COPY` below; dynamic segments (trip
+ * ids, invoice ids) match `DYNAMIC_MATCHERS`. If a route has no copy
+ * entry, the breadcrumb still renders alone (no title, no error).
  *
  * Action buttons are not hardcoded here. Pages publish transient
  * actions through `usePageHeaderStore` via the `<PageActions>` slot
@@ -20,6 +22,7 @@
 
 import { usePathname } from 'next/navigation';
 
+import { DashboardBreadcrumb } from '@/components/app-shell/dashboard-breadcrumb';
 import { usePageHeaderStore } from '@/components/dashboard/page-header-store';
 
 type Copy = { title: string; description?: string };
@@ -57,9 +60,13 @@ const DASHBOARD_PAGE_COPY: Record<string, Copy> = {
     title: 'Slack channel',
     description: 'Install approvals and employee travel DMs.',
   },
+  '/dashboard/integrations': {
+    title: 'Integrations',
+    description: 'Plug Sendero into the rest of your stack.',
+  },
   '/dashboard/integrations/mcp': {
-    title: 'MCP agents',
-    description: 'Expose the journey engine to external LLMs.',
+    title: 'API keys & MCP',
+    description: 'One key powers HTTP dispatch, MCP server, and direct tool calls.',
   },
   '/dashboard/settings': {
     title: 'Settings',
@@ -78,8 +85,17 @@ const DASHBOARD_PAGE_COPY: Record<string, Copy> = {
     description: 'Members, roles, and workspace metadata.',
   },
   '/dashboard/passport': {
-    title: 'Passport vault',
-    description: 'Envelope-encrypted traveler documents for eligibility checks.',
+    title: 'Passport',
+    description:
+      'Drop a photo. We extract the MRZ on the server, encrypt it, and discard the image.',
+  },
+  '/dashboard/channels': {
+    title: 'Channels',
+    description: 'Where Sendero meets travelers — WhatsApp, Slack, email, web.',
+  },
+  '/dashboard/inbox': {
+    title: 'Trip inboxes',
+    description: 'Recent threads. Click one to take over the conversation.',
   },
   '/dashboard/admin-retries': {
     title: 'Admin · Retries',
@@ -102,19 +118,12 @@ const DYNAMIC_MATCHERS: Array<{ re: RegExp; copy: Copy }> = [
   },
 ];
 
-// Routes that own their own hero / full-bleed layout. The shared
-// header stays off these to avoid two headers on one page.
-const SUPPRESS_PREFIXES = [
-  '/dashboard/console',
-  '/dashboard/inbox',
-  '/dashboard/scan',
-  '/dashboard/passport',
-  '/dashboard/trips',
-  '/dashboard/billing/invoices',
-  '/dashboard/spend',
-  '/dashboard/caps',
-  '/dashboard/channels',
-];
+// Full-bleed routes that own their own hero (suppress entirely).
+const SUPPRESS_EXACT = new Set(['/dashboard/console']);
+// Suppress on children only — the bare path keeps the unified header.
+// `/dashboard/inbox` (list) renders the header; `/dashboard/inbox/[id]`
+// (composer detail) suppresses it.
+const SUPPRESS_CHILDREN_PREFIXES = ['/dashboard/console', '/dashboard/inbox'];
 
 function resolveCopy(pathname: string): Copy | null {
   const exact = DASHBOARD_PAGE_COPY[pathname];
@@ -130,22 +139,27 @@ export function DashboardPageHeader() {
   const actions = usePageHeaderStore(s => s.actions);
 
   if (!pathname.startsWith('/dashboard')) return null;
-  if (SUPPRESS_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))) return null;
+  if (SUPPRESS_EXACT.has(pathname)) return null;
+  if (SUPPRESS_CHILDREN_PREFIXES.some(p => pathname.startsWith(p + '/'))) return null;
 
   const copy = resolveCopy(pathname);
-  if (!copy) return null;
 
   return (
-    <div className="px-6 pt-0">
-      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-normal">{copy.title}</h1>
-          {copy.description ? (
-            <p className="text-sm text-muted-foreground">{copy.description}</p>
+    <div className="px-6 pt-3 pb-2 [&_.dashboard-crumbs]:!p-0 [&_.dashboard-crumbs]:!min-h-0">
+      <DashboardBreadcrumb />
+      {copy ? (
+        <div className="mt-1 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-2xl font-semibold tracking-normal">{copy.title}</h1>
+            {copy.description ? (
+              <p className="text-sm text-muted-foreground">{copy.description}</p>
+            ) : null}
+          </div>
+          {actions ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-3">{actions}</div>
           ) : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-      </div>
+      ) : null}
     </div>
   );
 }

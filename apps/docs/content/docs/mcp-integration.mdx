@@ -85,7 +85,70 @@ After restart, ask the host to list Sendero tools. Then ask for a scoped action 
 
 For production booking, have the host follow [agent-to-agent booking](/docs/agent-to-agent-booking) and prefer the named `sendero.book_flight` workflow where available.
 
-## Cursor, Zed, and custom agents
+## Claude Code
+
+For the Claude Code CLI, register Sendero with one command:
+
+```sh
+claude mcp add sendero \
+  --transport http \
+  --url https://app.sendero.travel/api/mcp \
+  --header "Authorization: Bearer ak_..."
+```
+
+Replace `ak_...` with a production API key minted at `/dashboard/settings/api-keys`. Then in chat: *"Use Sendero to search flights from BUE to SFO on May 15."*
+
+## Codex
+
+For the Codex CLI, append to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.sendero]
+url = "https://app.sendero.travel/api/mcp"
+headers = { Authorization = "Bearer ak_..." }
+```
+
+Restart Codex; `tools/list` should show every Sendero tool the API key is scoped for.
+
+## Cursor
+
+**One-click install:** click [Add Sendero to Cursor](https://cursor.com/install-mcp?name=sendero&config=eyJ1cmwiOiJodHRwczovL2FwcC5zZW5kZXJvLnRyYXZlbC9hcGkvbWNwIiwiaGVhZGVycyI6eyJBdXRob3JpemF0aW9uIjoiQmVhcmVyIGFrX1JFUExBQ0VfV0lUSF9ZT1VSX0tFWSJ9fQ%3D%3D). Cursor opens, prompts for confirmation, and writes the server config. Then replace `ak_REPLACE_WITH_YOUR_KEY` with a real key from `/dashboard/settings/api-keys`.
+
+**Manual install** (Cursor, Windsurf, or any IDE that reads `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "sendero": {
+      "url": "https://app.sendero.travel/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ak_..."
+      }
+    }
+  }
+}
+```
+
+## VS Code
+
+VS Code (Insiders + GitHub Copilot Agent mode) supports `vscode:mcp/install` deep-links. Click [Add Sendero to VS Code](vscode:mcp/install?%7B%22name%22%3A%22sendero%22%2C%22url%22%3A%22https%3A%2F%2Fapp.sendero.travel%2Fapi%2Fmcp%22%2C%22headers%22%3A%7B%22Authorization%22%3A%22Bearer%20ak_REPLACE_WITH_YOUR_KEY%22%7D%7D) — your browser will offer to open VS Code with the server pre-loaded.
+
+Manual install: drop into `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "sendero": {
+      "url": "https://app.sendero.travel/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ak_..."
+      }
+    }
+  }
+}
+```
+
+## Custom agents (Zed and others)
 
 Custom agents should:
 

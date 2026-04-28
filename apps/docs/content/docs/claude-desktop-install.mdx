@@ -1,0 +1,102 @@
+---
+title: Claude Desktop install
+description: One-click install for Sendero on Claude Desktop via .mcpb.
+---
+
+The fastest way to use Sendero from Claude Desktop. Download one file, double-click, paste a key, done.
+
+## 1. Download the bundle
+
+Click [Install Sendero (.mcpb)](https://app.sendero.travel/downloads/sendero.mcpb).
+Your browser saves `sendero.mcpb` (~150 KB).
+
+This URL always points at the latest release. If you want a specific version,
+grab it from [GitHub Releases](https://github.com/tcxcx/sendero/releases).
+
+## 2. Open it in Claude Desktop
+
+Double-click `sendero.mcpb`. Claude Desktop opens an install dialog with the
+Sendero icon, description, and permission scope.
+
+If Claude Desktop doesn't open automatically:
+
+- **macOS**: right-click the file → Open with → Claude Desktop
+- **Windows**: right-click → Open with → Claude
+- **Linux**: open Claude Desktop → Settings → Extensions → "Install from file…"
+  and pick the bundle
+
+Click **Install**.
+
+## 3. Paste your API key
+
+Claude Desktop prompts for a Sendero API key. Get one at
+[/dashboard/settings/api-keys](https://app.sendero.travel/dashboard/settings/api-keys)
+— sandbox is fine for first-time use, no real USDC moves.
+
+The key is stored in your OS keychain (macOS Keychain / Windows Credential
+Manager / GNOME Keyring on Linux). Sendero never sees it; the bundle reads it
+locally and forwards each request as a `Authorization: Bearer …` header to
+`https://app.sendero.travel/api/mcp`.
+
+## 4. Use it
+
+Open a new Claude Desktop chat. Sendero's tools appear in the tools palette.
+Try:
+
+> Use Sendero to search flights from BUE to SFO on May 15.
+
+The agent runs `search_flights` against Duffel sandbox and streams the result
+back. Every call is metered against your workspace; sandbox keys write
+`MeterEvent.status='sandbox'` and never settle on-chain.
+
+## What's inside the bundle
+
+`sendero.mcpb` is a zip archive containing:
+
+- `manifest.json` — extension metadata Claude Desktop reads on install
+- `server/index.js` — a 1.4 KB Node script that proxies stdio JSON-RPC to
+  `app.sendero.travel/api/mcp`
+- `icon.png` + `icons/*` — brand mark variants
+
+The proxy holds no state. Claude Desktop spawns it on app start, kills it
+on app exit. The only network call it makes is the forwarded request to
+the production MCP endpoint.
+
+## Switching keys or endpoint
+
+Settings → Extensions → Sendero → **Configure**. Edit the `api_key` (rotate to
+a new production key, or swap sandbox ↔ production). Edit `mcp_url` only when
+you're testing self-hosted Sendero or staging.
+
+## Uninstall
+
+Settings → Extensions → Sendero → **Uninstall**. Removes the unpacked
+bundle and the keychain entry. Server-side, your API key stays valid until
+you revoke it at [/dashboard/settings/api-keys](https://app.sendero.travel/dashboard/settings/api-keys).
+
+## Troubleshooting
+
+**"Sendero connection error" on first run.** Your API key is missing or
+malformed. Open Configure and paste again — keys start with `ak_` and are 64
+characters of hex after the prefix.
+
+**Tools palette is empty.** Claude Desktop didn't run `tools/list` yet. Send
+any message in chat to trigger it. If still empty, check `~/Library/Logs/Claude/`
+on macOS for the proxy's stderr (look for `[sendero-mcpb]` lines).
+
+**`Sendero upstream returned 401`.** Your key was revoked or expired. Mint a
+new one and update via Configure.
+
+## What's not in this bundle
+
+- **No OAuth flow.** Bearer tokens only. If you'd rather wire Sendero through
+  Claude Desktop's native Custom Connectors UI (Settings → Connectors), we'd
+  need to ship OAuth on `/api/mcp` first — track [this discussion](https://github.com/anthropics/claude-ai-mcp/issues/112)
+  for the Bearer-token gap that's blocking the Custom Connectors path today.
+- **No local tools.** This bundle is a transport proxy, not a local MCP
+  server. The actual tool implementations live on Sendero's servers.
+
+## Other clients
+
+For Cursor, VS Code, Claude Code, or Codex CLI: see [MCP integration](/docs/mcp-integration).
+Each has a one-click or one-command install path.

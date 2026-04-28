@@ -38,6 +38,7 @@
     "@sendero/guest": "*",
     "@sendero/invoicing": "*",
     "@sendero/kapso": "*",
+    "@sendero/langfuse": "*",
     "@sendero/nanopayments": "*",
     "@sendero/notifications": "*",
     "@sendero/ocr": "*",

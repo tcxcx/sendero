@@ -69,7 +69,7 @@ export function SettlePanel() {
     return (
       <div className="card" style={{ opacity: 0.7 }}>
         <div className="card-head">
-          <span className="title">Settle on Arc</span>
+          <span className="title">Confirm payment</span>
           <span className="tag faint">Sign in required</span>
         </div>
         <div
@@ -80,7 +80,7 @@ export function SettlePanel() {
             color: 'var(--text-dim)',
           }}
         >
-          Sign in with a passkey to settle this booking on Arc Testnet.
+          Sign in with a passkey to confirm payment for this booking.
         </div>
       </div>
     );
@@ -168,15 +168,15 @@ export function SettlePanel() {
 
   switch (phase) {
     case 'idle':
-      buttonLabel = busy ? 'Signing…' : `Pay + attest · sign once`;
+      buttonLabel = busy ? 'Confirming…' : `Confirm payment · sign once`;
       break;
     case 'signing':
-      buttonLabel = 'Signing userOp · waiting for bundler…';
+      buttonLabel = 'Confirming · processing…';
       buttonDisabled = true;
       buttonAction = null;
       break;
     case 'done':
-      buttonLabel = 'Settled ✓';
+      buttonLabel = 'Paid ✓';
       buttonDisabled = true;
       buttonAction = null;
       break;
@@ -189,7 +189,7 @@ export function SettlePanel() {
       };
       break;
     default:
-      buttonLabel = 'Pay + attest · sign once';
+      buttonLabel = 'Confirm payment · sign once';
   }
 
   const signerShort = `${userAuth.address.slice(0, 6)}…${userAuth.address.slice(-4)}`;
@@ -197,8 +197,8 @@ export function SettlePanel() {
   return (
     <div className="card">
       <div className="card-head">
-        <span className="title">Finalize on Arc</span>
-        <span className="tag ink">1 passkey tap · gasless</span>
+        <span className="title">Confirm payment</span>
+        <span className="tag ink">1 passkey tap · no gas fees</span>
       </div>
 
       <div
@@ -211,12 +211,12 @@ export function SettlePanel() {
           lineHeight: 1.5,
         }}
       >
-        One user operation, two atomic calls: transfer{' '}
+        Pay{' '}
         <strong style={{ color: 'var(--text)' }}>
           {totalAmount} {totalCurrency === 'USD' ? 'USDC' : totalCurrency}
         </strong>{' '}
-        to the provider wallet on Arc, and log a +1 reputation attestation on the agent's ERC-8004
-        record. Arc pays its own gas.
+        to the provider and log a +1 reputation point on the agent's record. One signature settles
+        both atomically; gas is on us.
       </div>
 
       <div className="settle-grid">

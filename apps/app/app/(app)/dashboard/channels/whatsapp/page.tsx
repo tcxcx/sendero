@@ -24,7 +24,6 @@ import {
   type ChannelStatusKind,
 } from '@/components/channels/channel-status-panel';
 import { WhatsappConnectedPanel } from '@/components/channels/whatsapp-connected-panel';
-import { Crumb } from '@/components/console/crumb';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
@@ -87,16 +86,14 @@ export default async function WhatsAppChannelPage() {
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 18,
+        gap: 16,
         flex: 1,
         minHeight: 0,
       }}
     >
-      <Crumb trail={['WhatsApp']} />
-
       {status === 'active' && install ? (
         <ConnectedView install={install} />
       ) : (
@@ -152,14 +149,6 @@ function DisconnectedView({
 }) {
   return (
     <>
-      <header>
-        <h1 className="t-h1">WhatsApp</h1>
-        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          Sendero owns the WhatsApp Business Account and lends you a number from the pool. No Meta
-          embedded signup, no carrier paperwork — you brand the experience.
-        </p>
-      </header>
-
       <ChannelStatusPanel
         brand="whatsapp"
         status={status}

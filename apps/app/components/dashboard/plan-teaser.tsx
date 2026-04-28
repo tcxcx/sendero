@@ -66,7 +66,7 @@ export function PlanTeaser({ tier }: { tier: PlanTier }) {
             ? 'border-[color:var(--ink)] bg-[color:color-mix(in_oklab,var(--ink)_6%,white)]'
             : 'border-[color:var(--border)] bg-[color:var(--surface-floating)] hover:border-[color:var(--ink)]';
           return (
-            <PricingTableDialog key={t}>
+            <PricingTableDialog key={t} tier={t}>
               <button
                 type="button"
                 className={

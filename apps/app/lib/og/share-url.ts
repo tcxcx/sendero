@@ -7,10 +7,11 @@
  * brand-frame Satori card from the decoded payload.
  *
  * Signing scheme: HMAC-SHA256 over `base64url(JSON(payload))`. Wire format
- * is `<payload>.<signature>`. Re-uses `INVOICE_SIGNING_SECRET` (already
- * configured on every env) so operators don't manage a second secret.
- * A leak/rotation only invalidates future share-image fetches — unfurl
- * bots cache PNGs by URL and we never persist tokens.
+ * is `<payload>.<signature>`. Keyed by `OG_SHARE_SIGNING_SECRET` — a
+ * deliberately separate secret from `INVOICE_SIGNING_SECRET` so the
+ * two surfaces can rotate independently. Invoice URLs need to verify
+ * for the lifetime of the receipt; share-image URLs can rotate freely
+ * because unfurl bots cache PNGs by URL and we never persist tokens.
  *
  * Web Crypto rather than `jose` to keep the helper edge-runtime-friendly
  * with zero new dependencies in `apps/app`. The same primitive is used
@@ -25,7 +26,7 @@ const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();
 
 function getSecret(): string | null {
-  return process.env.INVOICE_SIGNING_SECRET ?? null;
+  return process.env.OG_SHARE_SIGNING_SECRET ?? null;
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -119,7 +120,7 @@ export interface ShareInput {
 
 /**
  * Build a signed `/api/og/share` URL for a share payload. Returns null
- * when `INVOICE_SIGNING_SECRET` is unset; channel renderers treat null
+ * when `OG_SHARE_SIGNING_SECRET` is unset; channel renderers treat null
  * as "no fallback image" and emit the card without a top image.
  */
 export async function buildShareImageUrl(

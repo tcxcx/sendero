@@ -21,15 +21,28 @@
  * 160 — staying under 140 leaves a buffer.
  */
 
+import { getPromptWithFallback } from '@sendero/langfuse';
+
 import { BRAND_ANCHOR_TEXT, type MoodboardRef, moodboardForKind } from './moodboard';
 import type { StampContext } from './types';
+
+// Universal voice/format rules for stamp captions. The hardcoded fallback
+// stays here as the safety net; production reads `sendero-stamp-caption-rules`
+// from Langfuse Prompt Management when LANGFUSE_PROMPT_MANAGEMENT=true.
+const STAMP_CAPTION_RULES_FALLBACK =
+  'Return ONLY one sentence, max 140 characters. No quotation marks, no emoji, no hashtags, no labels like "Caption:". Plain text suitable for an unfurl preview. Sendero voice: a smart travel guide with taste — editorial, observant, slightly literary, never gimmicky.';
 
 /**
  * Compose the text portion of the image prompt. Pair this with the
  * moodboard refs from `imageReferencesForKind` and pass both to
  * Gemini via the AI SDK's multimodal `messages` API.
+ *
+ * Reads the universal brand anchor from Langfuse (`sendero-stamp-image-brand-anchor`)
+ * with `BRAND_ANCHOR_TEXT` as the hardcoded fallback. The per-kind object cue
+ * stays in code — it's tightly interleaved with dynamic data (route, carrier,
+ * cabin, USDC amount) and doesn't translate to {{var}} substitution cleanly.
  */
-export function imagePromptForKind(ctx: StampContext): string {
+export async function imagePromptForKind(ctx: StampContext): Promise<string> {
   const { tenant, trip, booking } = ctx;
   const brand = tenant.displayName;
   const route =
@@ -81,7 +94,13 @@ export function imagePromptForKind(ctx: StampContext): string {
     }
   })();
 
-  return `${objectCue}\n\n${BRAND_ANCHOR_TEXT}`;
+  const brandAnchor = await getPromptWithFallback(
+    'sendero-stamp-image-brand-anchor',
+    BRAND_ANCHOR_TEXT,
+    {},
+    { label: 'production', cacheTtlSeconds: 60 }
+  );
+  return `${objectCue}\n\n${brandAnchor.text}`;
 }
 
 /**
@@ -103,23 +122,25 @@ export function imageReferencesForKind(ctx: StampContext): MoodboardRef[] {
 export function moodboardGuidanceText(ctx: StampContext): string {
   const refs = moodboardForKind(ctx.kind);
   if (refs.length === 0) return '';
-  const lines = refs.map(
-    (r, i) => `Reference image ${i + 1} (${r.role}): ${r.guidance}`
-  );
+  const lines = refs.map((r, i) => `Reference image ${i + 1} (${r.role}): ${r.guidance}`);
   return ['Reference images attached:', ...lines].join('\n');
 }
 
-export function captionPromptForKind(ctx: StampContext): string {
+export async function captionPromptForKind(ctx: StampContext): Promise<string> {
   const { trip, booking } = ctx;
   const route =
     trip.origin && trip.destination ? `${trip.origin} → ${trip.destination}` : 'this trip';
 
-  const baseRules = [
-    'Return ONLY one sentence, max 140 characters.',
-    'No quotation marks, no emoji, no hashtags, no labels like "Caption:".',
-    'Plain text suitable for an unfurl preview.',
-    'Sendero voice: a smart travel guide with taste — editorial, observant, slightly literary, never gimmicky.',
-  ].join(' ');
+  // Universal voice/format constraints come from Langfuse — marketing tunes
+  // tone here without redeploying. The per-kind narrative directive that
+  // mentions trip-specific details stays in code.
+  const captionRules = await getPromptWithFallback(
+    'sendero-stamp-caption-rules',
+    STAMP_CAPTION_RULES_FALLBACK,
+    {},
+    { label: 'production', cacheTtlSeconds: 60 }
+  );
+  const baseRules = captionRules.text;
 
   switch (ctx.kind) {
     case 'BoardingPass':

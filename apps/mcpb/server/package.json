@@ -1,0 +1,14 @@
+{
+  "name": "sendero-mcpb-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "stdio→HTTP proxy that forwards JSON-RPC to https://app.sendero.travel/api/mcp. Bundled inside the .mcpb extension; not consumed as a workspace dependency.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

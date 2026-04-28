@@ -1,0 +1,32 @@
+{
+  "name": "@sendero/langfuse",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — Langfuse observability for all AI operations. Single package that imports @langfuse/* directly; all surfaces import from here.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./otel": "./src/otel.ts",
+    "./traces": "./src/traces.ts",
+    "./sessions": "./src/sessions.ts",
+    "./prompts": "./src/prompts.ts",
+    "./scores": "./src/scores.ts",
+    "./evaluators": "./src/evaluators.ts",
+    "./flush": "./src/flush.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.0",
+    "@langfuse/client": "^4.0.0",
+    "@langfuse/tracing": "^4.0.0",
+    "@langfuse/otel": "^4.0.0",
+    "@opentelemetry/sdk-trace-node": "^2.0.0",
+    "@opentelemetry/api": "^1.9.0",
+    "ai": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

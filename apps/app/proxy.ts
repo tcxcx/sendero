@@ -27,6 +27,7 @@ const isPublicRoute = createRouteMatcher([
   '/pay/(.*)', // hosted magic-link payment page for off-app travelers (BookingPayToken-gated)
   '/stamps/(.*)', // public NFT stamp viewer + OG unfurl target (Slack/WhatsApp)
   '/agents/(.*)', // public ERC-8004 agent metadata + reputation profile (org + user)
+  '/install/(.*)', // public per-tenant channel install pages (Persona C — end-customer admins, no Sendero session)
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/sso-callback(.*)',
@@ -47,6 +48,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/workflows/reputation/(.*)', // reputation WDK fan-in — same secret/session auth, in-route
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
   '/api/health',
+  '/downloads/(.*)', // public artifact downloads (e.g. sendero.mcpb for Claude Desktop)
   '/api/guest/claimed', // guest submits post-claim; no session yet
   '/api/waitlist/precheck', // email lookup for waitlist toast + redirect (no session)
 ]);

@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { prisma, type Prisma } from '@sendero/database';
 import { Button } from '@sendero/ui/button';
 
-import { Crumb } from '@/components/console/crumb';
 import { PageActions } from '@/components/dashboard/page-actions';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
@@ -71,20 +70,10 @@ export default async function TripsPage({
   ]);
   const totalPages = Math.max(1, Math.ceil(total / query.per));
 
-  const inflight = countOf(summary, ['booked', 'in_progress']);
-  const awaiting = countOf(summary, ['awaiting_approval']);
-  const settledThisWeek = await prisma.trip.count({
-    where: {
-      tenantId: tenant.id,
-      status: 'completed',
-      updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-    },
-  });
-
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -92,33 +81,15 @@ export default async function TripsPage({
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Trips']} />
-
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: 24,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <h1 className="t-h1">Trips</h1>
-          <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-            {inflight} in flight, {awaiting} awaiting approval, {settledThisWeek} settled this week.
-          </p>
-        </div>
-        <PageActions>
-          {/* Lightweight "new trip" — opens a draft Trip row only. The
-              operator can mint a prepaid claim link later from the
-              trip detail surface. */}
-          <NewTripButton label={copy.createTripCta} />
-          <Button asChild>
-            <Link href="/dashboard/trips?sheet=new">{copy.createCta}</Link>
-          </Button>
-        </PageActions>
-      </div>
+      <PageActions>
+        {/* Lightweight "new trip" — opens a draft Trip row only. The
+            operator can mint a prepaid claim link later from the
+            trip detail surface. */}
+        <NewTripButton label={copy.createTripCta} />
+        <Button asChild>
+          <Link href="/dashboard/trips?sheet=new">{copy.createCta}</Link>
+        </Button>
+      </PageActions>
 
       <StatusFilterBar
         active={status ?? null}

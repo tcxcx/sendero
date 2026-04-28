@@ -32,12 +32,13 @@ import type { ToolSet } from 'ai';
 
 import {
   type AgentInput,
+  type AgentMediaAttachment,
   type ConversationState,
   runAgentTurn,
   type RunAgentTurnArgs,
   type SessionStore,
-  SENDERO_SOUL,
 } from '@sendero/agent';
+import { buildSlackPersonaWithContext } from '@/lib/agent-persona';
 import type { CapStore } from '@sendero/billing/caps';
 import type { MeterStore } from '@sendero/billing/meter';
 import type { BillingSegment } from '@sendero/billing/pricing';
@@ -53,6 +54,8 @@ import {
   type ModelTier,
 } from './agent-models';
 import { senderoSlackTools } from './slack-agent-tools';
+import { markThreadSubscribed } from './slack-thread-subscription';
+import { appendTripEvent, resolveActiveTripForUser } from './trip-events';
 
 /**
  * Persisted Slack install — superset of OAuth's `SlackInstall` plus the
@@ -98,6 +101,13 @@ export interface RunSlackAgentTurnArgs {
   envelope: SlackEventEnvelope;
   /** User-facing event text — mention body, slash command body, etc. */
   text: string;
+  /**
+   * Optional inbound media (Slack `event.files[]` after fetch + base64).
+   * Forwarded to the agent runtime as multimodal file parts so the model
+   * can run `scan_document_auto` on the attachment without needing to
+   * resolve a Slack file URL itself.
+   */
+  attachments?: AgentMediaAttachment[];
   /** Thread to reply into. For top-level mentions Slack returns the message ts. */
   threadTs: string;
   /** Originating Slack channel (`C…`). */
@@ -181,13 +191,16 @@ export async function runSlackAgentTurn(
   // prefix). Slack tools take precedence on any future overlap.
   const tools: ToolSet = { ...senderoTools, ...slackTools };
 
-  const persona = buildSlackPersona({
-    orgName: args.orgName ?? args.install.teamName,
-    planTier: args.planTier,
-    channelName: args.channelName,
-    channelId: args.channelId,
-    routing: args.install.routing ?? null,
-  });
+  const persona = await buildSlackPersonaWithContext(
+    {
+      orgName: args.orgName ?? args.install.teamName,
+      planTier: args.planTier,
+      channelName: args.channelName,
+      channelId: args.channelId,
+      routingPreamble: renderSlackRoutingPreamble(args.install.routing ?? null),
+    },
+    args.locale ?? null
+  );
 
   const turnId = args.envelope.event_id ?? `slack:${args.envelope.team_id}:${Date.now()}`;
   const input: AgentInput = {
@@ -199,6 +212,7 @@ export async function runSlackAgentTurn(
     channel: 'slack',
     text: args.text,
     turnId,
+    ...(args.attachments && args.attachments.length > 0 ? { attachments: args.attachments } : {}),
     meta: {
       // Channel-agnostic subjectKey for stateful sessions: thread-scoped
       // so a single Slack user has separate context per thread.
@@ -225,6 +239,107 @@ export async function runSlackAgentTurn(
     );
   }
 
+  // Post a "thinking" placeholder up front so the user sees the bot
+  // engage immediately. Cold turns can take 5–20s; without this the
+  // thread looks dead until the model finishes. We `chat.update` the
+  // same `ts` once the reply is ready — Slack treats edits as silent
+  // (no re-notify), so this is purely UX and never spams.
+  //
+  // Step-based streaming: between tool calls we narrate progress
+  // ("Searching flights…" → "Comparing options…") so the user sees
+  // the bot working. This is *step* streaming, not token streaming;
+  // the placeholder edits once per AI SDK step (typically 1–4 per
+  // turn). True per-token streaming would require swapping
+  // `generateText` → `streamText` in `@sendero/agent::run.ts` (shared
+  // with dispatch + chat) — separate ~4d refactor, intentionally
+  // deferred.
+  //
+  // Fail-soft: if the placeholder post itself fails (network blip,
+  // revoked token), we just skip the edit later and post the final
+  // reply fresh.
+  const slack = createSlackClient(args.install.botToken);
+  let placeholderTs: string | null = null;
+  try {
+    const placeholder = await slack.chat.postMessage({
+      channel: args.channelId,
+      thread_ts: args.threadTs,
+      text: '_Thinking…_',
+      mrkdwn: true,
+      unfurl_links: false,
+    });
+    placeholderTs = placeholder.ts ?? null;
+  } catch (err) {
+    console.warn('[slack.agent] placeholder post failed; falling back to single-shot post', {
+      teamId: args.install.teamId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Step-streaming hook: when AI SDK finishes a step (text gen or
+  // tool call), update the placeholder so the user sees progress.
+  // We accumulate all text-only fragments into `runningText` so the
+  // partial reply grows toward the final answer without us having
+  // to wait for the whole turn to complete.
+  //
+  // chat.update rate limit (Tier 3, 50/min per workspace) is not a
+  // concern here — turns rarely exceed 4 steps so we'll never hit it.
+  let runningText = '';
+  let lastStatus = '';
+  const onStepFinish = placeholderTs
+    ? async (step: { stepNumber: number; toolNames: string[]; text: string }) => {
+        if (step.text) runningText += step.text;
+        const status = renderStepStatus(step, tools, runningText);
+        // Skip the round-trip when the rendered status matches the last
+        // one we sent — Slack treats identical edits as no-ops anyway,
+        // but cheaper to skip the whole API call.
+        if (status === lastStatus) return;
+        lastStatus = status;
+        try {
+          await slack.chat.update({
+            channel: args.channelId,
+            ts: placeholderTs!,
+            text: status,
+          });
+        } catch (updateErr) {
+          // Edit failed (channel closed, bot kicked between steps). The
+          // final post-turn write below still tries — log + move on.
+          console.warn('[slack.agent] step update failed (non-fatal)', {
+            stepNumber: step.stepNumber,
+            error: updateErr instanceof Error ? updateErr.message : String(updateErr),
+          });
+        }
+      }
+    : undefined;
+
+  // Canonical ledger write — inbound traveler message. Resolved trip
+  // is the most-recent active one for this Sendero user. When null
+  // (no in-flight trip), the write is skipped; the agent still runs
+  // and may create a trip via tool calls. Same fail-soft posture as
+  // the dispatch route's path.
+  const tripIdForLedger = await resolveActiveTripForUser({
+    tenantId: args.install.tenantId,
+    userId: args.senderoUserId,
+  });
+  if (tripIdForLedger && args.text) {
+    await appendTripEvent({
+      tripId: tripIdForLedger,
+      tenantId: args.install.tenantId,
+      event: {
+        id: `inbound_${turnId}`,
+        kind: 'inbox_reply',
+        direction: 'inbound',
+        channel: 'slack',
+        createdAt: new Date().toISOString(),
+        text: args.text,
+        author: {
+          kind: 'traveler',
+          slackUserId: args.userId,
+          userId: args.senderoUserId,
+        },
+      },
+    });
+  }
+
   let result: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
     result = await runAgentTurn({
@@ -239,6 +354,7 @@ export async function runSlackAgentTurn(
       ...(args.pricingOverrides ? { pricingOverrides: args.pricingOverrides } : {}),
       ...(args.loadTrip ? { loadTrip: args.loadTrip } : {}),
       persona,
+      ...(onStepFinish ? { onStepFinish } : {}),
     });
   } catch (err) {
     // Gateway-wide failure → cascade to direct providers in
@@ -251,9 +367,7 @@ export async function runSlackAgentTurn(
     for (const candidate of retryModels) {
       try {
         // eslint-disable-next-line no-console
-        console.warn(
-          `[slack.agent] gateway failed; retrying direct provider ${candidate.label}`
-        );
+        console.warn(`[slack.agent] gateway failed; retrying direct provider ${candidate.label}`);
         retryResult = await runAgentTurn({
           input,
           model: candidate.model,
@@ -266,6 +380,7 @@ export async function runSlackAgentTurn(
           ...(args.pricingOverrides ? { pricingOverrides: args.pricingOverrides } : {}),
           ...(args.loadTrip ? { loadTrip: args.loadTrip } : {}),
           persona,
+          ...(onStepFinish ? { onStepFinish } : {}),
         });
         break;
       } catch (innerErr) {
@@ -294,18 +409,62 @@ export async function runSlackAgentTurn(
 
   // Post the agent's final reply into the originating thread. We always
   // thread (`thread_ts`) — never broadcast — so noisy channels don't
-  // turn into a top-level firehose.
+  // turn into a top-level firehose. If we already posted a "Thinking…"
+  // placeholder, edit it in place (silent); otherwise post fresh.
   let postedTs: string | undefined;
   if (result.text && result.text.trim().length > 0) {
-    const slack = createSlackClient(args.install.botToken);
-    const posted = await slack.chat.postMessage({
-      channel: args.channelId,
-      thread_ts: args.threadTs,
-      text: result.text,
-      mrkdwn: true,
-      unfurl_links: false,
-    });
-    postedTs = posted.ts ?? undefined;
+    if (placeholderTs) {
+      try {
+        await slack.chat.update({
+          channel: args.channelId,
+          ts: placeholderTs,
+          text: result.text,
+          // `mrkdwn` only applies on `chat.postMessage`; edits inherit
+          // the original message's parse mode, so it's not in the
+          // `chat.update` arg type.
+        });
+        postedTs = placeholderTs;
+      } catch (err) {
+        // Edit failed (rare — channel closed, bot kicked between
+        // placeholder + final). Fall back to a fresh post so the user
+        // still sees the answer.
+        console.warn('[slack.agent] chat.update on placeholder failed; posting fresh', {
+          teamId: args.install.teamId,
+          placeholderTs,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        const posted = await slack.chat.postMessage({
+          channel: args.channelId,
+          thread_ts: args.threadTs,
+          text: result.text,
+          mrkdwn: true,
+          unfurl_links: false,
+        });
+        postedTs = posted.ts ?? undefined;
+      }
+    } else {
+      const posted = await slack.chat.postMessage({
+        channel: args.channelId,
+        thread_ts: args.threadTs,
+        text: result.text,
+        mrkdwn: true,
+        unfurl_links: false,
+      });
+      postedTs = posted.ts ?? undefined;
+    }
+  } else if (placeholderTs) {
+    // Empty result (e.g. tool-approval pause). Replace the
+    // "Thinking…" placeholder with a neutral state so the thread isn't
+    // left with a dangling spinner-emoji message.
+    try {
+      await slack.chat.update({
+        channel: args.channelId,
+        ts: placeholderTs,
+        text: '_Working on it — I may need approval before continuing._',
+      });
+    } catch {
+      // Best-effort; no-op on failure.
+    }
   }
 
   // TODO(slack-approval): When the LLM picked a `needsApproval`-gated
@@ -316,6 +475,36 @@ export async function runSlackAgentTurn(
   // so we can render an Approve/Reject card for arbitrary Slack tool
   // calls and resume the turn from the existing interactions handler.
   // For now the user simply sees the LLM's narration in the thread.
+
+  // Mark the thread subscribed so follow-up messages in the same
+  // thread (no fresh @-mention needed) trigger the agent. Fire-and-
+  // forget — a Redis blip shouldn't block the return path.
+  if (postedTs && args.channelId && args.threadTs) {
+    void markThreadSubscribed({
+      teamId: args.install.teamId,
+      channelId: args.channelId,
+      threadTs: args.threadTs,
+    });
+  }
+
+  // Canonical ledger write — agent reply. Lands next to the inbound
+  // event written above so the operator sees the full thread on the
+  // trip inbox view. Skipped when no trip resolved or empty reply.
+  if (tripIdForLedger && result.text && result.text.trim().length > 0) {
+    await appendTripEvent({
+      tripId: tripIdForLedger,
+      tenantId: args.install.tenantId,
+      event: {
+        id: `agent_${turnId}`,
+        kind: 'agent_reply',
+        direction: 'outbound',
+        channel: 'slack',
+        createdAt: new Date().toISOString(),
+        text: result.text,
+        author: { kind: 'agent' },
+      },
+    });
+  }
 
   return {
     text: result.text,
@@ -329,59 +518,74 @@ export async function runSlackAgentTurn(
 
 // ─── helpers ─────────────────────────────────────────────────────────
 
-interface BuildSlackPersonaArgs {
-  orgName?: string;
-  planTier?: string;
-  channelName?: string;
-  channelId: string;
-  routing: SlackRoutingConfig | null;
+/**
+ * Render a "step in progress" status for the placeholder edit.
+ *
+ * If the step finished with text (final-answer step), surface the
+ * accumulated `runningText` so the user sees the answer growing.
+ *
+ * If the step ran tools, narrate which ones — operators should see
+ * "🔎 Searching flights, hotels…" between calls instead of a static
+ * "_Thinking…_". Sendero's tool catalog is large; we map the common
+ * verbs but fall through to the literal tool name on miss so new
+ * tools render readably without code changes here.
+ */
+function renderStepStatus(
+  step: { stepNumber: number; toolNames: string[]; text: string },
+  _tools: ToolSet,
+  runningText: string
+): string {
+  // Final-answer-shape step: surface the partial answer so the user
+  // can start reading. Add a faint trailing ellipsis so they know
+  // there's more coming if the engine continues.
+  if (runningText.trim().length > 0) {
+    return `${runningText}\n\n_…_`;
+  }
+  if (step.toolNames.length === 0) {
+    return '_Thinking…_';
+  }
+  const verbs = step.toolNames.map(toolNameToVerb);
+  // Dedup adjacent identical verbs ("Searching" + "Searching" → "Searching")
+  const unique = Array.from(new Set(verbs));
+  return `🔎 ${unique.join(', ')}…`;
 }
 
-function buildSlackPersona(args: BuildSlackPersonaArgs): string {
-  const parts: string[] = [SENDERO_SOUL, ''];
+function toolNameToVerb(toolName: string): string {
+  // High-traffic tools get a friendly verb; everything else falls
+  // through to the literal tool name (still readable, less polished).
+  if (toolName.startsWith('search_flights')) return 'Searching flights';
+  if (toolName.startsWith('search_hotels')) return 'Searching hotels';
+  if (toolName.startsWith('hold_')) return 'Holding the option';
+  if (toolName.startsWith('book_')) return 'Booking';
+  if (toolName.startsWith('settle_')) return 'Settling';
+  if (toolName.startsWith('scan_document')) return 'Scanning the document';
+  if (toolName.startsWith('lookup_trip')) return 'Looking up the trip';
+  if (toolName.startsWith('slack_')) return 'Working in Slack';
+  return `Running \`${toolName}\``;
+}
 
-  parts.push('## Tenant context');
-  if (args.orgName) parts.push(`- Workspace: ${args.orgName}`);
-  if (args.planTier) parts.push(`- Plan: ${args.planTier}`);
-
-  parts.push('', '## Slack context');
-  parts.push(
-    args.channelName
-      ? `- Channel: #${args.channelName} (${args.channelId})`
-      : `- Channel: ${args.channelId}`
-  );
-
-  if (args.routing) {
-    if (args.routing.defaultChannel) {
-      parts.push(`- Default routing channel: ${args.routing.defaultChannel}`);
-    }
-    if (args.routing.routes?.length) {
-      parts.push('- Event routing rules:');
-      for (const r of args.routing.routes) {
-        parts.push(`  - ${r.eventClass} → ${r.channel}${r.mode ? ` (${r.mode})` : ''}`);
-      }
-    }
-  } else {
-    // No routing set → reply in the same channel/thread the user wrote
-    // in. Surface that explicitly so the LLM doesn't try to discover a
-    // routing dest with a tool call.
-    parts.push(
-      '- Routing: not configured. Reply in the originating thread; do not move the conversation.'
-    );
+/**
+ * Render the per-tenant routing preamble that gets stitched between the
+ * (Langfuse-managed) tenant/channel context and the (Langfuse-managed)
+ * Slack tool guidance. Routing rules are dynamic per turn — they can't
+ * live as static prompt copy, so they stay in code as composed text.
+ */
+function renderSlackRoutingPreamble(routing: SlackRoutingConfig | null): string {
+  if (!routing) {
+    return '- Routing: not configured. Reply in the originating thread; do not move the conversation.';
   }
-
-  parts.push(
-    '',
-    '## Slack tool guidance',
-    '- You have access to Slack tools (`slack_send_message`, `slack_read_channel`, …) AND Sendero travel tools (flights, hotels, escrow). Pick the smallest tool that does the job.',
-    '- Mutating Slack tools (send / canvas / join / delete) require human approval — when you want to call one, narrate your intent in plain text instead of forcing the tool call so the workspace admin can confirm.',
-    '- Default to thread replies. Do not @-mention `@channel`/`@here` unless the user explicitly asks.',
-    '- Use Slack mrkdwn (`*bold*`, `_italic_`, `<https://example.com|link>`). No HTML.'
-  );
-
+  const lines: string[] = [];
+  if (routing.defaultChannel) {
+    lines.push(`- Default routing channel: ${routing.defaultChannel}`);
+  }
+  if (routing.routes?.length) {
+    lines.push('- Event routing rules:');
+    for (const r of routing.routes) {
+      lines.push(`  - ${r.eventClass} → ${r.channel}${r.mode ? ` (${r.mode})` : ''}`);
+    }
+  }
   // Reuse the `ConversationState` type so TS type-checks the import even
   // when the engine's `recentTurns` block grows new fields.
   void ({} as ConversationState);
-
-  return parts.join('\n');
+  return lines.join('\n');
 }

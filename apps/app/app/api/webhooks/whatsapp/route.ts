@@ -14,7 +14,7 @@
  * happens here — keeps p95 latency predictable.
  */
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { after, NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 import { detectLocale, localeForPhone } from '@sendero/locale';
@@ -29,9 +29,20 @@ import {
   WhatsAppClient,
   type NormalizedIdentityChange,
   type NormalizedInboundMessage,
+  type NormalizedStatusUpdate,
   type WhatsAppIdentity,
   type WhatsAppMedia,
 } from '@sendero/whatsapp';
+
+import { newTraceId } from '@/lib/api-errors';
+import { resolveActiveTripForChannelIdentity } from '@/lib/trip-events';
+import {
+  logMetaCall,
+  logOutboundMessage,
+  logWebhookEvent,
+  reconcileOutboundStatus,
+} from '@/lib/whatsapp-audit';
+import { claimWhatsAppMessage, isWithinReplayWindow } from '@/lib/whatsapp-dedup';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,6 +71,9 @@ export async function GET(req: NextRequest) {
 // ─── POST: Inbound messages + identity changes ─────────────────────────
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
+  const receivedAt = new Date();
+
   const appSecret = env.whatsappAppSecret();
   if (!appSecret) {
     return NextResponse.json(
@@ -73,6 +87,26 @@ export async function POST(req: NextRequest) {
     req.headers.get('x-hub-signature-256') ?? req.headers.get('x-webhook-signature') ?? null;
 
   if (!verifyWebhookSignature(rawBody, signature, appSecret)) {
+    // Audit the rejected request for forensics — somebody hit our
+    // public endpoint with a bad sig, ops should be able to grep for
+    // these without wading through Vercel logs.
+    after(() =>
+      logWebhookEvent({
+        tenantId: null,
+        receivedAt,
+        rawBody,
+        signatureValid: false,
+        replayWindowOk: null,
+        messageCount: 0,
+        identityChangeCount: 0,
+        statusUpdateCount: 0,
+        droppedReplayCount: 0,
+        droppedDuplicateCount: 0,
+        dispatchedCount: 0,
+        durationMs: Date.now() - startTime,
+        traceId: newTraceId(),
+      })
+    );
     return NextResponse.json({ error: 'bad_signature' }, { status: 401 });
   }
 
@@ -83,10 +117,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  const { messages, identityChanges } = normalizeWebhookPayload(
+  const { messages, identityChanges, statusUpdates } = normalizeWebhookPayload(
     parsed as Parameters<typeof normalizeWebhookPayload>[0],
     { defaultCountry: env.whatsappDefaultCountry() }
   );
+
+  const traceId = newTraceId();
+  console.log('[wa/webhook] inbound', {
+    traceId,
+    messageCount: messages.length,
+    identityChangeCount: identityChanges.length,
+    statusUpdateCount: statusUpdates.length,
+  });
 
   // Apply identity changes FIRST so downstream message routing sees the
   // reconciled ChannelIdentity rows.
@@ -94,7 +136,27 @@ export async function POST(req: NextRequest) {
     try {
       await applyIdentityChange(change);
     } catch (err) {
-      console.error('[wa/webhook] identity-change failed:', err);
+      console.error('[wa/webhook] identity-change failed:', { traceId, error: err });
+    }
+  }
+
+  // Apply outbound delivery-status updates. Today these only fan out to
+  // OtpDeliveryAttempt rows (the one outbound surface that persists
+  // providerMessageId). Adding other outbound surfaces — booking
+  // confirmations, trip nudges — would route through the same loop with
+  // a tagged provider id.
+  let statusUpdated = 0;
+  for (const status of statusUpdates) {
+    try {
+      const updated = await applyOtpStatusUpdate(status);
+      statusUpdated += updated;
+    } catch (err) {
+      console.error('[wa/webhook] status-update failed:', {
+        traceId,
+        wamid: status.messageId,
+        status: status.status,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -102,10 +164,45 @@ export async function POST(req: NextRequest) {
   // for each text-or-media message. Dispatch is best-effort; a failure in
   // the agent turn must not cause Meta to retry the webhook.
   let dispatched = 0;
+  let droppedReplay = 0;
+  let droppedDuplicate = 0;
   for (const msg of messages) {
+    // Replay-window: Meta's signature only signs the body, so freshness
+    // gating happens per-message off the server-stamped timestamp.
+    if (!isWithinReplayWindow(msg.timestamp)) {
+      droppedReplay++;
+      console.warn('[wa/webhook] dropping stale message outside replay window', {
+        traceId,
+        messageId: msg.messageId,
+        timestamp: msg.timestamp.toISOString(),
+      });
+      continue;
+    }
+    // Dedup: Meta retries the same wamid on non-200 acks, and rare
+    // network blips can deliver twice even after our 200. SETNX in
+    // Redis with 1h TTL covers both. Fail-open if Redis is down.
+    const fresh = await claimWhatsAppMessage(msg.messageId);
+    if (!fresh) {
+      droppedDuplicate++;
+      console.log('[wa/webhook] duplicate message, skipping', {
+        traceId,
+        messageId: msg.messageId,
+      });
+      continue;
+    }
     try {
       const identity = await upsertChannelIdentity(msg);
       if (!identity) continue;
+
+      // Resolve an active trip for this traveler so the dispatch route
+      // can append inbound + outbound events to the canonical Trip
+      // ledger. Null when the traveler has no in-flight trip — dispatch
+      // skips the ledger write and the agent processes the message
+      // anyway (it may create a trip via tool calls).
+      const tripId = await resolveActiveTripForChannelIdentity({
+        tenantId: identity.tenantId,
+        channelIdentityId: identity.id,
+      });
 
       const kind = msg.message.type;
       const text = kind === 'text' ? (msg.message.text?.body ?? '') : mediaCaption(msg.message);
@@ -117,12 +214,26 @@ export async function POST(req: NextRequest) {
           text,
           locale: identity.locale,
           turnId: `whatsapp:${msg.messageId}`,
+          tripId,
           req,
         })
           .then(result => {
-            if (result?.reply) void sendWhatsAppReply(msg, result.reply);
+            if (result?.reply) {
+              void sendWhatsAppReply(msg, result.reply);
+            } else {
+              // Dispatch returned null — agent didn't produce text but
+              // didn't throw. Still send a fallback so the user knows
+              // their message landed.
+              void sendDispatchFallback(msg, 'no_reply');
+            }
           })
-          .catch(err => console.error('[wa/webhook] dispatch failed:', err));
+          .catch(err => {
+            console.error('[wa/webhook] dispatch failed:', {
+              messageId: msg.messageId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            void sendDispatchFallback(msg, 'dispatch_error');
+          });
         dispatched++;
       } else if ((kind === 'image' || kind === 'document') && msg.message[kind]) {
         // Process media turns async — downloading can be slow, Meta
@@ -133,6 +244,7 @@ export async function POST(req: NextRequest) {
           userId: identity.userId ?? identity.id,
           locale: identity.locale,
           turnId: `whatsapp:${msg.messageId}`,
+          tripId,
           phoneNumberId: msg.tenantPhoneNumberId,
           media: msg.message[kind] as WhatsAppMedia,
           caption: text,
@@ -140,9 +252,19 @@ export async function POST(req: NextRequest) {
           req,
         })
           .then(result => {
-            if (result?.reply) void sendWhatsAppReply(msg, result.reply);
+            if (result?.reply) {
+              void sendWhatsAppReply(msg, result.reply);
+            } else {
+              void sendDispatchFallback(msg, 'no_reply');
+            }
           })
-          .catch(err => console.error('[wa/webhook] media dispatch failed:', err));
+          .catch(err => {
+            console.error('[wa/webhook] media dispatch failed:', {
+              messageId: msg.messageId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            void sendDispatchFallback(msg, 'dispatch_error');
+          });
         dispatched++;
       }
     } catch (err) {
@@ -150,10 +272,46 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const replayWindowOk = messages.length === 0 ? null : droppedReplay < messages.length;
+
+  // Resolve the most-likely tenantId from the first inbound message.
+  // For pure-status payloads with no inbound message, we can't infer a
+  // tenant (status updates carry phone_number_id; we'd have to look up
+  // the install). Acceptable to leave null on those rows.
+  let auditTenantId: string | null = null;
+  if (messages[0]) {
+    auditTenantId = await resolveTenantIdForPhoneNumberId(messages[0].tenantPhoneNumberId);
+  }
+
+  // Persist webhook audit row past the 200 ack so a slow Prisma write
+  // never extends Meta's wait. Same pattern as identity-change apply.
+  const traceIdForAudit = traceId;
+  const totalDurationMs = Date.now() - startTime;
+  after(() =>
+    logWebhookEvent({
+      tenantId: auditTenantId,
+      receivedAt,
+      rawBody,
+      signatureValid: true,
+      replayWindowOk,
+      messageCount: messages.length,
+      identityChangeCount: identityChanges.length,
+      statusUpdateCount: statusUpdates.length,
+      droppedReplayCount: droppedReplay,
+      droppedDuplicateCount: droppedDuplicate,
+      dispatchedCount: dispatched,
+      durationMs: totalDurationMs,
+      traceId: traceIdForAudit,
+    })
+  );
+
   return NextResponse.json({
     received: messages.length,
     identityChanges: identityChanges.length,
     dispatched,
+    droppedReplay,
+    droppedDuplicate,
+    statusUpdated,
   });
 }
 
@@ -165,6 +323,7 @@ async function dispatchAgent(args: {
   text: string;
   locale: string;
   turnId: string;
+  tripId: string | null;
   req: NextRequest;
 }): Promise<{ reply: string } | null> {
   return postToDispatch(args.req, {
@@ -174,6 +333,7 @@ async function dispatchAgent(args: {
     text: args.text,
     locale: args.locale,
     turnId: args.turnId,
+    ...(args.tripId ? { tripId: args.tripId } : {}),
   });
 }
 
@@ -182,6 +342,7 @@ async function dispatchMediaTurn(args: {
   userId: string;
   locale: string;
   turnId: string;
+  tripId: string | null;
   phoneNumberId: string;
   media: WhatsAppMedia;
   caption: string;
@@ -225,6 +386,7 @@ async function dispatchMediaTurn(args: {
     text: args.caption,
     locale: args.locale,
     turnId: args.turnId,
+    ...(args.tripId ? { tripId: args.tripId } : {}),
     attachments: [
       {
         kind: args.attachmentKind,
@@ -260,20 +422,84 @@ function mediaCaption(msg: NormalizedInboundMessage['message']): string {
 
 function agentDispatchHeaders() {
   const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  if (!secret) {
+    console.error(
+      '[wa/webhook] AGENT_DISPATCH_SECRET / CRON_SECRET unset — dispatch will 401. Set one before customer traffic.'
+    );
+  }
   return {
     'Content-Type': 'application/json',
     'x-sendero-dispatch-secret': secret,
   };
 }
 
+/**
+ * Last-resort fallback message when the agent dispatch fails or returns
+ * nothing. Without this, the WhatsApp user sees dead silence — Meta
+ * already received our 200 ack so it won't retry, and the user has no
+ * indication their message even landed. The fallback closes the loop.
+ *
+ * Best-effort: a fallback that itself fails just logs. We don't escalate
+ * a fallback failure into a 500 because that retriggers Meta's webhook
+ * retry which is the worse outcome (duplicate dispatches).
+ */
+async function sendDispatchFallback(
+  msg: NormalizedInboundMessage,
+  reason: 'no_reply' | 'dispatch_error'
+): Promise<void> {
+  const text =
+    reason === 'dispatch_error'
+      ? "I'm having trouble reaching the agent right now. Please try again in a minute — your message did come through."
+      : "Got your message. I'm on it — give me a moment.";
+  try {
+    await sendWhatsAppReply(msg, text);
+  } catch (err) {
+    console.error('[wa/webhook] fallback send failed:', {
+      messageId: msg.messageId,
+      reason,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): Promise<void> {
   const accessToken = env.whatsappAccessToken();
   if (!accessToken) return;
   const { formatForWhatsApp } = await import('@sendero/whatsapp');
+
+  // Resolve the tenant once so every audit row carries the correct
+  // tenantId. Skip auditing entirely when we can't resolve (dev with
+  // no install row) — better a missing audit row than a broken FK.
+  const auditTenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
+
   const client = new WhatsAppClient({
     phoneNumberId: msg.tenantPhoneNumberId,
     accessToken,
     apiBaseUrl: env.whatsappApiBaseUrl() ?? undefined,
+    ...(auditTenantId
+      ? {
+          onSent: event =>
+            logOutboundMessage({
+              tenantId: auditTenantId,
+              phoneNumberId: msg.tenantPhoneNumberId,
+              source: 'agent_reply',
+              event,
+            }),
+          // Audit every Meta API call (success + failure + each retry)
+          // so the inbox UI's "outbound API" tab can show p95 latency,
+          // 429 rate, and failed-only views per tenant.
+          onApiCall: event =>
+            logMetaCall({
+              tenantId: auditTenantId,
+              method: event.method,
+              endpoint: event.endpoint,
+              statusCode: event.statusCode,
+              durationMs: event.durationMs,
+              ok: event.ok,
+              ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
+            }),
+        }
+      : {}),
   });
   const chunks = formatForWhatsApp(reply);
   for (const chunk of chunks) {
@@ -429,6 +655,52 @@ function localeFromMetadata(metadata: unknown, fallback: string): string {
     if (typeof locale === 'string' && locale) return locale;
   }
   return fallback;
+}
+
+/**
+ * Match a status update to its outbound row(s) and reconcile.
+ *
+ * The wamid (`status.messageId`) is what we wrote into
+ * `OtpDeliveryAttempt.providerMessageId` when we dispatched the OTP, so
+ * `updateMany` on that column fans out to all matching audit rows
+ * (typically one). Returns the count for the response payload's
+ * `statusUpdated` counter.
+ *
+ * `failed` carries a non-null `failureReason`; non-failed updates leave
+ * the prior `failureReason` alone (it might still be informative — e.g.
+ * a partial-failure in a batch). We do NOT downgrade — Meta's status
+ * stream is roughly monotonic (sent → delivered → read, or sent →
+ * failed), and stale 'sent' updates after a 'delivered' would be rare;
+ * if they happen we accept the noise rather than read-then-write each
+ * row. Worth revisiting if ops sees flapping.
+ */
+async function applyOtpStatusUpdate(status: NormalizedStatusUpdate): Promise<number> {
+  const data: { deliveryStatus: string; failureReason?: string } = {
+    deliveryStatus: status.status,
+  };
+  if (status.failureReason) data.failureReason = status.failureReason;
+
+  const [otpResult, outboundCount] = await Promise.all([
+    prisma.otpDeliveryAttempt.updateMany({
+      where: {
+        providerMessageId: status.messageId,
+        channel: 'whatsapp',
+      },
+      data,
+    }),
+    // Also reconcile the canonical outbound audit row. A given wamid
+    // appears in OtpDeliveryAttempt OR WhatsAppOutboundMessage (or both
+    // during the migration window), so we update both unconditionally.
+    reconcileOutboundStatus({
+      wamid: status.messageId,
+      status: status.status,
+      failureReason: status.failureReason,
+      at: status.timestamp,
+    }),
+  ]);
+  // Return the maximum of the two counts so the response payload's
+  // `statusUpdated` counter reflects "at least one row was reconciled".
+  return Math.max(otpResult.count, outboundCount);
 }
 
 async function applyIdentityChange(change: NormalizedIdentityChange): Promise<void> {

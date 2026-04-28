@@ -15,11 +15,10 @@ import Link from 'next/link';
 
 import { prisma, type InvoiceKind, type InvoiceStatus, type Prisma } from '@sendero/database';
 
-import { Crumb } from '@/components/console/crumb';
 import { InvoicesGrid } from '@/components/invoices/invoices-card-grid';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PagePagination } from '@/components/shared/page-pagination';
-import { formatMicroUsd } from '@/lib/format';
+import { formatMicroUsdPrecise } from '@/lib/format';
 import { getAppCopy } from '@/lib/app-copy';
 import { parseListQuery } from '@/lib/parse-list-query';
 import { getRequestLocale } from '@/lib/request-locale';
@@ -176,7 +175,7 @@ export default async function InvoicesPage({
   return (
     <div
       style={{
-        padding: '24px 28px',
+        padding: '0 20px 20px',
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -184,31 +183,22 @@ export default async function InvoicesPage({
         minHeight: 0,
       }}
     >
-      <Crumb trail={['Money & policy', 'Invoices']} />
-
-      <div>
-        <h1 className="t-h1">Invoices</h1>
-        <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-          Settled in nano-USDC on Arc L2. Full audit trail on every line.
-        </p>
-      </div>
-
       <KpiStrip
         items={[
           {
             label: 'MTD billed',
-            value: formatMicroUsd(mtdSum),
+            value: formatMicroUsdPrecise(mtdSum),
             sub:
               mtdDeltaPct === null ? '—' : `${mtdDeltaPct >= 0 ? '+' : ''}${mtdDeltaPct}% vs last`,
           },
           {
             label: 'Open',
-            value: formatMicroUsd(openSum),
+            value: formatMicroUsdPrecise(openSum),
             sub: `${openCount} invoice${openCount === 1 ? '' : 's'}`,
           },
           {
             label: 'Past due',
-            value: formatMicroUsd(overdueSum),
+            value: formatMicroUsdPrecise(overdueSum),
             sub: overdueCount === 0 ? 'clean' : `${overdueCount} overdue`,
           },
           {

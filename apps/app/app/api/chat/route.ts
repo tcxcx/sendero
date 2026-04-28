@@ -23,12 +23,13 @@ import {
   googleGenerativeAiKey,
   type ModelTier,
   renderWorkflowsBlock,
-  SENDERO_SOUL,
   selectModel,
   vertexLocation,
   vertexProject,
 } from '@sendero/agent';
-import { prisma } from '@sendero/database';
+import { buildAgentPersona } from '@/lib/agent-persona';
+import { prisma, type Prisma } from '@sendero/database';
+import { aiTelemetryConfig } from '@sendero/langfuse';
 import { detectLocale, getLocaleSlice, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
@@ -42,50 +43,29 @@ import {
 } from 'ai';
 
 import { detectAttachmentsHint } from '@/lib/agent-attachments-hint';
+import {
+  buildPlanOverrides,
+  makeCapStore,
+  resolveSegment,
+  resolveTenantPlan,
+} from '@/lib/agent-auth';
+import { currentOrgPlan } from '@/lib/billing-plan';
+import {
+  chatPricingBreakdown,
+  chatTurnPriceMicroUsdc,
+  inferModelId,
+  type ChatUsage,
+} from '@/lib/chat-pricing';
+import { preflight } from '@sendero/billing/meter';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
-const WEB_CHAT_RULES = `## Web console rules
-
-You book flights for corporate travelers through first-party supplier integrations, and every booking is
-settled on-chain via an ERC-8183 job backed by USDC escrow. You have an
-ERC-8004 agent identity and an accumulating reputation score.
-
-Booking flow — ALWAYS in this order:
-  1. search_flights   — confirm origin/destination/date with the user first
-  2. book_flight      — after the user picks an offer; issues a real PNR
-
-CRITICAL — don't duplicate the UI:
-  • After search_flights returns, the Stage already renders every offer as a
-    rich card. DO NOT list airline/price/duration in the chat. Reply in ONE
-    short sentence pointing the user to the Stage ("Three premium-economy
-    options on the right — click Hold seat to book.") and stop.
-  • After book_flight returns a PNR, the UI renders a HoldCard and a
-    Settlement panel. DO NOT recap the price or PNR. Reply in ONE sentence
-    telling the user to sign the three userOps in the Settlement panel to
-    finalize on Arc.
-  • Do not try to call any settle tool — the UI drives the user through the
-    three passkey-signed user operations itself.
-
-Hotels are a separate flow. Use search_hotels when the user asks for
-lodging. The Stage renders up to six property cards — DO NOT list them in
-the chat, same rule as flights.
-
-Treasury rebalance tools (Sendero corporate wallet on Arc):
-  • check_treasury         — read current USDC + EURC balances
-  • gateway_balance        — unified USDC across every Gateway testnet
-  • gateway_transfer       — sub-500ms burn+mint between Gateway chains
-  • swap_tokens            — USDC ↔ EURC on Arc via Circle App Kit
-  • send_tokens            — transfer USDC/EURC to any Arc address
-  • bridge_to_arc          — CCTP v2 bridge into Arc (slower than Gateway)
-  • swap_and_bridge        — composed: CCTP into Arc then swap to EURC
-  • settle_split           — atomic commission fan-out on Arc
-
-Keep every response under 2 sentences unless the user asks a question. When
-you call a tool, a single clause like "Searching flights…" is enough.
-
-Today's date: ${new Date().toISOString().split('T')[0]}.`;
+// Persona resolution moved to apps/app/lib/agent-persona.ts. Resolves
+// `sendero-soul` + `sendero-web-chat-rules` from Langfuse Prompt Management
+// when LANGFUSE_PROMPT_MANAGEMENT=true; otherwise the hardcoded fallback
+// inside that helper ships verbatim. Today's date flows in as the
+// `{{today}}` template variable so prompt-side authors can reference it.
 
 type Picked = { model: LanguageModel | string; label: string; tier: ModelTier };
 
@@ -204,6 +184,13 @@ interface ChatBody {
   traveler?: { name?: string; email?: string; phone?: string };
   context?: Record<string, string | number | boolean | null | object>;
   tier?: ModelTier;
+  /**
+   * Operator-selected gateway model id (e.g. `google/gemini-2.5-flash`).
+   * When set, this becomes the FIRST entry in the model cascade —
+   * direct-provider fallbacks still kick in if the gateway is down.
+   * Tool-internal models (OCR, embeddings) ignore this and stay pinned.
+   */
+  model?: string;
   locale?: string;
   /**
    * Optional trip scope. When the MetaInbox is mounted at
@@ -281,12 +268,65 @@ export async function POST(req: NextRequest) {
     console.warn('[chat] tenant resolve failed; meter write will be skipped', err);
   }
 
+  // Cap preflight — same gate as /api/agent/dispatch and /api/agent/chat.
+  // Without this, console turns ignore plan-tier caps and a Free-tier
+  // tenant can blow past their $100 ceiling via `/dashboard/console`
+  // alone. Keep behavior pre-Clerk for unauthed callers (storybook,
+  // playground): no tenant → no preflight, no meter write.
+  if (tenantId) {
+    try {
+      const segment = await resolveSegment(tenantId);
+      const planTier = await resolveTenantPlan(tenantId);
+      const overrides = buildPlanOverrides(planTier);
+      const capStore = makeCapStore();
+      const pre = await preflight(capStore, {
+        tenantId,
+        action: 'chat_reply',
+        segment,
+        overrides,
+      });
+      if (pre.blocked) {
+        return NextResponse.json(
+          {
+            error: 'cap_exceeded',
+            text:
+              pre.cap.warnings[0] ??
+              'Your tenant has hit its spend cap for this period. Contact your admin.',
+            periods: pre.cap.periods.map(p => ({
+              period: p.period,
+              spentMicro: p.spentMicro.toString(),
+              capMicro: p.capMicro.toString(),
+              remainingMicro: p.remainingMicro.toString(),
+            })),
+          },
+          { status: 402 }
+        );
+      }
+    } catch (err) {
+      // Cap store outage — fail open so a degraded billing service
+      // doesn't take the chat surface down. The actual price write
+      // below still runs; the operator sees a higher-than-expected
+      // cap report next page load and can investigate.
+      console.warn('[chat] cap preflight failed; allowing turn', err);
+    }
+  }
+
   const runtimeContextJson = body.context ? JSON.stringify(body.context, null, 2) : undefined;
 
   // Chat tier defaults to 'fast' (sonnet-class) for responsive replies.
   // A trailing body.tier override lets power users force a smart/cheap turn.
   const requestedTier: ModelTier = body.tier ?? 'fast';
   const cascade = pickModelCascade(requestedTier);
+  // Operator-picked model trumps the default cascade head when valid.
+  // Stays a string (gateway slug) — direct-provider fallbacks are still
+  // appended so a gateway outage doesn't kill the chat.
+  if (body.model && gatewayConfigured() && Date.now() >= gatewayBrokenUntil) {
+    cascade.unshift({
+      model: body.model,
+      label: `gateway:${body.model}`,
+      tier: requestedTier,
+    });
+  }
   if (cascade.length === 0) {
     // Plain text because useChat renders the raw body as `error.message`.
     // Give the operator a human sentence, not a JSON blob.
@@ -374,7 +414,7 @@ export async function POST(req: NextRequest) {
   // every channel sees the workflow catalog as the canonical orchestration
   // surface, not ad-hoc tool chains.
   const systemPrompt = buildSystemPrompt({
-    persona: `${SENDERO_SOUL}\n\n${WEB_CHAT_RULES}`,
+    persona: await buildAgentPersona('web', locale),
     locale,
     localeSlice: getLocaleSlice(locale),
     channelHint:
@@ -392,21 +432,77 @@ export async function POST(req: NextRequest) {
     console.error(`[chat] ${picked.label} error:`, msg);
   };
 
+  // Extend gateway routing with thinking config so the conversational LLM
+  // emits reasoning parts that the AI Elements <Reasoning> bubble can
+  // render inline. Gemini 2.5 + Claude Sonnet 4 both honor these keys
+  // when called via the gateway. Tool-internal models (OCR, embeddings)
+  // never see this — they don't go through this route.
   const providerOptions =
-    typeof picked.model === 'string' ? buildProviderOptions(picked.tier) : undefined;
+    typeof picked.model === 'string'
+      ? {
+          ...buildProviderOptions(picked.tier),
+          google: {
+            thinkingConfig: { thinkingBudget: 4096, includeThoughts: true },
+          },
+          anthropic: {
+            thinking: { type: 'enabled', budgetTokens: 4096 },
+            // Ephemeral cache breakpoint — system + tools cached at
+            // the provider, never user content. ~10× input-token COGS
+            // reduction on agentic loops. Cross-tenant cache leakage
+            // not a concern: cache is keyed by (content hash, API key)
+            // and gateway-with-BYOK scopes per-tenant.
+            cacheControl: { type: 'ephemeral' as const },
+          },
+        }
+      : undefined;
 
   // Stable per-turn id so retries de-dupe at the meter layer.
   const turnId = `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const turnStart = Date.now();
+
+  // Tool-selection telemetry. The agent has a large catalog (78+ tools)
+  // and operators are reporting selection failures (e.g. asks "what's my
+  // balance?", model picks no tool). We log the catalog the model SAW
+  // and what it ACTUALLY picked so we can quantify failures before
+  // shipping any new wrappers. Single structured stdout line — query
+  // via `vercel logs --since=1d | grep '\\[tool-select\\]'`.
+  const lastUserMessage = (() => {
+    const msgs = messages as Array<{ role?: string; parts?: unknown[]; content?: unknown }>;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m?.role !== 'user') continue;
+      const t = extractContent(m as { parts?: unknown[]; content?: unknown });
+      if (t) return t;
+    }
+    return '';
+  })();
+  const toolCatalogNames = Object.keys(tools);
 
   const result = streamText({
     model: picked.model,
     system: systemPrompt,
     messages: converted,
     tools,
-    stopWhen: stepCountIs(6),
+    // Per-turn step ceiling — runaway-loop defense. 8 covers the
+    // richest agent flows (search → policy check → hold → confirm)
+    // while bounding the worst-case for opus-on-Pro. Same number
+    // as agent/chat for consistency across operator surfaces.
+    stopWhen: stepCountIs(8),
     maxRetries: 2,
     providerOptions,
     onError,
+    // Langfuse traces every AI SDK call via OTel (initLangfuseOtel in
+    // instrumentation.ts). aiTelemetryConfig() returns the standard
+    // experimental_telemetry shape with Langfuse-aware metadata tags.
+    experimental_telemetry: aiTelemetryConfig('sendero-chat', {
+      userId: userId ?? 'anonymous',
+      tenantId: tenantId ?? 'anonymous',
+      surface: 'app-api',
+      trigger: 'user',
+      channel,
+      model: picked.label,
+      scope: 'chat',
+    }),
     // Bill the turn after the last chunk lands. `chat_reply` is the
     // canonical aggregator the rest of the system already understands
     // (matches `runAgentTurn` in @sendero/agent and the streaming
@@ -415,8 +511,62 @@ export async function POST(req: NextRequest) {
     // agent actually did this turn — useful for the NanopayPanel
     // ledger but never trusted for pricing.
     onFinish: async finish => {
-      if (!tenantId) return;
       const toolNames = (finish.toolCalls ?? []).map(t => t.toolName);
+
+      // [tool-select] telemetry — fires every turn, even unauthed ones,
+      // so we can see WHICH prompts the model fails to tool-route on.
+      // Single line, structured, greppable. No PII beyond the prompt
+      // first 200 chars (already stored verbatim in chatMessage.content).
+      //
+      // Aggregate across multi-step turns. `finish.toolCalls` only
+      // reports the FINAL step's calls; in a 2-step turn (step 1: call
+      // tool → step 2: summarize) the summary step's empty toolCalls
+      // would falsely report selection failure. Walk every step in
+      // `finish.steps` and union their toolCalls instead.
+      try {
+        const steps = Array.isArray((finish as { steps?: unknown[] }).steps)
+          ? ((finish as { steps?: unknown[] }).steps as Array<{
+              toolCalls?: Array<{ toolName?: string }>;
+            }>)
+          : [];
+        const allInvoked: string[] = [];
+        for (const step of steps) {
+          const calls = Array.isArray(step?.toolCalls) ? step.toolCalls : [];
+          for (const call of calls) {
+            if (typeof call?.toolName === 'string') allInvoked.push(call.toolName);
+          }
+        }
+        // Fallback to final-step toolNames if steps array is unavailable
+        // (older AI SDK versions, error paths).
+        const invoked = allInvoked.length > 0 ? allInvoked : toolNames;
+        const usage = (finish as { usage?: { inputTokens?: number; outputTokens?: number } }).usage;
+        const finishReason = (finish as { finishReason?: string }).finishReason;
+        console.log(
+          '[tool-select] ' +
+            JSON.stringify({
+              ts: new Date().toISOString(),
+              turnId,
+              tenantId: tenantId ?? null,
+              userId: userId ?? null,
+              model: picked.label,
+              prompt: lastUserMessage.slice(0, 200),
+              promptLen: lastUserMessage.length,
+              catalogCount: toolCatalogNames.length,
+              catalog: toolCatalogNames,
+              invokedCount: invoked.length,
+              invoked,
+              inputTokens: usage?.inputTokens ?? null,
+              outputTokens: usage?.outputTokens ?? null,
+              stepCount: steps.length || null,
+              finishReason: finishReason ?? null,
+              durationMs: Date.now() - turnStart,
+            })
+        );
+      } catch (logErr) {
+        console.warn('[tool-select] log failed', logErr);
+      }
+
+      if (!tenantId) return;
 
       // Persist the chat session + every UIMessage. Non-fatal: meter
       // write still runs even if this throws. Skipped when the caller
@@ -531,20 +681,30 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Token-aware pricing — covers the thinking budget on Gemini /
+      // Claude. Reasoning rolls into output cost at every provider.
+      // Falls back to a base fee when usage is unreported.
+      // Plan-tier discount applies to both base + provider passthrough.
+      const modelId = inferModelId(picked.model);
+      const usage = (finish as { usage?: ChatUsage }).usage;
+      const planConfig = await currentOrgPlan().catch(() => null);
+      const discountBps = planConfig?.nanopaymentDiscountBps ?? 0;
+      const turnPrice = chatTurnPriceMicroUsdc(modelId, usage, discountBps);
+      const breakdown = chatPricingBreakdown(modelId, usage, discountBps);
+
       try {
         const row = await prisma.meterEvent.create({
           data: {
             tenantId,
             userId,
             toolName: 'chat_reply',
-            // Flat $0.001 per turn for the web console until the full
-            // segment-aware preflight pipeline is wired here. Real
-            // pricing lives in `runAgentTurn` for dispatch + the agent
-            // chat stream; this surface stays cheap-and-honest until
-            // we promote it.
-            priceMicroUsdc: 1_000n,
+            priceMicroUsdc: turnPrice,
             status: 'paid',
-            note: `surface=chat channel=${channel} tools=${toolNames.length}`,
+            note: `surface=chat channel=${channel} tools=${toolNames.length} model=${modelId ?? 'unknown'}`,
+            // Cast through unknown → Prisma.InputJsonValue: `breakdown.rates`
+            // is a ModelRates interface without an index signature, so it
+            // can't satisfy InputJsonObject directly even though every
+            // field IS JSON-serializable. The runtime shape is correct.
             metadata: {
               channel,
               turnId,
@@ -552,7 +712,8 @@ export async function POST(req: NextRequest) {
               toolNames,
               surface: 'web_console_chat',
               chatSessionId,
-            },
+              pricing: breakdown,
+            } as unknown as Prisma.InputJsonValue,
           },
           select: { id: true, at: true, priceMicroUsdc: true },
         });
@@ -571,6 +732,13 @@ export async function POST(req: NextRequest) {
         await prisma.$executeRaw`SELECT pg_notify('meter_event', ${payload})`.catch(err =>
           console.warn('[chat] pg_notify meter_event failed (non-fatal)', err)
         );
+
+        // Settlement is intentionally batched, not inline. The cron at
+        // /api/cron/settle-nanopay-batches sweeps every 5 minutes
+        // (vercel.json) — gas-efficient, no nonce races on the
+        // treasury EOA, predictable RPC budget. The Spend dashboard
+        // surfaces pending-vs-reconciled so the operator sees what's
+        // owed at any instant without waiting on chain confirmation.
       } catch (err) {
         console.error('[chat] meter write failed (non-fatal):', err);
       }

@@ -13,17 +13,23 @@
  * than the install row's primary key would suggest.
  */
 
-import { after, NextResponse, type NextRequest } from 'next/server';
-import { env } from '@sendero/env';
+import { after, type NextRequest, NextResponse } from 'next/server';
+
 import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
 import {
   deriveTenantKey,
   isUrlVerificationChallenge,
-  verifySlackSignature,
   type SlackEventEnvelope,
+  verifySlackSignature,
 } from '@sendero/slack';
-import { runSlackAgentTurn } from '@/lib/slack-agent';
+
 import { makeCapStore, makeMeterStore, makeSessionStore, resolveSegment } from '@/lib/agent-stores';
+import { newTraceId } from '@/lib/api-errors';
+import { acquireThreadLock, claimSlackEvent, releaseThreadLock } from '@/lib/slack-dedup-lock';
+import { runSlackAgentTurn } from '@/lib/slack-agent';
+import { fetchSlackFilesAsAttachments } from '@/lib/slack-media';
+import { isThreadSubscribed } from '@/lib/slack-thread-subscription';
 import { resolveSenderoUser } from '@/lib/slack-user-mapping';
 
 export const runtime = 'nodejs';
@@ -90,10 +96,162 @@ export async function POST(req: NextRequest) {
   }
 
   const ev = envelope.event;
+
+  // Lifecycle events that retire the install. `tokens_revoked` fires
+  // when a Slack admin revokes the bot token (per-user or workspace);
+  // `app_uninstalled` fires when the workspace removes the app
+  // entirely. We mark `revokedAt` and keep the row — meter_events +
+  // SlackUserBinding still reference it for audit. Subsequent webhook
+  // events for this install will keep landing here (Slack doesn't
+  // un-subscribe immediately) but every handler downstream treats a
+  // non-null revokedAt as "do nothing".
+  const lifecycleType = (ev?.type as string | undefined) ?? null;
+  if (lifecycleType === 'tokens_revoked' || lifecycleType === 'app_uninstalled') {
+    if (install.revokedAt === null) {
+      await prisma.slackInstall.update({
+        where: { id: install.id },
+        data: { revokedAt: new Date() },
+      });
+      console.log('[slack/events] install revoked', {
+        eventType: lifecycleType,
+        teamId: install.teamId,
+        enterpriseId: install.enterpriseId,
+        installId: install.id,
+      });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  // Already-revoked installs may still receive late events while
+  // Slack's subscription propagates. Drop them quietly so we don't
+  // burn agent turns or hit the dead bot token.
+  if (install.revokedAt !== null) {
+    return NextResponse.json({ ok: true, dropped: 'install_revoked' });
+  }
+
   const channelId = (ev?.channel as string | undefined) ?? null;
   const userId = (ev?.user as string | undefined) ?? null;
   const text = (ev?.text as string | undefined) ?? '';
   const threadTs = (ev?.thread_ts as string | undefined) ?? (ev?.ts as string | undefined);
+
+  // Event-type filter — only dispatch the agent on events the operator
+  // actually addressed Sendero in. Without this, every `channel_rename`,
+  // `member_joined_channel`, `pin_added`, etc. would burn an agent turn
+  // and (worse) post a noise reply into the originating thread.
+  //
+  // Slack subscription model:
+  //   - app_mention      → always respond (explicit @-mention)
+  //   - message.im       → always respond (DM)
+  //   - message.channels → only respond if (a) bot was @-mentioned in
+  //     the text, OR (b) this thread is "subscribed" — bot has replied
+  //     here before, see slack-thread-subscription.ts. Without (b) the
+  //     bot would only react to fresh @-mentions, breaking natural
+  //     follow-up conversation. Without the gate, every message in any
+  //     channel the bot is in triggers a turn. Both extremes are wrong.
+  //
+  // Bot-authored messages are skipped to avoid self-reply loops
+  // (`subtype === 'bot_message'` or `user matches install.botUserId`).
+  const eventType = (ev?.type as string | undefined) ?? null;
+  const eventSubtype = (ev?.subtype as string | undefined) ?? null;
+  const channelType = (ev?.channel_type as string | undefined) ?? null;
+  const isBotEcho = userId === install.botUserId || eventSubtype === 'bot_message';
+  // Slack inserts the bot user-id literally into mention text as
+  // `<@U…>`. Cheap to detect without a tokenizer.
+  const mentionsBot =
+    eventType === 'app_mention' ||
+    (typeof text === 'string' && text.includes(`<@${install.botUserId}>`));
+  const isDirectMessage = channelType === 'im' || eventType === 'app_mention';
+
+  let isAgentInput = false;
+  let dispatchReason: 'mention' | 'dm' | 'subscribed' | null = null;
+
+  if (!isBotEcho && eventType === 'app_mention') {
+    isAgentInput = true;
+    dispatchReason = 'mention';
+  } else if (!isBotEcho && eventType === 'message' && text.trim().length > 0 && !eventSubtype) {
+    if (isDirectMessage) {
+      isAgentInput = true;
+      dispatchReason = 'dm';
+    } else if (mentionsBot) {
+      isAgentInput = true;
+      dispatchReason = 'mention';
+    } else if (threadTs && channelId) {
+      // Channel/group message in an existing thread: dispatch only if
+      // the bot has previously replied here. Marked subscribed in
+      // `runSlackAgentTurn` after a successful post.
+      const subscribed = await isThreadSubscribed({
+        teamId: install.teamId,
+        channelId,
+        threadTs,
+      });
+      if (subscribed) {
+        isAgentInput = true;
+        dispatchReason = 'subscribed';
+      }
+    }
+  }
+
+  if (!isAgentInput) {
+    console.log('[slack/events] skip non-agent event', {
+      eventType,
+      eventSubtype,
+      channelType,
+      isBotEcho,
+      mentionsBot,
+      teamId: install.teamId,
+      eventId: envelope.event_id,
+    });
+    return NextResponse.json({ ok: true });
+  }
+
+  // Dedup retried deliveries on event_id. Slack retries up to 3 times
+  // when an endpoint fails to ack within 3s, and rare network blips
+  // can deliver the same event_id twice even after a 200. The session
+  // store's idempotency further down would catch most of these, but
+  // the cheap Redis SETNX up front means we don't even start the
+  // download / agent path on a known dupe. Fail-open if Redis is
+  // unavailable — the session store remains a backstop.
+  const fresh = await claimSlackEvent(envelope.event_id);
+  if (!fresh) {
+    console.log('[slack/events] duplicate event, skipping', {
+      eventId: envelope.event_id,
+      teamId: install.teamId,
+    });
+    return NextResponse.json({ ok: true, duplicate: true });
+  }
+
+  // Single-flight per (team, channel, thread). Two concurrent inbound
+  // events for the same thread would race the session store
+  // (last-write-wins on history) and double-post into the thread.
+  // `subjectKey` here MUST match the one slack-agent.ts builds for
+  // the session store so the lock and the state are keyed alike.
+  const subjectKey = `slack:${install.teamId}:${channelId}:${threadTs}`;
+  const lockToken = await acquireThreadLock(subjectKey);
+  if (lockToken === null) {
+    console.log('[slack/events] thread busy, dropping concurrent event', {
+      eventId: envelope.event_id,
+      subjectKey,
+    });
+    return NextResponse.json({ ok: true, dropped: 'thread_busy' });
+  }
+
+  // Cross-phase autoplan ask: every webhook entry gets a correlation id
+  // we can grep across the call graph (events → agent turn → meter row).
+  const traceId = newTraceId();
+  console.log('[slack/events] inbound', {
+    traceId,
+    teamId: install.teamId,
+    channelId,
+    eventId: envelope.event_id,
+    threadTs,
+    dispatchReason,
+    hasText: Boolean(text),
+    fileCount: Array.isArray(ev?.files) ? (ev?.files as unknown[]).length : 0,
+  });
+  // Slack delivers shared files inline on the event envelope as `files[]`.
+  // We pull them off here so the file fetch happens inside `after()`
+  // (auth'd download is slow) and the route still acks within Slack's 3s.
+  const rawFiles = Array.isArray(ev?.files) ? (ev?.files as unknown[]) : [];
 
   // Defer the agent turn past the ack — Slack only needs `{ ok: true }`
   // within 3s; the LLM call can take much longer on cold paths. The Slack
@@ -124,6 +282,16 @@ export async function POST(req: NextRequest) {
           ).senderoUserId
         : install.authedUserId;
 
+      // Fetch any inline file shares with the bot token. Slack's
+      // url_private requires Authorization, so we download here and pass
+      // the bytes through as base64 attachments — the agent runtime then
+      // exposes them as multimodal model parts and nudges the LLM toward
+      // `scan_document_auto`. Failures (private channels, expired tokens,
+      // oversize) are logged but never block the agent turn.
+      const attachments = rawFiles.length
+        ? await fetchSlackFilesAsAttachments(rawFiles, install.botToken)
+        : [];
+
       await runSlackAgentTurn({
         // Prisma's `routing: JsonValue` is structurally compatible with
         // SlackRoutingConfig | null at runtime; the agent's prompt-builder
@@ -135,6 +303,7 @@ export async function POST(req: NextRequest) {
         channelId,
         userId,
         senderoUserId: resolvedSenderoUserId,
+        ...(attachments.length ? { attachments } : {}),
         // Model intentionally omitted — slack-agent resolves via the
         // canonical Sendero policy: Gateway-first (Gemini-first cascade
         // google→anthropic→openai), direct-provider fallback on gateway
@@ -145,7 +314,40 @@ export async function POST(req: NextRequest) {
         resolveSegment,
       });
     } catch (err) {
-      console.error('[slack/events] runSlackAgentTurn failed:', err);
+      console.error('[slack/events] runSlackAgentTurn failed:', {
+        traceId,
+        teamId: install.teamId,
+        channelId,
+        threadTs,
+        eventId: envelope.event_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Best-effort fallback so the user doesn't see dead silence in the
+      // thread. If posting the fallback also fails (token revoked, etc.)
+      // we just log — never re-throw past `after()`, that bubbles up as
+      // an unhandled rejection in the Vercel runtime.
+      if (channelId && threadTs) {
+        try {
+          const { createSlackClient } = await import('@sendero/slack');
+          const slack = createSlackClient(install.botToken);
+          await slack.chat.postMessage({
+            channel: channelId,
+            thread_ts: threadTs,
+            text: "I'm having trouble reaching the agent right now. Please try again in a minute — your message did come through.",
+            mrkdwn: true,
+            unfurl_links: false,
+          });
+        } catch (fallbackErr) {
+          console.error('[slack/events] fallback post failed:', {
+            error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+          });
+        }
+      }
+    } finally {
+      // Release the single-flight lock whether the turn succeeded or
+      // threw. If the function instance dies before this runs, the
+      // 90s TTL covers cleanup.
+      await releaseThreadLock(subjectKey, lockToken);
     }
   });
 

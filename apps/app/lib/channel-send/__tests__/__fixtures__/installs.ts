@@ -28,6 +28,7 @@ export function slackInstallFixture(overrides: Partial<SlackInstall> = {}): Slac
     authedUserId: 'U0AUTHED',
     installedAt: FROZEN_AT,
     updatedAt: FROZEN_AT,
+    revokedAt: null,
     raw: null,
     routing: null,
     ...overrides,

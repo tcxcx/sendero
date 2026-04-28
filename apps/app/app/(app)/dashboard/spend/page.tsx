@@ -53,7 +53,7 @@ export default async function SpendPage({
   const now = new Date();
   const from = new Date(now.getTime() - days * DAY_MS);
 
-  const [summary, caps, recentBatches] = await Promise.all([
+  const [summary, caps, recentBatches, settlementSplit] = await Promise.all([
     tenantSpendSummary(makeAnalyticsStore(), { tenantId: tenant.id, from, to: now, bucket: 'day' }),
     prisma.tenantSpendCap.findMany({
       where: { tenantId: tenant.id },
@@ -74,6 +74,37 @@ export default async function SpendPage({
         createdAt: true,
       },
     }),
+    // Pending vs reconciled split — same window as the summary.
+    // `pending` = paid events not yet attached to a settled batch
+    // (cron will pick them up at the next */5 sweep). `reconciled` =
+    // events with a settlementRef pointing at a batch in any state.
+    Promise.all([
+      prisma.meterEvent.aggregate({
+        where: {
+          tenantId: tenant.id,
+          status: 'paid',
+          settlementRef: null,
+          at: { gte: from, lte: now },
+        },
+        _sum: { priceMicroUsdc: true },
+        _count: true,
+      }),
+      prisma.meterEvent.aggregate({
+        where: {
+          tenantId: tenant.id,
+          status: 'paid',
+          settlementRef: { not: null },
+          at: { gte: from, lte: now },
+        },
+        _sum: { priceMicroUsdc: true },
+        _count: true,
+      }),
+    ]).then(([pending, reconciled]) => ({
+      pendingMicro: pending._sum.priceMicroUsdc ?? 0n,
+      pendingCount: pending._count,
+      reconciledMicro: reconciled._sum.priceMicroUsdc ?? 0n,
+      reconciledCount: reconciled._count,
+    })),
   ]);
 
   return (
@@ -90,6 +121,7 @@ export default async function SpendPage({
         summary={summary}
         caps={caps}
         recentBatches={recentBatches}
+        settlementSplit={settlementSplit}
       />
     </>
   );

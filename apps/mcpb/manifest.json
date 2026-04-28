@@ -1,0 +1,72 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/mcpb/main/schemas/mcpb-manifest-v0.3.schema.json",
+  "manifest_version": "0.3",
+  "name": "sendero",
+  "display_name": "Sendero",
+  "version": "0.1.0",
+  "description": "AI travel booking with on-chain settlement. Search, hold, ticket, and settle bookings in USDC — all from Claude Desktop.",
+  "long_description": "Sendero connects Claude Desktop to the Sendero travel-ops agent. Search flights via Duffel, place holds, settle on-chain in USDC, and audit every step. One API key, your workspace's plan limits, sandbox or production routing. Free tier: $100 cap. Paid plans unlock production keys, higher caps, and channel adapters (Slack, WhatsApp, MCP).",
+  "author": {
+    "name": "Sendero",
+    "email": "team@sendero.travel",
+    "url": "https://sendero.travel"
+  },
+  "homepage": "https://sendero.travel",
+  "documentation": "https://sendero.travel/docs/mcp-integration",
+  "support": "https://sendero.travel/support",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tcxcx/sendero"
+  },
+  "icon": "icon.png",
+  "icons": [
+    { "src": "icons/icon-128.png", "size": "128x128" },
+    { "src": "icons/icon-512.png", "size": "512x512" }
+  ],
+  "license": "Apache-2.0",
+  "keywords": [
+    "travel",
+    "booking",
+    "flights",
+    "hotels",
+    "usdc",
+    "on-chain",
+    "stablecoin",
+    "duffel",
+    "sendero"
+  ],
+  "privacy_policies": ["https://sendero.travel/legal/privacy"],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "node": ">=20" }
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "SENDERO_API_KEY": "${user_config.api_key}",
+        "SENDERO_MCP_URL": "${user_config.mcp_url}"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Sendero API key",
+      "description": "Get one at https://app.sendero.travel/dashboard/settings/api-keys (sandbox or production).",
+      "sensitive": true,
+      "required": true
+    },
+    "mcp_url": {
+      "type": "string",
+      "title": "MCP endpoint (advanced)",
+      "description": "Override only for self-hosted Sendero or staging. Default is the production endpoint.",
+      "default": "https://app.sendero.travel/api/mcp",
+      "required": false
+    }
+  }
+}

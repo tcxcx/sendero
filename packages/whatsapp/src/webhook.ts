@@ -13,6 +13,7 @@ import type {
   NormalizedIdentityChange,
   NormalizedInboundMessage,
   WhatsAppMessage,
+  WhatsAppStatus,
   WhatsAppWebhookPayload,
 } from './types';
 import {
@@ -21,6 +22,34 @@ import {
   normalizeSystemIdentityChange,
   normalizeUserIdUpdate,
 } from './identity';
+
+/**
+ * Per-message delivery status update extracted from Meta's `statuses[]`
+ * (or Kapso v2's `whatsapp.message.status` envelope, when surfaced).
+ *
+ * `messageId` is Meta's wamid — the same identifier used as
+ * `providerMessageId` on rows we wrote outbound (e.g.
+ * `OtpDeliveryAttempt.providerMessageId`). Joining the two closes the
+ * outbound-message audit loop.
+ */
+export interface NormalizedStatusUpdate {
+  /** Meta wamid the status applies to. */
+  messageId: string;
+  /** `sent` | `delivered` | `read` | `failed` per Meta. Pass-through. */
+  status: string;
+  /** ISO timestamp of the status event. */
+  timestamp: Date;
+  /** Phone-number-id the status was reported against (tenant scoping). */
+  tenantPhoneNumberId: string;
+  /** Recipient identifier — phone (`recipient_id`) or BSUID (`recipient_user_id`). */
+  recipientId: string | null;
+  /**
+   * Compact failure reason for `status === 'failed'`. Picks the first
+   * error envelope's `title` (falls back to `code`/`message`). `null`
+   * for non-failed statuses.
+   */
+  failureReason: string | null;
+}
 
 export function verifyWebhookSignature(
   rawBody: string,
@@ -72,6 +101,23 @@ interface KapsoV2Envelope {
 export interface NormalizedWebhook {
   messages: NormalizedInboundMessage[];
   identityChanges: NormalizedIdentityChange[];
+  statusUpdates: NormalizedStatusUpdate[];
+}
+
+function normalizeStatus(status: WhatsAppStatus, phoneNumberId: string): NormalizedStatusUpdate {
+  let failureReason: string | null = null;
+  if (status.status === 'failed' && status.errors && status.errors.length > 0) {
+    const e = status.errors[0]!;
+    failureReason = e.title ?? e.message ?? (e.code != null ? `meta_error_${e.code}` : 'unknown');
+  }
+  return {
+    messageId: status.id,
+    status: status.status,
+    timestamp: new Date(Number(status.timestamp) * 1000),
+    tenantPhoneNumberId: phoneNumberId,
+    recipientId: status.recipient_id ?? status.recipient_user_id ?? null,
+    failureReason,
+  };
 }
 
 /**
@@ -87,6 +133,7 @@ export function normalizeWebhookPayload(
 ): NormalizedWebhook {
   const messages: NormalizedInboundMessage[] = [];
   const identityChanges: NormalizedIdentityChange[] = [];
+  const statusUpdates: NormalizedStatusUpdate[] = [];
 
   // Kapso v2 batched envelope
   if ('type' in body && body.type === 'whatsapp.message.received' && Array.isArray(body.data)) {
@@ -115,7 +162,7 @@ export function normalizeWebhookPayload(
         message: item.message,
       });
     }
-    return { messages, identityChanges };
+    return { messages, identityChanges, statusUpdates };
   }
 
   // Meta native envelope
@@ -127,6 +174,10 @@ export function normalizeWebhookPayload(
 
         for (const update of change.value?.user_id_update ?? []) {
           identityChanges.push(normalizeUserIdUpdate(phoneNumberId, update, opts.defaultCountry));
+        }
+
+        for (const status of change.value?.statuses ?? []) {
+          statusUpdates.push(normalizeStatus(status, phoneNumberId));
         }
 
         // Build a phone-number → contact index so we can upgrade
@@ -164,5 +215,5 @@ export function normalizeWebhookPayload(
     }
   }
 
-  return { messages, identityChanges };
+  return { messages, identityChanges, statusUpdates };
 }

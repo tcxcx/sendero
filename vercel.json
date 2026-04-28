@@ -11,11 +11,15 @@
   "crons": [
     {
       "path": "/api/cron/settle-nanopay-batches",
-      "schedule": "0 3 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/channel-health",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-credits",
+      "schedule": "7 * * * *"
     }
   ]
 }

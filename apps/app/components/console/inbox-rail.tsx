@@ -18,11 +18,13 @@
 
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { useQueryState } from 'nuqs';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { TripRail, type TripRowData } from './trip-rail';
+import { TripRail, type TripRowData, type TripState } from './trip-rail';
 import type { CHANNELS } from './channels';
 
 const STORAGE_KEY = 'sendero.console.inboxRail.expanded';
@@ -35,9 +37,14 @@ interface InboxRailProps {
 }
 
 export function InboxRail(props: InboxRailProps) {
-  // Collapsed by default. Persist the operator's choice across page
-  // reloads so they don't have to re-collapse every time.
   const [expanded, setExpanded] = useState(false);
+  // Persists across expand/collapse so selecting AW then opening the
+  // full rail keeps the filter active.
+  const [stateFilter, setStateFilter] = useState<TripState | null>(null);
+  const toggleStateFilter = useCallback(
+    (state: TripState) => setStateFilter(prev => (prev === state ? null : state)),
+    []
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -57,7 +64,7 @@ export function InboxRail(props: InboxRailProps) {
 
   if (expanded) {
     return (
-      <ExpandedRail toggle={toggle}>
+      <ExpandedRail>
         <Tabs defaultValue="trips" className="flex h-full min-h-0 flex-col">
           <TabsList className="mb-1 h-7 w-full justify-stretch bg-transparent p-0 gap-1">
             <TabsTrigger
@@ -74,7 +81,12 @@ export function InboxRail(props: InboxRailProps) {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="trips" className="mt-0 flex-1 min-h-0 overflow-hidden">
-            <TripRail {...props} />
+            <TripRail
+              {...props}
+              stateFilter={stateFilter}
+              onStateFilterChange={toggleStateFilter}
+              collapseControl={<CollapseRailButton onClick={toggle} />}
+            />
           </TabsContent>
           <TabsContent value="chats" className="mt-0 flex-1 min-h-0 overflow-auto">
             <ChatHistoryList />
@@ -84,7 +96,15 @@ export function InboxRail(props: InboxRailProps) {
     );
   }
 
-  return <CollapsedRail trips={props.trips} toggle={toggle} />;
+  return (
+    <CollapsedRail
+      trips={props.trips}
+      activeTripId={props.activeTripId}
+      stateFilter={stateFilter}
+      onStateFilterChange={toggleStateFilter}
+      toggle={toggle}
+    />
+  );
 }
 
 /**
@@ -109,6 +129,10 @@ interface ChatSessionRow {
 function ChatHistoryList() {
   const [sessions, setSessions] = useState<ChatSessionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // `cs` lives in the URL so reloads / shared links resume. nuqs
+  // defaults to shallow (history.replaceState) so clicks don't
+  // re-fetch the dashboard RSC tree or fire the loading.tsx overlay.
+  const [activeCs, setActiveCs] = useQueryState('cs');
 
   // Stable refetch fn — pulled out so the SSE subscriber + intra-tab
   // BroadcastChannel listener can both call it. `useCallback` so the
@@ -186,13 +210,13 @@ function ChatHistoryList() {
     return (
       <div
         style={{
-          padding: '14px 8px',
-          fontSize: 10,
-          color: 'var(--text-faint)',
-          fontFamily: 'var(--font-mono)',
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        Loading…
+        <Loader2 size={16} color="var(--ink)" className="animate-spin" />
       </div>
     );
   }
@@ -237,15 +261,25 @@ function ChatHistoryList() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '4px 0' }}>
       {sessions.map(s => (
-        <a
+        <button
           key={s.id}
-          href={`/dashboard/console?cs=${s.id}`}
+          type="button"
+          onClick={() => {
+            void setActiveCs(s.id);
+          }}
           style={{
             display: 'block',
+            width: '100%',
             padding: '8px 10px',
             borderRadius: 8,
             textDecoration: 'none',
             color: 'inherit',
+            textAlign: 'left',
+            background:
+              activeCs === s.id ? 'color-mix(in oklab, var(--ink) 8%, transparent)' : 'transparent',
+            border: 0,
+            cursor: 'pointer',
+            font: 'inherit',
           }}
         >
           <div
@@ -332,7 +366,7 @@ function ChatHistoryList() {
               </span>
             ) : null}
           </div>
-        </a>
+        </button>
       ))}
     </div>
   );
@@ -351,57 +385,72 @@ function formatRelativeTime(iso: string): string {
 // Trip rows still truncate for any extra fields.
 const EXPANDED_WIDTH = 220;
 
-function ExpandedRail({ toggle, children }: { toggle: () => void; children: ReactNode }) {
-  const [hover, setHover] = useState(false);
+function ExpandedRail({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
-        position: 'relative',
         width: EXPANDED_WIDTH,
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
         overflow: 'hidden',
+        background: 'var(--surface-floating)',
+        borderRight: '1px solid var(--ink)',
       }}
     >
       {children}
-      <button
-        type="button"
-        aria-label="Collapse inbox rail"
-        onClick={toggle}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        style={{
-          position: 'absolute',
-          top: 88,
-          right: 6,
-          width: 26,
-          height: 26,
-          borderRadius: '50%',
-          border: 0,
-          background: hover ? 'var(--ink)' : 'color-mix(in oklab, var(--ink) 8%, transparent)',
-          color: hover ? '#fff' : 'var(--text-faint)',
-          cursor: 'pointer',
-          display: 'grid',
-          placeItems: 'center',
-          padding: 0,
-          transition: 'background-color 140ms ease, color 140ms ease',
-        }}
-      >
-        <ChevronLeft size={14} />
-      </button>
     </div>
   );
 }
 
-function CollapsedRail({ trips, toggle }: { trips: TripRowData[]; toggle: () => void }) {
+export function CollapseRailButton({ onClick }: { onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label="Collapse inbox rail"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: '50%',
+        border: 0,
+        background: hover ? 'var(--ink)' : 'color-mix(in oklab, var(--ink) 10%, transparent)',
+        color: hover ? '#fff' : 'var(--ink)',
+        cursor: 'pointer',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 0,
+        transition: 'background-color 140ms ease, color 140ms ease',
+      }}
+    >
+      <ChevronLeft size={12} />
+    </button>
+  );
+}
+
+function CollapsedRail({
+  trips,
+  activeTripId,
+  stateFilter,
+  onStateFilterChange,
+  toggle,
+}: {
+  trips: TripRowData[];
+  activeTripId: string | null;
+  stateFilter: TripState | null;
+  onStateFilterChange: (s: TripState) => void;
+  toggle: () => void;
+}) {
   const awaiting = trips.filter(t => t.state === 'AWAITING').length;
   const holds = trips.filter(t => t.state === 'HOLD').length;
   const settled = trips.filter(t => t.state === 'SETTLED').length;
   return (
     <div
       style={{
-        borderRight: '1px solid var(--ink-soft)',
+        borderRight: '1px solid var(--ink)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -440,31 +489,121 @@ function CollapsedRail({ trips, toggle }: { trips: TripRowData[]; toggle: () => 
           gap: 6,
           alignItems: 'center',
           width: '100%',
+          borderBottom: '1px solid var(--ink)',
+          paddingBottom: 12,
         }}
       >
-        <Count label="AW" value={awaiting} />
-        <Count label="HO" value={holds} />
-        <Count label="ST" value={settled} />
+        <Count
+          label="AW"
+          value={awaiting}
+          active={stateFilter === 'AWAITING'}
+          hasFilter={stateFilter !== null}
+          onClick={() => onStateFilterChange('AWAITING')}
+        />
+        <Count
+          label="HO"
+          value={holds}
+          active={stateFilter === 'HOLD'}
+          hasFilter={stateFilter !== null}
+          onClick={() => onStateFilterChange('HOLD')}
+        />
+        <Count
+          label="ST"
+          value={settled}
+          active={stateFilter === 'SETTLED'}
+          hasFilter={stateFilter !== null}
+          onClick={() => onStateFilterChange('SETTLED')}
+        />
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 6,
+          width: '100%',
+        }}
+      >
+        {trips.map(t => {
+          const active = t.id === activeTripId;
+          return (
+            <Link
+              key={t.id}
+              href={`/dashboard/console?tripId=${t.id}`}
+              title={t.who}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                border: active ? '2px solid var(--vermillion)' : '1px solid var(--ink)',
+                background: active ? 'var(--tint-vermillion-soft)' : '#fdfbf7',
+                display: 'grid',
+                placeItems: 'center',
+                textDecoration: 'none',
+                color: active ? 'var(--vermillion)' : 'var(--ink)',
+                fontFamily: 'var(--font-mono-x)',
+                fontSize: 9,
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                flexShrink: 0,
+              }}
+            >
+              {tripInitials(t.who)}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function Count({ label, value }: { label: string; value: number }) {
+function tripInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function Count({
+  label,
+  value,
+  active,
+  hasFilter,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active: boolean;
+  hasFilter: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div
-      title={`${label} · ${value}`}
+    <button
+      type="button"
+      title={`Filter by ${label}`}
+      onClick={onClick}
       style={{
         fontFamily: 'var(--font-mono-x)',
         fontSize: 9,
         letterSpacing: '0.08em',
-        color: value > 0 ? 'var(--vermillion)' : 'var(--text-faint)',
+        color: active ? 'var(--vermillion)' : value > 0 ? 'var(--ink)' : 'var(--text-faint)',
         textAlign: 'center',
         lineHeight: 1.2,
+        background: active ? 'var(--tint-vermillion-soft)' : 'transparent',
+        border: 0,
+        borderRadius: 4,
+        padding: '3px 4px',
+        cursor: 'pointer',
+        width: '100%',
+        opacity: hasFilter && !active ? 0.35 : 1,
+        transition: 'opacity 120ms ease, background 120ms ease',
       }}
     >
       <div style={{ fontSize: 14, fontWeight: 600 }}>{value}</div>
       <div>{label}</div>
-    </div>
+    </button>
   );
 }

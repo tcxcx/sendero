@@ -17,6 +17,7 @@ import { after, NextResponse, type NextRequest } from 'next/server';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 import type { SlackInstall as SlackInstallRow } from '@prisma/client';
+import { flushLangfuse, scoreGeneration } from '@sendero/langfuse';
 import { notifier } from '@sendero/notifications';
 import {
   buildResolvedBlocks,
@@ -24,10 +25,15 @@ import {
   parseApprovalAction,
   parseInteractionBody,
   respondToInteraction,
+  serializeSubmissionResult,
   updateMessage,
   verifySlackSignature,
+  ViewRouter,
   type BlockActionsPayload,
+  type ViewClosedPayload,
+  type ViewSubmissionPayload,
 } from '@sendero/slack';
+import { handleTripNoteSubmission, TRIP_NOTE_CALLBACK_ID } from '@/lib/slack-views/trip-note';
 import { toolList } from '@sendero/tools';
 import { findWorkflow, resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
 
@@ -54,8 +60,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: verify.reason }, { status: 401 });
   }
 
-  const payload: BlockActionsPayload | null = parseInteractionBody(rawBody);
-  if (!payload || payload.type !== 'block_actions') {
+  const payload = parseInteractionBody(rawBody);
+  if (!payload) {
     return NextResponse.json({});
   }
 
@@ -77,12 +83,86 @@ export async function POST(req: NextRequest) {
   if (install.teamId !== teamId || (install.enterpriseId ?? null) !== (enterpriseId ?? null)) {
     return NextResponse.json({ error: 'install_mismatch' }, { status: 403 });
   }
+  if (install.revokedAt !== null) {
+    return NextResponse.json({ ok: true, dropped: 'install_revoked' });
+  }
 
-  // Defer all handler work past the ack — Slack only needs `{}` within
-  // 3s; the booking update + workflow resume can run for longer.
-  after(() => handleInteraction(payload, install));
+  // view_submission MUST ack synchronously — Slack reads the response
+  // body to drive the modal lifecycle (close / show errors / push next).
+  // No `after()` deferral allowed on this branch.
+  //
+  // Per-request router so the trip-note handler closes over the
+  // resolved install's `tenantId`. Without this, the handler would
+  // accept any `private_metadata.tripId` and write across tenants —
+  // the modal opener (slash command) takes user-supplied trip ids
+  // and stuffs them into private_metadata; only the handler can
+  // enforce the tenant gate.
+  if (payload.type === 'view_submission') {
+    const result = await handleViewSubmission(payload, install.tenantId);
+    return NextResponse.json(serializeSubmissionResult(result));
+  }
+
+  // view_closed and block_actions both ack with `{}` immediately and
+  // run any side-effect work post-ack via `after()`.
+  if (payload.type === 'view_closed') {
+    after(() => handleViewClosed(payload));
+    return NextResponse.json({});
+  }
+
+  // block_actions — existing approval-card path, plus future button
+  // handlers (e.g. "Add note" → opens the trip-note modal). The
+  // discriminated-union narrowing from the early returns above
+  // doesn't carry into the after() closure (TS conservatively
+  // widens captures), so pin the narrowed type into a const first.
+  if (payload.type !== 'block_actions') {
+    return NextResponse.json({});
+  }
+  const blockActionsPayload: BlockActionsPayload = payload;
+  after(() => handleInteraction(blockActionsPayload, install));
 
   return NextResponse.json({});
+}
+
+// ─── view-handler routing ─────────────────────────────────────────────
+//
+// Closed-handler router can be a singleton — view_closed only fires
+// with the same `callback_id` shape and doesn't need install scope.
+// Submission router is built per-request inside POST so handlers can
+// capture the resolved install's tenantId for cross-tenant gating.
+
+const closedRouter = new ViewRouter();
+
+async function handleViewSubmission(payload: ViewSubmissionPayload, tenantId: string) {
+  const router = new ViewRouter().registerSubmission(TRIP_NOTE_CALLBACK_ID, p =>
+    handleTripNoteSubmission(p, { tenantId })
+  );
+  try {
+    return await router.dispatchSubmission(payload);
+  } catch (err) {
+    console.error('[slack/interactions] view_submission dispatch failed:', {
+      callbackId: payload.view.callback_id,
+      userId: payload.user.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    // Surface a friendly, blocked-in-modal error rather than crashing the
+    // user's modal. Slack closes the modal on any non-`response_action`
+    // body, so returning errors keeps the user in place to retry.
+    return {
+      kind: 'errors' as const,
+      errors: { _root: 'Something went wrong saving that. Please retry.' },
+    };
+  }
+}
+
+async function handleViewClosed(payload: ViewClosedPayload): Promise<void> {
+  try {
+    await closedRouter.dispatchClosed(payload);
+  } catch (err) {
+    console.error('[slack/interactions] view_closed dispatch failed:', {
+      callbackId: payload.view.callback_id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 async function handleInteraction(
@@ -160,6 +240,7 @@ async function handleApprovalAction(
       segments: true,
       tenantId: true,
       pnr: true,
+      metadata: true,
       trip: {
         select: {
           id: true,
@@ -169,6 +250,28 @@ async function handleApprovalAction(
       },
     },
   });
+
+  // Score the originating agent generation with the human's decision.
+  // Booking.metadata.traceId is only present when confirm_booking ran
+  // through a Langfuse-traced agent turn. Fire-and-forget; never blocks
+  // the Slack ack.
+  const bookingTraceId =
+    booking?.metadata && typeof (booking.metadata as Record<string, unknown>).traceId === 'string'
+      ? ((booking.metadata as Record<string, unknown>).traceId as string)
+      : null;
+  if (bookingTraceId) {
+    void Promise.resolve().then(async () => {
+      try {
+        await scoreGeneration(
+          bookingTraceId,
+          parsed.decision === 'approve' ? 'approved' : 'rejected'
+        );
+        await flushLangfuse();
+      } catch {
+        // already logged inside the helpers
+      }
+    });
+  }
 
   // Email parity with the Slack approval flip. On approve, the traveler
   // gets a hold-confirmed receipt. Failures are swallowed so the Slack

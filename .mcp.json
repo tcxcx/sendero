@@ -3,6 +3,13 @@
     "shadcn": {
       "command": "npx",
       "args": ["shadcn@latest", "mcp"]
+    },
+    "langfuse": {
+      "type": "http",
+      "url": "https://us.cloud.langfuse.com/api/public/mcp",
+      "headers": {
+        "Authorization": "Basic ${LANGFUSE_MCP_AUTH}"
+      }
     }
   }
 }

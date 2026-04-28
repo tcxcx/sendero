@@ -36,19 +36,36 @@ function exhaustive(_: never): never {
   throw new Error('non-exhaustive ChannelMessage kind');
 }
 
+/**
+ * DESIGN-compliant bubble shell for any text-y MessageContent emission:
+ * topography SVG bg over parchment, dim hairline border, dim ink text,
+ * no shadow (DESIGN.md: "no panel has both shadow and border"). Applied
+ * via className override; the AI Elements `MessageContent` already
+ * group-aligns user msgs to the right via `.is-user` group selector.
+ */
+const BUBBLE_CLASSNAME = [
+  'rounded-lg border border-[color:var(--hairline-color-soft)]',
+  "bg-[color:var(--surface-raised)] bg-[url('/patterns/topography.svg')]",
+  'bg-[length:240px] bg-no-repeat px-4 py-3',
+  'text-[color:color-mix(in_oklab,var(--ink)_72%,transparent)]',
+  'group-[.is-user]:!bg-[color:var(--surface-raised)]',
+  'group-[.is-user]:!text-[color:color-mix(in_oklab,var(--ink)_72%,transparent)]',
+].join(' ');
+const BUBBLE_STYLE = { backgroundBlendMode: 'multiply' as const };
+
 /** Render the inner content for a single canonical message. */
 export function renderForOperator(msg: ChannelMessage): JSX.Element {
   switch (msg.kind) {
     case 'text':
       return (
-        <MessageContent>
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
           <MessageResponse>{msg.content}</MessageResponse>
         </MessageContent>
       );
 
     case 'card':
       return (
-        <MessageContent>
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
           <CardBlock
             title={msg.title}
             body={msg.body}
@@ -60,10 +77,10 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
       );
 
     case 'tool_invocation':
-      // Renders single-call invocations via Tool. The AI Elements `Task`
-      // primitive is a richer fit when the agent surfaces a multi-step
-      // orchestration (e.g. plan + sub-tools); revisit when the canonical
-      // ChannelMessage union grows an orchestration kind.
+      // Single Tool block per call — input + output (or error) collapsed
+      // inside the same ToolContent. Output renders only when status is
+      // 'done' AND the converter passed a `result`. Tools that want a
+      // separate share-card view emit a distinct `tool_result` instead.
       return (
         <Tool>
           <ToolHeader
@@ -80,7 +97,14 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
           />
           <ToolContent>
             <ToolInput input={msg.input} />
-            {msg.errorMessage ? <ToolOutput output={null} errorText={msg.errorMessage} /> : null}
+            {msg.errorMessage ? (
+              <ToolOutput output={null} errorText={msg.errorMessage} />
+            ) : msg.status === 'done' && msg.result !== undefined ? (
+              <ToolOutput
+                output={<pre className="overflow-x-auto text-xs">{stringify(msg.result)}</pre>}
+                errorText={undefined}
+              />
+            ) : null}
           </ToolContent>
         </Tool>
       );

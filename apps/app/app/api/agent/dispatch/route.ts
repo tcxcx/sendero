@@ -24,8 +24,8 @@ import {
   gatewayErrorAllowsDirectRetry,
   type ModelTier,
   runAgentTurn,
-  SENDERO_SOUL,
 } from '@sendero/agent';
+import { buildAgentPersona } from '@/lib/agent-persona';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
 
 import {
@@ -34,7 +34,6 @@ import {
   extractBearerForSigning,
   loadTrip,
   makeCapStore,
-  makeMeterStore,
   makeSessionStore,
   requestLocale,
   resolveDirectModels,
@@ -43,10 +42,13 @@ import {
   resolveTenantPlan,
 } from '@/lib/agent-auth';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
+import { makeCreditAwareMeterStore } from '@/lib/credit-store';
+import { resolvePlan } from '@sendero/billing/plans';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
 import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
+import { appendTripEvent, type TripEvent } from '@/lib/trip-events';
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
@@ -99,17 +101,10 @@ const BodySchema = z.object({
   attachments: z.array(MediaAttachmentSchema).max(MAX_ATTACHMENTS).optional(),
 });
 
-const DISPATCH_PERSONA = `${SENDERO_SOUL}
-
-## Routing rules
-- Corporate buyers saying "fund a trip", "give my employee a budget", or "prefund this contractor"
-  → sendero.guest_prefund.
-- Agencies saying "set up a cohort", "fund these 50 people" → sendero.agency_cohort.
-- Individual traveler booking their own flight → sendero.book_flight.
-- A group planning together → sendero.group_trip.
-- Cancel + refund → sendero.refund.
-- Only call tools directly when none of the canonical workflows fits.
-`;
+// Persona resolution moved to apps/app/lib/agent-persona.ts. Resolves
+// `sendero-soul` + `sendero-dispatch-routing-rules` from Langfuse Prompt
+// Management when LANGFUSE_PROMPT_MANAGEMENT=true; otherwise the hardcoded
+// fallbacks inside that helper ship verbatim.
 
 export async function POST(req: NextRequest) {
   // Two valid auth modes:
@@ -331,6 +326,34 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Canonical ledger write — inbound traveler message lands on the
+  // trip's events log before the agent processes it. Skipped when the
+  // caller didn't resolve a tripId (pre-trip exploration); the agent
+  // may create a trip via tool calls and future messages will land
+  // there. Best-effort: a Postgres blip never blocks dispatch — the
+  // helper swallows errors and returns false.
+  if (body.tripId && body.text) {
+    const inboundChannel = ledgerChannelFromDispatchChannel(body.channel);
+    if (inboundChannel) {
+      await appendTripEvent({
+        tripId: body.tripId,
+        tenantId: body.tenantId,
+        event: {
+          id: `inbound_${agentInput.turnId}`,
+          kind: 'inbox_reply',
+          direction: 'inbound',
+          channel: inboundChannel,
+          createdAt: new Date().toISOString(),
+          text: body.text,
+          author: {
+            kind: isServiceAccount ? 'system' : 'traveler',
+            userId: body.userId,
+          },
+        },
+      });
+    }
+  }
+
   const tier: ModelTier = 'smart';
   const modelHandle = resolveModel(tier);
   if (!modelHandle) {
@@ -346,12 +369,22 @@ export async function POST(req: NextRequest) {
 
   const planTier = await resolveTenantPlan(body.tenantId);
   const pricingOverrides = buildPlanOverrides(planTier);
-  // If the caller authed with an API key whose effective type is
-  // sandbox (either it's a sandbox key, or it's a production key
-  // downgraded during testnet-beta), write MeterEvents as 'sandbox'
-  // so NanopayBatch skips them.
-  const meterStoreOpts =
-    apiKey?.effectiveKeyType === 'sandbox' ? ({ forceStatus: 'sandbox' } as const) : undefined;
+  // Credit-aware meter store — routes every metered action through
+  // `deductAndRecord()` so SaaS-included credits decrement off
+  // `Subscription.meterBalanceMicro`. Sandbox keys still skip the
+  // deduction (write 'sandbox') and tenants with no grant fall through
+  // to 'paid' at full cost — backward-compatible with prior behavior.
+  const dispatchSegment = await resolveSegment(body.tenantId);
+  const creditMeterStore = makeCreditAwareMeterStore({
+    plan: resolvePlan(planTier),
+    sandbox: apiKey?.effectiveKeyType === 'sandbox',
+    segment: dispatchSegment,
+  });
+
+  // Resolve persona once — covers both the gateway attempt and any direct
+  // retry below. getPromptWithFallback caches Langfuse fetches for 60s, so
+  // this is one network round-trip per minute per server instance.
+  const dispatchPersona = await buildAgentPersona('dispatch', agentInput.actor.locale);
 
   let result: Awaited<ReturnType<typeof runAgentTurn>>;
   try {
@@ -361,12 +394,12 @@ export async function POST(req: NextRequest) {
       tier,
       tools,
       capStore: makeCapStore(),
-      meterStore: makeMeterStore(meterStoreOpts),
+      meterStore: creditMeterStore,
       sessionStore: makeSessionStore(),
       resolveSegment,
       pricingOverrides,
       loadTrip,
-      persona: DISPATCH_PERSONA,
+      persona: dispatchPersona,
     });
   } catch (err) {
     const retryModels = gatewayErrorAllowsDirectRetry(err) ? resolveDirectModels(tier) : [];
@@ -382,12 +415,12 @@ export async function POST(req: NextRequest) {
           tier,
           tools,
           capStore: makeCapStore(),
-          meterStore: makeMeterStore(meterStoreOpts),
+          meterStore: creditMeterStore,
           sessionStore: makeSessionStore(),
           resolveSegment,
           pricingOverrides,
           loadTrip,
-          persona: DISPATCH_PERSONA,
+          persona: dispatchPersona,
         });
         retryError = null;
         break;
@@ -421,6 +454,29 @@ export async function POST(req: NextRequest) {
         latencyMs: result.latencyMs,
       },
     });
+
+    // Canonical ledger write — agent reply lands on the trip's events
+    // log next to the inbound message above. Same skip-when-no-tripId
+    // contract; same fail-soft posture. The pair (inbound + outbound)
+    // is what makes the unified inbox thread legible to operators.
+    if (body.tripId && result.text) {
+      const outboundChannel = ledgerChannelFromDispatchChannel(body.channel);
+      if (outboundChannel) {
+        await appendTripEvent({
+          tripId: body.tripId,
+          tenantId: body.tenantId,
+          event: {
+            id: `agent_${agentInput.turnId}`,
+            kind: 'agent_reply',
+            direction: 'outbound',
+            channel: outboundChannel,
+            createdAt: new Date().toISOString(),
+            text: result.text,
+            author: { kind: 'agent' },
+          },
+        });
+      }
+    }
   }
 
   await flush();
@@ -462,4 +518,25 @@ export async function POST(req: NextRequest) {
       }),
     },
   });
+}
+
+/**
+ * Map a dispatch `Channel` (which includes `mcp`) to a `TripEvent`
+ * channel. MCP-originated turns map to `web` for ledger purposes —
+ * an MCP client is conceptually "the web", just programmatic. Returns
+ * null for unknown channels so the caller skips the ledger write
+ * rather than writing a malformed row.
+ */
+function ledgerChannelFromDispatchChannel(channel: Channel): TripEvent['channel'] | null {
+  switch (channel) {
+    case 'whatsapp':
+    case 'slack':
+    case 'email':
+    case 'web':
+      return channel;
+    case 'mcp':
+      return 'web';
+    default:
+      return null;
+  }
 }

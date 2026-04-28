@@ -31,6 +31,7 @@ import {
   vertexLocation,
   vertexProject,
 } from '@sendero/agent';
+import { aiTelemetryConfig, getPromptWithFallback } from '@sendero/langfuse';
 import { getLocaleSlice, renderLocaleSlicePrompt } from '@sendero/locale';
 import type { RewriteMode, RewriteRequest, RewriteResponse } from '@sendero/ui/tiptap';
 import { generateText, type LanguageModel } from 'ai';
@@ -107,22 +108,32 @@ const MODE_INSTRUCTIONS: Record<RewriteMode, string> = {
     'Rewrite as a handoff-to-human tone: apologize briefly for the friction, commit to escalating to a senior agent, and set an expectation for follow-up. Preserve the original language.',
 };
 
-function buildSystemPrompt(context: RewriteRequest['context']): string {
+const INBOX_REWRITE_FALLBACK = `You are Sendero — an agent-native travel booking platform helping a human support agent write a better reply to a traveler.
+Brand voice: {{brand_voice}}.
+Rules:
+- Return ONLY the rewritten message. No preamble, no quotes, no explanations.
+- Never invent facts, times, prices, PNRs, or airport codes that were not in the input.
+- Preserve URLs, IATA codes, PNRs, dates, and prices exactly.
+- Keep the length proportional to the input unless the mode requires otherwise.
+
+{{locale_block}}`;
+
+async function buildSystemPrompt(context: RewriteRequest['context']): Promise<string> {
   const brandVoice = context.brandVoice ?? DEFAULT_BRAND_VOICE;
   const slice = getLocaleSlice(context.locale);
   const localeBlock = renderLocaleSlicePrompt(slice);
 
-  return [
-    'You are Sendero — an agent-native travel booking platform helping a human support agent write a better reply to a traveler.',
-    `Brand voice: ${brandVoice}.`,
-    'Rules:',
-    '- Return ONLY the rewritten message. No preamble, no quotes, no explanations.',
-    '- Never invent facts, times, prices, PNRs, or airport codes that were not in the input.',
-    '- Preserve URLs, IATA codes, PNRs, dates, and prices exactly.',
-    '- Keep the length proportional to the input unless the mode requires otherwise.',
-    '',
-    localeBlock,
-  ].join('\n');
+  // Pulls `sendero-inbox-rewrite` from Langfuse Prompt Management when
+  // LANGFUSE_PROMPT_MANAGEMENT=true; otherwise the fallback ships verbatim.
+  // The brand voice + locale slice are passed as variables so authors can
+  // edit the prompt in Langfuse without redeploying.
+  const prompt = await getPromptWithFallback(
+    'sendero-inbox-rewrite',
+    INBOX_REWRITE_FALLBACK,
+    { brand_voice: brandVoice, locale_block: localeBlock },
+    { label: 'production', cacheTtlSeconds: 60 }
+  );
+  return prompt.text;
 }
 
 function buildUserPrompt(req: RewriteRequest): string {
@@ -209,6 +220,11 @@ async function runCascade(system: string, prompt: string): Promise<string> {
         maxOutputTokens: 600,
         maxRetries: 0,
         providerOptions,
+        experimental_telemetry: aiTelemetryConfig('sendero-inbox-rewrite', {
+          surface: 'app-api',
+          trigger: 'user',
+          scope: 'inbox-rewrite',
+        }),
       });
       const text = (result.text ?? '').trim().replace(/^["']|["']$/g, '');
       if (text) return text;
@@ -276,7 +292,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const system = buildSystemPrompt(context);
+    const system = await buildSystemPrompt(context);
     const prompt = buildUserPrompt(body);
     const output = await runCascade(system, prompt);
     cacheSet(key, output);

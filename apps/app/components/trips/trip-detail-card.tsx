@@ -1,15 +1,15 @@
 /**
- * TripDetailCard — TripsDetailA layout. Two-column grid: Flights card
- * (filters bookings by `kind === 'flight'`) + Stay card (`kind === 'hotel'`).
- * Spend so far reads `trip.totalUsdc`. Other booking kinds (rail, car,
- * other) collapse into a small "Other reservations" strip below the
- * grid.
+ * TripDetailCard — TripsDetailA layout. 2×2 grid:
+ *   Row 1: Flights (kind === 'flight')      | Stay (kind === 'hotel') + Spend
+ *   Row 2: Trip Planner (planning stats)    | Ancillaries (seat/meal/bag/etc.)
  *
- * Designed to read raw fields from the existing Booking row — no new
- * data shape required. PNR / external ref / total / segments JSON are
- * surfaced in their existing columns. Pulling per-segment carrier
- * details out of `rawDuffel` is a follow-up; for now the card shows
- * what we already have without inventing values.
+ * Other booking kinds (rail, car, other) appear in the Ancillaries card
+ * since they're typically purchased as add-ons through chat.
+ *
+ * All cards read raw fields from existing Booking + Trip rows — no new
+ * data shape required. The Planner card derives counts from `trip.bookings`
+ * + `trip.intent`; richer per-tool telemetry (search counts, hold-vs-book
+ * conversion) will land once MeterEvent rows get tagged with tripId.
  */
 
 import type { Booking, Prisma, Trip } from '@sendero/database';
@@ -31,6 +31,7 @@ export function TripDetailCard({ trip }: { trip: TripWithBookings }) {
         flex: 1,
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
+        gridAutoRows: 'minmax(0, 1fr)',
         gap: 20,
         minHeight: 0,
       }}
@@ -136,40 +137,259 @@ export function TripDetailCard({ trip }: { trip: TripWithBookings }) {
             </span>
           </div>
         </div>
+      </div>
 
-        {otherBookings.length > 0 ? (
-          <>
-            <hr
-              aria-hidden
-              style={{
-                border: 0,
-                height: 1,
-                background: 'var(--hairline-color-soft)',
-                margin: '4px 0',
-              }}
-            />
-            <div>
-              <div className="t-meta">Other reservations</div>
-              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {otherBookings.map(b => (
-                  <div
-                    key={b.id}
-                    className="t-mono ink-70"
-                    style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between' }}
-                  >
-                    <span>
-                      {b.kind} · {b.status}
-                    </span>
-                    <span>{formatUsd(b.totalUsd)}</span>
-                  </div>
-                ))}
+      {/* ROW 2 LEFT — trip planner stats */}
+      <PlannerCard trip={trip} />
+
+      {/* ROW 2 RIGHT — ancillaries */}
+      <AncillariesCard flightBookings={flightBookings} otherBookings={otherBookings} />
+    </div>
+  );
+}
+
+// ── planner / ancillaries ────────────────────────────────────
+
+function PlannerCard({ trip }: { trip: TripWithBookings }) {
+  const flights = trip.bookings.filter(b => b.kind === 'flight').length;
+  const hotels = trip.bookings.filter(b => b.kind === 'hotel').length;
+  const pending = trip.bookings.filter(b => b.status === 'pending').length;
+  const confirmed = trip.bookings.filter(b => b.status === 'confirmed').length;
+  const settled = trip.settlementRef ? 1 : 0;
+  const intent =
+    trip.intent && typeof trip.intent === 'object' ? (trip.intent as Record<string, unknown>) : {};
+  const requested = inferRequestedKinds(intent);
+  const lastUpdate =
+    trip.bookings.reduce<Date | null>((acc, b) => {
+      const t = b.updatedAt ?? b.createdAt;
+      if (!t) return acc;
+      if (!acc || t > acc) return t;
+      return acc;
+    }, null) ?? trip.updatedAt;
+
+  return (
+    <div
+      className="sd-card-flat"
+      style={{
+        boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+        padding: '14px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+    >
+      <div className="t-meta">Trip planner</div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          rowGap: 10,
+          columnGap: 16,
+        }}
+      >
+        <Stat label="Flights booked" value={String(flights)} />
+        <Stat label="Stays booked" value={String(hotels)} />
+        <Stat label="Pending approvals" value={String(pending)} />
+        <Stat label="Confirmed" value={String(confirmed)} />
+        <Stat label="Settlement" value={settled ? 'on-chain' : 'pending'} mono />
+        <Stat label="Trip status" value={trip.status} mono />
+      </div>
+
+      {requested.length > 0 ? (
+        <div>
+          <div className="t-meta" style={{ fontSize: 11 }}>
+            Requested
+          </div>
+          <div className="t-body ink-70" style={{ fontSize: 13, marginTop: 4 }}>
+            {requested.join(' · ')}
+          </div>
+        </div>
+      ) : null}
+
+      {lastUpdate ? (
+        <div className="t-mono ink-60" style={{ fontSize: 11, marginTop: 'auto' }}>
+          Last activity {formatDateTime(lastUpdate.toISOString())}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AncillariesCard({
+  flightBookings,
+  otherBookings,
+}: {
+  flightBookings: Booking[];
+  otherBookings: Booking[];
+}) {
+  const ancillaries = flightBookings.flatMap(b => extractAncillaries(b));
+  const hasAny = ancillaries.length > 0 || otherBookings.length > 0;
+
+  return (
+    <div
+      className="sd-card-flat"
+      style={{
+        boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+        padding: '14px 16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}
+    >
+      <div className="t-meta">Ancillaries</div>
+
+      {!hasAny ? (
+        <div className="t-body ink-60" style={{ fontSize: 13 }}>
+          No add-ons purchased yet.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {ancillaries.map((a, i) => (
+            <div
+              key={`${a.bookingId}-${a.label}-${i}`}
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div className="t-body" style={{ fontSize: 13 }}>
+                  {a.label}
+                </div>
+                <div className="t-mono ink-60" style={{ fontSize: 11 }}>
+                  {a.detail}
+                </div>
               </div>
+              {a.priceUsd !== null ? (
+                <span className="t-mono ink-70" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                  {formatUsd(a.priceUsd)}
+                </span>
+              ) : null}
             </div>
-          </>
-        ) : null}
+          ))}
+
+          {otherBookings.length > 0 ? (
+            <>
+              {ancillaries.length > 0 ? (
+                <hr
+                  aria-hidden
+                  style={{
+                    border: 0,
+                    height: 1,
+                    background: 'var(--hairline-color-soft)',
+                    margin: '2px 0',
+                  }}
+                />
+              ) : null}
+              <div className="t-meta" style={{ fontSize: 11 }}>
+                Other reservations
+              </div>
+              {otherBookings.map(b => (
+                <div
+                  key={b.id}
+                  className="t-mono ink-70"
+                  style={{ fontSize: 12, display: 'flex', justifyContent: 'space-between' }}
+                >
+                  <span>
+                    {b.kind} · {b.status}
+                  </span>
+                  <span>{formatUsd(b.totalUsd)}</span>
+                </div>
+              ))}
+            </>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <div className="t-meta" style={{ fontSize: 11 }}>
+        {label}
+      </div>
+      <div
+        className={mono ? 't-mono' : 't-num-md'}
+        style={{ fontSize: mono ? 13 : 22, marginTop: 4 }}
+      >
+        {value}
       </div>
     </div>
   );
+}
+
+interface AncillaryEntry {
+  bookingId: string;
+  label: string;
+  detail: string;
+  priceUsd: number | null;
+}
+
+/**
+ * Extract ancillary line items from a flight booking's metadata. We
+ * surface seat, meal, bags, cabin upgrade, and lounge access — these
+ * are the standard Duffel ancillary types and what the agent can
+ * purchase via chat. Price is best-effort: if the booking metadata
+ * doesn't carry per-ancillary pricing yet, we omit the column rather
+ * than invent a number.
+ */
+function extractAncillaries(booking: Booking): AncillaryEntry[] {
+  const entries: AncillaryEntry[] = [];
+  const seat = stringFromJson(booking.metadata, 'seat', '');
+  const meal = stringFromJson(booking.metadata, 'meal', '');
+  const cabin = stringFromJson(booking.metadata, 'cabin', '');
+  const bags = stringFromJson(booking.metadata, 'bags', '');
+  const lounge = stringFromJson(booking.metadata, 'lounge', '');
+  const ref = booking.pnr ?? booking.duffelOrderId ?? booking.id.slice(0, 6);
+
+  if (seat) {
+    entries.push({
+      bookingId: booking.id,
+      label: 'Seat selection',
+      detail: `${ref} · ${seat}`,
+      priceUsd: null,
+    });
+  }
+  if (meal) {
+    entries.push({
+      bookingId: booking.id,
+      label: 'Meal',
+      detail: `${ref} · ${meal}`,
+      priceUsd: null,
+    });
+  }
+  if (bags) {
+    entries.push({
+      bookingId: booking.id,
+      label: 'Checked bags',
+      detail: `${ref} · ${bags}`,
+      priceUsd: null,
+    });
+  }
+  if (cabin) {
+    entries.push({
+      bookingId: booking.id,
+      label: 'Cabin',
+      detail: `${ref} · ${cabin}`,
+      priceUsd: null,
+    });
+  }
+  if (lounge) {
+    entries.push({
+      bookingId: booking.id,
+      label: 'Lounge access',
+      detail: `${ref} · ${lounge}`,
+      priceUsd: null,
+    });
+  }
+  return entries;
+}
+
+function inferRequestedKinds(intent: Record<string, unknown>): string[] {
+  const kinds: string[] = [];
+  if (intent.origin || intent.destination || intent.departureDate) kinds.push('flight');
+  if (intent.checkIn || intent.checkOut || intent.hotelCity) kinds.push('hotel');
+  if (intent.groundTransport) kinds.push('ground');
+  return kinds;
 }
 
 // ── booking blocks ───────────────────────────────────────────

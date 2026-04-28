@@ -20,13 +20,14 @@ import { decryptVaultPayload, readVaultSignals, revokeVault } from '@sendero/vau
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { ensureUserRow } from '@/lib/ensure-user';
+import { passportLog } from '@/lib/passport-debug';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function resolveActor() {
   const { userId, orgId } = await auth();
-  console.log('[passport/self] auth()', {
+  passportLog('[passport/self] auth()', {
     hasUserId: Boolean(userId),
     hasOrgId: Boolean(orgId),
   });
@@ -59,10 +60,10 @@ async function resolveActor() {
 }
 
 export async function GET(req: NextRequest) {
-  console.log('[passport/self] ▶ GET received');
+  passportLog('[passport/self] ▶ GET received');
   const actor = await resolveActor();
   if (!actor) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  console.log('[passport/self] actor resolved', {
+  passportLog('[passport/self] actor resolved', {
     tenantId: actor.tenantId,
     userId: actor.userId,
   });

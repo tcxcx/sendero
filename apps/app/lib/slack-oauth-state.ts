@@ -16,23 +16,37 @@
  * a dedicated env var. In production, set SLACK_STATE_SECRET explicitly.
  */
 
-import { createHmac, timingSafeEqual } from 'node:crypto';
-
 import { env } from '@sendero/env';
 
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
 const STATE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Flow hint persisted across OAuth round-trip so the callback knows
+ * whether the install came from the tenant-side wizard
+ * (`/dashboard/channels/slack/connect`) or the public per-tenant
+ * install URL (`/install/slack?tenant=<slug>`). The callback uses it
+ * to pick the post-OAuth redirect target — Persona C lands on
+ * `/install/slack/success`, tenant operators land back in the wizard.
+ */
+export type SlackStateFlow = 'wizard' | 'public';
 
 export type SlackStatePayload = {
   tenantId: string;
   exp: number;
+  flow?: SlackStateFlow;
 };
 
-export type SlackStateVerifyResult = { ok: true; tenantId: string } | { ok: false; reason: string };
+export type SlackStateVerifyResult =
+  | { ok: true; tenantId: string; flow: SlackStateFlow }
+  | { ok: false; reason: string };
 
-export function signSlackState(tenantId: string): string {
+export function signSlackState(tenantId: string, flow: SlackStateFlow = 'wizard'): string {
   const payload: SlackStatePayload = {
     tenantId,
     exp: Date.now() + STATE_TTL_MS,
+    flow,
   };
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = hmac(encoded);
@@ -60,7 +74,12 @@ export function verifySlackState(state: string): SlackStateVerifyResult {
     return { ok: false, reason: 'expired' };
   }
 
-  return { ok: true, tenantId: payload.tenantId };
+  // Default to 'wizard' for backward compat — historical states (signed
+  // before the flow field existed) still verify and resolve to the
+  // dashboard redirect, which is the safer default.
+  const flow: SlackStateFlow = payload.flow === 'public' ? 'public' : 'wizard';
+
+  return { ok: true, tenantId: payload.tenantId, flow };
 }
 
 function hmac(input: string): string {

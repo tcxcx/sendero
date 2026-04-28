@@ -43,9 +43,27 @@ interface TripRailProps {
   scopedTripId?: string | null;
   /** When set, the channel-scope card replaces the tab+search header. */
   scopedChannel?: ReturnType<typeof CHANNELS extends Record<string, infer V> ? () => V : never>;
+  /** Active state filter — null means "all". */
+  stateFilter?: TripState | null;
+  /** Toggling handler — clicking the active filter deselects it. */
+  onStateFilterChange?: (state: TripState) => void;
+  /**
+   * Optional collapse-rail control. When provided, renders inline on the
+   * AW/HD/ST count row right-justified — keeps the chevron in the visual
+   * "rail header" line instead of overlapping the search input.
+   */
+  collapseControl?: React.ReactNode;
 }
 
-export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel }: TripRailProps) {
+export function TripRail({
+  trips,
+  activeTripId,
+  scopedTripId,
+  scopedChannel,
+  stateFilter = null,
+  onStateFilterChange,
+  collapseControl,
+}: TripRailProps) {
   // Local search query — narrows the visible trip list on traveler
   // name, route, tripId, and last-message body. Group-trip + passenger
   // search will plug in here once those entities surface in the rail
@@ -70,33 +88,32 @@ export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel }: T
 
   const filtered = useMemo(() => {
     const base = scopedTripId ? trips.filter(t => t.id === scopedTripId) : trips;
+    const stateFiltered = stateFilter ? base.filter(t => t.state === stateFilter) : base;
     const q = query.trim().toLowerCase();
-    if (!q) return base;
-    return base.filter(t => matchesQuery(t, q));
-  }, [trips, scopedTripId, query]);
+    if (!q) return stateFiltered;
+    return stateFiltered.filter(t => matchesQuery(t, q));
+  }, [trips, scopedTripId, query, stateFilter]);
 
   const visible = filtered;
   return (
     <div
       style={{
-        borderRight: '1px solid var(--ink-soft)',
-        paddingRight: 10,
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
-        gap: 8,
+        gap: 0,
         minHeight: 0,
+        flex: 1,
         overflow: 'hidden',
-        // Tight enough that the rail fits in ~160px when expanded.
-        // All inner copy is shrunk to match — see fontSize edits below.
+        background: 'var(--surface-floating)',
       }}
     >
       {scopedChannel ? (
         <div
           className="sd-card-flat"
           style={{
-            boxShadow: `inset 0 0 0 1px ${scopedChannel.accent}`,
             padding: '8px 10px',
-            background: scopedChannel.tint,
+            background: 'transparent',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -115,27 +132,61 @@ export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel }: T
       ) : (
         <>
           {/* Compact count chips. Abbreviated labels (AW / HD / ST)
-              fit in the 160px expanded rail without wrapping. */}
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            <span className="sd-pill sd-pill-verm" style={{ fontSize: 9, padding: '2px 6px' }}>
-              AW · {trips.filter(t => t.state === 'AWAITING').length}
-            </span>
-            <span className="sd-pill sd-pill-sand" style={{ fontSize: 9, padding: '2px 6px' }}>
-              HD · {trips.filter(t => t.state === 'HOLD').length}
-            </span>
-            <span className="sd-pill sd-pill-sea" style={{ fontSize: 9, padding: '2px 6px' }}>
-              ST · {trips.filter(t => t.state === 'SETTLED').length}
-            </span>
+              fit in the 160px expanded rail without wrapping. Collapse
+              chevron sits on the same row, right-justified. */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 4,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              padding: '0 4px',
+              marginBottom: 8,
+            }}
+          >
+            {(
+              [
+                { key: 'AWAITING', label: 'AW', cls: 'sd-pill-verm' },
+                { key: 'HOLD', label: 'HD', cls: 'sd-pill-sand' },
+                { key: 'SETTLED', label: 'ST', cls: 'sd-pill-sea' },
+              ] as const
+            ).map(({ key, label, cls }) => {
+              const count = trips.filter(t => t.state === key).length;
+              const active = stateFilter === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => onStateFilterChange?.(key)}
+                  className={`sd-pill ${cls}`}
+                  style={{
+                    fontSize: 9,
+                    padding: '2px 6px',
+                    cursor: 'pointer',
+                    border: 0,
+                    fontFamily: 'inherit',
+                    opacity: stateFilter !== null && !active ? 0.35 : 1,
+                    outline: active ? '1.5px solid currentColor' : 'none',
+                    outlineOffset: 1,
+                    transition: 'opacity 120ms ease',
+                  }}
+                >
+                  {label} · {count}
+                </button>
+              );
+            })}
+            {collapseControl ? <span style={{ marginLeft: 'auto' }}>{collapseControl}</span> : null}
           </div>
           <div
-            className="sd-card-flat"
             style={{
-              boxShadow: 'inset 0 0 0 1px var(--ink-soft)',
-              padding: '4px 8px',
+              borderTop: '1px solid var(--hairline-color-soft, rgba(31,42,68,0.08))',
+              borderBottom: '1px solid var(--hairline-color-soft, rgba(31,42,68,0.08))',
+              borderRight: '1px solid var(--ink)',
+              padding: '5px 10px',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              background: 'rgba(253,251,247,0.7)',
+              background: 'rgba(253,251,247,0.6)',
             }}
           >
             <span className="t-mono ink-60" style={{ fontSize: 9, flexShrink: 0 }}>
@@ -199,7 +250,7 @@ export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel }: T
         {visible.length === 0 ? (
           <RailEmpty scoped={Boolean(scopedTripId)} searching={Boolean(query.trim())} />
         ) : null}
-        {visible.map(t => {
+        {visible.map((t, i) => {
           const active = t.id === activeTripId;
           const tc = CHANNELS[asChannelKey(t.channel)];
           return (
@@ -207,31 +258,18 @@ export function TripRail({ trips, activeTripId, scopedTripId, scopedChannel }: T
               key={t.id}
               href={`/dashboard/console?tripId=${t.id}`}
               style={{
-                padding: '8px 10px',
-                borderRadius: 8,
-                background: active ? 'rgba(253,251,247,0.95)' : 'transparent',
-                boxShadow: active ? 'var(--shadow-sm)' : 'none',
-                marginBottom: 3,
+                padding: '10px 12px',
+                background: active ? 'var(--tint-vermillion-soft)' : 'transparent',
+                borderLeft: active ? '3px solid var(--vermillion)' : '3px solid transparent',
+                borderTop:
+                  i > 0 ? '1px solid var(--hairline-color-soft, rgba(31,42,68,0.08))' : 'none',
                 cursor: 'pointer',
-                position: 'relative',
                 textDecoration: 'none',
                 color: 'inherit',
                 display: 'block',
                 minWidth: 0,
               }}
             >
-              {active ? (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: -10,
-                    top: 10,
-                    bottom: 10,
-                    width: 2,
-                    background: 'var(--vermillion)',
-                  }}
-                />
-              ) : null}
               <div
                 style={{
                   display: 'flex',

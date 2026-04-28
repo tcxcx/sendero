@@ -5,7 +5,8 @@
  *   GET/POST  /mcp        — MCP JSON-RPC 2.0 for Claude Desktop / ChatGPT Apps / etc.
  *   POST      /whatsapp   — Meta Cloud API webhook for WhatsApp Business
  *   POST      /discord    — Discord interactions webhook
- *   GET       /           — health + surface manifest
+ *   GET       /           — surface manifest (tool list + version)
+ *   GET       /health     — liveness probe ({ ok, timestamp }) for the GH Actions cron
  *   GET       /llms.txt   — mirrored for agents that discover edge directly
  *
  * Slack webhook handling moved to the Next.js app — Vercel Fluid Compute
@@ -78,6 +79,19 @@ app.get('/', c =>
     surfaces: ['/mcp', '/whatsapp', '/discord', '/tools'],
     toolCount: toolList.length,
     tools: toolList.map(t => t.name),
+  })
+);
+
+// Liveness probe consumed by `.github/workflows/edge-health.yml` and
+// `scripts/edge-health-check.sh`. Contract: HTTP 200 + body where
+// `.ok === true` and `.timestamp != null`. Keep this lean — the probe
+// hits it every 5 min and SLOs at <500ms.
+app.get('/health', c =>
+  c.json({
+    ok: true,
+    timestamp: new Date().toISOString(),
+    name: '@sendero/edge',
+    version: '0.1.0',
   })
 );
 

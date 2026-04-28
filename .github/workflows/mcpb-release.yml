@@ -1,0 +1,93 @@
+name: MCPB Release
+
+# Builds and publishes apps/mcpb/sendero-<version>.mcpb to a GitHub
+# Release whenever a tag of the form mcpb-v* is pushed. Tag matches
+# the version in apps/mcpb/package.json — run `bun run build` locally
+# first to sanity-check the bundle before tagging.
+
+on:
+  push:
+    tags:
+      - 'mcpb-v*'
+  workflow_dispatch:
+    # Manual trigger so we can rebuild a release without re-tagging.
+    inputs:
+      tag:
+        description: 'Release tag (e.g. mcpb-v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build .mcpb bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify manifest version matches tag
+        working-directory: apps/mcpb
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          TAG_VERSION="${{ steps.tag.outputs.tag }}"
+          TAG_VERSION="${TAG_VERSION#mcpb-v}"
+          if [ "$PKG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) != manifest.json version ($MANIFEST_VERSION)"
+            exit 1
+          fi
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) != tag version ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "version=$PKG_VERSION" >> "$GITHUB_ENV"
+
+      - name: Install MCPB CLI
+        run: bun add -g @anthropic-ai/mcpb@^2.1.2
+
+      - name: Build .mcpb bundle
+        working-directory: apps/mcpb
+        run: bun run build
+
+      - name: Duplicate as generic `sendero.mcpb` for stable URL
+        # softprops/action-gh-release uploads files with their literal
+        # filename. Cloning the versioned artifact under the generic
+        # name lets `latest/download/sendero.mcpb` keep working across
+        # releases without forcing every consumer to track versions.
+        run: cp apps/mcpb/sendero-${{ env.version }}.mcpb apps/mcpb/sendero.mcpb
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: 'MCPB v${{ env.version }}'
+          body: |
+            One-click Claude Desktop installer for Sendero.
+
+            ## Install
+            1. Download `sendero.mcpb` below (or the versioned file).
+            2. Open Claude Desktop → Settings → Extensions → "Install from file…"
+            3. Paste a Sendero API key from
+               [/dashboard/settings/api-keys](https://app.sendero.travel/dashboard/settings/api-keys).
+
+            ## Stable URL
+            `https://github.com/${{ github.repository }}/releases/latest/download/sendero.mcpb`
+          files: |
+            apps/mcpb/sendero-${{ env.version }}.mcpb
+            apps/mcpb/sendero.mcpb
+          fail_on_unmatched_files: true
