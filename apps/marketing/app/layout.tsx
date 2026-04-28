@@ -12,6 +12,7 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { Analytics } from '@vercel/analytics/next';
 import { Agentation } from 'agentation';
 
 import { Providers } from './providers';
@@ -98,6 +99,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <Providers allowedRedirectOrigins={CLERK_ALLOWED_REDIRECT_ORIGINS}>{children}</Providers>
         {process.env.NODE_ENV === 'development' && <Agentation />}
+        <Analytics />
       </body>
     </html>
   );
