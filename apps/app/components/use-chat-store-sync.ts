@@ -69,7 +69,15 @@ export function useChatStoreSync(messages: readonly unknown[]) {
 
         const state = p.state || p.toolInvocation?.state;
         const toolInput = (p.input || p.toolInvocation?.input || {}) as any;
-        const output = p.output || p.result || p.toolInvocation?.result;
+        // Live streaming gives `output: <value>`; rehydration from
+        // persisted UIMessage parts gives `output: { type: 'json',
+        // value: <value> }`. Normalize so downstream code never has to
+        // care which path produced the message.
+        const rawOutput = p.output || p.result || p.toolInvocation?.result;
+        const output =
+          rawOutput && typeof rawOutput === 'object' && 'type' in rawOutput && 'value' in rawOutput
+            ? (rawOutput as { value: unknown }).value
+            : rawOutput;
 
         const hasInput =
           state === 'input-available' || state === 'output-available' || state === 'result';

@@ -110,7 +110,7 @@ export function MetaInboxLive({
   // its own ChatSession row on the first turn. nuqs is shallow by
   // default — switching sessions updates the URL via history.replaceState
   // with no RSC refetch and no loading.tsx overlay.
-  const [activeCs] = useQueryState('cs');
+  const [activeCs, setActiveCs] = useQueryState('cs');
   const [freshSessionId] = useState(
     () => `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
   );
@@ -150,6 +150,13 @@ export function MetaInboxLive({
         'parts=',
         message.parts?.length ?? 0
       );
+      // Promote the freshly-minted chatSessionId into the URL so a
+      // page reload (or shared link) lands on `?cs=<id>` and the
+      // resume effect re-hydrates this exact session. Idempotent:
+      // skipped when activeCs is already set (rail click, deep link).
+      if (!activeCs) {
+        void setActiveCs(chatSessionId);
+      }
       // Tell the CHAT MODE rail to refetch immediately. Sub-100ms in
       // the same tab — the SSE round-trip from /api/chats/stream is
       // the cross-tab fallback.
@@ -174,6 +181,10 @@ export function MetaInboxLive({
       setMessages([]);
       return;
     }
+    // When activeCs is the id we just minted on this mount, useChat
+    // already holds every message in memory — skipping the fetch
+    // avoids a flicker right after onFinish promotes the id to the URL.
+    if (activeCs === freshSessionId) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -196,7 +207,7 @@ export function MetaInboxLive({
     return () => {
       cancelled = true;
     };
-  }, [activeCs, setMessages]);
+  }, [activeCs, freshSessionId, setMessages]);
 
   // Mirror status into a ref so the demo-trip runner can poll the
   // current value without subscribing to re-renders.
