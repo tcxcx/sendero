@@ -422,11 +422,17 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   return (
     <div className="agents-terminal max-w-3xl w-full font-mono">
       <div className="overflow-hidden border border-border">
+        {/*
+          Terminal title bar. Mac traffic-light dots in muted Sendero
+          tones — close, minimize, zoom — instead of flat-gray
+          identical circles. Subtle distinctive detail; reads as a
+          real terminal without screaming "Mac chrome."
+        */}
         <div className="select-none flex items-center h-7 px-3 border-b border-border bg-[#1a1f2e]">
-          <div className="flex gap-[5px]">
-            <span className="block w-2 h-2 rounded-full bg-[#3a4358]" />
-            <span className="block w-2 h-2 rounded-full bg-[#3a4358]" />
-            <span className="block w-2 h-2 rounded-full bg-[#3a4358]" />
+          <div className="flex gap-[6px]">
+            <span className="block w-[10px] h-[10px] rounded-full" style={{ background: '#e16454' }} />
+            <span className="block w-[10px] h-[10px] rounded-full" style={{ background: '#dba94e' }} />
+            <span className="block w-[10px] h-[10px] rounded-full" style={{ background: '#7fa97a' }} />
           </div>
           <span className="flex-1 text-center text-[10px] tracking-wide text-foreground -ml-10">
             sendero — zsh
@@ -630,10 +636,37 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
       <div className="max-w-screen-xl mx-auto px-4 pt-16 pb-12 md:py-28 flex flex-col lg:flex-row gap-12 justify-between items-center">
         <div className="lg:max-w-[590px] space-y-8 w-full">
           <div>
-            <h1 className="text-3xl md:text-4xl lg:text-5xl leading-[1.1] tracking-tight font-sans">
-              Let agents run your travel ops.
+            {/*
+              Editorial eyebrow — matches the home page hero's
+              ink-pill treatment (.mk-eyebrow inside .mk-hero-copy
+              in globals.css). Anchors the route to Sendero's brand
+              system instead of a bare h1.
+            */}
+            <div className="mk-eyebrow" style={{ display: 'inline-block', background: '#111', color: '#fafaf7', padding: '0.42em 0.72em', marginBottom: 24 }}>
+              For AI agents
+            </div>
+            <h1
+              className="leading-[1.05] tracking-[-0.015em]"
+              style={{
+                fontFamily: 'var(--display)',
+                fontSize: 'clamp(40px, 5.5vw, 68px)',
+                fontWeight: 450,
+                color: 'var(--fg)',
+                margin: 0,
+                textWrap: 'balance',
+              }}
+            >
+              Let agents run your{' '}
+              <span style={{ color: 'var(--ink)', fontStyle: 'italic' }}>travel ops</span>.
             </h1>
-            <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-base leading-normal mt-4 md:mt-8">
+            <p
+              className="text-base leading-normal mt-6 md:mt-8"
+              style={{
+                color: 'color-mix(in oklab, var(--fg) 65%, transparent)',
+                fontFamily: 'var(--sans)',
+                maxWidth: '52ch',
+              }}
+            >
               One CLI. ~49 tools. Your agent searches inventory, places holds, tickets bookings,
               settles on-chain in USDC, audits every step. Anything you do in Sendero, it can do
               too.
@@ -687,7 +720,9 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
                 <div className="p-4">
                   <div className="space-y-4">
                     <h3 className="text-sm text-foreground">{feature.title}</h3>
-                    <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">{feature.description}</p>
+                    <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">
+                      {feature.description}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -709,7 +744,9 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
                       {item.agent}
                     </span>
                     <h3 className="text-sm text-foreground">{item.title}</h3>
-                    <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">{item.description}</p>
+                    <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">
+                      {item.description}
+                    </p>
                   </div>
                 </div>
               </div>

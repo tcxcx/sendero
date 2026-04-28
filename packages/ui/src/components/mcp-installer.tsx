@@ -138,24 +138,21 @@ export function McpInstaller({
         className
       )}
       style={{
-        borderColor: 'color-mix(in oklab, var(--ink, #1f2a44) 18%, transparent)',
+        borderColor: 'color-mix(in oklab, var(--fg, #111) 18%, transparent)',
         ...style,
       }}
     >
-      <header className="flex flex-col gap-1">
-        <h2 className="font-sans text-xl tracking-tight text-[var(--ink,#1f2a44)]">
-          Install Sendero
-        </h2>
-        <p className="text-sm text-[color-mix(in_oklab,var(--ink,#1f2a44)_65%,transparent)]">
-          One CLI, one plugin, one MCP endpoint. Pick how you want to wire your agent in.
-        </p>
-      </header>
-
+      {/*
+        No internal header. Callers (the marketing /agents page, the
+        dashboard /integrations/* sub-routes) provide their own
+        section heading; this component starts with the tab strip so
+        we don't double-up "Install / Install Sendero" titles.
+      */}
       <nav
         role="tablist"
         aria-label="Sendero install paths"
         className="flex w-full border-b"
-        style={{ borderColor: 'color-mix(in oklab, var(--ink, #1f2a44) 18%, transparent)' }}
+        style={{ borderColor: 'color-mix(in oklab, var(--fg, #111) 18%, transparent)' }}
       >
         {TABS.map(t => {
           const active = t.value === tab;
@@ -170,13 +167,13 @@ export function McpInstaller({
               onClick={() => setTab(t.value)}
               className={cn(
                 'relative flex-1 border-b-2 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors',
-                active ? '' : 'hover:text-[var(--ink,#1f2a44)]'
+                active ? '' : 'hover:text-[var(--fg,#111)]'
               )}
               style={{
                 color: active
-                  ? 'var(--ink, #1f2a44)'
-                  : 'color-mix(in oklab, var(--ink, #1f2a44) 55%, transparent)',
-                borderBottomColor: active ? 'var(--vermillion, #fb542b)' : 'transparent',
+                  ? 'var(--ink, #fb542b)'
+                  : 'color-mix(in oklab, var(--fg, #111) 55%, transparent)',
+                borderBottomColor: active ? 'var(--ink, #fb542b)' : 'transparent',
                 marginBottom: '-1px',
               }}
             >
@@ -200,13 +197,13 @@ export function McpInstaller({
 
       <footer
         className="flex flex-col gap-3 border-t pt-4"
-        style={{ borderColor: 'color-mix(in oklab, var(--ink, #1f2a44) 12%, transparent)' }}
+        style={{ borderColor: 'color-mix(in oklab, var(--fg, #111) 12%, transparent)' }}
       >
         <div className="flex flex-col gap-1">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink,#1f2a44)]">
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--fg,#111)]">
             API key
           </span>
-          <p className="text-xs text-[color-mix(in_oklab,var(--ink,#1f2a44)_65%,transparent)]">
+          <p className="text-xs text-[color-mix(in_oklab,var(--fg,#111)_65%,transparent)]">
             Sendero keys are minted via Clerk in the dashboard. Sandbox keys ship with every new
             workspace; production keys are gated by your plan tier.
           </p>
@@ -219,7 +216,7 @@ export function McpInstaller({
             target={apiKeysHref.startsWith('http') ? '_blank' : undefined}
             rel={apiKeysHref.startsWith('http') ? 'noreferrer' : undefined}
             className="inline-flex h-10 w-fit items-center justify-center px-5 font-mono text-[12px] uppercase tracking-[0.14em] text-[var(--parchment,#fdfbf7)] transition-colors hover:opacity-90"
-            style={{ background: 'var(--ink, #1f2a44)' }}
+            style={{ background: 'var(--fg, #111)' }}
           >
             Get an API key →
           </a>
@@ -233,7 +230,7 @@ function CliPanel({ mcpUrl }: { mcpUrl: string }) {
   const apiKeyHint = 'ak_your_key_here';
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-[color-mix(in_oklab,var(--ink,#1f2a44)_70%,transparent)]">
+      <p className="text-sm text-[color-mix(in_oklab,var(--fg,#111)_70%,transparent)]">
         The fastest path. One <code className="font-mono text-xs">npx</code> command, no global
         install. Auth runs in your browser and writes{' '}
         <code className="font-mono text-xs">~/.sendero/key</code> with chmod 600.
@@ -258,8 +255,8 @@ function CliPanel({ mcpUrl }: { mcpUrl: string }) {
         language="bash"
         code={`npx @sendero/cli@latest tools call search_flights '{"origin":"BUE","destination":"MIA","date":"2026-05-12"}'`}
       />
-      <details className="text-xs text-[color-mix(in_oklab,var(--ink,#1f2a44)_70%,transparent)]">
-        <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink,#1f2a44)]">
+      <details className="text-xs text-[color-mix(in_oklab,var(--fg,#111)_70%,transparent)]">
+        <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--fg,#111)]">
           Endpoint override (advanced)
         </summary>
         <p className="mt-2">
@@ -277,7 +274,7 @@ function CliPanel({ mcpUrl }: { mcpUrl: string }) {
 function PluginPanel() {
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-[color-mix(in_oklab,var(--ink,#1f2a44)_70%,transparent)]">
+      <p className="text-sm text-[color-mix(in_oklab,var(--fg,#111)_70%,transparent)]">
         Versioned, distributable. Bundles the MCP server config plus a skill that teaches Claude
         when and how to use Sendero — confirm scope before settlement, respect plan caps, never
         fabricate offer IDs, surface Arcscan audit URLs.
@@ -300,7 +297,7 @@ claude --plugin-dir ./sendero/apps/claude-code-plugin`}
         code={`/plugin marketplace add tcxcx/sendero
 /plugin install sendero@sendero`}
       />
-      <p className="text-xs text-[color-mix(in_oklab,var(--ink,#1f2a44)_60%,transparent)]">
+      <p className="text-xs text-[color-mix(in_oklab,var(--fg,#111)_60%,transparent)]">
         Verify with <code className="font-mono text-xs">/help</code> — the Sendero MCP server and
         the <code className="font-mono text-xs">/sendero:travel-booking</code> skill should both be
         listed.
@@ -312,7 +309,7 @@ claude --plugin-dir ./sendero/apps/claude-code-plugin`}
 function SkillsPanel({ skills }: { skills: ReadonlyArray<McpInstallerSkill> }) {
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-[color-mix(in_oklab,var(--ink,#1f2a44)_70%,transparent)]">
+      <p className="text-sm text-[color-mix(in_oklab,var(--fg,#111)_70%,transparent)]">
         Skills are markdown files inside the plugin that teach Claude when to call which Sendero
         tools. They auto-load when the plugin is installed; trigger by asking Claude in plain
         language.
@@ -323,24 +320,24 @@ function SkillsPanel({ skills }: { skills: ReadonlyArray<McpInstallerSkill> }) {
             key={skill.slug}
             className="flex flex-col gap-1.5 border p-4"
             style={{
-              borderColor: 'color-mix(in oklab, var(--ink, #1f2a44) 18%, transparent)',
-              background: 'color-mix(in oklab, var(--ink, #1f2a44) 3%, white)',
+              borderColor: 'color-mix(in oklab, var(--fg, #111) 18%, transparent)',
+              background: 'color-mix(in oklab, var(--fg, #111) 3%, white)',
             }}
           >
             <div className="flex items-baseline justify-between gap-3">
-              <span className="font-sans text-sm font-semibold text-[var(--ink,#1f2a44)]">
+              <span className="font-sans text-sm font-semibold text-[var(--fg,#111)]">
                 {skill.name}
               </span>
               <code className="font-mono text-[11px] text-[var(--vermillion,#fb542b)]">
                 /sendero:{skill.slug}
               </code>
             </div>
-            <p className="text-xs text-[color-mix(in_oklab,var(--ink,#1f2a44)_65%,transparent)]">
+            <p className="text-xs text-[color-mix(in_oklab,var(--fg,#111)_65%,transparent)]">
               {skill.trigger}
             </p>
           </div>
         ))}
-        <p className="text-[11px] uppercase tracking-[0.14em] text-[color-mix(in_oklab,var(--ink,#1f2a44)_55%,transparent)]">
+        <p className="text-[11px] uppercase tracking-[0.14em] text-[color-mix(in_oklab,var(--fg,#111)_55%,transparent)]">
           Skills auto-load when the plugin is installed. The list will be tuned during the mainnet
           cutover and locked in v1.0.
         </p>
@@ -352,7 +349,7 @@ function SkillsPanel({ skills }: { skills: ReadonlyArray<McpInstallerSkill> }) {
 function McpPanel({ mcpUrl }: { mcpUrl: string }) {
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-[color-mix(in_oklab,var(--ink,#1f2a44)_70%,transparent)]">
+      <p className="text-sm text-[color-mix(in_oklab,var(--fg,#111)_70%,transparent)]">
         Direct MCP wire-up — no plugin, no skill, just the tool surface. Use this for clients that
         haven't adopted the Claude Code plugin format (Codex, Cursor, VS Code, custom agents).
       </p>
@@ -412,12 +409,12 @@ function CodeBlock({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink,#1f2a44)]">
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--fg,#111)]">
           {label}
         </span>
         <span
           className="font-mono text-[10px] uppercase tracking-[0.18em]"
-          style={{ color: 'color-mix(in oklab, var(--ink, #1f2a44) 50%, transparent)' }}
+          style={{ color: 'color-mix(in oklab, var(--fg, #111) 50%, transparent)' }}
         >
           {language}
         </span>
@@ -428,7 +425,7 @@ function CodeBlock({
           style={{
             background: '#0e1320',
             color: '#fdfbf7',
-            border: '1px solid color-mix(in oklab, var(--ink, #1f2a44) 18%, transparent)',
+            border: '1px solid color-mix(in oklab, var(--fg, #111) 18%, transparent)',
           }}
         >
           {code}
