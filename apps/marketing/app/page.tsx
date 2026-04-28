@@ -8,7 +8,6 @@ import {
   normalizeLocale,
 } from '@sendero/locale';
 import { resolvePublicOrigin } from '@sendero/seo';
-import { buildLocaleApiHrefs, SenderoLanguageSelector } from '@sendero/ui/language-selector';
 
 import { getMarketingContent } from '@/lib/content';
 import { heroTitleWithHighlights } from '@/lib/hero-title';
@@ -81,36 +80,10 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
       : href;
 
   // Header + footer come from app/layout.tsx (SiteHeader / SiteFooter).
-  // The home page renders only its body sections — hero, audiences,
-  // proof, pricing teaser, symbols.
+  // SiteHeader renders the language selector + primary CTA on the right
+  // of the nav row — see apps/marketing/components/site-shell/site-header.tsx.
   return (
     <>
-      {/* Locale selector + CTA stack lived inside the inline nav before
-          the layout extraction. Surfaced here as a hero affordance so
-          the home keeps its own primary/secondary CTAs without
-          duplicating site nav. */}
-      <div className="mk-nav-right mk-nav-right-floating" aria-label="Marketing actions">
-        <div className="mk-nav-stack">
-          <SenderoLanguageSelector
-            className="mk-language"
-            currentLocale={normalized}
-            hrefs={buildLocaleApiHrefs('/')}
-          />
-          <a
-            href={toAppHref(content.hero.primaryCta.href)}
-            className="mk-cta mk-nav-waitlist s-press"
-          >
-            {content.hero.primaryCta.label}
-          </a>
-          <a
-            href={toAppHref(content.hero.secondaryCta.href)}
-            className="mk-nav-secondary s-press"
-          >
-            {content.hero.secondaryCta.label}
-          </a>
-        </div>
-      </div>
-
       <section className="mk-hero">
         <div className="mk-hero-art s-fade s-fade-1" aria-hidden="true">
           <img

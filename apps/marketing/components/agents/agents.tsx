@@ -28,7 +28,7 @@ import { McpInstaller } from '@sendero/ui/mcp-installer';
 const SENDERO_MCP_URL = 'https://app.sendero.travel/api/mcp';
 const SENDERO_API_KEYS_URL = 'https://app.sendero.travel/dashboard/settings/api-keys';
 
-const DOT_COLOR = 'hsl(225, 60%, 55%)';
+const DOT_COLOR = 'color-mix(in oklab, var(--ink) 65%, white)';
 
 function cn(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(' ');
@@ -114,7 +114,7 @@ function CopyInstall() {
     <button
       type="button"
       onClick={copyCommand}
-      className="flex border border-border p-2 px-4 text-sm w-full relative cursor-pointer hover:bg-[hsl(225,70%,28%)] transition-colors"
+      className="flex border border-border p-2 px-4 text-sm w-full relative cursor-pointer hover:bg-[color:color-mix(in_oklab,var(--ink)_18%,white)] transition-colors"
       style={{
         backgroundImage:
           'repeating-linear-gradient(-60deg, hsla(var(--border), 0.4), hsla(var(--border), 0.4) 1px, transparent 1px, transparent 6px)',
@@ -422,11 +422,11 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   return (
     <div className="agents-terminal max-w-3xl w-full font-mono">
       <div className="overflow-hidden border border-border">
-        <div className="select-none flex items-center h-7 px-3 border-b border-border bg-[hsl(225,70%,26%)]">
+        <div className="select-none flex items-center h-7 px-3 border-b border-border bg-[#1a1f2e]">
           <div className="flex gap-[5px]">
-            <span className="block w-2 h-2 rounded-full bg-[hsl(225,50%,40%)]" />
-            <span className="block w-2 h-2 rounded-full bg-[hsl(225,50%,40%)]" />
-            <span className="block w-2 h-2 rounded-full bg-[hsl(225,50%,40%)]" />
+            <span className="block w-2 h-2 rounded-full bg-[#3a4358]" />
+            <span className="block w-2 h-2 rounded-full bg-[#3a4358]" />
+            <span className="block w-2 h-2 rounded-full bg-[#3a4358]" />
           </div>
           <span className="flex-1 text-center text-[10px] tracking-wide text-foreground -ml-10">
             sendero — zsh
@@ -443,7 +443,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
                 'relative flex-1 px-4 py-1.5 text-[11px] tracking-wide transition-colors border-b',
                 i === activeTab
                   ? 'bg-background text-foreground border-b-transparent'
-                  : 'text-[hsl(225,60%,75%)] hover:text-foreground border-b-border',
+                  : 'text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] hover:text-foreground border-b-border',
                 i > 0 && 'border-l border-l-border'
               )}
             >
@@ -461,7 +461,7 @@ function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
           <div className={cn('text-7xl sm:text-8xl text-foreground mt-3', pixelFontClass)}>
             sendero
           </div>
-          <div className="text-[hsl(225,60%,75%)] text-[10px] tracking-widest mt-1.5 mb-5">
+          <div className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-[10px] tracking-widest mt-1.5 mb-5">
             v0.1.0 · agent@workspace · Sendero Travel Ops
           </div>
 
@@ -633,7 +633,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
             <h1 className="text-3xl md:text-4xl lg:text-5xl leading-[1.1] tracking-tight font-sans">
               Let agents run your travel ops.
             </h1>
-            <p className="text-[hsl(225,60%,75%)] text-base leading-normal mt-4 md:mt-8">
+            <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-base leading-normal mt-4 md:mt-8">
               One CLI. ~49 tools. Your agent searches inventory, places holds, tickets bookings,
               settles on-chain in USDC, audits every step. Anything you do in Sendero, it can do
               too.
@@ -647,13 +647,13 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
           <div className="flex items-center gap-4">
             <Link
               href="https://app.sendero.travel"
-              className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[hsl(225,50%,92%)]"
+              className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[color:var(--ink)] hover:!text-white"
             >
               Start automating
             </Link>
             <Link
               href="https://docs.sendero.travel/claude-code-plugin"
-              className="hidden md:inline-flex h-11 items-center justify-center border border-border bg-transparent px-6 font-mono text-sm text-foreground transition-colors hover:!bg-[hsl(225,70%,28%)]"
+              className="hidden md:inline-flex h-11 items-center justify-center border border-border bg-transparent px-6 font-mono text-sm text-foreground transition-colors hover:!bg-[color:var(--ink)] hover:!text-white"
             >
               Read documentation
             </Link>
@@ -669,7 +669,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
             <h3 id="agents-installer-title" className="font-sans text-2xl text-foreground">
               Install
             </h3>
-            <p className="text-[hsl(225,60%,75%)] text-sm">
+            <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">
               Pick your install path. Same auth gate, same tool surface — different ergonomics.
             </p>
           </div>
@@ -687,7 +687,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
                 <div className="p-4">
                   <div className="space-y-4">
                     <h3 className="text-sm text-foreground">{feature.title}</h3>
-                    <p className="text-[hsl(225,60%,75%)] text-sm">{feature.description}</p>
+                    <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">{feature.description}</p>
                   </div>
                 </div>
               </div>
@@ -705,11 +705,11 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
               <div className="border border-border p-1 -mt-[1px] -ml-[1px]" key={item.title}>
                 <div className="p-4">
                   <div className="space-y-3">
-                    <span className="text-xs text-[hsl(225,50%,60%)] uppercase tracking-widest">
+                    <span className="text-xs text-[color:var(--ink)] uppercase tracking-widest">
                       {item.agent}
                     </span>
                     <h3 className="text-sm text-foreground">{item.title}</h3>
-                    <p className="text-[hsl(225,60%,75%)] text-sm">{item.description}</p>
+                    <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-sm">{item.description}</p>
                   </div>
                 </div>
               </div>
@@ -723,7 +723,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
           <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
             <div className="p-4 space-y-4">
               <h2 className="text-sm text-foreground">CLI</h2>
-              <ul className="text-[hsl(225,60%,75%)] space-y-2">
+              <ul className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] space-y-2">
                 <li className="text-sm">◇ Search, hold, confirm, settle, refund</li>
                 <li className="text-sm">◇ Structured JSON when piped, tables on TTY</li>
                 <li className="text-sm">◇ Browser-based key mint</li>
@@ -736,7 +736,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
           <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
             <div className="p-4 space-y-4">
               <h2 className="text-sm text-foreground">MCP</h2>
-              <ul className="text-[hsl(225,60%,75%)] space-y-2">
+              <ul className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] space-y-2">
                 <li className="text-sm">◇ ~49 tools across travel-ops</li>
                 <li className="text-sm">◇ HTTP transport — works with any MCP client</li>
                 <li className="text-sm">◇ Claude Desktop, Claude Code, Cursor, Codex, VS Code</li>
@@ -749,7 +749,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
           <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
             <div className="p-4 space-y-4">
               <h2 className="text-sm text-foreground">Developer experience</h2>
-              <ul className="text-[hsl(225,60%,75%)] space-y-2">
+              <ul className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] space-y-2">
                 <li className="text-sm">◇ OpenAPI 3.1 spec at /api/openapi.json</li>
                 <li className="text-sm">◇ llms.txt advertises every surface</li>
                 <li className="text-sm">◇ TypeScript SDK auto-generated</li>
@@ -763,7 +763,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
         <div className="hidden md:flex justify-center mt-12">
           <Link
             href="https://app.sendero.travel"
-            className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[hsl(225,50%,92%)]"
+            className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[color:var(--ink)] hover:!text-white"
           >
             Start automating
           </Link>
@@ -775,7 +775,7 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
 
         <div className="hidden md:block text-center">
           <h2 className="font-sans text-2xl sm:text-3xl text-foreground">Infrastructure</h2>
-          <p className="text-[hsl(225,60%,75%)] text-base leading-normal mt-4 max-w-md mx-auto">
+          <p className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] text-base leading-normal mt-4 max-w-md mx-auto">
             Sendero is the backbone. Agents connect via MCP, CLI, or REST. Every operation syncs
             back to the workspace ledger and on-chain audit trail.
           </p>
@@ -799,19 +799,19 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
         <div className="bg-background border border-border p-8 lg:p-12 text-center relative before:absolute before:inset-0 before:bg-[repeating-linear-gradient(-60deg,hsla(var(--border),0.4),hsla(var(--border),0.4)_1px,transparent_1px,transparent_6px)] before:pointer-events-none">
           <div className="relative z-10">
             <h2 className="font-sans text-2xl sm:text-3xl text-foreground mb-4">Get started</h2>
-            <p className="font-sans text-base text-[hsl(225,60%,75%)] mb-6 max-w-lg mx-auto">
+            <p className="font-sans text-base text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] mb-6 max-w-lg mx-auto">
               One CLI. One MCP server. Every travel-ops operation your agent needs.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link
                 href="https://app.sendero.travel"
-                className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[hsl(225,50%,92%)]"
+                className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[color:var(--ink)] hover:!text-white"
               >
                 Start automating
               </Link>
               <Link
                 href="https://docs.sendero.travel"
-                className="inline-flex h-11 items-center justify-center border border-primary bg-background px-6 font-mono text-sm text-foreground transition-colors hover:!bg-[hsl(225,70%,45%)]"
+                className="inline-flex h-11 items-center justify-center border border-primary bg-background px-6 font-mono text-sm text-foreground transition-colors hover:!bg-[color:var(--ink)] hover:!text-white"
               >
                 Read documentation
               </Link>

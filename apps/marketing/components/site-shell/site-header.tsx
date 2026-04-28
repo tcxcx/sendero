@@ -1,16 +1,23 @@
 import { cookies, headers } from 'next/headers';
 
-import { detectLocale, LOCALE_COOKIE_NAME, LOCALE_HEADER_NAME } from '@sendero/locale';
+import { detectLocale, LOCALE_COOKIE_NAME, LOCALE_HEADER_NAME, normalizeLocale } from '@sendero/locale';
 import { resolvePublicOrigin } from '@sendero/seo';
+import { buildLocaleApiHrefs, SenderoLanguageSelector } from '@sendero/ui/language-selector';
 
 import { getMarketingContent } from '@/lib/content';
 
 /**
- * SiteHeader — shared marketing nav. Mounted in apps/marketing/app/layout.tsx
- * so every route inherits the same brand mark + product links.
+ * SiteHeader — shared marketing nav. Mounted once in
+ * apps/marketing/app/layout.tsx so every route inherits the same
+ * brand mark + product links + language selector + primary CTA.
  *
- * Server component; reads locale once per request and pulls labels from
+ * Server component; reads locale once per request, pulls labels from
  * lib/content.ts. Pages don't render their own nav anymore.
+ *
+ * Layout: brand-left, nav-middle, language+CTA-right — all on a
+ * single row inside `.mk-nav-tools`. Matches Midday's `Features
+ * Pricing Story Download Resources | Sign in` shape but with
+ * Sendero's parchment + vermillion palette.
  */
 export async function SiteHeader() {
   const [hdrs, cookieStore] = await Promise.all([headers(), cookies()]);
@@ -21,15 +28,26 @@ export async function SiteHeader() {
     country: hdrs.get('x-vercel-ip-country') ?? hdrs.get('cf-ipcountry'),
   });
   const content = await getMarketingContent(locale);
+  const normalized = normalizeLocale(content.locale) ?? 'en-US';
   const appOrigin = resolvePublicOrigin(
     process.env.NEXT_PUBLIC_APP_URL,
     'https://app.sendero.travel'
   );
 
+  // The hero's primary CTA copy (e.g., "Start free" / "Empezar gratis")
+  // doubles as the universal header CTA — no per-page override needed.
+  const primaryHref = content.hero.primaryCta.href.startsWith('/dashboard')
+    ? `${appOrigin.replace(/\/$/, '')}${content.hero.primaryCta.href}`
+    : content.hero.primaryCta.href;
+
   return (
     <header className="mk-nav mk-nav-shared" aria-label="Sendero site header">
       <div className="mk-brand">
-        <a href="/" aria-label="Sendero home" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <a
+          href="/"
+          aria-label="Sendero home"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+        >
           <img
             alt=""
             className="mk-mark"
@@ -41,6 +59,7 @@ export async function SiteHeader() {
           <span>ARC</span>
         </a>
       </div>
+
       <div className="mk-nav-tools">
         <nav className="mk-nav-apps" aria-label="Sendero product navigation">
           <a href="/agents">Agents</a>
@@ -49,6 +68,17 @@ export async function SiteHeader() {
           <a href="https://docs.sendero.travel">Docs</a>
           <a href={appOrigin}>{content.nav.app}</a>
         </nav>
+
+        <div className="mk-nav-actions" aria-label="Marketing actions">
+          <SenderoLanguageSelector
+            className="mk-language"
+            currentLocale={normalized}
+            hrefs={buildLocaleApiHrefs('/')}
+          />
+          <a href={primaryHref} className="mk-cta mk-nav-waitlist s-press">
+            {content.hero.primaryCta.label}
+          </a>
+        </div>
       </div>
     </header>
   );
