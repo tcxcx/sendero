@@ -126,6 +126,7 @@ function trimTrailingSlash(s: string): string {
 /** Default route catalog for Sendero's marketing site. */
 export const SENDERO_MARKETING_ROUTES: SitemapRoute[] = [
   { path: '/', changeFrequency: 'daily', priority: 1.0 },
+  { path: '/agents', changeFrequency: 'weekly', priority: 0.9 },
   { path: '/llms.txt', changeFrequency: 'daily', priority: 0.95 },
   { path: '/.well-known/llms.txt', changeFrequency: 'daily', priority: 0.95 },
 ];

@@ -19,6 +19,7 @@
     "@sendero/seo": "workspace:*",
     "@sendero/ui": "workspace:*",
     "agentation": "^3.0.2",
+    "geist": "^1.7.0",
     "lucide-react": "^1.8.0",
     "motion": "^12.38.0",
     "next": "^16.2.4",

@@ -1,24 +1,133 @@
 'use client';
 
 /**
- * Sendero /agents marketing page — modeled after Midday's /agents
- * route but rebranded to Sendero's identity (parchment + vermillion +
- * ink, not the Midday blue). Section structure, terminal demo, and
- * grid layouts are inspired by Midday; copy + scenarios are 100%
- * Sendero (travel-ops, USDC settlement, MCP-native).
+ * Sendero /agents — verbatim port of midday-ai/midday's agents page
+ * (apps/website/src/components/agents.tsx) with Sendero swaps:
  *
- * The page boots a self-driving terminal demo that cycles through
- * four representative agent flows: search → hold → confirm → audit.
- * Tabs also allow click-to-jump for visitors who want to inspect a
- * specific scenario.
+ * - Wordmark "sendero" instead of "midday"
+ * - Scenarios: Search & hold / Confirm & settle / Reconcile / Audit
+ * - Copy: travel ops + USDC settlement + MCP-native
+ * - Brand backdrop: Sendero ink (#1f2a44) — already a deep navy that
+ *   matches the Midday aesthetic without further tuning. Tokens are
+ *   injected at page level via `dangerouslySetInnerHTML` (see
+ *   apps/marketing/app/agents/page.tsx) so the rest of the marketing
+ *   site stays parchment-on-ink.
+ *
+ * Same component contract as Midday's: takes `pixelFontClass` from
+ * `geist/font/pixel` so the giant "sendero" wordmark inside the
+ * terminal renders in pixel type.
  */
 
-import { McpInstaller } from '@sendero/ui/mcp-installer';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, Copy } from 'lucide-react';
+import Link from 'next/link';
 import type React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { McpInstaller } from '@sendero/ui/mcp-installer';
 
 const SENDERO_MCP_URL = 'https://app.sendero.travel/api/mcp';
 const SENDERO_API_KEYS_URL = 'https://app.sendero.travel/dashboard/settings/api-keys';
+
+const DOT_COLOR = 'hsl(225, 60%, 55%)';
+
+function cn(...classes: (string | false | null | undefined)[]): string {
+  return classes.filter(Boolean).join(' ');
+}
+
+function InfraDiagram() {
+  const d = (text: string) => <span style={{ color: DOT_COLOR }}>{text}</span>;
+  return (
+    <>
+      {'                                            ┌──────────────────┐\n'}
+      {'                                            │      Agents      │\n'}
+      {'                                            └────────┬─────────┘\n'}
+      {'                                                     │\n'}
+      {'                                              MCP / CLI / API\n'}
+      {'                                                     │\n'}
+      {' ┌───────────────────────────────────────────────────┴───────────────────────────────────────────────────┐\n'}
+      {' │'}
+      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {'│\n'}
+      {' │'}
+      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {'  Sendero  '}
+      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {'│\n'}
+      {' │'}
+      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {'│\n'}
+      {' │'}
+      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {'  Travel-ops with on-chain settlement  '}
+      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {'│\n'}
+      {' │'}
+      {d('░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░')}
+      {'│\n'}
+      {' └────┬───────────┬───────────┬───────────┬───────────┬───────────┬───────────┬─────────────────────────┘\n'}
+      {'      │           │           │           │           │           │           │\n'}
+      {'      ▼           ▼           ▼           ▼           ▼           ▼           ▼\n'}
+      {'\n'}
+      {'  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐\n'}
+      {'  │ Search  │ │  Hold   │ │ Ticket  │ │ Settle  │ │  Audit  │ │ Wallet  │ │ Export  │\n'}
+      {'  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘'}
+    </>
+  );
+}
+
+function SectionDivider() {
+  return (
+    <div className="w-full py-1">
+      <div
+        className="h-4 w-full border-y border-border"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(-60deg, hsla(var(--border), 0.4), hsla(var(--border), 0.4) 1px, transparent 1px, transparent 6px)',
+        }}
+      />
+    </div>
+  );
+}
+
+function CopyInstall() {
+  const [copied, setCopied] = useState(false);
+
+  const copyCommand = () => {
+    navigator.clipboard.writeText('npx @sendero/cli@latest').catch(() => {
+      // Best-effort
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1000);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copyCommand}
+      className="flex border border-border p-2 px-4 text-sm w-full relative cursor-pointer hover:bg-[hsl(225,70%,28%)] transition-colors"
+      style={{
+        backgroundImage:
+          'repeating-linear-gradient(-60deg, hsla(var(--border), 0.4), hsla(var(--border), 0.4) 1px, transparent 1px, transparent 6px)',
+      }}
+    >
+      <span className="text-foreground truncate">$ npx @sendero/cli@latest</span>
+
+      <div className="flex items-center space-x-2 ml-auto">
+        {copied ? (
+          <Check size={14} className="text-foreground" />
+        ) : (
+          <Copy size={14} className="text-foreground" />
+        )}
+      </div>
+
+      {copied && (
+        <div className="absolute left-1/2 -translate-x-1/2 -top-7 text-xs text-foreground animate-in fade-in slide-in-from-bottom-1">
+          Copied
+        </div>
+      )}
+    </button>
+  );
+}
 
 const ORA_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -54,17 +163,17 @@ const SCENARIOS: Scenario[] = [
     spin2: 'Placing 24h hold...',
     done2: 'Hold confirmed.',
     result1: (
-      <div className="relative mt-3 border-[0.5px] border-[var(--ink)] text-[12px]">
-        <span className="absolute -top-[10px] left-3 bg-[var(--surface)] px-1.5 text-[11px] tracking-wide">
+      <div className="relative mt-3 border-[0.5px] border-primary text-foreground text-[12px]">
+        <span className="absolute -top-[10px] left-3 bg-background px-1.5 text-[11px] tracking-wide text-foreground">
           BUE → MIA · 12 May 2026 · 3 offers
         </span>
         <table className="w-full mt-2 mb-1">
           <thead>
-            <tr className="text-left border-b-[0.5px] border-[var(--ink)]">
-              <th className="font-normal pl-3 pr-2 pb-1">CARRIER</th>
-              <th className="font-normal pr-2 pb-1">DEPART</th>
-              <th className="font-normal pr-2 pb-1">CABIN</th>
-              <th className="font-normal pr-3 pb-1 text-right">FARE</th>
+            <tr className="text-left border-b-[0.5px] border-primary">
+              <th className="font-normal pl-3 pr-2 pb-1 text-foreground">CARRIER</th>
+              <th className="font-normal pr-2 pb-1 text-foreground">DEPART</th>
+              <th className="font-normal pr-2 pb-1 text-foreground">CABIN</th>
+              <th className="font-normal pr-3 pb-1 text-right text-foreground">FARE</th>
             </tr>
           </thead>
           <tbody>
@@ -88,9 +197,10 @@ const SCENARIOS: Scenario[] = [
             </tr>
           </tbody>
         </table>
+        <div className="px-3 pb-2 text-[11px] text-foreground">Held offer: off_8f2</div>
       </div>
     ),
-    result2Line: '  Held offer off_8f2 for 24h · expires 2026-04-29 18:20 UTC',
+    result2Line: '  Hold lives 24h · expires 2026-04-29 18:20 UTC',
   },
   {
     label: 'Confirm & settle',
@@ -100,7 +210,7 @@ const SCENARIOS: Scenario[] = [
     spin2: 'Settling commission to take-rate wallet...',
     done2: 'Settlement landed in block 412,839,221.',
     result1: (
-      <div className="mt-2 text-[12px] space-y-0.5">
+      <div className="mt-2 text-foreground text-[12px] space-y-0.5">
         <div> Booking confirmed: bk_5c1</div>
         <div> PNR: PJZ3M1</div>
         <div> Settlement: $842.00 USDC → carrier wallet</div>
@@ -116,55 +226,55 @@ const SCENARIOS: Scenario[] = [
     cmd2: 'sendero tools call match_settlements --auto',
     spin1: 'Pulling settlements without paired bookings...',
     spin2: 'Auto-matching by holdId + amount...',
-    done2: 'Matching complete.',
+    done2: 'Matching 3 settlements to bookings...',
     result1: (
-      <div className="relative mt-3 border-[0.5px] border-[var(--ink)] text-[12px]">
-        <span className="absolute -top-[10px] left-3 bg-[var(--surface)] px-1.5 text-[11px] tracking-wide">
+      <div className="relative mt-3 border-[0.5px] border-primary text-foreground text-[12px]">
+        <span className="absolute -top-[10px] left-3 bg-background px-1.5 text-[11px] tracking-wide text-foreground">
           Unmatched settlements [3]
         </span>
         <table className="w-full mt-2 mb-1">
           <thead>
-            <tr className="text-left border-b-[0.5px] border-[var(--ink)]">
-              <th className="font-normal pl-3 pr-2 pb-1">SETTLEMENT</th>
-              <th className="font-normal pr-2 pb-1">AMOUNT</th>
-              <th className="font-normal pr-2 pb-1">CHAIN</th>
-              <th className="font-normal pr-3 pb-1">SUGGEST</th>
+            <tr className="text-left border-b-[0.5px] border-primary">
+              <th className="font-normal pl-3 pr-2 pb-1 text-foreground">ID</th>
+              <th className="font-normal pr-2 pb-1 text-foreground">CHAIN</th>
+              <th className="font-normal pr-2 pb-1 text-right text-foreground">AMOUNT</th>
+              <th className="font-normal pr-3 pb-1 text-foreground">SUGGESTED</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td className="pl-3 pr-2 py-[3px]">stl_91a</td>
-              <td className="pr-2 py-[3px]">$842.00</td>
               <td className="pr-2 py-[3px]">arc</td>
+              <td className="pr-2 py-[3px] text-right">$842.00</td>
               <td className="pr-3 py-[3px]">bk_5c1</td>
             </tr>
             <tr>
               <td className="pl-3 pr-2 py-[3px]">stl_8e7</td>
-              <td className="pr-2 py-[3px]">$617.00</td>
               <td className="pr-2 py-[3px]">arc</td>
+              <td className="pr-2 py-[3px] text-right">$617.00</td>
               <td className="pr-3 py-[3px]">bk_5b9</td>
             </tr>
             <tr>
               <td className="pl-3 pr-2 py-[3px]">stl_8d2</td>
-              <td className="pr-2 py-[3px]">$305.50</td>
               <td className="pr-2 py-[3px]">base</td>
+              <td className="pr-2 py-[3px] text-right">$305.50</td>
               <td className="pr-3 py-[3px]">bk_5a4</td>
             </tr>
           </tbody>
         </table>
       </div>
     ),
-    result2Line: '  3/3 settlements paired with bookings · ledger reconciled.',
+    result2Line: '  Matched 3/3 settlements. Ledger reconciled.',
   },
   {
-    label: 'Audit & export',
+    label: 'Audit',
     cmd1: 'sendero tools call export_trip_summary \'{"tripId":"tr_4d9","format":"pdf"}\'',
     cmd2: 'sendero tools call export_audit_log \'{"period":"2026-Q2","format":"csv"}\'',
     spin1: 'Rendering trip summary PDF...',
     spin2: 'Streaming audit log to CSV...',
     done2: 'Export complete.',
     result1: (
-      <div className="mt-2 text-[12px] space-y-0.5">
+      <div className="mt-2 text-foreground text-[12px] space-y-0.5">
         <div> Trip: tr_4d9 (BUE → MIA → LIM, 5 legs)</div>
         <div> Travelers: 3 · Bookings: 7 · Holds: 2</div>
         <div> Total spend: $4,217.50 USDC</div>
@@ -176,42 +286,7 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
-function CopyInstall({ command, label }: { command: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const copy = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    navigator.clipboard.writeText(command).catch(() => {
-      // Best-effort — older browsers / sandboxed iframes drop clipboard
-    });
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1100);
-  }, [command]);
-
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className="relative flex w-full cursor-pointer items-center border border-[color-mix(in_oklab,var(--ink)_22%,transparent)] bg-[var(--surface,#fdfbf7)] p-2 px-4 text-sm transition-colors hover:bg-[color-mix(in_oklab,var(--vermillion)_8%,white)]"
-      style={{
-        backgroundImage:
-          'repeating-linear-gradient(-60deg, color-mix(in oklab, var(--ink) 12%, transparent), color-mix(in oklab, var(--ink) 12%, transparent) 1px, transparent 1px, transparent 6px)',
-      }}
-    >
-      <span className="truncate font-mono text-[var(--ink)]">$ {command}</span>
-      <span className="ml-auto flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-[color-mix(in_oklab,var(--ink)_55%,transparent)]">
-        {label ?? 'Copy'}
-      </span>
-      {copied ? (
-        <span className="absolute -top-7 left-1/2 -translate-x-1/2 rounded bg-[var(--ink)] px-2 py-0.5 font-mono text-[11px] text-[var(--parchment,#fdfbf7)]">
-          Copied
-        </span>
-      ) : null}
-    </button>
-  );
-}
-
-function Terminal() {
+function Terminal({ pixelFontClass }: { pixelFontClass?: string }) {
   const [activeTab, setActiveTab] = useState(0);
   const [phase, setPhase] = useState<Phase>('typing-1');
   const [typed1, setTyped1] = useState('');
@@ -222,7 +297,7 @@ function Terminal() {
 
   const scenario = SCENARIOS[activeTab] as Scenario;
 
-  const reset = useCallback(() => {
+  const resetAnimation = useCallback(() => {
     setPhase('typing-1');
     setTyped1('');
     setTyped2('');
@@ -230,13 +305,15 @@ function Terminal() {
   }, []);
 
   useEffect(() => {
-    reset();
-  }, [activeTab, reset]);
+    resetAnimation();
+  }, [activeTab, resetAnimation]);
+
+  const handleTabClick = (idx: number) => setActiveTab(idx);
 
   const past = (p: Phase) => PHASES.indexOf(phase) >= PHASES.indexOf(p);
 
   useEffect(() => {
-    const id = setInterval(() => setCursorOn(v => !v), 530);
+    const id = setInterval(() => setCursorOn((v) => !v), 530);
     return () => clearInterval(id);
   }, []);
 
@@ -251,13 +328,13 @@ function Terminal() {
         clearInterval(id);
         setTimeout(() => setPhase('spin-1'), 300);
       }
-    }, 20);
+    }, 40);
     return () => clearInterval(id);
   }, [phase, scenario.cmd1]);
 
   useEffect(() => {
     if (phase !== 'spin-1' && phase !== 'spin-2') return;
-    const id = setInterval(() => setFrame(f => (f + 1) % ORA_FRAMES.length), 80);
+    const id = setInterval(() => setFrame((f) => (f + 1) % ORA_FRAMES.length), 80);
     const dur = phase === 'spin-1' ? 2000 : 1400;
     const t = setTimeout(() => {
       clearInterval(id);
@@ -286,7 +363,7 @@ function Terminal() {
         clearInterval(id);
         setTimeout(() => setPhase('spin-2'), 300);
       }
-    }, 20);
+    }, 40);
     return () => clearInterval(id);
   }, [phase, scenario.cmd2]);
 
@@ -299,8 +376,8 @@ function Terminal() {
   useEffect(() => {
     if (phase !== 'done') return;
     const t = setTimeout(() => {
-      setActiveTab(prev => (prev + 1) % SCENARIOS.length);
-    }, 2400);
+      setActiveTab((prev) => (prev + 1) % SCENARIOS.length);
+    }, 2000);
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -315,42 +392,50 @@ function Terminal() {
 
   const cursor = (
     <span
-      className={`inline-block w-[7px] h-[15px] ml-px align-middle bg-[var(--ink)] ${cursorOn ? 'opacity-100' : 'opacity-0'}`}
+      className={cn(
+        'inline-block w-[7px] h-[15px] ml-px align-middle bg-foreground',
+        cursorOn ? 'opacity-100' : 'opacity-0'
+      )}
     />
   );
-  const prompt = <span className="text-[var(--ink)]">~ $ </span>;
+
+  const prompt = <span className="text-foreground">~ $ </span>;
+
   const spin = (text: string) => (
-    <div>
+    <div className="text-foreground">
       {ORA_FRAMES[frame]} {text}
     </div>
   );
-  const done = (text: string) => <div>{text}</div>;
+
+  const done = (text: string) => <div className="text-foreground">{text}</div>;
 
   return (
-    <div className="w-full max-w-3xl font-mono text-[var(--ink)]">
-      <div className="overflow-hidden border border-[color-mix(in_oklab,var(--ink)_22%,transparent)]">
-        <div className="flex h-7 select-none items-center border-b border-[color-mix(in_oklab,var(--ink)_22%,transparent)] bg-[color-mix(in_oklab,var(--vermillion)_10%,white)] px-3">
+    <div className="max-w-3xl w-full font-mono">
+      <div className="overflow-hidden border border-border">
+        <div className="select-none flex items-center h-7 px-3 border-b border-border bg-[hsl(225,70%,26%)]">
           <div className="flex gap-[5px]">
-            <span className="block h-2 w-2 rounded-full bg-[color-mix(in_oklab,var(--ink)_25%,transparent)]" />
-            <span className="block h-2 w-2 rounded-full bg-[color-mix(in_oklab,var(--ink)_25%,transparent)]" />
-            <span className="block h-2 w-2 rounded-full bg-[color-mix(in_oklab,var(--ink)_25%,transparent)]" />
+            <span className="block w-2 h-2 rounded-full bg-[hsl(225,50%,40%)]" />
+            <span className="block w-2 h-2 rounded-full bg-[hsl(225,50%,40%)]" />
+            <span className="block w-2 h-2 rounded-full bg-[hsl(225,50%,40%)]" />
           </div>
-          <span className="-ml-10 flex-1 text-center text-[10px] tracking-wide text-[var(--ink)]">
+          <span className="flex-1 text-center text-[10px] tracking-wide text-foreground -ml-10">
             sendero — zsh
           </span>
         </div>
 
-        <div className="flex bg-[color-mix(in_oklab,var(--ink)_4%,white)]">
+        <div className="flex bg-muted/40">
           {SCENARIOS.map((s, i) => (
             <button
               key={s.label}
               type="button"
-              onClick={() => setActiveTab(i)}
-              className={`flex-1 border-b px-4 py-1.5 text-[11px] uppercase tracking-wide transition-colors ${
+              onClick={() => handleTabClick(i)}
+              className={cn(
+                'relative flex-1 px-4 py-1.5 text-[11px] tracking-wide transition-colors border-b',
                 i === activeTab
-                  ? 'border-b-transparent bg-[var(--surface,#fdfbf7)] text-[var(--ink)]'
-                  : 'border-b-[color-mix(in_oklab,var(--ink)_22%,transparent)] text-[color-mix(in_oklab,var(--ink)_55%,transparent)] hover:text-[var(--ink)]'
-              } ${i > 0 ? 'border-l border-l-[color-mix(in_oklab,var(--ink)_22%,transparent)]' : ''}`}
+                  ? 'bg-background text-foreground border-b-transparent'
+                  : 'text-[hsl(225,60%,75%)] hover:text-foreground border-b-border',
+                i > 0 && 'border-l border-l-border'
+              )}
             >
               {s.label}
             </button>
@@ -359,11 +444,21 @@ function Terminal() {
 
         <div
           ref={termRef}
-          className="h-[400px] overflow-y-auto bg-[var(--surface,#fdfbf7)] p-5 text-[13px] leading-[1.7] md:h-[460px]"
+          className="overflow-y-auto h-[380px] md:h-[460px] scroll-smooth p-5 bg-background text-[13px] leading-[1.7] text-foreground"
         >
-          <div>{prompt}npx @sendero/cli@latest</div>
-          <div className="mt-3 text-4xl tracking-tight text-[var(--ink)] sm:text-5xl">sendero</div>
-          <div className="mt-1.5 mb-5 text-[10px] uppercase tracking-widest text-[color-mix(in_oklab,var(--ink)_55%,transparent)]">
+          <div>
+            {prompt}npx @sendero/cli@latest
+          </div>
+
+          <div
+            className={cn(
+              'text-7xl sm:text-8xl text-foreground mt-3',
+              pixelFontClass
+            )}
+          >
+            sendero
+          </div>
+          <div className="text-[hsl(225,60%,75%)] text-[10px] tracking-widest mt-1.5 mb-5">
             v0.1.0 · agent@workspace · Sendero Travel Ops
           </div>
 
@@ -374,6 +469,7 @@ function Terminal() {
           </div>
 
           {phase === 'spin-1' && <div className="mt-1">{spin(scenario.spin1)}</div>}
+
           {past('result-1') && scenario.result1}
 
           {past('typing-2') && (
@@ -414,12 +510,12 @@ const FEATURES = [
   {
     title: 'Hold without committing',
     description:
-      'Place a 24h hold on any offer while finance approves, the traveler reconfirms, or policy gates resolve. Release on a timer if not confirmed.',
+      'Place a 24h hold while finance approves, the traveler reconfirms, or policy gates resolve. Release on a timer if not confirmed.',
   },
   {
     title: 'Settle on-chain in USDC',
     description:
-      'confirm_booking writes the ticket and the on-chain audit row in the same call. Arcscan URL surfaces in the response for finance.',
+      "confirm_booking tickets the offer and writes the on-chain audit row in the same call. Arcscan URL surfaces in the response for finance.",
   },
   {
     title: 'Reconcile autonomously',
@@ -429,7 +525,7 @@ const FEATURES = [
   {
     title: 'Pull reports on demand',
     description:
-      'export_trip_summary, export_audit_log, export_route_map. Structured outputs for travelers, finance, and auditors — same agent surface.',
+      'export_trip_summary, export_audit_log, export_route_map. Structured outputs for travelers, finance, auditors — same agent surface.',
   },
   {
     title: 'Respect plan caps',
@@ -439,17 +535,17 @@ const FEATURES = [
   {
     title: 'Sandbox by default',
     description:
-      'Sandbox API keys mint automatically on workspace creation. Practice the whole flow without moving real USDC; flip a flag to go live.',
+      'Sandbox API keys mint automatically on workspace creation. Practice the full flow without moving real USDC; flip a flag to go live.',
   },
   {
     title: 'Locale aware',
     description:
-      'Reply in the same language the user wrote in — Spanish, Portuguese, English. The tool surface is locale-agnostic; the skill teaches Claude to mirror.',
+      "Reply in the same language the user wrote in — Spanish, Portuguese, English. The tool surface is locale-agnostic; the skill teaches Claude to mirror.",
   },
   {
     title: 'Cross-channel by design',
     description:
-      'Same agent runs in WhatsApp, Slack, MCP, the web console, and email. One Trip.events ledger; every channel reads and writes to it.',
+      'Same agent runs in WhatsApp, Slack, MCP, the web console, email. One Trip.events ledger; every channel reads and writes to it.',
   },
   {
     title: 'Identity on ERC-8004',
@@ -459,12 +555,12 @@ const FEATURES = [
   {
     title: 'Works with any MCP client',
     description:
-      'Claude Code, Claude Desktop, Cursor, Codex, VS Code, Raycast, or your own agent. Same ~49 tools, same auth gate, any MCP transport.',
+      'Claude Code, Claude Desktop, Cursor, Codex, VS Code, Raycast, your own agent. Same ~49 tools, same auth gate, any MCP transport.',
   },
   {
     title: 'Zero setup',
     description:
-      'One npx command. Browser-based key mint. No API keys to manage, no config files. Your agent is operational in seconds.',
+      'One npx command. Browser-based key mint. No API keys to manage, no config files. Operational in seconds.',
   },
 ];
 
@@ -485,7 +581,7 @@ const POSSIBILITIES = [
     agent: 'Slack',
     title: 'Approve from #travel',
     description:
-      'Approval card lands in your channel. Click ✓; the bot tickets the offer, surfaces the Arcscan audit URL, and stamps Trip.events.',
+      'Approval card lands in your channel. Click ✓; the bot tickets the offer, surfaces the Arcscan audit URL, stamps Trip.events.',
   },
   {
     agent: 'WhatsApp',
@@ -521,92 +617,81 @@ const POSSIBILITIES = [
     agent: 'OpenClaw',
     title: 'A 24/7 ops desk',
     description:
-      'OpenClaw watches WhatsApp + Slack + email, escalates by policy, ticketing only after multi-step confirmation. The audit trail is on-chain.',
+      'OpenClaw watches WhatsApp + Slack + email, escalates by policy, ticketing only after multi-step confirmation. Audit trail on-chain.',
   },
 ];
 
-function SectionDivider() {
+export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
   return (
-    <div className="w-full py-1">
-      <div
-        className="h-4 w-full border-y border-[color-mix(in_oklab,var(--ink)_18%,transparent)]"
-        style={{
-          backgroundImage:
-            'repeating-linear-gradient(-60deg, color-mix(in oklab, var(--ink) 12%, transparent), color-mix(in oklab, var(--ink) 12%, transparent) 1px, transparent 1px, transparent 6px)',
-        }}
-      />
-    </div>
-  );
-}
-
-export function Agents() {
-  return (
-    <div className="relative mt-16 font-mono text-[var(--ink)]">
-      <div className="mx-auto flex max-w-screen-xl flex-col items-center justify-between gap-12 px-4 pt-16 pb-12 md:py-28 lg:flex-row">
-        <div className="w-full space-y-8 lg:max-w-[590px]">
+    <div className="font-mono relative mt-16">
+      <div className="max-w-screen-xl mx-auto px-4 pt-16 pb-12 md:py-28 flex flex-col lg:flex-row gap-12 justify-between items-center">
+        <div className="lg:max-w-[590px] space-y-8 w-full">
           <div>
-            <h1 className="font-sans text-3xl leading-[1.1] tracking-tight md:text-4xl lg:text-5xl">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl leading-[1.1] tracking-tight font-sans">
               Let agents run your travel ops.
             </h1>
-            <p className="mt-4 text-base leading-normal text-[color-mix(in_oklab,var(--ink)_70%,transparent)] md:mt-8">
+            <p className="text-[hsl(225,60%,75%)] text-base leading-normal mt-4 md:mt-8">
               One CLI. ~49 tools. Your agent searches inventory, places holds, tickets bookings,
-              settles on-chain in USDC, and audits every step. Anything you can do in Sendero, it
-              can do too.
+              settles on-chain in USDC, audits every step. Anything you do in Sendero, it can do
+              too.
             </p>
           </div>
 
           <div className="lg:max-w-[480px]">
-            <CopyInstall command="npx @sendero/cli@latest" label="Copy" />
+            <CopyInstall />
           </div>
 
-          <div className="flex flex-wrap items-center gap-4">
-            <a
+          <div className="flex items-center gap-4">
+            <Link
               href="https://app.sendero.travel"
-              className="inline-flex h-11 items-center justify-center bg-[var(--ink)] px-6 font-mono text-sm text-[var(--parchment,#fdfbf7)] transition-colors hover:bg-[var(--vermillion)]"
+              className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[hsl(225,50%,92%)]"
             >
               Start automating
-            </a>
-            <a
+            </Link>
+            <Link
               href="https://sendero.travel/docs/claude-code-plugin"
-              className="hidden h-11 items-center justify-center border border-[var(--ink)] bg-transparent px-6 font-mono text-sm text-[var(--ink)] transition-colors hover:bg-[color-mix(in_oklab,var(--vermillion)_8%,white)] md:inline-flex"
+              className="hidden md:inline-flex h-11 items-center justify-center border border-border bg-transparent px-6 font-mono text-sm text-foreground transition-colors hover:!bg-[hsl(225,70%,28%)]"
             >
               Read documentation
-            </a>
+            </Link>
           </div>
         </div>
 
-        <Terminal />
+        <Terminal pixelFontClass={pixelFontClass} />
       </div>
 
-      <div className="mx-auto max-w-screen-lg space-y-16 px-4">
+      <div className="space-y-16 max-w-screen-lg mx-auto px-4">
         <section
           aria-labelledby="agents-installer-title"
           className="mt-4 flex flex-col gap-4"
         >
           <div className="flex flex-col gap-1">
-            <h3 id="agents-installer-title" className="font-sans text-2xl">
+            <h3 id="agents-installer-title" className="font-sans text-2xl text-foreground">
               Install
             </h3>
-            <p className="text-sm text-[color-mix(in_oklab,var(--ink)_65%,transparent)]">
+            <p className="text-[hsl(225,60%,75%)] text-sm">
               Pick your install path. Same auth gate, same tool surface — different ergonomics.
             </p>
           </div>
           <McpInstaller mcpUrl={SENDERO_MCP_URL} apiKeysHref={SENDERO_API_KEYS_URL} />
         </section>
 
+        <SectionDivider />
+
         <div className="mt-12">
-          <h3 className="font-sans text-2xl">Features</h3>
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map(feature => (
+          <h3 className="font-sans text-2xl text-foreground">Features</h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-4">
+            {FEATURES.map((feature) => (
               <div
+                className="border border-border p-1 -mt-[1px] -ml-[1px]"
                 key={feature.title}
-                className="-mt-[1px] -ml-[1px] border border-[color-mix(in_oklab,var(--ink)_18%,transparent)] p-1"
               >
-                <div className="space-y-3 p-4">
-                  <h4 className="text-sm font-semibold">{feature.title}</h4>
-                  <p className="text-sm text-[color-mix(in_oklab,var(--ink)_65%,transparent)]">
-                    {feature.description}
-                  </p>
+                <div className="p-4">
+                  <div className="space-y-4">
+                    <h3 className="text-sm text-foreground">{feature.title}</h3>
+                    <p className="text-[hsl(225,60%,75%)] text-sm">{feature.description}</p>
+                  </div>
                 </div>
               </div>
             ))}
@@ -616,21 +701,22 @@ export function Agents() {
         <SectionDivider />
 
         <div>
-          <h3 className="font-sans text-2xl">Possibilities</h3>
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {POSSIBILITIES.map(item => (
+          <h3 className="font-sans text-2xl text-foreground">Possibilities</h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mt-4">
+            {POSSIBILITIES.map((item) => (
               <div
+                className="border border-border p-1 -mt-[1px] -ml-[1px]"
                 key={item.title}
-                className="-mt-[1px] -ml-[1px] border border-[color-mix(in_oklab,var(--ink)_18%,transparent)] p-1"
               >
-                <div className="space-y-3 p-4">
-                  <span className="text-xs uppercase tracking-widest text-[var(--vermillion)]">
-                    {item.agent}
-                  </span>
-                  <h4 className="text-sm font-semibold">{item.title}</h4>
-                  <p className="text-sm text-[color-mix(in_oklab,var(--ink)_65%,transparent)]">
-                    {item.description}
-                  </p>
+                <div className="p-4">
+                  <div className="space-y-3">
+                    <span className="text-xs text-[hsl(225,50%,60%)] uppercase tracking-widest">
+                      {item.agent}
+                    </span>
+                    <h3 className="text-sm text-foreground">{item.title}</h3>
+                    <p className="text-[hsl(225,60%,75%)] text-sm">{item.description}</p>
+                  </div>
                 </div>
               </div>
             ))}
@@ -639,11 +725,11 @@ export function Agents() {
 
         <SectionDivider />
 
-        <div className="grid grid-cols-1 md:grid-cols-3">
-          <div className="-mt-[1px] -ml-[1px] border border-[color-mix(in_oklab,var(--ink)_18%,transparent)] p-1">
-            <div className="space-y-4 p-4">
-              <h4 className="text-sm font-semibold">CLI</h4>
-              <ul className="space-y-2 text-[color-mix(in_oklab,var(--ink)_65%,transparent)]">
+        <div className="grid grid-cols-1 md:grid-cols-3 mt-4">
+          <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
+            <div className="p-4 space-y-4">
+              <h2 className="text-sm text-foreground">CLI</h2>
+              <ul className="text-[hsl(225,60%,75%)] space-y-2">
                 <li className="text-sm">◇ Search, hold, confirm, settle, refund</li>
                 <li className="text-sm">◇ Structured JSON when piped, tables on TTY</li>
                 <li className="text-sm">◇ Browser-based key mint</li>
@@ -653,11 +739,11 @@ export function Agents() {
             </div>
           </div>
 
-          <div className="-mt-[1px] -ml-[1px] border border-[color-mix(in_oklab,var(--ink)_18%,transparent)] p-1">
-            <div className="space-y-4 p-4">
-              <h4 className="text-sm font-semibold">MCP</h4>
-              <ul className="space-y-2 text-[color-mix(in_oklab,var(--ink)_65%,transparent)]">
-                <li className="text-sm">◇ ~49 tools across the travel-ops surface</li>
+          <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
+            <div className="p-4 space-y-4">
+              <h2 className="text-sm text-foreground">MCP</h2>
+              <ul className="text-[hsl(225,60%,75%)] space-y-2">
+                <li className="text-sm">◇ ~49 tools across travel-ops</li>
                 <li className="text-sm">◇ HTTP transport — works with any MCP client</li>
                 <li className="text-sm">◇ Claude Desktop, Claude Code, Cursor, Codex, VS Code</li>
                 <li className="text-sm">◇ Same auth gate as the CLI</li>
@@ -666,10 +752,10 @@ export function Agents() {
             </div>
           </div>
 
-          <div className="-mt-[1px] -ml-[1px] border border-[color-mix(in_oklab,var(--ink)_18%,transparent)] p-1">
-            <div className="space-y-4 p-4">
-              <h4 className="text-sm font-semibold">Developer experience</h4>
-              <ul className="space-y-2 text-[color-mix(in_oklab,var(--ink)_65%,transparent)]">
+          <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
+            <div className="p-4 space-y-4">
+              <h2 className="text-sm text-foreground">Developer experience</h2>
+              <ul className="text-[hsl(225,60%,75%)] space-y-2">
                 <li className="text-sm">◇ OpenAPI 3.1 spec at /api/openapi.json</li>
                 <li className="text-sm">◇ llms.txt advertises every surface</li>
                 <li className="text-sm">◇ TypeScript SDK auto-generated</li>
@@ -680,65 +766,62 @@ export function Agents() {
           </div>
         </div>
 
-        <div className="mt-12 hidden justify-center md:flex">
-          <a
+        <div className="hidden md:flex justify-center mt-12">
+          <Link
             href="https://app.sendero.travel"
-            className="inline-flex h-11 items-center justify-center bg-[var(--ink)] px-6 font-mono text-sm text-[var(--parchment,#fdfbf7)] transition-colors hover:bg-[var(--vermillion)]"
+            className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[hsl(225,50%,92%)]"
           >
             Start automating
-          </a>
+          </Link>
         </div>
 
-        <SectionDivider />
+        <div className="hidden md:block">
+          <SectionDivider />
+        </div>
 
-        <div className="text-center">
-          <h2 className="font-sans text-2xl sm:text-3xl">Infrastructure</h2>
-          <p className="mx-auto mt-4 max-w-md text-base leading-normal text-[color-mix(in_oklab,var(--ink)_70%,transparent)]">
+        <div className="hidden md:block text-center">
+          <h2 className="font-sans text-2xl sm:text-3xl text-foreground">Infrastructure</h2>
+          <p className="text-[hsl(225,60%,75%)] text-base leading-normal mt-4 max-w-md mx-auto">
             Sendero is the backbone. Agents connect via MCP, CLI, or REST. Every operation syncs
             back to the workspace ledger and on-chain audit trail.
           </p>
-          <pre
-            className="mx-auto mt-4 inline-block p-4 text-left text-[11px] leading-5"
-            style={{ fontFamily: 'monospace', whiteSpace: 'pre' }}
-          >
-            {`                                            ┌──────────────────┐
-                                            │      Agents      │
-                                            └────────┬─────────┘
-                                                     │
-                                              MCP / CLI / API
-                                                     │
-   ┌─────────────────────────────────────────────────┴─────────────────────────────────────────────────┐
-   │░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  Sendero  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
-   │░░░░░░░░░░░░░░░░░░░░  Travel-ops backbone with on-chain settlement  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░│
-   └─────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬─────────────────────────┘
-         │          │          │          │          │          │          │
-         ▼          ▼          ▼          ▼          ▼          ▼          ▼
-    ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-    │ Search │ │  Hold  │ │ Ticket │ │ Settle │ │  Audit │ │ Wallet │ │ Export │
-    └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘`}
-          </pre>
+
+          <div className="hidden md:flex flex-col items-center justify-center mt-2">
+            <pre
+              className="p-4 text-sm leading-5 md:scale-[0.8] transform-gpu text-foreground"
+              style={{
+                fontFamily: 'monospace',
+                whiteSpace: 'pre',
+                textAlign: 'left',
+              }}
+            >
+              <InfraDiagram />
+            </pre>
+          </div>
         </div>
       </div>
 
-      <div className="mx-auto mt-16 mb-24 max-w-screen-lg px-4">
-        <div className="relative border border-[color-mix(in_oklab,var(--ink)_22%,transparent)] bg-[var(--surface,#fdfbf7)] p-8 text-center lg:p-12">
-          <h2 className="mb-4 font-sans text-2xl sm:text-3xl">Get started</h2>
-          <p className="mx-auto mb-6 max-w-lg font-sans text-base text-[color-mix(in_oklab,var(--ink)_70%,transparent)]">
-            One CLI. One MCP server. Every travel-ops operation your agent needs.
-          </p>
-          <div className="flex flex-wrap justify-center gap-4">
-            <a
-              href="https://app.sendero.travel"
-              className="inline-flex h-11 items-center justify-center bg-[var(--ink)] px-6 font-mono text-sm text-[var(--parchment,#fdfbf7)] transition-colors hover:bg-[var(--vermillion)]"
-            >
-              Start automating
-            </a>
-            <a
-              href="https://sendero.travel/docs"
-              className="inline-flex h-11 items-center justify-center border border-[var(--ink)] bg-transparent px-6 font-mono text-sm text-[var(--ink)] transition-colors hover:bg-[color-mix(in_oklab,var(--vermillion)_8%,white)]"
-            >
-              Read documentation
-            </a>
+      <div className="max-w-screen-lg mx-auto mt-16 mb-24 px-4">
+        <div className="bg-background border border-border p-8 lg:p-12 text-center relative before:absolute before:inset-0 before:bg-[repeating-linear-gradient(-60deg,hsla(var(--border),0.4),hsla(var(--border),0.4)_1px,transparent_1px,transparent_6px)] before:pointer-events-none">
+          <div className="relative z-10">
+            <h2 className="font-sans text-2xl sm:text-3xl text-foreground mb-4">Get started</h2>
+            <p className="font-sans text-base text-[hsl(225,60%,75%)] mb-6 max-w-lg mx-auto">
+              One CLI. One MCP server. Every travel-ops operation your agent needs.
+            </p>
+            <div className="flex flex-wrap justify-center gap-4">
+              <Link
+                href="https://app.sendero.travel"
+                className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[hsl(225,50%,92%)]"
+              >
+                Start automating
+              </Link>
+              <Link
+                href="https://sendero.travel/docs"
+                className="inline-flex h-11 items-center justify-center border border-primary bg-background px-6 font-mono text-sm text-foreground transition-colors hover:!bg-[hsl(225,70%,45%)]"
+              >
+                Read documentation
+              </Link>
+            </div>
           </div>
         </div>
       </div>
