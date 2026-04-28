@@ -1,10 +1,12 @@
 /**
  * /dashboard/channels/whatsapp/inbox — operator-facing audit surface.
  *
- * Two stacked tables, both tenant-scoped:
+ * Three stacked tables, all tenant-scoped:
  *   1. Inbound webhook events  — every Meta webhook delivery, with
  *      verify outcome + normalized counts + duration.
- *   2. Outbound messages       — every send (agent reply / OTP /
+ *   2. Outbound API calls      — every Kapso/Meta call, with status,
+ *      duration, error message.
+ *   3. Outbound messages       — every send (agent reply / OTP /
  *      security alert / etc.), with delivery status + failure reason.
  *
  * Closes Bucket 5 of the channel-skill audit. When a customer says
@@ -13,10 +15,14 @@
  * outbound (delivery_status = failed? failure_reason populated?).
  *
  * Read-only by design — the audit is a witness, not a control plane.
+ *
+ * Visual shell mirrors `SlackConnectedPanel`'s Channel-routing card so
+ * the audit pages on both channels read as one design system.
  */
 
 import { prisma } from '@sendero/database';
 
+import { InboxSectionCard } from '@/components/channels/inbox-section-card';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
@@ -45,163 +51,192 @@ export default async function WhatsAppInboxPage() {
   ]);
 
   return (
-    <main className="mx-auto w-full max-w-screen-xl space-y-8 px-4 py-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">WhatsApp inbox audit</h1>
-        <p className="text-sm text-muted-foreground">
+    <main
+      style={{
+        padding: '0 20px 20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 18,
+        flex: 1,
+        minHeight: 0,
+      }}
+    >
+      <header style={{ paddingTop: 4 }}>
+        <h1 className="t-h1">WhatsApp inbox audit</h1>
+        <p className="t-body ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
           Every inbound webhook delivery and every outbound message we sent. Use this when a
           customer reports a missing reply or a stuck OTP.
         </p>
       </header>
 
-      <section aria-labelledby="inbound-heading" className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 id="inbound-heading" className="text-lg font-medium">
-            Inbound webhook deliveries
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Last {Math.min(webhookEvents.length, PAGE_SIZE)} of newest-first
-          </p>
-        </div>
+      <InboxSectionCard
+        id="inbound-heading"
+        title="Inbound webhook deliveries"
+        description="Newest-first · verify + normalized counts + duration"
+        meta={`Last ${Math.min(webhookEvents.length, PAGE_SIZE)}`}
+      >
         {webhookEvents.length === 0 ? (
           <EmptyState
             title="No inbound deliveries logged yet"
             body="Once Meta forwards a message to your webhook, the row lands here."
           />
         ) : (
-          <div className="overflow-x-auto rounded-md border border-border">
+          <TableWrap>
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
+              <thead>
+                <tr style={tableHeadRowStyle}>
                   <Th>Received</Th>
                   <Th>Verify</Th>
                   <Th>Replay</Th>
-                  <Th>Msgs</Th>
-                  <Th>Statuses</Th>
-                  <Th>Disp.</Th>
-                  <Th>Drop·R</Th>
-                  <Th>Drop·D</Th>
-                  <Th>Duration</Th>
+                  <Th align="right">Msgs</Th>
+                  <Th align="right">Statuses</Th>
+                  <Th align="right">Disp.</Th>
+                  <Th align="right">Drop·R</Th>
+                  <Th align="right">Drop·D</Th>
+                  <Th align="right">Duration</Th>
                   <Th>Trace</Th>
                 </tr>
               </thead>
               <tbody>
-                {webhookEvents.map(ev => (
-                  <tr key={ev.id} className="border-t border-border">
-                    <Td title={ev.receivedAt.toISOString()}>{formatRelative(ev.receivedAt)}</Td>
-                    <Td>
-                      <Badge tone={ev.signatureValid ? 'ok' : 'fail'}>
-                        {ev.signatureValid ? 'ok' : 'bad'}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      {ev.replayWindowOk === null ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <Badge tone={ev.replayWindowOk ? 'ok' : 'warn'}>
-                          {ev.replayWindowOk ? 'ok' : 'stale'}
+                {webhookEvents.map((ev, i) => {
+                  const last = i === webhookEvents.length - 1;
+                  return (
+                    <tr key={ev.id} style={tableRowStyle(last)}>
+                      <Td title={ev.receivedAt.toISOString()}>{formatRelative(ev.receivedAt)}</Td>
+                      <Td>
+                        <Badge tone={ev.signatureValid ? 'ok' : 'fail'}>
+                          {ev.signatureValid ? 'ok' : 'bad'}
                         </Badge>
-                      )}
-                    </Td>
-                    <Td>{ev.messageCount}</Td>
-                    <Td>{ev.statusUpdateCount}</Td>
-                    <Td>{ev.dispatchedCount}</Td>
-                    <Td>{ev.droppedReplayCount}</Td>
-                    <Td>{ev.droppedDuplicateCount}</Td>
-                    <Td>{ev.durationMs == null ? '—' : `${ev.durationMs}ms`}</Td>
-                    <Td className="font-mono">{ev.traceId?.slice(0, 8) ?? '—'}</Td>
-                  </tr>
-                ))}
+                      </Td>
+                      <Td>
+                        {ev.replayWindowOk === null ? (
+                          <span className="ink-70">—</span>
+                        ) : (
+                          <Badge tone={ev.replayWindowOk ? 'ok' : 'warn'}>
+                            {ev.replayWindowOk ? 'ok' : 'stale'}
+                          </Badge>
+                        )}
+                      </Td>
+                      <Td className="font-mono" align="right">
+                        {ev.messageCount}
+                      </Td>
+                      <Td className="font-mono" align="right">
+                        {ev.statusUpdateCount}
+                      </Td>
+                      <Td className="font-mono" align="right">
+                        {ev.dispatchedCount}
+                      </Td>
+                      <Td className="font-mono" align="right">
+                        {ev.droppedReplayCount}
+                      </Td>
+                      <Td className="font-mono" align="right">
+                        {ev.droppedDuplicateCount}
+                      </Td>
+                      <Td className="font-mono" align="right">
+                        {ev.durationMs == null ? '—' : `${ev.durationMs}ms`}
+                      </Td>
+                      <Td className="font-mono">{ev.traceId?.slice(0, 8) ?? '—'}</Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         )}
-      </section>
+      </InboxSectionCard>
 
-      <section aria-labelledby="api-heading" className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 id="api-heading" className="text-lg font-medium">
-            Outbound API calls
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Last {Math.min(apiLogs.length, PAGE_SIZE)} of newest-first · Kapso + Meta
-          </p>
-        </div>
+      <InboxSectionCard
+        id="api-heading"
+        title="Outbound API calls"
+        description="Newest-first · Kapso + Meta"
+        meta={`Last ${Math.min(apiLogs.length, PAGE_SIZE)}`}
+      >
         {apiLogs.length === 0 ? (
           <EmptyState
             title="No API calls logged yet"
             body="Every Kapso health ping and Meta send (or failed attempt) lands here. Filter by failed-only to triage outages."
           />
         ) : (
-          <div className="overflow-x-auto rounded-md border border-border">
+          <TableWrap>
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
+              <thead>
+                <tr style={tableHeadRowStyle}>
                   <Th>Called</Th>
                   <Th>Target</Th>
                   <Th>Method</Th>
                   <Th>Endpoint</Th>
                   <Th>Status</Th>
-                  <Th>Duration</Th>
+                  <Th align="right">Duration</Th>
                   <Th>Error</Th>
                 </tr>
               </thead>
               <tbody>
-                {apiLogs.map(log => (
-                  <tr key={log.id} className="border-t border-border">
-                    <Td title={log.calledAt.toISOString()}>{formatRelative(log.calledAt)}</Td>
-                    <Td>
-                      <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[11px]">
-                        {log.target}
-                      </span>
-                    </Td>
-                    <Td className="font-mono">{log.method}</Td>
-                    <Td className="font-mono text-[11px]" title={log.endpoint}>
-                      {log.endpoint}
-                    </Td>
-                    <Td>
-                      <Badge tone={log.ok ? 'ok' : 'fail'}>
-                        {log.statusCode === 0 ? 'net' : log.statusCode}
-                      </Badge>
-                    </Td>
-                    <Td>{`${log.durationMs}ms`}</Td>
-                    <Td
-                      className="max-w-[260px] truncate text-[11px]"
-                      title={log.errorMessage ?? undefined}
-                    >
-                      {log.errorMessage ? (
-                        <span className="text-rose-700">{log.errorMessage}</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </Td>
-                  </tr>
-                ))}
+                {apiLogs.map((log, i) => {
+                  const last = i === apiLogs.length - 1;
+                  return (
+                    <tr key={log.id} style={tableRowStyle(last)}>
+                      <Td title={log.calledAt.toISOString()}>{formatRelative(log.calledAt)}</Td>
+                      <Td>
+                        <span
+                          className="font-mono"
+                          style={{
+                            display: 'inline-flex',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            background: 'color-mix(in oklab, var(--ink) 5%, transparent)',
+                            fontSize: 11,
+                          }}
+                        >
+                          {log.target}
+                        </span>
+                      </Td>
+                      <Td className="font-mono">{log.method}</Td>
+                      <Td className="font-mono text-[11px]" title={log.endpoint}>
+                        {log.endpoint}
+                      </Td>
+                      <Td>
+                        <Badge tone={log.ok ? 'ok' : 'fail'}>
+                          {log.statusCode === 0 ? 'net' : log.statusCode}
+                        </Badge>
+                      </Td>
+                      <Td className="font-mono" align="right">
+                        {`${log.durationMs}ms`}
+                      </Td>
+                      <Td
+                        className="max-w-[260px] truncate text-[11px]"
+                        title={log.errorMessage ?? undefined}
+                      >
+                        {log.errorMessage ? (
+                          <span className="text-rose-700">{log.errorMessage}</span>
+                        ) : (
+                          <span className="ink-70">—</span>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         )}
-      </section>
+      </InboxSectionCard>
 
-      <section aria-labelledby="outbound-heading" className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 id="outbound-heading" className="text-lg font-medium">
-            Outbound messages
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Last {Math.min(outboundMessages.length, PAGE_SIZE)} of newest-first
-          </p>
-        </div>
+      <InboxSectionCard
+        id="outbound-heading"
+        title="Outbound messages"
+        description="Newest-first · delivery status + failure reason"
+        meta={`Last ${Math.min(outboundMessages.length, PAGE_SIZE)}`}
+      >
         {outboundMessages.length === 0 ? (
           <EmptyState
             title="No outbound messages logged yet"
             body="Every send through `WhatsAppClient` lands here once an audit hook is wired in."
           />
         ) : (
-          <div className="overflow-x-auto rounded-md border border-border">
+          <TableWrap>
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
+              <thead>
+                <tr style={tableHeadRowStyle}>
                   <Th>Sent</Th>
                   <Th>Source</Th>
                   <Th>Kind</Th>
@@ -212,56 +247,101 @@ export default async function WhatsAppInboxPage() {
                 </tr>
               </thead>
               <tbody>
-                {outboundMessages.map(msg => (
-                  <tr key={msg.id} className="border-t border-border">
-                    <Td title={msg.sentAt.toISOString()}>{formatRelative(msg.sentAt)}</Td>
-                    <Td>
-                      <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[11px]">
-                        {msg.source}
-                      </span>
-                    </Td>
-                    <Td>{msg.kind}</Td>
-                    <Td className="font-mono">{redactRecipient(msg.recipientId)}</Td>
-                    <Td>
-                      <DeliveryStatusBadge
-                        status={msg.deliveryStatus}
-                        failureReason={msg.failureReason}
-                      />
-                    </Td>
-                    <Td className="max-w-[260px] truncate" title={msg.preview ?? undefined}>
-                      {msg.preview ?? <span className="text-muted-foreground">—</span>}
-                    </Td>
-                    <Td className="font-mono text-[11px]" title={msg.wamid}>
-                      {msg.wamid.slice(-12)}
-                    </Td>
-                  </tr>
-                ))}
+                {outboundMessages.map((msg, i) => {
+                  const last = i === outboundMessages.length - 1;
+                  return (
+                    <tr key={msg.id} style={tableRowStyle(last)}>
+                      <Td title={msg.sentAt.toISOString()}>{formatRelative(msg.sentAt)}</Td>
+                      <Td>
+                        <span
+                          className="font-mono"
+                          style={{
+                            display: 'inline-flex',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            background: 'color-mix(in oklab, var(--ink) 5%, transparent)',
+                            fontSize: 11,
+                          }}
+                        >
+                          {msg.source}
+                        </span>
+                      </Td>
+                      <Td>{msg.kind}</Td>
+                      <Td className="font-mono">{redactRecipient(msg.recipientId)}</Td>
+                      <Td>
+                        <DeliveryStatusBadge
+                          status={msg.deliveryStatus}
+                          failureReason={msg.failureReason}
+                        />
+                      </Td>
+                      <Td className="max-w-[260px] truncate" title={msg.preview ?? undefined}>
+                        {msg.preview ?? <span className="ink-70">—</span>}
+                      </Td>
+                      <Td className="font-mono text-[11px]" title={msg.wamid}>
+                        {msg.wamid.slice(-12)}
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
+          </TableWrap>
         )}
-      </section>
+      </InboxSectionCard>
     </main>
   );
 }
 
 // ─── tiny presentational helpers ─────────────────────────────────────
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 font-medium">{children}</th>;
+const tableHeadRowStyle: React.CSSProperties = {
+  background: 'color-mix(in oklab, var(--ink) 3%, transparent)',
+  borderBottom: '1px solid var(--hairline-color-soft)',
+};
+
+function tableRowStyle(last: boolean): React.CSSProperties {
+  return {
+    borderBottom: last ? 'none' : '1px solid var(--hairline-color-soft)',
+  };
+}
+
+function TableWrap({ children }: { children: React.ReactNode }) {
+  return <div style={{ overflowX: 'auto' }}>{children}</div>;
+}
+
+function Th({ children, align }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+  return (
+    <th
+      className="t-meta"
+      style={{
+        padding: '10px 24px',
+        textAlign: align ?? 'left',
+        fontWeight: 600,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </th>
+  );
 }
 
 function Td({
   children,
   className,
   title,
+  align,
 }: {
   children: React.ReactNode;
   className?: string;
   title?: string;
+  align?: 'left' | 'right';
 }) {
   return (
-    <td className={`px-3 py-2 align-top ${className ?? ''}`} title={title}>
+    <td
+      className={`align-top ${className ?? ''}`}
+      style={{ padding: '12px 24px', textAlign: align ?? 'left' }}
+      title={title}
+    >
       {children}
     </td>
   );
@@ -299,9 +379,21 @@ function DeliveryStatusBadge({
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-md border border-dashed border-border bg-muted/20 px-6 py-8 text-center">
-      <p className="text-sm font-medium">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{body}</p>
+    <div
+      style={{
+        padding: '24px',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+      }}
+    >
+      <span className="t-body" style={{ fontSize: 13, color: 'var(--midnight)' }}>
+        {title}
+      </span>
+      <span className="t-body ink-70" style={{ fontSize: 12 }}>
+        {body}
+      </span>
     </div>
   );
 }
