@@ -75,7 +75,7 @@ function providerSlug(p: ChatModelProvider): ProviderSlug {
 const TIER_ORDER: readonly PlanTier[] = ['free', 'basic', 'pro', 'enterprise'] as const;
 
 /** Five-band cost dot encoding. */
-function tierDots(cogsMicro: bigint): string {
+export function tierDots(cogsMicro: bigint): string {
   if (cogsMicro <= 10_000n) return '●○○○○';
   if (cogsMicro <= 30_000n) return '●●○○○';
   if (cogsMicro <= 50_000n) return '●●●○○';
@@ -195,6 +195,11 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
         align="start"
         className="min-w-72 border border-[color:var(--hairline-color-soft)] bg-[color:var(--surface-raised)]"
       >
+        <DropdownMenuLabel className="flex items-center justify-between pl-8 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+          <span>Model</span>
+          <span>Cost / turn</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
         <DropdownMenuRadioGroup value={model} onValueChange={onValueChange}>
           {Array.from(grouped.entries()).map(([provider, models], providerIdx) => (
             <DropdownMenuGroup key={provider}>
@@ -245,7 +250,7 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
                         <div className="mb-2 flex items-center gap-2">
                           <ProviderIcon slug={providerSlug(m.provider)} size={14} />
                           <span className="font-mono text-[10px] uppercase tracking-[0.08em]">
-                            {PROVIDER_LABEL[m.provider]} · {dots}
+                            {PROVIDER_LABEL[m.provider]} · cost {dots}
                           </span>
                         </div>
                         <p>{m.description}</p>
