@@ -69,7 +69,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
   const normalized = normalizeLocale(content.locale) ?? DEFAULT_LOCALE;
   const appOrigin = resolvePublicOrigin(
     process.env.NEXT_PUBLIC_APP_URL,
-    'https://www.sendero.travel'
+    'https://app.sendero.travel'
   );
   // Marketing site lives on a different host from the app. Resolve any
   // app-relative path (/dashboard, /onboarding) to the app origin so it
