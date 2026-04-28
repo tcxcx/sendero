@@ -1,0 +1,75 @@
+---
+title: Getting started
+description: From zero to your first paid tool call in 60 seconds.
+---
+
+The quickest way to feel Sendero. One tool call, one signed receipt, your wallet
+0.001 USDC lighter.
+
+## 1. Get an API key
+
+Sign in at [app.sendero.travel](https://app.sendero.travel), open
+**Dashboard → Settings → API keys**, click **Create new key**. Copy the
+`ak_...` token immediately — you can't see it again.
+
+If your tenant is on `testnet-beta`, every key resolves as a sandbox key
+even when the dashboard labels it "production". Sandbox-routed turns
+write `MeterEvent.status='sandbox'` and never settle on-chain. Flip
+`SENDERO_NETWORK_MODE=production` to activate real settlement without
+re-issuing keys.
+
+## 2. Call a tool
+
+```bash
+export SENDERO_API_KEY="ak_..."
+
+curl -s https://app.sendero.travel/api/agent/dispatch \
+  -H "authorization: Bearer $SENDERO_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{
+    "channel": "web",
+    "input": "Find flights from JFK to LIS next Tuesday."
+  }'
+```
+
+You'll see streamed JSON with the agent's response, tool calls, and a
+trace id. The agent runs `search_flights`, your tenant pays the
+nano-USDC tool price, and a `MeterEvent` row lands in your DB.
+
+## 3. See the receipt
+
+Open **Dashboard → Console**. The hero band shows live KPIs (today's
+trips, settled-30d fare, avg response). Open the workflow column on
+the right to watch tool calls tick through with their per-call USDC
+prices.
+
+For the audit story, hit `/dashboard/channels/whatsapp/inbox` (or
+`/slack/inbox`) — every webhook delivery, every outbound send, every
+Meta/Kapso/Slack API call we made on your behalf, with verify
+outcomes and durations.
+
+## What just happened
+
+- The agent resolved your tool catalog filtered by your API key's
+  scopes (sandbox keys default to `*`; user-minted production keys
+  default to `DEFAULT_PROD_SCOPES` — read-mostly).
+- `search_flights` ran against Duffel sandbox. The response was meter-
+  written as a paid call.
+- The tool-call price is configured per-tool in
+  [`@sendero/billing/cogs`](/x402-nanopayments). Your Pro / Enterprise
+  tier's nanopayment discount applies before the meter writes.
+- Sendero's response ships with three audit headers:
+  - `x-sendero-trace-id` — the run id, joinable to Langfuse + meter rows
+  - `x-sendero-meter-id` — the `MeterEvent.id`
+  - `x-sendero-sig` — HMAC over the response body to detect cached-replay-as-paid
+
+## Where to go next
+
+- **[Quickstart](/quickstart)** — full edge surface, x402 payment flow,
+  raw HTTP without the dispatch wrapper.
+- **[MCP integration](/mcp-integration)** — stream tools to a Claude /
+  Cursor / agent host via the MCP server.
+- **[Tool catalog](/tools/overview)** — every tool, every Zod schema, every
+  per-call price. Auto-generated from the canonical registry.
+- **[Pricing](/pricing)** — plans, caps, markup, take-rate.
+- **[Security](/security)** — scopes, signing, response envelopes.
