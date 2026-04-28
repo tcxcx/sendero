@@ -3,6 +3,19 @@
    so the shipped components (nav, sidebar, TOC, callouts) all adopt
    the brand without us shipping a custom theme package. */
 :root {
+  /* Font stacks. `senderoFontVars` from @sendero/fonts populates the
+     `--font-*` vars on <html>. The display font isn't currently
+     loaded by the docs app — fall back to a curated serif stack so
+     h1/h2 still read editorial. When we wire Fraunces/Reckless,
+     re-introduce the leading var. */
+  --display:
+    ui-serif, "Iowan Old Style", "Apple Garamond", Baskerville, Georgia, "Times New Roman", serif;
+  --sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
   --fd-background: var(--bg);
   --fd-foreground: var(--text);
   --fd-muted: var(--bg-panel);
@@ -102,13 +115,37 @@ kbd {
 }
 
 /* Editorial: Fraunces drives docs h1 + h2 so the prose feels like a
-   manual / handbook, not generic API output. Body + code stay Geist. */
+   manual / handbook, not generic API output. Body + code stay Geist.
+   Fumadocs renders the page-title h1 OUTSIDE .prose (as a sibling of
+   the prose container, directly under `article`); we have to target
+   both selectors. The `article > h1` rule catches the Fumadocs page
+   title; `.prose > h2` catches in-content section headings. */
 .prose > h1,
-.prose > h2 {
-  font-family: var(--display);
-  font-weight: 450;
-  letter-spacing: -0.012em;
+.prose > h2,
+article > h1 {
+  font-family: var(--display) !important;
+  font-weight: 450 !important;
+  letter-spacing: -0.012em !important;
   text-wrap: balance;
+}
+article > h1 {
+  font-size: clamp(36px, 5vw, 56px) !important;
+  line-height: 1.05 !important;
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+article > p:first-of-type {
+  /*
+    Fumadocs renders the frontmatter `description` as the first <p>
+    directly under the article. Editorial subtitle treatment.
+  */
+  font-family: var(--sans);
+  font-size: clamp(15px, 1.4vw, 17px);
+  line-height: 1.6;
+  color: var(--text-dim);
+  margin-bottom: 32px;
+  max-width: 62ch;
 }
 .prose > h1 {
   font-size: clamp(28px, 3.5vw, 40px);
@@ -117,6 +154,22 @@ kbd {
 .prose > h2 {
   font-size: clamp(22px, 2.4vw, 28px);
   line-height: 1.2;
+  margin-top: 1.6em;
+  /*
+    Editorial section divider. A vermillion en-dash sits to the left of
+    every h2; keys docs sections to the brand without colored
+    side-stripes (those are banned per /impeccable absolute_bans).
+  */
+  position: relative;
+  padding-left: 0;
+}
+.prose > h2::before {
+  content: "—";
+  display: inline-block;
+  margin-right: 0.5em;
+  color: var(--ink);
+  font-weight: 400;
+  font-style: normal;
 }
 
 .prose {
@@ -221,4 +274,140 @@ kbd {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/*
+  ─────────────────────────────────────────────────────────────────
+  DocsTopBar — global top header (apps/docs/components/docs-top-bar.tsx).
+  Lives ABOVE the Fumadocs `<DocsLayout>` so the language selector +
+  primary nav + auth-aware "Get API key" CTA don't get crammed into
+  the sidebar header. Editorial Sendero palette: parchment surface,
+  ink dividers, vermillion only on the active language pill + the
+  CTA hover.
+  ─────────────────────────────────────────────────────────────────
+*/
+.docs-top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: minmax(180px, auto) 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 14px clamp(16px, 3vw, 32px);
+  background: var(--bg);
+  border-bottom: 1px solid color-mix(in oklab, var(--ink) 14%, var(--border));
+  backdrop-filter: saturate(1.2);
+}
+.docs-top-bar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.docs-top-bar-mark {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.docs-top-bar-brand-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+.docs-top-bar-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+.docs-top-bar-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--text) 75%, transparent);
+  text-decoration: none;
+  border-radius: 4px;
+  transition:
+    background 150ms ease-out,
+    color 150ms ease-out;
+}
+.docs-top-bar-nav-link:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+  text-decoration: none;
+}
+.docs-top-bar-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  color: color-mix(in oklab, var(--ink) 70%, transparent);
+}
+.docs-top-bar-nav-link:hover .docs-top-bar-nav-icon {
+  color: var(--ink);
+}
+.docs-top-bar-nav-ext {
+  margin-left: 2px;
+  opacity: 0.55;
+}
+.docs-top-bar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  justify-self: end;
+}
+.docs-top-bar-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: var(--text);
+  color: var(--bg);
+  text-decoration: none;
+  transition:
+    background 150ms ease-out,
+    color 150ms ease-out;
+}
+.docs-top-bar-cta:hover {
+  background: var(--ink);
+  color: #fafaf7;
+  text-decoration: none;
+}
+.docs-top-bar-cta:active {
+  transform: scale(0.98);
+}
+
+/* Hide the primary nav on small viewports — the Fumadocs sidebar
+   covers in-docs navigation, and the right cluster (language +
+   CTA) keeps the header useful on mobile. */
+@media (max-width: 880px) {
+  .docs-top-bar {
+    grid-template-columns: minmax(140px, auto) 1fr auto;
+    gap: 12px;
+    padding: 10px 14px;
+  }
+  .docs-top-bar-nav {
+    display: none;
+  }
+}
+
+/* Avoid double-stacking with Fumadocs' built-in nav: hide the
+   default brand row inside DocsLayout since DocsTopBar covers it. */
+.docs-layout-language {
+  display: none;
 }

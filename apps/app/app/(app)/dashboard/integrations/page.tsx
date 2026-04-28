@@ -2,21 +2,23 @@
 
 /**
  * /dashboard/integrations — index page mirroring `/dashboard/channels`.
- * One BigPill per integration. MCP is the only working integration
- * today; Bufi ships disabled with a "Coming soon" badge so the second
- * card slot exists at the same scale as the first.
+ * One BigPill per integration. MCP and the Claude Code plugin are
+ * shipping today; Bufi ships disabled with a "Coming soon" badge so
+ * the third card slot exists at the same scale.
  *
  * Brand assets + Bufi metadata pulled from workspace packages so the
  * canonical sources stay reusable across surfaces:
- *  - `@sendero/icons` — McpMark + BufiLogo
+ *  - `@sendero/icons` — McpMark + ClaudeCodePluginMark + BufiLogo
  *  - `@sendero/bu` — BUFI_PURPURA, BUFI_VIOLETA_WASH, BUFI_INTEGRATION
  */
 
 import Link from 'next/link';
 
 import { BUFI_INTEGRATION, BUFI_PURPURA, BUFI_VIOLETA_WASH } from '@sendero/bu';
-import { BufiLogo, McpMark } from '@sendero/icons';
+import { BufiLogo, ClaudeCodePluginMark, McpMark } from '@sendero/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@sendero/ui/tooltip';
+
+type IntegrationKind = 'mcp' | 'claude-code' | 'bufi';
 
 export default function IntegrationsIndexPage() {
   return (
@@ -28,12 +30,18 @@ export default function IntegrationsIndexPage() {
           </p>
         </div>
 
-        <div className="flex flex-nowrap items-center justify-center gap-8">
+        <div className="flex flex-wrap items-center justify-center gap-8">
           <BigIntegrationPill
             href="/dashboard/integrations/mcp"
             kind="mcp"
             label="Manage MCP"
             description="One key powers HTTP dispatch, MCP server, and direct tool calls."
+          />
+          <BigIntegrationPill
+            href="/dashboard/integrations/claude-code"
+            kind="claude-code"
+            label="Claude Code plugin"
+            description="Versioned plugin bundle for Claude Code: Sendero MCP server + travel-booking skill, one install."
           />
           <BigIntegrationPill
             kind="bufi"
@@ -55,17 +63,18 @@ function BigIntegrationPill({
   disabled,
 }: {
   href?: string;
-  kind: 'mcp' | 'bufi';
+  kind: IntegrationKind;
   label: string;
   description: string;
   disabled?: boolean;
 }) {
-  const isMcp = kind === 'mcp';
+  // Each kind picks its own rest style + hover swap. MCP and Claude
+  // Code share the warm parchment palette (vermillion ink). Bufi gets
+  // the purpura-tinted brand wash so the disabled card still reads as
+  // its own thing.
+  const isInkBrand = kind === 'mcp' || kind === 'claude-code';
 
-  // Static styles per brand. MCP keeps the warm parchment border that
-  // matches /channels. Bufi gets a purpura-tinted border + soft violeta
-  // wash so the disabled card still carries brand identity.
-  const restStyle: React.CSSProperties = isMcp
+  const restStyle: React.CSSProperties = isInkBrand
     ? {
         background: '#ffffff',
         borderColor: 'color-mix(in oklab, var(--ink) 22%, transparent)',
@@ -78,20 +87,31 @@ function BigIntegrationPill({
   // Hover variables drive the brand swap on enabled cards. Tailwind
   // JIT can't compose dynamic arbitrary values from runtime constants,
   // so the hover transition lives in inline event handlers below.
-  const labelColor = isMcp ? 'var(--ink)' : BUFI_PURPURA;
+  const labelColor = isInkBrand ? 'var(--ink)' : BUFI_PURPURA;
 
   const baseClass =
     'group/qa inline-flex h-[286px] w-[286px] flex-col items-center justify-center gap-[20px] rounded-[32px] border text-[color:var(--text-dim)] shadow-[var(--shadow-md)] transition-colors duration-150';
 
+  let mark: React.ReactNode;
+  if (kind === 'mcp') {
+    mark = (
+      <span style={{ color: 'var(--ink)' }} className="size-[192px] shrink-0">
+        <McpMark size={192} />
+      </span>
+    );
+  } else if (kind === 'claude-code') {
+    mark = (
+      <span style={{ color: 'var(--ink)' }} className="size-[192px] shrink-0">
+        <ClaudeCodePluginMark size={192} />
+      </span>
+    );
+  } else {
+    mark = <BufiLogo size={192} className="size-[192px] shrink-0" />;
+  }
+
   const content = (
     <>
-      {isMcp ? (
-        <span style={{ color: 'var(--ink)' }} className="size-[192px] shrink-0">
-          <McpMark size={192} />
-        </span>
-      ) : (
-        <BufiLogo size={192} className="size-[192px] shrink-0" />
-      )}
+      {mark}
       <span
         className="font-mono text-[22px] uppercase tracking-[0.14em]"
         style={{ color: labelColor }}
@@ -115,7 +135,7 @@ function BigIntegrationPill({
   const onEnter = (e: React.MouseEvent<HTMLElement>) => {
     if (disabled) return;
     const el = e.currentTarget;
-    if (isMcp) {
+    if (isInkBrand) {
       el.style.background = 'color-mix(in oklab, var(--ink) 5%, white)';
       el.style.borderColor = 'var(--ink)';
     } else {
@@ -155,12 +175,12 @@ function BigIntegrationPill({
         )}
       </TooltipTrigger>
       {/* Topography variants match the dashboard CTA + brand-channel
-          chips: ink (vermillion) for MCP, bufi (purpura) for Bufi.
-          Same `topography.svg` mask system — the variant rule lives in
-          `globals.css` keyed on `data-variant`. */}
+          chips: ink (vermillion) for MCP + Claude Code, bufi (purpura)
+          for Bufi. Same `topography.svg` mask system — the variant
+          rule lives in `globals.css` keyed on `data-variant`. */}
       <TooltipContent
         side="bottom"
-        data-variant={isMcp ? 'ink' : 'bufi'}
+        data-variant={isInkBrand ? 'ink' : 'bufi'}
         className="max-w-xs text-xs"
       >
         <div className="font-medium">{label}</div>

@@ -1,0 +1,12 @@
+{
+  "name": "@sendero/claude-code-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero plugin for Claude Code — bundles the Sendero MCP server config plus a travel-booking skill that teaches Claude when and how to use it.",
+  "scripts": {
+    "pack": "bun run scripts/pack.ts",
+    "verify": "bun run scripts/pack.ts --check",
+    "clean": "rm -rf dist sendero-claude-code-plugin-*.zip"
+  }
+}

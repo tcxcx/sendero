@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { useSendero } from './store';
 import { holdFlight, payBooking, searchFlights } from './actions';
+import { sendViaChat } from './chat-bridge';
 import { StepRail, ErrorBanner } from './ui';
 import { SettlePanel } from './settle-panel';
 import { FundCard } from './fund-card';
@@ -72,17 +73,27 @@ function SearchForm() {
   const [cabinClass, setCabinClass] = useState<
     'economy' | 'premium_economy' | 'business' | 'first'
   >('premium_economy');
-
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    searchFlights({
+    const params = {
       origin: origin.toUpperCase(),
       destination: destination.toUpperCase(),
       departureDate,
       returnDate: returnDate || undefined,
       passengers,
       cabinClass,
-    });
+    };
+    // Prefer the agent path when a chat surface is mounted: the
+    // search_flights tool result then lands in chat history and
+    // rehydrates on reload, identical to a typed query. Headless
+    // surfaces (storybook, install/slack) have no chat → sendViaChat
+    // returns false and we fall through to the direct action.
+    const cabinLabel = params.cabinClass.replace('_', ' ');
+    const paxLabel = params.passengers === 1 ? '1 passenger' : `${params.passengers} passengers`;
+    const returnPart = params.returnDate ? `, return ${params.returnDate}` : '';
+    const text = `Use search_flights for ${params.origin} → ${params.destination} departing ${params.departureDate}${returnPart}, ${paxLabel}, ${cabinLabel}.`;
+    if (sendViaChat(text)) return;
+    searchFlights(params);
   };
 
   return (

@@ -8,6 +8,7 @@
  */
 
 import { useSendero, type SearchParams, type FlightOffer } from './store';
+import { noteToChat } from './chat-bridge';
 
 function now() {
   const d = new Date();
@@ -113,6 +114,15 @@ export async function holdFlight(
       text: `PNR <span class="v">${data.bookingReference}</span> · ttl=${new Date(data.paymentRequiredBy).toISOString().slice(11, 16)}`,
       t: now(),
     });
+
+    // Append a synthetic note to the active chat so the agent sees the
+    // hold on follow-up turns ("what PNR did you hold?") and the note
+    // survives reload via chat history rehydrate. Direct API path stays
+    // unchanged — no LLM round-trip cost, no auto-pay risk.
+    noteToChat(
+      `Held offer ${offerId.slice(0, 10)}… → PNR ${data.bookingReference}, ${data.totalAmount} ${data.totalCurrency}, due by ${new Date(data.paymentRequiredBy).toISOString().slice(11, 16)} UTC.`
+    );
+
     return data;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -161,6 +171,14 @@ export async function payBooking(orderId: string) {
       text: `circleCCTP(<span class="v">${data.amount} ${data.currency}</span>) → Arc L2`,
       t: now(),
     });
+
+    // Synthetic chat note (Step 4) — keeps history coherent without
+    // routing the pay action itself through the agent (which would
+    // risk auto-paying on a different offer if the model misroutes).
+    noteToChat(
+      `Paid ${data.amount} ${data.currency} for order ${orderId.slice(0, 10)}… status=${data.status}.`
+    );
+
     return data;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

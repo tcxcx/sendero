@@ -1,79 +1,25 @@
 import type { ReactNode } from 'react';
 
-import { buildLocaleApiHrefs, SenderoLanguageSelector } from '@sendero/ui/language-selector';
-import { DocsLayout, type LinkItemType } from 'fumadocs-ui/layouts/docs';
-import { BookOpenIcon, KeyIcon, PlugIcon } from 'lucide-react';
+import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 
-import { getDocsRequestLocale } from '@/lib/request-locale';
 import { source } from '@/lib/source';
 
 /**
- * Top-nav links — Stripe / Sherpa pattern, one click past their gated form.
+ * The brand row, language selector, top-nav links, and Get-API-key
+ * CTA all live in `<DocsTopBar>` (mounted once at app/layout.tsx)
+ * so they don't get crammed into the Fumadocs sidebar header.
  *
- *   API Reference → embedded Scalar viewer against /api/openapi.json.
- *   MCP           → /docs/mcp-integration with /api/mcp config snippets.
- *   Get API key   → deep link to the Clerk-native API-key UI inside the
- *                   app. No form, no waiting, no sales call.
+ * This layout configures only the sidebar tree + sensible defaults.
+ * `nav={{ enabled: false }}` would hide Fumadocs' built-in top-bar
+ * entirely; we leave it absent because Fumadocs renders the sidebar
+ * brand-row inline with the tree at narrow viewports — letting it
+ * stay (in a stripped-down form via docs-overrides.css) keeps the
+ * mobile nav functional.
  */
-const TOP_NAV_LINKS: LinkItemType[] = [
-  {
-    type: 'main',
-    text: 'API Reference',
-    url: '/docs/api-reference',
-    icon: <BookOpenIcon className="size-3.5" aria-hidden="true" />,
-  },
-  {
-    type: 'main',
-    text: 'MCP',
-    url: '/docs/mcp-integration',
-    icon: <PlugIcon className="size-3.5" aria-hidden="true" />,
-  },
-  {
-    type: 'main',
-    text: 'Get API key',
-    url: 'https://www.sendero.travel/dashboard/settings/api-keys',
-    external: true,
-    icon: <KeyIcon className="size-3.5" aria-hidden="true" />,
-  },
-];
-
-export default async function Layout({ children }: { children: ReactNode }) {
-  const locale = await getDocsRequestLocale();
-
+export default function Layout({ children }: { children: ReactNode }) {
   return (
     <DocsLayout
       tree={source.pageTree}
-      links={TOP_NAV_LINKS}
-      nav={{
-        title: (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-            }}
-          >
-            <img
-              alt=""
-              decoding="async"
-              src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
-              style={{ width: 22, height: 22, objectFit: 'contain', flexShrink: 0 }}
-            />
-            <span style={{ color: 'var(--ink)' }}>Sendero</span> / docs
-          </span>
-        ),
-        children: (
-          <SenderoLanguageSelector
-            className="docs-layout-language"
-            currentLocale={locale}
-            hrefs={buildLocaleApiHrefs('/docs', { includeLocalizedPath: false })}
-          />
-        ),
-      }}
       sidebar={{
         defaultOpenLevel: 1,
       }}

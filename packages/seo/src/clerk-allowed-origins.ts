@@ -25,7 +25,7 @@ export function buildClerkAllowedRedirectOrigins(
 ): string[] {
   const {
     appUrlEnv = process.env.NEXT_PUBLIC_APP_URL,
-    appOriginFallback = 'https://www.sendero.travel',
+    appOriginFallback = 'https://app.sendero.travel',
     siteUrlEnv = process.env.NEXT_PUBLIC_SITE_URL,
     siteOriginFallback = 'https://sendero.travel',
     vercelUrl = process.env.VERCEL_URL,

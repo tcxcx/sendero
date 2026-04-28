@@ -168,6 +168,7 @@ export {
 export { checkTravelEligibilityTool } from './check-travel-eligibility';
 export type { OpenApiDocInput } from './openapi';
 export { buildOpenApiDoc } from './openapi';
+export { checkTreasuryTool } from './check-treasury';
 export { scanDocumentTool } from './scan-document';
 export { scanDocumentAutoTool } from './scan-document-auto';
 export type { KeyScope } from './scopes';

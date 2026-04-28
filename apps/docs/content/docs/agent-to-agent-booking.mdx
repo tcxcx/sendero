@@ -10,7 +10,7 @@ There are two integration modes:
 | Mode | Best for | Entry point |
 | ---- | -------- | ----------- |
 | MCP tool calls | Agent hosts such as Claude Desktop, Cursor, Zed, or custom LLM runtimes that want schema discovery. | `POST https://edge.sendero.travel/mcp` |
-| Workflow delegation | Production agents that want Sendero to run the whole booking lifecycle with pauses, webhooks, and invoices. | `POST https://www.sendero.travel/api/workflows/run` |
+| Workflow delegation | Production agents that want Sendero to run the whole booking lifecycle with pauses, webhooks, and invoices. | `POST https://app.sendero.travel/api/workflows/run` |
 
 Read `/.well-known/llms.txt` first. It points agents at the current docs, tool catalog, safety rules, and canonical endpoints.
 
@@ -61,7 +61,7 @@ curl -X POST https://edge.sendero.travel/mcp \
 Workflow clients should list named plans:
 
 ```bash
-curl https://www.sendero.travel/api/workflows/list
+curl https://app.sendero.travel/api/workflows/list
 ```
 
 Use named workflows when an intent matches. Use raw tools only for low-level operations or custom flows.
@@ -71,7 +71,7 @@ Use named workflows when an intent matches. Use raw tools only for low-level ope
 Call `/api/workflows/run` from your backend. Pass stable tenant and user identifiers from your system; Sendero uses them for metering, policy, session memory, and audit logs.
 
 ```bash
-curl -X POST https://www.sendero.travel/api/workflows/run \
+curl -X POST https://app.sendero.travel/api/workflows/run \
   -H "content-type: application/json" \
   -H "authorization: Bearer $SENDERO_INTERNAL_TOKEN" \
   -d '{
@@ -98,7 +98,7 @@ If the response is `status: "paused"`, persist the returned `runId`, `nextStepId
 Approvals, guest claims, and ticketing are event-driven. When your system receives the required resolution, resume the run:
 
 ```bash
-curl -X POST https://www.sendero.travel/api/workflows/resume \
+curl -X POST https://app.sendero.travel/api/workflows/resume \
   -H "content-type: application/json" \
   -H "authorization: Bearer $SENDERO_INTERNAL_TOKEN" \
   -d '{

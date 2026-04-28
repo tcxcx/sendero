@@ -14,8 +14,13 @@ export default async function Page() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)]">
-      {/* Cloud background — fills the viewport; UnicornScene scales to 100%×100% */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+      {/* Cloud background — fills the viewport; UnicornScene scales to 100%×100%.
+          The wrapper carries the cinematic entrance (slow scale + blur + opacity)
+          and a Ken Burns drift after settle — see app-hero-scene-wrapper rules in globals.css. */}
+      <div
+        aria-hidden="true"
+        className="app-hero-scene-wrapper pointer-events-none absolute inset-0 z-0"
+      >
         <AppHeroScene />
       </div>
 
@@ -75,8 +80,25 @@ export default async function Page() {
             {copy.hero.eyebrow}
           </div>
 
-          <h1 className="s-enter s-enter-2 m-0 text-[42px] font-medium leading-[0.98] tracking-normal text-[var(--text)] sm:text-[62px] lg:text-[76px]">
-            {copy.hero.title}
+          <h1 className="s-enter s-enter-2 m-0 text-[42px] font-medium leading-[1.18] tracking-normal text-[var(--text)] sm:text-[62px] sm:leading-[1.16] lg:text-[76px] lg:leading-[1.14]">
+            {(() => {
+              const title = copy.hero.title;
+              // Vermillion pill on "Agentic" (EN) / "agente" (ES, PT) — same
+              // mk-title-em treatment used on the marketing site.
+              const tokens = ['Agentic', 'agente'];
+              for (const tok of tokens) {
+                const i = title.indexOf(tok);
+                if (i < 0) continue;
+                return (
+                  <>
+                    {title.slice(0, i)}
+                    <span className="app-title-em">{tok}</span>
+                    {title.slice(i + tok.length)}
+                  </>
+                );
+              }
+              return title;
+            })()}
           </h1>
 
           <p className="s-enter s-enter-3 mt-6 max-w-2xl text-base leading-7 text-[var(--text-dim)] sm:text-lg">

@@ -12,8 +12,12 @@ import {
   softwareApplicationJsonLd,
   travelAgencyJsonLd,
 } from '@sendero/seo';
+import { buildOgImageUrl } from '@sendero/seo/og';
 import { Analytics } from '@vercel/analytics/next';
 import { Agentation } from 'agentation';
+
+import { SiteFooter } from '@/components/site-shell/site-footer';
+import { SiteHeader } from '@/components/site-shell/site-header';
 
 import { Providers } from './providers';
 import './globals.css';
@@ -34,6 +38,12 @@ export const metadata = buildMetadata({
   defaultLocale: 'en-US',
   siteUrl: SITE_URL,
   siteName: 'Sendero',
+  ogImage: buildOgImageUrl(SITE_URL, {
+    title: 'Agent-native travel, settled on Arc',
+    description:
+      'Real inventory, policy checks, prepaid escrow, PNR issuance, USDC settlement, and trip support — orchestrated by AI agents.',
+    eyebrow: 'sendero.travel',
+  }),
   ogImageAlt: 'Sendero social preview with the binoculars mark and agent-native travel copy.',
   keywords: [
     'AI travel booking',
@@ -97,7 +107,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         ))}
       </head>
       <body>
-        <Providers allowedRedirectOrigins={CLERK_ALLOWED_REDIRECT_ORIGINS}>{children}</Providers>
+        <Providers allowedRedirectOrigins={CLERK_ALLOWED_REDIRECT_ORIGINS}>
+          {/*
+            Shared marketing chrome. The home page (/) and every secondary
+            route (/agents, /pricing, /policy, /terms, /updates) inherit
+            this header + footer; pages render only their body in between.
+          */}
+          <div className="mk-root">
+            <SiteHeader />
+            {children}
+            <SiteFooter />
+          </div>
+        </Providers>
         {process.env.NODE_ENV === 'development' && <Agentation />}
         <Analytics />
       </body>

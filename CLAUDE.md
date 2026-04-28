@@ -407,8 +407,8 @@ Three append-mostly tables, all under tenant scoping:
 LANGFUSE_SECRET_KEY=     # Langfuse project secret key (sensitive)
 LANGFUSE_PUBLIC_KEY=     # Langfuse project public key
 LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
-LANGFUSE_PROMPT_MANAGEMENT=false   # flip to true to pull persona slabs from Langfuse
-LANGFUSE_EVALUATORS=false          # flip to true to fire 4 LLM-judges per turn (gpt-4.1-nano)
+LANGFUSE_PROMPT_MANAGEMENT=true    # pulls persona slabs from Langfuse (set on prod + all preview; verify with `vercel env ls`)
+LANGFUSE_EVALUATORS=true           # fires 4 LLM-judges per turn (gpt-4.1-nano)
 LANGFUSE_MCP_AUTH=       # base64(public:secret) — consumed by .mcp.json for in-IDE prompt CRUD
 ```
 
@@ -465,3 +465,109 @@ When `LANGFUSE_PROMPT_MANAGEMENT=false` the helper returns the hardcoded fallbac
 | Smoke a prompt change against goldens | `bun langfuse:regression --scenario <name>` |
 | Read the active trace inside a tool | `getActiveTraceId()` from `@sendero/langfuse` (returns undefined when no span) |
 | Read prompts from the Anthropic skills system | the `/langfuse` skill — documentation-first, CLI-native |
+
+## Vercel env vars: scope to all preview, never to a single branch
+
+`vercel env add NAME preview <branch>` scopes a variable to one git branch. New branches cut from main inherit nothing — they fall back to whatever broader-scope record exists, or to the code default. The dashboard reveals it as `Preview · <branch>`; the CLI hides it.
+
+**The rule:** when running `vercel env add`, omit the `<branch>` argument. Targets that should follow the app — keys, flags, service URLs, model configs — go to `production`, `preview` (no branch), `development`. Branch-scoping is reserved for genuinely branch-specific values (per-PR mock URL, sandbox creds for one test).
+
+**The CLI is broken for the bulk widening case.** `vercel env add NAME preview --value true --yes` (no branch) returns `git_branch_required` even with `--non-interactive --force --yes`. The Claude plugin returns the same command back as a "next" suggestion → infinite loop. Use the REST API instead:
+
+```bash
+TOKEN=$(jq -r .token ~/Library/Application\ Support/com.vercel.cli/auth.json)
+PROJECT_ID=$(jq -r .projectId .vercel/project.json)
+TEAM_ID=$(jq -r .orgId .vercel/project.json)
+
+# Add (or upsert) at all-preview scope.
+# type=encrypted is the typical default — value is decryptable via API/CLI.
+# Use type=sensitive ONLY when you want to lock readback to the dashboard
+# (real secrets you've decided no one should ever pull down again).
+# `upsert=true` keeps the existing type if the var already exists, so this
+# block is safe to re-run after an audit.
+curl -X POST "https://api.vercel.com/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID&upsert=true" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"key":"NAME","value":"VALUE","type":"encrypted","target":["preview"]}'
+
+# Audit what's branch-scoped that shouldn't be
+curl -s "https://api.vercel.com/v10/projects/$PROJECT_ID/env?teamId=$TEAM_ID&decrypt=true" \
+  -H "Authorization: Bearer $TOKEN" \
+  | jq '.envs[] | select(.target | index("preview")) | select(.gitBranch != null) | {key, gitBranch, id}'
+
+# Delete a branch-scoped record by id (after replacing with all-preview version)
+curl -X DELETE "https://api.vercel.com/v10/projects/$PROJECT_ID/env/$ENV_ID?teamId=$TEAM_ID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+`target:["preview"]` with no `gitBranch` field = all preview branches. `decrypt=true` returns plaintext for non-sensitive vars; sensitive vars come back with empty `value`, so widening them needs the plaintext from `.env.local` (root or `apps/app/.env.local`).
+
+History: a backfill audit once found 11 vars (LANGFUSE keys + flags, AI_GATEWAY_API_KEY, GOOGLE_CLOUD_*, GOOGLE_API_KEY, NEXT_PUBLIC_DEMO_TRIP_*) all stuck on a single ship branch's preview scope. Widened in bulk via the curl loop; full lesson in `lessons.md`. Re-run the audit query above before any release to catch new drift.
+
+## Mainnet cutover gating — distribution surfaces
+
+The four agent-distribution surfaces — Claude Code plugin, skills,
+MCP server, and `@sendero/cli` — are **built and committed but
+intentionally not published to public registries** until the day Arc
+mainnet ships. The reasons:
+
+1. **Surface area changes during cutover.** Skill copy will get tuned
+   based on real agent regression scores from Langfuse. The CLI's
+   `tools call` shape will tighten when `effectiveKeyType` flips off
+   the testnet-beta downgrade. Publishing now would burn a version
+   number on every tweak.
+
+2. **Plan-tier limits are not final.** Free $100 / Basic $2,000 / Pro
+   $20,000 caps are placeholder values for testnet beta. Mainnet GA
+   may move them; we don't want a published CLI whose error messages
+   reference numbers that no longer match reality.
+
+3. **Marketplace listings are signals.** A `/plugin install
+   sendero@sendero` that lands during testnet beta sends the wrong
+   signal — buyers assume mainnet means production, not "settlements
+   land in test USDC." Hold the marketplace push for the mainnet
+   announcement.
+
+### What stays committed but unpublished today
+
+- `packages/cli/` — runs locally via `bun run dev`. Source is final
+  enough for development; do **not** `npm publish` until the mainnet
+  flag flips.
+- `apps/claude-code-plugin/` — installable via `claude --plugin-dir
+  ./apps/claude-code-plugin`. Do **not** open a marketplace listing
+  yet.
+- `apps/claude-code-plugin/skills/` — seven skills authored
+  (travel-booking, settlement, reconciliation, cap-management,
+  audit-export, cross-channel, agent-identity). Copy is reasonable
+  v0.1 but expects regression-suite tuning before lock-in.
+- `apps/mcpb/` — the .mcpb bundle DOES ship today via GH Releases
+  (Claude Desktop already has a prod-grade install path). Treat as
+  the exception — it's a thin stdio→HTTP proxy that won't change
+  shape during mainnet cutover.
+
+### The cutover playbook (when Arc mainnet flips)
+
+1. **CLI publish.**
+   ```bash
+   cd packages/cli && bun run build
+   npm publish --access public
+   ```
+2. **Plugin marketplace.**
+   - Add `marketplace.json` at repo root pointing at `apps/claude-code-plugin/`.
+   - Push a tag (`plugin-v1.0.0`) → GH Actions release workflow
+     packages the zip and uploads it to the GH Release.
+   - Submit to the Anthropic plugin directory.
+3. **MCP discovery.** Already live at `/api/mcp`. Promote `llms.txt`
+   so directory crawlers see the production endpoint.
+4. **Skills lock.** Run `bun langfuse:regression --scenario <each>`
+   against the Pro-tier prompts; iterate copy until pass rate ≥ 90%.
+   Then bump the plugin version to v1.0.0.
+5. **Documentation freeze.** `apps/docs/content/docs/cli.mdx`,
+   `skills.mdx`, and `installer.mdx` (currently absent) get authored
+   in the cutover sprint and merged together.
+
+Until that flag flips: every install instruction should say "clone
+the repo + run locally" or "load via `--plugin-dir`," NEVER `npx
+@sendero/cli@latest` or `/plugin install sendero@sendero`. Marketing
+copy that promises the npm/marketplace flow is allowed (it's the
+public roadmap), but install snippets users would actually run today
+must use the source-loaded path.

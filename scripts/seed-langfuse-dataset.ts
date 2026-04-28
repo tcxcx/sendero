@@ -122,6 +122,29 @@ const ITEMS: DatasetItem[] = [
     },
     metadata: { scenario: 'treasury-check', intent: 'corporate-ops' },
   },
+  {
+    // Same prompt run through both surfaces (sendero-chat-routing-rules
+    // for /api/agent/chat, sendero-web-chat-rules for /api/chat) is
+    // expected to land near-identical Duffel sandbox prices. /qa on
+    // 2026-04-28 found a 2x drift ($483 vs $935 premium economy
+    // SFO→LHR) between surfaces — judge flagged hallucination=yes on
+    // the cheaper one. Captures that anomaly for regression detection.
+    input: {
+      text: 'Search premium economy flights from San Francisco (SFO) to London Heathrow (LHR) departing 2026-05-14 returning 2026-05-21 for 1 passenger.',
+      locale: 'en-US',
+      channel: 'web',
+    },
+    expectedOutput: {
+      mustMention: ['SFO', 'LHR', 'premium economy'],
+      mustNotMention: ['$483'],
+      expectedToolCall: 'search_flights',
+    },
+    metadata: {
+      scenario: 'premium-economy-price-drift',
+      intent: 'cross-surface-price-parity',
+      flaggedBy: 'qa-2026-04-28',
+    },
+  },
 ];
 
 async function ensureDataset(): Promise<void> {

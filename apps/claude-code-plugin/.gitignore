@@ -1,0 +1,4 @@
+dist/
+node_modules/
+sendero-claude-code-plugin-*.zip
+.tsbuildinfo

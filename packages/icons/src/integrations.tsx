@@ -35,6 +35,39 @@ export function BufiLogo({
 }
 
 /**
+ * Claude Code plugin mark — abstract `{·}` motif: bracket pair around
+ * a center dot. Reads as "code wrapping a runtime entry-point" without
+ * borrowing Anthropic-owned brand marks. Inlined so `currentColor`
+ * picks up the parent CSS color (matches the pattern used by McpMark).
+ */
+export function ClaudeCodePluginMark(props: SVGProps<SVGSVGElement> & { size?: number }) {
+  const { size = 192, ...rest } = props;
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...rest}
+    >
+      <title>Claude Code plugin</title>
+      {/* Left bracket — opens scope */}
+      <path d="M9 4 C7 4 6 5 6 7 V10 C6 11 5 12 4 12 C5 12 6 13 6 14 V17 C6 19 7 20 9 20" />
+      {/* Right bracket — closes scope */}
+      <path d="M15 4 C17 4 18 5 18 7 V10 C18 11 19 12 20 12 C19 12 18 13 18 14 V17 C18 19 17 20 15 20" />
+      {/* Center dot — the plugin runtime */}
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
  * Official ModelContextProtocol mark, inlined so `currentColor` works.
  * Source: https://github.com/modelcontextprotocol — paths verbatim.
  */

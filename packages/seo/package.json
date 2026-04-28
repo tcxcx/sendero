@@ -11,7 +11,8 @@
     "./robots": "./src/robots.ts",
     "./metadata": "./src/metadata.ts",
     "./jsonld": "./src/jsonld.ts",
-    "./clerk-allowed-origins": "./src/clerk-allowed-origins.ts"
+    "./clerk-allowed-origins": "./src/clerk-allowed-origins.ts",
+    "./og": "./src/og/index.ts"
   },
   "peerDependencies": {
     "@sendero/locale": "*"

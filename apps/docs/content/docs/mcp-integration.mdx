@@ -1,120 +1,79 @@
 ---
 title: MCP integration
-description: Connect Sendero tools to Claude Desktop, Cursor, Zed, or your own MCP-compatible agent host.
+description: Connect Sendero tools to Claude Desktop, Claude Code, Cursor, VS Code, Codex, or any MCP-compatible host. One auth gate, the same ~49 tools, your pick of client.
 ---
 
-Sendero exposes a Streamable HTTP MCP server at:
+Sendero exposes a Streamable HTTP MCP server. Two endpoints, one tool registry:
 
 ```text
-https://edge.sendero.travel/mcp
+https://app.sendero.travel/api/mcp        # canonical (Next.js app)
+https://edge.sendero.travel/mcp           # edge mirror (Cloudflare Worker)
 ```
 
-The Next.js app also serves the same protocol at:
+Both endpoints derive tools from `@sendero/tools`, so web chat, WhatsApp, Slack, MCP, and direct HTTP share one registry. Pick whichever URL is closer to your client.
+
+## Pick your client
+
+Each tab below has a one-click or one-line install. The auth header is the same across every client: a Clerk-issued API key minted at [`/dashboard/settings/api-keys`](https://app.sendero.travel/dashboard/settings/api-keys) (sandbox keys are auto-issued at workspace creation).
+
+<Tabs items={['Claude Desktop', 'Claude Code', 'Cursor', 'VS Code', 'Codex', 'Custom agent']}>
+
+<Tab value="Claude Desktop">
+
+Claude Desktop ships a one-click `.mcpb` bundle that wraps the remote MCP endpoint with a local stdio→HTTP proxy. Install once, paste a key, done.
 
 ```text
-https://www.sendero.travel/api/mcp
+https://app.sendero.travel/downloads/sendero.mcpb
 ```
 
-Both endpoints derive tools from `@sendero/tools`, so web chat, WhatsApp, Slack, and MCP share one registry.
+That URL 302s to the latest GitHub Release artifact (rebuilt every plugin tag). Open the downloaded file in Claude Desktop → Settings → Extensions → Sendero → Configure, paste your `ak_…` key, and the server appears in the picker.
 
-## Protocol
-
-The MCP surface speaks JSON-RPC 2.0. Start with `initialize`, then `tools/list`, then `tools/call`.
-
-```bash
-curl -X POST https://edge.sendero.travel/mcp \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {}
-  }'
-```
-
-```bash
-curl -X POST https://edge.sendero.travel/mcp \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 2,
-    "method": "tools/list"
-  }'
-```
-
-Call a tool:
-
-```bash
-curl -X POST https://edge.sendero.travel/mcp \
-  -H "content-type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 3,
-    "method": "tools/call",
-    "params": {
-      "name": "search_flights",
-      "arguments": {
-        "origin": "MEX",
-        "destination": "SCL",
-        "departureDate": "2026-05-15",
-        "passengers": 2,
-        "cabinClass": "economy"
-      }
-    }
-  }'
-```
-
-MCP tool results are returned as text content containing formatted JSON. Parse that JSON before threading values such as offer ids, trip ids, or booking ids into later calls.
-
-## Claude Desktop
-
-If your MCP host can connect to remote Streamable HTTP servers directly, point it at `https://edge.sendero.travel/mcp`.
-
-If your host expects a local command, wrap the remote endpoint with your preferred MCP proxy. Keep these environment variables available to the proxy:
+If you'd rather not use the bundle, the plain JSON config is:
 
 ```json
 {
-  "SENDERO_EDGE_URL": "https://edge.sendero.travel",
-  "SENDERO_API_KEY": "sk_test_..."
+  "mcpServers": {
+    "sendero": {
+      "type": "http",
+      "url": "https://app.sendero.travel/api/mcp",
+      "headers": { "Authorization": "Bearer ak_..." }
+    }
+  }
 }
 ```
 
-After restart, ask the host to list Sendero tools. Then ask for a scoped action such as:
+After restart, ask Claude something like *"Use Sendero to search flights from Mexico City to Santiago next Friday for two passengers."*
 
-> Search flights from Mexico City to Santiago next Friday for two passengers.
+</Tab>
 
-For production booking, have the host follow [agent-to-agent booking](/docs/agent-to-agent-booking) and prefer the named `sendero.book_flight` workflow where available.
-
-## Claude Code
+<Tab value="Claude Code">
 
 For the Claude Code CLI, register Sendero with one command:
 
-```sh
+```bash
 claude mcp add sendero \
   --transport http \
   --url https://app.sendero.travel/api/mcp \
   --header "Authorization: Bearer ak_..."
 ```
 
-Replace `ak_...` with a production API key minted at `/dashboard/settings/api-keys`. Then in chat: *"Use Sendero to search flights from BUE to SFO on May 15."*
+Or — install the versioned **Sendero plugin** that bundles the MCP config plus a `/sendero:travel-booking` skill that teaches Claude when to use Sendero:
 
-## Codex
-
-For the Codex CLI, append to `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.sendero]
-url = "https://app.sendero.travel/api/mcp"
-headers = { Authorization = "Bearer ak_..." }
+```bash
+git clone https://github.com/tcxcx/sendero.git
+export SENDERO_API_KEY=ak_your_key
+claude --plugin-dir ./sendero/apps/claude-code-plugin
 ```
 
-Restart Codex; `tools/list` should show every Sendero tool the API key is scoped for.
+See [Claude Code plugin](/docs/claude-code-plugin) for the full plugin install guide.
 
-## Cursor
+</Tab>
 
-**One-click install:** click [Add Sendero to Cursor](https://cursor.com/install-mcp?name=sendero&config=eyJ1cmwiOiJodHRwczovL2FwcC5zZW5kZXJvLnRyYXZlbC9hcGkvbWNwIiwiaGVhZGVycyI6eyJBdXRob3JpemF0aW9uIjoiQmVhcmVyIGFrX1JFUExBQ0VfV0lUSF9ZT1VSX0tFWSJ9fQ%3D%3D). Cursor opens, prompts for confirmation, and writes the server config. Then replace `ak_REPLACE_WITH_YOUR_KEY` with a real key from `/dashboard/settings/api-keys`.
+<Tab value="Cursor">
 
-**Manual install** (Cursor, Windsurf, or any IDE that reads `.cursor/mcp.json`):
+**One-click:** click [Add Sendero to Cursor](https://cursor.com/install-mcp?name=sendero&config=eyJ1cmwiOiJodHRwczovL2FwcC5zZW5kZXJvLnRyYXZlbC9hcGkvbWNwIiwiaGVhZGVycyI6eyJBdXRob3JpemF0aW9uIjoiQmVhcmVyIGFrX1JFUExBQ0VfV0lUSF9ZT1VSX0tFWSJ9fQ%3D%3D). Cursor opens, prompts for confirmation, and writes the server config. Replace `ak_REPLACE_WITH_YOUR_KEY` with a real key.
+
+**Manual** — drop into `.cursor/mcp.json`:
 
 ```json
 {
@@ -129,11 +88,15 @@ Restart Codex; `tools/list` should show every Sendero tool the API key is scoped
 }
 ```
 
-## VS Code
+</Tab>
 
-VS Code (Insiders + GitHub Copilot Agent mode) supports `vscode:mcp/install` deep-links. Click [Add Sendero to VS Code](vscode:mcp/install?%7B%22name%22%3A%22sendero%22%2C%22url%22%3A%22https%3A%2F%2Fapp.sendero.travel%2Fapi%2Fmcp%22%2C%22headers%22%3A%7B%22Authorization%22%3A%22Bearer%20ak_REPLACE_WITH_YOUR_KEY%22%7D%7D) — your browser will offer to open VS Code with the server pre-loaded.
+<Tab value="VS Code">
 
-Manual install: drop into `.vscode/mcp.json`:
+VS Code Insiders with GitHub Copilot Agent mode supports the `vscode:mcp/install` deep-link.
+
+Click [Add Sendero to VS Code](vscode:mcp/install?%7B%22name%22%3A%22sendero%22%2C%22url%22%3A%22https%3A%2F%2Fapp.sendero.travel%2Fapi%2Fmcp%22%2C%22headers%22%3A%7B%22Authorization%22%3A%22Bearer%20ak_REPLACE_WITH_YOUR_KEY%22%7D%7D) — your browser opens VS Code with the server pre-loaded.
+
+**Manual** — drop into `.vscode/mcp.json`:
 
 ```json
 {
@@ -148,17 +111,71 @@ Manual install: drop into `.vscode/mcp.json`:
 }
 ```
 
-## Custom agents (Zed and others)
+</Tab>
+
+<Tab value="Codex">
+
+For the OpenAI Codex CLI, append to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.sendero]
+url = "https://app.sendero.travel/api/mcp"
+headers = { Authorization = "Bearer ak_..." }
+```
+
+Restart Codex; `tools/list` returns every Sendero tool the API key is scoped for.
+
+</Tab>
+
+<Tab value="Custom agent">
+
+Bringing your own agent? The protocol is JSON-RPC 2.0 over HTTP. Read [`/.well-known/llms.txt`](https://docs.sendero.travel/.well-known/llms.txt) for the discovery contract, then call:
+
+```bash
+# Initialize
+curl -X POST https://app.sendero.travel/api/mcp \
+  -H "content-type: application/json" \
+  -H "Authorization: Bearer ak_..." \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+
+# List tools
+curl -X POST https://app.sendero.travel/api/mcp \
+  -H "content-type: application/json" \
+  -H "Authorization: Bearer ak_..." \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+# Call a tool
+curl -X POST https://app.sendero.travel/api/mcp \
+  -H "content-type: application/json" \
+  -H "Authorization: Bearer ak_..." \
+  -d '{
+    "jsonrpc":"2.0","id":3,"method":"tools/call",
+    "params":{
+      "name":"search_flights",
+      "arguments":{"origin":"MEX","destination":"SCL","departureDate":"2026-05-15","passengers":2}
+    }
+  }'
+```
 
 Custom agents should:
 
-1. Read `https://edge.sendero.travel/.well-known/llms.txt`.
-2. Initialize MCP at `https://edge.sendero.travel/mcp`.
-3. Call `tools/list`.
+1. Read [`/.well-known/llms.txt`](https://docs.sendero.travel/.well-known/llms.txt).
+2. Initialize MCP at `https://app.sendero.travel/api/mcp`.
+3. Call `tools/list` once.
 4. Select tools by schema, not by prompt text.
 5. Use workflow APIs for multi-step booking, approvals, ticketing waits, settlement, and invoices.
 
-## Direct HTTP fallback
+</Tab>
+
+</Tabs>
+
+## Protocol notes
+
+MCP tool results return as text content containing formatted JSON. Parse that JSON before threading values such as offer ids, trip ids, or booking ids into later calls.
+
+For irreversible actions (booking, paying, cancelling, changing travel), the calling agent must get user or operator approval before the call. The recommended pattern is `hold` → present to user → `confirm_booking` only on explicit OK.
+
+## Direct HTTP fallback (no MCP)
 
 Some agent platforms do not speak MCP. Use the x402-gated HTTP surface instead:
 
@@ -169,8 +186,6 @@ POST https://edge.sendero.travel/tools/search_flights
 
 Those endpoints use the `PAYMENT-REQUIRED` and `Payment-Signature` headers described in [x402 nanopayments](/docs/x402-nanopayments).
 
-## Payment notes
+## Auth at a glance
 
-MCP is the schema and tool-call interface. Direct paid HTTP endpoints are the x402 interface. Public deployments can enforce API keys or x402 at the edge, so clients should always send an `Authorization: Bearer ...` header even when local development routes do not inspect it.
-
-For irreversible actions, the calling agent must get user or operator approval before booking, paying, cancelling, or changing travel.
+MCP is the schema and tool-call interface; direct paid HTTP endpoints are the x402 interface. Public deployments can enforce API keys or x402 at the edge, so clients should always send an `Authorization: Bearer ...` header even when local development routes do not inspect it.

@@ -123,7 +123,7 @@ export function buildOpenApiDoc(input: OpenApiDocInput): Record<string, unknown>
           '',
           '## Authentication',
           '',
-          'Every call is authenticated with a Clerk-issued API key (`Authorization: Bearer ak_…`). Mint one at [`/dashboard/settings/api-keys`](https://www.sendero.travel/dashboard/settings/api-keys). Keys are tenant-scoped; the server derives both `tenantId` and the service-account `userId` from the key.',
+          'Every call is authenticated with a Clerk-issued API key (`Authorization: Bearer ak_…`). Mint one at [`/dashboard/settings/api-keys`](https://app.sendero.travel/dashboard/settings/api-keys). Keys are tenant-scoped; the server derives both `tenantId` and the service-account `userId` from the key.',
           '',
           '## Dispatch shape',
           '',

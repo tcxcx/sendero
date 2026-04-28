@@ -78,7 +78,7 @@ NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/onboarding
 
 ## 7b. Production checklist (live Clerk instance)
 
-Use a dedicated Clerk **Production** instance (or the same app with the Dashboard toggle set to **Production** keys). Do not ship `pk_test_` / `sk_test_` on Vercel **Production**: `env:validate` exits non-zero when `VERCEL_ENV=production` and those prefixes are detected (unless `SKIP_ENV_VALIDATION=1`).
+Use a dedicated Clerk **Production** instance (or the same app with the Dashboard toggle set to **Production** keys). Do not ship `pk_test_` / `ak_` on Vercel **Production**: `env:validate` exits non-zero when `VERCEL_ENV=production` and those prefixes are detected (unless `SKIP_ENV_VALIDATION=1`).
 
 1. **API keys** — In Clerk → API Keys, switch to **Production**. Copy `pk_live_…` and `sk_live_…` into the Vercel **Production** environment for the app project (and marketing if it uses Clerk). Keep **Preview** / **Development** on test keys if you prefer.
 2. **Domains** — Clerk → **Domains**: add production hostnames (e.g. `www.sendero.travel`, `app.sendero.travel`, `sendero.travel`). Align with `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL`.

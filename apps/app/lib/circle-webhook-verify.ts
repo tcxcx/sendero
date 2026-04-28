@@ -7,8 +7,10 @@
  * Prisma, no Next runtime — so it tree-shakes cleanly.
  *
  * Circle signature:
- *   - SHA256 RSA via the public key fetched from
+ *   - SHA256 over the raw body, signed with the key Circle returns from
  *     https://api.circle.com/v2/notifications/publicKey/{keyId}
+ *     (RSA or ECDSA depending on the project — Node's `createVerify`
+ *     dispatches on the key type, so the same call site handles both).
  *   - Headers: x-circle-signature (base64), x-circle-key-id (UUID)
  *   - Public keys cached in-process for 24h with a bounded LRU
  *
@@ -33,6 +35,19 @@ const CIRCLE_KEY_CACHE = new Map<string, { pem: string; fetchedAt: number }>();
  * a forged key id or if the upstream fetch fails. Bounded LRU prevents
  * an attacker who slips a fresh-looking keyId past the regex from
  * growing the map without limit.
+ *
+ * Two non-obvious gotchas:
+ *
+ * 1. The publicKey endpoint REQUIRES `Authorization: Bearer
+ *    ${CIRCLE_API_KEY}`. Without it Circle returns 401 and every
+ *    inbound webhook fails the gate with `public_key_fetch_failed`.
+ *    Confirmed against desk-v1's working impl.
+ *
+ * 2. Circle returns the public key as raw base64 (no PEM banners).
+ *    Node's `crypto.createVerify(...).verify(pem, ...)` requires PEM,
+ *    so we wrap the response in `-----BEGIN PUBLIC KEY-----` lines
+ *    before caching. Idempotent: if a future Circle response ships
+ *    pre-wrapped, the head-check skips the wrap.
  */
 export async function getCirclePublicKey(keyId: string): Promise<string | null> {
   if (!CIRCLE_KEY_ID_RE.test(keyId)) return null;
@@ -45,11 +60,36 @@ export async function getCirclePublicKey(keyId: string): Promise<string | null> 
     return hit.pem;
   }
 
-  const res = await fetch(`https://api.circle.com/v2/notifications/publicKey/${keyId}`);
-  if (!res.ok) return null;
+  const apiKey = process.env.CIRCLE_API_KEY;
+  if (!apiKey) {
+    // Hard fail — every webhook would 401 silently otherwise.
+    console.error('[circle-webhook] CIRCLE_API_KEY missing; cannot verify webhook signatures');
+    return null;
+  }
+
+  const res = await fetch(`https://api.circle.com/v2/notifications/publicKey/${keyId}`, {
+    headers: { Accept: 'application/json', Authorization: `Bearer ${apiKey}` },
+  });
+  if (!res.ok) {
+    const bodyPreview = await res
+      .text()
+      .then(t => t.slice(0, 200))
+      .catch(() => '<read-failed>');
+    console.warn(
+      `[circle-webhook] publicKey fetch non-200 ${JSON.stringify({
+        keyId,
+        status: res.status,
+        statusText: res.statusText,
+        bodyPreview,
+      })}`
+    );
+    return null;
+  }
   const json = (await res.json()) as { data?: { publicKey?: string } };
-  const pem = json.data?.publicKey ?? null;
-  if (!pem) return null;
+  const raw = json.data?.publicKey ?? null;
+  if (!raw) return null;
+
+  const pem = raw.includes('-----BEGIN') ? raw : wrapBase64AsPem(raw);
 
   if (CIRCLE_KEY_CACHE.size >= KEY_CACHE_MAX) {
     const oldest = CIRCLE_KEY_CACHE.keys().next().value;
@@ -57,6 +97,12 @@ export async function getCirclePublicKey(keyId: string): Promise<string | null> 
   }
   CIRCLE_KEY_CACHE.set(keyId, { pem, fetchedAt: Date.now() });
   return pem;
+}
+
+function wrapBase64AsPem(raw: string): string {
+  const stripped = raw.replace(/\s+/g, '');
+  const lines = stripped.match(/.{1,64}/g) ?? [stripped];
+  return `-----BEGIN PUBLIC KEY-----\n${lines.join('\n')}\n-----END PUBLIC KEY-----\n`;
 }
 
 export function verifyCircleSignature(raw: string, signatureB64: string, pem: string): boolean {
@@ -109,25 +155,57 @@ export async function gateCircleWebhook<T = Record<string, unknown>>(args: {
   keyIdHeader: string | null;
   handledTypes: ReadonlySet<string>;
 }): Promise<CircleWebhookGateResult<T>> {
+  // Structured diagnostics on every rejection. Grep prod logs for
+  // `[circle-webhook] gate-reject` to see exactly which gate failed
+  // when Circle Console reports a 401. Never logs the signature bytes
+  // (sensitive); logs the keyId, sig length, type, and timestamp so we
+  // can correlate with Circle's delivery details.
+  const reject = (status: number, error: string, extra: Record<string, unknown> = {}) => {
+    const ctx = {
+      reason: error,
+      status,
+      keyIdHeader: args.keyIdHeader ?? null,
+      keyIdShape: args.keyIdHeader
+        ? CIRCLE_KEY_ID_RE.test(args.keyIdHeader)
+          ? 'uuid'
+          : 'malformed'
+        : 'absent',
+      signaturePresent: Boolean(args.signatureHeader),
+      signatureLength: args.signatureHeader?.length ?? 0,
+      bodyLength: args.rawBody.length,
+      bodyPreview: args.rawBody.slice(0, 120),
+      ...extra,
+    };
+    // Next's dev logger only stringifies the first arg, so interpolate
+    // ctx into the message itself or it'll print `[circle-webhook]
+    // gate-reject {}` — the structured fields would silently disappear.
+    console.warn(`[circle-webhook] gate-reject ${JSON.stringify(ctx)}`);
+    const body =
+      error === 'stale_webhook'
+        ? { error, reason: extra.freshnessReason as string | undefined }
+        : { error };
+    return { ok: false as const, status, body };
+  };
+
   if (!args.signatureHeader || !args.keyIdHeader) {
-    return { ok: false, status: 401, body: { error: 'missing_signature' } };
+    return reject(401, 'missing_signature');
   }
   if (!CIRCLE_KEY_ID_RE.test(args.keyIdHeader)) {
-    return { ok: false, status: 401, body: { error: 'invalid_key_id' } };
+    return reject(401, 'invalid_key_id');
   }
   const pem = await getCirclePublicKey(args.keyIdHeader);
   if (!pem) {
-    return { ok: false, status: 401, body: { error: 'public_key_fetch_failed' } };
+    return reject(401, 'public_key_fetch_failed');
   }
   if (!verifyCircleSignature(args.rawBody, args.signatureHeader, pem)) {
-    return { ok: false, status: 401, body: { error: 'invalid_signature' } };
+    return reject(401, 'invalid_signature', { pemHead: pem.slice(0, 64) });
   }
 
   let event: CircleNotification<T>;
   try {
     event = JSON.parse(args.rawBody) as CircleNotification<T>;
   } catch {
-    return { ok: false, status: 400, body: { error: 'invalid_payload' } };
+    return reject(400, 'invalid_payload');
   }
 
   const type = event.notificationType ?? 'unknown';
@@ -136,7 +214,10 @@ export async function gateCircleWebhook<T = Record<string, unknown>>(args: {
 
   const freshness = checkTimestampFreshness(event.timestamp);
   if (freshness) {
-    return { ok: false, status: 401, body: { error: 'stale_webhook', reason: freshness } };
+    return reject(401, 'stale_webhook', {
+      freshnessReason: freshness,
+      timestamp: event.timestamp,
+    });
   }
 
   return { ok: true, event, raw: args.rawBody };

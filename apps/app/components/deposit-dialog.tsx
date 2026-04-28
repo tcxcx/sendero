@@ -3,12 +3,18 @@
 /**
  * DepositDialog — fund the user's MSCA on Arc Testnet.
  * Two paths: (a) Circle faucet (external), (b) treasury drip via /api/fund-msca.
+ *
+ * The treasury drip is dev-only — it spends real testnet treasury USDC
+ * with no UX guard, so it's a foot-cannon for prod operators. The
+ * Circle faucet stays available everywhere because it's external.
  */
 
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
 import { DialogShell } from './dialog-shell';
 import { useSendero } from './store';
+
+const SHOW_TREASURY_DRIP = process.env.NODE_ENV === 'development';
 
 export function DepositDialog() {
   const [deposit, setDeposit] = useQueryState('deposit');
@@ -74,43 +80,47 @@ export function DepositDialog() {
         ) needs USDC on Arc Testnet. Choose a source.
       </p>
 
-      <div className="dlg-row">
-        <span className="dlg-label">Treasury drip amount · USDC</span>
-        <input
-          className="dlg-input"
-          style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}
-          inputMode="decimal"
-          value={amt}
-          onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-          placeholder="5"
-        />
-      </div>
+      {SHOW_TREASURY_DRIP && (
+        <>
+          <div className="dlg-row">
+            <span className="dlg-label">Treasury drip amount · USDC</span>
+            <input
+              className="dlg-input"
+              style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}
+              inputMode="decimal"
+              value={amt}
+              onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+              placeholder="5"
+            />
+          </div>
 
-      {error && <div className="dlg-err">{error}</div>}
-      {result && <div className="dlg-ok">{result}</div>}
+          {error && <div className="dlg-err">{error}</div>}
+          {result && <div className="dlg-ok">{result}</div>}
 
-      <button type="button" className="dlg-primary" disabled={!validAmt || busy} onClick={drip}>
-        {busy ? (
-          <>
-            <span className="dlg-spinner" aria-hidden="true" />
-            <span>Sending drip…</span>
-          </>
-        ) : (
-          <>
-            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
-              <path
-                d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span>Drip {amt || '0'} USDC from treasury</span>
-          </>
-        )}
-      </button>
+          <button type="button" className="dlg-primary" disabled={!validAmt || busy} onClick={drip}>
+            {busy ? (
+              <>
+                <span className="dlg-spinner" aria-hidden="true" />
+                <span>Sending drip…</span>
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                  <path
+                    d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span>Drip {amt || '0'} USDC from treasury</span>
+              </>
+            )}
+          </button>
+        </>
+      )}
 
       <a
         className="dlg-primary dlg-primary-ghost"
