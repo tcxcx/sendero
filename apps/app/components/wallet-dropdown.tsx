@@ -167,7 +167,7 @@ export function WalletDropdown() {
       ) : (
         <button
           type="button"
-          className={`wd-trigger ${open ? 'open' : ''}`}
+          className={`sd-corner-hover wd-trigger ${open ? 'open' : ''}`}
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={() => setOpen(v => !v)}

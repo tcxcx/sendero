@@ -111,7 +111,7 @@ export default async function DashboardPage() {
                   <Link
                     href={s.href}
                     aria-label={s.label}
-                    className="group/qa inline-flex h-9 w-9 items-center justify-center rounded-md border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] bg-white text-[color:var(--text-dim)] shadow-[var(--shadow-xs)] transition-colors duration-150 hover:border-[color:var(--ink)] hover:bg-[color:var(--tint-vermillion-soft)] hover:text-[color:var(--ink)]"
+                    className="sd-corner-hover group/qa inline-flex h-9 w-9 items-center justify-center rounded-md border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] bg-white text-[color:var(--text-dim)] shadow-[var(--shadow-xs)] transition-colors duration-150 hover:border-[color:var(--ink)] hover:bg-[color:var(--tint-vermillion-soft)] hover:text-[color:var(--ink)]"
                   >
                     <Icon className="size-4" aria-hidden="true" />
                   </Link>
@@ -125,7 +125,7 @@ export default async function DashboardPage() {
           })}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button asChild variant="topography">
+              <Button asChild variant="topography" className="sd-corner-hover">
                 <Link href="/dashboard/console">
                   <span className="agent-console-cta__bg" aria-hidden="true" />
                   <span className="agent-console-cta__label">
@@ -257,7 +257,7 @@ function ChannelPill({
           href={href}
           aria-label={label}
           className={
-            'group/qa inline-flex h-9 w-9 items-center justify-center rounded-md ' +
+            'sd-corner-hover group/qa inline-flex h-9 w-9 items-center justify-center rounded-md ' +
             'border border-[color:color-mix(in_oklab,var(--ink)_22%,transparent)] ' +
             'bg-white text-[color:var(--text-dim)] shadow-[var(--shadow-xs)] ' +
             'transition-colors duration-150 ' +

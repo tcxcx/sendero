@@ -32,6 +32,7 @@ export function StatCard({
   const numeric = parseStatValue(value);
 
   return (
+    <div className="sd-corner-hover">
     <Link
       href={href}
       aria-label={`${title} — view`}
@@ -111,6 +112,7 @@ export function StatCard({
         </div>
       </div>
     </Link>
+    </div>
   );
 }
 

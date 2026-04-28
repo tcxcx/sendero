@@ -97,7 +97,7 @@ export function AgentChip() {
     <div className="ac-wrap" ref={wrapRef}>
       <button
         type="button"
-        className={`ac-chip ${open ? 'open' : ''}`}
+        className={`sd-corner-hover ac-chip ${open ? 'open' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(v => !v)}
