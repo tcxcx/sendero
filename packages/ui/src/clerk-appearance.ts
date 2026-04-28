@@ -1,5 +1,3 @@
-import type { Appearance } from '@clerk/types';
-
 /**
  * Sendero brand theme for every Clerk component.
  *
@@ -21,7 +19,7 @@ import type { Appearance } from '@clerk/types';
  *   borderRadius  0.375rem (md)
  *   spacing       1rem     (md)
  */
-export const senderoClerkAppearance: Appearance = {
+export const senderoClerkAppearance = {
   variables: {
     colorPrimary: '#fb542b',
     colorPrimaryForeground: '#ffffff',
@@ -41,4 +39,4 @@ export const senderoClerkAppearance: Appearance = {
     borderRadius: '0.375rem',
     spacing: '1rem',
   },
-};
+} as const;

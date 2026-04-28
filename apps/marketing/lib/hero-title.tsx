@@ -7,7 +7,7 @@ const HERO_TITLE_HIGHLIGHTS: Record<
   SupportedLocale,
   readonly [travelToken: string, aiToken: string]
 > = {
-  'en-US': ['Travel', 'agent'],
+  'en-US': ['Travel', 'agentic'],
   'es-MX': ['viajes', 'agentes'],
   'es-AR': ['viajes', 'agentes'],
   'pt-BR': ['viagens', 'agentes'],

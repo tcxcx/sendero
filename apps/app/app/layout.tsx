@@ -2,8 +2,8 @@ import type { Viewport } from 'next';
 import Script from 'next/script';
 
 import { ClerkProvider } from '@clerk/nextjs';
-import { senderoClerkAppearance } from '@sendero/auth/clerk-appearance';
 import { senderoFontVars } from '@sendero/fonts';
+import { senderoClerkAppearance } from '@sendero/ui/clerk-appearance';
 import { SUPPORTED_LOCALES } from '@sendero/locale';
 import {
   buildClerkAllowedRedirectOrigins,

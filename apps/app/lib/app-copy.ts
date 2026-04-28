@@ -194,7 +194,7 @@ const EN_US: AppCopy = {
       requestAccess: 'Request access',
     },
     hero: {
-      eyebrow: 'Agentic travel operations',
+      eyebrow: 'Agentic Travel OS',
       title: 'Run every trip from one Agentic workspace.',
       body: 'Sendero is the product console for agent-native travel: launch prepaid traveler links, connect WhatsApp or Slack channels, let other LLMs call MCP tools, watch trip state, issue invoices, and settle metered actions in USDC on Arc.',
       primaryCta: { label: 'Request access', href: '/waitlist' },

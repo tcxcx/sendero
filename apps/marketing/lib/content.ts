@@ -274,7 +274,7 @@ const EN_US: MarketingContent = {
   },
   hero: {
     eyebrow: 'Live on Testnet',
-    title: 'Travel infrastructure for the agent era.',
+    title: 'Travel infrastructure for the agentic era.',
     subtitle:
       'Bookings, prepaid escrow, USDC settlement, and trip support — in one persistent thread.',
     primaryCta: { label: 'Start free', href: '/dashboard' },

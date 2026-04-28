@@ -14,6 +14,7 @@
     "./motion.css": "./src/motion.css",
     "./tailwind.config": "./tailwind.config.ts",
     "./brand": "./src/brand/sendero-brand.ts",
+    "./clerk-appearance": "./src/clerk-appearance.ts",
     "./cn": "./src/utils/cn.ts",
     "./alert": "./src/components/alert.tsx",
     "./animated-number": "./src/components/animated-number.tsx",

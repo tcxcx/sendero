@@ -1887,6 +1887,68 @@ a:hover {
     transform: none;
   }
 }
+/* Home hero — cinematic bg entrance.
+   Layered choreography: art image scales down + de-blurs + fades in
+   over ~1.6s on Emil's strong ease-in-out (slow-fast-slow), then
+   eases into a slow Ken Burns drift that loops indefinitely so the
+   surface keeps subtle life without distracting motion. The edge
+   topography overlay arrives slightly later to feel layered, like a
+   film title card. The mask-image radial gradient on the art layer
+   keeps the parchment surrounding the focal cloud breathable
+   (avoids a hard rectangle edge). */
+@media (prefers-reduced-motion: no-preference) {
+  .mk-hero-home-art {
+    opacity: 0;
+    transform: scale(1.06);
+    filter: blur(10px) saturate(1.05);
+    animation:
+      mk-home-art-reveal 1800ms cubic-bezier(0.65, 0, 0.35, 1) 80ms forwards,
+      mk-home-art-drift 22s ease-in-out 1900ms infinite alternate;
+    will-change: transform, opacity, filter;
+  }
+  @keyframes mk-home-art-reveal {
+    0% {
+      opacity: 0;
+      transform: scale(1.06);
+      filter: blur(10px) saturate(1.05);
+    }
+    55% {
+      opacity: 0.8;
+      filter: blur(2px) saturate(1.02);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+      filter: blur(0) saturate(1);
+    }
+  }
+  /* Ken Burns: a 1.5% drift across both axes so the cloudscape
+     breathes without animating layout. transform-origin centers
+     the motion over the focal binoculars region. */
+  @keyframes mk-home-art-drift {
+    0% {
+      transform: scale(1) translate3d(0, 0, 0);
+    }
+    100% {
+      transform: scale(1.025) translate3d(-0.6%, -0.4%, 0);
+    }
+  }
+  .mk-hero-home-art .mk-hero-art-edge {
+    opacity: 0;
+    animation: mk-home-edge-fade 1200ms var(--s-ease-out) 920ms forwards;
+  }
+  @keyframes mk-home-edge-fade {
+    to {
+      opacity: 0.52;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-hero-home-art {
+    animation: none;
+  }
+}
+
 /* Pricing hero — split layout + Unicorn Studio badge hide */
 .mk-hero-pricing {
   border-bottom: 1px solid var(--border);

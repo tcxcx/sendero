@@ -84,8 +84,8 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
   // of the nav row — see apps/marketing/components/site-shell/site-header.tsx.
   return (
     <>
-      <section className="mk-hero">
-        <div className="mk-hero-art s-fade s-fade-1" aria-hidden="true">
+      <section className="mk-hero mk-hero-home">
+        <div className="mk-hero-art mk-hero-home-art" aria-hidden="true">
           <img
             alt=""
             className="mk-hero-art-img"
