@@ -14,6 +14,7 @@ import {
 import 'fumadocs-ui/style.css';
 
 import { DocsRootProvider } from '@/app/docs-root-provider';
+import { DocsTopBar } from '@/components/docs-top-bar';
 
 // Pull the exact same token vocabulary the main Sendero app uses so
 // the docs match the vermilion brand pixel-for-pixel. The relative
@@ -109,7 +110,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         ))}
       </head>
       <body>
-        <DocsRootProvider>{children}</DocsRootProvider>
+        <DocsRootProvider>
+          {/*
+            DocsTopBar replaces the language selector + nav links that
+            Fumadocs would otherwise cram into the sidebar header.
+            Mounted once at the root so every docs route inherits the
+            same top strip (brand-left, nav-middle, language +
+            Get-API-key right). See apps/docs/components/docs-top-bar.tsx.
+          */}
+          <DocsTopBar />
+          {children}
+        </DocsRootProvider>
       </body>
     </html>
   );
