@@ -72,15 +72,8 @@ export function SwapDialog() {
   };
 
   return (
-    <DialogShell
-      open={open}
-      title="Swap"
-      subtitle="Circle App Kit · Arc Testnet"
-      onClose={close}
-    >
-      <p className="dlg-sub">
-        Swap between USDC and EURC on Arc. Gas paid in Arc-native USDC.
-      </p>
+    <DialogShell open={open} title="Swap" subtitle="Circle App Kit · Arc Testnet" onClose={close}>
+      <p className="dlg-sub">Swap between USDC and EURC on Arc. Gas paid in Arc-native USDC.</p>
 
       <div className="dlg-row">
         <span className="dlg-label">From</span>

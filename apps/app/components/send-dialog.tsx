@@ -67,12 +67,7 @@ export function SendDialog() {
   };
 
   return (
-    <DialogShell
-      open={open}
-      title="Send"
-      subtitle="Arc Testnet · same-chain"
-      onClose={close}
-    >
+    <DialogShell open={open} title="Send" subtitle="Arc Testnet · same-chain" onClose={close}>
       <p className="dlg-sub">
         Sends {tok} from your gateway wallet to any Arc Testnet address. Gas paid in Arc-native
         USDC.

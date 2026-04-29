@@ -22,7 +22,11 @@ export function MarketingEngineBadgeCover() {
   }, []);
 
   return (
-    <div ref={ref} aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+    <div
+      ref={ref}
+      aria-hidden="true"
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+    >
       {visible && (
         <div
           style={{

@@ -75,7 +75,10 @@ export async function POST(req: NextRequest) {
       anyErr?.cause?.trace?.rawError?.shortMessage ||
       anyErr?.cause?.trace?.rawError?.message ||
       (err instanceof Error ? err.message : String(err));
-    console.error('[bridge] error:', detail, { tenantId: tenant.id, signerAddress: signer.address });
+    console.error('[bridge] error:', detail, {
+      tenantId: tenant.id,
+      signerAddress: signer.address,
+    });
     return NextResponse.json({ error: 'bridge_failed', message: detail }, { status: 500 });
   }
 }

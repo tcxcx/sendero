@@ -77,8 +77,8 @@ export function BridgeDialog() {
       onClose={close}
     >
       <p className="dlg-sub">
-        Pulls USDC from another chain into Arc Testnet via Circle CCTP. Your gateway wallet signs
-        on both chains.
+        Pulls USDC from another chain into Arc Testnet via Circle CCTP. Your gateway wallet signs on
+        both chains.
       </p>
 
       <div className="dlg-row">

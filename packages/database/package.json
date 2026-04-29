@@ -8,7 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/index.ts",
-"./types": "./src/types.ts",
+    "./types": "./src/types.ts",
     "./seed": "./src/seed.ts"
   },
   "scripts": {
@@ -25,7 +25,7 @@
     "@neondatabase/serverless": "^0.10.0",
     "@prisma/adapter-neon": "^5.22.0",
     "@prisma/client": "^5.22.0",
-"ws": "^8.18.0"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.13",

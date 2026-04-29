@@ -485,6 +485,9 @@
     "packages/icons": {
       "name": "@sendero/icons",
       "version": "0.1.0",
+      "dependencies": {
+        "@web3icons/react": "4.1.14",
+      },
       "devDependencies": {
         "@types/react": "^19.2.5",
         "next": "^16.2.4",
@@ -2562,6 +2565,10 @@
     "@vueuse/shared": ["@vueuse/shared@13.9.0", "", { "peerDependencies": { "vue": "^3.5.0" } }, "sha512-e89uuTLMh0U5cZ9iDpEI2senqPGfbPRTHM/0AaQkcxnpqjkZqDYP8rpfm7edOz8s+pOCOROEy1PIveSW8+fL5g=="],
 
     "@wagmi/core": ["@wagmi/core@2.22.1", "", { "dependencies": { "eventemitter3": "5.0.1", "mipd": "0.0.7", "zustand": "5.0.0" }, "peerDependencies": { "@tanstack/query-core": ">=5.0.0", "typescript": ">=5.0.4", "viem": "2.x" }, "optionalPeers": ["@tanstack/query-core", "typescript"] }, "sha512-cG/xwQWsBEcKgRTkQVhH29cbpbs/TdcUJVFXCyri3ZknxhMyGv0YEjTcrNpRgt2SaswL1KrvslSNYKKo+5YEAg=="],
+
+    "@web3icons/common": ["@web3icons/common@0.11.43", "", { "peerDependencies": { "typescript": "^5.0.0" } }, "sha512-uJTEzqrXsFgAT04hh3rSC9SWgIvhihs7j63x5fHAGIFQd10II4HUrN8I1KL1pfnGDI9CWWKe0PZSZOFmVROkgw=="],
+
+    "@web3icons/react": ["@web3icons/react@4.1.14", "", { "dependencies": { "@web3icons/common": "0.11.43" }, "peerDependencies": { "react": "^18.0.0 || ^19.0.0" } }, "sha512-W3ITwmYCIBIgGWN9bEFyscxGdqa/NKLA0viWGb+F4QiR3Ja90E1ppbi2DO9RLQq8zO7DgCibPuzqB5W4tj9dyQ=="],
 
     "@whatwg-node/disposablestack": ["@whatwg-node/disposablestack@0.0.6", "", { "dependencies": { "@whatwg-node/promise-helpers": "^1.0.0", "tslib": "^2.6.3" } }, "sha512-LOtTn+JgJvX8WfBVJtF08TGrdjuFzGJc4mkP8EdDI8ADbvO7kiexYep1o8dwnt0okb0jYclCDXF13xU7Ge4zSw=="],
 
