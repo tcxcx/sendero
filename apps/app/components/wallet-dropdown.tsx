@@ -15,6 +15,7 @@ import { useQueryState } from 'nuqs';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { useSendero } from './store';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { UnifiedBalanceSection } from './unified-balance-section';
 import { useIsMac } from './hooks/use-is-mac';
 import { logout } from '@sendero/circle/modular-wallets';
 
@@ -289,6 +290,13 @@ export function WalletDropdown() {
               />
             </div>
           </div>
+
+          {/* Phase 2 P2.8 — unified Gateway balance + per-chain breakdown.
+              Hidden when the tenant has no TenantGatewayConfig (provisioning
+              gap). Polls /api/gateway/balance every 30s. Per-wallet balance
+              card above stays as the live Arc treasury view; this section
+              surfaces the cross-chain unified picture. */}
+          {!isZeroAddress && <UnifiedBalanceSection />}
 
           {/* Meta footer */}
           <div className="wd-meta">
