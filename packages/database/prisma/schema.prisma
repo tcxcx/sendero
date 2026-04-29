@@ -300,6 +300,7 @@ model Tenant {
   gatewayConfig       TenantGatewayConfig?
   gatewayDeposits     GatewayDepositLog[]
   gatewayTransfers    GatewayTransferLog[]
+  walletAccessLogs    WalletAccessLog[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -994,6 +995,50 @@ model GatewayTransferLog {
   @@index([tenantId, createdAt])
   @@index([status, createdAt])
   @@map("gateway_transfer_logs")
+}
+
+/// Append-only audit trail of every Gateway-signer key-material access.
+///
+/// Phase 5. Required for compliance + forensics — answers "which user,
+/// from which surface, decrypted tenant X's signer at time T?" Critical
+/// for investigating any leak suspicion. Cache hits do NOT log because
+/// they don't decrypt; only cold-path decrypts (cache miss) record here.
+///
+/// Surfaces include:
+///   - 'route'   — operator UI request (Clerk session)
+///   - 'cron'    — scheduled job (CRON_SECRET)
+///   - 'webhook' — Circle inbound webhook fan-out
+///   - 'tool'    — agent tool call via /api/agent/dispatch
+///   - 'cli'     — out-of-band script (e.g. provisioning, reconciliation)
+///
+/// Failure mode: if an audit insert fails, the decrypt still proceeds —
+/// availability beats audit completeness for the hot path. The DB row
+/// is best-effort; production parity with audit comes from the
+/// app-level "must-log-or-fail" mode (set via env in Phase 5+ if
+/// compliance demands it).
+model WalletAccessLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String
+  /// route | cron | webhook | tool | cli
+  callerSurface String
+  /// Clerk userId when callerSurface='route'. Null for cron/webhook
+  /// (system-driven). 'tool' callers may have it from the dispatch
+  /// path; cli callers don't.
+  callerUserId  String?
+  /// KEK version used to decrypt. Surfaces rotation lag — a row with
+  /// kekVersion < TenantGatewaySigner.kekVersion means the lazy
+  /// re-encrypt-on-read step ran on this access.
+  kekVersion    Int
+  /// Free-form context. Examples: route path, cron name, webhook
+  /// notification.id. Bounded to ~200 chars to keep table small.
+  context       String?
+  occurredAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
+  @@index([occurredAt])
+  @@map("wallet_access_logs")
 }
 
 /// Append-only nanopayment ledger. Mirrors packages/tools/src/meter.ts
