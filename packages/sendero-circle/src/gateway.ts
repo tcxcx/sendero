@@ -24,6 +24,7 @@ import {
   type Chain,
   type Hex,
   type Address,
+  type PrivateKeyAccount,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
@@ -314,14 +315,26 @@ export async function depositToGateway(
 
 /**
  * Transfer from Gateway unified balance: sign burn intent → submit to
- * Gateway API → call gatewayMint on destination. All server-side with
- * treasury EOA signing. Returns the mint tx hash on destination chain.
+ * Gateway API → call gatewayMint on destination. Returns the mint tx
+ * hash on destination chain.
+ *
+ * Pass `signer` to use a per-tenant Gateway EOA (Phase 1+ path —
+ * mandatory for tenant-scoped operator routes). Omit it to fall back
+ * to the platform `TREASURY_PRIVATE_KEY` for legacy callers (the
+ * `gateway_transfer` MCP tool until it migrates in Phase 2+).
+ *
+ * The `signer` IS the recorded Gateway depositor — it signs both the
+ * burn intent and the destination mint tx. Caller must ensure the
+ * signer's address has previously deposited liquidity into Gateway
+ * (sweepChain is the canonical funding path).
  */
 export async function transferViaGateway(params: {
   from: keyof typeof GATEWAY_CHAINS;
   to: keyof typeof GATEWAY_CHAINS;
   amountUsdc: string;
   recipient?: Address;
+  /** Optional per-tenant signer. Defaults to platform TREASURY_PRIVATE_KEY. */
+  signer?: PrivateKeyAccount;
 }): Promise<{
   burnSignature: Hex;
   mintHash: Hex;
@@ -335,7 +348,7 @@ export async function transferViaGateway(params: {
     throw new Error(`Unknown Gateway chain pair: ${params.from} → ${params.to}`);
   }
 
-  const acct = treasuryAccount();
+  const acct = params.signer ?? treasuryAccount();
   const recipient = (params.recipient ?? acct.address) as Address;
   const value = parseUnits(params.amountUsdc, 6);
 
@@ -389,7 +402,14 @@ export async function transferViaGateway(params: {
     signature: Hex;
   };
 
-  const dstWallet = walletClientFor(dst);
+  // Mint on destination chain. We construct the wallet client with the
+  // resolved signer (per-tenant or platform fallback) explicitly so the
+  // tx is signed by the right account regardless of which path called us.
+  const dstWallet = createWalletClient({
+    account: acct,
+    chain: dst.viemChain,
+    transport: http(dst.rpcUrl, { retryCount: 3, timeout: 15_000 }),
+  });
   const dstPub = publicClientFor(dst);
   const mintHash = await dstWallet.writeContract({
     address: GATEWAY_MINTER,
