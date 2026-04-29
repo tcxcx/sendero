@@ -24,6 +24,8 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
 import { verifyClerkWebhook } from '@sendero/auth/webhooks';
 import { provisionTenantWallet } from '@sendero/circle';
+import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
 import { Prisma, prisma } from '@sendero/database';
 import {
@@ -353,6 +355,45 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     tenantId: tenant.id,
     clerkOrgId: id,
   });
+
+  // Gateway phase 1 provisioning — non-fatal. Failure here doesn't
+  // block onboarding: a backfill cron (Phase 1 P1.7) picks up tenants
+  // missing TenantGatewaySigner / TenantGatewayConfig / operations DCW
+  // and provisions on next run. Treasury wallet alone is enough for
+  // operator dashboard + sandbox bookings; Gateway is only on the
+  // unified-balance + auto-sweep hot path.
+  try {
+    const signer = await getOrCreateGatewaySigner(tenant.id);
+
+    await provisionTenantOpsDcw({
+      tenantId: tenant.id,
+      clerkOrgId: id,
+      chain: 'ARC-TESTNET',
+    });
+
+    await prisma.tenantGatewayConfig.upsert({
+      where: { tenantId: tenant.id },
+      create: {
+        tenantId: tenant.id,
+        evmDepositorAddress: signer.address,
+        enabledDomains: [26], // Arc Testnet domain (matches GATEWAY_CHAINS)
+      },
+      update: {
+        evmDepositorAddress: signer.address,
+      },
+    });
+
+    console.log('[webhooks/clerk] gateway provisioned', {
+      tenantId: tenant.id,
+      depositor: signer.address,
+    });
+  } catch (err) {
+    console.warn('[webhooks/clerk] gateway provisioning failed (non-fatal)', {
+      id,
+      tenantId: tenant.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // Mint the org's ERC-8004 identity NFT atomically with wallet
   // provisioning. The treasury wallet (just provisioned above) becomes
