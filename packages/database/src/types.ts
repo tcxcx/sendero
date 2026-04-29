@@ -3,52 +3,50 @@
  * convenience in apps/app and apps/edge. Keeps call-sites short:
  *
  *   import type { TripWithBookings } from '@sendero/database/types';
- *
- * Prisma.validator preserves relation typing without hand-writing unions.
  */
 
 import { Prisma } from '@prisma/client';
 
 // ─── Tenant ────────────────────────────────────────────────────────────────
 
-export const tenantWithPolicies = Prisma.validator<Prisma.TenantDefaultArgs>()({
+export const tenantWithPolicies = {
   include: { policies: true },
-});
+} satisfies Prisma.TenantDefaultArgs;
 export type TenantWithPolicies = Prisma.TenantGetPayload<typeof tenantWithPolicies>;
 
-export const tenantWithMembers = Prisma.validator<Prisma.TenantDefaultArgs>()({
+export const tenantWithMembers = {
   include: { memberships: { include: { user: true } } },
-});
+} satisfies Prisma.TenantDefaultArgs;
 export type TenantWithMembers = Prisma.TenantGetPayload<typeof tenantWithMembers>;
 
-export const tenantFull = Prisma.validator<Prisma.TenantDefaultArgs>()({
+export const tenantFull = {
   include: {
     policies: true,
     subscription: true,
     memberships: { include: { user: true } },
   },
-});
+} satisfies Prisma.TenantDefaultArgs;
 export type TenantFull = Prisma.TenantGetPayload<typeof tenantFull>;
 
 // ─── User ──────────────────────────────────────────────────────────────────
 
-export const userWithWallets = Prisma.validator<Prisma.UserDefaultArgs>()({
+export const userWithWallets = {
   include: { wallets: true, memberships: { include: { tenant: true } } },
-});
+} satisfies Prisma.UserDefaultArgs;
 export type UserWithWallets = Prisma.UserGetPayload<typeof userWithWallets>;
 
 // ─── Trip ──────────────────────────────────────────────────────────────────
 
-export const tripWithBookings = Prisma.validator<Prisma.TripDefaultArgs>()({
+export const tripWithBookings = {
   include: {
     bookings: { include: { supplier: true } },
     policy: true,
     traveler: true,
   },
-});
+} satisfies Prisma.TripDefaultArgs;
 export type TripWithBookings = Prisma.TripGetPayload<typeof tripWithBookings>;
 
-export const tripFull = Prisma.validator<Prisma.TripDefaultArgs>()({
+export const tripFull = {
   include: {
     bookings: { include: { supplier: true, settlements: { include: { legs: true } } } },
     policy: true,
@@ -57,21 +55,21 @@ export const tripFull = Prisma.validator<Prisma.TripDefaultArgs>()({
     attestations: true,
     settlements: { include: { legs: true } },
   },
-});
+} satisfies Prisma.TripDefaultArgs;
 export type TripFull = Prisma.TripGetPayload<typeof tripFull>;
 
 // ─── Booking ───────────────────────────────────────────────────────────────
 
-export const bookingWithSettlement = Prisma.validator<Prisma.BookingDefaultArgs>()({
+export const bookingWithSettlement = {
   include: { settlements: { include: { legs: true } }, supplier: true },
-});
+} satisfies Prisma.BookingDefaultArgs;
 export type BookingWithSettlement = Prisma.BookingGetPayload<typeof bookingWithSettlement>;
 
 // ─── Settlement ────────────────────────────────────────────────────────────
 
-export const settlementWithLegs = Prisma.validator<Prisma.SettlementDefaultArgs>()({
+export const settlementWithLegs = {
   include: { legs: true },
-});
+} satisfies Prisma.SettlementDefaultArgs;
 export type SettlementWithLegs = Prisma.SettlementGetPayload<typeof settlementWithLegs>;
 
 // ─── Policy rules (free-form JSON) ─────────────────────────────────────────

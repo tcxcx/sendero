@@ -8,9 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./client": "./src/index.ts",
-    "./accelerate": "./src/accelerate.ts",
-    "./pulse": "./src/pulse.ts",
-    "./types": "./src/types.ts",
+"./types": "./src/types.ts",
     "./seed": "./src/seed.ts"
   },
   "scripts": {
@@ -27,9 +25,7 @@
     "@neondatabase/serverless": "^0.10.0",
     "@prisma/adapter-neon": "^5.22.0",
     "@prisma/client": "^5.22.0",
-    "@prisma/extension-accelerate": "^3.0.1",
-    "@prisma/extension-pulse": "^1.2.2",
-    "ws": "^8.18.0"
+"ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.13",

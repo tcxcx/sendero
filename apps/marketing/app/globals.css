@@ -997,6 +997,7 @@ a:hover {
   line-height: 1.45;
 }
 .mk-scene-banner {
+  position: relative;
   width: 100vw;
   margin: 0 calc(50% - 50vw) 80px;
   height: 900px;

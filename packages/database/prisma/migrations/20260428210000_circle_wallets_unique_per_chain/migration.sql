@@ -36,8 +36,8 @@
 --   3. Re-run the migration after dedup. The unique index creation
 --      is idempotent (IF NOT EXISTS).
 
-DROP INDEX CONCURRENTLY IF EXISTS "circle_wallets_tenantId_kind_chain_idx";
+DROP INDEX IF EXISTS "circle_wallets_tenantId_kind_chain_idx";
 
-CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE UNIQUE INDEX IF NOT EXISTS
   "circle_wallets_tenantId_kind_chain_key"
   ON "circle_wallets" ("tenantId", "kind", "chain");
