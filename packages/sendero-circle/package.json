@@ -16,15 +16,19 @@
     "./gateway-deposit": "./src/gateway-deposit.ts",
     "./gateway-sweep": "./src/gateway-sweep.ts",
     "./gateway-backfill": "./src/gateway-backfill.ts",
+    "./gateway-solana-mint": "./src/gateway-solana-mint.ts",
     "./sca-deploy": "./src/sca-deploy.ts",
     "./modular-wallets": "./src/modular-wallets.ts",
     "./provision-tenant-wallet": "./src/provision-tenant-wallet.ts"
   },
   "dependencies": {
-    "@sendero/env": "workspace:*",
     "@sendero/arc": "workspace:*",
     "@sendero/database": "workspace:*",
-    "@sendero/encryption": "workspace:*"
+    "@sendero/encryption": "workspace:*",
+    "@sendero/env": "workspace:*",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0"
   },
   "peerDependencies": {
     "@circle-fin/adapter-circle-wallets": "^1.2.5",

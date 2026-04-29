@@ -34,6 +34,7 @@
       "@sendero/circle/gateway-deposit": ["./packages/sendero-circle/src/gateway-deposit.ts"],
       "@sendero/circle/gateway-sweep": ["./packages/sendero-circle/src/gateway-sweep.ts"],
       "@sendero/circle/gateway-backfill": ["./packages/sendero-circle/src/gateway-backfill.ts"],
+      "@sendero/circle/gateway-solana-mint": ["./packages/sendero-circle/src/gateway-solana-mint.ts"],
       "@sendero/circle/sca-deploy": ["./packages/sendero-circle/src/sca-deploy.ts"],
       "@sendero/encryption": ["./packages/encryption/src/index.ts"],
       "@sendero/database/accelerate": ["./packages/database/src/accelerate.ts"],
