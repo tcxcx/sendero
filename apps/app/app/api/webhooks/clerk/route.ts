@@ -852,7 +852,11 @@ async function onSubscriptionUpsert(
   const status = resolveSubscriptionStatus(data);
   const currentPeriodEnd = readCurrentPeriodEnd(data);
   const clerkSubId =
-    typeof data.id === 'string' ? data.id : typeof data.subscription_id === 'string' ? (data.subscription_id as string) : null;
+    typeof data.id === 'string'
+      ? data.id
+      : typeof data.subscription_id === 'string'
+        ? (data.subscription_id as string)
+        : null;
 
   // Server-derived grant — never trust a payload-supplied amount.
   // Free tier returns 0n grant; the unique grant per tier lives in

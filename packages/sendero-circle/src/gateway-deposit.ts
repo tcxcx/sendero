@@ -238,7 +238,7 @@ export async function depositToGateway(
   const nowSec = Math.floor(Date.now() / 1000);
   const validAfter = 0n;
   const validBefore = BigInt(nowSec + 60 * 30); // 30-minute auth window
-  const nonce = (`0x${randomBytes(32).toString('hex')}`) as Hex;
+  const nonce = `0x${randomBytes(32).toString('hex')}` as Hex;
 
   const message = {
     from: signer.address,

@@ -196,7 +196,13 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
 
   const opsWallet = await prisma.circleWallet.findFirst({
     where: { circleWalletId: walletId, kind: 'operations' },
-    select: { id: true, tenantId: true, address: true, chain: true, tenant: { select: { metadata: true } } },
+    select: {
+      id: true,
+      tenantId: true,
+      address: true,
+      chain: true,
+      tenant: { select: { metadata: true } },
+    },
   });
   if (!opsWallet) return;
 

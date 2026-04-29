@@ -232,10 +232,7 @@ async function resolveUsdcTokenId(
  * the same rescue-on-timeout behavior: if the poll loop exits but the
  * tx is actually confirmed, return its hash instead of erroring.
  */
-async function pollCircleTransaction(
-  sdk: SweepCircleSdk,
-  challengeId: string
-): Promise<string> {
+async function pollCircleTransaction(sdk: SweepCircleSdk, challengeId: string): Promise<string> {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
     const res = await sdk.getTransaction({ id: challengeId });
     const tx = res?.data?.transaction;

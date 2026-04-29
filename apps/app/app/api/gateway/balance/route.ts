@@ -165,10 +165,7 @@ export async function GET() {
     // credits the Gateway API has already incorporated.
     .filter(c => c.remainingSeconds > 0 || c.status === 'should_be_available');
 
-  const pendingCreditMicroTotal = pendingCredits.reduce(
-    (sum, c) => sum + BigInt(c.amount),
-    0n
-  );
+  const pendingCreditMicroTotal = pendingCredits.reduce((sum, c) => sum + BigInt(c.amount), 0n);
 
   // Ops DCW staging USDC — what's sitting in the per-chain ops wallets
   // mid-sweep. Under steady state ("always-sweep" Phase 1 policy) these
@@ -184,10 +181,7 @@ export async function GET() {
     usdc: w.usdcBalanceMicro?.toString() ?? '0',
     updatedAt: w.balanceUpdatedAt?.toISOString() ?? null,
   }));
-  const opsStagingMicroTotal = opsWallets.reduce(
-    (sum, w) => sum + (w.usdcBalanceMicro ?? 0n),
-    0n
-  );
+  const opsStagingMicroTotal = opsWallets.reduce((sum, w) => sum + (w.usdcBalanceMicro ?? 0n), 0n);
 
   // grandTotal in micro-USDC for precision, returned as 6-decimal
   // string. Number(available) parses Gateway API's decimal string; we
