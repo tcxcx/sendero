@@ -19,7 +19,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { auth } from '@clerk/nextjs/server';
-import { GATEWAY_CHAINS, transferViaGateway } from '@sendero/circle/gateway';
+import {
+  GATEWAY_CHAINS,
+  isSolanaChain,
+  transferViaGateway,
+} from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 
@@ -31,9 +35,16 @@ const BodySchema = z.object({
   from: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]),
   to: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]),
   amount: z.string().regex(/^\d+(\.\d{1,6})?$/),
+  /**
+   * Recipient address — accepts both EVM (0x… 20-byte hex) and Solana
+   * (base58, 32-44 chars). Per-destination-chain validation happens
+   * after parse: EVM destinations require 0x..., Solana destinations
+   * require base58. Per-format-validation done in route body so the
+   * error message can name the destination chain.
+   */
   recipient: z
     .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .regex(/^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/)
     .optional(),
 });
 
@@ -77,6 +88,43 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const fromChain = GATEWAY_CHAINS[body.from as keyof typeof GATEWAY_CHAINS];
+  const toChain = GATEWAY_CHAINS[body.to as keyof typeof GATEWAY_CHAINS];
+
+  // Per-destination recipient format validation. The Zod schema accepts
+  // either format; here we enforce the right one for the dest chain.
+  // Solana destinations REQUIRE an explicit recipient because the
+  // tenant signer is an EVM EOA — its address can't default-route to a
+  // Solana account. EVM destinations default to the signer when omitted.
+  if (isSolanaChain(toChain)) {
+    if (!body.recipient) {
+      return NextResponse.json(
+        {
+          error: 'invalid_input',
+          message: 'Solana destinations require an explicit base58 recipient address',
+        },
+        { status: 400 }
+      );
+    }
+    if (body.recipient.startsWith('0x')) {
+      return NextResponse.json(
+        {
+          error: 'invalid_input',
+          message: `Recipient is an EVM address (0x...) but destination ${toChain.label} is a Solana chain`,
+        },
+        { status: 400 }
+      );
+    }
+  } else if (body.recipient && !body.recipient.startsWith('0x')) {
+    return NextResponse.json(
+      {
+        error: 'invalid_input',
+        message: `Recipient is a Solana address but destination ${toChain.label} is an EVM chain`,
+      },
+      { status: 400 }
+    );
+  }
+
   // Resolve user's row for audit attribution. Best-effort — auth() may
   // give us a Clerk userId without a matching User row in edge cases
   // (e.g. mid-creation). Don't fail the transfer.
@@ -86,12 +134,16 @@ export async function POST(req: NextRequest) {
 
   const signer = await getOrCreateGatewaySigner(tenant.id);
 
-  const fromChain = GATEWAY_CHAINS[body.from as keyof typeof GATEWAY_CHAINS];
-  const toChain = GATEWAY_CHAINS[body.to as keyof typeof GATEWAY_CHAINS];
-
   // Pre-create the transfer log so failures still leave an audit trail.
   // Status starts at 'attesting'; we update to 'confirmed' or 'failed'.
+  // Recipient is stored case-preserved for Solana (base58 is case-sensitive)
+  // and lowercased for EVM (canonical equality).
   const amountMicro = BigInt(Math.round(Number(body.amount) * 1_000_000));
+  const recipientForLog = body.recipient
+    ? isSolanaChain(toChain)
+      ? body.recipient
+      : body.recipient.toLowerCase()
+    : signer.address;
   const log = await prisma.gatewayTransferLog.create({
     data: {
       tenantId: tenant.id,
@@ -99,10 +151,12 @@ export async function POST(req: NextRequest) {
       destinationDomain: toChain.domain,
       destinationChain: toChain.kitName,
       amountMicroUsdc: amountMicro,
-      recipientAddress: (body.recipient ?? signer.address).toLowerCase(),
+      recipientAddress: recipientForLog,
       status: 'attesting',
-      // Phase 1 = self-mint path (the tenant EOA mints on dest). Phase 4
-      // adds Circle forwarding for EVM destinations once Solana lands.
+      // Phase 1-4 = self-mint path. EVM destinations: tenant EOA mints
+      // via writeContract. Solana destinations: Sendero relayer mints
+      // via @sendero/circle/gateway-solana-mint. Phase 5+ may add Circle
+      // forwarding for EVM destinations to remove the gas dependency.
       forwardingEnabled: false,
       triggeredBy: 'manual',
       initiatedByUserId: initiatedByUser?.id ?? null,
@@ -114,7 +168,7 @@ export async function POST(req: NextRequest) {
       from: body.from as keyof typeof GATEWAY_CHAINS,
       to: body.to as keyof typeof GATEWAY_CHAINS,
       amountUsdc: body.amount,
-      recipient: body.recipient as `0x${string}` | undefined,
+      recipient: body.recipient,
       signer: signer.account,
     });
 

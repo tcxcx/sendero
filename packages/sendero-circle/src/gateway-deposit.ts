@@ -44,7 +44,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
-import { GATEWAY_CHAINS, type GatewayChain } from './gateway';
+import { GATEWAY_CHAINS, isEvmChain, type GatewayChain } from './gateway';
 import { getOrCreateGatewaySigner } from './gateway-signer';
 
 // ── EIP-3009 wire format ──────────────────────────────────────────────
@@ -172,6 +172,13 @@ export async function depositToGateway(
 
   const chain = GATEWAY_CHAINS[chainKey];
   if (!chain) throw new Error(`Unknown Gateway chain: ${chainKey}`);
+  if (!isEvmChain(chain)) {
+    throw new Error(
+      `depositToGateway: ${chainKey} is a Solana chain — EIP-3009 deposit ` +
+        `path is EVM-only. Solana sources will use a different program ` +
+        `flow in Phase 4.5.`
+    );
+  }
 
   // Idempotency check — if this webhook already drove a deposit, return
   // the existing row. Critical for Circle's at-least-once delivery +
