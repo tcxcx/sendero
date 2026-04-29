@@ -12,6 +12,9 @@
     "./app-kit": "./src/app-kit.ts",
     "./gateway": "./src/gateway.ts",
     "./gateway-signer": "./src/gateway-signer.ts",
+    "./gateway-ops-wallet": "./src/gateway-ops-wallet.ts",
+    "./gateway-deposit": "./src/gateway-deposit.ts",
+    "./gateway-sweep": "./src/gateway-sweep.ts",
     "./modular-wallets": "./src/modular-wallets.ts",
     "./provision-tenant-wallet": "./src/provision-tenant-wallet.ts"
   },
