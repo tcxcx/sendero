@@ -28,6 +28,8 @@
       "@sendero/circle/app-kit": ["./packages/sendero-circle/src/app-kit.ts"],
       "@sendero/circle/gateway": ["./packages/sendero-circle/src/gateway.ts"],
       "@sendero/circle/modular-wallets": ["./packages/sendero-circle/src/modular-wallets.ts"],
+      "@sendero/circle/gateway-signer": ["./packages/sendero-circle/src/gateway-signer.ts"],
+      "@sendero/encryption": ["./packages/encryption/src/index.ts"],
       "@sendero/multisig": ["./packages/sendero-multisig/src/index.ts"],
       "@sendero/multisig/signing": ["./packages/sendero-multisig/src/signing.ts"],
       "@sendero/multisig/userop-builder": ["./packages/sendero-multisig/src/userop-builder.ts"],

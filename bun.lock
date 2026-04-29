@@ -455,6 +455,13 @@
         "typescript": "^5.8.3",
       },
     },
+    "packages/encryption": {
+      "name": "@sendero/encryption",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
     "packages/fonts": {
       "name": "@sendero/fonts",
       "version": "0.1.0",
@@ -581,6 +588,7 @@
       "dependencies": {
         "@sendero/arc": "workspace:*",
         "@sendero/database": "workspace:*",
+        "@sendero/encryption": "workspace:*",
         "@sendero/env": "workspace:*",
       },
       "peerDependencies": {
@@ -1836,6 +1844,8 @@
     "@sendero/duffel": ["@sendero/duffel@workspace:packages/sendero-duffel"],
 
     "@sendero/edge": ["@sendero/edge@workspace:apps/edge"],
+
+    "@sendero/encryption": ["@sendero/encryption@workspace:packages/encryption"],
 
     "@sendero/env": ["@sendero/env@workspace:packages/sendero-env"],
 
