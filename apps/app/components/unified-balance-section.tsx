@@ -79,9 +79,7 @@ export function UnifiedBalanceSection() {
         const res = await fetch('/api/gateway/balance', { cache: 'no-store' });
         if (cancelled) return;
         if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as
-            | UnifiedBalanceErrorResponse
-            | null;
+          const body = (await res.json().catch(() => null)) as UnifiedBalanceErrorResponse | null;
           setError(body?.message ?? body?.error ?? `HTTP ${res.status}`);
           setData(null);
           return;
@@ -114,9 +112,7 @@ export function UnifiedBalanceSection() {
     <div className="border-t border-zinc-200/60 px-4 py-3">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-xs uppercase tracking-wider text-zinc-500">
-            Unified balance
-          </div>
+          <div className="text-xs uppercase tracking-wider text-zinc-500">Unified balance</div>
           <div className="mt-0.5 font-mono text-lg tabular-nums">
             {data ? `$${formatGrandTotal(data.grandTotal)}` : '—'}
           </div>
@@ -178,33 +174,28 @@ export function UnifiedBalanceSection() {
                         ? `${formatRemaining(c.remainingSeconds)}`
                         : 'arriving'}
                     </span>
-                    <span className="font-mono tabular-nums">
-                      ${formatMicroUsdc(c.amount)}
-                    </span>
+                    <span className="font-mono tabular-nums">${formatMicroUsdc(c.amount)}</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {data.opsStaging.length > 0 &&
-            data.opsStaging.some(s => s.usdc !== '0') && (
-              <div className="border-t border-zinc-200/60 pt-2">
-                <div className="text-zinc-500">In sweep</div>
-                <ul className="mt-1 space-y-1">
-                  {data.opsStaging
-                    .filter(s => s.usdc !== '0')
-                    .map(s => (
-                      <li key={s.walletAddress} className="flex justify-between">
-                        <span className="truncate">{s.chain}</span>
-                        <span className="font-mono tabular-nums">
-                          ${formatMicroUsdc(s.usdc)}
-                        </span>
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            )}
+          {data.opsStaging.length > 0 && data.opsStaging.some(s => s.usdc !== '0') && (
+            <div className="border-t border-zinc-200/60 pt-2">
+              <div className="text-zinc-500">In sweep</div>
+              <ul className="mt-1 space-y-1">
+                {data.opsStaging
+                  .filter(s => s.usdc !== '0')
+                  .map(s => (
+                    <li key={s.walletAddress} className="flex justify-between">
+                      <span className="truncate">{s.chain}</span>
+                      <span className="font-mono tabular-nums">${formatMicroUsdc(s.usdc)}</span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
 
           <div className="border-t border-zinc-200/60 pt-2 font-mono text-[10px] text-zinc-400">
             Depositor: {shortAddr(data.depositor)}
@@ -215,15 +206,7 @@ export function UnifiedBalanceSection() {
   );
 }
 
-function BreakdownRow({
-  label,
-  value,
-  muted,
-}: {
-  label: string;
-  value: string;
-  muted?: boolean;
-}) {
+function BreakdownRow({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className={`flex justify-between ${muted ? 'text-zinc-400' : ''}`}>
       <span>{label}</span>

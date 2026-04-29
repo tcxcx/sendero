@@ -36,6 +36,8 @@
       "@sendero/circle/gateway-backfill": ["./packages/sendero-circle/src/gateway-backfill.ts"],
       "@sendero/circle/sca-deploy": ["./packages/sendero-circle/src/sca-deploy.ts"],
       "@sendero/encryption": ["./packages/encryption/src/index.ts"],
+      "@sendero/database/accelerate": ["./packages/database/src/accelerate.ts"],
+      "@sendero/database/pulse": ["./packages/database/src/pulse.ts"],
       "@sendero/multisig": ["./packages/sendero-multisig/src/index.ts"],
       "@sendero/multisig/signing": ["./packages/sendero-multisig/src/signing.ts"],
       "@sendero/multisig/userop-builder": ["./packages/sendero-multisig/src/userop-builder.ts"],
