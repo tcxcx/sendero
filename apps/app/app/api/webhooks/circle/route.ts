@@ -135,13 +135,17 @@ async function syncAll(
 /**
  * Map Circle's blockchain identifier ('ARC-TESTNET', 'AVAX-FUJI', …)
  * to Sendero's GATEWAY_CHAINS key ('Arc_Testnet', 'Avalanche_Fuji', …).
- * Returns null for chains we don't operate Gateway on yet (Phase 1 = Arc only).
+ * Returns null for chains we don't operate Gateway on yet.
+ *
+ * Matches against `circleId` rather than the kitName. The kitName is a
+ * legacy underscored format ('Avalanche_Fuji') that doesn't always map
+ * cleanly to Circle's dashed id ('AVAX-FUJI'). circleId is the
+ * canonical id everywhere outside App Kit.
  */
 function mapCircleBlockchainToChainKey(blockchain: string): keyof typeof GATEWAY_CHAINS | null {
+  const normalized = blockchain.toUpperCase();
   for (const [key, def] of Object.entries(GATEWAY_CHAINS)) {
-    // GATEWAY_CHAINS uses the same identifier with underscores; Circle
-    // uses dashes. Case-insensitive equality after normalization.
-    if (def.kitName.toUpperCase().replace(/_/g, '-') === blockchain.toUpperCase()) {
+    if (def.circleId.toUpperCase() === normalized) {
       return key as keyof typeof GATEWAY_CHAINS;
     }
   }

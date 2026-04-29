@@ -51,8 +51,15 @@ export interface GatewayChain {
   domain: number;
   /** Human-readable name (UI). */
   label: string;
-  /** Machine name matching App Kit bridge enum. */
+  /** Machine name matching App Kit bridge enum (legacy underscored
+   *  format — kept for App Kit interop only). */
   kitName: string;
+  /** Circle blockchain identifier in the dashed format. Matches:
+   *  - circle_wallets.chain column values
+   *  - Circle webhook notification.blockchain field
+   *  - Circle SDK createWallets({blockchains:[...]}) arg
+   *  This is the canonical id for everything except App Kit calls. */
+  circleId: string;
   viemChain: Chain;
   usdc: Address;
   rpcUrl: string;
@@ -67,6 +74,7 @@ export const GATEWAY_CHAINS: Record<string, GatewayChain> = {
     domain: 26,
     label: 'Arc Testnet',
     kitName: 'Arc_Testnet',
+    circleId: 'ARC-TESTNET',
     viemChain: arcTestnet,
     usdc: '0x3600000000000000000000000000000000000000',
     rpcUrl: 'https://rpc.testnet.arc.network',
@@ -75,6 +83,7 @@ export const GATEWAY_CHAINS: Record<string, GatewayChain> = {
     domain: 0,
     label: 'Ethereum Sepolia',
     kitName: 'Ethereum_Sepolia',
+    circleId: 'ETH-SEPOLIA',
     viemChain: sepolia,
     usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
     rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
@@ -83,6 +92,7 @@ export const GATEWAY_CHAINS: Record<string, GatewayChain> = {
     domain: 6,
     label: 'Base Sepolia',
     kitName: 'Base_Sepolia',
+    circleId: 'BASE-SEPOLIA',
     viemChain: baseSepolia,
     usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
     rpcUrl: 'https://base-sepolia-rpc.publicnode.com',
@@ -91,6 +101,7 @@ export const GATEWAY_CHAINS: Record<string, GatewayChain> = {
     domain: 1,
     label: 'Avalanche Fuji',
     kitName: 'Avalanche_Fuji',
+    circleId: 'AVAX-FUJI',
     viemChain: avalancheFuji,
     usdc: '0x5425890298aed601595a70AB815c96711a31Bc65',
     rpcUrl: 'https://avalanche-fuji-c-chain-rpc.publicnode.com',
@@ -99,6 +110,7 @@ export const GATEWAY_CHAINS: Record<string, GatewayChain> = {
     domain: 2,
     label: 'Optimism Sepolia',
     kitName: 'Optimism_Sepolia',
+    circleId: 'OP-SEPOLIA',
     viemChain: optimismSepolia,
     usdc: '0x5fd84259d66Cd46123540766Be93DFE6D43130D7',
     rpcUrl: 'https://optimism-sepolia-rpc.publicnode.com',
@@ -107,6 +119,7 @@ export const GATEWAY_CHAINS: Record<string, GatewayChain> = {
     domain: 3,
     label: 'Arbitrum Sepolia',
     kitName: 'Arbitrum_Sepolia',
+    circleId: 'ARB-SEPOLIA',
     viemChain: arbitrumSepolia,
     usdc: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
     rpcUrl: 'https://arbitrum-sepolia-rpc.publicnode.com',
@@ -115,6 +128,7 @@ export const GATEWAY_CHAINS: Record<string, GatewayChain> = {
     domain: 7,
     label: 'Polygon Amoy',
     kitName: 'Polygon_Amoy_Testnet',
+    circleId: 'MATIC-AMOY',
     viemChain: polygonAmoy,
     usdc: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
     rpcUrl: 'https://polygon-amoy-bor-rpc.publicnode.com',

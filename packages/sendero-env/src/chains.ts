@@ -128,13 +128,17 @@ export function getTenantTreasuryChains(): readonly string[] {
  * USDC lands here, the auto-sweep webhook drains it into the tenant
  * Gateway EOA → Gateway unified balance.
  *
- * Phase 2: Arc only. Phase 3 adds AVAX-FUJI; Phase 4 adds SOL-DEVNET
- * (which gets its own provisioning path because Solana can't sign EVM
- * EIP-3009). The list IS the seam — adding a chain = appending here.
+ * Phase 2: Arc only. Phase 3 adds AVAX (corporate-buyer-friendly EVM
+ * chain with $-cheap gas; same EOA signs because chainId-aware EIP-3009
+ * works on USDC's domain). Phase 4 adds SOL-DEVNET (different
+ * provisioning path because Solana can't sign EVM EIP-3009).
+ *
+ * The list IS the seam — adding a chain = appending here. Backfill cron
+ * + login hook auto-provision for every existing tenant on next pass.
  */
 export function getTenantOperationsChains(): readonly string[] {
   const c = activeChains();
-  return [c.arc] as const;
+  return [c.arc, c.avax] as const;
 }
 
 /**
