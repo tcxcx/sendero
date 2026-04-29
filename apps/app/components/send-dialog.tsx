@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
 import { DialogShell } from './dialog-shell';
+import { TokenIcon, BlockchainIcon } from '@sendero/icons';
 
 type Token = 'USDC' | 'EURC';
 
@@ -74,6 +75,15 @@ export function SendDialog() {
       </p>
 
       <div className="dlg-row">
+        <span className="dlg-label">Chain</span>
+        <div className="snd-chain">
+          <BlockchainIcon chain="Arc_Testnet" size={18} />
+          <span className="snd-chain-name">Arc Testnet</span>
+          <span className="snd-locked">same-chain</span>
+        </div>
+      </div>
+
+      <div className="dlg-row">
         <span className="dlg-label">Token</span>
         <div className="dlg-segmented">
           {(['USDC', 'EURC'] as Token[]).map(t => (
@@ -83,6 +93,7 @@ export function SendDialog() {
               className={`dlg-seg-btn ${tok === t ? 'sel' : ''}`}
               onClick={() => setToken(t)}
             >
+              <TokenIcon token={t} size={13} />
               {t}
             </button>
           ))}
@@ -150,6 +161,30 @@ export function SendDialog() {
           </>
         )}
       </button>
+
+      <style jsx>{`
+        .snd-chain {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .snd-chain-name {
+          font-family: var(--font-mono);
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.06em;
+          color: var(--text);
+        }
+        .snd-locked {
+          font-family: var(--font-mono);
+          font-size: 9px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text-faint);
+          padding: 1px 5px;
+          border: 1px solid var(--border);
+        }
+      `}</style>
     </DialogShell>
   );
 }

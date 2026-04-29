@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
 import { DialogShell } from './dialog-shell';
+import { TokenIcon, BlockchainIcon } from '@sendero/icons';
 import {
   ARC_BRIDGE_SOURCES,
   bridgeChainLabel,
@@ -81,27 +82,63 @@ export function BridgeDialog() {
         both chains.
       </p>
 
+      {/* Live route visualization — updates as chain selection changes */}
+      <div className="br-route">
+        <div className="br-route-end">
+          <BlockchainIcon chain={chain} size={20} />
+          <span className="br-route-label">{bridgeChainLabel(chain)}</span>
+        </div>
+        <svg className="br-arrow" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path
+            d="M5 12h14m0 0l-5-5m5 5l-5 5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <div className="br-route-end">
+          <BlockchainIcon chain="Arc_Testnet" size={20} />
+          <span className="br-route-label">Arc Testnet</span>
+        </div>
+        <span className="br-token-pill">
+          <TokenIcon token="USDC" size={13} />
+          <span>USDC</span>
+        </span>
+      </div>
+
       <div className="dlg-row">
         <span className="dlg-label">Source chain</span>
-        <select className="dlg-select" value={chain} onChange={e => setFromChain(e.target.value)}>
-          {ARC_BRIDGE_SOURCES.map(id => (
-            <option key={id} value={id}>
-              {bridgeChainLabel(id)}
-            </option>
-          ))}
-        </select>
+        <div className="br-chain-select">
+          <BlockchainIcon chain={chain} size={16} />
+          <select
+            className="dlg-select br-select"
+            value={chain}
+            onChange={e => setFromChain(e.target.value)}
+          >
+            {ARC_BRIDGE_SOURCES.map(id => (
+              <option key={id} value={id}>
+                {bridgeChainLabel(id)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="dlg-row">
         <span className="dlg-label">Amount · USDC</span>
-        <input
-          className="dlg-input"
-          style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}
-          inputMode="decimal"
-          value={amt}
-          onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-          placeholder="0.00"
-        />
+        <div className="br-amount-row">
+          <TokenIcon token="USDC" size={14} />
+          <input
+            className="dlg-input"
+            style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', flex: 1 }}
+            inputMode="decimal"
+            value={amt}
+            onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+            placeholder="0.00"
+          />
+        </div>
       </div>
 
       {error && <div className="dlg-err">{error}</div>}
@@ -110,24 +147,9 @@ export function BridgeDialog() {
           <strong>
             Bridge submitted — {steps.length} step{steps.length !== 1 && 's'}.
           </strong>
-          <div
-            style={{
-              marginTop: 8,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-            }}
-          >
+          <div className="br-steps">
             {steps.map((s, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'auto 1fr auto',
-                  gap: 8,
-                  alignItems: 'center',
-                }}
-              >
+              <div key={i} className="br-step">
                 <span
                   style={{
                     color:
@@ -136,6 +158,7 @@ export function BridgeDialog() {
                         : s.state === 'error'
                           ? 'var(--accent-rose)'
                           : 'var(--text-dim)',
+                    fontSize: 8,
                   }}
                 >
                   ●
@@ -178,6 +201,77 @@ export function BridgeDialog() {
           </>
         )}
       </button>
+
+      <style jsx>{`
+        .br-route {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+          background: var(--bg-elev);
+        }
+        .br-route-end {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+          min-width: 0;
+        }
+        .br-route-label {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.06em;
+          color: var(--text);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .br-arrow {
+          color: var(--text-faint);
+          flex-shrink: 0;
+        }
+        .br-token-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-family: var(--font-mono);
+          font-size: 9.5px;
+          letter-spacing: 0.1em;
+          color: var(--text-dim);
+          padding: 2px 7px;
+          border: 1px solid var(--border);
+          background: var(--bg);
+          flex-shrink: 0;
+        }
+        .br-chain-select {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+        }
+        .br-select {
+          flex: 1;
+        }
+        .br-amount-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+        }
+        .br-steps {
+          margin-top: 8px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .br-step {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          gap: 8px;
+          align-items: center;
+        }
+      `}</style>
     </DialogShell>
   );
 }

@@ -2644,6 +2644,10 @@ hr.rule {
   border: 1.5px solid var(--border);
 }
 .dlg-seg-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   background: var(--bg);
   border: none;
   padding: 10px 8px;
