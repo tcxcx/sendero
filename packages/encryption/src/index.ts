@@ -86,13 +86,54 @@ const HKDF_SALT = Buffer.from('sendero.encryption.v1', 'utf8');
 // ── KEK loading ───────────────────────────────────────────────────────
 
 /**
- * Load a versioned KEK from the env. Phase 1: `SENDERO_KEK` (always v1)
- * + `SENDERO_KEK_V2`, `SENDERO_KEK_V3`, … for rotation. Phase 5 swaps
- * this for a KMS-backed implementation that returns decryption oracles
- * instead of raw KEK bytes (callers will use the same `deriveDek()` API
- * — only this loader changes).
+ * Process-scoped KEK cache. Both env-mode and KMS-mode populate this.
+ * Vercel cold starts re-decrypt; warm functions reuse the cached KEK.
+ *
+ * For KMS mode this matters more — decrypting via Google Cloud KMS is
+ * a network round trip (~50-200ms). Without the cache, every signer
+ * decrypt would burn one. With it, the cost is paid once per cold start.
  */
-function loadKek(version: number): Buffer {
+const kekCache = new Map<number, Buffer>();
+
+/**
+ * Phase 5 P5.2 — KMS-backed KEK with env fallback.
+ *
+ * Two modes selected by `SENDERO_KEK_PROVIDER` env:
+ *
+ *   - `'env'` (default): read raw KEK from `SENDERO_KEK` (v1) or
+ *     `SENDERO_KEK_V<N>` (rotation). Plaintext base64-encoded 32 bytes.
+ *     Dev workflow stays the same — no GCP setup needed locally.
+ *
+ *   - `'gcp-kms'`: read base64-encoded KMS ciphertext from
+ *     `SENDERO_KEK_CIPHERTEXT` (v1) or `SENDERO_KEK_CIPHERTEXT_V<N>`,
+ *     decrypt via Google Cloud KMS using the resource path in
+ *     `SENDERO_KEK_KMS_RESOURCE`. The plaintext KEK never appears in
+ *     env or DB; only KMS ever sees it post-encryption.
+ *
+ * In both modes the resolved 32-byte KEK is cached per version.
+ *
+ * Phase 5+ rotation playbook:
+ *   1. Generate new KEK (`openssl rand -base64 32`)
+ *   2. Encrypt with KMS via `bun run packages/encryption/bin/wrap-kek.ts`
+ *      (script lands with the GCP KMS docs in PHASE_5 runbook)
+ *   3. Set `SENDERO_KEK_CIPHERTEXT_V<N+1>` on Vercel
+ *   4. Bump `CURRENT_KEK_VERSION` in code, deploy
+ *   5. Lazy re-encrypt: existing rows re-wrap on next read via the
+ *      kekVersion column (handled by callers, not this module)
+ */
+async function loadKek(version: number): Promise<Buffer> {
+  const cached = kekCache.get(version);
+  if (cached) return cached;
+
+  const provider = process.env.SENDERO_KEK_PROVIDER ?? 'env';
+  const kek =
+    provider === 'gcp-kms' ? await loadKekFromKms(version) : loadKekFromEnv(version);
+
+  kekCache.set(version, kek);
+  return kek;
+}
+
+function loadKekFromEnv(version: number): Buffer {
   const envKey = version === 1 ? 'SENDERO_KEK' : `SENDERO_KEK_V${version}`;
   const raw = process.env[envKey];
   if (!raw) {
@@ -114,6 +155,70 @@ function loadKek(version: number): Buffer {
   return kek;
 }
 
+/**
+ * KMS-backed KEK loader. Fetches the KMS-encrypted ciphertext from env,
+ * asks Google Cloud KMS to decrypt, returns the plaintext KEK.
+ *
+ * Lazy import keeps the @google-cloud/kms SDK out of cold-start cost
+ * for env-mode (the default). Only KMS-mode pays the import cost.
+ *
+ * Auth: standard Google Cloud auth resolution. Sendero already wires
+ * GOOGLE_APPLICATION_CREDENTIALS_JSON for Vertex AI; same path applies.
+ */
+async function loadKekFromKms(version: number): Promise<Buffer> {
+  const ciphertextEnv =
+    version === 1 ? 'SENDERO_KEK_CIPHERTEXT' : `SENDERO_KEK_CIPHERTEXT_V${version}`;
+  const resourceEnv = 'SENDERO_KEK_KMS_RESOURCE';
+
+  const ciphertext = process.env[ciphertextEnv];
+  if (!ciphertext) {
+    throw new Error(
+      `${ciphertextEnv} is not set. SENDERO_KEK_PROVIDER=gcp-kms requires the ` +
+        `KMS-encrypted KEK ciphertext (base64). See PHASE_5_PRODUCTION_HARDENING_RUNBOOK.md ` +
+        `for the wrap-kek script.`
+    );
+  }
+  const resource = process.env[resourceEnv];
+  if (!resource) {
+    throw new Error(
+      `${resourceEnv} is not set. Format: ` +
+        `projects/<project>/locations/<region>/keyRings/<ring>/cryptoKeys/<key>`
+    );
+  }
+
+  const { KeyManagementServiceClient } = await import('@google-cloud/kms');
+  const client = new KeyManagementServiceClient();
+  const [response] = await client.decrypt({
+    name: resource,
+    ciphertext: Buffer.from(ciphertext, 'base64'),
+  });
+
+  if (!response.plaintext) {
+    throw new Error(`KMS decrypt returned no plaintext for ${ciphertextEnv}`);
+  }
+  // KMS returns Uint8Array | string; normalize to Buffer.
+  const kek =
+    typeof response.plaintext === 'string'
+      ? Buffer.from(response.plaintext, 'base64')
+      : Buffer.from(response.plaintext);
+
+  if (kek.length !== KEY_LEN) {
+    throw new Error(
+      `KMS-decrypted KEK is ${kek.length} bytes, expected ${KEY_LEN}. ` +
+        `The wrapped ciphertext is wrong — re-run the wrap-kek script.`
+    );
+  }
+  return kek;
+}
+
+/**
+ * Test helper: clear the KEK cache so consecutive tests don't share
+ * cached values across env-var swaps. Production code never calls this.
+ */
+export function _clearKekCache(): void {
+  kekCache.clear();
+}
+
 // ── DEK derivation ────────────────────────────────────────────────────
 
 /**
@@ -123,16 +228,21 @@ function loadKek(version: number): Buffer {
  *
  * Deterministic: same KEK + same purpose + same contextId + same version
  * → same DEK. That's what makes ciphertexts portable across processes.
+ *
+ * Async because Phase 5 KMS-mode does a network round-trip on cold
+ * start. Cached after first call (per process, per kekVersion) so
+ * subsequent calls are sync-fast. Env-mode is sync at the bottom but
+ * still wrapped in async for API uniformity.
  */
-export function deriveDek(
+export async function deriveDek(
   purpose: EncryptionPurpose,
   contextId: string,
   kekVersion = CURRENT_KEK_VERSION
-): Buffer {
+): Promise<Buffer> {
   if (!contextId) {
     throw new Error('deriveDek: contextId required');
   }
-  const kek = loadKek(kekVersion);
+  const kek = await loadKek(kekVersion);
   const info = Buffer.from(
     `sendero.encryption|purpose=${purpose}|context=${contextId}|v=${kekVersion}`,
     'utf8'
@@ -149,10 +259,15 @@ export function deriveDek(
  * Encrypt plaintext under a derived DEK. Returns a single base64 string
  * containing `iv || ciphertext || tag`. Caller persists this string +
  * the `kekVersion` value used.
+ *
+ * Async because the underlying `deriveDek` is async (KMS round-trip on
+ * cold start). Cached KEK makes subsequent calls fast.
  */
-export function encrypt(args: EncryptArgs): { ciphertext: string; kekVersion: number } {
+export async function encrypt(
+  args: EncryptArgs
+): Promise<{ ciphertext: string; kekVersion: number }> {
   const kekVersion = args.kekVersion ?? CURRENT_KEK_VERSION;
-  const dek = deriveDek(args.purpose, args.contextId, kekVersion);
+  const dek = await deriveDek(args.purpose, args.contextId, kekVersion);
   const iv = randomBytes(IV_LEN);
   const cipher = createCipheriv('aes-256-gcm', dek, iv);
   const encrypted = Buffer.concat([cipher.update(args.plaintext, 'utf8'), cipher.final()]);
@@ -162,13 +277,13 @@ export function encrypt(args: EncryptArgs): { ciphertext: string; kekVersion: nu
 }
 
 /**
- * Decrypt a base64 envelope back to plaintext. Throws if the auth tag
+ * Decrypt a base58 envelope back to plaintext. Throws if the auth tag
  * fails (tampered ciphertext, wrong contextId, wrong purpose, wrong
  * KEK version — all surface as the same `Authentication failed` error
  * to avoid leaking which input was wrong).
  */
-export function decrypt(args: DecryptArgs): string {
-  const dek = deriveDek(args.purpose, args.contextId, args.kekVersion);
+export async function decrypt(args: DecryptArgs): Promise<string> {
+  const dek = await deriveDek(args.purpose, args.contextId, args.kekVersion);
   let envelope: Buffer;
   try {
     envelope = Buffer.from(args.ciphertext, 'base64');

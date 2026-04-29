@@ -45,6 +45,30 @@ import { decrypt, encrypt } from '@sendero/encryption';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import type { Hex, PrivateKeyAccount } from 'viem';
 
+/**
+ * Phase 5 P5.3 — caller context for the audit trail. Routes / crons /
+ * webhooks / tools pass this so WalletAccessLog rows record who touched
+ * the key on every cache miss. Cache hits don't decrypt and don't log.
+ *
+ * Surface = where the call came from. userId = Clerk userId when
+ * available (route, sometimes tool). context = free-form trace data
+ * (route path, cron name, notification.id) for forensics.
+ *
+ * Backwards-compat: callers that don't pass `caller` log with
+ * surface='unknown'. Plumbing it through every call site is Phase 5+
+ * follow-up work; the audit row still exists so we can grep by tenant
+ * if needed.
+ */
+export interface GatewaySignerCallerContext {
+  surface: 'route' | 'cron' | 'webhook' | 'tool' | 'cli' | 'unknown';
+  userId?: string;
+  context?: string;
+}
+
+export interface GetGatewaySignerOptions {
+  caller?: GatewaySignerCallerContext;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────
 
 /** Resolved Gateway signer — address + viem account ready to sign. */
@@ -107,7 +131,10 @@ export function invalidateGatewaySignerCache(tenantId: string): void {
  *   - Decrypted key derives a different address than the one stored
  *     (tampering or KEK mismatch).
  */
-export async function getOrCreateGatewaySigner(tenantId: string): Promise<TenantGatewaySigner> {
+export async function getOrCreateGatewaySigner(
+  tenantId: string,
+  options?: GetGatewaySignerOptions
+): Promise<TenantGatewaySigner> {
   if (!tenantId) {
     throw new Error('getOrCreateGatewaySigner: tenantId required');
   }
@@ -120,11 +147,12 @@ export async function getOrCreateGatewaySigner(tenantId: string): Promise<Tenant
   });
 
   if (existing) {
-    const signer = decryptSigner({
+    const signer = await decryptSigner({
       tenantId,
       address: existing.address,
       encryptedPrivateKey: existing.encryptedPrivateKey,
       kekVersion: existing.kekVersion,
+      caller: options?.caller,
     });
     cacheSet(tenantId, signer);
     return signer;
@@ -134,7 +162,7 @@ export async function getOrCreateGatewaySigner(tenantId: string): Promise<Tenant
   const privateKey = generatePrivateKey();
   const account = privateKeyToAccount(privateKey);
   const lowerAddress = account.address.toLowerCase();
-  const { ciphertext, kekVersion } = encrypt({
+  const { ciphertext, kekVersion } = await encrypt({
     plaintext: privateKey,
     purpose: 'gateway-signer',
     contextId: tenantId,
@@ -157,11 +185,12 @@ export async function getOrCreateGatewaySigner(tenantId: string): Promise<Tenant
         where: { tenantId },
       });
       if (winner) {
-        const signer = decryptSigner({
+        const signer = await decryptSigner({
           tenantId,
           address: winner.address,
           encryptedPrivateKey: winner.encryptedPrivateKey,
           kekVersion: winner.kekVersion,
+          caller: options?.caller,
         });
         cacheSet(tenantId, signer);
         return signer;
@@ -169,6 +198,16 @@ export async function getOrCreateGatewaySigner(tenantId: string): Promise<Tenant
     }
     throw err;
   }
+
+  // First-time provisioning: write an audit row tagged 'create' so the
+  // initial signer's existence is forensic-traceable. Subsequent
+  // decrypts log via decryptSigner.
+  void writeAuditLog({
+    tenantId,
+    kekVersion,
+    caller: options?.caller,
+    contextSuffix: 'create',
+  });
 
   const signer: TenantGatewaySigner = {
     address: lowerAddress as Hex,
@@ -184,7 +223,10 @@ export async function getOrCreateGatewaySigner(tenantId: string): Promise<Tenant
  * in routes that should fail closed (e.g. balance lookups before
  * provisioning has run) instead of provisioning on read.
  */
-export async function getGatewaySigner(tenantId: string): Promise<TenantGatewaySigner | null> {
+export async function getGatewaySigner(
+  tenantId: string,
+  options?: GetGatewaySignerOptions
+): Promise<TenantGatewaySigner | null> {
   if (!tenantId) {
     throw new Error('getGatewaySigner: tenantId required');
   }
@@ -197,11 +239,12 @@ export async function getGatewaySigner(tenantId: string): Promise<TenantGatewayS
   });
   if (!row) return null;
 
-  const signer = decryptSigner({
+  const signer = await decryptSigner({
     tenantId,
     address: row.address,
     encryptedPrivateKey: row.encryptedPrivateKey,
     kekVersion: row.kekVersion,
+    caller: options?.caller,
   });
   cacheSet(tenantId, signer);
   return signer;
@@ -214,15 +257,21 @@ interface DecryptArgs {
   address: string;
   encryptedPrivateKey: string;
   kekVersion: number;
+  caller?: GatewaySignerCallerContext;
 }
 
 /**
  * Decrypt a stored ciphertext, derive the address from the resulting
  * key, and verify it matches the stored address. Mismatch = corruption
  * or KEK error — fail loudly rather than sign with a wrong key.
+ *
+ * Phase 5: writes a WalletAccessLog row on every successful decrypt
+ * (best-effort, fire-and-forget). The decrypt is the cold path —
+ * callers that hit the in-memory cache (cacheGet) skip this function
+ * entirely, so audit volume is bounded by cold starts × tenant ops.
  */
-function decryptSigner(args: DecryptArgs): TenantGatewaySigner {
-  const plaintext = decrypt({
+async function decryptSigner(args: DecryptArgs): Promise<TenantGatewaySigner> {
+  const plaintext = await decrypt({
     ciphertext: args.encryptedPrivateKey,
     purpose: 'gateway-signer',
     contextId: args.tenantId,
@@ -238,11 +287,58 @@ function decryptSigner(args: DecryptArgs): TenantGatewaySigner {
     );
   }
 
+  // Audit the decrypt event. Fire-and-forget — don't gate the hot path
+  // on the audit DB. If audit writes fall over, signing still works;
+  // the operator gets a log warning instead of a wedged Gateway flow.
+  void writeAuditLog({
+    tenantId: args.tenantId,
+    kekVersion: args.kekVersion,
+    caller: args.caller,
+    contextSuffix: 'decrypt',
+  });
+
   return {
     address: account.address.toLowerCase() as Hex,
     account,
     kekVersion: args.kekVersion,
   };
+}
+
+/**
+ * Best-effort audit log write. Async but never awaited — the caller
+ * uses `void writeAuditLog(...)` so a slow / failed write doesn't
+ * extend the hot path. On error, log a warning so misconfig is
+ * visible but signing still proceeds.
+ */
+async function writeAuditLog(args: {
+  tenantId: string;
+  kekVersion: number;
+  caller: GatewaySignerCallerContext | undefined;
+  contextSuffix: string;
+}): Promise<void> {
+  try {
+    const callerSurface = args.caller?.surface ?? 'unknown';
+    const callerUserId = args.caller?.userId ?? null;
+    // Truncate context to ~200 chars so adversarial / accidental long
+    // strings don't bloat the table.
+    const callerContext = args.caller?.context
+      ? `${args.contextSuffix}:${args.caller.context}`.slice(0, 200)
+      : args.contextSuffix;
+    await prisma.walletAccessLog.create({
+      data: {
+        tenantId: args.tenantId,
+        callerSurface,
+        callerUserId,
+        kekVersion: args.kekVersion,
+        context: callerContext,
+      },
+    });
+  } catch (err) {
+    console.warn('[gateway-signer] audit log write failed (non-fatal)', {
+      tenantId: args.tenantId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**
