@@ -1,40 +1,38 @@
 /**
  * GET /api/cron/provision-gateway
  *
- * Phase 1 P1.7 — sweeper that fills gaps left when the synchronous
- * `organization.created` webhook couldn't provision Gateway artifacts
- * (transient Circle API failure, partial outage, missing env). The
- * webhook handler intentionally treats Gateway provisioning as
- * non-fatal so onboarding doesn't block; this cron makes sure no
- * tenant stays stuck without Gateway.
+ * Phase 1 P1.7 + Phase 2 P2.7 — sweeper that fills gaps left when:
+ *   - The synchronous `organization.created` Clerk webhook couldn't
+ *     provision Gateway artifacts (transient Circle API failure,
+ *     missing env, partial state).
+ *   - A Phase 3+ chain is added to `getTenantOperationsChains()` and
+ *     existing tenants need the new ops DCW backfilled.
  *
- * For each candidate tenant, ensures three rows exist:
+ * For each candidate tenant, ensures three categories of rows:
  *   1. TenantGatewaySigner — per-tenant Gateway EOA, encrypted at
  *      rest. getOrCreateGatewaySigner is idempotent + race-safe.
- *   2. CircleWallet(kind='operations', chain='ARC-TESTNET') — the ops
- *      DCW that receives inbound USDC for the Phase 1 sweep loop.
- *      Phase 3+ widens to per-chain rows as enabled domains expand.
- *   3. TenantGatewayConfig — depositor address + enabled domain set.
- *      Default Phase 1 = [26] (Arc Testnet only).
+ *   2. CircleWallet(kind='operations', chain=…) for every chain in
+ *      `getTenantOperationsChains()`. Phase 2 = ARC only; Phase 3+
+ *      auto-widens via the env-driven config.
+ *   3. TenantGatewayConfig — depositor address + enabled domain set
+ *      derived from the chain config. Upsert merges domains so adding
+ *      a chain doesn't retract previously enabled ones.
  *
- * Auth: CRON_SECRET header match (Vercel injects automatically).
- * Scheduled in apps/app/vercel.json.
- *
- * Bounded to 50 candidates per run. Tenants with all three rows
- * already present are filtered out at the query level.
+ * Auth: CRON_SECRET via Authorization: Bearer header (Vercel injects).
+ * Schedule: every 30 minutes (vercel.json). Bounded to 50 candidates
+ * per run.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
+import { backfillTenantOpsDcws } from '@sendero/circle/gateway-backfill';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { getEnabledGatewayDomains, getTenantOperationsChains } from '@sendero/env/chains';
 import { prisma } from '@sendero/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-const PHASE_1_CHAIN = 'ARC-TESTNET';
-const PHASE_1_DOMAINS = [26];
 const BATCH_SIZE = 50;
 
 interface ProvisionResult {
@@ -42,7 +40,8 @@ interface ProvisionResult {
   clerkOrgId: string;
   status: 'provisioned' | 'partial' | 'skipped' | 'failed';
   signerProvisioned?: boolean;
-  opsDcwProvisioned?: boolean;
+  opsChainsProvisioned?: string[];
+  opsChainsFailed?: Array<{ chain: string; error: string }>;
   configProvisioned?: boolean;
   error?: string;
 }
@@ -53,11 +52,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // Candidates: tenants missing any of (signer, config, ops DCW on Arc).
-  // Use a coarse filter (signer OR config null) to find work, then
-  // probe ops DCW per row — keeps the SQL simple while still narrowing
-  // the candidate set on the hot path.
-  const candidates = await prisma.tenant.findMany({
+  const requiredOpsChains = getTenantOperationsChains();
+
+  // Candidates: tenants missing any of (signer, config, ops DCW on
+  // any required chain). Two queries unioned, deduped:
+  //   1) Tenants with signer or config null — catches brand-new and
+  //      brand-failed.
+  //   2) Tenants with signer + config but missing an ops DCW on at
+  //      least one required chain — catches partial provisioning AND
+  //      Phase 3+ chain expansion (existing tenants need the new
+  //      chain's ops DCW).
+  const newTenantCandidates = await prisma.tenant.findMany({
     where: {
       clerkOrgId: { not: null },
       OR: [{ gatewaySigner: null }, { gatewayConfig: null }],
@@ -66,25 +71,29 @@ export async function GET(req: NextRequest) {
     take: BATCH_SIZE,
   });
 
-  // Augment with tenants who have signer + config but missing ops DCW
-  // on Arc. The above query catches new tenants; this catches a partial
-  // provision that landed signer + config but not the ops DCW.
   const opsGapCandidates = await prisma.tenant.findMany({
     where: {
       clerkOrgId: { not: null },
       gatewaySigner: { isNot: null },
       gatewayConfig: { isNot: null },
-      circleWallets: {
-        none: { kind: 'operations', chain: PHASE_1_CHAIN },
-      },
+      // Each tenant whose ops DCW chain count is less than the active
+      // required-chains count is a candidate. This single Prisma
+      // expression covers Phase 3+ chain expansion uniformly.
+      OR: requiredOpsChains.map(chain => ({
+        circleWallets: { none: { kind: 'operations', chain } },
+      })),
     },
     select: { id: true, clerkOrgId: true },
     take: BATCH_SIZE,
   });
 
-  const seen = new Set(candidates.map(c => c.id));
+  const seen = new Set(newTenantCandidates.map(c => c.id));
+  const candidates = [...newTenantCandidates];
   for (const c of opsGapCandidates) {
-    if (!seen.has(c.id)) candidates.push(c);
+    if (!seen.has(c.id)) {
+      candidates.push(c);
+      seen.add(c.id);
+    }
   }
 
   const results: ProvisionResult[] = [];
@@ -95,7 +104,8 @@ export async function GET(req: NextRequest) {
       clerkOrgId: c.clerkOrgId,
       status: 'skipped',
       signerProvisioned: false,
-      opsDcwProvisioned: false,
+      opsChainsProvisioned: [],
+      opsChainsFailed: [],
       configProvisioned: false,
     };
 
@@ -104,33 +114,39 @@ export async function GET(req: NextRequest) {
       const signer = await getOrCreateGatewaySigner(c.id);
       result.signerProvisioned = true;
 
-      // Step 2: ops DCW on Arc (idempotent on (tenantId, kind, chain)).
-      await provisionTenantOpsDcw({
+      // Step 2: ops DCWs across every required chain (idempotent +
+      // race-safe via the (tenantId, kind, chain) unique constraint).
+      const opsResult = await backfillTenantOpsDcws({
         tenantId: c.id,
         clerkOrgId: c.clerkOrgId,
-        chain: PHASE_1_CHAIN,
       });
-      result.opsDcwProvisioned = true;
+      result.opsChainsProvisioned = opsResult.created;
+      result.opsChainsFailed = opsResult.failed;
 
-      // Step 3: TenantGatewayConfig with Phase 1 enabled domain.
-      // Upsert keeps existing config intact while ensuring the row
-      // exists; we only refresh evmDepositorAddress so a previous
-      // partial config gets corrected if signer regenerated (shouldn't
-      // happen, but defensive).
+      // Step 3: TenantGatewayConfig with the latest enabled domains.
+      // Upsert merges domains so adding a chain doesn't retract
+      // previously enabled ones.
+      const requiredDomains = getEnabledGatewayDomains();
+      const existingConfig = await prisma.tenantGatewayConfig.findUnique({
+        where: { tenantId: c.id },
+        select: { enabledDomains: true },
+      });
+      const mergedDomains = mergeUniqueSorted(existingConfig?.enabledDomains, requiredDomains);
       await prisma.tenantGatewayConfig.upsert({
         where: { tenantId: c.id },
         create: {
           tenantId: c.id,
           evmDepositorAddress: signer.address,
-          enabledDomains: PHASE_1_DOMAINS,
+          enabledDomains: mergedDomains,
         },
         update: {
           evmDepositorAddress: signer.address,
+          enabledDomains: { set: mergedDomains },
         },
       });
       result.configProvisioned = true;
 
-      result.status = 'provisioned';
+      result.status = (result.opsChainsFailed?.length ?? 0) > 0 ? 'partial' : 'provisioned';
     } catch (err) {
       result.status = result.signerProvisioned ? 'partial' : 'failed';
       result.error = err instanceof Error ? err.message : String(err);
@@ -148,9 +164,21 @@ export async function GET(req: NextRequest) {
     partial: results.filter(r => r.status === 'partial').length,
     failed: results.filter(r => r.status === 'failed').length,
     skipped: results.filter(r => r.status === 'skipped').length,
+    requiredOpsChains: [...requiredOpsChains],
   };
 
   console.log('[cron/provision-gateway] run complete', summary);
 
   return NextResponse.json({ ok: true, ...summary, results });
+}
+
+/**
+ * Union of two domain ID sets, deduped, sorted ascending. Adding a
+ * chain to the config is monotonic — we never retract a domain a
+ * tenant has been transacting on.
+ */
+function mergeUniqueSorted(existing: number[] | undefined, incoming: number[]): number[] {
+  const merged = new Set<number>(existing ?? []);
+  for (const d of incoming) merged.add(d);
+  return [...merged].sort((a, b) => a - b);
 }

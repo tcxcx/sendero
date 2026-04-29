@@ -169,9 +169,7 @@ async function pollTransactionComplete(sdk: ScaDeploySdk, challengeId: string): 
       return tx.txHash;
     }
     if (state === 'FAILED' || state === 'DENIED') {
-      throw new Error(
-        `SCA deploy tx ${challengeId} ${state}: ${tx?.errorReason ?? 'unknown'}`
-      );
+      throw new Error(`SCA deploy tx ${challengeId} ${state}: ${tx?.errorReason ?? 'unknown'}`);
     }
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
   }

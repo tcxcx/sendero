@@ -110,9 +110,7 @@ export async function backfillTenantTreasuryWallets(
  * Idempotent on (tenantId, kind='operations', chain) via the Phase 2
  * unique constraint. Race-safe: P2002 is absorbed as no-op.
  */
-export async function backfillTenantOpsDcws(
-  args: BackfillTenantArgs
-): Promise<BackfillResult> {
+export async function backfillTenantOpsDcws(args: BackfillTenantArgs): Promise<BackfillResult> {
   const required = getTenantOperationsChains();
 
   const existingRows = await prisma.circleWallet.findMany({
@@ -161,9 +159,7 @@ export interface FullBackfillResult {
  * config provisioning (which depends on the signer + ops DCW being
  * present first).
  */
-export async function backfillTenantWallets(
-  args: BackfillTenantArgs
-): Promise<FullBackfillResult> {
+export async function backfillTenantWallets(args: BackfillTenantArgs): Promise<FullBackfillResult> {
   const [treasury, operations] = await Promise.all([
     backfillTenantTreasuryWallets(args),
     backfillTenantOpsDcws(args),
