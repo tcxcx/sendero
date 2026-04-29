@@ -117,25 +117,23 @@ describe('tamper detection', () => {
 describe('KEK loading', () => {
   test('missing KEK env throws with actionable message', () => {
     delete process.env.SENDERO_KEK;
-    expect(() =>
-      encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })
-    ).toThrow(/SENDERO_KEK is not set/);
+    expect(() => encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })).toThrow(
+      /SENDERO_KEK is not set/
+    );
     process.env.SENDERO_KEK = TEST_KEK_B64;
   });
 
   test('non-base64 KEK throws', () => {
     process.env.SENDERO_KEK = 'not!valid!base64!';
-    expect(() =>
-      encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })
-    ).toThrow();
+    expect(() => encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })).toThrow();
     process.env.SENDERO_KEK = TEST_KEK_B64;
   });
 
   test('wrong-length KEK throws', () => {
     process.env.SENDERO_KEK = Buffer.alloc(16, 0).toString('base64'); // 16 bytes, not 32
-    expect(() =>
-      encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })
-    ).toThrow(/32 bytes/);
+    expect(() => encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })).toThrow(
+      /32 bytes/
+    );
     process.env.SENDERO_KEK = TEST_KEK_B64;
   });
 });

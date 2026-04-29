@@ -11,13 +11,15 @@
     "./balance-sync": "./src/balance-sync.ts",
     "./app-kit": "./src/app-kit.ts",
     "./gateway": "./src/gateway.ts",
+    "./gateway-signer": "./src/gateway-signer.ts",
     "./modular-wallets": "./src/modular-wallets.ts",
     "./provision-tenant-wallet": "./src/provision-tenant-wallet.ts"
   },
   "dependencies": {
     "@sendero/env": "workspace:*",
     "@sendero/arc": "workspace:*",
-    "@sendero/database": "workspace:*"
+    "@sendero/database": "workspace:*",
+    "@sendero/encryption": "workspace:*"
   },
   "peerDependencies": {
     "@circle-fin/adapter-circle-wallets": "^1.2.5",
@@ -27,5 +29,8 @@
     "@circle-fin/modular-wallets-core": "^1.0.13",
     "viem": "^2.21.0",
     "webauthn-p256": "0.0.5"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
   }
 }
