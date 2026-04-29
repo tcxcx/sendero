@@ -16,6 +16,7 @@
     "./gateway-deposit": "./src/gateway-deposit.ts",
     "./gateway-sweep": "./src/gateway-sweep.ts",
     "./gateway-backfill": "./src/gateway-backfill.ts",
+    "./gateway-reconcile": "./src/gateway-reconcile.ts",
     "./gateway-solana-mint": "./src/gateway-solana-mint.ts",
     "./sca-deploy": "./src/sca-deploy.ts",
     "./modular-wallets": "./src/modular-wallets.ts",

@@ -126,8 +126,7 @@ async function loadKek(version: number): Promise<Buffer> {
   if (cached) return cached;
 
   const provider = process.env.SENDERO_KEK_PROVIDER ?? 'env';
-  const kek =
-    provider === 'gcp-kms' ? await loadKekFromKms(version) : loadKekFromEnv(version);
+  const kek = provider === 'gcp-kms' ? await loadKekFromKms(version) : loadKekFromEnv(version);
 
   kekCache.set(version, kek);
   return kek;

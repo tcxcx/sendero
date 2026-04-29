@@ -120,9 +120,9 @@ describe('tamper detection', () => {
 describe('KEK loading (env mode)', () => {
   test('missing KEK env throws with actionable message', async () => {
     delete process.env.SENDERO_KEK;
-    expect(
-      encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })
-    ).rejects.toThrow(/SENDERO_KEK is not set/);
+    expect(encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })).rejects.toThrow(
+      /SENDERO_KEK is not set/
+    );
     process.env.SENDERO_KEK = TEST_KEK_B64;
   });
 
@@ -136,9 +136,9 @@ describe('KEK loading (env mode)', () => {
 
   test('wrong-length KEK throws', async () => {
     process.env.SENDERO_KEK = Buffer.alloc(16, 0).toString('base64');
-    expect(
-      encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })
-    ).rejects.toThrow(/32 bytes/);
+    expect(encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })).rejects.toThrow(
+      /32 bytes/
+    );
     process.env.SENDERO_KEK = TEST_KEK_B64;
   });
 });
@@ -148,9 +148,9 @@ describe('KMS mode wiring', () => {
     process.env.SENDERO_KEK_PROVIDER = 'gcp-kms';
     delete process.env.SENDERO_KEK_CIPHERTEXT;
     delete process.env.SENDERO_KEK_KMS_RESOURCE;
-    expect(
-      encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })
-    ).rejects.toThrow(/SENDERO_KEK_CIPHERTEXT is not set/);
+    expect(encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })).rejects.toThrow(
+      /SENDERO_KEK_CIPHERTEXT is not set/
+    );
     delete process.env.SENDERO_KEK_PROVIDER;
   });
 
@@ -158,9 +158,9 @@ describe('KMS mode wiring', () => {
     process.env.SENDERO_KEK_PROVIDER = 'gcp-kms';
     process.env.SENDERO_KEK_CIPHERTEXT = 'AAAA';
     delete process.env.SENDERO_KEK_KMS_RESOURCE;
-    expect(
-      encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })
-    ).rejects.toThrow(/SENDERO_KEK_KMS_RESOURCE is not set/);
+    expect(encrypt({ plaintext: 'x', purpose: 'gateway-signer', contextId: 'a' })).rejects.toThrow(
+      /SENDERO_KEK_KMS_RESOURCE is not set/
+    );
     delete process.env.SENDERO_KEK_PROVIDER;
     delete process.env.SENDERO_KEK_CIPHERTEXT;
   });

@@ -19,11 +19,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { auth } from '@clerk/nextjs/server';
-import {
-  GATEWAY_CHAINS,
-  isSolanaChain,
-  transferViaGateway,
-} from '@sendero/circle/gateway';
+import { GATEWAY_CHAINS, isSolanaChain, transferViaGateway } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 

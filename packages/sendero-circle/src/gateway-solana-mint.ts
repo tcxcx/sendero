@@ -249,13 +249,7 @@ function encodeGatewayMintData(attestation: Buffer, signature: Buffer): Buffer {
   atLen.writeUInt32LE(attestation.length, 0);
   const sigLen = Buffer.alloc(4);
   sigLen.writeUInt32LE(signature.length, 0);
-  return Buffer.concat([
-    Buffer.from([12, 0]),
-    atLen,
-    attestation,
-    sigLen,
-    signature,
-  ]);
+  return Buffer.concat([Buffer.from([12, 0]), atLen, attestation, sigLen, signature]);
 }
 
 // ── Mint ─────────────────────────────────────────────────────────────
@@ -280,8 +274,14 @@ export async function mintOnSolana(params: {
   recipientOwner: PublicKey;
   needsAtaCreate: boolean;
 }): Promise<{ txSignature: string }> {
-  const { attestation, operatorSignature, destinationChain, recipientAta, recipientOwner, needsAtaCreate } =
-    params;
+  const {
+    attestation,
+    operatorSignature,
+    destinationChain,
+    recipientAta,
+    recipientOwner,
+    needsAtaCreate,
+  } = params;
 
   const minterProgramId = new PublicKey(destinationChain.gatewayMinterProgram);
   const usdcMint = new PublicKey(destinationChain.usdcMint);
@@ -346,10 +346,7 @@ export async function mintOnSolana(params: {
 
   const raw = tx.serialize();
   const signature = await connection.sendRawTransaction(raw, { skipPreflight: false });
-  await connection.confirmTransaction(
-    { signature, blockhash, lastValidBlockHeight },
-    'confirmed'
-  );
+  await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
 
   return { txSignature: signature };
 }

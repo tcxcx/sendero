@@ -456,9 +456,7 @@ export async function transferViaGateway(params: {
   // Lazy-load Solana helpers only when the destination needs them. Keeps
   // EVM-only callers (the gateway_transfer MCP tool, App Kit ops) from
   // pulling @solana/web3.js into their bundle.
-  const solanaHelpers = isSolanaChain(dst)
-    ? await import('./gateway-solana-mint')
-    : null;
+  const solanaHelpers = isSolanaChain(dst) ? await import('./gateway-solana-mint') : null;
 
   // Build burn-intent spec. EVM destinations: left-pad 0x addresses to
   // bytes32. Solana destinations: base58-decode 32-byte PublicKey (no
