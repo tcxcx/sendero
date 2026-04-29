@@ -820,8 +820,8 @@ model CircleWallet {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, kind, chain], name: "tenantId_kind_chain")
   @@index([tenantId, kind])
-  @@index([tenantId, kind, chain])
   @@map("circle_wallets")
 }
 
