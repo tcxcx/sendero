@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { SendParams } from '@circle-fin/app-kit';
-import { env } from '@sendero/env';
-import { getAppKit, getTreasuryAdapter, summarizeSend } from '@sendero/circle/app-kit';
+import { auth } from '@clerk/nextjs/server';
+import { getAppKit, createAdapterForSigner, summarizeSend } from '@sendero/circle/app-kit';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { prisma } from '@sendero/database';
 
 /**
  * POST /api/send
- * Same-chain treasury transfer on Arc Testnet via App Kit (viem adapter).
+ * Same-chain USDC/EURC transfer on Arc Testnet via App Kit (viem adapter).
+ * Uses the calling org's per-tenant gateway signer EOA — NOT the treasury.
+ *
  * Body: { to: 0xAddress, amount: decimal, token?: 'USDC'|'EURC' }
  */
 const BodySchema = z.object({
@@ -20,19 +24,25 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  if (!env.treasuryPrivateKey()) {
-    return NextResponse.json(
-      {
-        error: 'treasury_not_configured',
-        message: 'TREASURY_PRIVATE_KEY required in .env.local.',
-      },
-      { status: 503 }
-    );
+  const { orgId } = await auth();
+  if (!orgId) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { clerkOrgId: orgId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
+  }
+
+  const signer = await getOrCreateGatewaySigner(tenant.id);
+
   try {
     const body = BodySchema.parse(await req.json());
     const kit = getAppKit();
-    const adapter = getTreasuryAdapter();
+    const adapter = createAdapterForSigner(signer.privateKey);
 
     const params: SendParams = {
       from: {
@@ -50,13 +60,18 @@ export async function POST(req: NextRequest) {
       amount: body.amount,
       token: body.token,
       to: body.to,
+      signerAddress: signer.address,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid_input', issues: err.issues }, { status: 400 });
     }
-    const detail = err instanceof Error ? err.message : String(err);
-    console.error('[send] error:', detail);
+    const anyErr = err as any;
+    const detail: string =
+      anyErr?.cause?.trace?.rawError?.shortMessage ||
+      anyErr?.cause?.trace?.rawError?.message ||
+      (err instanceof Error ? err.message : String(err));
+    console.error('[send] error:', detail, { tenantId: tenant.id, signerAddress: signer.address });
     return NextResponse.json({ error: 'send_failed', message: detail }, { status: 500 });
   }
 }

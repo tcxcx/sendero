@@ -77,6 +77,9 @@ export interface TenantGatewaySigner {
   address: Hex;
   /** viem account that signs EIP-712 burn intents and EIP-3009 auths. */
   account: PrivateKeyAccount;
+  /** Raw private key — server-only, never serialized to client. Used by
+   *  App Kit viem adapter (createViemAdapterFromPrivateKey) for swap/send/bridge. */
+  privateKey: Hex;
   /** KEK version the underlying ciphertext was decrypted under. Useful
    *  for the rotation path that re-encrypts to the latest KEK on read. */
   kekVersion: number;
@@ -212,6 +215,7 @@ export async function getOrCreateGatewaySigner(
   const signer: TenantGatewaySigner = {
     address: lowerAddress as Hex,
     account,
+    privateKey,
     kekVersion,
   };
   cacheSet(tenantId, signer);
@@ -300,6 +304,7 @@ async function decryptSigner(args: DecryptArgs): Promise<TenantGatewaySigner> {
   return {
     address: account.address.toLowerCase() as Hex,
     account,
+    privateKey: plaintext as Hex,
     kekVersion: args.kekVersion,
   };
 }

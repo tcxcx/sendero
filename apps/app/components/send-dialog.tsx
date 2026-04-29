@@ -69,12 +69,12 @@ export function SendDialog() {
   return (
     <DialogShell
       open={open}
-      title="Send · treasury transfer"
+      title="Send"
       subtitle="Arc Testnet · same-chain"
       onClose={close}
     >
       <p className="dlg-sub">
-        Sends {tok} from the Sendero treasury to any Arc Testnet address. Gas paid in Arc-native
+        Sends {tok} from your gateway wallet to any Arc Testnet address. Gas paid in Arc-native
         USDC.
       </p>
 
@@ -134,7 +134,7 @@ export function SendDialog() {
         {busy ? (
           <>
             <span className="dlg-spinner" aria-hidden="true" />
-            <span>Signing transaction…</span>
+            <span>Signing…</span>
           </>
         ) : (
           <>

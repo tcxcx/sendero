@@ -74,13 +74,12 @@ export function SwapDialog() {
   return (
     <DialogShell
       open={open}
-      title="Swap · treasury rebalance"
+      title="Swap"
       subtitle="Circle App Kit · Arc Testnet"
       onClose={close}
     >
       <p className="dlg-sub">
-        Rebalances the Sendero corporate treasury between USDC and EURC on Arc. Gas paid in
-        Arc-native USDC.
+        Swap between USDC and EURC on Arc. Gas paid in Arc-native USDC.
       </p>
 
       <div className="dlg-row">
@@ -154,7 +153,7 @@ export function SwapDialog() {
         {busy ? (
           <>
             <span className="dlg-spinner" aria-hidden="true" />
-            <span>Signing treasury tx…</span>
+            <span>Signing…</span>
           </>
         ) : (
           <>

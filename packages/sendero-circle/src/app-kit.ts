@@ -60,6 +60,24 @@ export function getTreasuryAdapter(): ViemAdapter {
   return _adapter;
 }
 
+/**
+ * Per-request viem adapter backed by a per-tenant gateway signer private key.
+ * Not cached — callers hold a short-lived reference per request.
+ */
+export function createAdapterForSigner(privateKey: `0x${string}`): ViemAdapter {
+  return createViemAdapterFromPrivateKey({
+    privateKey,
+    getPublicClient: ({ chain }): PublicClient => {
+      const rpcUrl = rpcForChain(chain);
+      const client = createPublicClient({
+        chain,
+        transport: http(rpcUrl, { retryCount: 3, timeout: 15_000 }),
+      });
+      return client as PublicClient;
+    },
+  });
+}
+
 export function getKitKey(): string {
   const k = process.env.CIRCLE_KIT_KEY;
   if (!k) {
