@@ -1,49 +1,43 @@
 -- Phase 2 P2.2 — enforce one wallet per (tenant, kind, chain).
 --
 -- Phase 1 added a non-unique (tenantId, kind, chain) index for fast
--- per-chain ops DCW lookups. Phase 2 promotes that to UNIQUE so race-
--- safe insert paths can rely on the constraint instead of pre-checking.
+-- per-chain ops DCW lookups. Phase 2 promotes that to a UNIQUE
+-- constraint so race-safe insert paths can rely on the constraint
+-- instead of pre-checking. Closes:
 --
--- Race scenarios this closes:
 --   - Two concurrent organization.created webhooks (svix at-least-once)
---     both call provisionTenantOpsDcw → without unique, both could
---     CREATE rows with the same (tenant, kind, chain), yielding two
---     ops DCWs and Circle SDK + DB drift.
---   - Phase 2 backfill cron + login hook race on the same tenant.
+--     both calling provisionTenantOpsDcw — without unique, both could
+--     CREATE rows with the same (tenant, kind, chain).
+--   - Phase 2 backfill cron + login backfill hook racing on the same
+--     (tenant, chain).
 --
--- Phase 2 wallets currently exist for one (tenant, kind='treasury',
--- chain='ARC-TESTNET') row per tenant + zero or one (tenant,
--- kind='operations', chain='ARC-TESTNET') row per tenant. Both
--- already satisfy the unique constraint by construction; the audit
--- query below verifies this before promotion.
+-- Two-step migration to fail safely on any pre-existing duplicates:
+--   Step 1 (this file): CREATE UNIQUE INDEX CONCURRENTLY. Fails loud
+--                       with the offending tuple if dupes exist; never
+--                       locks the table for writes either way.
+--   Step 2 (separate):  ALTER TABLE ADD CONSTRAINT ... USING INDEX —
+--                       metadata-only, instant.
 --
--- Pre-flight audit (run via Supabase MCP / psql before migrating):
---   SELECT "tenantId", kind, chain, COUNT(*)
---   FROM   "circle_wallets"
---   GROUP  BY "tenantId", kind, chain
---   HAVING COUNT(*) > 1;
+-- PostgreSQL note: UNIQUE constraints don't support NOT VALID (that's
+-- CHECK / FOREIGN KEY only). The CONCURRENTLY index is the production-
+-- grade equivalent — index creation surfaces duplicates with a clear
+-- error including the tenantId + kind + chain values, without holding
+-- the table lock that a plain `ADD CONSTRAINT UNIQUE` would.
 --
---   Expected: zero rows. If any duplicates show up, dedup them
---   manually (keep the row Circle SDK still recognizes, archive the
---   stale row's circle_wallet_id) BEFORE running this migration.
+-- This file is intentionally NOT wrapped in BEGIN/COMMIT — Prisma on
+-- Postgres doesn't wrap migrations in a transaction by default, and
+-- CONCURRENTLY operations CANNOT run inside a transaction.
 --
--- Forward-compat: when Phase 3 adds AVAX-FUJI, no migration change
--- needed — the (AVAX-FUJI) ops DCW lands as a fresh row with the
--- same constraint.
+-- If this migration fails with a "could not create unique index"
+-- error, the deployer's recovery path:
+--   1. Read the error — Postgres logs the offending tuple.
+--   2. Investigate the duplicate (manually pick the canonical row;
+--      archive the stale circle_wallet_id Circle-side).
+--   3. Re-run the migration after dedup. The unique index creation
+--      is idempotent (IF NOT EXISTS).
 
-BEGIN;
+DROP INDEX CONCURRENTLY IF EXISTS "circle_wallets_tenantId_kind_chain_idx";
 
--- Drop the non-unique index — UNIQUE will replace it. Keep the
--- separate (tenantId, kind) index intact (it's used by listings that
--- don't filter by chain).
-DROP INDEX IF EXISTS "circle_wallets_tenantId_kind_chain_idx";
-
--- Add UNIQUE constraint. PostgreSQL implicitly creates a backing
--- unique index, which serves the same lookup pattern the old non-
--- unique index did. The named constraint matches Prisma's expected
--- shape (`tenantId_kind_chain`) so prisma migrate diff stays clean.
-ALTER TABLE "circle_wallets"
-  ADD CONSTRAINT "circle_wallets_tenantId_kind_chain_key"
-  UNIQUE ("tenantId", "kind", "chain");
-
-COMMIT;
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS
+  "circle_wallets_tenantId_kind_chain_key"
+  ON "circle_wallets" ("tenantId", "kind", "chain");
