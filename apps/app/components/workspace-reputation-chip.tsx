@@ -29,6 +29,7 @@ interface WorkspaceReputation {
     error: string | null;
   };
   publicUrl: string;
+  contractUrl: string | null;
 }
 
 export function WorkspaceReputationChip() {
@@ -134,6 +135,7 @@ export function WorkspaceReputationChip() {
                 holderAddress: data.holderAddress,
                 contract: data.contract,
                 publicUrl: data.publicUrl,
+                explorerUrl: data.contractUrl,
                 mintedAt: data.mintedAt,
                 cachedAt: data.cachedAt,
               }}
@@ -158,6 +160,7 @@ export function WorkspaceReputationChip() {
                 holderAddress: data.holderAddress,
                 contract: data.contract,
                 publicUrl: data.publicUrl,
+                explorerUrl: data.contractUrl,
                 mintedAt: data.mintedAt,
                 cachedAt: data.cachedAt,
               }}
@@ -182,6 +185,7 @@ export function WorkspaceReputationChip() {
                 holderAddress: data.holderAddress,
                 contract: data.contract,
                 publicUrl: data.publicUrl,
+                explorerUrl: data.contractUrl,
                 mintedAt: data.mintedAt,
                 cachedAt: data.cachedAt,
               }}
@@ -206,6 +210,7 @@ export function WorkspaceReputationChip() {
                 holderAddress: data.holderAddress,
                 contract: data.contract,
                 publicUrl: data.publicUrl,
+                explorerUrl: data.contractUrl,
                 mintedAt: data.mintedAt,
                 cachedAt: data.cachedAt,
               }}
@@ -222,9 +227,16 @@ export function WorkspaceReputationChip() {
               <Stat value={String(data.validationCount)} label="checks" />
             </ReputationStatDialog>
           </div>
-          <a className="wr-link" href={data.publicUrl} target="_blank" rel="noreferrer">
-            View public reputation →
-          </a>
+          <div className="wr-actions">
+            <a className="wr-link" href={data.publicUrl} target="_blank" rel="noreferrer">
+              View public reputation →
+            </a>
+            {data.contractUrl ? (
+              <a className="wr-link" href={data.contractUrl} target="_blank" rel="noreferrer">
+                View contract on Arc ↗
+              </a>
+            ) : null}
+          </div>
         </div>
       )}
 
@@ -300,7 +312,9 @@ export function WorkspaceReputationChip() {
         .wr-stat:last-child { border-right: 0; }
         .wr-stat-v { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
         .wr-stat-k { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-faint); }
-        .wr-link { display: block; padding: 10px 14px; text-align: center; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); text-decoration: none; }
+        .wr-actions { display: grid; border-top: 1px solid var(--border); }
+        .wr-link { display: block; padding: 10px 14px; text-align: center; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); text-decoration: none; }
+        .wr-link:first-child { border-top: 0; }
         .wr-link:hover { background: color-mix(in oklab, var(--ink) 6%, transparent); }
         @media (max-width: 720px) {
           .wr-chip { max-width: 132px; }

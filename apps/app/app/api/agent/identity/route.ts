@@ -72,6 +72,8 @@ export async function GET() {
       },
     });
 
+    const contract = indexed?.contract ?? IDENTITY_REGISTRY;
+
     return NextResponse.json({
       agentId: agentIdStr,
       providerAddress,
@@ -110,8 +112,11 @@ export async function GET() {
           createdAt: v.createdAt.toISOString(),
           resolvedAt: v.resolvedAt?.toISOString() ?? null,
         })) ?? [],
-      // Arcscan doesn't expose a per-tokenId page; link to the contract.
-      explorerUrl: `${explorerUrl}/address/${IDENTITY_REGISTRY}`,
+      publicUrl: `/agents/sendero/${agentIdStr}`,
+      // Arcscan doesn't expose a reliable per-tokenId page; link to the
+      // IdentityRegistry contract where the Sendero agent NFT lives.
+      contractUrl: `${explorerUrl}/address/${contract}`,
+      explorerUrl: `${explorerUrl}/address/${contract}`,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

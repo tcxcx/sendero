@@ -21,7 +21,7 @@
 
 import { ImageResponse } from 'next/og';
 
-import { loadAgentProfile } from '@/lib/agent-profile';
+import { loadAgentProfile, loadSenderoAgentProfile } from '@/lib/agent-profile';
 
 // Node runtime (not edge) because loadAgentProfile pulls in @sendero/database
 // → Prisma → not edge-compatible. Sub-200ms cold start on Fluid Compute is
@@ -65,10 +65,16 @@ export default async function OgImage({ params }: { params: Promise<RouteParams>
 
 async function renderOg(params: RouteParams) {
   const { kind, id } = params;
-  if (kind !== 'org' && kind !== 'user') {
+  if (kind !== 'sendero' && kind !== 'org' && kind !== 'user') {
     return notFoundCard();
   }
-  const profile = await loadAgentProfile({ kind, subjectId: id });
+  const profile =
+    kind === 'sendero'
+      ? await loadSenderoAgentProfile()
+      : await loadAgentProfile({ kind, subjectId: id });
+  if (kind === 'sendero' && profile?.agentId !== id) {
+    return notFoundCard();
+  }
   if (!profile) {
     return notFoundCard();
   }
@@ -124,7 +130,8 @@ async function renderOg(params: RouteParams) {
             display: 'flex',
           }}
         />
-        Sendero · {kind === 'org' ? 'Travel Agency' : 'Traveler'}
+        Sendero ·{' '}
+        {kind === 'sendero' ? 'Primary Agent' : kind === 'org' ? 'Travel Agency' : 'Traveler'}
       </div>
 
       {/* Display name */}

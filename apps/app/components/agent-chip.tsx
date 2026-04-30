@@ -31,6 +31,8 @@ interface AgentIdentity {
   } | null;
   recent: ReputationRecentFeedback[];
   validations: ReputationValidation[];
+  publicUrl: string;
+  contractUrl: string;
   explorerUrl: string;
 }
 
@@ -145,6 +147,7 @@ export function AgentChip() {
                 providerAddress: data.providerAddress,
                 holderAddress: data.indexed?.holderAddress ?? null,
                 contract: data.indexed?.contract ?? null,
+                publicUrl: data.publicUrl,
                 explorerUrl: data.explorerUrl,
                 mintedAt: data.indexed?.mintedAt ?? null,
                 cachedAt: data.indexed?.cachedAt ?? null,
@@ -170,6 +173,7 @@ export function AgentChip() {
                 providerAddress: data.providerAddress,
                 holderAddress: data.indexed?.holderAddress ?? null,
                 contract: data.indexed?.contract ?? null,
+                publicUrl: data.publicUrl,
                 explorerUrl: data.explorerUrl,
                 mintedAt: data.indexed?.mintedAt ?? null,
                 cachedAt: data.indexed?.cachedAt ?? null,
@@ -195,6 +199,7 @@ export function AgentChip() {
                 providerAddress: data.providerAddress,
                 holderAddress: data.indexed?.holderAddress ?? null,
                 contract: data.indexed?.contract ?? null,
+                publicUrl: data.publicUrl,
                 explorerUrl: data.explorerUrl,
                 mintedAt: data.indexed?.mintedAt ?? null,
                 cachedAt: data.indexed?.cachedAt ?? null,
@@ -220,6 +225,7 @@ export function AgentChip() {
                 providerAddress: data.providerAddress,
                 holderAddress: data.indexed?.holderAddress ?? null,
                 contract: data.indexed?.contract ?? null,
+                publicUrl: data.publicUrl,
                 explorerUrl: data.explorerUrl,
                 mintedAt: data.indexed?.mintedAt ?? null,
                 cachedAt: data.indexed?.cachedAt ?? null,
@@ -245,18 +251,23 @@ export function AgentChip() {
             </div>
           </div>
 
-          <a
-            className="ac-open"
-            href={data.explorerUrl}
-            target="_blank"
-            rel="noreferrer"
-            title="Open Arcscan (g x)"
-          >
-            View on Arcscan ↗
-            <kbd className="ac-kbd" aria-hidden>
-              g x
-            </kbd>
-          </a>
+          <div className="ac-actions">
+            <a className="ac-open" href={data.publicUrl} target="_blank" rel="noreferrer">
+              View public reputation →
+            </a>
+            <a
+              className="ac-open"
+              href={data.contractUrl ?? data.explorerUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="Open Arcscan (g x)"
+            >
+              View contract on Arc ↗
+              <kbd className="ac-kbd" aria-hidden>
+                g x
+              </kbd>
+            </a>
+          </div>
         </div>
       )}
 
@@ -450,6 +461,11 @@ const chipStyles = `
     color: var(--ink);
   }
 
+  .ac-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    border-top: 1px solid var(--border);
+  }
   .ac-open {
     padding: 10px 14px;
     border-top: 1px solid var(--border);
@@ -462,6 +478,7 @@ const chipStyles = `
     text-align: center;
     transition: background 120ms;
   }
+  .ac-open:first-child { border-top: 0; }
   .ac-open:hover {
     background: color-mix(in oklab, var(--ink) 6%, transparent);
   }

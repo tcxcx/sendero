@@ -11,7 +11,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { loadAgentProfile } from '@/lib/agent-profile';
+import { loadAgentProfile, loadSenderoAgentProfile } from '@/lib/agent-profile';
+import { env } from '@sendero/env';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -22,9 +23,26 @@ interface PageParams {
 }
 
 const KIND_DESCRIPTION: Record<string, string> = {
+  sendero:
+    'Primary Sendero AI travel agent — books, settles, and records reputation on Arc-Testnet.',
   org: 'Travel agency on the Sendero protocol — settles bookings on Arc-Testnet.',
   user: 'Sendero traveler with an on-chain identity on Arc-Testnet.',
 };
+
+const KIND_LABEL: Record<string, string> = {
+  sendero: 'Primary agent',
+  org: 'Agency',
+  user: 'Traveler',
+};
+
+async function loadPublicProfile(kind: string, id: string) {
+  if (kind === 'sendero') {
+    const profile = await loadSenderoAgentProfile();
+    return profile?.agentId === id ? profile : null;
+  }
+  if (kind !== 'org' && kind !== 'user') return null;
+  return loadAgentProfile({ kind, subjectId: id });
+}
 
 export async function generateMetadata({
   params,
@@ -32,8 +50,10 @@ export async function generateMetadata({
   params: Promise<PageParams>;
 }): Promise<Metadata> {
   const { kind, id } = await params;
-  if (kind !== 'org' && kind !== 'user') return { title: 'Not found · Sendero' };
-  const profile = await loadAgentProfile({ kind, subjectId: id });
+  if (kind !== 'sendero' && kind !== 'org' && kind !== 'user') {
+    return { title: 'Not found · Sendero' };
+  }
+  const profile = await loadPublicProfile(kind, id);
   if (!profile) return { title: 'Agent not found · Sendero' };
 
   const url = `https://app.sendero.travel/agents/${kind}/${id}`;
@@ -63,22 +83,23 @@ export async function generateMetadata({
 
 export default async function AgentProfilePage({ params }: { params: Promise<PageParams> }) {
   const { kind, id } = await params;
-  if (kind !== 'org' && kind !== 'user') notFound();
-  const profile = await loadAgentProfile({ kind, subjectId: id });
+  if (kind !== 'sendero' && kind !== 'org' && kind !== 'user') notFound();
+  const profile = await loadPublicProfile(kind, id);
   if (!profile) notFound();
 
-  const arcscanUrl = profile.agentId
-    ? `https://testnet-explorer.arc.com/token/${profile.contract}?a=${profile.agentId}`
-    : null;
+  const explorerUrl = env.arcExplorerUrl();
+  const contractUrl = `${explorerUrl}/address/${profile.contract}`;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[860px] flex-col gap-10 px-6 py-16 text-foreground">
       <header className="flex flex-col gap-2">
         <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-          Sendero · {kind === 'org' ? 'Agency' : 'Traveler'}
+          Sendero · {KIND_LABEL[kind]}
         </p>
         <h1 className="font-display text-3xl">{profile.displayName}</h1>
-        <p className="text-sm text-muted-foreground">{KIND_DESCRIPTION[kind]}</p>
+        <p className="text-sm text-muted-foreground">
+          {profile.description ?? KIND_DESCRIPTION[kind]}
+        </p>
       </header>
 
       <section className="grid grid-cols-2 gap-6 sm:grid-cols-4">
@@ -110,7 +131,7 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                 <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground">
                   <span title={r.fromAddress}>{r.fromAddress.slice(0, 10)}…</span>
                   <Link
-                    href={`https://testnet-explorer.arc.com/tx/${r.txHash}`}
+                    href={`${explorerUrl}/tx/${r.txHash}`}
                     target="_blank"
                     rel="noreferrer"
                     className="underline"
@@ -140,16 +161,14 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
       </section>
 
       <nav className="flex flex-wrap gap-3 text-sm">
-        {arcscanUrl ? (
-          <Link
-            href={arcscanUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-md border border-border px-3 py-2 text-foreground hover:bg-muted"
-          >
-            View on Arcscan
-          </Link>
-        ) : null}
+        <Link
+          href={contractUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-md border border-border px-3 py-2 text-foreground hover:bg-muted"
+        >
+          View contract on Arc
+        </Link>
         <Link
           href={`/agents/${kind}/${id}/metadata.json`}
           target="_blank"

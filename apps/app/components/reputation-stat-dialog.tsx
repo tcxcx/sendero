@@ -139,6 +139,28 @@ export function ReputationStatDialog({
                 ]}
               />
             </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {identity.publicUrl ? (
+                <a
+                  href={identity.publicUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="border border-[color:var(--ink)] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--ink)] hover:bg-[color:var(--tint-vermillion-soft)]"
+                >
+                  View public reputation
+                </a>
+              ) : null}
+              {identity.explorerUrl ? (
+                <a
+                  href={identity.explorerUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="border border-[color:var(--hairline-color)] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--ink)] hover:bg-[color:var(--surface-raised)]"
+                >
+                  View contract on Arc
+                </a>
+              ) : null}
+            </div>
 
             <section className="mt-5">
               <SectionHead
