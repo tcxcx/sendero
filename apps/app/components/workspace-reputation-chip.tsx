@@ -6,7 +6,7 @@ import {
   ReputationStatDialog,
   type ReputationRecentFeedback,
   type ReputationValidation,
-} from '@/components/reputation-stat-dialog';
+} from './reputation-stat-dialog';
 
 interface WorkspaceReputation {
   subjectId: string;

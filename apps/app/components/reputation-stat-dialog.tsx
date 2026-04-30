@@ -4,13 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { motion } from 'motion/react';
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from './ui/dialog';
 
 export interface ReputationRecentFeedback {
   stars: number;
