@@ -57,7 +57,7 @@
 - `packages/notifications/src/index.ts` — export `sendInvoice`
 
 **Env + health:**
-- `packages/sendero-env/src/validate.ts` — require `INVOICE_SIGNING_SECRET`, `BLOB_READ_WRITE_TOKEN`
+- `packages/env/src/validate.ts` — require `INVOICE_SIGNING_SECRET`, `BLOB_READ_WRITE_TOKEN`
 - `apps/app/app/api/health/route.ts` — surface new booleans
 - `apps/app/vercel.json` — add `crons` entry
 
@@ -1144,7 +1144,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 
 ### Task 11: Add `INVOICE_FONT_BASE_URL` + `INVOICE_SIGNING_SECRET` + `BLOB_READ_WRITE_TOKEN` to env
 
-- [ ] **Step 1: Add entries in `packages/sendero-env/src/validate.ts`**
+- [ ] **Step 1: Add entries in `packages/env/src/validate.ts`**
 
 Append to the `REQUIRED` array:
 
@@ -1157,7 +1157,7 @@ Append to the `REQUIRED` array:
   {
     name: 'BLOB_READ_WRITE_TOKEN',
     scope: 'invoicing',
-    hint: 'Vercel Blob token — auto-provisioned by Marketplace Blob integration on sendero-arc-web',
+    hint: 'Vercel Blob token — auto-provisioned by Marketplace Blob integration on arc-web',
   },
 ```
 
@@ -1173,12 +1173,12 @@ Expected: either all-green (if envs set) or gap report listing the two. Populate
 echo "INVOICE_SIGNING_SECRET=$(node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))")" >> .env.local
 ```
 
-For `BLOB_READ_WRITE_TOKEN`: add the Blob Marketplace integration to the `sendero-arc-web` Vercel project, then `vercel env pull apps/app/.env.local` and copy the value into root `.env.local`. Or paste manually from the Vercel dashboard.
+For `BLOB_READ_WRITE_TOKEN`: add the Blob Marketplace integration to the `arc-web` Vercel project, then `vercel env pull apps/app/.env.local` and copy the value into root `.env.local`. Or paste manually from the Vercel dashboard.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/sendero-env/src/validate.ts
+git add packages/env/src/validate.ts
 git commit --no-verify -m "chore(phase-11b): require INVOICE_SIGNING_SECRET + BLOB_READ_WRITE_TOKEN
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -2425,7 +2425,7 @@ Commit.
 
 ### Task 32: `env.invoiceSigningSecret()` accessor (if pattern is preferred)
 
-- [ ] Add to `packages/sendero-env/src/index.ts`:
+- [ ] Add to `packages/env/src/index.ts`:
 
 ```typescript
   invoiceSigningSecret: () => process.env.INVOICE_SIGNING_SECRET ?? null,

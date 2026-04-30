@@ -29,6 +29,51 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 const PER_RUN_LIMIT = 200;
+const SYNC_CONCURRENCY = 3;
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRateLimited(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes('429');
+}
+
+async function withRateLimitRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!isRateLimited(err)) throw err;
+    await sleep(1_500);
+    return fn();
+  }
+}
+
+async function runPool<T>(
+  items: T[],
+  worker: (item: T, index: number) => Promise<void>
+): Promise<Array<PromiseSettledResult<void>>> {
+  const results: Array<PromiseSettledResult<void>> = new Array(items.length);
+  let cursor = 0;
+
+  async function next() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      try {
+        await worker(items[index], index);
+        results[index] = { status: 'fulfilled', value: undefined };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+      await sleep(150);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(SYNC_CONCURRENCY, items.length) }, () => next()));
+  return results;
+}
 
 export async function GET(req: NextRequest) {
   const expected = process.env.CRON_SECRET;
@@ -78,19 +123,19 @@ export async function GET(req: NextRequest) {
   let syncedTravelers = 0;
   let failed = 0;
 
-  const tenantResults = await Promise.allSettled(
-    tenantWallets.map(async w => {
-      if (!w.circleWalletId) return;
-      const balances = await syncWalletBalance(tenantStore, w.circleWalletId);
-      const payload = JSON.stringify({
-        address: w.address,
-        usdc: balances.usdcMicro.toString(),
-        eurc: balances.eurcMicro.toString(),
-        updatedAt: balances.observedAt.toISOString(),
-      });
-      await prisma.$executeRaw`SELECT pg_notify('wallet_balance', ${payload})`.catch(() => null);
-    })
-  );
+  const tenantResults = await runPool(tenantWallets, async w => {
+    if (!w.circleWalletId) return;
+    const balances = await withRateLimitRetry(() =>
+      syncWalletBalance(tenantStore, w.circleWalletId)
+    );
+    const payload = JSON.stringify({
+      address: w.address,
+      usdc: balances.usdcMicro.toString(),
+      eurc: balances.eurcMicro.toString(),
+      updatedAt: balances.observedAt.toISOString(),
+    });
+    await prisma.$executeRaw`SELECT pg_notify('wallet_balance', ${payload})`.catch(() => null);
+  });
   tenantResults.forEach((r, i) => {
     if (r.status === 'fulfilled') {
       syncedTenants += 1;
@@ -109,19 +154,19 @@ export async function GET(req: NextRequest) {
     }
   });
 
-  const travelerResults = await Promise.allSettled(
-    travelerWallets.map(async w => {
-      if (!w.circleWalletId) return;
-      // We pass our wallet-row-store but reuse the same fetch so the
-      // Circle round-trip shape stays identical to the webhook path.
-      await syncWalletBalance(
+  const travelerResults = await runPool(travelerWallets, async w => {
+    if (!w.circleWalletId) return;
+    // We pass our wallet-row-store but reuse the same fetch so the
+    // Circle round-trip shape stays identical to the webhook path.
+    await withRateLimitRetry(() =>
+      syncWalletBalance(
         {
           updateByCircleId: async (id, patch) => travelerStore.updateByCircleId(id, patch),
         },
         w.circleWalletId
-      );
-    })
-  );
+      )
+    );
+  });
   travelerResults.forEach((r, i) => {
     if (r.status === 'fulfilled') {
       syncedTravelers += 1;

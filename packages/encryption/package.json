@@ -2,7 +2,7 @@
   "name": "@sendero/encryption",
   "version": "0.1.0",
   "private": true,
-  "description": "Authenticated symmetric encryption (AES-256-GCM) with HKDF-derived per-tenant DEKs. Used by @sendero/sendero-circle for Gateway signer key storage. KEK loaded from env in Phase 1; Google Cloud KMS-backed in Phase 5.",
+  "description": "Authenticated symmetric encryption (AES-256-GCM) with HKDF-derived per-tenant DEKs. Used by @sendero/circle for Gateway signer key storage. KEK loaded from env in Phase 1; Google Cloud KMS-backed in Phase 5.",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {

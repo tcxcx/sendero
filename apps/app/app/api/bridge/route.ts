@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-import type { BridgeParams } from '@circle-fin/app-kit';
 import { auth } from '@clerk/nextjs/server';
-import { getAppKit, createAdapterForSigner, summarizeBridge } from '@sendero/circle/app-kit';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
+import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
 
 /**
  * POST /api/bridge
@@ -39,32 +38,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
   }
 
-  const signer = await getOrCreateGatewaySigner(tenant.id);
-
   try {
     const body = BodySchema.parse(await req.json());
-    const kit = getAppKit();
-    const adapter = createAdapterForSigner(signer.privateKey);
-
-    const params: BridgeParams = {
-      from: {
-        adapter,
-        chain: body.fromChain,
-      },
-      to: {
-        adapter,
-        chain: 'Arc_Testnet',
-      },
+    const result = await materializeGatewayUsdcToArc({
+      tenantId: tenant.id,
       amount: body.amount,
-    };
-
-    const result = await kit.bridge(params);
+      preferredSourceChain: body.fromChain,
+    });
     return NextResponse.json({
-      ...summarizeBridge(result),
+      state: 'success',
+      txHash: result.mintHash,
+      explorerUrl: result.explorerUrl,
+      steps: [
+        {
+          name: 'gateway_transfer',
+          state: 'success',
+          txHash: result.mintHash,
+          explorerUrl: result.explorerUrl,
+        },
+      ],
       amount: body.amount,
-      fromChain: body.fromChain,
+      fromChain: result.from,
+      requestedFromChain: body.fromChain,
       toChain: 'Arc_Testnet',
-      signerAddress: signer.address,
+      signerAddress: result.signer.address,
+      source: 'gateway',
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -77,7 +75,6 @@ export async function POST(req: NextRequest) {
       (err instanceof Error ? err.message : String(err));
     console.error('[bridge] error:', detail, {
       tenantId: tenant.id,
-      signerAddress: signer.address,
     });
     return NextResponse.json({ error: 'bridge_failed', message: detail }, { status: 500 });
   }

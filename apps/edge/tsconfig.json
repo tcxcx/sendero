@@ -16,10 +16,10 @@
       "@sendero/tools/meter": ["../../packages/tools/src/meter.ts"],
       "@sendero/tools/pricing": ["../../packages/tools/src/pricing.ts"],
       "@sendero/tools/types": ["../../packages/tools/src/types.ts"],
-      "@sendero/circle": ["../../packages/sendero-circle/src/index.ts"],
-      "@sendero/circle/*": ["../../packages/sendero-circle/src/*"],
-      "@sendero/arc": ["../../packages/sendero-arc/src/index.ts"],
-      "@sendero/arc/*": ["../../packages/sendero-arc/src/*"],
+      "@sendero/circle": ["../../packages/circle/src/index.ts"],
+      "@sendero/circle/*": ["../../packages/circle/src/*"],
+      "@sendero/arc": ["../../packages/arc/src/index.ts"],
+      "@sendero/arc/*": ["../../packages/arc/src/*"],
       "@sendero/billing": ["../../packages/billing/src/index.ts"],
       "@sendero/billing/*": ["../../packages/billing/src/*"]
     }

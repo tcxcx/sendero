@@ -8,27 +8,28 @@
  * Tenant-scoped: requires Clerk session. Returns 503 if Gateway not
  * configured.
  *
- * Body: { from: chainKey, to: chainKey, amount: decimal, recipient?: 0x… }
+ * Body: { from?: chainKey, to: chainKey, amount: decimal, recipient?: 0x… }
  *
  * Records every transfer (success or failure) to GatewayTransferLog for
  * audit + reconciliation. Unique on circleTransferId so duplicate
  * submissions collapse cleanly.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-
 import { auth } from '@clerk/nextjs/server';
 import { GATEWAY_CHAINS, isSolanaChain, transferViaGateway } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
+import { selectTenantGatewayEvmSource } from '@/lib/gateway-treasury';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const BodySchema = z.object({
-  from: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]),
+  from: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]).optional(),
   to: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]),
   amount: z.string().regex(/^\d+(\.\d{1,6})?$/),
   /**
@@ -77,14 +78,6 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  if (body.from === body.to) {
-    return NextResponse.json(
-      { error: 'invalid_input', message: 'from and to must differ' },
-      { status: 400 }
-    );
-  }
-
-  const fromChain = GATEWAY_CHAINS[body.from as keyof typeof GATEWAY_CHAINS];
   const toChain = GATEWAY_CHAINS[body.to as keyof typeof GATEWAY_CHAINS];
 
   // Per-destination recipient format validation. The Zod schema accepts
@@ -128,7 +121,17 @@ export async function POST(req: NextRequest) {
     ? await prisma.user.findUnique({ where: { clerkUserId: userId }, select: { id: true } })
     : null;
 
-  const signer = await getOrCreateGatewaySigner(tenant.id);
+  const selected = body.from
+    ? {
+        signer: await getOrCreateGatewaySigner(tenant.id),
+        from: body.from as keyof typeof GATEWAY_CHAINS,
+      }
+    : await selectTenantGatewayEvmSource({
+        tenantId: tenant.id,
+        amount: body.amount,
+      });
+  const signer = selected.signer;
+  const fromChain = GATEWAY_CHAINS[selected.from];
 
   // Pre-create the transfer log so failures still leave an audit trail.
   // Status starts at 'attesting'; we update to 'confirmed' or 'failed'.
@@ -161,7 +164,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await transferViaGateway({
-      from: body.from as keyof typeof GATEWAY_CHAINS,
+      from: selected.from,
       to: body.to as keyof typeof GATEWAY_CHAINS,
       amountUsdc: body.amount,
       recipient: body.recipient,
@@ -181,7 +184,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       state: 'success',
-      from: body.from,
+      from: selected.from,
+      requestedFrom: body.from ?? null,
       to: body.to,
       amount: body.amount,
       recipient: body.recipient ?? null,

@@ -23,7 +23,7 @@ Phase-11 (invoicing) should absorb items 1 + 2 + billing-contact fields, or it w
 
 | # | Gap | Location | Fix |
 |---|---|---|---|
-| B1 | Batch settlement uses synthetic tx hashes — no real USDC transfer | `apps/app/app/api/cron/settle-nanopay-batches/route.ts:134`, `packages/billing/src/batch.ts` | Wire `packages/sendero-nanopayments` real transfer via treasury MSCA |
+| B1 | Batch settlement uses synthetic tx hashes — no real USDC transfer | `apps/app/app/api/cron/settle-nanopay-batches/route.ts:134`, `packages/billing/src/batch.ts` | Wire `packages/nanopayments` real transfer via treasury MSCA |
 | B2 | `confirm_duffel` tool missing | referenced in `packages/workflows/src/catalog.ts:55-70`, file absent in `packages/tools/src/` | Implement tool: accept duffelOrderHash → encode `confirmDuffel` onchain call |
 | B3 | `settle_booking` tool missing | same | Implement: reads booking state, encodes `settleBooking`, triggers vendor payout + commission fan-out |
 | B4 | Duffel refund/cancel path absent | no file covers failed/cancelled order | Add `cancel_booking` tool + escrow release; workflow branch for Duffel error |
@@ -48,7 +48,7 @@ Phase-11 (invoicing) should absorb items 1 + 2 + billing-contact fields, or it w
 | I10 | Itinerary delivery missing — no PDF, no .ics, no post-booking email | `packages/notifications` covers only invite | Add `sendItinerary()` template + .ics generation; reuse the phase-11 PDF pipeline |
 | I11 | Post-settle receipt missing | none | Fold into phase-11: "booking invoice" = PDF-emailed itinerary with escrow + commission disclosure |
 | I12 | Duplicate-claim UX guard missing; relies on on-chain revert | `apps/app/app/g/page.tsx` | Pre-check via `/api/guest/claimed` GET |
-| I13 | No cross-device passkey recovery (localStorage-only) | `packages/sendero-circle/src/modular-wallets.ts` | Post-hackathon |
+| I13 | No cross-device passkey recovery (localStorage-only) | `packages/circle/src/modular-wallets.ts` | Post-hackathon |
 | I14 | Guest invite NOT dispatched to WhatsApp / Slack DM (only email) | `prefundTripTool` returns link, no send routing for non-email channels | Add channel selector in tool + dispatcher |
 
 ### 🟡 Polish

@@ -80,7 +80,7 @@ async function handleRpc(
             protocolVersion: PROTOCOL_VERSION,
             capabilities: { tools: {} },
             serverInfo: {
-              name: 'sendero-arc',
+              name: 'arc',
               version: '0.9.5-alpha',
               description:
                 'AI travel agent + USDC settlement rail on Arc L2. Books real flights, hotels, and trip services; settles via Circle Gateway + App Kit.',
@@ -169,7 +169,7 @@ export const mcpApp = new Hono()
   )
   .get('/', c =>
     c.json({
-      name: 'sendero-arc',
+      name: 'arc',
       version: '0.9.5-alpha',
       description:
         'Sendero MCP — AI travel booking + Arc L2 USDC settlement + Circle Gateway treasury rails.',
@@ -177,7 +177,7 @@ export const mcpApp = new Hono()
       transports: ['streamable-http'],
       endpoint: '/api/mcp',
       tools: Object.keys(discoveryCatalog),
-      docs: 'https://github.com/criptopoeta/sendero-arc',
+      docs: 'https://github.com/criptopoeta/arc',
     })
   )
   .post('/', async c => {

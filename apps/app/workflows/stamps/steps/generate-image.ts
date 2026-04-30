@@ -2,7 +2,7 @@
  * Generate the stamp image via Gemini 2.5 Flash Image.
  *
  * Picks the first credentialed provider in priority order, matching
- * `packages/sendero-ocr/src/providers/gemini-multimodal.ts::pickProvider`:
+ * `packages/ocr/src/providers/gemini-multimodal.ts::pickProvider`:
  *
  *   1. **Vercel AI Gateway** — when `AI_GATEWAY_API_KEY` /
  *      `VERCEL_OIDC_TOKEN` is set. Consolidates billing, falls over

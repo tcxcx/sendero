@@ -465,7 +465,7 @@ Existing `/api/cron/settle-nanopay-batches` schedule also added if not already p
 - `packages/tools/src/index.ts` — register `generate_booking_invoice`
 - `packages/workflows/src/catalog.ts` — append `generate_booking_invoice` step to `bookFlightWorkflow` + `guestPrefundWorkflow` after `settle_escrow`
 - `packages/notifications/src/index.ts` — export `sendInvoice`
-- `packages/sendero-env/src/validate.ts` — require `INVOICE_SIGNING_SECRET`, `BLOB_READ_WRITE_TOKEN`
+- `packages/env/src/validate.ts` — require `INVOICE_SIGNING_SECRET`, `BLOB_READ_WRITE_TOKEN`
 - `apps/app/vercel.json` — `crons: [{ path: '/api/cron/generate-platform-bills', schedule: '0 2 1 * *' }]`
 - `apps/app/app/api/health/route.ts` — surface new env booleans
 - `package.json` — add `deploy:fonts`, `smoke:invoice-*` scripts
@@ -473,7 +473,7 @@ Existing `/api/cron/settle-nanopay-batches` schedule also added if not already p
 ## Env additions
 
 - `INVOICE_SIGNING_SECRET` — random 256-bit secret for JWT signing of public tokens. Generate once: `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`.
-- `BLOB_READ_WRITE_TOKEN` — auto-provisioned by Vercel Marketplace Blob integration on `sendero-arc-web`.
+- `BLOB_READ_WRITE_TOKEN` — auto-provisioned by Vercel Marketplace Blob integration on `arc-web`.
 - `INVOICE_FONT_BASE_URL` (optional) — override the default Vercel Blob base URL for fonts (useful for local-dev with a mirror).
 
 ## Rollout

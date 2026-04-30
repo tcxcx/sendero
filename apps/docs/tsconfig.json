@@ -11,16 +11,7 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"],
-      "@sendero/llms": ["../../packages/llms/src/index.ts"],
-      "@sendero/llms/*": ["../../packages/llms/src/*"],
-      "@sendero/locale": ["../../packages/locale/src/index.ts"],
-      "@sendero/locale/*": ["../../packages/locale/src/*"],
-      "@sendero/tools": ["../../packages/tools/src/index.ts"],
-      "@sendero/tools/pricing": ["../../packages/tools/src/pricing.ts"],
-      "@sendero/tools/types": ["../../packages/tools/src/types.ts"],
-      "@sendero/ui/language-selector": ["../../packages/ui/src/components/language-selector.tsx"],
-      "@sendero/ui/*": ["../../packages/ui/src/components/*.tsx"]
+      "@/*": ["./*"]
     }
   },
   "include": [

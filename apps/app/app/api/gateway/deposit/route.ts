@@ -1,7 +1,7 @@
 /**
  * POST /api/gateway/deposit
  *
- * Manually deposit USDC from the tenant's Gateway EOA into Circle Gateway.
+ * Manually sweep USDC from the tenant's per-chain operations wallet into Circle Gateway.
  * Used by the operator UI's "Deposit" dialog. The auto-sweep loop runs
  * the same path on every Circle inbound webhook; this route is the
  * support / one-off path.
@@ -11,19 +11,17 @@
  *
  * Body: { chain: chainKey, amount: decimal }
  *
- * Pre-condition: the tenant Gateway EOA must hold `amount` USDC on the
- * source chain. The route does NOT move USDC from anywhere — it signs
- * an EIP-3009 ReceiveWithAuthorization for already-held USDC and
- * submits depositWithAuthorization on-chain (paid by platform sponsor).
+ * Pre-condition: the tenant operations DCW must hold `amount` USDC on the
+ * source chain. The route mirrors the webhook sweep path.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
+import { type NextRequest, NextResponse } from 'next/server';
 
 import { auth } from '@clerk/nextjs/server';
 import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
-import { depositToGateway } from '@sendero/circle/gateway-deposit';
+import { sweepChain } from '@sendero/circle/gateway-sweep';
 import { prisma } from '@sendero/database';
+import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,19 +66,48 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await depositToGateway({
+    const chainKey = body.chain as keyof typeof GATEWAY_CHAINS;
+    const chain = GATEWAY_CHAINS[chainKey];
+    const opsWallet = await prisma.circleWallet.findFirst({
+      where: { tenantId: tenant.id, kind: 'operations', chain: chain.circleId },
+      select: { address: true, circleWalletId: true },
+    });
+    if (!opsWallet?.circleWalletId) {
+      return NextResponse.json(
+        {
+          error: 'operations_wallet_missing',
+          message:
+            `${chain.label} operations wallet is not provisioned yet. ` +
+            'Run /api/cron/provision-gateway or wait for the login backfill.',
+        },
+        { status: 503 }
+      );
+    }
+
+    const result = await sweepChain({
       tenantId: tenant.id,
-      chainKey: body.chain as keyof typeof GATEWAY_CHAINS,
+      opsDcwWalletId: opsWallet.circleWalletId,
+      opsDcwAddress: opsWallet.address,
+      chainKey,
       amount: body.amount,
       triggeredBy: 'manual',
     });
+    if (result.status !== 'confirmed' && result.status !== 'already-processed') {
+      return NextResponse.json(
+        {
+          error: 'gateway_deposit_failed',
+          message: result.status === 'failed' ? result.error : result.reason,
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({
       state: 'success',
       chain: body.chain,
       amount: body.amount,
       depositTxHash: result.depositTxHash,
       depositLogId: result.depositLogId,
-      alreadyProcessed: result.alreadyProcessed,
+      alreadyProcessed: result.status === 'already-processed',
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);

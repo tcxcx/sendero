@@ -4,8 +4,8 @@
  * DepositDialog — gateway-focused deposit instructions.
  *
  * Shows the operator's per-chain deposit addresses for USDC (via Circle
- * Gateway unified balance) and EURC (direct on-chain). Three chains:
- * Arc Testnet, Avalanche Fuji, Solana Devnet.
+ * Gateway unified balance) and EURC (direct on-chain). USDC chains:
+ * Arc Testnet, Avalanche Fuji, Arbitrum Sepolia, Solana Devnet.
  *
  * USDC deposits pool into the unified Gateway balance visible in the
  * UnifiedBalanceSection. EURC deposits land directly on each chain's
@@ -130,7 +130,7 @@ export function DepositDialog() {
     <DialogShell
       open={open}
       title="Deposit"
-      subtitle="Gateway · Arc · Avalanche · Solana"
+      subtitle="Gateway · Arc · Avalanche · Arbitrum · Solana"
       onClose={close}
     >
       <p className="dlg-sub">
@@ -169,7 +169,9 @@ export function DepositDialog() {
         <div className="dep-chains">
           {chains.length === 0 &&
             // Skeleton rows while loading
-            [0, 1, 2].map(i => <div key={i} className="dep-chain-skel" />)}
+            Array.from({ length: selectedToken === 'USDC' ? 4 : 2 }, (_, i) => (
+              <div key={i} className="dep-chain-skel" />
+            ))}
 
           {chains.map(chain => (
             <div key={chain.chain} className="dep-chain-row">

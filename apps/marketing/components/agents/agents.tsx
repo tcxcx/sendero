@@ -588,56 +588,6 @@ export function Agents({ pixelFontClass }: { pixelFontClass?: string }) {
           + the in-terminal scenarios already cover what those grids
           said, and the page reads tighter without the 21 cards.
         */}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 mt-4">
-          <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
-            <div className="p-4 space-y-4">
-              <h2 className="text-sm text-foreground">CLI</h2>
-              <ul className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] space-y-2">
-                <li className="text-sm">◇ Search, hold, confirm, settle, refund</li>
-                <li className="text-sm">◇ Structured JSON when piped, tables on TTY</li>
-                <li className="text-sm">◇ Browser-based key mint</li>
-                <li className="text-sm">◇ Workspace switching</li>
-                <li className="text-sm">◇ Single npx command</li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
-            <div className="p-4 space-y-4">
-              <h2 className="text-sm text-foreground">MCP</h2>
-              <ul className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] space-y-2">
-                <li className="text-sm">◇ ~49 tools across travel-ops</li>
-                <li className="text-sm">◇ HTTP transport — works with any MCP client</li>
-                <li className="text-sm">◇ Claude Desktop, Claude Code, Cursor, Codex, VS Code</li>
-                <li className="text-sm">◇ Same auth gate as the CLI</li>
-                <li className="text-sm">◇ Sandbox keys auto-mint on workspace create</li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="border border-border p-1 -mt-[1px] -ml-[1px]">
-            <div className="p-4 space-y-4">
-              <h2 className="text-sm text-foreground">Developer experience</h2>
-              <ul className="text-[color:color-mix(in_oklab,var(--fg)_55%,transparent)] space-y-2">
-                <li className="text-sm">◇ OpenAPI 3.1 spec at /api/openapi.json</li>
-                <li className="text-sm">◇ llms.txt advertises every surface</li>
-                <li className="text-sm">◇ TypeScript SDK auto-generated</li>
-                <li className="text-sm">◇ One canonical tool registry</li>
-                <li className="text-sm">◇ Open-source plugin + CLI</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div className="hidden md:flex justify-center mt-12">
-          <Link
-            href="https://app.sendero.travel"
-            className="inline-flex h-11 items-center justify-center bg-primary px-6 font-mono text-sm text-primary-foreground transition-colors hover:!bg-[color:var(--ink)] hover:!text-white"
-          >
-            Start automating
-          </Link>
-        </div>
       </div>
 
       <div className="max-w-screen-lg mx-auto mt-16 mb-24 px-4">

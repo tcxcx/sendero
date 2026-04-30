@@ -2,7 +2,7 @@
 # after the corresponding CF Workers Builds run finishes.
 #
 # Required secret: CLOUDFLARE_API_TOKEN
-# Scope: Account -> Workers Scripts -> Read (for the sendero-arc-edge worker only).
+# Scope: Account -> Workers Scripts -> Read (for the arc-edge worker only).
 # Generate at https://dash.cloudflare.com/profile/api-tokens.
 # If the secret is missing, the workflow fails soft with an explanatory comment.
 
@@ -23,7 +23,7 @@ permissions:
 
 env:
   CF_ACCOUNT_ID: 67f97ad58ab9673c26f9f5a2c27c99da
-  CF_WORKER_NAME: sendero-arc-edge
+  CF_WORKER_NAME: arc-edge
   CF_WORKER_HOST: tomas-cordero-esp.workers.dev
 
 jobs:

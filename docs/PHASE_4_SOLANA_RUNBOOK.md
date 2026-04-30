@@ -1,4 +1,4 @@
-# Phase 4 — Solana destination runbook
+# Phase 4 / 4.5 — Solana Gateway runbook
 
 This is what the operator does the day Phase 4 ships. The code change is
 in `@sendero/circle/gateway-solana-mint` and `transferViaGateway`'s
@@ -11,12 +11,11 @@ operational steps below are done.
   destination transfers. The tenant Gateway EOA still signs the burn
   intent (EVM EIP-712); Sendero's Solana relayer mints on the Solana
   side.
-- **Out of scope**: Solana as a SOURCE. Depositing USDC FROM Solana INTO
-  Gateway is Phase 4.5 — separate program flow, requires per-tenant
-  Solana wallet, different recorded-depositor model.
-
-If you try to transfer FROM Solana via the Phase 4 code, you'll get a
-clear error: `transferViaGateway: Solana sources not yet supported`.
+- **Phase 4.5 scope**: Solana as a deposit/source chain for unified
+  balance. Each tenant gets a Circle DCW Solana operations wallet; the
+  webhook/manual sweep path deposits that wallet's USDC through the
+  Circle Wallets adapter and Unified Balance Kit. Gateway balances query
+  domain 5 with the Solana depositor address, not the EVM signer.
 
 ## What automatically happens (no operator action)
 
@@ -113,20 +112,19 @@ vercel env pull .env.local
 only rotate, not decrypt back. Keep the keypair file as the source of
 truth in a password manager.
 
-### 4. Optional: register Circle webhook for Solana inbound
+### 4. Register Circle webhook for Solana inbound
 
-Phase 4 does NOT handle Solana inbound (that's Phase 4.5), but if you
-want forward-compat webhook events available, you can register the
-webhook now. Otherwise skip.
+Phase 4.5 handles Solana inbound. Register the webhook before exposing
+Solana deposit addresses in production.
 
 In the Circle Console → Notifications → add subscription:
 - URL: same as your existing `/api/webhooks/circle` endpoint
 - Blockchain: `SOL-DEVNET` (or `SOL` for mainnet)
 - Notification types: `transactions.inbound`, `transactions.outbound`
 
-The Phase 4 webhook fan-out will see the Solana notifications and skip
-them with a clear log line because `getTenantOperationsChains()` doesn't
-include Solana yet (Phase 4.5 will).
+The webhook fan-out matches the Solana operations wallet by
+`circleWalletId` and calls `sweepChain()`. For Solana chains, `sweepChain`
+uses the Circle Wallets adapter instead of the EVM EIP-3009 helper.
 
 ### 5. End-to-end smoke test
 
@@ -200,15 +198,14 @@ has Solana liquidity. Phase 4 doesn't auto-add Solana to every tenant's
 `enabledDomains` because Solana isn't an operations chain yet (Phase
 4.5 work).
 
-## What Phase 4.5 will need
+## Phase 4.5 implementation status
 
-When we add Solana SOURCE support:
-- Per-tenant Solana keypair (or Circle DCW Solana wallet) as recorded
-  depositor
-- Solana-side deposit program flow (different from EIP-3009 — uses
-  Solana's token program, not Ethereum's USDC contract)
-- Solana ops DCW provisioning branch in `provisionTenantOpsDcw`
-- Webhook fan-out for `transactions.inbound` on Solana chains
-- `gateway-solana-deposit.ts` to mirror the EVM deposit flow
-- Adding `'sol'` to `getTenantOperationsChains()` (the one-line gate
-  that's deliberately not flipped in Phase 4)
+- Per-tenant Solana Circle DCW operations wallet: implemented.
+- Solana Gateway depositor address on `TenantGatewayConfig`: implemented.
+- Solana inbound webhook fan-out: implemented via `sweepChain()`.
+- Manual Solana deposit support: implemented in `/api/gateway/deposit`.
+- Gateway balance query for Solana domain 5: implemented with the Solana
+  depositor address.
+- Solana burn-source transfers through `/api/gateway/transfer`: still use
+  the explicit Solana burn-intent path when needed; App Kit Unified
+  Balance spend is preferred for pooled source allocation.

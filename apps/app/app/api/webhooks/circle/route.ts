@@ -21,7 +21,7 @@
  * notification id.
  */
 
-import { type NextRequest, NextResponse, after } from 'next/server';
+import { after, type NextRequest, NextResponse } from 'next/server';
 
 import { syncWalletBalance } from '@sendero/circle/balance-sync';
 import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
@@ -29,7 +29,7 @@ import { sweepChain } from '@sendero/circle/gateway-sweep';
 import { prisma } from '@sendero/database';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
-import { gateCircleWebhook, type CircleNotification } from '@/lib/circle-webhook-verify';
+import { type CircleNotification, gateCircleWebhook } from '@/lib/circle-webhook-verify';
 import { webhookEventStore } from '@/lib/webhook-events';
 
 export const runtime = 'nodejs';
@@ -166,10 +166,10 @@ function mapCircleBlockchainToChainKey(blockchain: string): keyof typeof GATEWAY
  *
  * Skip conditions (all return cleanly without throwing):
  *   - Not a transactions.inbound event.
- *   - notification.walletId doesn't match any CircleWallet kind='operations'.
+ *   - notification.walletId doesn't match any Gateway deposit CircleWallet.
  *   - Tenant has no TenantGatewayConfig (provisioning gap; backfill cron
  *     will catch).
- *   - Tenant's gateway flag is disabled in metadata.
+ *   - Tenant has explicit metadata.gatewayEnabled === false.
  *   - Chain not in Sendero's GATEWAY_CHAINS map (Phase 1 = Arc only).
  */
 async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
@@ -198,24 +198,42 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
   const FINALIZED = new Set(['CONFIRMED', 'COMPLETE', 'COMPLETED']);
   if (!FINALIZED.has(state)) return;
 
-  const opsWallet = await prisma.circleWallet.findFirst({
-    where: { circleWalletId: walletId, kind: 'operations' },
+  const sweepWallet = await prisma.circleWallet.findFirst({
+    where: {
+      circleWalletId: walletId,
+      kind: 'operations',
+    },
     select: {
       id: true,
       tenantId: true,
       address: true,
       chain: true,
-      tenant: { select: { metadata: true } },
+      kind: true,
+      tenant: {
+        select: {
+          metadata: true,
+          gatewayConfig: { select: { tenantId: true } },
+        },
+      },
     },
   });
-  if (!opsWallet) return;
+  if (!sweepWallet) return;
 
-  // Feature flag check — gradual rollout per tenant. Defaults to
-  // disabled until the operator opts in (metadata.gatewayEnabled === true).
-  const meta = (opsWallet.tenant.metadata ?? {}) as Record<string, unknown>;
-  if (meta.gatewayEnabled !== true) {
+  if (!sweepWallet.tenant.gatewayConfig) {
+    console.log('[webhooks/circle] gateway config missing for tenant — skipping sweep', {
+      tenantId: sweepWallet.tenantId,
+      walletId,
+    });
+    return;
+  }
+
+  // Feature flag check — explicit false disables sweeps. Defaulting
+  // enabled keeps the webhook aligned with /api/gateway/deposit-info,
+  // which exposes Gateway deposit addresses once the config exists.
+  const meta = (sweepWallet.tenant.metadata ?? {}) as Record<string, unknown>;
+  if (meta.gatewayEnabled === false) {
     console.log('[webhooks/circle] gateway disabled for tenant — skipping sweep', {
-      tenantId: opsWallet.tenantId,
+      tenantId: sweepWallet.tenantId,
       walletId,
     });
     return;
@@ -231,8 +249,9 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
   }
 
   console.log('[webhooks/circle] dispatching gateway sweep', {
-    tenantId: opsWallet.tenantId,
+    tenantId: sweepWallet.tenantId,
     chainKey,
+    walletKind: sweepWallet.kind,
     walletId,
     amount,
     notificationId,
@@ -240,22 +259,22 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
 
   try {
     const result = await sweepChain({
-      tenantId: opsWallet.tenantId,
+      tenantId: sweepWallet.tenantId,
       opsDcwWalletId: walletId,
-      opsDcwAddress: opsWallet.address as `0x${string}`,
+      opsDcwAddress: sweepWallet.address,
       chainKey,
       amount,
       triggeredBy: 'auto',
       webhookEventId: notificationId,
     });
     console.log('[webhooks/circle] gateway sweep result', {
-      tenantId: opsWallet.tenantId,
+      tenantId: sweepWallet.tenantId,
       notificationId,
       result,
     });
   } catch (err) {
     console.error('[webhooks/circle] gateway sweep crashed', {
-      tenantId: opsWallet.tenantId,
+      tenantId: sweepWallet.tenantId,
       notificationId,
       error: err instanceof Error ? err.message : String(err),
     });

@@ -31,7 +31,7 @@ import {
   getAirlineCredit,
   listAirlineCredits,
   searchFlights,
-} from '../packages/sendero-duffel/src/index';
+} from '../packages/duffel/src/index';
 
 function section(title: string) {
   console.log('\n─── ' + title + ' ───');

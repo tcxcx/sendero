@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "sendero-arc",
+      "name": "arc",
       "devDependencies": {
         "@ai-sdk/openai": "^3.0.53",
         "@biomejs/biome": "2.3.8",
@@ -355,6 +355,18 @@
         "typescript": "^5.8.3",
       },
     },
+    "packages/arc": {
+      "name": "@sendero/arc",
+      "version": "0.1.0",
+      "dependencies": {
+        "@sendero/env": "workspace:*",
+      },
+      "peerDependencies": {
+        "@circle-fin/developer-controlled-wallets": "^8.0.0",
+        "@circle-fin/smart-contract-platform": "^10.3.0",
+        "viem": "^2.21.0",
+      },
+    },
     "packages/auth": {
       "name": "@sendero/auth",
       "version": "0.1.0",
@@ -398,6 +410,29 @@
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.8.3",
+      },
+    },
+    "packages/circle": {
+      "name": "@sendero/circle",
+      "version": "0.1.0",
+      "dependencies": {
+        "@sendero/arc": "workspace:*",
+        "@sendero/database": "workspace:*",
+        "@sendero/encryption": "workspace:*",
+        "@sendero/env": "workspace:*",
+        "@solana/spl-token": "^0.4.14",
+        "@solana/web3.js": "^1.98.4",
+        "bs58": "^6.0.0",
+      },
+      "peerDependencies": {
+        "@circle-fin/adapter-circle-wallets": "^1.2.5",
+        "@circle-fin/adapter-viem-v2": "^1.8.2",
+        "@circle-fin/app-kit": "^1.3.0",
+        "@circle-fin/developer-controlled-wallets": "^8.0.0",
+        "@circle-fin/modular-wallets-core": "^1.0.13",
+        "@circle-fin/unified-balance-kit": "^1.0.1",
+        "viem": "^2.21.0",
+        "webauthn-p256": "0.0.5",
       },
     },
     "packages/cli": {
@@ -455,6 +490,17 @@
         "typescript": "^5.8.3",
       },
     },
+    "packages/duffel": {
+      "name": "@sendero/duffel",
+      "version": "0.1.0",
+      "dependencies": {
+        "@sendero/env": "workspace:*",
+        "zod": "*",
+      },
+      "peerDependencies": {
+        "@duffel/api": "^4.0.0",
+      },
+    },
     "packages/encryption": {
       "name": "@sendero/encryption",
       "version": "0.1.0",
@@ -463,6 +509,17 @@
       },
       "devDependencies": {
         "typescript": "^5.8.3",
+      },
+    },
+    "packages/env": {
+      "name": "@sendero/env",
+      "version": "0.1.0",
+    },
+    "packages/erc8183": {
+      "name": "@sendero/erc8183",
+      "version": "0.1.0",
+      "peerDependencies": {
+        "viem": "^2.21.0",
       },
     },
     "packages/fonts": {
@@ -480,6 +537,16 @@
       "peerDependencies": {
         "next": "^15.0.0 || ^16.0.0",
         "react": "^19.0.0",
+      },
+    },
+    "packages/guest": {
+      "name": "@sendero/guest",
+      "version": "0.1.0",
+      "dependencies": {
+        "viem": "^2.21.0",
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3",
       },
     },
     "packages/icons": {
@@ -532,6 +599,16 @@
         "react-dom": "^19.1.0",
       },
     },
+    "packages/kapso": {
+      "name": "@sendero/kapso",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^3.25.76",
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
     "packages/langfuse": {
       "name": "@sendero/langfuse",
       "version": "0.1.0",
@@ -562,6 +639,30 @@
         "typescript": "^5.8.3",
       },
     },
+    "packages/multisig": {
+      "name": "@sendero/multisig",
+      "version": "0.1.0",
+      "dependencies": {
+        "@sendero/env": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "viem": "^2.21.0",
+        "webauthn-p256": "0.0.5",
+      },
+    },
+    "packages/nanopayments": {
+      "name": "@sendero/nanopayments",
+      "version": "0.1.0",
+      "dependencies": {
+        "@sendero/env": "workspace:*",
+      },
+      "peerDependencies": {
+        "viem": "^2.21.0",
+      },
+    },
     "packages/notifications": {
       "name": "@sendero/notifications",
       "version": "0.1.0",
@@ -576,107 +677,7 @@
         "@sendero/invoicing": "workspace:*",
       },
     },
-    "packages/sendero-arc": {
-      "name": "@sendero/arc",
-      "version": "0.1.0",
-      "dependencies": {
-        "@sendero/env": "workspace:*",
-      },
-      "peerDependencies": {
-        "@circle-fin/developer-controlled-wallets": "^8.0.0",
-        "@circle-fin/smart-contract-platform": "^10.3.0",
-        "viem": "^2.21.0",
-      },
-    },
-    "packages/sendero-circle": {
-      "name": "@sendero/circle",
-      "version": "0.1.0",
-      "dependencies": {
-        "@sendero/arc": "workspace:*",
-        "@sendero/database": "workspace:*",
-        "@sendero/encryption": "workspace:*",
-        "@sendero/env": "workspace:*",
-        "@solana/spl-token": "^0.4.14",
-        "@solana/web3.js": "^1.98.4",
-        "bs58": "^6.0.0",
-      },
-      "peerDependencies": {
-        "@circle-fin/adapter-circle-wallets": "^1.2.5",
-        "@circle-fin/adapter-viem-v2": "^1.8.2",
-        "@circle-fin/app-kit": "^1.3.0",
-        "@circle-fin/developer-controlled-wallets": "^8.0.0",
-        "@circle-fin/modular-wallets-core": "^1.0.13",
-        "viem": "^2.21.0",
-        "webauthn-p256": "0.0.5",
-      },
-    },
-    "packages/sendero-duffel": {
-      "name": "@sendero/duffel",
-      "version": "0.1.0",
-      "dependencies": {
-        "@sendero/env": "workspace:*",
-        "zod": "*",
-      },
-      "peerDependencies": {
-        "@duffel/api": "^4.0.0",
-      },
-    },
-    "packages/sendero-env": {
-      "name": "@sendero/env",
-      "version": "0.1.0",
-    },
-    "packages/sendero-erc8183": {
-      "name": "@sendero/erc8183",
-      "version": "0.1.0",
-      "peerDependencies": {
-        "viem": "^2.21.0",
-      },
-    },
-    "packages/sendero-guest": {
-      "name": "@sendero/guest",
-      "version": "0.1.0",
-      "dependencies": {
-        "viem": "^2.21.0",
-      },
-      "devDependencies": {
-        "typescript": "^5.8.3",
-      },
-    },
-    "packages/sendero-kapso": {
-      "name": "@sendero/kapso",
-      "version": "0.1.0",
-      "dependencies": {
-        "zod": "^3.25.76",
-      },
-      "devDependencies": {
-        "typescript": "^5.8.3",
-      },
-    },
-    "packages/sendero-multisig": {
-      "name": "@sendero/multisig",
-      "version": "0.1.0",
-      "dependencies": {
-        "@sendero/env": "workspace:*",
-      },
-      "devDependencies": {
-        "typescript": "^5.8.3",
-      },
-      "peerDependencies": {
-        "viem": "^2.21.0",
-        "webauthn-p256": "0.0.5",
-      },
-    },
-    "packages/sendero-nanopayments": {
-      "name": "@sendero/nanopayments",
-      "version": "0.1.0",
-      "dependencies": {
-        "@sendero/env": "workspace:*",
-      },
-      "peerDependencies": {
-        "viem": "^2.21.0",
-      },
-    },
-    "packages/sendero-ocr": {
+    "packages/ocr": {
       "name": "@sendero/ocr",
       "version": "0.1.0",
       "devDependencies": {
@@ -691,28 +692,6 @@
         "zod": "^3.25.0",
       },
     },
-    "packages/sendero-sherpa": {
-      "name": "@sendero/sherpa",
-      "version": "0.1.0",
-      "devDependencies": {
-        "typescript": "^5.8.3",
-      },
-    },
-    "packages/sendero-vault": {
-      "name": "@sendero/vault",
-      "version": "0.1.0",
-      "dependencies": {
-        "mrz-fast": "^1.0.9",
-      },
-      "devDependencies": {
-        "typescript": "^5.8.3",
-      },
-      "peerDependencies": {
-        "@sendero/database": "*",
-        "@sendero/ocr": "*",
-        "@sendero/sherpa": "*",
-      },
-    },
     "packages/seo": {
       "name": "@sendero/seo",
       "version": "0.1.0",
@@ -721,6 +700,13 @@
       },
       "peerDependencies": {
         "@sendero/locale": "*",
+      },
+    },
+    "packages/sherpa": {
+      "name": "@sendero/sherpa",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
       },
     },
     "packages/slack": {
@@ -811,6 +797,21 @@
       "peerDependencies": {
         "react": "^19",
         "react-dom": "^19",
+      },
+    },
+    "packages/vault": {
+      "name": "@sendero/vault",
+      "version": "0.1.0",
+      "dependencies": {
+        "mrz-fast": "^1.0.9",
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "@sendero/database": "*",
+        "@sendero/ocr": "*",
+        "@sendero/sherpa": "*",
       },
     },
     "packages/webhooks": {
@@ -1836,7 +1837,7 @@
 
     "@sendero/app": ["@sendero/app@workspace:apps/app"],
 
-    "@sendero/arc": ["@sendero/arc@workspace:packages/sendero-arc"],
+    "@sendero/arc": ["@sendero/arc@workspace:packages/arc"],
 
     "@sendero/auth": ["@sendero/auth@workspace:packages/auth"],
 
@@ -1844,7 +1845,7 @@
 
     "@sendero/bu": ["@sendero/bu@workspace:packages/bu"],
 
-    "@sendero/circle": ["@sendero/circle@workspace:packages/sendero-circle"],
+    "@sendero/circle": ["@sendero/circle@workspace:packages/circle"],
 
     "@sendero/claude-code-plugin": ["@sendero/claude-code-plugin@workspace:apps/claude-code-plugin"],
 
@@ -1858,19 +1859,19 @@
 
     "@sendero/docs": ["@sendero/docs@workspace:apps/docs"],
 
-    "@sendero/duffel": ["@sendero/duffel@workspace:packages/sendero-duffel"],
+    "@sendero/duffel": ["@sendero/duffel@workspace:packages/duffel"],
 
     "@sendero/edge": ["@sendero/edge@workspace:apps/edge"],
 
     "@sendero/encryption": ["@sendero/encryption@workspace:packages/encryption"],
 
-    "@sendero/env": ["@sendero/env@workspace:packages/sendero-env"],
+    "@sendero/env": ["@sendero/env@workspace:packages/env"],
 
-    "@sendero/erc8183": ["@sendero/erc8183@workspace:packages/sendero-erc8183"],
+    "@sendero/erc8183": ["@sendero/erc8183@workspace:packages/erc8183"],
 
     "@sendero/fonts": ["@sendero/fonts@workspace:packages/fonts"],
 
-    "@sendero/guest": ["@sendero/guest@workspace:packages/sendero-guest"],
+    "@sendero/guest": ["@sendero/guest@workspace:packages/guest"],
 
     "@sendero/help": ["@sendero/help@workspace:apps/help"],
 
@@ -1882,7 +1883,7 @@
 
     "@sendero/invoicing": ["@sendero/invoicing@workspace:packages/invoicing"],
 
-    "@sendero/kapso": ["@sendero/kapso@workspace:packages/sendero-kapso"],
+    "@sendero/kapso": ["@sendero/kapso@workspace:packages/kapso"],
 
     "@sendero/langfuse": ["@sendero/langfuse@workspace:packages/langfuse"],
 
@@ -1894,17 +1895,17 @@
 
     "@sendero/mcpb": ["@sendero/mcpb@workspace:apps/mcpb"],
 
-    "@sendero/multisig": ["@sendero/multisig@workspace:packages/sendero-multisig"],
+    "@sendero/multisig": ["@sendero/multisig@workspace:packages/multisig"],
 
-    "@sendero/nanopayments": ["@sendero/nanopayments@workspace:packages/sendero-nanopayments"],
+    "@sendero/nanopayments": ["@sendero/nanopayments@workspace:packages/nanopayments"],
 
     "@sendero/notifications": ["@sendero/notifications@workspace:packages/notifications"],
 
-    "@sendero/ocr": ["@sendero/ocr@workspace:packages/sendero-ocr"],
+    "@sendero/ocr": ["@sendero/ocr@workspace:packages/ocr"],
 
     "@sendero/seo": ["@sendero/seo@workspace:packages/seo"],
 
-    "@sendero/sherpa": ["@sendero/sherpa@workspace:packages/sendero-sherpa"],
+    "@sendero/sherpa": ["@sendero/sherpa@workspace:packages/sherpa"],
 
     "@sendero/slack": ["@sendero/slack@workspace:packages/slack"],
 
@@ -1916,7 +1917,7 @@
 
     "@sendero/ui": ["@sendero/ui@workspace:packages/ui"],
 
-    "@sendero/vault": ["@sendero/vault@workspace:packages/sendero-vault"],
+    "@sendero/vault": ["@sendero/vault@workspace:packages/vault"],
 
     "@sendero/webhooks": ["@sendero/webhooks@workspace:packages/webhooks"],
 

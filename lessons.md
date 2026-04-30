@@ -293,7 +293,7 @@ Sherpa's docs UX is the B2B API bar. What made their integration fast wasn't the
 
 ### The "vendor the spec" pattern
 
-When Sherpa handed us their Swagger 2.0 JSON file, we dropped it into `packages/sendero-sherpa/openapi/sherpa-requirements-api-v3.json` and rewrote the client against it in one evening. **Vendoring the upstream spec inside the package that consumes it** is the right default for partner integrations: the JSON is authoritative, the TypeScript types are a convenience view, and diffing on upgrade is mechanical. Commit the JSON — the 94KB once is cheaper than the 2h it takes to rediscover a field name.
+When Sherpa handed us their Swagger 2.0 JSON file, we dropped it into `packages/sherpa/openapi/sherpa-requirements-api-v3.json` and rewrote the client against it in one evening. **Vendoring the upstream spec inside the package that consumes it** is the right default for partner integrations: the JSON is authoritative, the TypeScript types are a convenience view, and diffing on upgrade is mechanical. Commit the JSON — the 94KB once is cheaper than the 2h it takes to rediscover a field name.
 
 ## Vercel env vars: never leave them branch-scoped (2026-04)
 

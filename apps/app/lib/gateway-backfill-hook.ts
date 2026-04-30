@@ -11,9 +11,9 @@
  *     non-fatally (Circle hiccup, missing env, partial state).
  *   - Tenants that existed before Phase 1 launched and haven't yet
  *     hit the /api/cron/provision-gateway sweeper.
- *   - Tenants that pre-date a Phase 3+ chain addition (AVAX, SOL) —
- *     adding a chain to getTenantOperationsChains() means every
- *     existing tenant lights up on next login.
+ *   - Tenants that pre-date a Phase 3+ chain addition (AVAX, ARB,
+ *     SOL) — adding a chain to getTenantOperationsChains() means
+ *     every existing tenant lights up on next login.
  *
  * Cadence: runs on every dashboard navigation. If everything is
  * already provisioned, the cost is two Prisma findMany calls (cheap).
@@ -26,10 +26,9 @@
  */
 
 import { backfillTenantWallets } from '@sendero/circle/gateway-backfill';
-import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
-import { getEnabledGatewayDomains, getTenantOperationsChains } from '@sendero/env/chains';
 import { prisma } from '@sendero/database';
+import { GATEWAY_DOMAIN_BY_CHAIN, getTenantOperationsChains } from '@sendero/env/chains';
 
 export interface BackfillTenantGatewayPostLoginArgs {
   tenantId: string;
@@ -53,16 +52,41 @@ export async function backfillTenantGatewayPostLogin(
     // Step 3: ensure TenantGatewayConfig exists with the latest
     // enabled-domains list. Upsert so a config that pre-dates a chain
     // addition gets refreshed when the user logs in again.
-    const enabledDomains = getEnabledGatewayDomains();
+    const requiredOpsChains = getTenantOperationsChains();
+    const actualOpsWallets = await prisma.circleWallet.findMany({
+      where: {
+        tenantId: args.tenantId,
+        kind: 'operations',
+        chain: { in: [...requiredOpsChains] },
+      },
+      select: { chain: true },
+    });
+    const enabledDomains = mergeUniqueSorted(
+      undefined,
+      actualOpsWallets
+        .map(w => GATEWAY_DOMAIN_BY_CHAIN[w.chain])
+        .filter((domain): domain is number => typeof domain === 'number')
+    );
+    const solanaOpsWallet = await prisma.circleWallet.findFirst({
+      where: {
+        tenantId: args.tenantId,
+        kind: 'operations',
+        chain: { in: ['SOL-DEVNET', 'SOL'] },
+      },
+      select: { address: true },
+      orderBy: { createdAt: 'asc' },
+    });
     await prisma.tenantGatewayConfig.upsert({
       where: { tenantId: args.tenantId },
       create: {
         tenantId: args.tenantId,
         evmDepositorAddress: signer.address,
+        solanaDepositorAddress: solanaOpsWallet?.address ?? null,
         enabledDomains,
       },
       update: {
         evmDepositorAddress: signer.address,
+        solanaDepositorAddress: solanaOpsWallet?.address ?? undefined,
         // Only widen, never narrow. Operators can disable chains
         // explicitly via a future admin action; the login hook should
         // not retract a chain a tenant has been transacting on.

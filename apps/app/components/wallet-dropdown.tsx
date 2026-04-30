@@ -260,7 +260,13 @@ export function WalletDropdown() {
               </svg>
             </div>
             <div className="wd-amount">
-              {fmt(selectedBalance)} <span className="wd-amount-unit">{selected}</span>
+              {selected === 'USDC' && !isZeroAddress ? (
+                <UnifiedBalanceSection chrome="inline" />
+              ) : (
+                <>
+                  {fmt(selectedBalance)} <span className="wd-amount-unit">{selected}</span>
+                </>
+              )}
             </div>
 
             <div className="wd-actions">
@@ -290,13 +296,6 @@ export function WalletDropdown() {
               />
             </div>
           </div>
-
-          {/* Phase 2 P2.8 — unified Gateway balance + per-chain breakdown.
-              Hidden when the tenant has no TenantGatewayConfig (provisioning
-              gap). Polls /api/gateway/balance every 30s. Per-wallet balance
-              card above stays as the live Arc treasury view; this section
-              surfaces the cross-chain unified picture. */}
-          {!isZeroAddress && <UnifiedBalanceSection />}
 
           {/* Meta footer */}
           <div className="wd-meta">

@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import { transferViaGateway, GATEWAY_CHAINS } from '@sendero/circle/gateway';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { selectTenantGatewayEvmSource } from './gateway-service';
 import type { ToolDef } from './types';
 
 const GATEWAY_CHAIN_KEYS = Object.keys(GATEWAY_CHAINS);
 
 const inputSchema = z.object({
-  from: z.string(),
+  from: z.string().optional(),
   to: z.string(),
   amount: z.string().describe('Decimal USDC amount, e.g. "5.00"'),
   recipient: z.string().optional().describe('0x-address on destination (defaults to treasury)'),
@@ -18,7 +20,7 @@ export const gatewayTransferTool: ToolDef = {
   inputSchema,
   jsonSchema: {
     type: 'object',
-    required: ['from', 'to', 'amount'],
+    required: ['to', 'amount'],
     properties: {
       from: {
         type: 'string',
@@ -40,17 +42,32 @@ export const gatewayTransferTool: ToolDef = {
       },
     },
   },
-  async handler(input: any) {
-    if (input.from === input.to) return { error: 'from and to must differ' };
+  async handler(input: any, ctx) {
+    const selected = ctx?.traveler?.tenantId
+      ? input.from
+        ? {
+            signer: await getOrCreateGatewaySigner(ctx.traveler.tenantId),
+            from: input.from,
+          }
+        : await selectTenantGatewayEvmSource({
+            tenantId: ctx.traveler.tenantId,
+            amount: input.amount,
+          })
+      : { signer: null, from: input.from };
+    if (!selected.from) {
+      return { error: 'from is required when no tenant context is available' };
+    }
     const r = await transferViaGateway({
-      from: input.from,
+      from: selected.from,
       to: input.to,
       amountUsdc: input.amount,
       recipient: input.recipient,
+      signer: selected.signer?.account,
     });
     return {
       state: 'success',
-      from: input.from,
+      from: selected.from,
+      requestedFrom: input.from ?? null,
       to: input.to,
       amount: input.amount,
       mintHash: r.mintHash,

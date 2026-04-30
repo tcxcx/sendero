@@ -17,9 +17,10 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@sendero/database';
+
 import { clerkClient } from '@clerk/nextjs/server';
 import { provisionTenantWallet } from '@sendero/circle';
+import { prisma } from '@sendero/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,11 +32,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // Candidates: Tenants with a clerkOrgId but no CircleWallet row yet.
+  // Candidates: Tenants with a clerkOrgId but no treasury wallet yet.
+  // Gateway operations wallets may already exist; treasury is still
+  // required for tenant settlement and operator wallet views.
   const candidates = await prisma.tenant.findMany({
     where: {
-      clerkOrgId: { not: null },
-      circleWallets: { none: {} },
+      circleWallets: { none: { kind: 'treasury' } },
     },
     select: { id: true, clerkOrgId: true },
     take: 50,

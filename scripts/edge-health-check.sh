@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Edge worker health probe.
 #
-# Hits HEALTH_URL (default: production sendero-arc-edge), validates HTTP
+# Hits HEALTH_URL (default: production arc-edge), validates HTTP
 # status + body shape + latency SLO, emits a JSONL line to stdout, and
 # (when GITHUB_TOKEN is set) opens / appends to / closes a labeled
 # incident issue.
@@ -19,7 +19,7 @@ set -u
 # Don't `set -e` — we want to handle curl/jq failures explicitly so we
 # can still emit a JSONL line and a structured exit.
 
-HEALTH_URL="${HEALTH_URL:-https://sendero-arc-edge.tomas-cordero-esp.workers.dev/health}"
+HEALTH_URL="${HEALTH_URL:-https://arc-edge.tomas-cordero-esp.workers.dev/health}"
 LABEL="edge-health-incident"
 ISSUE_TITLE="🚨 Edge worker health probe failure"
 

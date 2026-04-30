@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import type { SwapParams } from '@circle-fin/app-kit';
 import { auth } from '@clerk/nextjs/server';
 import { getAppKit, createAdapterForSigner, getKitKey } from '@sendero/circle/app-kit';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
+import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
 
 /**
  * POST /api/swap
@@ -51,6 +53,14 @@ export async function POST(req: NextRequest) {
 
     const kit = getAppKit();
     const adapter = createAdapterForSigner(signer.privateKey);
+    const gatewayFunding =
+      body.from === 'USDC'
+        ? await materializeGatewayUsdcToArc({
+            tenantId: tenant.id,
+            amount: body.amount,
+            recipient: signer.address,
+          })
+        : null;
 
     const params: SwapParams = {
       from: {
@@ -73,6 +83,7 @@ export async function POST(req: NextRequest) {
       amountIn: result.amountIn,
       fees: result.fees ?? [],
       signerAddress: signer.address,
+      gatewayFunding,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {

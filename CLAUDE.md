@@ -29,7 +29,7 @@ Two revenue legs, independent: SaaS MRR (Clerk Billing) + nanopayments (per-call
 
 Authority: Circle webhook `/api/webhooks/circle` → `CircleWallet.usdcBalanceMicro` + `eurcBalanceMicro`. UI: SSE `/api/wallet/balance/stream`. **Never poll viem from browser.**
 
-- Arc testnet USDC reports `decimals: 18` but amount strings are human-readable. Normalize to 6-decimal micro-USDC. See `packages/sendero-circle/src/balance-sync.ts::toMicro`.
+- Arc testnet USDC reports `decimals: 18` but amount strings are human-readable. Normalize to 6-decimal micro-USDC. See `packages/circle/src/balance-sync.ts::toMicro`.
 - Zero address = `arcWalletAddress` not stamped. WalletDropdown renders "Provisioning", skips fetches.
 
 ## SenderoStamps deployment runbook (Circle SCP, Arc-Testnet)

@@ -46,7 +46,7 @@ permissions:
 env:
   CLOUDFLARE_ACCOUNT_ID: 67f97ad58ab9673c26f9f5a2c27c99da
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-  WORKER_NAME: sendero-arc-edge
+  WORKER_NAME: arc-edge
   # CF Workers Builds takes ~2-3 minutes from push to live. Stage 1 sleeps
   # past that mark before probing, so we never measure the previous version.
   CF_BUILDS_LEAD_TIME_SEC: '180'

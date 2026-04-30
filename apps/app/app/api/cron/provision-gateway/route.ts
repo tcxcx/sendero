@@ -24,10 +24,15 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+
 import { backfillTenantOpsDcws } from '@sendero/circle/gateway-backfill';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
-import { getEnabledGatewayDomains, getTenantOperationsChains } from '@sendero/env/chains';
 import { prisma } from '@sendero/database';
+import {
+  GATEWAY_DOMAIN_BY_CHAIN,
+  getEnabledGatewayDomains,
+  getTenantOperationsChains,
+} from '@sendero/env/chains';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,7 +69,6 @@ export async function GET(req: NextRequest) {
   //      chain's ops DCW).
   const newTenantCandidates = await prisma.tenant.findMany({
     where: {
-      clerkOrgId: { not: null },
       OR: [{ gatewaySigner: null }, { gatewayConfig: null }],
     },
     select: { id: true, clerkOrgId: true },
@@ -73,7 +77,6 @@ export async function GET(req: NextRequest) {
 
   const opsGapCandidates = await prisma.tenant.findMany({
     where: {
-      clerkOrgId: { not: null },
       gatewaySigner: { isNot: null },
       gatewayConfig: { isNot: null },
       // Each tenant whose ops DCW chain count is less than the active
@@ -127,26 +130,44 @@ export async function GET(req: NextRequest) {
       // Upsert merges domains so adding a chain doesn't retract
       // previously enabled ones.
       const requiredDomains = getEnabledGatewayDomains();
-      const existingConfig = await prisma.tenantGatewayConfig.findUnique({
-        where: { tenantId: c.id },
-        select: { enabledDomains: true },
+      const actualOpsWallets = await prisma.circleWallet.findMany({
+        where: { tenantId: c.id, kind: 'operations', chain: { in: [...requiredOpsChains] } },
+        select: { chain: true },
       });
-      const mergedDomains = mergeUniqueSorted(existingConfig?.enabledDomains, requiredDomains);
+      const actualDomains = actualOpsWallets
+        .map(w => GATEWAY_DOMAIN_BY_CHAIN[w.chain])
+        .filter((domain): domain is number => typeof domain === 'number');
+      const enabledDomains = mergeUniqueSorted(undefined, actualDomains);
+      const missingDomains = requiredDomains.filter(domain => !enabledDomains.includes(domain));
+      const solanaOpsWallet = await prisma.circleWallet.findFirst({
+        where: {
+          tenantId: c.id,
+          kind: 'operations',
+          chain: { in: ['SOL-DEVNET', 'SOL'] },
+        },
+        select: { address: true },
+        orderBy: { createdAt: 'asc' },
+      });
       await prisma.tenantGatewayConfig.upsert({
         where: { tenantId: c.id },
         create: {
           tenantId: c.id,
           evmDepositorAddress: signer.address,
-          enabledDomains: mergedDomains,
+          solanaDepositorAddress: solanaOpsWallet?.address ?? null,
+          enabledDomains,
         },
         update: {
           evmDepositorAddress: signer.address,
-          enabledDomains: { set: mergedDomains },
+          solanaDepositorAddress: solanaOpsWallet?.address ?? undefined,
+          enabledDomains: { set: enabledDomains },
         },
       });
       result.configProvisioned = true;
 
-      result.status = (result.opsChainsFailed?.length ?? 0) > 0 ? 'partial' : 'provisioned';
+      result.status =
+        (result.opsChainsFailed?.length ?? 0) > 0 || missingDomains.length > 0
+          ? 'partial'
+          : 'provisioned';
     } catch (err) {
       result.status = result.signerProvisioned ? 'partial' : 'failed';
       result.error = err instanceof Error ? err.message : String(err);

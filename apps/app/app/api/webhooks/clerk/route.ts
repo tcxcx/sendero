@@ -23,19 +23,20 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { clerkClient } from '@clerk/nextjs/server';
 import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
 import { verifyClerkWebhook } from '@sendero/auth/webhooks';
+import { PLANS, type PlanTier, resolvePlan } from '@sendero/billing/plans';
 import { provisionTenantWallet } from '@sendero/circle';
 import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
-import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
-import { Prisma, prisma } from '@sendero/database';
+import type { BillingTier, SubscriptionStatus } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
 import {
   createCustomerUser,
   createCustomerUserGroup,
   findCustomerUserByEmail,
 } from '@sendero/duffel';
+import { getEnabledGatewayDomains, getTenantOperationsChains } from '@sendero/env/chains';
+import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
-import { PLANS, resolvePlan, type PlanTier } from '@sendero/billing/plans';
-import type { BillingTier, SubscriptionStatus } from '@sendero/database';
 
 import { invalidateApiKeyCache } from '@/lib/api-key-auth';
 import { webhookEventStore } from '@/lib/webhook-events';
@@ -365,21 +366,29 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
   try {
     const signer = await getOrCreateGatewaySigner(tenant.id);
 
-    await provisionTenantOpsDcw({
-      tenantId: tenant.id,
-      clerkOrgId: id,
-      chain: 'ARC-TESTNET',
-    });
+    const opsWallets = await Promise.all(
+      getTenantOperationsChains().map(chain =>
+        provisionTenantOpsDcw({
+          tenantId: tenant.id,
+          clerkOrgId: id,
+          chain,
+        })
+      )
+    );
+    const solanaOpsWallet = opsWallets.find(w => !w.address.startsWith('0x'));
 
     await prisma.tenantGatewayConfig.upsert({
       where: { tenantId: tenant.id },
       create: {
         tenantId: tenant.id,
         evmDepositorAddress: signer.address,
-        enabledDomains: [26], // Arc Testnet domain (matches GATEWAY_CHAINS)
+        solanaDepositorAddress: solanaOpsWallet?.address ?? null,
+        enabledDomains: getEnabledGatewayDomains(),
       },
       update: {
         evmDepositorAddress: signer.address,
+        solanaDepositorAddress: solanaOpsWallet?.address ?? undefined,
+        enabledDomains: { set: getEnabledGatewayDomains() },
       },
     });
 

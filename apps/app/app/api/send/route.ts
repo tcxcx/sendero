@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import type { SendParams } from '@circle-fin/app-kit';
 import { auth } from '@clerk/nextjs/server';
 import { getAppKit, createAdapterForSigner, summarizeSend } from '@sendero/circle/app-kit';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
+import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
 
 /**
  * POST /api/send
@@ -41,6 +43,25 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = BodySchema.parse(await req.json());
+    if (body.token === 'USDC') {
+      const result = await materializeGatewayUsdcToArc({
+        tenantId: tenant.id,
+        amount: body.amount,
+        recipient: body.to,
+      });
+      return NextResponse.json({
+        state: 'success',
+        txHash: result.mintHash,
+        explorerUrl: result.explorerUrl,
+        amount: body.amount,
+        token: body.token,
+        to: body.to,
+        signerAddress: result.signer.address,
+        source: 'gateway',
+        sourceChain: result.from,
+      });
+    }
+
     const kit = getAppKit();
     const adapter = createAdapterForSigner(signer.privateKey);
 

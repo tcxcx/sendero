@@ -203,9 +203,9 @@ Track: **Agent-to-Agent Payment Loop** (primary) + **Per-API Monetization Engine
 
 ## Deployed surfaces
 
-- **Web app**: https://sendero-arc-web.vercel.app (Vercel, prod) — Next.js 15 + x402 endpoints + MCP + full agent console.
+- **Web app**: https://arc-web.vercel.app (Vercel, prod) — Next.js 15 + x402 endpoints + MCP + full agent console.
 - **Edge worker**: Cloudflare Workers target via `wrangler deploy` from `apps/edge/` (recommended for the x402 nanopayment rail — Hono is first-class there). Local dev on :3020.
-- **GitHub**: https://github.com/tcxcx/sendero-arc (private)
+- **GitHub**: https://github.com/tcxcx/arc (private)
 - **On-chain agent**: #2286 on Arc Testnet — https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e
 
 ## Open items to add before Apr 25 submission

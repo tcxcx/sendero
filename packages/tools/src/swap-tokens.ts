@@ -1,6 +1,14 @@
 import { z } from 'zod';
-import { getAppKit, getKitKey, getTreasuryAdapter, summarizeSwap } from '@sendero/circle/app-kit';
+import {
+  createAdapterForSigner,
+  getAppKit,
+  getKitKey,
+  getTreasuryAdapter,
+  summarizeSwap,
+} from '@sendero/circle/app-kit';
 import type { SwapParams } from '@circle-fin/app-kit';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { materializeGatewayUsdcToArc } from './gateway-service';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -23,12 +31,22 @@ export const swapTokensTool: ToolDef = {
       amount: { type: 'string', description: 'Decimal amount, e.g. "5.00"' },
     },
   },
-  async handler(input: any) {
+  async handler(input: any, ctx) {
     if (input.fromToken === input.toToken) {
       return { error: 'fromToken and toToken must differ' };
     }
     const kit = getAppKit();
-    const adapter = getTreasuryAdapter();
+    const signer = ctx?.traveler?.tenantId
+      ? await getOrCreateGatewaySigner(ctx.traveler.tenantId)
+      : null;
+    if (ctx?.traveler?.tenantId && input.fromToken === 'USDC') {
+      await materializeGatewayUsdcToArc({
+        tenantId: ctx.traveler.tenantId,
+        amount: input.amount,
+        recipient: signer?.address,
+      });
+    }
+    const adapter = signer ? createAdapterForSigner(signer.privateKey) : getTreasuryAdapter();
     const params: SwapParams = {
       from: { adapter, chain: 'Arc_Testnet' },
       tokenIn: input.fromToken,

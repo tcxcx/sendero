@@ -99,7 +99,7 @@ Svix application UIDs are deterministic: `tenant_<tenantId>`. Reusing the same t
 
 ## Adding a Provider
 
-1. Add the provider signing secret to `.env.example`, `packages/sendero-env/src/index.ts`, and `turbo.json`.
+1. Add the provider signing secret to `.env.example`, `packages/env/src/index.ts`, and `turbo.json`.
 2. Implement signature verification in the provider package or route module.
 3. Add an `apps/app/app/api/webhooks/<provider>/route.ts` route using `processDurableWebhook`.
 4. Add provider-specific dispatch tests and a smoke command if the provider supports local signing.

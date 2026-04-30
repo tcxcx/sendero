@@ -67,7 +67,7 @@ interface UnifiedBalanceErrorResponse {
 
 const POLL_INTERVAL_MS = 30_000;
 
-export function UnifiedBalanceSection() {
+export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'section' | 'inline' }) {
   const [data, setData] = useState<UnifiedBalanceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -108,8 +108,10 @@ export function UnifiedBalanceSection() {
     return null;
   }
 
+  const Wrapper = chrome === 'inline' ? InlineWrapper : SectionWrapper;
+
   return (
-    <div className="border-t border-zinc-200/60 px-4 py-3">
+    <Wrapper>
       <div className="flex items-center justify-between">
         <div>
           <div className="text-xs uppercase tracking-wider text-zinc-500">Unified balance</div>
@@ -202,8 +204,16 @@ export function UnifiedBalanceSection() {
           </div>
         </div>
       )}
-    </div>
+    </Wrapper>
   );
+}
+
+function SectionWrapper({ children }: { children: React.ReactNode }) {
+  return <div className="border-t border-zinc-200/60 px-4 py-3">{children}</div>;
+}
+
+function InlineWrapper({ children }: { children: React.ReactNode }) {
+  return <div className="w-full">{children}</div>;
 }
 
 function BreakdownRow({ label, value, muted }: { label: string; value: string; muted?: boolean }) {

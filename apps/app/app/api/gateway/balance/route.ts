@@ -62,12 +62,16 @@ export async function GET() {
   const config = tenant.gatewayConfig;
   const enabledDomains = config.enabledDomains;
 
-  // Build the Gateway API request — one source per enabled domain,
-  // all keyed off the same per-tenant EVM depositor address.
-  const sources = enabledDomains.map(domain => ({
-    domain,
-    depositor: config.evmDepositorAddress,
-  }));
+  // Build the Gateway API request — one source per enabled domain.
+  // EVM domains use the tenant Gateway EOA; Solana uses the tenant's
+  // Solana operations DCW address once Phase 4.5 provisioning is live.
+  const sources = enabledDomains
+    .map(domain => {
+      const depositor =
+        domain === 5 ? (config.solanaDepositorAddress ?? null) : config.evmDepositorAddress;
+      return depositor ? { domain, depositor } : null;
+    })
+    .filter((source): source is { domain: number; depositor: string } => source !== null);
 
   // Query Gateway API. Explicit timeout to keep the UI responsive
   // when Circle's API is slow.
@@ -106,7 +110,9 @@ export async function GET() {
   // Gateway API didn't return (e.g. never deposited).
   const domainToChainKey = new Map<number, keyof typeof GATEWAY_CHAINS>();
   for (const [key, def] of Object.entries(GATEWAY_CHAINS)) {
-    domainToChainKey.set(def.domain, key as keyof typeof GATEWAY_CHAINS);
+    if (!domainToChainKey.has(def.domain)) {
+      domainToChainKey.set(def.domain, key as keyof typeof GATEWAY_CHAINS);
+    }
   }
   const perDomain = enabledDomains.map(domain => {
     const apiEntry = gatewayApiBalances.find(b => b.domain === domain);
@@ -162,8 +168,8 @@ export async function GET() {
       } as const;
     })
     // Filter to the still-finalizing window so we don't double-count
-    // credits the Gateway API has already incorporated.
-    .filter(c => c.remainingSeconds > 0 || c.status === 'should_be_available');
+    // credits once the Gateway API should have incorporated them.
+    .filter(c => c.remainingSeconds > 0);
 
   const pendingCreditMicroTotal = pendingCredits.reduce((sum, c) => sum + BigInt(c.amount), 0n);
 

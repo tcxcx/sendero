@@ -61,7 +61,7 @@ Cron (hourly, Vercel) → /api/cron/settle-nanopay-batches
 **Key changes vs today:**
 
 - `packages/billing/src/batch.ts:makeSettleFn()` — swap synthetic return for real `transferUSDC` call
-- `packages/sendero-nanopayments/src/index.ts` — ensure `transferUSDC(from, to, amount, token, chain)` helper exists; submits via treasury MSCA userOp, paymaster-sponsored
+- `packages/nanopayments/src/index.ts` — ensure `transferUSDC(from, to, amount, token, chain)` helper exists; submits via treasury MSCA userOp, paymaster-sponsored
 - `NanopayBatch.retryCount` column added; increment on failure
 - `packages/slack/src/alerts.ts` (new or extend existing) — `fireBatchFailedAlert(batchId, tenantId, reason)` posts to ops channel
 
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-`packages/sendero-duffel/src/webhook.ts` (new):
+`packages/duffel/src/webhook.ts` (new):
 
 - `verifyDuffelSignature(rawBody, signature, secret) → boolean`
 - `parseDuffelWebhook(rawBody) → DuffelWebhookEvent`
@@ -208,13 +208,13 @@ model NanopayBatch {
 - `DUFFEL_WEBHOOK_SECRET` — HMAC secret from Duffel dashboard
 - `SENDERO_TREASURY_ADDRESS` — destination for nanopay transfers (may already exist; verify)
 
-Update `packages/sendero-env/src/validate.ts` + `apps/app/app/api/health/route.ts` to report both.
+Update `packages/env/src/validate.ts` + `apps/app/app/api/health/route.ts` to report both.
 
 ## Files
 
 ### New
 
-- `packages/sendero-duffel/src/webhook.ts`
+- `packages/duffel/src/webhook.ts`
 - `packages/tools/src/confirm-duffel.ts`
 - `packages/tools/src/settle-booking.ts`
 - `packages/tools/src/cancel-booking.ts`
@@ -226,8 +226,8 @@ Update `packages/sendero-env/src/validate.ts` + `apps/app/app/api/health/route.t
 - `packages/workflows/src/catalog.ts` — add pause + branch to `bookFlightWorkflow` and `guestPrefundWorkflow`
 - `packages/database/prisma/schema.prisma` — `WebhookEvent`, `Booking.duffelOrderId`, `NanopayBatch.retryCount`, `NanopayBatch.lastError`
 - `packages/billing/src/batch.ts` — wire real `transferUSDC`, retry, circuit break
-- `packages/sendero-nanopayments/src/index.ts` — ensure `transferUSDC` exists; add if not
-- `packages/sendero-env/src/validate.ts` — new env keys
+- `packages/nanopayments/src/index.ts` — ensure `transferUSDC` exists; add if not
+- `packages/env/src/validate.ts` — new env keys
 - `packages/slack/src/alerts.ts` — `fireBatchFailedAlert` (extend if file exists, create if not)
 - `apps/app/app/api/health/route.ts` — surface webhook + treasury config
 - Migration: `packages/database/prisma/migrations/YYYYMMDDHHMMSS_phase_11a/migration.sql`
@@ -260,7 +260,7 @@ Extend `scripts/smoke-guest-escrow.ts` to add:
 - **Duffel webhook delivery reliability** — per Duffel docs, they retry with exponential backoff up to 24h. Our 48h pause timeout gives headroom; add a cron sweeper post-11a if we observe drops.
 - **treasuryMSCA gas** — treasury MSCA needs USDC for Arc native gas. Assume paymaster sponsors agent operator calls but **treasury-originated transfers may not be sponsored**. Mitigation: pre-fund treasury MSCA with a gas float, monitor in `/api/health`. Document in deploy checklist.
 - **settleBooking signer** — confirmed in contract v1.1: `settleBooking` is operator-only. Operator key must be rotated off treasury per Track A before this ships to prod.
-- **Order hash computation** — `duffelOrderHash = keccak256(canonicalJSON(duffelOrder))`. We need to fix the canonicalization rule (JCS / RFC 8785) so the hash is reproducible for dispute/audit. Document in `packages/sendero-duffel/src/canonical.ts`.
+- **Order hash computation** — `duffelOrderHash = keccak256(canonicalJSON(duffelOrder))`. We need to fix the canonicalization rule (JCS / RFC 8785) so the hash is reproducible for dispute/audit. Document in `packages/duffel/src/canonical.ts`.
 
 ## Rollout
 

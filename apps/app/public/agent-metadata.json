@@ -1,7 +1,7 @@
 {
   "name": "Sendero Travel Agent",
   "description": "Autonomous travel booking agent — searches flights and hotels via Duffel, books on behalf of corporate travelers, settles in USDC on Arc L2 via ERC-8183 job escrow.",
-  "image": "https://sendero-arc.vercel.app/agent-avatar.png",
+  "image": "https://arc.vercel.app/agent-avatar.png",
   "agent_type": "travel",
   "capabilities": [
     "flight_search",

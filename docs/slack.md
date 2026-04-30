@@ -79,7 +79,7 @@ These match `DEFAULT_BOT_SCOPES` in `packages/slack/src/oauth.ts`. If any are mi
 | Environment | Redirect URL |
 |---|---|
 | Production | `https://app.sendero.travel/api/webhooks/slack/oauth-callback` |
-| Preview | branch alias, e.g. `https://sendero-arc-web-git-<branch>-tcxcxs-projects.vercel.app/api/webhooks/slack/oauth-callback` |
+| Preview | branch alias, e.g. `https://arc-web-git-<branch>-tcxcxs-projects.vercel.app/api/webhooks/slack/oauth-callback` |
 | Development | `http://localhost:3010/api/webhooks/slack/oauth-callback` (only useful for local OAuth dev) |
 
 Save URLs.
@@ -148,7 +148,7 @@ SLACK_STATE_SECRET       # Random 32-byte hex; falls back to CLERK_SECRET_KEY if
 SLACK_REDIRECT_URI       # Must exactly match the URL in §3, including trailing path
 ```
 
-CLI push (run from repo root, project linked to `sendero-arc-web`):
+CLI push (run from repo root, project linked to `arc-web`):
 
 ```bash
 for KEY in SLACK_SIGNING_SECRET SLACK_CLIENT_ID SLACK_CLIENT_SECRET SLACK_STATE_SECRET SLACK_REDIRECT_URI; do

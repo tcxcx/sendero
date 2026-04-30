@@ -794,7 +794,7 @@ model CircleWallet {
   id                String    @id @default(cuid())
   tenantId          String
   clerkOrgId        String?
-  address           String    @unique
+  address           String
   /// 'treasury' (primary tenant wallet, default-Arc settle target) or
   /// 'operations' (per-chain inbound staging DCW that the Gateway sweep
   /// loop drains into the tenant Gateway EOA). Phase 1 = both kinds on
@@ -814,7 +814,7 @@ model CircleWallet {
   /// first OUTBOUND tx — `signTypedData` rejects with "undeployed wallet"
   /// before that. We self-send 0 native to deploy on first use and stamp
   /// this column so subsequent transfers skip the round-trip. See
-  /// @sendero/sendero-circle/src/sca-deploy.ts (Phase 2).
+  /// @sendero/circle/src/sca-deploy.ts (Phase 2).
   scaDeployedAt     DateTime? @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
@@ -822,6 +822,7 @@ model CircleWallet {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, kind, chain], name: "tenantId_kind_chain")
+  @@index([address])
   @@index([tenantId, kind])
   @@map("circle_wallets")
 }
@@ -883,7 +884,7 @@ model TenantGatewayConfig {
   solanaDepositorAddress String?
   /// Circle Gateway domain IDs the tenant has wallets on. Phase 1 = [26]
   /// (ARC-TESTNET). Phase 3 adds 1 (AVAX-FUJI). Phase 4 adds 5 (SOL).
-  /// See GATEWAY_DOMAINS in @sendero/sendero-circle/src/gateway.ts.
+  /// See GATEWAY_DOMAINS in @sendero/circle/src/gateway.ts.
   enabledDomains         Int[]    @default([26])
   /// Sweep policy for inbound USDC. Null = always sweep 100% (Phase 1
   /// default — Arc gas is cheap). Phase 3 widens to support thresholds:
@@ -909,7 +910,7 @@ model GatewayDepositLog {
   tenantId        String
   chain           String
   /// Circle Gateway domain ID — matches GATEWAY_DOMAINS in
-  /// @sendero/sendero-circle/src/gateway.ts.
+  /// @sendero/circle/src/gateway.ts.
   domain          Int
   /// USDC amount in micro-USDC (6 decimals). 1_000_000 = 1 USDC.
   amountMicroUsdc BigInt

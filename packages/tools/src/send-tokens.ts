@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getAppKit, getTreasuryAdapter, summarizeSend } from '@sendero/circle/app-kit';
 import type { SendParams } from '@circle-fin/app-kit';
+import { materializeGatewayUsdcToArc } from './gateway-service';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -23,7 +24,24 @@ export const sendTokensTool: ToolDef = {
       token: { type: 'string', enum: ['USDC', 'EURC'], default: 'USDC' },
     },
   },
-  async handler(input: any) {
+  async handler(input: any, ctx) {
+    if ((input.token ?? 'USDC') === 'USDC' && ctx?.traveler?.tenantId) {
+      const result = await materializeGatewayUsdcToArc({
+        tenantId: ctx.traveler.tenantId,
+        amount: input.amount,
+        recipient: input.to,
+      });
+      return {
+        state: 'success',
+        token: 'USDC',
+        amount: input.amount,
+        to: input.to,
+        txHash: result.mintHash,
+        explorerUrl: result.explorerUrl,
+        source: 'gateway',
+        sourceChain: result.from,
+      };
+    }
     const kit = getAppKit();
     const adapter = getTreasuryAdapter();
     const params: SendParams = {
