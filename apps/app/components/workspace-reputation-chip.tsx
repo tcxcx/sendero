@@ -60,6 +60,7 @@ export function WorkspaceReputationChip() {
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
+      if (isInsideReputationDialog(event.target)) return;
       if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
@@ -323,6 +324,10 @@ export function WorkspaceReputationChip() {
       `}</style>
     </div>
   );
+}
+
+function isInsideReputationDialog(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-reputation-dialog="true"]') !== null;
 }
 
 function Stat({ value, label }: { value: string; label: string }) {

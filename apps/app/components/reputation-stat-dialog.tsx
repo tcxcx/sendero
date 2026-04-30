@@ -70,7 +70,10 @@ export function ReputationStatDialog({
   return (
     <Dialog>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="max-h-[88vh] max-w-3xl overflow-hidden border-[color:var(--ink)] bg-[color:var(--surface-floating)] p-0 text-[color:var(--midnight)] shadow-[0_24px_80px_rgba(31,42,68,0.28)]">
+      <DialogContent
+        data-reputation-dialog="true"
+        className="z-[100] max-h-[88vh] max-w-3xl overflow-hidden border-[color:var(--ink)] bg-[color:var(--surface-floating)] p-0 text-[color:var(--midnight)] shadow-[0_24px_80px_rgba(31,42,68,0.28)]"
+      >
         <motion.div
           layoutId={`reputation-stat-${identity.kind}-${metric.key}`}
           transition={{ type: 'spring', stiffness: 420, damping: 36 }}
@@ -289,7 +292,7 @@ function EmptyState({ text }: { text: string }) {
 function useCurrentTripId(): string | null {
   const [tripId, setTripId] = useState<string | null>(null);
   useEffect(() => {
-    const match = window.location.pathname.match(/\/dashboard\/inbox\/([^/?#]+)/);
+    const match = window.location.pathname.match(/\/dashboard\/(?:inbox|trips)\/([^/?#]+)/);
     setTripId(match?.[1] ?? null);
   }, []);
   return tripId;
