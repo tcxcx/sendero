@@ -215,9 +215,7 @@ export function WalletDropdown() {
             <div className="wd-id-body">
               <span className="wd-id-name">{userAuth.displayName}</span>
               <span className="wd-id-role">
-                {isZeroAddress
-                  ? 'Provisioning Arc wallet…'
-                  : `Passkey · ${userAuth.email || 'no email'}`}
+                {isZeroAddress ? 'Provisioning Arc wallet…' : userAuth.email || 'no email'}
               </span>
             </div>
           </div>

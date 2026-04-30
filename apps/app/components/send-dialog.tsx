@@ -23,6 +23,7 @@ export function SendDialog() {
   const [result, setResult] = useState<{
     txHash: string | null;
     explorerUrl: string | null;
+    transferLogId: string | null;
   } | null>(null);
 
   const open = send === 'open';
@@ -59,6 +60,7 @@ export function SendDialog() {
       setResult({
         txHash: data.txHash ?? null,
         explorerUrl: data.explorerUrl ?? null,
+        transferLogId: data.transferLogId ?? null,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -129,9 +131,21 @@ export function SendDialog() {
         <div className="dlg-ok">
           <strong>Sent.</strong>{' '}
           {result.txHash && result.explorerUrl && (
-            <a className="dlg-link" href={result.explorerUrl} target="_blank" rel="noreferrer">
+            <a
+              className="dlg-link"
+              href={result.explorerUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={e => {
+                e.preventDefault();
+                window.open(result.explorerUrl ?? '', '_blank', 'noopener,noreferrer');
+              }}
+            >
               {result.txHash.slice(0, 10)}…{result.txHash.slice(-6)} ↗
             </a>
+          )}
+          {result.transferLogId && (
+            <span className="snd-audit">audit {result.transferLogId.slice(0, 8)}</span>
           )}
         </div>
       )}
@@ -183,6 +197,14 @@ export function SendDialog() {
           color: var(--text-faint);
           padding: 1px 5px;
           border: 1px solid var(--border);
+        }
+        .snd-audit {
+          margin-left: 8px;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.08em;
+          color: var(--text-faint);
+          text-transform: uppercase;
         }
       `}</style>
     </DialogShell>
