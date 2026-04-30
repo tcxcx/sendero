@@ -15,12 +15,15 @@
  */
 
 import {
-  CreateWebhookRequest,
   CreateSetupLinkRequest,
-  KapsoWebhookRegistration,
+  CreateWebhookRequest,
+  CreateWorkflowTriggerRequest,
   KapsoCustomer,
+  KapsoPhoneHealth,
   KapsoSetupLink,
+  KapsoWebhookRegistration,
   KapsoWhatsAppPhoneNumber,
+  KapsoWorkflowTrigger,
   SendTemplateRequest,
   SendTextRequest,
 } from './types';
@@ -183,6 +186,13 @@ export class KapsoClient {
     return KapsoWhatsAppPhoneNumber.parse(unwrap(raw, 'phone_number'));
   }
 
+  async checkPhoneHealth(phoneNumberId: string): Promise<KapsoPhoneHealth> {
+    const raw = await this.request<unknown>(
+      `/phone_numbers/${encodeURIComponent(phoneNumberId)}/health`
+    );
+    return KapsoPhoneHealth.parse(unwrap(raw, 'data') ?? unwrap(raw, 'health') ?? raw);
+  }
+
   // ── Webhooks ──────────────────────────────────────────────────────
   async registerWebhook(
     input: Parameters<typeof CreateWebhookRequest.parse>[0]
@@ -219,6 +229,59 @@ export class KapsoClient {
           }
         : unwrapped;
     return KapsoWebhookRegistration.parse(stitched);
+  }
+
+  // ── Workflow triggers ─────────────────────────────────────────────
+  async createWorkflowTrigger(
+    workflowId: string,
+    input: Parameters<typeof CreateWorkflowTriggerRequest.parse>[0]
+  ): Promise<KapsoWorkflowTrigger> {
+    const body = CreateWorkflowTriggerRequest.parse(input);
+    const raw = await this.request<unknown>(
+      `/workflows/${encodeURIComponent(workflowId)}/triggers`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          trigger: {
+            trigger_type: body.trigger_type,
+            active: body.active,
+            display_name: body.display_name,
+            triggerable:
+              body.trigger_type === 'inbound_message'
+                ? { phone_number_id: body.phone_number_id }
+                : undefined,
+          },
+        }),
+      }
+    );
+    return KapsoWorkflowTrigger.parse(unwrap(raw, 'data') ?? unwrap(raw, 'trigger') ?? raw);
+  }
+
+  async replaceWorkflowTriggers(
+    workflowId: string,
+    triggers: Array<Parameters<typeof CreateWorkflowTriggerRequest.parse>[0]>
+  ): Promise<KapsoWorkflowTrigger[]> {
+    const parsed = triggers.map(trigger => CreateWorkflowTriggerRequest.parse(trigger));
+    const raw = await this.request<unknown>(
+      `/workflows/${encodeURIComponent(workflowId)}/triggers/replace`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          triggers: parsed.map(trigger => ({
+            trigger_type: trigger.trigger_type,
+            active: trigger.active,
+            display_name: trigger.display_name,
+            triggerable:
+              trigger.trigger_type === 'inbound_message'
+                ? { phone_number_id: trigger.phone_number_id }
+                : undefined,
+          })),
+        }),
+      }
+    );
+    const list = unwrap(raw, 'data') ?? unwrap(raw, 'triggers') ?? raw;
+    if (!Array.isArray(list)) return [];
+    return list.map(item => KapsoWorkflowTrigger.parse(item));
   }
 
   // ── Outbound messages (Kapso's higher-level send helper) ──────────

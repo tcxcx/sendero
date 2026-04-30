@@ -8,6 +8,7 @@ import {
   BarChart3,
   Briefcase,
   FileText,
+  Handshake,
   Home,
   type LucideIcon,
   Settings,
@@ -23,6 +24,7 @@ export type SidebarLinkCopy = {
 const defaultLinks: SidebarLinkCopy[] = [
   { href: '/dashboard', label: 'Home', exact: true },
   { href: '/dashboard/trips', label: 'Trips' },
+  { href: '/dashboard/handoff', label: 'Handoff' },
   { href: '/dashboard/billing/invoices', label: 'Invoices' },
   { href: '/dashboard/spend', label: 'Spend' },
   { href: '/dashboard/caps', label: 'Caps' },
@@ -32,6 +34,7 @@ const defaultLinks: SidebarLinkCopy[] = [
 const iconsByHref: Record<string, LucideIcon> = {
   '/dashboard': Home,
   '/dashboard/trips': Briefcase,
+  '/dashboard/handoff': Handshake,
   '/dashboard/billing/invoices': FileText,
   '/dashboard/spend': BarChart3,
   '/dashboard/caps': ShieldAlert,

@@ -1,0 +1,4 @@
+slug: sendero-tenant-travel-search-docs
+name: Sendero tenant travel search docs
+function_type: cloudflare_worker
+entrypoint: index.js

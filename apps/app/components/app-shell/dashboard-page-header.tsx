@@ -40,6 +40,10 @@ const DASHBOARD_PAGE_COPY: Record<string, Copy> = {
     title: 'Trips',
     description: 'Active and recent bookings across every channel.',
   },
+  '/dashboard/handoff': {
+    title: 'Internal handoff',
+    description: 'Human decisions from WhatsApp, Slack, and web in one operator queue.',
+  },
   '/dashboard/caps': {
     title: 'Caps',
     description: 'Hard and soft nanopayment spend caps for this tenant.',
@@ -140,7 +144,7 @@ export function DashboardPageHeader() {
 
   if (!pathname.startsWith('/dashboard')) return null;
   if (SUPPRESS_EXACT.has(pathname)) return null;
-  if (SUPPRESS_CHILDREN_PREFIXES.some(p => pathname.startsWith(p + '/'))) return null;
+  if (SUPPRESS_CHILDREN_PREFIXES.some(p => pathname.startsWith(`${p}/`))) return null;
 
   const copy = resolveCopy(pathname);
 

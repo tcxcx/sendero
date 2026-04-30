@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@sendero/database';
 import { readSetupLinkSnapshot } from '@sendero/kapso';
 
+import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const runtime = 'nodejs';
@@ -22,6 +23,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const { tenant } = await requireCurrentTenant();
+  const plan = await currentOrgPlanTier();
   const install = await prisma.whatsAppInstall.findUnique({
     where: { tenantId: tenant.id },
     select: {
@@ -36,10 +38,16 @@ export async function GET() {
     },
   });
   if (!install) {
-    return NextResponse.json({ install: null });
+    return NextResponse.json({
+      install: null,
+      plan,
+      readiness: readinessForPlan(plan),
+    });
   }
   const setupLink = readSetupLinkSnapshot(install.metadata);
   return NextResponse.json({
+    plan,
+    readiness: readinessForPlan(plan),
     install: {
       status: install.status,
       phoneNumberId: install.phoneNumberId,
@@ -56,4 +64,15 @@ export async function GET() {
       provisioned: install.status === 'active' && Boolean(install.phoneNumberId),
     },
   });
+}
+
+function readinessForPlan(plan: string) {
+  return {
+    canConnectProductionNumber: plan !== 'free',
+    requiresUpgrade: plan === 'free',
+    message:
+      plan === 'free'
+        ? 'WhatsApp tenant operations require a dedicated business number on a paid plan.'
+        : 'Connect a dedicated WhatsApp Business number to activate tenant operations.',
+  };
 }

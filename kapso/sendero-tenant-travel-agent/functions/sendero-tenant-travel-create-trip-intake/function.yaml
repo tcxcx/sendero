@@ -1,0 +1,4 @@
+slug: sendero-tenant-travel-create-trip-intake
+name: Sendero tenant travel create trip intake
+function_type: cloudflare_worker
+entrypoint: index.js

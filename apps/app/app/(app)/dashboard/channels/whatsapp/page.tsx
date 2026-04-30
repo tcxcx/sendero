@@ -12,24 +12,26 @@
  * and updates `status` / `lastHealthyAt` / `lastErrorMessage`.
  */
 
-import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 import { KapsoClient } from '@sendero/kapso';
 
 import {
-  ChannelStatusPanel,
   type ChannelStatusKind,
+  ChannelStatusPanel,
 } from '@/components/channels/channel-status-panel';
 import { WhatsappConnectedPanel } from '@/components/channels/whatsapp-connected-panel';
+import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
 export default async function WhatsAppChannelPage() {
   const { tenant } = await requireCurrentTenant();
+  const plan = await currentOrgPlanTier();
 
   const install = await prisma.whatsAppInstall.findUnique({
     where: { tenantId: tenant.id },
@@ -98,6 +100,7 @@ export default async function WhatsAppChannelPage() {
         <ConnectedView install={install} />
       ) : (
         <DisconnectedView
+          plan={plan}
           status={status}
           identifier={identifier}
           lastHealthyAt={install?.lastHealthyAt?.toISOString() ?? null}
@@ -135,17 +138,19 @@ function ConnectedView({
 }
 
 function DisconnectedView({
+  plan,
   status,
   identifier,
   lastHealthyAt,
   lastErrorMessage,
   onProbe,
 }: {
+  plan: string;
   status: ChannelStatusKind;
   identifier: string | null;
   lastHealthyAt: string | null;
   lastErrorMessage: string | null;
-  onProbe?: () => Promise<{ ok: boolean; message?: string } | void>;
+  onProbe?: () => Promise<{ ok: boolean; message?: string } | undefined>;
 }) {
   return (
     <>
@@ -194,6 +199,48 @@ function DisconnectedView({
           Start setup
         </Link>
       </section>
+
+      {plan === 'free' ? <WhatsAppReadinessCard /> : null}
     </>
+  );
+}
+
+function WhatsAppReadinessCard() {
+  return (
+    <section
+      className="sd-card-flat"
+      style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
+    >
+      <div className="t-meta">Readiness</div>
+      <p
+        className="t-body ink-70"
+        style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55, maxWidth: '68ch' }}
+      >
+        WhatsApp tenant operations require a dedicated WhatsApp Business number. Free workspaces can
+        review the setup flow and channel requirements here, but live WhatsApp testing starts after
+        upgrading and connecting a number through Kapso.
+      </p>
+      <a
+        href="/dashboard/billing/plans?upgrade=basic&feature=channel_whatsapp"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          marginTop: 12,
+          padding: '8px 18px',
+          background: 'var(--vermillion)',
+          color: '#fdfbf7',
+          border: 0,
+          borderRadius: 8,
+          fontSize: 12,
+          fontWeight: 600,
+          fontFamily: 'var(--font-mono-x)',
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          textDecoration: 'none',
+        }}
+      >
+        Upgrade to connect
+      </a>
+    </section>
   );
 }

@@ -10,17 +10,23 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+
 import Image from 'next/image';
+
 import { Check, Loader2 } from 'lucide-react';
 
 import type { WizardPaneProps, WizardPaneRenderer } from './types';
 
-// Sendero provisions only US numbers via Kapso's pool. Non-US countries
-// require custom Twilio credentials and the embedded-signup flow falls
-// back to manual SMS verification (which the operator can't satisfy
-// because Sendero owns the SIM). Locking to US keeps the flow fully
-// automated end-to-end.
-const COUNTRIES = [{ iso: 'US', label: 'United States' }];
+// Paid tenants connect their own WhatsApp Business number through Kapso.
+// The picker still captures the preferred country so Kapso can bias the
+// hosted setup link. Free tenants test from the shared Sendero sandbox
+// number shown on the channel page.
+const COUNTRIES = [
+  { iso: 'US', label: 'United States' },
+  { iso: 'BR', label: 'Brazil' },
+  { iso: 'MX', label: 'Mexico' },
+  { iso: 'GB', label: 'United Kingdom' },
+];
 
 const TEMPLATE_DEFS = [
   {
@@ -174,8 +180,8 @@ function NumberPreview({ e164 }: { e164: string | null }) {
         </div>
       </div>
       <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--text-dim)]">
-        Sendero owns the WhatsApp Business Account. You share this number with travelers; we handle
-        delivery + Meta compliance.
+        Paid workspaces connect their WhatsApp Business number through Kapso. Sendero handles the
+        tenant travel workflow, delivery checks, and Meta compliance surfaces.
       </p>
     </aside>
   );

@@ -9,6 +9,10 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 type SupportTool =
+  | 'get_tenant_operating_context'
+  | 'create_trip_intake'
+  | 'create_tenant_handoff'
+  | 'get_wallet_context'
   | 'get_tenant_context'
   | 'get_whatsapp_setup_status'
   | 'get_recent_channel_events'
@@ -112,6 +116,30 @@ function supportRefFromContext(body: SupportToolBody): string | null {
   );
 }
 
+function phoneNumberIdFromContext(body: SupportToolBody): string | null {
+  const input = body.input ?? {};
+  const conversation = body.whatsapp_context?.conversation ?? {};
+  const context = body.execution_context?.context ?? {};
+  const candidates = [
+    input.phone_number_id,
+    input.phoneNumberId,
+    conversation.phone_number_id,
+    conversation.phoneNumberId,
+    conversation.whatsapp_phone_number_id,
+    conversation.whatsappPhoneNumberId,
+    (conversation.whatsapp_config as Record<string, unknown> | undefined)?.phone_number_id,
+    (conversation.whatsapp_config as Record<string, unknown> | undefined)?.phoneNumberId,
+    context.phone_number_id,
+    context.phoneNumberId,
+    context.whatsapp_phone_number_id,
+  ];
+  for (const candidate of candidates) {
+    const value = asString(candidate);
+    if (value) return value;
+  }
+  return null;
+}
+
 function maskIdentifier(value: unknown): string | null {
   const text = asString(value);
   if (!text) return null;
@@ -173,6 +201,15 @@ function verifiedSupportContext(body: SupportToolBody): VerifiedSupportContext |
 
 async function resolveTenant(body: SupportToolBody) {
   const input = body.input ?? {};
+  const phoneNumberId = phoneNumberIdFromContext(body);
+  if (phoneNumberId) {
+    const install = await prisma.whatsAppInstall.findUnique({
+      where: { phoneNumberId },
+      include: { tenant: true },
+    });
+    if (install?.tenant) return install.tenant;
+  }
+
   const supportRef = supportRefFromContext(body);
   if (supportRef) {
     const rows = await prisma.$queryRaw<Array<{ tenant_id: string }>>`
@@ -258,6 +295,7 @@ function supportContext(body: SupportToolBody) {
   const input = body.input ?? {};
   return {
     input,
+    phoneNumberId: phoneNumberIdFromContext(body),
     workflowExecutionId:
       asString(body.execution_context?.system?.workflow_execution_id) ??
       asString(body.execution_context?.system?.flow_execution_id),
@@ -360,6 +398,258 @@ async function getTenantContext(body: SupportToolBody) {
         }
       : null,
     recentTickets,
+  };
+}
+
+function isFreeTenant(tenant: { billingTier: unknown }): boolean {
+  return String(tenant.billingTier ?? 'free').toLowerCase() === 'free';
+}
+
+async function getTenantOperatingContext(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+  const [subscription, whatsappInstall, slackInstall, trips, recentTickets] = await Promise.all([
+    prisma.subscription.findUnique({ where: { tenantId: tenant.id } }),
+    prisma.whatsAppInstall.findUnique({ where: { tenantId: tenant.id } }),
+    prisma.slackInstall.findFirst({
+      where: { tenantId: tenant.id, revokedAt: null },
+      orderBy: { installedAt: 'desc' },
+      select: { id: true, teamName: true, teamId: true, botUserId: true, routing: true },
+    }),
+    prisma.trip.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        status: true,
+        intent: true,
+        totalUsdc: true,
+        createdAt: true,
+        updatedAt: true,
+        traveler: { select: { id: true, displayName: true, email: true, phone: true } },
+        bookings: {
+          orderBy: { createdAt: 'desc' },
+          take: 3,
+          select: { id: true, kind: true, status: true, totalUsd: true, pnr: true },
+        },
+      },
+    }),
+    listSupportTickets(tenant.id, 8),
+  ]);
+  const context = supportContext(body);
+  const sandbox = isFreeTenant(tenant);
+  return {
+    ok: true,
+    mode: sandbox ? 'sandbox' : 'production',
+    sandbox,
+    tenant: {
+      id: tenant.id,
+      slug: tenant.slug,
+      displayName: tenant.displayName,
+      billingTier: tenant.billingTier,
+      fiscalCountry: tenant.fiscalCountry,
+      arcAddress: tenant.arcAddress,
+    },
+    subscription,
+    whatsapp: whatsappInstall
+      ? {
+          status: whatsappInstall.status,
+          phoneNumberId: whatsappInstall.phoneNumberId,
+          displayPhoneNumber: whatsappInstall.displayPhoneNumber,
+          businessDisplayName: whatsappInstall.businessDisplayName,
+          lastHealthyAt: whatsappInstall.lastHealthyAt,
+          lastErrorMessage: whatsappInstall.lastErrorMessage,
+        }
+      : null,
+    handoff: {
+      primary: 'web_internal',
+      webInternalAvailable: true,
+      slackConfigured: Boolean(slackInstall),
+      slack: slackInstall,
+      whatsappOperatorConfigured: Boolean(
+        (whatsappInstall?.metadata as Record<string, unknown> | null | undefined)
+          ?.operatorHandoffPhone
+      ),
+    },
+    recentTrips: trips,
+    recentHandoffs: recentTickets,
+    channel: {
+      phoneNumberId: context.phoneNumberId,
+      whatsappConversationId: context.whatsappConversationId,
+      customerPhoneMasked: maskIdentifier(context.whatsappPhoneNumber),
+      profileName: context.whatsappProfileName,
+    },
+    restrictions: sandbox
+      ? [
+          'Sandbox mode: no production templates, customer broadcasts, payment movement, wallet transfers, booking commits, refunds, or escrow settlement.',
+          'Create internal web handoffs for human decisions.',
+        ]
+      : [],
+  };
+}
+
+async function createTripIntake(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+  const input = body.input ?? {};
+  const context = supportContext(body);
+  const sandbox = isFreeTenant(tenant);
+  const title = asString(input.title) ?? asString(input.summary) ?? 'WhatsApp trip intake';
+  const travelerName =
+    asString(input.traveler_name) ?? asString(input.travelerName) ?? context.whatsappProfileName;
+  const travelerPhone =
+    asString(input.traveler_phone) ??
+    asString(input.travelerPhone) ??
+    context.whatsappPhoneNumber ??
+    null;
+  const intent = {
+    source: 'kapso_whatsapp',
+    sandbox,
+    title,
+    travelerName,
+    travelerPhone,
+    origin: asString(input.origin),
+    destination: asString(input.destination),
+    dates: asString(input.dates),
+    budget: asString(input.budget),
+    purpose: asString(input.purpose),
+    notes: safeText(input.notes ?? input.summary, 2000),
+  };
+  const trip = await prisma.trip.create({
+    data: {
+      tenantId: tenant.id,
+      intent: intent as Prisma.InputJsonValue,
+      status: 'draft',
+      metadata: {
+        source: 'kapso_whatsapp_tenant_agent',
+        sandbox,
+        whatsappConversationId: context.whatsappConversationId,
+        workflowExecutionId: context.workflowExecutionId,
+      } as Prisma.InputJsonValue,
+      guestVerifiedContacts: travelerPhone
+        ? ({ phone: travelerPhone } as Prisma.InputJsonValue)
+        : undefined,
+      channelBindings: {
+        primary: 'whatsapp',
+        notifyChannels: ['web'],
+      } as Prisma.InputJsonValue,
+    },
+    select: {
+      id: true,
+      status: true,
+      intent: true,
+      metadata: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+  await prisma.supportTurn.create({
+    data: {
+      tenantId: tenant.id,
+      tripId: trip.id,
+      turnSummary: title,
+      outcome: sandbox ? 'deflected' : 'answered',
+      rawIo: {
+        kind: 'trip_intake',
+        sandbox,
+        whatsappConversationId: context.whatsappConversationId,
+      } as Prisma.InputJsonValue,
+    },
+  });
+  return { ok: true, sandbox, trip };
+}
+
+async function createTenantHandoff(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+  const input = body.input ?? {};
+  const context = supportContext(body);
+  const id = crypto.randomUUID();
+  const title = asString(input.title) ?? 'Traveler handoff';
+  const summary = asString(input.summary) ?? asString(input.question) ?? title;
+  const priority = asString(input.priority) === 'urgent' ? 'urgent' : 'normal';
+  const rawContext = sanitizedSupportContext(body);
+  const slackInstall = await prisma.slackInstall.findFirst({
+    where: { tenantId: tenant.id, revokedAt: null },
+    orderBy: { installedAt: 'desc' },
+    select: { teamId: true, teamName: true, routing: true },
+  });
+  const handoffContext = {
+    ...rawContext,
+    kind: 'tenant_travel_handoff',
+    primaryChannel: 'web_internal',
+    optionalFanout: {
+      slackConfigured: Boolean(slackInstall),
+      slackTeamId: slackInstall?.teamId ?? null,
+      whatsappOperatorConfigured: Boolean(asString(input.operator_whatsapp_phone)),
+    },
+    tripId: asString(input.trip_id) ?? asString(input.tripId),
+  } as Prisma.InputJsonObject;
+
+  await prisma.$executeRaw`
+    INSERT INTO support_tickets (
+      id, tenant_id, status, priority, source, title, summary,
+      assignee_name, assignee_email, assignee_slack_user_id,
+      whatsapp_conversation_id, whatsapp_phone_number, whatsapp_profile_name,
+      workflow_execution_id, slack_channel_id, slack_message_ts, raw_context,
+      created_at, updated_at
+    )
+    VALUES (
+      ${id}, ${tenant.id}, 'open', ${priority}, 'web_internal',
+      ${title}, ${summary}, ${asString(input.assignee_name)}, ${asString(input.assignee_email)},
+      ${asString(input.assignee_slack_user_id)}, ${context.whatsappConversationId}, ${context.whatsappPhoneNumber},
+      ${context.whatsappProfileName}, ${context.workflowExecutionId}, ${asString(input.slack_channel_id)},
+      ${asString(input.slack_message_ts)}, ${handoffContext as Prisma.InputJsonValue}, now(), now()
+    )
+  `;
+  await prisma.supportTurn.create({
+    data: {
+      tenantId: tenant.id,
+      tripId: asString(input.trip_id) ?? asString(input.tripId) ?? undefined,
+      turnSummary: summary,
+      outcome: 'escalated',
+      rawIo: { handoffId: id, ...handoffContext } as Prisma.InputJsonValue,
+    },
+  });
+  return {
+    ok: true,
+    handoff: await getSupportTicket(id),
+    primaryChannel: 'web_internal',
+    fanout: {
+      slackConfigured: Boolean(slackInstall),
+      whatsappOperatorConfigured: Boolean(asString(input.operator_whatsapp_phone)),
+    },
+  };
+}
+
+async function getWalletContext(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+  const input = body.input ?? {};
+  const userId = asString(input.user_id) ?? asString(input.userId);
+  const [tenantWallets, userWallets, gatewayConfig, signer] = await Promise.all([
+    prisma.circleWallet.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { updatedAt: 'desc' },
+      take: 10,
+    }),
+    userId
+      ? prisma.wallet.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' }, take: 10 })
+      : Promise.resolve([]),
+    prisma.tenantGatewayConfig.findUnique({ where: { tenantId: tenant.id } }).catch(() => null),
+    prisma.tenantGatewaySigner.findUnique({ where: { tenantId: tenant.id } }).catch(() => null),
+  ]);
+  return {
+    ok: true,
+    tenant: { id: tenant.id, slug: tenant.slug, arcAddress: tenant.arcAddress },
+    sandbox: isFreeTenant(tenant),
+    tenantWallets,
+    userWallets,
+    gateway: gatewayConfig
+      ? { configured: true, updatedAt: gatewayConfig.updatedAt }
+      : { configured: false },
+    signer: signer ? { configured: true, updatedAt: signer.updatedAt } : { configured: false },
   };
 }
 
@@ -870,12 +1160,16 @@ function titleFromText(text: string, url: string): string {
 }
 
 const OPERATIONS: Record<SupportTool, (body: SupportToolBody) => Promise<unknown>> = {
+  create_tenant_handoff: createTenantHandoff,
+  create_trip_intake: createTripIntake,
   create_support_ticket: createSupportTicket,
   get_billing_context: getBillingContext,
   get_escrow_context: getEscrowContext,
   get_recent_channel_events: getRecentChannelEvents,
+  get_tenant_operating_context: getTenantOperatingContext,
   get_tenant_context: getTenantContext,
   get_trip_context: getTripContext,
+  get_wallet_context: getWalletContext,
   get_whatsapp_setup_status: getWhatsappSetupStatus,
   search_sendero_docs: searchSenderoDocs,
   update_support_ticket: updateSupportTicket,
