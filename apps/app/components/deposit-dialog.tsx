@@ -138,6 +138,15 @@ export function DepositDialog() {
         <strong>unified Gateway balance</strong>. EURC lands directly per chain.
       </p>
 
+      <div className="dep-gateway-note">
+        <strong>{selectedToken === 'USDC' ? 'Unified Gateway path' : 'Per-chain EURC path'}</strong>
+        <span>
+          {selectedToken === 'USDC'
+            ? 'USDC deposits on Arc, Avalanche, Arbitrum, or Solana sweep into one spendable balance for send, bridge, swap, and traveler spend flows.'
+            : 'EURC is shown as a wallet balance on each supported chain until Gateway pooling is enabled for that asset.'}
+        </span>
+      </div>
+
       {/* Token selector */}
       <div className="dep-tabs">
         {(['USDC', 'EURC'] as Token[]).map(t => (
@@ -302,6 +311,26 @@ export function DepositDialog() {
       )}
 
       <style jsx>{`
+        .dep-gateway-note {
+          border: 1px solid var(--border);
+          background: color-mix(in oklab, var(--bg-elev) 100%, transparent);
+          padding: 10px 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+        .dep-gateway-note strong {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text);
+        }
+        .dep-gateway-note span {
+          color: var(--text-dim);
+          font-size: 12px;
+          line-height: 1.5;
+        }
         .dep-tabs {
           display: grid;
           grid-template-columns: 1fr 1fr;

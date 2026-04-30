@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
     console.error('[send] error:', detail, { tenantId: tenant.id, signerAddress: signer.address });
     return NextResponse.json(
       { error: 'send_failed', message: detail },
-      { status: detail.startsWith('Insufficient EVM Gateway USDC.') ? 409 : 500 }
+      { status: detail.startsWith('Insufficient spendable EVM Gateway USDC.') ? 409 : 500 }
     );
   }
 }
