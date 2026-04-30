@@ -33,6 +33,8 @@
 
 import type { ReactNode } from 'react';
 
+import { Menu } from 'lucide-react';
+
 import { ChatModelTrigger } from '@/components/chat/chat-model-trigger';
 import {
   DropdownMenu,
@@ -213,9 +215,15 @@ function QuickCommandsPanel({ onCommand }: { onCommand?: (prefix: string) => voi
                 borderRadius: 6,
                 border: 0,
                 color: 'var(--ink)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 34,
+                height: 30,
               }}
+              aria-label="Open quick commands"
             >
-              Commands
+              <Menu aria-hidden="true" size={16} strokeWidth={2} />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent

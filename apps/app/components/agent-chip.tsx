@@ -8,6 +8,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import {
+  ReputationStatDialog,
+  type ReputationRecentFeedback,
+  type ReputationValidation,
+} from '@/components/reputation-stat-dialog';
+
 interface AgentIdentity {
   agentId: string;
   providerAddress: string;
@@ -16,6 +22,15 @@ interface AgentIdentity {
   count: number;
   validators: number;
   metadata: { name?: string; description?: string } | null;
+  indexed: {
+    contract: string;
+    holderAddress: string;
+    status: string;
+    mintedAt: string | null;
+    cachedAt: string | null;
+  } | null;
+  recent: ReputationRecentFeedback[];
+  validations: ReputationValidation[];
   explorerUrl: string;
 }
 
@@ -121,22 +136,106 @@ export function AgentChip() {
           </div>
 
           <div className="ac-stats">
-            <div className="ac-stat">
-              <div className="ac-stat-v">★ {data.stars.toFixed(2)}</div>
-              <div className="ac-stat-k">stars</div>
-            </div>
-            <div className="ac-stat">
-              <div className="ac-stat-v">{data.count}</div>
-              <div className="ac-stat-k">feedback</div>
-            </div>
-            <div className="ac-stat">
-              <div className="ac-stat-v">{data.validators}</div>
-              <div className="ac-stat-k">validators</div>
-            </div>
-            <div className="ac-stat">
-              <div className="ac-stat-v">{data.meanScore.toFixed(0)}</div>
-              <div className="ac-stat-k">mean score</div>
-            </div>
+            <ReputationStatDialog
+              identity={{
+                kind: 'sendero-agent',
+                name,
+                agentId: data.agentId,
+                status: data.indexed?.status ?? null,
+                providerAddress: data.providerAddress,
+                holderAddress: data.indexed?.holderAddress ?? null,
+                contract: data.indexed?.contract ?? null,
+                explorerUrl: data.explorerUrl,
+                mintedAt: data.indexed?.mintedAt ?? null,
+                cachedAt: data.indexed?.cachedAt ?? null,
+              }}
+              metric={{
+                key: 'stars',
+                label: 'stars',
+                value: data.stars.toFixed(2),
+                description:
+                  'Weighted ERC-8004 reputation signal for the Sendero travel agent across recorded trip feedback.',
+              }}
+              recent={data.recent}
+              validations={data.validations}
+            >
+              <StatBox value={`★ ${data.stars.toFixed(2)}`} label="stars" />
+            </ReputationStatDialog>
+            <ReputationStatDialog
+              identity={{
+                kind: 'sendero-agent',
+                name,
+                agentId: data.agentId,
+                status: data.indexed?.status ?? null,
+                providerAddress: data.providerAddress,
+                holderAddress: data.indexed?.holderAddress ?? null,
+                contract: data.indexed?.contract ?? null,
+                explorerUrl: data.explorerUrl,
+                mintedAt: data.indexed?.mintedAt ?? null,
+                cachedAt: data.indexed?.cachedAt ?? null,
+              }}
+              metric={{
+                key: 'feedback',
+                label: 'feedback',
+                value: String(data.count),
+                description:
+                  'Feedback events indexed for this agent, including linked trip and booking references when the event was created by a Sendero trip interaction.',
+              }}
+              recent={data.recent}
+              validations={data.validations}
+            >
+              <StatBox value={String(data.count)} label="feedback" />
+            </ReputationStatDialog>
+            <ReputationStatDialog
+              identity={{
+                kind: 'sendero-agent',
+                name,
+                agentId: data.agentId,
+                status: data.indexed?.status ?? null,
+                providerAddress: data.providerAddress,
+                holderAddress: data.indexed?.holderAddress ?? null,
+                contract: data.indexed?.contract ?? null,
+                explorerUrl: data.explorerUrl,
+                mintedAt: data.indexed?.mintedAt ?? null,
+                cachedAt: data.indexed?.cachedAt ?? null,
+              }}
+              metric={{
+                key: 'validators',
+                label: 'validators',
+                value: String(data.validators),
+                description:
+                  'Distinct validator wallets that have rated or attested the Sendero travel agent under the ERC-8004 reputation graph.',
+              }}
+              recent={data.recent}
+              validations={data.validations}
+            >
+              <StatBox value={String(data.validators)} label="validators" />
+            </ReputationStatDialog>
+            <ReputationStatDialog
+              identity={{
+                kind: 'sendero-agent',
+                name,
+                agentId: data.agentId,
+                status: data.indexed?.status ?? null,
+                providerAddress: data.providerAddress,
+                holderAddress: data.indexed?.holderAddress ?? null,
+                contract: data.indexed?.contract ?? null,
+                explorerUrl: data.explorerUrl,
+                mintedAt: data.indexed?.mintedAt ?? null,
+                cachedAt: data.indexed?.cachedAt ?? null,
+              }}
+              metric={{
+                key: 'mean-score',
+                label: 'mean score',
+                value: data.meanScore.toFixed(0),
+                description:
+                  'Mean raw ERC-8004 score on the 0-100 scale before conversion into the visible 0-5 star value.',
+              }}
+              recent={data.recent}
+              validations={data.validations}
+            >
+              <StatBox value={data.meanScore.toFixed(0)} label="mean score" />
+            </ReputationStatDialog>
           </div>
 
           <div className="ac-meta">
@@ -163,6 +262,15 @@ export function AgentChip() {
 
       <style jsx>{chipStyles}</style>
     </div>
+  );
+}
+
+function StatBox({ value, label }: { value: string; label: string }) {
+  return (
+    <button type="button" className="ac-stat reputation-stat-trigger">
+      <div className="ac-stat-v">{value}</div>
+      <div className="ac-stat-k">{label}</div>
+    </button>
   );
 }
 
@@ -291,12 +399,15 @@ const chipStyles = `
     border-bottom: 1px solid var(--border);
   }
   .ac-stat {
+    border: 0;
+    background: transparent;
     padding: 10px 6px;
     display: flex;
     flex-direction: column;
     gap: 2px;
     align-items: center;
     border-right: 1px solid var(--border);
+    cursor: pointer;
   }
   .ac-stat:last-child { border-right: 0; }
   .ac-stat-v {

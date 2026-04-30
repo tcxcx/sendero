@@ -2519,7 +2519,7 @@ hr.rule {
   }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 900px) {
   .console-hero-band {
     margin: -12px -10px 0 !important;
     padding: 14px 12px 12px !important;
@@ -2568,6 +2568,12 @@ hr.rule {
   }
 }
 
+@media (max-width: 620px) {
+  .console-hero-kpis {
+    gap: 1px !important;
+  }
+}
+
 /* =====================================================
    Console grid
    ===================================================== */
@@ -2602,6 +2608,23 @@ hr.rule {
 
   .meta-inbox-workflow {
     padding: 12px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .meta-inbox-grid {
+    --meta-inbox-cols: minmax(0, 1fr);
+  }
+
+  .meta-inbox-grid > :first-child {
+    display: none !important;
+  }
+
+  .meta-inbox-conversation {
+    grid-column: 1 / -1;
+    min-height: min(620px, calc(100vh - 220px)) !important;
+    padding: 10px 12px !important;
+    border-top: 1px solid var(--hairline-color);
   }
 }
 
@@ -3198,4 +3221,51 @@ hr.rule {
 }
 .sd-corner-hover:hover::before {
   opacity: 1;
+}
+
+.reputation-stat-trigger {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.reputation-stat-trigger::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ink);
+  opacity: 0;
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition:
+    opacity 140ms ease,
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reputation-stat-trigger:hover,
+.reputation-stat-trigger:focus-visible {
+  color: #fdfbf7;
+  outline: none;
+}
+
+.reputation-stat-trigger:hover::after,
+.reputation-stat-trigger:focus-visible::after {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.reputation-stat-trigger:hover .ac-stat-v,
+.reputation-stat-trigger:hover .ac-stat-k,
+.reputation-stat-trigger:hover .wr-stat-v,
+.reputation-stat-trigger:hover .wr-stat-k,
+.reputation-stat-trigger:focus-visible .ac-stat-v,
+.reputation-stat-trigger:focus-visible .ac-stat-k,
+.reputation-stat-trigger:focus-visible .wr-stat-v,
+.reputation-stat-trigger:focus-visible .wr-stat-k {
+  color: #fdfbf7;
 }

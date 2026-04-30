@@ -2,14 +2,32 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import {
+  ReputationStatDialog,
+  type ReputationRecentFeedback,
+  type ReputationValidation,
+} from '@/components/reputation-stat-dialog';
+
 interface WorkspaceReputation {
+  subjectId: string;
   displayName: string;
   status: string;
   agentId: string | null;
+  contract: string | null;
+  holderAddress: string | null;
+  mintedAt: string | null;
+  cachedAt: string | null;
   stars: number | null;
   feedbackCount: number;
   validatorCount: number;
   validationCount: number;
+  recent: ReputationRecentFeedback[];
+  validations: ReputationValidation[];
+  provisioning?: {
+    attempted: boolean;
+    status: 'not_needed' | 'minted' | 'pending' | 'failed';
+    error: string | null;
+  };
   publicUrl: string;
 }
 
@@ -92,11 +110,117 @@ export function WorkspaceReputationChip() {
               <div className="wr-sub">Workspace customer profile</div>
             </div>
           </div>
+          {data.provisioning?.attempted && (
+            <div className={`wr-provision ${data.provisioning.status}`}>
+              <span>
+                {data.provisioning.status === 'minted'
+                  ? 'Workspace identity minted'
+                  : data.provisioning.status === 'failed'
+                    ? 'Provisioning needs attention'
+                    : 'Workspace identity provisioning'}
+              </span>
+              <span>
+                {data.provisioning.error ?? (data.agentId ? `#${data.agentId}` : data.status)}
+              </span>
+            </div>
+          )}
           <div className="wr-stats">
-            <Stat value={stars} label="stars" />
-            <Stat value={String(data.feedbackCount)} label="ratings" />
-            <Stat value={String(data.validatorCount)} label="raters" />
-            <Stat value={String(data.validationCount)} label="checks" />
+            <ReputationStatDialog
+              identity={{
+                kind: 'workspace-agent',
+                name: data.displayName,
+                agentId: data.agentId,
+                status: data.status,
+                holderAddress: data.holderAddress,
+                contract: data.contract,
+                publicUrl: data.publicUrl,
+                mintedAt: data.mintedAt,
+                cachedAt: data.cachedAt,
+              }}
+              metric={{
+                key: 'stars',
+                label: 'stars',
+                value: stars,
+                description:
+                  'Workspace agent reputation across travelers, validators, and counterparties that have rated this tenant identity.',
+              }}
+              recent={data.recent}
+              validations={data.validations}
+            >
+              <Stat value={stars} label="stars" />
+            </ReputationStatDialog>
+            <ReputationStatDialog
+              identity={{
+                kind: 'workspace-agent',
+                name: data.displayName,
+                agentId: data.agentId,
+                status: data.status,
+                holderAddress: data.holderAddress,
+                contract: data.contract,
+                publicUrl: data.publicUrl,
+                mintedAt: data.mintedAt,
+                cachedAt: data.cachedAt,
+              }}
+              metric={{
+                key: 'ratings',
+                label: 'ratings',
+                value: String(data.feedbackCount),
+                description:
+                  'Ratings attached to this workspace identity, including trip IDs, booking IDs, validator wallets, and transaction hashes when indexed.',
+              }}
+              recent={data.recent}
+              validations={data.validations}
+            >
+              <Stat value={String(data.feedbackCount)} label="ratings" />
+            </ReputationStatDialog>
+            <ReputationStatDialog
+              identity={{
+                kind: 'workspace-agent',
+                name: data.displayName,
+                agentId: data.agentId,
+                status: data.status,
+                holderAddress: data.holderAddress,
+                contract: data.contract,
+                publicUrl: data.publicUrl,
+                mintedAt: data.mintedAt,
+                cachedAt: data.cachedAt,
+              }}
+              metric={{
+                key: 'raters',
+                label: 'raters',
+                value: String(data.validatorCount),
+                description:
+                  'Distinct counterparties that have rated this workspace agent. Diversity matters because ERC-8004 forbids useful trust from self-rating.',
+              }}
+              recent={data.recent}
+              validations={data.validations}
+            >
+              <Stat value={String(data.validatorCount)} label="raters" />
+            </ReputationStatDialog>
+            <ReputationStatDialog
+              identity={{
+                kind: 'workspace-agent',
+                name: data.displayName,
+                agentId: data.agentId,
+                status: data.status,
+                holderAddress: data.holderAddress,
+                contract: data.contract,
+                publicUrl: data.publicUrl,
+                mintedAt: data.mintedAt,
+                cachedAt: data.cachedAt,
+              }}
+              metric={{
+                key: 'checks',
+                label: 'checks',
+                value: String(data.validationCount),
+                description:
+                  'ValidationRegistry checks for this workspace identity, including pending and resolved KYB, KYC, suitability, or route-specific attestations.',
+              }}
+              recent={data.recent}
+              validations={data.validations}
+            >
+              <Stat value={String(data.validationCount)} label="checks" />
+            </ReputationStatDialog>
           </div>
           <a className="wr-link" href={data.publicUrl} target="_blank" rel="noreferrer">
             View public reputation →
@@ -150,8 +274,29 @@ export function WorkspaceReputationChip() {
         .wr-title { min-width: 0; }
         .wr-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; color: var(--text); }
         .wr-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+        .wr-provision {
+          display: grid;
+          gap: 4px;
+          padding: 9px 14px;
+          border-bottom: 1px solid var(--border);
+          background: color-mix(in oklab, var(--ink) 7%, transparent);
+          font-family: var(--font-mono);
+          font-size: 10px;
+          line-height: 1.35;
+          color: var(--text);
+        }
+        .wr-provision span:last-child {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--text-dim);
+        }
+        .wr-provision.failed {
+          background: color-mix(in oklab, var(--danger, #ff4b2b) 9%, transparent);
+          color: var(--danger, #ff4b2b);
+        }
         .wr-stats { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--border); }
-        .wr-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-right: 1px solid var(--border); }
+        .wr-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border: 0; border-right: 1px solid var(--border); background: transparent; cursor: pointer; width: 100%; }
         .wr-stat:last-child { border-right: 0; }
         .wr-stat-v { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
         .wr-stat-k { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-faint); }
@@ -168,9 +313,9 @@ export function WorkspaceReputationChip() {
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="wr-stat">
+    <button type="button" className="wr-stat reputation-stat-trigger">
       <div className="wr-stat-v">{value}</div>
       <div className="wr-stat-k">{label}</div>
-    </div>
+    </button>
   );
 }

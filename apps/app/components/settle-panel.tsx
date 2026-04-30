@@ -15,7 +15,7 @@
  * the user signs once and the money actually moves.)
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { useSendero } from './store';
 import { restoreFromStorage, sendUserOp } from '@sendero/circle/modular-wallets';
@@ -95,24 +95,24 @@ export function SettlePanel() {
     setBusy(true);
     setSettlementError(null);
     setSettlementPhase('signing');
-    logEvent({
-      group: SETTLE_LOG_GROUP,
-      bullet: 'active',
-      text: `pay(<span class="v">${totalAmount} USDC</span>) · attest(#${/* agentId filled below */ ''})`,
-      t: now(),
-    });
 
     try {
-      const wallet = await restoreFromStorage();
+      const [wallet, identity] = await Promise.all([restoreFromStorage(), fetchAgentIdentity()]);
       if (!wallet) {
         throw new Error('Session expired — sign in with your passkey again.');
       }
 
-      const identity = await fetchAgentIdentity();
+      logEvent({
+        group: SETTLE_LOG_GROUP,
+        bullet: 'active',
+        text: `pay(<span class="v">${totalAmount} USDC</span>) · attest(<span class="v">#${identity.agentId}</span>)`,
+        t: now(),
+      });
+
       const amountUnits = toUsdcUnits(totalAmount);
 
       const calls = [
-        encodeUsdcTransfer(identity.providerAddress as any, amountUnits),
+        encodeUsdcTransfer(identity.providerAddress as `0x${string}`, amountUnits),
         encodeGiveFeedback({
           agentId: BigInt(identity.agentId),
           score: 95,
@@ -302,6 +302,7 @@ export function SettlePanel() {
         }}
       >
         <button
+          type="button"
           className="btn primary"
           disabled={buttonDisabled || !buttonAction}
           onClick={() => buttonAction?.()}
@@ -332,9 +333,9 @@ export function SettlePanel() {
           >
             On-chain
           </div>
-          {settlement.txHashes.map((hash, i) => (
+          {settlement.txHashes.map(hash => (
             <a
-              key={hash + i}
+              key={hash}
               href={`${EXPLORER_BASE}/tx/${hash}`}
               target="_blank"
               rel="noreferrer"
