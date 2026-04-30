@@ -264,9 +264,6 @@ export function AgentChip() {
               title="Open Arcscan (g x)"
             >
               View contract on Arc ↗
-              <kbd className="ac-kbd" aria-hidden>
-                g x
-              </kbd>
             </a>
           </div>
         </div>
@@ -331,9 +328,9 @@ const chipStyles = `
     place-items: center;
   }
   .ac-avatar.lg {
-    width: 32px;
-    height: 32px;
-    font-size: 12px;
+    width: 40px;
+    height: 40px;
+    font-size: 13px;
   }
   .ac-stars {
     color: var(--ink);
@@ -385,14 +382,14 @@ const chipStyles = `
   .ac-header {
     display: flex;
     gap: 12px;
-    padding: 12px 14px;
+    padding: 14px 18px;
     border-bottom: 1px solid var(--border);
     align-items: center;
   }
   .ac-header-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .ac-name {
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
     letter-spacing: -0.01em;
     color: var(--text);
@@ -403,7 +400,7 @@ const chipStyles = `
   .ac-sub {
     font-family: var(--font-mono);
     font-size: 10px;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     color: var(--text-dim);
     text-transform: uppercase;
   }
@@ -417,7 +414,8 @@ const chipStyles = `
   .ac-stat {
     border: 0;
     background: transparent;
-    padding: 10px 6px;
+    min-width: 0;
+    padding: 13px 4px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -428,6 +426,9 @@ const chipStyles = `
   .ac-stat:last-child { border-right: 0; }
   .ac-stat-v {
     font-family: var(--font-mono);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 13px;
     color: var(--ink);
     letter-spacing: 0.02em;
@@ -441,7 +442,7 @@ const chipStyles = `
   }
 
   .ac-meta {
-    padding: 10px 14px;
+    padding: 10px 18px;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -468,11 +469,11 @@ const chipStyles = `
 
   .ac-actions {
     display: grid;
-    grid-template-columns: 1fr;
     border-top: 1px solid var(--border);
   }
   .ac-open {
-    padding: 10px 14px;
+    display: block;
+    padding: 13px 18px;
     border-top: 1px solid var(--border);
     font-family: var(--font-mono);
     font-size: 10px;
@@ -481,6 +482,7 @@ const chipStyles = `
     color: var(--ink);
     text-decoration: none;
     text-align: center;
+    white-space: nowrap;
     transition: background 120ms;
   }
   .ac-open:first-child { border-top: 0; }
