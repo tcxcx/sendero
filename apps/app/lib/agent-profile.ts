@@ -14,16 +14,21 @@
 
 import { unstable_cache } from 'next/cache';
 
+import { getAgentIdentity, getReputation, IDENTITY_REGISTRY } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
 
 export interface AgentProfile {
-  kind: 'org' | 'user';
+  kind: 'org' | 'user' | 'sendero';
   subjectId: string;
   agentId: string | null;
   contract: string;
   holderAddress: string;
+  providerAddress?: string | null;
   status: 'pending' | 'minted' | 'failed';
   displayName: string;
+  description?: string | null;
+  tokenURI?: string | null;
   mintedAt: string | null;
   stars: number | null;
   feedbackCount: number;
@@ -150,3 +155,110 @@ export const loadAgentProfile = unstable_cache(loadAgentProfileFresh, ['agent-pr
   revalidate: 300,
   tags: ['reputation'],
 });
+
+export async function loadSenderoAgentProfileFresh(): Promise<AgentProfile | null> {
+  const agentId = env.senderoAgentTokenId();
+  const providerAddress = process.env.SENDERO_PROVIDER_ADDRESS ?? null;
+  if (!agentId || !providerAddress) return null;
+
+  const [identity, reputation, indexed] = await Promise.all([
+    getAgentIdentity(BigInt(agentId)).catch(() => null),
+    getReputation(BigInt(agentId)).catch(() => null),
+    prisma.onchainIdentity.findFirst({
+      where: { agentId },
+      select: {
+        id: true,
+        contract: true,
+        holderAddress: true,
+        status: true,
+        mintedAt: true,
+        cachedStars: true,
+        cachedFeedbackCount: true,
+        cachedValidatorCount: true,
+        cachedValidationCount: true,
+        cachedAt: true,
+      },
+    }),
+  ]);
+
+  const recent = indexed
+    ? await prisma.reputationFeedback.findMany({
+        where: { subjectId: indexed.id },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+        select: {
+          stars: true,
+          score: true,
+          tag: true,
+          fromAddress: true,
+          txHash: true,
+          tripId: true,
+          bookingId: true,
+          createdAt: true,
+        },
+      })
+    : [];
+  const validations = indexed
+    ? await prisma.validationCheck.findMany({
+        where: { subjectId: indexed.id },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+        select: {
+          validatorAddress: true,
+          requestHash: true,
+          responseScore: true,
+          tag: true,
+          createdAt: true,
+          resolvedAt: true,
+        },
+      })
+    : [];
+
+  return {
+    kind: 'sendero',
+    subjectId: agentId,
+    agentId,
+    contract: indexed?.contract ?? IDENTITY_REGISTRY,
+    holderAddress: indexed?.holderAddress ?? providerAddress,
+    providerAddress,
+    status: (indexed?.status as 'pending' | 'minted' | 'failed' | undefined) ?? 'minted',
+    displayName: identity?.metadata?.name ?? 'Sendero Travel Agent',
+    description:
+      identity?.metadata?.description ??
+      'Sendero primary AI travel agent. Books, settles, and records reputation on Arc-Testnet.',
+    tokenURI: identity?.tokenURI ?? null,
+    mintedAt: indexed?.mintedAt?.toISOString() ?? null,
+    stars: reputation?.stars ?? indexed?.cachedStars ?? null,
+    feedbackCount: reputation?.count ?? indexed?.cachedFeedbackCount ?? 0,
+    validatorCount: reputation?.validators ?? indexed?.cachedValidatorCount ?? 0,
+    validationCount: indexed?.cachedValidationCount ?? validations.length,
+    cachedAt: indexed?.cachedAt?.toISOString() ?? null,
+    recent: recent.map(r => ({
+      stars: r.stars,
+      score: r.score,
+      tag: r.tag,
+      fromAddress: r.fromAddress,
+      txHash: r.txHash,
+      tripId: r.tripId,
+      bookingId: r.bookingId,
+      createdAt: r.createdAt.toISOString(),
+    })),
+    validations: validations.map(v => ({
+      validatorAddress: v.validatorAddress,
+      requestHash: v.requestHash,
+      responseScore: v.responseScore,
+      tag: v.tag,
+      createdAt: v.createdAt.toISOString(),
+      resolvedAt: v.resolvedAt?.toISOString() ?? null,
+    })),
+  };
+}
+
+export const loadSenderoAgentProfile = unstable_cache(
+  loadSenderoAgentProfileFresh,
+  ['sendero-agent-profile'],
+  {
+    revalidate: 300,
+    tags: ['reputation'],
+  }
+);

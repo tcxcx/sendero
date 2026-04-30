@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { loadAgentProfileFresh } from '@/lib/agent-profile';
 import { requireCurrentTenant } from '@/lib/tenant-context';
+import { env } from '@sendero/env';
 import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
 
 export const runtime = 'nodejs';
@@ -38,6 +39,8 @@ export async function GET() {
     }
   }
 
+  const explorerUrl = env.arcExplorerUrl();
+
   return NextResponse.json({
     subjectId: tenant.id,
     displayName: tenant.displayName,
@@ -55,5 +58,6 @@ export async function GET() {
     validations: profile?.validations ?? [],
     provisioning,
     publicUrl: `/agents/org/${tenant.id}`,
+    contractUrl: profile?.contract ? `${explorerUrl}/address/${profile.contract}` : null,
   });
 }

@@ -29,6 +29,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { loadSenderoAgentProfile } from '@/lib/agent-profile';
 import { prisma } from '@sendero/database';
 
 export const runtime = 'nodejs';
@@ -40,16 +41,26 @@ interface RouteParams {
 }
 
 const KIND_LABEL: Record<string, string> = {
+  sendero: 'Sendero Travel Agent',
   org: 'Sendero Travel Agency',
   user: 'Sendero Traveler',
 };
 
 const KIND_DESCRIPTION: Record<string, string> = {
+  sendero:
+    'The primary Sendero AI travel agent operating on Arc-Testnet. Books trips, settles USDC, and accumulates ERC-8004 reputation.',
   org: 'A travel agency or corporate travel desk operating on the Sendero protocol. Settles bookings on Arc-Testnet in USDC; reputation accumulates per ERC-8004.',
   user: 'A traveler with an on-chain identity on Arc-Testnet. Trip history and ratings accumulate against this single address regardless of which agency they book through.',
 };
 
 const KIND_CAPABILITIES: Record<string, string[]> = {
+  sendero: [
+    'search_flights',
+    'book_flight',
+    'settle_booking',
+    'give_feedback',
+    'request_validation',
+  ],
   org: ['book_flight', 'cancel_booking', 'settle_booking', 'give_feedback', 'request_validation'],
   user: ['rate_counterparty', 'submit_validation_response'],
 };
@@ -151,8 +162,42 @@ function customImageFor(args: {
 
 export async function GET(_req: Request, { params }: { params: Promise<RouteParams> }) {
   const { kind, id } = await params;
-  if (kind !== 'org' && kind !== 'user') {
+  if (kind !== 'sendero' && kind !== 'org' && kind !== 'user') {
     return NextResponse.json({ error: 'unknown_kind' }, { status: 404 });
+  }
+
+  if (kind === 'sendero') {
+    const profile = await loadSenderoAgentProfile();
+    if (!profile || profile.agentId !== id) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    }
+
+    return NextResponse.json(
+      {
+        name: profile.displayName,
+        description: profile.description ?? KIND_DESCRIPTION.sendero,
+        image: placeholderImageFor('org', id),
+        external_url: `https://app.sendero.travel/agents/sendero/${id}`,
+        agent_type: 'sendero',
+        subject_kind: 'sendero',
+        holder_address: profile.holderAddress,
+        provider_address: profile.providerAddress ?? null,
+        contract: profile.contract,
+        on_chain_agent_id: profile.agentId,
+        minted_at: profile.mintedAt,
+        capabilities: KIND_CAPABILITIES.sendero,
+        version: '1.0.0',
+        sendero: {
+          tenant_slug: null,
+          profile_url: `https://app.sendero.travel/agents/sendero/${id}`,
+        },
+      },
+      {
+        headers: {
+          'Cache-Control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=86400',
+        },
+      }
+    );
   }
 
   let identity;
