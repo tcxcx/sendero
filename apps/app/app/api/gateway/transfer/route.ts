@@ -20,7 +20,7 @@ import {
   GATEWAY_CHAINS,
   isEvmChain,
   isSolanaChain,
-  transferViaGateway,
+  transferViaGatewayFromSources,
 } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
@@ -28,7 +28,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { decimalUsdcToMicro } from '@/lib/gateway-balance-math';
-import { selectTenantGatewayEvmSource } from '@/lib/gateway-treasury';
+import { selectTenantGatewayEvmSources } from '@/lib/gateway-treasury';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -132,14 +132,14 @@ export async function POST(req: NextRequest) {
     const selected = body.from
       ? {
           signer: await getOrCreateGatewaySigner(tenant.id),
-          from: body.from as keyof typeof GATEWAY_CHAINS,
+          sources: [{ from: body.from as keyof typeof GATEWAY_CHAINS, amountUsdc: body.amount }],
         }
-      : await selectTenantGatewayEvmSource({
+      : await selectTenantGatewayEvmSources({
           tenantId: tenant.id,
           amount: body.amount,
         });
     const signer = selected.signer;
-    const fromChain = GATEWAY_CHAINS[selected.from];
+    const fromChain = GATEWAY_CHAINS[selected.sources[0].from];
     if (!isEvmChain(fromChain)) {
       return NextResponse.json(
         {
@@ -179,10 +179,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const result = await transferViaGateway({
-      from: selected.from,
+    const result = await transferViaGatewayFromSources({
+      sources: selected.sources,
       to: body.to as keyof typeof GATEWAY_CHAINS,
-      amountUsdc: body.amount,
       recipient: body.recipient,
       signer: signer.account,
     });
@@ -200,7 +199,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       state: 'success',
-      from: selected.from,
+      from: selected.sources[0].from,
+      sources: selected.sources,
       requestedFrom: body.from ?? null,
       to: body.to,
       amount: body.amount,

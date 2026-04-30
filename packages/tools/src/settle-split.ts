@@ -22,16 +22,27 @@ const inputSchema = z.object({
 
 /**
  * Resolve the agency leg's destination address for a tenant. Priority:
- *   1. `TenantGatewayConfig.evmDepositorAddress` — the per-tenant
- *      Gateway EOA. Phase 1+ canonical destination.
- *   2. `CircleWallet(kind='treasury')` — the existing tenant treasury
- *      Circle SCA. Used until the backfill cron lands Gateway config.
- *   3. `DEMO_CLIENT_ADDRESS` env — the legacy demo address. Last
+ *   1. `CircleWallet(kind='operations', chain='ARC-TESTNET')` — the
+ *      Gateway deposit staging wallet. Inbound agency profit sweeps
+ *      into the tenant's unified Gateway balance via the Circle webhook.
+ *   2. `TenantGatewayConfig.evmDepositorAddress` — fallback to the
+ *      per-tenant Gateway EOA when the ops wallet is not provisioned.
+ *   3. `CircleWallet(kind='treasury')` — legacy fallback until the
+ *      Gateway backfill has completed.
+ *   4. `DEMO_CLIENT_ADDRESS` env — the legacy demo address. Last
  *      resort, only when neither (1) nor (2) is available (e.g. tools
  *      called without tenant context, or manual replays).
  */
 async function resolveAgencyAddress(tenantId: string | undefined): Promise<`0x${string}`> {
   if (tenantId) {
+    const operations = await prisma.circleWallet.findFirst({
+      where: { tenantId, kind: 'operations', chain: 'ARC-TESTNET' },
+      select: { address: true },
+    });
+    if (operations?.address) {
+      return operations.address as `0x${string}`;
+    }
+
     const config = await prisma.tenantGatewayConfig.findUnique({
       where: { tenantId },
       select: { evmDepositorAddress: true },

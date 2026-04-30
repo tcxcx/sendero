@@ -983,7 +983,7 @@ model GatewayTransferLog {
   status                  String    @default("attesting")
   lastReconciledAt        DateTime? @db.Timestamptz(6)
   initiatedByUserId       String?
-  /// internal_transfer | payroll | invoice | manual | settle_split
+  /// internal_transfer | payroll | invoice | manual | settle_split | nanopay_batch
   triggeredBy             String
   errorMessage            String?
   createdAt               DateTime  @default(now()) @db.Timestamptz(6)

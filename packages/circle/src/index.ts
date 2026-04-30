@@ -31,6 +31,7 @@ export {
   queryUnifiedBalance,
   depositToGateway,
   transferViaGateway,
+  transferViaGatewayFromSources,
 } from './gateway';
 export {
   provisionTenantWallet,

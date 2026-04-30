@@ -2,8 +2,8 @@
  * Scheduled batch settlement — every 5 minutes via Vercel Cron.
  *
  * For every tenant with unsettled paid MeterEvents, builds a
- * NanopayBatch and fires one on-chain USDC transfer via
- * @sendero/nanopayments.
+ * NanopayBatch and debits the tenant's Gateway Business Balance into
+ * Sendero treasury.
  *
  * Cheap-when-idle: a fast pre-flight count returns immediately when
  * there are no pending events AND no stuck `settling` batches to

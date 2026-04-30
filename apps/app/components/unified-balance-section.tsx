@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * UnifiedBalanceSection — operator-facing unified Gateway balance.
+ * UnifiedBalanceSection — operator-facing business balance.
  *
  * Phase 2 P2.8. Renders the per-tenant unified USDC view sourced from
  * /api/gateway/balance:
@@ -13,8 +13,8 @@
  *
  * Lives alongside the existing per-wallet treasury balance in
  * WalletDropdown. Per-wallet view = "what's in my Arc treasury wallet
- * right now." Unified view = "what's in my Gateway balance plus
- * everything in flight." Both useful in different ops contexts.
+ * right now." Business balance = "ticket-sale profit, deposits, and
+ * spendable Gateway funds, plus everything in flight."
  *
  * Polls every 30s — Gateway API freshness + the finalization ETA
  * countdowns. SSE-replacement deferred to Phase 5 (Postgres NOTIFY
@@ -132,7 +132,7 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
         }
       >
         <div className={inline ? 'flex flex-col items-center' : undefined}>
-          <div className="text-xs uppercase tracking-wider text-zinc-500">Unified balance</div>
+          <div className="text-xs uppercase tracking-wider text-zinc-500">Business balance</div>
           <div
             className={
               inline
@@ -197,9 +197,9 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
     <div className="space-y-3">
       <div>
         <div className="font-mono text-[10px] uppercase tracking-[0.12em] opacity-70">
-          Unified balance
+          Business balance
         </div>
-        <div className="mt-0.5 text-sm font-medium">Gateway balance breakdown</div>
+        <div className="mt-0.5 text-sm font-medium">Operating balance breakdown</div>
       </div>
 
       <div className="space-y-1.5">

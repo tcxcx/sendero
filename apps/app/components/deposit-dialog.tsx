@@ -134,15 +134,17 @@ export function DepositDialog() {
       onClose={close}
     >
       <p className="dlg-sub">
-        Send to your deposit address on any chain below. USDC pools into your{' '}
-        <strong>unified Gateway balance</strong>. EURC lands directly per chain.
+        Send ticket sales, customer deposits, or operating funds to any address below. USDC pools
+        into your <strong>Business Balance</strong>. EURC lands directly per chain.
       </p>
 
       <div className="dep-gateway-note">
-        <strong>{selectedToken === 'USDC' ? 'Unified Gateway path' : 'Per-chain EURC path'}</strong>
+        <strong>
+          {selectedToken === 'USDC' ? 'Business Balance path' : 'Per-chain EURC path'}
+        </strong>
         <span>
           {selectedToken === 'USDC'
-            ? 'USDC deposits on Arc, Avalanche, Arbitrum, or Solana sweep into one spendable balance for send, bridge, swap, and traveler spend flows.'
+            ? 'USDC deposits on Arc, Avalanche, Arbitrum, or Solana sweep into one spendable balance for ticket profit, send, bridge, swap, traveler spend, and nanopayment billing.'
             : 'EURC is shown as a wallet balance on each supported chain until Gateway pooling is enabled for that asset.'}
         </span>
       </div>

@@ -4,11 +4,11 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 import { put } from '@vercel/blob';
 import { invoiceToTemplateProps, renderInvoicePdfBuffer } from '@sendero/invoicing';
 import { provisionTenantWallet } from '@sendero/circle';
-import { retrySettlingBatches, type BatchStore, type SettleFn } from '@sendero/billing/batch';
+import { retrySettlingBatches, type BatchStore } from '@sendero/billing/batch';
 import { prisma } from '@sendero/database';
-import { transferUSDC } from '@sendero/nanopayments';
 import { revalidatePath } from 'next/cache';
-import type { Address } from 'viem';
+
+import { makeSettleFn } from '@/lib/nanopay-settle';
 
 type RetryResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -226,24 +226,5 @@ function makeTenantBatchStore(tenantId: string): BatchStore {
         orderBy: { updatedAt: 'asc' },
         take: limit,
       }),
-  };
-}
-
-function senderoTreasuryAddress(): Address {
-  const address = process.env.SENDERO_TREASURY_ADDRESS;
-  if (!address) throw new Error('SENDERO_TREASURY_ADDRESS not configured');
-  return address as Address;
-}
-
-function makeSettleFn(): SettleFn {
-  const to = senderoTreasuryAddress();
-  return async ({ totalMicroUsdc, batchId, tenantId }) => {
-    const amount = (Number(totalMicroUsdc) / 1e6).toFixed(6);
-    const { txHash } = await transferUSDC({
-      to,
-      amount,
-      label: `nanopay-batch:${tenantId}:${batchId}`,
-    });
-    return { txHash };
   };
 }

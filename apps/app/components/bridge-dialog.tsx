@@ -87,8 +87,8 @@ export function BridgeDialog() {
       onClose={close}
     >
       <p className="dlg-sub">
-        Moves USDC from your unified Gateway balance across enabled Gateway chains. Arc remains the
-        default destination while Solana and other chain destinations come online.
+        Moves USDC from your Business Balance across enabled Gateway chains. Ticket profit,
+        deposits, and operating funds share this source of truth.
       </p>
 
       {/* Live route visualization — updates as chain selection changes */}
@@ -118,7 +118,7 @@ export function BridgeDialog() {
       </div>
 
       <div className="dlg-row">
-        <span className="dlg-label">Source chain · Gateway balance</span>
+        <span className="dlg-label">Source chain · Business Balance</span>
         <div className="br-chain-grid" role="radiogroup" aria-label="Source chain">
           {ARC_BRIDGE_SOURCES.map(id => {
             const selected = id === chain;

@@ -613,3 +613,194 @@ export async function transferViaGateway(params: {
     apiSignature,
   };
 }
+
+export async function transferViaGatewayFromSources(params: {
+  sources: Array<{ from: keyof typeof GATEWAY_CHAINS; amountUsdc: string }>;
+  to: keyof typeof GATEWAY_CHAINS;
+  /** EVM destination: 0x address. Solana destination: base58 address. */
+  recipient?: string;
+  /** Optional per-tenant signer. Defaults to platform TREASURY_PRIVATE_KEY. */
+  signer?: PrivateKeyAccount;
+}): Promise<{
+  burnSignature: Hex;
+  burnSignatures: Hex[];
+  mintHash: string;
+  explorerUrl: string;
+  attestation: Hex;
+  apiSignature: Hex;
+}> {
+  if (params.sources.length === 0) {
+    throw new Error('transferViaGatewayFromSources: at least one source is required');
+  }
+  if (params.sources.length === 1) {
+    const result = await transferViaGateway({
+      from: params.sources[0].from,
+      to: params.to,
+      amountUsdc: params.sources[0].amountUsdc,
+      recipient: params.recipient,
+      signer: params.signer,
+    });
+    return { ...result, burnSignatures: [result.burnSignature] };
+  }
+
+  const dst = GATEWAY_CHAINS[params.to];
+  if (!dst) {
+    throw new Error(`Unknown Gateway destination chain: ${params.to}`);
+  }
+
+  const acct = params.signer ?? treasuryAccount();
+  const solanaHelpers = isSolanaChain(dst) ? await import('./gateway-solana-mint') : null;
+  let destinationContractEncoded: Hex;
+  let destinationTokenEncoded: Hex;
+  let destinationRecipientEncoded: Hex;
+  let solanaMintContext: {
+    recipientAta: import('@solana/web3.js').PublicKey;
+    recipientOwner: import('@solana/web3.js').PublicKey;
+    needsAtaCreate: boolean;
+  } | null = null;
+
+  if (isSolanaChain(dst)) {
+    if (!solanaHelpers) {
+      throw new Error('transferViaGatewayFromSources: Solana helpers unavailable');
+    }
+    if (!params.recipient) {
+      throw new Error('transferViaGatewayFromSources: Solana destination requires recipient');
+    }
+    const resolved = await solanaHelpers.resolveSolanaUsdcRecipient({
+      recipient: params.recipient,
+      usdcMint: dst.usdcMint,
+      rpcUrl: dst.rpcUrl,
+    });
+    solanaMintContext = resolved;
+    destinationContractEncoded = solanaHelpers.solAddressToBytes32(dst.gatewayMinterProgram);
+    destinationTokenEncoded = solanaHelpers.solAddressToBytes32(dst.usdcMint);
+    destinationRecipientEncoded = solanaHelpers.solAddressToBytes32(
+      resolved.recipientAta.toBase58()
+    );
+  } else if (isEvmChain(dst)) {
+    const evmRecipient = (params.recipient ?? acct.address) as Address;
+    destinationContractEncoded = addressToBytes32(GATEWAY_MINTER);
+    destinationTokenEncoded = addressToBytes32(dst.usdc);
+    destinationRecipientEncoded = addressToBytes32(evmRecipient);
+  } else {
+    const _exhaustive: never = dst;
+    throw new Error(`Unhandled chain kind: ${_exhaustive}`);
+  }
+
+  const signed = await Promise.all(
+    params.sources.map(async source => {
+      const src = GATEWAY_CHAINS[source.from];
+      if (!src) throw new Error(`Unknown Gateway source chain: ${source.from}`);
+      if (!isEvmChain(src)) {
+        throw new Error(
+          `transferViaGatewayFromSources: Solana sources not yet supported (${source.from}).`
+        );
+      }
+      const burnIntent = {
+        maxBlockHeight: maxUint64,
+        maxFee: MAX_FEE,
+        spec: {
+          version: 1,
+          sourceDomain: src.domain,
+          destinationDomain: dst.domain,
+          sourceContract: addressToBytes32(GATEWAY_WALLET),
+          destinationContract: destinationContractEncoded,
+          sourceToken: addressToBytes32(src.usdc),
+          destinationToken: destinationTokenEncoded,
+          sourceDepositor: addressToBytes32(acct.address),
+          destinationRecipient: destinationRecipientEncoded,
+          sourceSigner: addressToBytes32(acct.address),
+          destinationCaller: addressToBytes32(zeroAddress),
+          value: parseUnits(source.amountUsdc, 6),
+          salt: randomSalt(),
+          hookData: '0x' as Hex,
+        },
+      };
+      const signature = await acct.signTypedData({
+        domain: EIP712_DOMAIN,
+        primaryType: 'BurnIntent',
+        types: EIP712_TYPES,
+        message: burnIntent,
+      });
+      return {
+        burnIntent: {
+          maxBlockHeight: burnIntent.maxBlockHeight.toString(),
+          maxFee: burnIntent.maxFee.toString(),
+          spec: {
+            ...burnIntent.spec,
+            value: burnIntent.spec.value.toString(),
+          },
+        },
+        signature,
+      };
+    })
+  );
+
+  const res = await fetch(`${GATEWAY_API}/transfer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(signed),
+  });
+  if (!res.ok) {
+    throw new Error(`Gateway /transfer failed: ${res.status} ${await res.text()}`);
+  }
+  const { attestation, signature: apiSignature } = (await res.json()) as {
+    attestation: Hex;
+    signature: Hex;
+  };
+
+  if (isSolanaChain(dst) && solanaHelpers && solanaMintContext) {
+    const result = await solanaHelpers.mintOnSolana({
+      attestation,
+      operatorSignature: apiSignature,
+      destinationChain: dst,
+      recipientAta: solanaMintContext.recipientAta,
+      recipientOwner: solanaMintContext.recipientOwner,
+      needsAtaCreate: solanaMintContext.needsAtaCreate,
+    });
+    return {
+      burnSignature: signed[0].signature,
+      burnSignatures: signed.map(item => item.signature),
+      mintHash: result.txSignature,
+      explorerUrl: `https://explorer.solana.com/tx/${result.txSignature}?cluster=${
+        dst.circleId === 'SOL-DEVNET' ? 'devnet' : 'mainnet-beta'
+      }`,
+      attestation,
+      apiSignature,
+    };
+  }
+
+  if (!isEvmChain(dst)) {
+    throw new Error('Internal: unhandled non-EVM destination');
+  }
+
+  const dstWallet = createWalletClient({
+    account: acct,
+    chain: dst.viemChain,
+    transport: http(dst.rpcUrl, { retryCount: 3, timeout: 15_000 }),
+  });
+  const dstPub = publicClientFor(dst);
+  const mintHash = await dstWallet.writeContract({
+    address: GATEWAY_MINTER,
+    abi: gatewayMinterAbi,
+    functionName: 'gatewayMint',
+    args: [attestation, apiSignature],
+    account: acct,
+    chain: dst.viemChain,
+  });
+  await dstPub.waitForTransactionReceipt({ hash: mintHash });
+
+  const explorerUrl =
+    dst.kitName === 'Arc_Testnet'
+      ? `https://testnet.arcscan.app/tx/${mintHash}`
+      : `${dst.viemChain.blockExplorers?.default?.url ?? ''}/tx/${mintHash}`;
+
+  return {
+    burnSignature: signed[0].signature,
+    burnSignatures: signed.map(item => item.signature),
+    mintHash,
+    explorerUrl,
+    attestation,
+    apiSignature,
+  };
+}

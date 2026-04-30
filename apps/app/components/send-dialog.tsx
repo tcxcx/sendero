@@ -139,17 +139,17 @@ export function SendDialog() {
   };
 
   return (
-    <DialogShell open={open} title="Send" subtitle="Gateway unified balance" onClose={close}>
+    <DialogShell open={open} title="Send" subtitle="Business Balance" onClose={close}>
       <p className="dlg-sub">
         {tok === 'USDC'
-          ? 'Send from your spendable Gateway USDC balance. Gateway sources available balance across supported chains, then settles to the recipient on Arc Testnet.'
+          ? 'Send from your spendable Business Balance. Gateway sources available USDC across supported chains, then settles to the recipient on Arc Testnet.'
           : 'Send EURC from the current Arc wallet balance. EURC is not pooled into Gateway yet.'}
       </p>
 
       {tok === 'USDC' ? (
         <div className="snd-balance-panel">
           <div className="snd-balance-head">
-            <span>Gateway unified balance</span>
+            <span>Business Balance</span>
             <strong>
               {balance ? `$${money(balance.spendableAvailable ?? balance.available)}` : '—'}
             </strong>

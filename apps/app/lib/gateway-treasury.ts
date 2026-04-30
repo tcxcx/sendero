@@ -1,4 +1,4 @@
-import { GATEWAY_CHAINS, isEvmChain, transferViaGateway } from '@sendero/circle/gateway';
+import { GATEWAY_CHAINS, isEvmChain, transferViaGatewayFromSources } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import type { TenantGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
@@ -43,6 +43,18 @@ export async function selectTenantGatewayEvmSource(args: {
   amount: string;
   preferredSourceChain?: string;
 }): Promise<{ signer: TenantGatewaySigner; from: keyof typeof GATEWAY_CHAINS }> {
+  const selected = await selectTenantGatewayEvmSources(args);
+  return { signer: selected.signer, from: selected.sources[0].from };
+}
+
+export async function selectTenantGatewayEvmSources(args: {
+  tenantId: string;
+  amount: string;
+  preferredSourceChain?: string;
+}): Promise<{
+  signer: TenantGatewaySigner;
+  sources: Array<{ from: keyof typeof GATEWAY_CHAINS; amountUsdc: string }>;
+}> {
   const amountMicro = decimalUsdcToMicro(args.amount);
   if (amountMicro <= 0n) {
     throw new Error('Gateway transfer amount must be greater than zero.');
@@ -98,20 +110,25 @@ export async function selectTenantGatewayEvmSource(args: {
   const evmRows = rows.filter(row => row.chain && isEvmChain(row.chain));
 
   const preferred = gatewayKeyForBridgeChain(args.preferredSourceChain);
-  const preferredRow = preferred
-    ? evmRows.find(row => row.key === preferred && row.balanceMicro >= amountMicro)
-    : null;
-  const sourceRow =
-    preferredRow ??
-    evmRows
-      .filter(row => row.balanceMicro >= amountMicro)
-      .sort((a, b) => {
-        if (a.key === ARC_CHAIN_KEY) return -1;
-        if (b.key === ARC_CHAIN_KEY) return 1;
-        return Number(b.balanceMicro - a.balanceMicro);
-      })[0];
+  const sortedRows = evmRows
+    .filter(row => row.balanceMicro > 0n)
+    .sort((a, b) => {
+      if (preferred && a.key === preferred) return -1;
+      if (preferred && b.key === preferred) return 1;
+      if (a.key === ARC_CHAIN_KEY) return -1;
+      if (b.key === ARC_CHAIN_KEY) return 1;
+      return Number(b.balanceMicro - a.balanceMicro);
+    });
+  let remaining = amountMicro;
+  const selectedSources: Array<{ from: keyof typeof GATEWAY_CHAINS; amountUsdc: string }> = [];
+  for (const row of sortedRows) {
+    if (!row.key || remaining <= 0n) break;
+    const take = row.balanceMicro >= remaining ? remaining : row.balanceMicro;
+    selectedSources.push({ from: row.key, amountUsdc: microUsdcToDecimal(take) });
+    remaining -= take;
+  }
 
-  if (!sourceRow?.key) {
+  if (remaining > 0n || selectedSources.length === 0) {
     const totalEvm = evmRows.reduce((sum, row) => sum + row.balanceMicro, 0n);
     const totalGateway = rows.reduce((sum, row) => sum + row.balanceMicro, 0n);
     const unsupported = totalGateway - totalEvm;
@@ -127,7 +144,7 @@ export async function selectTenantGatewayEvmSource(args: {
   }
 
   const signer = await getOrCreateGatewaySigner(args.tenantId);
-  return { signer, from: sourceRow.key };
+  return { signer, sources: selectedSources };
 }
 
 export async function materializeGatewayUsdcToArc(args: {
@@ -136,23 +153,22 @@ export async function materializeGatewayUsdcToArc(args: {
   recipient?: string;
   preferredSourceChain?: string;
 }): Promise<GatewayMaterializeResult> {
-  const { signer, from } = await selectTenantGatewayEvmSource({
+  const { signer, sources } = await selectTenantGatewayEvmSources({
     tenantId: args.tenantId,
     amount: args.amount,
     preferredSourceChain: args.preferredSourceChain,
   });
   const recipient = args.recipient ?? signer.address;
-  const transfer = await transferViaGateway({
-    from,
+  const transfer = await transferViaGatewayFromSources({
+    sources,
     to: ARC_CHAIN_KEY,
-    amountUsdc: args.amount,
     recipient,
     signer: signer.account,
   });
 
   return {
     signerAddress: signer.address,
-    from,
+    from: sources[0].from,
     to: ARC_CHAIN_KEY,
     amount: args.amount,
     recipient,
