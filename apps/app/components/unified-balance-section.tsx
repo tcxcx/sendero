@@ -57,9 +57,14 @@ interface OpsStagingEntry {
 
 interface UnifiedBalanceResponse {
   grandTotal: string;
+  spendableTotal?: string;
   available: string;
+  spendableAvailable?: string;
+  unsupportedSourceTotal?: string;
   pendingCreditTotal: string;
+  spendablePendingCreditTotal?: string;
   opsStagingTotal: string;
+  spendableOpsStagingTotal?: string;
   perDomain: PerDomain[];
   pendingCredits: PendingCredit[];
   opsStaging: OpsStagingEntry[];
@@ -135,7 +140,7 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
                 : 'mt-0.5 font-mono text-lg tabular-nums'
             }
           >
-            {data ? `$${formatGrandTotal(data.grandTotal)}` : '—'}
+            {data ? `$${formatGrandTotal(data.spendableAvailable ?? data.available)}` : '—'}
           </div>
         </div>
         <HoverCard openDelay={120} closeDelay={80}>
@@ -183,6 +188,11 @@ function InlineWrapper({ children }: { children: React.ReactNode }) {
 }
 
 function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
+  const spendableAvailable = data.spendableAvailable ?? data.available;
+  const spendableTotal = data.spendableTotal ?? data.grandTotal;
+  const unsupportedSourceTotal = data.unsupportedSourceTotal ?? '0.000000';
+  const hasUnsupportedSource = unsupportedSourceTotal !== '0.000000';
+
   return (
     <div className="space-y-3">
       <div>
@@ -193,7 +203,13 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
       </div>
 
       <div className="space-y-1.5">
-        <BreakdownRow label="Available" value={`$${formatGrandTotal(data.available)}`} />
+        <BreakdownRow label="Spendable now" value={`$${formatGrandTotal(spendableAvailable)}`} />
+        <BreakdownRow
+          label="Total tracked"
+          value={`$${formatGrandTotal(data.grandTotal)}`}
+          muted={data.grandTotal === spendableTotal}
+        />
+        <BreakdownRow label="Gateway available" value={`$${formatGrandTotal(data.available)}`} />
         <BreakdownRow
           label="Finalizing"
           value={`$${formatGrandTotal(data.pendingCreditTotal)}`}
@@ -204,6 +220,12 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
           value={`$${formatGrandTotal(data.opsStagingTotal)}`}
           muted={data.opsStagingTotal === '0.000000'}
         />
+        {hasUnsupportedSource && (
+          <BreakdownRow
+            label="Unsupported source"
+            value={`$${formatGrandTotal(unsupportedSourceTotal)}`}
+          />
+        )}
       </div>
 
       {data.perDomain.length > 0 && (

@@ -4,17 +4,13 @@ import type { TenantGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
+import { decimalUsdcToMicro, microUsdcToDecimal } from '@/lib/gateway-balance-math';
+
 const GATEWAY_API = 'https://gateway-api-testnet.circle.com/v1';
 const ARC_CHAIN_KEY = 'Arc_Testnet' as const;
 
 interface GatewayBalanceApiResponse {
   balances?: Array<{ domain: number; depositor: string; balance: string }>;
-}
-
-function decimalToMicro(decimal: string): bigint {
-  const [whole, frac = ''] = decimal.split('.');
-  const padded = `${frac}000000`.slice(0, 6);
-  return BigInt(whole || '0') * 1_000_000n + BigInt(padded || '0');
 }
 
 function chainKeyForDomain(domain: number): keyof typeof GATEWAY_CHAINS | null {
@@ -47,7 +43,7 @@ export async function selectTenantGatewayEvmSource(args: {
   amount: string;
   preferredSourceChain?: string;
 }): Promise<{ signer: TenantGatewaySigner; from: keyof typeof GATEWAY_CHAINS }> {
-  const amountMicro = decimalToMicro(args.amount);
+  const amountMicro = decimalUsdcToMicro(args.amount);
   if (amountMicro <= 0n) {
     throw new Error('Gateway transfer amount must be greater than zero.');
   }
@@ -95,18 +91,19 @@ export async function selectTenantGatewayEvmSource(args: {
         chain,
         domain: row.domain,
         balance: row.balance,
-        balanceMicro: decimalToMicro(row.balance),
+        balanceMicro: decimalUsdcToMicro(row.balance),
       };
     })
-    .filter(row => row.key && row.chain && isEvmChain(row.chain));
+    .filter(row => row.key && row.chain);
+  const evmRows = rows.filter(row => row.chain && isEvmChain(row.chain));
 
   const preferred = gatewayKeyForBridgeChain(args.preferredSourceChain);
   const preferredRow = preferred
-    ? rows.find(row => row.key === preferred && row.balanceMicro >= amountMicro)
+    ? evmRows.find(row => row.key === preferred && row.balanceMicro >= amountMicro)
     : null;
   const sourceRow =
     preferredRow ??
-    rows
+    evmRows
       .filter(row => row.balanceMicro >= amountMicro)
       .sort((a, b) => {
         if (a.key === ARC_CHAIN_KEY) return -1;
@@ -115,11 +112,17 @@ export async function selectTenantGatewayEvmSource(args: {
       })[0];
 
   if (!sourceRow?.key) {
-    const totalEvm = rows.reduce((sum, row) => sum + row.balanceMicro, 0n);
+    const totalEvm = evmRows.reduce((sum, row) => sum + row.balanceMicro, 0n);
+    const totalGateway = rows.reduce((sum, row) => sum + row.balanceMicro, 0n);
+    const unsupported = totalGateway - totalEvm;
+    const unsupportedMessage =
+      unsupported > 0n
+        ? ` ${microUsdcToDecimal(unsupported)} USDC is on unsupported Gateway source domains such as Solana.`
+        : '';
     throw new Error(
-      `Insufficient EVM Gateway USDC. Need ${args.amount}; available EVM Gateway balance is ${(
-        Number(totalEvm) / 1_000_000
-      ).toFixed(6)}. Solana Gateway source burns are not supported by this server path yet.`
+      `Insufficient spendable EVM Gateway USDC. Need ${args.amount}; spendable EVM Gateway balance is ${microUsdcToDecimal(
+        totalEvm
+      )}.${unsupportedMessage} Solana Gateway source burns are not supported by this server path yet.`
     );
   }
 

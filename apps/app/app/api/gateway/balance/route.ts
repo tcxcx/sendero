@@ -23,6 +23,8 @@ import { auth } from '@clerk/nextjs/server';
 import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
 import { prisma } from '@sendero/database';
 
+import { calculateGatewayBalanceTotals, microUsdcToDecimal } from '@/lib/gateway-balance-math';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -163,8 +165,6 @@ export async function GET() {
     };
   });
 
-  const available = perDomain.reduce((sum, d) => sum + Number(d.balance || 0), 0);
-
   // Optimistic credits — GatewayDepositLog rows that were confirmed
   // on-chain but may not yet show up in the Gateway API balance (Circle
   // attests + index lag, especially on L2s). 30-min lookback window.
@@ -209,8 +209,6 @@ export async function GET() {
     // credits once the Gateway API should have incorporated them.
     .filter(c => c.remainingSeconds > 0);
 
-  const pendingCreditMicroTotal = pendingCredits.reduce((sum, c) => sum + BigInt(c.amount), 0n);
-
   // Ops DCW staging USDC — what's sitting in the per-chain ops wallets
   // mid-sweep. Under steady state ("always-sweep" Phase 1 policy) these
   // hover near zero; non-zero values signal in-flight sweeps or stuck
@@ -229,20 +227,22 @@ export async function GET() {
       w.address
     ),
   }));
-  const opsStagingMicroTotal = opsWallets.reduce((sum, w) => sum + (w.usdcBalanceMicro ?? 0n), 0n);
-
-  // grandTotal in micro-USDC for precision, returned as 6-decimal
-  // string. Number(available) parses Gateway API's decimal string; we
-  // multiply to micro-USDC, add the bigint micro totals, then format.
-  const availableMicro = BigInt(Math.round(available * 1_000_000));
-  const grandTotalMicro = availableMicro + pendingCreditMicroTotal + opsStagingMicroTotal;
-  const grandTotal = (Number(grandTotalMicro) / 1_000_000).toFixed(6);
+  const totals = calculateGatewayBalanceTotals({
+    perDomain,
+    pendingCredits,
+    opsStaging,
+  });
 
   return NextResponse.json({
-    grandTotal,
-    available: available.toFixed(6),
-    pendingCreditTotal: (Number(pendingCreditMicroTotal) / 1_000_000).toFixed(6),
-    opsStagingTotal: (Number(opsStagingMicroTotal) / 1_000_000).toFixed(6),
+    grandTotal: microUsdcToDecimal(totals.grandTotalMicro),
+    spendableTotal: microUsdcToDecimal(totals.spendableTotalMicro),
+    available: microUsdcToDecimal(totals.availableMicro),
+    spendableAvailable: microUsdcToDecimal(totals.spendableAvailableMicro),
+    unsupportedSourceTotal: microUsdcToDecimal(totals.unsupportedSourceMicro),
+    pendingCreditTotal: microUsdcToDecimal(totals.pendingCreditMicro),
+    spendablePendingCreditTotal: microUsdcToDecimal(totals.spendablePendingCreditMicro),
+    opsStagingTotal: microUsdcToDecimal(totals.opsStagingMicro),
+    spendableOpsStagingTotal: microUsdcToDecimal(totals.spendableOpsStagingMicro),
     perDomain,
     pendingCredits,
     opsStaging,
