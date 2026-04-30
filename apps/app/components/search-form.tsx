@@ -26,7 +26,7 @@ import {
   useSearchHotkey,
 } from '@/components/search-palette';
 import { useHover } from '@/components/hooks/use-hover';
-import { SidebarGroup, SidebarGroupContent } from '@/components/ui/sidebar';
+import { SidebarGroup, SidebarGroupContent, useSidebar } from '@/components/ui/sidebar';
 import { useSearchPaletteStore } from '@/components/use-search-palette-store';
 
 const HOVER_CLOSE_DELAY_MS = 150;
@@ -38,6 +38,7 @@ export function SearchForm({
   placeholder?: string;
   className?: string;
 }) {
+  const { isMobile } = useSidebar();
   const open = useSearchPaletteStore(s => s.open);
   const setOpen = useSearchPaletteStore(s => s.setOpen);
 
@@ -146,24 +147,21 @@ export function SearchForm({
             </button>
           </PopoverPrimitive.Trigger>
 
-          <SearchBackdrop open={open} />
+          <SearchBackdrop open={open && !isMobile} />
 
-          <PopoverPrimitive.Portal>
+          {isMobile ? (
             <PopoverPrimitive.Content
               ref={contentRef}
-              side="right"
+              side="bottom"
               align="start"
-              sideOffset={12}
-              collisionPadding={16}
-              className="z-50 w-[480px] overflow-hidden rounded-[18px] border outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=right]:slide-in-from-left-2 data-[side=left]:slide-in-from-right-2 data-[side=bottom]:slide-in-from-top-2"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-[95] w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-[12px] border outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[side=bottom]:slide-in-from-top-1"
               style={{
-                backgroundColor:
-                  'color-mix(in oklab, var(--surface-floating, #FDFBF7) 94%, transparent)',
-                borderColor: 'color-mix(in oklab, var(--ink) 32%, transparent)',
+                backgroundColor: 'var(--surface-raised)',
+                borderColor: 'color-mix(in oklab, var(--ink) 28%, transparent)',
                 boxShadow:
-                  '0 24px 60px -20px color-mix(in oklab, var(--ink) 25%, transparent), 0 2px 4px rgba(31, 42, 68, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
-                backdropFilter: 'blur(18px) saturate(1.2)',
-                WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
+                  '0 18px 38px -24px color-mix(in oklab, var(--ink) 45%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.45)',
               }}
             >
               <SearchPaletteBody
@@ -172,7 +170,33 @@ export function SearchForm({
                 }}
               />
             </PopoverPrimitive.Content>
-          </PopoverPrimitive.Portal>
+          ) : (
+            <PopoverPrimitive.Portal>
+              <PopoverPrimitive.Content
+                ref={contentRef}
+                side="right"
+                align="start"
+                sideOffset={12}
+                collisionPadding={16}
+                className="z-50 w-[480px] overflow-hidden rounded-[18px] border outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=right]:slide-in-from-left-2 data-[side=left]:slide-in-from-right-2 data-[side=bottom]:slide-in-from-top-2"
+                style={{
+                  backgroundColor:
+                    'color-mix(in oklab, var(--surface-floating, #FDFBF7) 94%, transparent)',
+                  borderColor: 'color-mix(in oklab, var(--ink) 32%, transparent)',
+                  boxShadow:
+                    '0 24px 60px -20px color-mix(in oklab, var(--ink) 25%, transparent), 0 2px 4px rgba(31, 42, 68, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+                  backdropFilter: 'blur(18px) saturate(1.2)',
+                  WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
+                }}
+              >
+                <SearchPaletteBody
+                  onClose={() => {
+                    setManualOpen(false);
+                  }}
+                />
+              </PopoverPrimitive.Content>
+            </PopoverPrimitive.Portal>
+          )}
         </PopoverPrimitive.Root>
       </SidebarGroupContent>
     </SidebarGroup>
