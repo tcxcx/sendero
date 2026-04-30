@@ -156,7 +156,7 @@ export function SearchForm({
               align="start"
               sideOffset={8}
               collisionPadding={12}
-              className="z-[95] w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-[12px] border outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[side=bottom]:slide-in-from-top-1"
+              className="z-[95] ml-2 w-[calc(var(--radix-popover-trigger-width)-16px)] overflow-hidden rounded-[12px] border outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[side=bottom]:slide-in-from-top-1"
               style={{
                 backgroundColor: 'var(--surface-raised)',
                 borderColor: 'color-mix(in oklab, var(--ink) 28%, transparent)',
