@@ -21,7 +21,7 @@
  * channel for gateway balance changes).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { TopographyButton } from '@sendero/ui/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@sendero/ui/hover-card';
@@ -284,12 +284,38 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
 }
 
 function ScannerLink({ href, label }: { href: string; label: string }) {
+  const openedFromPointerRef = useRef(false);
+
+  const openScanner = (
+    e: React.MouseEvent<HTMLAnchorElement> | React.PointerEvent<HTMLAnchorElement>
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const opened = window.open(href, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      window.location.href = href;
+    }
+  };
+
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
       aria-label={`open ${label} scanner`}
+      onPointerDown={e => {
+        openedFromPointerRef.current = true;
+        openScanner(e);
+      }}
+      onClick={e => {
+        if (openedFromPointerRef.current) {
+          openedFromPointerRef.current = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        openScanner(e);
+      }}
       className="rounded border border-white/25 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/90 no-underline transition hover:border-white/70 hover:bg-white/10 hover:text-white"
     >
       Scan ↗
