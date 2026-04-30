@@ -14,9 +14,12 @@ import {
   NetworkAvalanche,
   NetworkBase,
   NetworkEthereum,
+  NetworkLinea,
   NetworkOptimism,
   NetworkPolygon,
+  NetworkPolygonAmoy,
   NetworkSolana,
+  NetworkUnichain,
 } from '@web3icons/react';
 import type { IconComponentProps } from '@web3icons/react';
 
@@ -27,8 +30,10 @@ type KnownChain =
   | 'AVAX-FUJI'
   | 'AVAX'
   | 'Sol_Devnet'
+  | 'Solana_Devnet'
   | 'SOL-DEVNET'
   | 'Sol'
+  | 'Solana'
   | 'SOL'
   | 'Ethereum_Sepolia'
   | 'ETH-SEPOLIA'
@@ -43,8 +48,14 @@ type KnownChain =
   | 'ARB-SEPOLIA'
   | 'ARB'
   | 'Polygon_Amoy'
+  | 'Polygon_Amoy_Testnet'
+  | 'Polygon'
   | 'MATIC-AMOY'
   | 'MATIC'
+  | 'Unichain_Sepolia'
+  | 'Unichain'
+  | 'Linea_Sepolia'
+  | 'Linea'
   | string;
 
 const CHAIN_MAP: Record<string, ComponentType<IconComponentProps>> = {
@@ -52,12 +63,20 @@ const CHAIN_MAP: Record<string, ComponentType<IconComponentProps>> = {
   Arc_Testnet: NetworkArc,
   Avalanche_Fuji: NetworkAvalanche,
   Sol_Devnet: NetworkSolana,
+  Solana_Devnet: NetworkSolana,
   Sol: NetworkSolana,
+  Solana: NetworkSolana,
   Ethereum_Sepolia: NetworkEthereum,
   Base_Sepolia: NetworkBase,
   Optimism_Sepolia: NetworkOptimism,
   Arbitrum_Sepolia: NetworkArbitrumOne,
-  Polygon_Amoy: NetworkPolygon,
+  Polygon_Amoy: NetworkPolygonAmoy,
+  Polygon_Amoy_Testnet: NetworkPolygonAmoy,
+  Polygon: NetworkPolygon,
+  Unichain_Sepolia: NetworkUnichain,
+  Unichain: NetworkUnichain,
+  Linea_Sepolia: NetworkLinea,
+  Linea: NetworkLinea,
   // Circle circleId strings
   'ARC-TESTNET': NetworkArc,
   'AVAX-FUJI': NetworkAvalanche,
@@ -72,7 +91,7 @@ const CHAIN_MAP: Record<string, ComponentType<IconComponentProps>> = {
   OP: NetworkOptimism,
   'ARB-SEPOLIA': NetworkArbitrumOne,
   ARB: NetworkArbitrumOne,
-  'MATIC-AMOY': NetworkPolygon,
+  'MATIC-AMOY': NetworkPolygonAmoy,
   MATIC: NetworkPolygon,
 };
 
