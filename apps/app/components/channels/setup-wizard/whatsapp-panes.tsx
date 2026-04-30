@@ -93,7 +93,7 @@ function PickNumberPane({ setResolution, pending }: WizardPaneProps) {
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px]">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <label className={FIELD_LABEL}>Country</label>
+          <span className={FIELD_LABEL}>Country</span>
           <div className="flex flex-wrap gap-1.5">
             {COUNTRIES.map(c => (
               <button
@@ -113,7 +113,7 @@ function PickNumberPane({ setResolution, pending }: WizardPaneProps) {
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className={FIELD_LABEL}>Available numbers</label>
+          <span className={FIELD_LABEL}>Available numbers</span>
           {loading ? (
             <p className="text-sm text-[color:var(--text-dim)]">Loading…</p>
           ) : numbers.length === 0 ? (
@@ -190,6 +190,9 @@ interface InstallSnapshot {
   businessDisplayName: string | null;
   setupLinkUrl: string | null;
   setupLinkExpiresAt: string | null;
+  setupLinkStatus: string | null;
+  setupLinkError: string | null;
+  setupLinkProvisionPhoneNumber: boolean | null;
   provisioned: boolean;
   lastErrorMessage: string | null;
 }
@@ -202,7 +205,7 @@ interface InstallSnapshot {
  *
  *   1. We minted a setup link in step 1 (kapso_reserve_number stored
  *      `metadata.setupLinkUrl` on WhatsAppInstall).
- *   2. The operator clicks "Open Meta signup" → opens the Kapso hosted
+ *   2. The operator clicks "Open WhatsApp setup" → opens the Kapso hosted
  *      page in a new tab → completes Embedded Signup (~30 sec).
  *   3. Kapso fires `whatsapp.phone_number.created` to our project
  *      webhook (apps/app/app/api/webhooks/kapso/route.ts), which writes
@@ -272,8 +275,9 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
         ) : (
           <div className="flex flex-col gap-3">
             <p className="max-w-[60ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
-              Open the Meta Embedded Signup page in a new tab and approve the WhatsApp Business
-              connection. The wizard will detect when you&rsquo;re done.
+              Open the Kapso-hosted WhatsApp setup page in a new tab and approve the WhatsApp
+              Business connection. Tenant admins can connect their own number without using the
+              Sendero Kapso owner account.
             </p>
             <div className="flex items-center gap-3">
               {setupUrl ? (
@@ -284,7 +288,7 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
                   onClick={() => setOpened(true)}
                   className="inline-flex items-center gap-2 rounded-md bg-[color:#25D366] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
                 >
-                  Open Meta signup
+                  Open WhatsApp setup
                 </a>
               ) : (
                 <span className="text-[12px] text-[color:var(--text-dim)]">
@@ -303,6 +307,11 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
                 {snapshot.lastErrorMessage}
               </div>
             ) : null}
+            {snapshot?.setupLinkError ? (
+              <div className="rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
+                {snapshot.setupLinkError}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
@@ -314,6 +323,10 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
         <span className={`${PILL_FONT} mt-2`}>Status</span>
         <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
           {snapshot?.status ?? 'unknown'}
+        </span>
+        <span className={`${PILL_FONT} mt-2`}>Link mode</span>
+        <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
+          {snapshot?.setupLinkProvisionPhoneNumber ? 'project owner provision' : 'tenant connect'}
         </span>
       </aside>
     </div>
@@ -584,7 +597,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className={FIELD_LABEL}>{label}</label>
+      <span className={FIELD_LABEL}>{label}</span>
       {children}
       {hint ? <span className="text-[11px] text-[color:var(--text-faint)]">{hint}</span> : null}
     </div>

@@ -2,16 +2,40 @@
 
 import Link from 'next/link';
 
+import { useAuth, useOrganization } from '@clerk/nextjs';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@sendero/ui/hover-card';
 import { LifeBuoy } from 'lucide-react';
 
+import { PricingTableDialog } from '@/components/billing/pricing-table-dialog';
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 
 const HELP_URL = 'https://docs.sendero.travel/docs/help';
-const WHATSAPP_URL = process.env.NEXT_PUBLIC_SENDERO_WA_URL ?? 'https://wa.me/';
+const SUPPORT_WHATSAPP_URL = '/api/support/whatsapp';
 const EMAIL_URL = 'mailto:support@sendero.travel';
+const PLAN_ORDER = ['enterprise', 'pro', 'basic', 'free'] as const;
+type PlanSlug = (typeof PLAN_ORDER)[number];
+
+function currentPlanSlug(
+  has: ((q: { plan: string }) => boolean) | undefined,
+  metadataTier: unknown
+): PlanSlug {
+  for (const slug of PLAN_ORDER) {
+    if (has?.({ plan: slug })) return slug;
+  }
+  if (typeof metadataTier === 'string') {
+    const normalized = metadataTier.toLowerCase();
+    if (normalized === 'business') return 'basic';
+    if (PLAN_ORDER.includes(normalized as PlanSlug)) return normalized as PlanSlug;
+  }
+  return 'free';
+}
 
 export function HelpDocsCard() {
+  const { has, isLoaded } = useAuth();
+  const { organization } = useOrganization();
+  const plan = isLoaded ? currentPlanSlug(has, organization?.publicMetadata?.billingTier) : 'free';
+  const hasPaidPlan = plan !== 'free';
+
   return (
     <HoverCard openDelay={120} closeDelay={80}>
       <HoverCardTrigger asChild>
@@ -47,18 +71,20 @@ export function HelpDocsCard() {
             </div>
           </div>
           <span className="shrink-0 rounded-full border border-[color:color-mix(in_oklab,var(--accent-green)_40%,transparent)] bg-[color:color-mix(in_oklab,var(--accent-green)_14%,transparent)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--accent-green)]">
-            24/7
+            {hasPaidPlan ? 'Live' : 'Paid'}
           </span>
         </div>
 
         <div className="border-t border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] px-4 py-3">
           <p className="text-xs leading-relaxed text-[color:var(--text-dim)]">
             <strong className="text-[color:var(--text)]">Docs</strong> cover trips, policy, billing,
-            and Arc settlement. <strong className="text-[color:var(--text)]">Live support</strong>{' '}
-            on WhatsApp or email for anything else.
+            and Arc settlement. <strong className="text-[color:var(--text)]">Agent support</strong>{' '}
+            on WhatsApp is available to paying workspaces.
           </p>
           <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.08em] text-[color:var(--text-faint)]">
-            Reply target · &lt; 4h business · &lt; 24h weekends
+            {hasPaidPlan
+              ? 'Support agent · WhatsApp handoff · Sendero team'
+              : 'Free workspace · docs and email remain available'}
           </p>
         </div>
 
@@ -71,14 +97,25 @@ export function HelpDocsCard() {
           >
             Read docs ↗
           </Link>
-          <Link
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-[color:var(--ink)] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] transition-opacity hover:opacity-90"
-          >
-            Message us →
-          </Link>
+          {hasPaidPlan ? (
+            <Link
+              href={SUPPORT_WHATSAPP_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-[color:var(--ink)] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] transition-opacity hover:opacity-90"
+            >
+              Message us →
+            </Link>
+          ) : (
+            <PricingTableDialog tier="basic">
+              <button
+                type="button"
+                className="flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-[color:var(--ink)] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] transition-opacity hover:opacity-90"
+              >
+                Upgrade →
+              </button>
+            </PricingTableDialog>
+          )}
         </div>
 
         <div className="border-t border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] px-4 py-2.5">

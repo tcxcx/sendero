@@ -34,7 +34,10 @@ export const KapsoSetupLink = z.object({
   expires_at: z.string(),
   status: z.enum(['pending', 'active', 'completed', 'expired']).optional(),
   allowed_connection_types: z.array(z.string()).optional(),
+  provision_phone_number: z.boolean().optional(),
   provisioned_phone_number: z.string().nullable().optional(),
+  success_redirect_url: z.string().url().nullable().optional(),
+  failure_redirect_url: z.string().url().nullable().optional(),
   whatsapp_setup_status: z.string().nullable().optional(),
   whatsapp_setup_error: z.string().nullable().optional(),
 });
@@ -42,13 +45,19 @@ export type KapsoSetupLink = z.infer<typeof KapsoSetupLink>;
 
 export const CreateSetupLinkRequest = z.object({
   /** "dedicated" is the recommended default in the integrate-whatsapp skill. */
-  allowed_connection_types: z.array(z.enum(['dedicated', 'shared'])).default(['dedicated']),
-  provision_phone_number: z.boolean().default(true),
+  allowed_connection_types: z
+    .array(z.enum(['coexistence', 'dedicated', 'shared']))
+    .default(['coexistence', 'dedicated']),
+  provision_phone_number: z.boolean().default(false),
   phone_number_country_isos: z.array(z.string().length(2)).optional(),
   phone_number_area_code: z.string().optional(),
   language: z.string().optional(),
-  /** Where the traveler/admin is sent after they finish Meta signup. */
+  /** Legacy alias kept for old callers; converted to success/failure URLs by setup-link.ts. */
   redirect_url: z.string().url().optional(),
+  /** Where the tenant admin lands after successful Meta signup. */
+  success_redirect_url: z.string().url().optional(),
+  /** Where the tenant admin lands after failed Meta signup. */
+  failure_redirect_url: z.string().url().optional(),
 });
 export type CreateSetupLinkRequest = z.infer<typeof CreateSetupLinkRequest>;
 

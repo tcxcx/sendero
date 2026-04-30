@@ -13,6 +13,7 @@
 import { NextResponse } from 'next/server';
 
 import { prisma } from '@sendero/database';
+import { readSetupLinkSnapshot } from '@sendero/kapso';
 
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -37,7 +38,7 @@ export async function GET() {
   if (!install) {
     return NextResponse.json({ install: null });
   }
-  const metadata = (install.metadata as Record<string, unknown> | null) ?? {};
+  const setupLink = readSetupLinkSnapshot(install.metadata);
   return NextResponse.json({
     install: {
       status: install.status,
@@ -47,9 +48,11 @@ export async function GET() {
       kapsoCustomerId: install.kapsoCustomerId,
       kapsoConnectionId: install.kapsoConnectionId,
       lastErrorMessage: install.lastErrorMessage,
-      setupLinkUrl: typeof metadata.setupLinkUrl === 'string' ? metadata.setupLinkUrl : null,
-      setupLinkExpiresAt:
-        typeof metadata.setupLinkExpiresAt === 'string' ? metadata.setupLinkExpiresAt : null,
+      setupLinkUrl: setupLink?.url ?? null,
+      setupLinkExpiresAt: setupLink?.expires_at ?? null,
+      setupLinkStatus: setupLink?.status ?? null,
+      setupLinkError: setupLink?.whatsapp_setup_error ?? null,
+      setupLinkProvisionPhoneNumber: setupLink?.provision_phone_number ?? null,
       provisioned: install.status === 'active' && Boolean(install.phoneNumberId),
     },
   });

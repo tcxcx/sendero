@@ -27,7 +27,8 @@ describe('startOnboarding', () => {
   it('creates customer then setup link with redirect_url', async () => {
     const expires = new Date(Date.now() + 3600_000).toISOString();
     const client = stubClient([
-      { customer: { id: 'cus_x', name: 'Acme', external_id: 'tenant_x' } },
+      { data: [] },
+      { customer: { id: 'cus_x', name: 'Acme', external_customer_id: 'tenant_x' } },
       {
         setup_link: {
           id: 'sl_x',

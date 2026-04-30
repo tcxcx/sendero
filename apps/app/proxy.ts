@@ -43,6 +43,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/og/share', // canonical Satori share-image generator — needs to be publicly fetchable so Slack/WhatsApp/email unfurl bots can render the image. Token signature gates payload integrity.
   '/api/webhooks/(.*)', // Duffel, Clerk, etc. — signature-verified per route
   '/api/agent/dispatch', // internal fan-in — protected by AGENT_DISPATCH_SECRET / CRON_SECRET in-route
+  '/api/internal/support/tools', // Kapso support tools — protected by x-sendero-support-secret in-route
   '/api/pay-link/(.*)', // pay-link dispatch — protected by AGENT_DISPATCH_SECRET in-route
   '/api/workflows/stamps/(.*)', // stamp WDK fan-in — same secret/session auth as dispatch, in-route
   '/api/workflows/reputation/(.*)', // reputation WDK fan-in — same secret/session auth, in-route

@@ -120,6 +120,13 @@ pre-push:
         - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
       run: bun run config:doctor
 
+    # Google Cloud Responsible AI ship gate. Keeps the durable CLAUDE.md policy
+    # and executable guard in place for every push/ship.
+    responsible-ai-check:
+      skip:
+        - run: test "${SKIP_PUSH_CHECKS:-0}" = "1"
+      run: bun run scripts/check-responsible-ai.ts
+
 commit-msg:
   commands:
     non-empty:

@@ -15,7 +15,9 @@
  */
 
 import {
+  CreateWebhookRequest,
   CreateSetupLinkRequest,
+  KapsoWebhookRegistration,
   KapsoCustomer,
   KapsoSetupLink,
   KapsoWhatsAppPhoneNumber,
@@ -99,7 +101,7 @@ export class KapsoClient {
         },
       }),
     });
-    return KapsoCustomer.parse(unwrap(raw, 'customer') ?? unwrap(raw, 'data'));
+    return KapsoCustomer.parse(unwrap(raw, 'customer') ?? unwrap(raw, 'data') ?? raw);
   }
 
   /**
@@ -134,7 +136,7 @@ export class KapsoClient {
 
   async getCustomer(customerId: string): Promise<KapsoCustomer> {
     const raw = await this.request<unknown>(`/customers/${customerId}`);
-    return KapsoCustomer.parse(unwrap(raw, 'customer') ?? unwrap(raw, 'data'));
+    return KapsoCustomer.parse(unwrap(raw, 'customer') ?? unwrap(raw, 'data') ?? raw);
   }
 
   // ── Setup links ────────────────────────────────────────────────────
@@ -143,8 +145,8 @@ export class KapsoClient {
     input: Partial<Parameters<typeof CreateSetupLinkRequest.parse>[0]> = {}
   ): Promise<KapsoSetupLink> {
     const body = CreateSetupLinkRequest.parse({
-      allowed_connection_types: ['dedicated'],
-      provision_phone_number: true,
+      allowed_connection_types: ['coexistence', 'dedicated'],
+      provision_phone_number: false,
       ...input,
     });
     const raw = await this.request<unknown>(`/customers/${customerId}/setup_links`, {
@@ -182,20 +184,42 @@ export class KapsoClient {
   }
 
   // ── Webhooks ──────────────────────────────────────────────────────
-  //
-  // Project-scope webhooks (the kind Sendero needs for
-  // `whatsapp.phone_number.created`) are dashboard-only on Kapso —
-  // verified Apr 2026 against
-  // https://docs.kapso.ai/docs/platform/webhooks/overview. Register
-  // via the Kapso dashboard, paste the secret into KAPSO_WEBHOOK_SECRET,
-  // and use `bun scripts/register-kapso-webhook.ts` to print the steps.
-  //
-  // WhatsApp number-scoped webhooks DO have an API surface
-  // (POST /platform/v1/whatsapp/phone_numbers/:id/webhooks) — wire
-  // those here when we need per-number webhook control. We don't need
-  // them today: connection events come through the project-scope
-  // webhook, and inbound messages flow through Meta → Kapso proxy
-  // → /api/webhooks/whatsapp.
+  async registerWebhook(
+    input: Parameters<typeof CreateWebhookRequest.parse>[0]
+  ): Promise<KapsoWebhookRegistration> {
+    const body = CreateWebhookRequest.parse(input);
+    const path =
+      body.scope === 'phone_number'
+        ? `/whatsapp/phone_numbers/${encodeURIComponent(body.phone_number_id ?? '')}/webhooks`
+        : '/webhooks';
+    const raw = await this.request<unknown>(path, {
+      method: 'POST',
+      body: JSON.stringify({
+        [body.scope === 'phone_number' ? 'whatsapp_webhook' : 'webhook']: {
+          url: body.url,
+          events: body.events,
+          kind: body.kind,
+          payload_version: body.payload_version,
+          active: body.active,
+          buffer_enabled: body.buffer_enabled,
+          buffer_window_seconds: body.buffer_window_seconds,
+          max_buffer_size: body.max_buffer_size,
+          phone_number_id: body.phone_number_id,
+        },
+      }),
+    });
+    const unwrapped =
+      unwrap(raw, 'webhook') ?? unwrap(raw, 'whatsapp_webhook') ?? unwrap(raw, 'data');
+    const stitched =
+      typeof unwrapped === 'object' && unwrapped !== null
+        ? {
+            ...(unwrapped as object),
+            scope: body.scope,
+            phone_number_id: body.phone_number_id ?? null,
+          }
+        : unwrapped;
+    return KapsoWebhookRegistration.parse(stitched);
+  }
 
   // ── Outbound messages (Kapso's higher-level send helper) ──────────
   /**

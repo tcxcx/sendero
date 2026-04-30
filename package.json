@@ -73,6 +73,7 @@
     "deploy:rolling:approve:app": "vercel --cwd apps/app rolling-release approve",
     "deploy:rolling:complete:app": "vercel --cwd apps/app rolling-release complete",
     "config:doctor": "bun run scripts/config-doctor.ts",
+    "responsible-ai:check": "bun run scripts/check-responsible-ai.ts",
     "cache:setup": "bash scripts/setup-turbo-cache.sh",
     "defect-escape:report": "bun run scripts/defect-escape-report.ts",
     "edge:health": "bash scripts/edge-health-check.sh",
