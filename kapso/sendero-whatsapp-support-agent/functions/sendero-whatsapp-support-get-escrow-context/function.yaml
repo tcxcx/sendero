@@ -1,0 +1,7 @@
+entrypoint: index.js
+function_type: cloudflare_worker
+invoke_response_mode: passthrough
+name: Sendero support get escrow context
+public_endpoint: false
+runtime_config: {}
+slug: sendero-whatsapp-support-get-escrow-context

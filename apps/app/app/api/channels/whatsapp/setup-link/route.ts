@@ -15,9 +15,15 @@
  */
 
 import { auth } from '@clerk/nextjs/server';
-import { prisma } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
-import { isSetupLinkExpired, KapsoClient, startOnboarding } from '@sendero/kapso';
+import {
+  isSetupLinkExpired,
+  KapsoClient,
+  readSetupLinkSnapshot,
+  setupLinkSnapshot,
+  startOnboarding,
+} from '@sendero/kapso';
 import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 
@@ -51,7 +57,8 @@ export async function POST(): Promise<Response> {
       { status: 503 }
     );
   }
-  const redirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/settings/channels?onboarding=whatsapp`;
+  const redirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/settings/channels?onboarding=whatsapp&status=connected`;
+  const failureRedirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/settings/channels?onboarding=whatsapp&status=failed`;
 
   const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
 
@@ -67,9 +74,7 @@ export async function POST(): Promise<Response> {
   });
 
   if (existing) {
-    const rawLink = (
-      existing.metadata as { setupLink?: { id: string; url: string; expires_at: string } } | null
-    )?.setupLink;
+    const rawLink = readSetupLinkSnapshot(existing.metadata);
     if (rawLink && !isSetupLinkExpired({ expires_at: rawLink.expires_at })) {
       return NextResponse.json({
         customerId: existing.kapsoCustomerId,
@@ -81,20 +86,23 @@ export async function POST(): Promise<Response> {
 
     // Re-issue link against the same customer.
     const freshLink = await kapso.createSetupLink(existing.kapsoCustomerId, {
-      redirect_url: redirectUrl,
-      allowed_connection_types: ['dedicated'],
-      provision_phone_number: true,
+      success_redirect_url: redirectUrl,
+      failure_redirect_url: failureRedirectUrl,
+      allowed_connection_types: ['coexistence', 'dedicated'],
+      provision_phone_number: false,
     });
+    const freshSnapshot = setupLinkSnapshot(freshLink);
     await prisma.whatsAppInstall.update({
       where: { id: existing.id },
       data: {
         status: existing.status === 'active' ? 'active' : 'pending',
-        metadata: { setupLink: freshLink },
+        lastErrorMessage: null,
+        metadata: { setupLink: freshSnapshot } as unknown as Prisma.InputJsonValue,
       },
     });
     return NextResponse.json({
       customerId: existing.kapsoCustomerId,
-      setupLink: freshLink,
+      setupLink: freshSnapshot,
       status: existing.status === 'active' ? 'active' : 'pending',
       reused: true,
     });
@@ -104,8 +112,10 @@ export async function POST(): Promise<Response> {
     tenantId: tenant.id,
     tenantName: tenant.displayName,
     redirectUrl,
+    failureRedirectUrl,
     countryIsos: tenant.fiscalCountry ? [tenant.fiscalCountry] : undefined,
   });
+  const setupLinkData = setupLinkSnapshot(setupLink);
 
   // Mint a per-install webhook secret ahead of the Kapso webhook. Kapso
   // issues its own secret when we register the phone-number webhook
@@ -120,13 +130,13 @@ export async function POST(): Promise<Response> {
       webhookSecret: projectWebhookSecret,
       status: 'pending',
       connectedByUserId: userId,
-      metadata: { setupLink },
+      metadata: { setupLink: setupLinkData } as unknown as Prisma.InputJsonValue,
     },
   });
 
   return NextResponse.json({
     customerId: customer.id,
-    setupLink,
+    setupLink: setupLinkData,
     status: 'pending',
     reused: false,
   });

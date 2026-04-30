@@ -2,6 +2,22 @@
 
 Durable project context. Keep terse. Append only what future sessions need.
 
+## Google Cloud Responsible AI ship gate
+
+Every AI/agent-facing shipment must be checked against Google Cloud Responsible AI guidance:
+`https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/responsible-ai`.
+
+Before ship, verify:
+- **Security risks:** agent tools must fail closed on tenant/auth boundaries; never trust user-provided tenant IDs, org IDs, trip IDs, or secrets without a signed/authenticated binding.
+- **Safety testing:** run relevant unit/type/build checks plus at least one adversarial prompt/tool misuse review for new agent capabilities.
+- **Grounding/factuality:** tenant-specific claims must come from live Sendero tools, docs, or DB state; agents must not invent setup status, billing state, transactions, tickets, trips, or policy outcomes.
+- **Privacy/security:** return the minimum diagnostic data needed; redact tokens/secrets; mask phone/user identifiers where full values are not necessary; avoid storing raw channel envelopes unless explicitly required.
+- **Human supervision:** escalate decisions involving tenant account access, legal/financial approval, irreversible payments, settlement/escrow changes, or specialized uncertainty.
+- **Language/fairness:** honor user locale and avoid lowering support quality for non-English users; switch language when the user does.
+- **Monitoring/feedback:** preserve support ticket, Slack thread, trace ID, workflow execution ID, and channel event links needed to audit outcomes.
+
+Left Hook runs `scripts/check-responsible-ai.ts`. If this section or the guard script is weakened, pre-push must fail.
+
 ## Billing & pricing (source: `packages/billing/src/plans.ts`)
 
 Two revenue legs, independent: SaaS MRR (Clerk Billing) + nanopayments (per-call x402, agent wallet pays). Trial skips MRR; nanopay keeps flowing.

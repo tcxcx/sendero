@@ -30,18 +30,20 @@ describe('KapsoClient', () => {
           body: String(init?.body ?? ''),
         };
         return new Response(
-          JSON.stringify({ customer: { id: 'cus_1', name: 'Acme', external_id: 'tenant_a' } }),
+          JSON.stringify({
+            customer: { id: 'cus_1', name: 'Acme', external_customer_id: 'tenant_a' },
+          }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
       }) as typeof fetch,
     });
 
-    const out = await client.createCustomer({ name: 'Acme', external_id: 'tenant_a' });
+    const out = await client.createCustomer({ name: 'Acme', externalCustomerId: 'tenant_a' });
     expect(out.id).toBe('cus_1');
     expect(captured).not.toBeNull();
     expect(captured!.url).toContain('/platform/v1/customers');
     expect(captured!.headers.get('x-api-key')).toBe('test-key');
-    expect(captured!.body).toContain('"external_id":"tenant_a"');
+    expect(captured!.body).toContain('"external_customer_id":"tenant_a"');
   });
 
   it('throws KapsoError with status + body on non-200', async () => {
@@ -60,7 +62,7 @@ describe('KapsoClient', () => {
     }
   });
 
-  it('creates a setup link with dedicated-default connection types', async () => {
+  it('creates a tenant setup link without project-owner phone provisioning by default', async () => {
     let capturedBody = '';
     const client = new KapsoClient({
       apiKey: 'k',
@@ -84,8 +86,8 @@ describe('KapsoClient', () => {
       redirect_url: 'https://sendero.travel/x',
     });
     expect(link.id).toBe('sl_1');
-    expect(capturedBody).toContain('"allowed_connection_types":["dedicated"]');
-    expect(capturedBody).toContain('"provision_phone_number":true');
+    expect(capturedBody).toContain('"allowed_connection_types":["coexistence","dedicated"]');
+    expect(capturedBody).toContain('"provision_phone_number":false');
     expect(capturedBody).toContain('"redirect_url":"https://sendero.travel/x"');
   });
 
@@ -122,7 +124,7 @@ describe('KapsoClient', () => {
     });
     expect(hook.id).toBe('wh_1');
     expect(hook.secret).toBe('shh');
-    expect(capturedUrl).toContain('/platform/v1/webhooks');
+    expect(capturedUrl).toContain('/platform/v1/whatsapp/phone_numbers/pn_1/webhooks');
   });
 
   it('tolerates bare (unwrapped) responses', async () => {

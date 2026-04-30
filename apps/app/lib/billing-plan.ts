@@ -28,6 +28,15 @@ export async function currentOrgPlan(): Promise<PlanConfig> {
   for (const tier of order) {
     if (has({ plan: PLANS[tier].slug })) return PLANS[tier];
   }
+  try {
+    const { tenant } = await requireCurrentTenant();
+    const legacy = tenant.billingTier?.toLowerCase();
+    if (legacy === 'enterprise') return PLANS.enterprise;
+    if (legacy === 'pro') return PLANS.pro;
+    if (legacy === 'business' || legacy === 'basic') return PLANS.basic;
+  } catch {
+    // Authenticated plan pages can render before tenant provisioning finishes.
+  }
   return PLANS.free;
 }
 
