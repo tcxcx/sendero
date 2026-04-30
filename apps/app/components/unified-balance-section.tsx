@@ -23,6 +23,9 @@
 
 import { useEffect, useState } from 'react';
 
+import { TopographyButton } from '@sendero/ui/button';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@sendero/ui/hover-card';
+
 interface PerDomain {
   domain: number;
   chain: string;
@@ -70,7 +73,6 @@ const POLL_INTERVAL_MS = 30_000;
 export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'section' | 'inline' }) {
   const [data, setData] = useState<UnifiedBalanceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,90 +121,37 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
             {data ? `$${formatGrandTotal(data.grandTotal)}` : '—'}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setExpanded(v => !v)}
-          className="text-xs text-zinc-500 hover:text-zinc-900"
-          aria-expanded={expanded}
-        >
-          {expanded ? 'Hide breakdown' : 'Breakdown'}
-        </button>
+        <HoverCard openDelay={120} closeDelay={80}>
+          <HoverCardTrigger asChild>
+            <TopographyButton
+              type="button"
+              size="sm"
+              className="h-8 px-3 text-xs text-[color:var(--ink)]"
+            >
+              Breakdown
+            </TopographyButton>
+          </HoverCardTrigger>
+          <HoverCardContent
+            side="bottom"
+            align="end"
+            sideOffset={10}
+            collisionPadding={16}
+            data-variant="ink"
+            className="z-[100] w-80 max-w-[calc(100vw-24px)] p-4 text-xs"
+          >
+            {data ? (
+              <BreakdownContent data={data} />
+            ) : (
+              <div className="font-mono text-[11px] uppercase tracking-[0.12em] opacity-80">
+                Loading balance
+              </div>
+            )}
+          </HoverCardContent>
+        </HoverCard>
       </div>
 
       {error && !/not_configured/.test(error) && (
         <div className="mt-2 text-xs text-amber-700">Gateway API: {error}</div>
-      )}
-
-      {expanded && data && (
-        <div className="mt-3 space-y-3 text-xs">
-          <BreakdownRow label="Available" value={`$${formatGrandTotal(data.available)}`} />
-          <BreakdownRow
-            label="Finalizing"
-            value={`$${formatGrandTotal(data.pendingCreditTotal)}`}
-            muted={data.pendingCreditTotal === '0.000000'}
-          />
-          <BreakdownRow
-            label="Ops staging"
-            value={`$${formatGrandTotal(data.opsStagingTotal)}`}
-            muted={data.opsStagingTotal === '0.000000'}
-          />
-
-          {data.perDomain.length > 0 && (
-            <div className="border-t border-zinc-200/60 pt-2">
-              <div className="text-zinc-500">Per chain</div>
-              <ul className="mt-1 space-y-1">
-                {data.perDomain.map(d => (
-                  <li key={d.domain} className="flex justify-between">
-                    <span>{d.label}</span>
-                    <span className="font-mono tabular-nums">${d.balance}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {data.pendingCredits.length > 0 && (
-            <div className="border-t border-zinc-200/60 pt-2">
-              <div className="text-zinc-500">Pending credits</div>
-              <ul className="mt-1 space-y-1">
-                {data.pendingCredits.map(c => (
-                  <li
-                    key={`${c.depositTxHash ?? c.confirmedAt}-${c.domain}`}
-                    className="flex justify-between"
-                  >
-                    <span className="truncate">
-                      {c.chain} ·{' '}
-                      {c.status === 'finalizing'
-                        ? `${formatRemaining(c.remainingSeconds)}`
-                        : 'arriving'}
-                    </span>
-                    <span className="font-mono tabular-nums">${formatMicroUsdc(c.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {data.opsStaging.length > 0 && data.opsStaging.some(s => s.usdc !== '0') && (
-            <div className="border-t border-zinc-200/60 pt-2">
-              <div className="text-zinc-500">In sweep</div>
-              <ul className="mt-1 space-y-1">
-                {data.opsStaging
-                  .filter(s => s.usdc !== '0')
-                  .map(s => (
-                    <li key={s.walletAddress} className="flex justify-between">
-                      <span className="truncate">{s.chain}</span>
-                      <span className="font-mono tabular-nums">${formatMicroUsdc(s.usdc)}</span>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
-
-          <div className="border-t border-zinc-200/60 pt-2 font-mono text-[10px] text-zinc-400">
-            Depositor: {shortAddr(data.depositor)}
-          </div>
-        </div>
       )}
     </Wrapper>
   );
@@ -216,11 +165,98 @@ function InlineWrapper({ children }: { children: React.ReactNode }) {
   return <div className="w-full">{children}</div>;
 }
 
+function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.12em] opacity-70">
+          Unified balance
+        </div>
+        <div className="mt-0.5 text-sm font-medium">Gateway balance breakdown</div>
+      </div>
+
+      <div className="space-y-1.5">
+        <BreakdownRow label="Available" value={`$${formatGrandTotal(data.available)}`} />
+        <BreakdownRow
+          label="Finalizing"
+          value={`$${formatGrandTotal(data.pendingCreditTotal)}`}
+          muted={data.pendingCreditTotal === '0.000000'}
+        />
+        <BreakdownRow
+          label="Ops staging"
+          value={`$${formatGrandTotal(data.opsStagingTotal)}`}
+          muted={data.opsStagingTotal === '0.000000'}
+        />
+      </div>
+
+      {data.perDomain.length > 0 && (
+        <div className="border-t border-white/20 pt-2">
+          <div className="opacity-70">Per chain</div>
+          <ul className="mt-1 space-y-1">
+            {data.perDomain.map(d => (
+              <li key={d.domain} className="flex justify-between gap-3">
+                <span className="min-w-0 truncate">{d.label}</span>
+                <span className="shrink-0 font-mono tabular-nums">${d.balance}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {data.pendingCredits.length > 0 && (
+        <div className="border-t border-white/20 pt-2">
+          <div className="opacity-70">Pending credits</div>
+          <ul className="mt-1 space-y-1">
+            {data.pendingCredits.map(c => (
+              <li
+                key={`${c.depositTxHash ?? c.confirmedAt}-${c.domain}`}
+                className="flex justify-between gap-3"
+              >
+                <span className="min-w-0 truncate">
+                  {c.chain} ·{' '}
+                  {c.status === 'finalizing'
+                    ? `${formatRemaining(c.remainingSeconds)}`
+                    : 'arriving'}
+                </span>
+                <span className="shrink-0 font-mono tabular-nums">
+                  ${formatMicroUsdc(c.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {data.opsStaging.length > 0 && data.opsStaging.some(s => s.usdc !== '0') && (
+        <div className="border-t border-white/20 pt-2">
+          <div className="opacity-70">In sweep</div>
+          <ul className="mt-1 space-y-1">
+            {data.opsStaging
+              .filter(s => s.usdc !== '0')
+              .map(s => (
+                <li key={s.walletAddress} className="flex justify-between gap-3">
+                  <span className="min-w-0 truncate">{s.chain}</span>
+                  <span className="shrink-0 font-mono tabular-nums">
+                    ${formatMicroUsdc(s.usdc)}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="border-t border-white/20 pt-2 font-mono text-[10px] opacity-65">
+        Depositor: {shortAddr(data.depositor)}
+      </div>
+    </div>
+  );
+}
+
 function BreakdownRow({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <div className={`flex justify-between ${muted ? 'text-zinc-400' : ''}`}>
+    <div className={`flex justify-between gap-3 ${muted ? 'opacity-55' : ''}`}>
       <span>{label}</span>
-      <span className="font-mono tabular-nums">{value}</span>
+      <span className="shrink-0 font-mono tabular-nums">{value}</span>
     </div>
   );
 }
