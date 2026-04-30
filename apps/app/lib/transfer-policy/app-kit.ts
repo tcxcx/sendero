@@ -15,14 +15,19 @@
  *   testnet dev.
  */
 
+import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
 import { createViemAdapterFromPrivateKey } from '@circle-fin/adapter-viem-v2';
 import { UnifiedBalanceKit } from '@circle-fin/unified-balance-kit';
-
 import { env } from '@sendero/env';
 
 let cached: {
   kit: UnifiedBalanceKit;
   adapter: ReturnType<typeof createViemAdapterFromPrivateKey>;
+} | null = null;
+
+let circleCached: {
+  kit: UnifiedBalanceKit;
+  adapter: ReturnType<typeof createCircleWalletsAdapter>;
 } | null = null;
 
 export function getUnifiedBalanceDelegate(): {
@@ -39,4 +44,21 @@ export function getUnifiedBalanceDelegate(): {
   const kit = new UnifiedBalanceKit();
   cached = { kit, adapter };
   return cached;
+}
+
+export function getCircleUnifiedBalanceDelegate(): {
+  kit: UnifiedBalanceKit;
+  adapter: ReturnType<typeof createCircleWalletsAdapter>;
+} | null {
+  if (circleCached) return circleCached;
+  const apiKey = env.circleApiKey();
+  const entitySecret = env.circleEntitySecret();
+  if (!apiKey || !entitySecret) return null;
+  const adapter = createCircleWalletsAdapter({
+    apiKey,
+    entitySecret,
+  });
+  const kit = new UnifiedBalanceKit();
+  circleCached = { kit, adapter };
+  return circleCached;
 }

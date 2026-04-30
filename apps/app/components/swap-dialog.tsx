@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
 import { DialogShell } from './dialog-shell';
+import { TokenIcon, BlockchainIcon } from '@sendero/icons';
 
 type Token = 'USDC' | 'EURC';
 
@@ -72,16 +73,14 @@ export function SwapDialog() {
   };
 
   return (
-    <DialogShell
-      open={open}
-      title="Swap · treasury rebalance"
-      subtitle="Circle App Kit · Arc Testnet"
-      onClose={close}
-    >
-      <p className="dlg-sub">
-        Rebalances the Sendero corporate treasury between USDC and EURC on Arc. Gas paid in
-        Arc-native USDC.
-      </p>
+    <DialogShell open={open} title="Swap" subtitle="Circle App Kit · Arc Testnet" onClose={close}>
+      <p className="dlg-sub">Swap between USDC and EURC on Arc. Gas paid in Arc-native USDC.</p>
+
+      <div className="sw-chain-badge">
+        <BlockchainIcon chain="Arc_Testnet" size={14} />
+        <span>Arc Testnet</span>
+        <span className="sw-chain-note">same chain</span>
+      </div>
 
       <div className="dlg-row">
         <span className="dlg-label">From</span>
@@ -95,6 +94,7 @@ export function SwapDialog() {
                 disabled={toT === t}
                 onClick={() => setFrom(t)}
               >
+                <TokenIcon token={t} size={13} />
                 {t}
               </button>
             ))}
@@ -125,6 +125,7 @@ export function SwapDialog() {
                 disabled={fromT === t}
                 onClick={() => setTo(t)}
               >
+                <TokenIcon token={t} size={13} />
                 {t}
               </button>
             ))}
@@ -154,7 +155,7 @@ export function SwapDialog() {
         {busy ? (
           <>
             <span className="dlg-spinner" aria-hidden="true" />
-            <span>Signing treasury tx…</span>
+            <span>Signing…</span>
           </>
         ) : (
           <>
@@ -176,6 +177,25 @@ export function SwapDialog() {
       </button>
 
       <style jsx>{`
+        .sw-chain-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.08em;
+          color: var(--text-dim);
+          padding: 3px 8px;
+          border: 1px solid var(--border);
+          background: var(--bg-elev);
+        }
+        .sw-chain-note {
+          margin-left: 2px;
+          font-size: 9px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text-faint);
+        }
         .sw-row {
           display: grid;
           grid-template-columns: 140px 1fr;

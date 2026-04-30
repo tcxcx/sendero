@@ -12,9 +12,9 @@
  *   4. On success, marks `settled` and writes tx hash; on failure,
  *      `failed` with the error string so operators can retry.
  *
- * The actual on-chain primitive is @sendero/nanopayments (Circle
- * x402 batching), injected via `SettleFn`. This keeps the billing
- * package runtime-agnostic.
+ * The actual settlement primitive is injected via `SettleFn`. In the
+ * app this debits the tenant's Gateway Business Balance; tests can
+ * provide an in-memory settler.
  */
 
 import type { NanopayBatchStatus } from '@sendero/database';
@@ -50,7 +50,9 @@ export interface BatchStore {
     olderThan: Date;
     limit: number;
     maxRetryCount: number;
-  }) => Promise<Array<{ id: string; tenantId: string; totalMicroUsdc: bigint; retryCount: number }>>;
+  }) => Promise<
+    Array<{ id: string; tenantId: string; totalMicroUsdc: bigint; retryCount: number }>
+  >;
 }
 
 export type SettleFn = (args: {
@@ -86,7 +88,14 @@ export async function buildAndSettleBatch(
       eventCount: number;
     }
   | { batchId: string; status: 'failed'; error: string; totalMicroUsdc: bigint; eventCount: number }
-  | { batchId: string; status: 'retrying'; error: string; retryCount: number; totalMicroUsdc: bigint; eventCount: number }
+  | {
+      batchId: string;
+      status: 'retrying';
+      error: string;
+      retryCount: number;
+      totalMicroUsdc: bigint;
+      eventCount: number;
+    }
   | { status: 'empty' }
 > {
   const windowEndedAt = args.windowEndedAt ?? new Date();
@@ -171,10 +180,26 @@ export async function retrySettlingBatches(
   store: BatchStore,
   settle: SettleFn,
   opts: { olderThanMs?: number; limit?: number } = {}
-): Promise<Array<
-  | { batchId: string; tenantId: string; status: 'settled'; txHash: string; retryCount: number; totalMicroUsdc: bigint }
-  | { batchId: string; tenantId: string; status: 'retrying' | 'failed'; error: string; retryCount: number; totalMicroUsdc: bigint }
->> {
+): Promise<
+  Array<
+    | {
+        batchId: string;
+        tenantId: string;
+        status: 'settled';
+        txHash: string;
+        retryCount: number;
+        totalMicroUsdc: bigint;
+      }
+    | {
+        batchId: string;
+        tenantId: string;
+        status: 'retrying' | 'failed';
+        error: string;
+        retryCount: number;
+        totalMicroUsdc: bigint;
+      }
+  >
+> {
   const olderThan = new Date(Date.now() - (opts.olderThanMs ?? 10 * 60 * 1000));
   const candidates = await store.findSettlingBatches({
     olderThan,
@@ -183,8 +208,22 @@ export async function retrySettlingBatches(
   });
 
   const out: Array<
-    | { batchId: string; tenantId: string; status: 'settled'; txHash: string; retryCount: number; totalMicroUsdc: bigint }
-    | { batchId: string; tenantId: string; status: 'retrying' | 'failed'; error: string; retryCount: number; totalMicroUsdc: bigint }
+    | {
+        batchId: string;
+        tenantId: string;
+        status: 'settled';
+        txHash: string;
+        retryCount: number;
+        totalMicroUsdc: bigint;
+      }
+    | {
+        batchId: string;
+        tenantId: string;
+        status: 'retrying' | 'failed';
+        error: string;
+        retryCount: number;
+        totalMicroUsdc: bigint;
+      }
   > = [];
   for (const b of candidates) {
     try {

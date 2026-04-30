@@ -23,7 +23,7 @@ DUFFEL_API_TOKEN=... bun run scripts/register-duffel-webhook.ts \
 ```
 
 ### 3. No live smoke against Duffel wire types
-`scripts/smoke-duffel-advanced.ts` exists. Never run. Until a human runs it against a test token, every hand-authored wire type in `packages/sendero-duffel/src/types.ts` is theoretical. Low effort, high signal.
+`scripts/smoke-duffel-advanced.ts` exists. Never run. Until a human runs it against a test token, every hand-authored wire type in `packages/duffel/src/types.ts` is theoretical. Low effort, high signal.
 
 ### 4. `/app/console` marketing-page fallback is closed but the edge path isn't
 `ClerkSenderoApp` wraps `SenderoApp` with `gate='bypass'` and that works for Clerk-authed operators. BUT: the route still hard-depends on `NEXT_PUBLIC_SENDERO_EDGE_URL`; when the edge worker is down the console/ops surfaces emit `ERR_CONNECTION_REFUSED` in DevTools. The prior QA flagged it; still unfixed.
@@ -33,7 +33,7 @@ Fix: `use-meter.ts:39` — gate the default on `NODE_ENV === 'development'`; pro
 ## P1 — quality / correctness
 
 ### 5. `searchFlights` offers mapping still uses `any`
-`packages/sendero-duffel/src/index.ts:183` — `offers.map((o: any): FlightOfferSummary => ...)`. The wire types cover offer requests but not offers yet. Replace with `DuffelOfferMinimalWire`. 20 min.
+`packages/duffel/src/index.ts:183` — `offers.map((o: any): FlightOfferSummary => ...)`. The wire types cover offer requests but not offers yet. Replace with `DuffelOfferMinimalWire`. 20 min.
 
 ### 6. `bookFlight`'s Duffel Balance currency assumption
 `payFromBalance()` uses the order's `total_currency`. If the balance is GBP and the order is USD, we fail at payment time with a cryptic error. Add an `fxDrift` check before calling pay — matches the spec's fx-drift edge case.
@@ -71,7 +71,7 @@ The product has 4+ places that would benefit from a graph view (booking workflow
 `packages/tools/src/pricing.ts` is a flat dict. At 49 tools, it's becoming hard to scan "what's the concierge tier look like?" vs "what's the composed tier?". Refactor into `TIERS` const + derived dict with pricing (no behavior change; tests already cover coverage).
 
 ### 17. `@duffel/api` cast escape hatches
-Even after the types pass, `as unknown as Parameters<typeof duffel.orders.create>[0]` appears 3 times in the wrapper because the SDK type lags. Consider a single type-bridge module `packages/sendero-duffel/src/sdk-bridge.ts` where these casts live — keeps the happy path clean.
+Even after the types pass, `as unknown as Parameters<typeof duffel.orders.create>[0]` appears 3 times in the wrapper because the SDK type lags. Consider a single type-bridge module `packages/duffel/src/sdk-bridge.ts` where these casts live — keeps the happy path clean.
 
 ### 18. Unused imports / variables leftover from refactors
 `chat-col.tsx` imports from `./ui` that no longer applies. `trip-tool-cards.tsx` has an unused `ReactElement` import. Fixable by `bunx biome lint --apply` but needs a sanity check on the diff.

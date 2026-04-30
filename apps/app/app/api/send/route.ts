@@ -1,12 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import type { SendParams } from '@circle-fin/app-kit';
-import { env } from '@sendero/env';
-import { getAppKit, getTreasuryAdapter, summarizeSend } from '@sendero/circle/app-kit';
+import { auth } from '@clerk/nextjs/server';
+import { getArcClient } from '@sendero/arc/chain';
+import { getAppKit, createAdapterForSigner, summarizeSend } from '@sendero/circle/app-kit';
+import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { prisma } from '@sendero/database';
+import { type NextRequest, NextResponse } from 'next/server';
+import { getAddress, parseAbiItem, zeroAddress, type Hex } from 'viem';
+import { z } from 'zod';
+
+import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
 
 /**
  * POST /api/send
- * Same-chain treasury transfer on Arc Testnet via App Kit (viem adapter).
+ * Same-chain USDC/EURC transfer on Arc Testnet via App Kit (viem adapter).
+ * Uses the calling org's per-tenant gateway signer EOA — NOT the treasury.
+ *
  * Body: { to: 0xAddress, amount: decimal, token?: 'USDC'|'EURC' }
  */
 const BodySchema = z.object({
@@ -15,24 +24,128 @@ const BodySchema = z.object({
   token: z.enum(['USDC', 'EURC']).default('USDC'),
 });
 
+const ARC_USDC = '0x3600000000000000000000000000000000000000' as const;
+const ARC_DOMAIN = GATEWAY_CHAINS.Arc_Testnet.domain;
+const USDC_TRANSFER_EVENT = parseAbiItem(
+  'event Transfer(address indexed from,address indexed to,uint256 value)'
+);
+
+function decimalToMicro(decimal: string): bigint {
+  const [whole = '0', frac = ''] = decimal.split('.');
+  const padded = `${frac}000000`.slice(0, 6);
+  return BigInt(whole || '0') * 1_000_000n + BigInt(padded || '0');
+}
+
+async function assertArcUsdcMintedToRecipient(args: {
+  txHash: string;
+  recipient: string;
+  amountMicro: bigint;
+}) {
+  const client = getArcClient();
+  const receipt = await client.getTransactionReceipt({ hash: args.txHash as Hex });
+  if (receipt.status !== 'success') {
+    throw new Error(`Arc mint transaction ${args.txHash} reverted`);
+  }
+  const recipient = getAddress(args.recipient);
+  const transferLogs = await client.getLogs({
+    address: ARC_USDC,
+    event: USDC_TRANSFER_EVENT,
+    args: { to: recipient },
+    fromBlock: receipt.blockNumber,
+    toBlock: receipt.blockNumber,
+  });
+  for (const log of transferLogs) {
+    if (log.transactionHash.toLowerCase() !== args.txHash.toLowerCase()) continue;
+    const { from, value } = log.args;
+    if (from && getAddress(from) === zeroAddress && value === args.amountMicro) {
+      return;
+    }
+  }
+  throw new Error(
+    `Arc mint transaction ${args.txHash} did not include the expected ${(
+      Number(args.amountMicro) / 1_000_000
+    ).toFixed(6)} USDC mint to ${recipient}`
+  );
+}
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  if (!env.treasuryPrivateKey()) {
-    return NextResponse.json(
-      {
-        error: 'treasury_not_configured',
-        message: 'TREASURY_PRIVATE_KEY required in .env.local.',
-      },
-      { status: 503 }
-    );
+  const { orgId, userId } = await auth();
+  if (!orgId) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { clerkOrgId: orgId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
+  }
+
+  const signer = await getOrCreateGatewaySigner(tenant.id);
+  let gatewayTransferLogId: string | null = null;
+
   try {
     const body = BodySchema.parse(await req.json());
+    if (body.token === 'USDC') {
+      const amountMicro = decimalToMicro(body.amount);
+      const initiatedByUser = userId
+        ? await prisma.user.findUnique({ where: { clerkUserId: userId }, select: { id: true } })
+        : null;
+      const log = await prisma.gatewayTransferLog.create({
+        data: {
+          tenantId: tenant.id,
+          sourceDomain: null,
+          destinationDomain: ARC_DOMAIN,
+          destinationChain: GATEWAY_CHAINS.Arc_Testnet.kitName,
+          amountMicroUsdc: amountMicro,
+          recipientAddress: body.to.toLowerCase(),
+          status: 'attesting',
+          forwardingEnabled: false,
+          triggeredBy: 'manual',
+          initiatedByUserId: initiatedByUser?.id ?? null,
+        },
+      });
+      gatewayTransferLogId = log.id;
+      const result = await materializeGatewayUsdcToArc({
+        tenantId: tenant.id,
+        amount: body.amount,
+        recipient: body.to,
+      });
+      await assertArcUsdcMintedToRecipient({
+        txHash: result.mintHash,
+        recipient: body.to,
+        amountMicro,
+      });
+      await prisma.gatewayTransferLog.update({
+        where: { id: log.id },
+        data: {
+          sourceDomain: GATEWAY_CHAINS[result.from].domain,
+          mintTxHash: result.mintHash,
+          status: 'confirmed',
+          confirmedAt: new Date(),
+        },
+      });
+      return NextResponse.json({
+        state: 'success',
+        txHash: result.mintHash,
+        explorerUrl: result.explorerUrl,
+        amount: body.amount,
+        token: body.token,
+        to: body.to,
+        signerAddress: result.signerAddress,
+        source: 'gateway',
+        sourceChain: result.from,
+        transferLogId: log.id,
+      });
+    }
+
     const kit = getAppKit();
-    const adapter = getTreasuryAdapter();
+    const adapter = createAdapterForSigner(signer.privateKey);
 
     const params: SendParams = {
       from: {
@@ -50,13 +163,34 @@ export async function POST(req: NextRequest) {
       amount: body.amount,
       token: body.token,
       to: body.to,
+      signerAddress: signer.address,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid_input', issues: err.issues }, { status: 400 });
     }
-    const detail = err instanceof Error ? err.message : String(err);
-    console.error('[send] error:', detail);
-    return NextResponse.json({ error: 'send_failed', message: detail }, { status: 500 });
+    const anyErr = err as any;
+    const detail: string =
+      anyErr?.cause?.trace?.rawError?.shortMessage ||
+      anyErr?.cause?.trace?.rawError?.message ||
+      (err instanceof Error ? err.message : String(err));
+    if (gatewayTransferLogId) {
+      await prisma.gatewayTransferLog
+        .update({
+          where: { id: gatewayTransferLogId },
+          data: { status: 'failed', errorMessage: detail },
+        })
+        .catch(updateErr => {
+          console.error('[send] failed to update gateway transfer log', {
+            transferLogId: gatewayTransferLogId,
+            updateErr,
+          });
+        });
+    }
+    console.error('[send] error:', detail, { tenantId: tenant.id, signerAddress: signer.address });
+    return NextResponse.json(
+      { error: 'send_failed', message: detail },
+      { status: detail.startsWith('Insufficient spendable EVM Gateway USDC.') ? 409 : 500 }
+    );
   }
 }

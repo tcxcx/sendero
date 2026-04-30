@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { env } from '@sendero/env';
 import { getAgentIdentity, getReputation, IDENTITY_REGISTRY } from '@sendero/arc/identity';
+import { prisma } from '@sendero/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,43 @@ export async function GET() {
       getAgentIdentity(agentId).catch(() => null),
       getReputation(agentId).catch(() => null),
     ]);
+    const indexed = await prisma.onchainIdentity.findFirst({
+      where: { agentId: agentIdStr },
+      select: {
+        id: true,
+        contract: true,
+        holderAddress: true,
+        status: true,
+        mintedAt: true,
+        cachedAt: true,
+        received: {
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+          select: {
+            stars: true,
+            score: true,
+            tag: true,
+            fromAddress: true,
+            txHash: true,
+            tripId: true,
+            bookingId: true,
+            createdAt: true,
+          },
+        },
+        validations: {
+          orderBy: { createdAt: 'desc' },
+          take: 12,
+          select: {
+            validatorAddress: true,
+            requestHash: true,
+            responseScore: true,
+            tag: true,
+            createdAt: true,
+            resolvedAt: true,
+          },
+        },
+      },
+    });
 
     return NextResponse.json({
       agentId: agentIdStr,
@@ -43,6 +81,35 @@ export async function GET() {
       validators: reputation?.validators ?? 0,
       metadata: identity?.metadata ?? null,
       tokenURI: identity?.tokenURI ?? null,
+      indexed: indexed
+        ? {
+            contract: indexed.contract,
+            holderAddress: indexed.holderAddress,
+            status: indexed.status,
+            mintedAt: indexed.mintedAt?.toISOString() ?? null,
+            cachedAt: indexed.cachedAt?.toISOString() ?? null,
+          }
+        : null,
+      recent:
+        indexed?.received.map(r => ({
+          stars: r.stars,
+          score: r.score,
+          tag: r.tag,
+          fromAddress: r.fromAddress,
+          txHash: r.txHash,
+          tripId: r.tripId,
+          bookingId: r.bookingId,
+          createdAt: r.createdAt.toISOString(),
+        })) ?? [],
+      validations:
+        indexed?.validations.map(v => ({
+          validatorAddress: v.validatorAddress,
+          requestHash: v.requestHash,
+          responseScore: v.responseScore,
+          tag: v.tag,
+          createdAt: v.createdAt.toISOString(),
+          resolvedAt: v.resolvedAt?.toISOString() ?? null,
+        })) ?? [],
       // Arcscan doesn't expose a per-tokenId page; link to the contract.
       explorerUrl: `${explorerUrl}/address/${IDENTITY_REGISTRY}`,
     });

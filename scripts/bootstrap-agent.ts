@@ -39,7 +39,7 @@ const SEED_PROGRESS = path.join(APP_ROOT, '.bootstrap-seed-progress.json');
 
 // Hackathon default: Arc docs example metadata URI. Swap for a pinned
 // web3.storage URL if you want agent-specific metadata.
-const METADATA_URI_DEFAULT = 'https://sendero-arc.vercel.app/agent-metadata.json';
+const METADATA_URI_DEFAULT = 'https://arc.vercel.app/agent-metadata.json';
 
 const SLEEP_MS = 2000; // dodge Circle DCW rate limit
 

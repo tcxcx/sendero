@@ -45,27 +45,8 @@ export default async function HomePage() {
   const toolCount = Object.keys(TOOL_PRICING).length;
   return (
     <main className="docs-home">
-      <header className="docs-nav">
-        <Link href="/" className="docs-brand">
-          <img
-            alt=""
-            className="docs-brand-mark"
-            decoding="async"
-            src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
-          />
-          <span className="docs-brand-word">Sendero</span>
-          <span>/</span>
-          <span>docs</span>
-        </Link>
-        <SenderoLanguageSelector
-          className="docs-language"
-          currentLocale={locale}
-          hrefs={buildLocaleApiHrefs('/', { includeLocalizedPath: false })}
-        />
-      </header>
       <section className="docs-hero">
         <div className="docs-copy">
-          <p className="label docs-label">Sendero / Developer docs</p>
           <h1>
             Book flights. <span>Settle on-chain.</span>
           </h1>

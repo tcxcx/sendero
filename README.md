@@ -37,7 +37,7 @@
 
 The same narrative compressed into 12 slides + a Google-Slides-style speaker-notes window. Live online (private preview):
 
-> **🔗 [sendero-pitch.vercel.app](https://sendero-pitch.vercel.app)** &nbsp;·&nbsp; passphrase **`sendero-arc`**
+> **🔗 [sendero-pitch.vercel.app](https://sendero-pitch.vercel.app)** &nbsp;·&nbsp; passphrase **`arc`**
 >
 > Press **`N`** inside the deck (or click *Speaker notes ↗* in the top-right) to open the notes window in a separate tab — it stays in sync with the slide you're on.
 
@@ -152,15 +152,15 @@ Trials monetize leg 2 even when leg 1 is $0. Pro+ customers monetize both. Enter
 
 **Why it matters.** Every travel booking generates receipts, invoices, and boarding passes that someone has to type back into a ledger. Sendero's agents read them directly. A traveler WhatsApps a crumpled taxi receipt → amount + merchant + date flow into the expense row. An operator forwards a supplier invoice → vendor + total + due date reconcile against the booking. A boarding pass PDF comes in → PNR + seat + cabin cross-check Duffel.
 
-**Zod schemas pin Gemini's output.** No free-form JSON parsing, no regex salvage, no LLM-as-JSON-coercer. Four document kinds — invoice, receipt, boarding pass, government ID — each own a schema ([`packages/sendero-ocr/src/schemas/`](./packages/sendero-ocr/src/schemas/)) and a prompt. The schema IS the contract.
+**Zod schemas pin Gemini's output.** No free-form JSON parsing, no regex salvage, no LLM-as-JSON-coercer. Four document kinds — invoice, receipt, boarding pass, government ID — each own a schema ([`packages/ocr/src/schemas/`](./packages/ocr/src/schemas/)) and a prompt. The schema IS the contract.
 
-**Vertex AI → AI Studio credential cascade.** The same code runs with Google Cloud ADC in production and a plain `GEMINI_API_KEY` in local dev. One path gracefully degrades to the other; neither forces a redeploy. See [`packages/sendero-ocr/src/providers/gemini-multimodal.ts`](./packages/sendero-ocr/src/providers/gemini-multimodal.ts).
+**Vertex AI → AI Studio credential cascade.** The same code runs with Google Cloud ADC in production and a plain `GEMINI_API_KEY` in local dev. One path gracefully degrades to the other; neither forces a redeploy. See [`packages/ocr/src/providers/gemini-multimodal.ts`](./packages/ocr/src/providers/gemini-multimodal.ts).
 
 **Flash by default, Pro on demand.** `gemini-2.5-flash` is 3–5× faster and ~10× cheaper than Pro with the same accuracy when the schema is tight. Callers pass `model: 'gemini-2.5-pro'` only when a document is genuinely ambiguous.
 
 **Thinking budget stripped** because OCR isn't a reasoning task. `providerOptions.google.thinkingConfig.thinkingBudget = 0` cuts latency 40–60% and cost ~3× with zero accuracy impact — the schema pins the output space, there's nothing to "think" about.
 
-**Golden-set eval harness.** Field-level accuracy + p50/p95 latency, tracked per kind over time. Drop `{slug}.pdf` + `{slug}.yml` into [`packages/sendero-ocr/evals/golden/{kind}/`](./packages/sendero-ocr/evals/) and run `bun run eval`:
+**Golden-set eval harness.** Field-level accuracy + p50/p95 latency, tracked per kind over time. Drop `{slug}.pdf` + `{slug}.yml` into [`packages/ocr/evals/golden/{kind}/`](./packages/ocr/evals/) and run `bun run eval`:
 
 ```
 RECEIPTS (12 docs)
@@ -169,7 +169,7 @@ RECEIPTS (12 docs)
   p95 latency      1840 ms
 ```
 
-**Production hardening the other pitches won't mention** — see [`packages/tools/src/scan-document.ts`](./packages/tools/src/scan-document.ts) and [`packages/sendero-ocr/src/extract.ts`](./packages/sendero-ocr/src/extract.ts):
+**Production hardening the other pitches won't mention** — see [`packages/tools/src/scan-document.ts`](./packages/tools/src/scan-document.ts) and [`packages/ocr/src/extract.ts`](./packages/ocr/src/extract.ts):
 - **SSRF guard** on the URL-fetch path — cloud-metadata endpoints refused, https-only, redirects re-checked.
 - **20 MB payload cap + MIME allowlist** before a byte reaches Gemini.
 - **PII audit signal** on boarding-pass scans (PNR + passport fragments get logged without blocking).
@@ -194,29 +194,29 @@ Passports are the most sensitive document the platform will ever touch. Visa fri
 
 **L1 — Intake** ([`POST /api/passport/upload`](./apps/app/app/api/passport/upload/route.ts)). The client parses the two MRZ lines with [`mrz-fast`](https://www.npmjs.com/package/mrz-fast) (zero-dep, ICAO 9303 TD3, offline) and hashes the image to SHA-256. **Image bytes are discarded before the network call** — the server never sees pixels on the happy path.
 
-**L2 — Privileged extraction** ([`packages/sendero-vault/src/extract.ts`](./packages/sendero-vault/src/extract.ts)). A Vercel Node function checksum-validates the MRZ. Every per-field check digit *and* the composite check digit must pass — that's machine evidence of an honest extraction, no LLM round-trip needed to trust it. A compliance-gated [Vertex AI Zero Data Retention](https://ai.google.dev/gemini-api/docs/zdr) fallback stays available for unusual layouts; opt-in per tenant, audited per call, never the default.
+**L2 — Privileged extraction** ([`packages/vault/src/extract.ts`](./packages/vault/src/extract.ts)). A Vercel Node function checksum-validates the MRZ. Every per-field check digit *and* the composite check digit must pass — that's machine evidence of an honest extraction, no LLM round-trip needed to trust it. A compliance-gated [Vertex AI Zero Data Retention](https://ai.google.dev/gemini-api/docs/zdr) fallback stays available for unusual layouts; opt-in per tenant, audited per call, never the default.
 
-**L3 — Encrypted vault** ([`packages/sendero-vault/src/passport.ts`](./packages/sendero-vault/src/passport.ts) + [`PassportVault` model](./packages/database/prisma/schema.prisma)). `pgcrypto` `pgp_sym_encrypt(..., 'cipher-algo=aes256')` via parameterized `$queryRaw`, per-tenant Data Encryption Key derived via HKDF-SHA256 from a Vercel-env Key Encryption Key. **The KEK lives outside Postgres** — a DB dump's blast radius is bounded. Full name, passport#, DOB, MRZ lines stay inside `ciphertext bytea`; only sanitized signals — `nationalityIso3`, `expiresOn`, `documentVariant`, `mrzChecksumValid` — surface as plaintext columns. Every access appends to `PassportVaultAccessLog` — tampering the log tampers the audit trail.
+**L3 — Encrypted vault** ([`packages/vault/src/passport.ts`](./packages/vault/src/passport.ts) + [`PassportVault` model](./packages/database/prisma/schema.prisma)). `pgcrypto` `pgp_sym_encrypt(..., 'cipher-algo=aes256')` via parameterized `$queryRaw`, per-tenant Data Encryption Key derived via HKDF-SHA256 from a Vercel-env Key Encryption Key. **The KEK lives outside Postgres** — a DB dump's blast radius is bounded. Full name, passport#, DOB, MRZ lines stay inside `ciphertext bytea`; only sanitized signals — `nationalityIso3`, `expiresOn`, `documentVariant`, `mrzChecksumValid` — surface as plaintext columns. Every access appends to `PassportVaultAccessLog` — tampering the log tampers the audit trail.
 
 **L4 — Agent surface** ([`check_travel_eligibility`](./packages/tools/src/check-travel-eligibility.ts) tool + [`sendero.verify_travel_documents`](./packages/workflows/src/catalog.ts) workflow). Returns `{ status: 'ok' | 'warn' | 'block', reasons: VerdictReasonCode[], actions: VerdictActionId[] }` — enum codes only, never prose, never dates, never names. The UI decorates codes into human copy via a translation table the agent never touches. `book_flight` will refuse on a `block` verdict before we touch a supplier.
 
 #### Three tiers of trust — so verification never halts a quote
 
-The pipeline ([`packages/sendero-vault/src/verify.ts`](./packages/sendero-vault/src/verify.ts)) picks the highest-confidence tier it has:
+The pipeline ([`packages/vault/src/verify.ts`](./packages/vault/src/verify.ts)) picks the highest-confidence tier it has:
 
 - **T2 — Vault** (MRZ-validated, encrypted). Required for ticketing + visa submission.
-- **T1 — Self-declared** ([`TravelerOnboardingCard`](./apps/app/components/traveler/traveler-onboarding-card.tsx) + [`packages/sendero-vault/src/declared.ts`](./packages/sendero-vault/src/declared.ts)). Traveler picks nationality + expiry month in 10 seconds. Stored on `user.metadata.travelerProfile` as ISO-3 + date — no PII, no encryption.
+- **T1 — Self-declared** ([`TravelerOnboardingCard`](./apps/app/components/traveler/traveler-onboarding-card.tsx) + [`packages/vault/src/declared.ts`](./packages/vault/src/declared.ts)). Traveler picks nationality + expiry month in 10 seconds. Stored on `user.metadata.travelerProfile` as ISO-3 + date — no PII, no encryption.
 - **T0 — Tenant default** — admin sets `defaultNationalityIso3` once; new users get visa-aware quotes on day zero.
 
 The upload gate fires only when a trip actually demands it: visa-required corridor, expiry within 12 months of return, trip total over the tenant ceiling, or tenant policy demands it. **Quotes, searches, and most domestic bookings never trigger it.**
 
 #### Async + webhook-driven — so the user never waits
 
-Eligibility runs are jobs, not synchronous calls ([`TripEligibilityRun` model](./packages/database/prisma/schema.prisma) + [`packages/sendero-vault/src/eligibility-run.ts`](./packages/sendero-vault/src/eligibility-run.ts)). The booking UI fires [`POST /api/trip-eligibility/start`](./apps/app/app/api/trip-eligibility/start/route.ts), gets a `runId`, and subscribes to [`/api/trip-eligibility/{runId}/stream`](./apps/app/app/api/trip-eligibility/[runId]/stream/route.ts) — a Server-Sent Events channel backed by Postgres `LISTEN/NOTIFY` on Neon's unpooled endpoint. Flight cards render *"checking visa requirements…"* and flip when `pg_notify` fires. An inbound [`/api/webhooks/sherpa`](./apps/app/app/api/webhooks/sherpa/route.ts) endpoint is stubbed + shared-secret validated for when Sherpa exposes eVisa state events.
+Eligibility runs are jobs, not synchronous calls ([`TripEligibilityRun` model](./packages/database/prisma/schema.prisma) + [`packages/vault/src/eligibility-run.ts`](./packages/vault/src/eligibility-run.ts)). The booking UI fires [`POST /api/trip-eligibility/start`](./apps/app/app/api/trip-eligibility/start/route.ts), gets a `runId`, and subscribes to [`/api/trip-eligibility/{runId}/stream`](./apps/app/app/api/trip-eligibility/[runId]/stream/route.ts) — a Server-Sent Events channel backed by Postgres `LISTEN/NOTIFY` on Neon's unpooled endpoint. Flight cards render *"checking visa requirements…"* and flip when `pg_notify` fires. An inbound [`/api/webhooks/sherpa`](./apps/app/app/api/webhooks/sherpa/route.ts) endpoint is stubbed + shared-secret validated for when Sherpa exposes eVisa state events.
 
 #### Sherpa Requirements API v3 — production-grade visa data
 
-[`@sendero/sherpa`](./packages/sendero-sherpa/) wraps [Sherpa's Requirements API v3](https://docs.joinsherpa.io/requirements-api/) against the vendored OpenAPI spec at [`packages/sendero-sherpa/openapi/sherpa-requirements-api-v3.json`](./packages/sendero-sherpa/openapi/sherpa-requirements-api-v3.json) — 2000+ government + travel-organization sources, IATA Open API standard, AES-256 at rest, SSL/TLS 1 transport. `POST /v3/trips` with JSON:API, UTM-attributed "See details" redirects. When `SHERPA_API_KEY` is set we overlay Sherpa's verdict on ours; when the call times out, rate-limits, or errors we degrade to the curated corridor table in [`packages/sendero-vault/src/visa-rules.ts`](./packages/sendero-vault/src/visa-rules.ts) — the caller never notices.
+[`@sendero/sherpa`](./packages/sherpa/) wraps [Sherpa's Requirements API v3](https://docs.joinsherpa.io/requirements-api/) against the vendored OpenAPI spec at [`packages/sherpa/openapi/sherpa-requirements-api-v3.json`](./packages/sherpa/openapi/sherpa-requirements-api-v3.json) — 2000+ government + travel-organization sources, IATA Open API standard, AES-256 at rest, SSL/TLS 1 transport. `POST /v3/trips` with JSON:API, UTM-attributed "See details" redirects. When `SHERPA_API_KEY` is set we overlay Sherpa's verdict on ours; when the call times out, rate-limits, or errors we degrade to the curated corridor table in [`packages/vault/src/visa-rules.ts`](./packages/vault/src/visa-rules.ts) — the caller never notices.
 
 #### Visa as a revenue line — LATAM's biggest opportunity
 
@@ -224,7 +224,7 @@ When Sherpa returns an `apply-product` action for the traveler's nationality × 
 
 #### The PII boundary stays hard
 
-Agents, workflow scratchpads, and log lines only ever see enum codes + non-PII `ancillary` fields. Full legal name, DOB, passport number, and MRZ lines stay in `ciphertext bytea` and surface at two controlled moments: when **the traveler** views [`/dashboard/passport`](./apps/app/app/api/passport/self/route.ts), and when **Duffel ticketing, extra luggage, seats, accomodation and car rentals or Sherpa eVisa submission** calls [`readVaultTicketingRecord()`](./packages/sendero-vault/src/passport.ts) — which writes a separate `ticketing_read` audit-log action distinct from `decrypt`, so compliance can distinguish "booking read passport# for legitimate reasons" from "owner viewed their own document." The LLM is never on either side of that boundary.
+Agents, workflow scratchpads, and log lines only ever see enum codes + non-PII `ancillary` fields. Full legal name, DOB, passport number, and MRZ lines stay in `ciphertext bytea` and surface at two controlled moments: when **the traveler** views [`/dashboard/passport`](./apps/app/app/api/passport/self/route.ts), and when **Duffel ticketing, extra luggage, seats, accomodation and car rentals or Sherpa eVisa submission** calls [`readVaultTicketingRecord()`](./packages/vault/src/passport.ts) — which writes a separate `ticketing_read` audit-log action distinct from `decrypt`, so compliance can distinguish "booking read passport# for legitimate reasons" from "owner viewed their own document." The LLM is never on either side of that boundary.
 
 #### What this get's us
 
@@ -375,7 +375,7 @@ See [`/docs/security`](./apps/docs/content/docs/security.mdx) for the full integ
 
 Sendero's agent layer is a workflow engine first and a chat surface second. That choice has runtime consequences — long-running booking flows that wait days for a supplier webhook, OCR pipelines that move multi-MB passport scans through privileged extraction, settlement runs that fan one userOp out into seven on-chain transfers, multi-step setup wizards that pause overnight while a tenant admin grants Slack scopes. None of that is safe on cold-start serverless or on vanilla edge functions. **Vercel Workflows on Fluid Compute** gives us four guarantees we'd otherwise have to rebuild ourselves:
 
-**1. Encrypted by default.** Step inputs, outputs, and stream chunks are encrypted before they leave the deployment. Passport MRZ extractions, settlement memos, OCR'd boarding-pass JSON, traveler emails, Slack OAuth state payloads — none of it is readable in transit or at rest outside the Sendero deployment. Pairs cleanly with our column-level [`PassportVault`](./packages/sendero-vault/src/passport.ts) AES-256 encryption (`pgcrypto`, per-tenant DEK derived via HKDF from a Vercel-env KEK): **Workflows handles transport, `pgcrypto` handles storage** — the LLM never sees a plaintext on either side.
+**1. Encrypted by default.** Step inputs, outputs, and stream chunks are encrypted before they leave the deployment. Passport MRZ extractions, settlement memos, OCR'd boarding-pass JSON, traveler emails, Slack OAuth state payloads — none of it is readable in transit or at rest outside the Sendero deployment. Pairs cleanly with our column-level [`PassportVault`](./packages/vault/src/passport.ts) AES-256 encryption (`pgcrypto`, per-tenant DEK derived via HKDF from a Vercel-env KEK): **Workflows handles transport, `pgcrypto` handles storage** — the LLM never sees a plaintext on either side.
 
 **2. Durable execution.** [`packages/workflows`](./packages/workflows) defines the graphs (`sendero.book_flight`, `cancellationRecoveryWorkflow`, `agencyCohortWorkflow`, channel setup wizards), and the [`WorkflowRun`](./packages/database/prisma/schema.prisma) row is the resumable checkpoint — but the runtime that survives crashes, cold starts, and redeploys is Workflows + Fluid Compute. `sendero.book_flight` can pause for hours awaiting `supplier_order_ticketed`, drift across two deploys, and resume from the exact pending step on the next webhook. The traveler reaches out on WhatsApp on Monday, the supplier confirms ticketing on Wednesday, the same workflow run mails the receipt — one durable object, three timezones, zero glue code.
 
@@ -552,10 +552,10 @@ Role gating is re-checked inside every tool handler (not only the UI), and each 
 A **guest pass** is a WhatsApp-or-Slack-shareable link that lets someone without a Sendero account spend a prefunded USDC budget on one trip, then walk away. End-to-end:
 
 1. `prefund_trip` escrows USDC on-chain with budget + expiry + metadata CID.
-2. [`@sendero/guest`](./packages/sendero-guest) emits a Peanut-style share link (private key in URL fragment, never server-side) — email mirrors the link as the durable channel.
+2. [`@sendero/guest`](./packages/guest) emits a Peanut-style share link (private key in URL fragment, never server-side) — email mirrors the link as the durable channel.
 3. Guest enrolls an **MSCA passkey** and signs `claimTrip(tripId, guestWallet, signature)`.
 4. Agent books inside the budget. `reserve_booking` / `commit_booking` draw down per leg.
-5. On ticketing confirmation, `settle_booking` atomically splits vendor + agency + fee + reputation tip via [`@sendero/sendero-nanopayments`](./packages/sendero-nanopayments).
+5. On ticketing confirmation, `settle_booking` atomically splits vendor + agency + fee + reputation tip via [`@sendero/nanopayments`](./packages/nanopayments).
 6. Unspent budget auto-refunds to the buyer at expiry.
 
 Canonical workflows: `guestPrefundWorkflow` (single seat) and `agencyCohortWorkflow` (bulk). UX rules:
@@ -615,7 +615,7 @@ Accessibility is non-negotiable: ~1 in 5 travelers have accessibility needs. 44�
 
 ### Nanopayments + USDC are billing *and* settlement
 
-[`@sendero/sendero-nanopayments`](./packages/sendero-nanopayments) settles bookings in a single Arc userOp that atomically fans traveler escrow → supplier + agency commission + Sendero fee + validator reward + reputation tip. The same rails meter per-turn agent usage (via x402). Quotes show fiat (via `quote_fx`) but commit in USDC; the invoice email shows both plus the settle tx hash; refunds via `send_tokens` surface their own tx hash. Card rails cannot do atomic multi-leg settlement — this is the Sendero-specific unlock.
+[`@sendero/nanopayments`](./packages/nanopayments) settles bookings in a single Arc userOp that atomically fans traveler escrow → supplier + agency commission + Sendero fee + validator reward + reputation tip. The same rails meter per-turn agent usage (via x402). Quotes show fiat (via `quote_fx`) but commit in USDC; the invoice email shows both plus the settle tx hash; refunds via `send_tokens` surface their own tx hash. Card rails cannot do atomic multi-leg settlement — this is the Sendero-specific unlock.
 
 ### Rolling releases on Vercel — gradual production rollouts
 
@@ -664,7 +664,7 @@ bun run deploy:rolling:complete:app        # promote canary to 100% immediately
 
 **Plan tier.** Rolling Releases is a Vercel **Pro / Enterprise** feature (Sendero is on Pro). Hobby projects will reject the configure call.
 
-**Edge-tier counterpart.** The CF Workers `sendero-arc-edge` worker has its own canary system documented in [`apps/edge/README.md`](./apps/edge/README.md#canary-rollouts) — different runtime, same shape (gradient rollout, health-probe gating, manual rollback escape hatch).
+**Edge-tier counterpart.** The CF Workers `arc-edge` worker has its own canary system documented in [`apps/edge/README.md`](./apps/edge/README.md#canary-rollouts) — different runtime, same shape (gradient rollout, health-probe gating, manual rollback escape hatch).
 
 
 ## One-liner setup (mise)
@@ -860,7 +860,7 @@ Start with `apps/docs/content/docs/agent-to-agent-booking.mdx` for the complete 
 ## File structure
 
 ```
-sendero-arc/
+arc/
 ├── app/
 │   ├── api/
 │   │   ├── agent/{identity,runtime}/  # ERC-8004 reputation + runtime meta

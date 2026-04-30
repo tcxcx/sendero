@@ -1,6 +1,6 @@
 name: Edge Worker Health Probe
 
-# Continuously verifies the sendero-arc-edge Cloudflare Worker is alive
+# Continuously verifies the arc-edge Cloudflare Worker is alive
 # and within latency SLO, independent of CI/CD. Failures open a labeled
 # incident issue; recovery closes it. Read-only — never deploys.
 
@@ -48,5 +48,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          HEALTH_URL: ${{ vars.EDGE_HEALTH_URL || 'https://sendero-arc-edge.tomas-cordero-esp.workers.dev/health' }}
+          HEALTH_URL: ${{ vars.EDGE_HEALTH_URL || 'https://arc-edge.tomas-cordero-esp.workers.dev/health' }}
         run: bash scripts/edge-health-check.sh

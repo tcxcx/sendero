@@ -117,7 +117,9 @@ export function SpendDashboard({
         }}
       >
         <div>
-          <h1 className="t-h1">Spend</h1>
+          <h1 className="t-h1" style={{ color: 'var(--ink)' }}>
+            Spend
+          </h1>
           <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
             {tooltipsRange} · {summary.totalCalls.toLocaleString()} paid call
             {summary.totalCalls === 1 ? '' : 's'} across {summary.perTool.length} tool
@@ -446,10 +448,11 @@ function KpiStrip({ items }: { items: Array<{ label: string; value: string; sub:
           <div
             className="t-num-lg"
             style={{
-              fontSize: 32,
+              fontSize: 'clamp(18px, 3vw, 32px)',
               marginTop: 6,
               lineHeight: 1,
               fontVariantNumeric: 'tabular-nums',
+              overflowWrap: 'anywhere',
             }}
           >
             {k.value}

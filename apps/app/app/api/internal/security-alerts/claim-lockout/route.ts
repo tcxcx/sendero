@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
       // The cached PublicClient's typing widens through `let | null`,
       // which trips up viem's strict overload selector for
       // readContract. Cast at the boundary — the runtime call works
-      // identically. See packages/sendero-arc/src/identity.ts for the
+      // identically. See packages/arc/src/identity.ts for the
       // same `as any` workaround.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const record = (await (client.readContract as any)({

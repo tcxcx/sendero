@@ -1,74 +1,236 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-import { GATEWAY_CHAINS, transferViaGateway } from '@sendero/circle/gateway';
-import { env } from '@sendero/env';
-
 /**
  * POST /api/gateway/transfer
- * Burn USDC on any source Gateway chain, mint on any destination
- * Gateway chain in under a second via the Circle Gateway API.
- * Body: { from: chainKey, to: chainKey, amount: decimal, recipient?: 0x… }
+ *
+ * Transfer USDC from the tenant's Gateway unified balance to any address
+ * on any enabled Gateway chain. Tenant Gateway EOA signs the burn intent;
+ * Circle attests; the same EOA submits gatewayMint on the destination.
+ *
+ * Tenant-scoped: requires Clerk session. Returns 503 if Gateway not
+ * configured.
+ *
+ * Body: { from?: chainKey, to: chainKey, amount: decimal, recipient?: 0x… }
+ *
+ * Records every transfer (success or failure) to GatewayTransferLog for
+ * audit + reconciliation. Unique on circleTransferId so duplicate
+ * submissions collapse cleanly.
  */
-const BodySchema = z.object({
-  from: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]),
-  to: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]),
-  amount: z.string().regex(/^\d+(\.\d{1,6})?$/),
-  recipient: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .optional(),
-});
+
+import { auth } from '@clerk/nextjs/server';
+import {
+  GATEWAY_CHAINS,
+  isEvmChain,
+  isSolanaChain,
+  transferViaGatewayFromSources,
+} from '@sendero/circle/gateway';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { prisma } from '@sendero/database';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
+import { decimalUsdcToMicro } from '@/lib/gateway-balance-math';
+import { selectTenantGatewayEvmSources } from '@/lib/gateway-treasury';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+const BodySchema = z.object({
+  from: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]).optional(),
+  to: z.enum(Object.keys(GATEWAY_CHAINS) as [string, ...string[]]),
+  amount: z.string().regex(/^\d+(\.\d{1,6})?$/),
+  /**
+   * Recipient address — accepts both EVM (0x… 20-byte hex) and Solana
+   * (base58, 32-44 chars). Per-destination-chain validation happens
+   * after parse: EVM destinations require 0x..., Solana destinations
+   * require base58. Per-format-validation done in route body so the
+   * error message can name the destination chain.
+   */
+  recipient: z
+    .string()
+    .regex(/^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/)
+    .optional(),
+});
+
 export async function POST(req: NextRequest) {
-  if (!env.treasuryPrivateKey()) {
+  const { orgId, userId } = await auth();
+  if (!orgId) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { clerkOrgId: orgId },
+    select: { id: true, gatewayConfig: true },
+  });
+  if (!tenant) {
+    return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
+  }
+  if (!tenant.gatewayConfig) {
     return NextResponse.json(
       {
-        error: 'treasury_not_configured',
-        message: 'TREASURY_PRIVATE_KEY required for Gateway.',
+        error: 'gateway_not_configured',
+        message: 'TenantGatewayConfig missing — provision via /api/cron/provision-gateway.',
       },
       { status: 503 }
     );
   }
+
+  let body: z.infer<typeof BodySchema>;
   try {
-    const body = BodySchema.parse(await req.json());
-    if (body.from === body.to) {
+    body = BodySchema.parse(await req.json());
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: 'invalid_input', issues: err.issues }, { status: 400 });
+    }
+    throw err;
+  }
+
+  const toChain = GATEWAY_CHAINS[body.to as keyof typeof GATEWAY_CHAINS];
+
+  // Per-destination recipient format validation. The Zod schema accepts
+  // either format; here we enforce the right one for the dest chain.
+  // Solana destinations REQUIRE an explicit recipient because the
+  // tenant signer is an EVM EOA — its address can't default-route to a
+  // Solana account. EVM destinations default to the signer when omitted.
+  if (isSolanaChain(toChain)) {
+    if (!body.recipient) {
       return NextResponse.json(
         {
           error: 'invalid_input',
-          message: 'from and to must differ.',
+          message: 'Solana destinations require an explicit base58 recipient address',
         },
         { status: 400 }
       );
     }
-    const result = await transferViaGateway({
-      from: body.from as keyof typeof GATEWAY_CHAINS,
-      to: body.to as keyof typeof GATEWAY_CHAINS,
-      amountUsdc: body.amount,
-      recipient: body.recipient as `0x${string}` | undefined,
+    if (body.recipient.startsWith('0x')) {
+      return NextResponse.json(
+        {
+          error: 'invalid_input',
+          message: `Recipient is an EVM address (0x...) but destination ${toChain.label} is a Solana chain`,
+        },
+        { status: 400 }
+      );
+    }
+  } else if (body.recipient && !body.recipient.startsWith('0x')) {
+    return NextResponse.json(
+      {
+        error: 'invalid_input',
+        message: `Recipient is a Solana address but destination ${toChain.label} is an EVM chain`,
+      },
+      { status: 400 }
+    );
+  }
+
+  // Resolve user's row for audit attribution. Best-effort — auth() may
+  // give us a Clerk userId without a matching User row in edge cases
+  // (e.g. mid-creation). Don't fail the transfer.
+  const initiatedByUser = userId
+    ? await prisma.user.findUnique({ where: { clerkUserId: userId }, select: { id: true } })
+    : null;
+
+  let log: { id: string } | null = null;
+  try {
+    const selected = body.from
+      ? {
+          signer: await getOrCreateGatewaySigner(tenant.id),
+          sources: [{ from: body.from as keyof typeof GATEWAY_CHAINS, amountUsdc: body.amount }],
+        }
+      : await selectTenantGatewayEvmSources({
+          tenantId: tenant.id,
+          amount: body.amount,
+        });
+    const signer = selected.signer;
+    const fromChain = GATEWAY_CHAINS[selected.sources[0].from];
+    if (!isEvmChain(fromChain)) {
+      return NextResponse.json(
+        {
+          error: 'unsupported_source_chain',
+          message:
+            'Solana Gateway sources are not supported by this transfer path yet. Choose an EVM Gateway source or leave source auto-selected.',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Pre-create the transfer log so transfer failures still leave an
+    // audit trail. Source-selection failures happen before a source
+    // domain exists, so those return a structured error without a log.
+    const amountMicro = decimalUsdcToMicro(body.amount);
+    const recipientForLog = body.recipient
+      ? isSolanaChain(toChain)
+        ? body.recipient
+        : body.recipient.toLowerCase()
+      : signer.address;
+    log = await prisma.gatewayTransferLog.create({
+      data: {
+        tenantId: tenant.id,
+        sourceDomain: fromChain.domain,
+        destinationDomain: toChain.domain,
+        destinationChain: toChain.kitName,
+        amountMicroUsdc: amountMicro,
+        recipientAddress: recipientForLog,
+        status: 'attesting',
+        // Phase 1-4 = self-mint path. EVM destinations: tenant EOA mints
+        // via writeContract. Solana destinations: Sendero relayer mints
+        // via @sendero/circle/gateway-solana-mint. Phase 5+ may add Circle
+        // forwarding for EVM destinations to remove the gas dependency.
+        forwardingEnabled: false,
+        triggeredBy: 'manual',
+        initiatedByUserId: initiatedByUser?.id ?? null,
+      },
     });
+
+    const result = await transferViaGatewayFromSources({
+      sources: selected.sources,
+      to: body.to as keyof typeof GATEWAY_CHAINS,
+      recipient: body.recipient,
+      signer: signer.account,
+    });
+
+    await prisma.gatewayTransferLog.update({
+      where: { id: log.id },
+      data: {
+        burnSignature: result.burnSignature,
+        attestation: result.attestation,
+        mintTxHash: result.mintHash,
+        status: 'confirmed',
+        confirmedAt: new Date(),
+      },
+    });
+
     return NextResponse.json({
       state: 'success',
-      from: body.from,
+      from: selected.sources[0].from,
+      sources: selected.sources,
+      requestedFrom: body.from ?? null,
       to: body.to,
       amount: body.amount,
       recipient: body.recipient ?? null,
       mintHash: result.mintHash,
       explorerUrl: result.explorerUrl,
       burnSignature: result.burnSignature,
+      transferLogId: log.id,
     });
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return NextResponse.json({ error: 'invalid_input', issues: err.issues }, { status: 400 });
-    }
     const detail = err instanceof Error ? err.message : String(err);
-    console.error('[gateway/transfer] error:', detail);
+    if (log) {
+      await prisma.gatewayTransferLog
+        .update({
+          where: { id: log.id },
+          data: { status: 'failed', errorMessage: detail },
+        })
+        .catch(updateErr => {
+          // Don't let a log-update failure mask the original error.
+          console.error('[gateway/transfer] failed to update log row', {
+            logId: log?.id,
+            updateErr,
+          });
+        });
+    }
+
+    console.error('[gateway/transfer] error', { tenantId: tenant.id, detail });
     return NextResponse.json(
-      { error: 'gateway_transfer_failed', message: detail },
-      { status: 500 }
+      { error: 'gateway_transfer_failed', message: detail, transferLogId: log?.id ?? null },
+      { status: detail.includes('Insufficient') && detail.includes('Gateway USDC') ? 409 : 500 }
     );
   }
 }

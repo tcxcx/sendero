@@ -6,9 +6,9 @@
  * wallet (transient Circle API failure, partial outage, etc.).
  *
  * Picks up Tenants that have a `clerkOrgId` but no `CircleWallet` row,
- * retries `provisionTenantWallet`, and on success stamps
- * `org.publicMetadata` with { tenantId, arcWalletAddress,
- * onboardingComplete: true } so middleware session claims flip.
+ * retries `provisionTenantWallet`, mints the workspace on-chain identity,
+ * and stamps `org.publicMetadata` with { tenantId, arcWalletAddress,
+ * onboardingComplete: true } when the Clerk org still exists.
  *
  * Scheduled every 5 minutes via apps/app/vercel.json. Bounded to 50
  * candidates per run to stay inside maxDuration.
@@ -17,9 +17,11 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@sendero/database';
+
 import { clerkClient } from '@clerk/nextjs/server';
 import { provisionTenantWallet } from '@sendero/circle';
+import { prisma } from '@sendero/database';
+import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,11 +33,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // Candidates: Tenants with a clerkOrgId but no CircleWallet row yet.
+  // Candidates: Tenants with a clerkOrgId but no treasury wallet yet.
+  // Gateway operations wallets may already exist; treasury is still
+  // required for tenant settlement and operator wallet views.
   const candidates = await prisma.tenant.findMany({
     where: {
-      clerkOrgId: { not: null },
-      circleWallets: { none: {} },
+      circleWallets: { none: { kind: 'treasury' } },
     },
     select: { id: true, clerkOrgId: true },
     take: 50,
@@ -49,18 +52,35 @@ export async function GET(req: NextRequest) {
         tenantId: c.id,
         clerkOrgId: c.clerkOrgId,
       });
-      const client = await clerkClient();
-      await client.organizations.updateOrganization(c.clerkOrgId, {
-        publicMetadata: {
+      let clerkMetadataUpdated = false;
+      let clerkMetadataError: string | null = null;
+      try {
+        const client = await clerkClient();
+        await client.organizations.updateOrganization(c.clerkOrgId, {
+          publicMetadata: {
+            tenantId: c.id,
+            arcWalletAddress: result.address,
+            onboardingComplete: true,
+          },
+        });
+        clerkMetadataUpdated = true;
+      } catch (err) {
+        clerkMetadataError = err instanceof Error ? err.message : String(err);
+        console.warn('[cron/retry-wallet-provision] Clerk metadata update failed', {
           tenantId: c.id,
-          arcWalletAddress: result.address,
-          onboardingComplete: true,
-        },
-      });
+          clerkOrgId: c.clerkOrgId,
+          error: clerkMetadataError,
+        });
+      }
+      const identity = await ensureOrgIdentity({ tenantId: c.id });
       results.push({
         tenantId: c.id,
         outcome: 'provisioned',
         alreadyExisted: result.alreadyExisted,
+        clerkMetadataUpdated,
+        clerkMetadataError,
+        identityStatus: identity.status,
+        agentId: identity.agentId,
       });
     } catch (err) {
       results.push({

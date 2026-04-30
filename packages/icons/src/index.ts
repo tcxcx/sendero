@@ -16,3 +16,5 @@
 export { ProviderIcon, PROVIDER_ICON_SOURCES, PROVIDER_LABEL } from './providers';
 export type { ProviderSlug } from './providers';
 export { ClaudeCodePluginMark, McpMark, BufiLogo, BufiLogoSrc } from './integrations';
+export { TokenIcon } from './token-icon';
+export { BlockchainIcon } from './blockchain-icon';

@@ -113,7 +113,7 @@ mcp_server_public, custom_webhooks, audit_log_export, priority_support,
 sso_saml, white_label, custom_sla
 ```
 
-See the [README](https://github.com/criptopoeta/sendero-arc#business-model)
+See the [README](https://github.com/criptopoeta/arc#business-model)
 for the per-plan attachment matrix.
 
 ## 5. Enable API keys
@@ -154,7 +154,7 @@ const result = await client.apiKeys.verify(bearerToken);
 // result.claims carries any metadata you set at mint time
 ```
 
-Sendero wraps this in [`apps/app/lib/api-key-auth.ts::resolveTenantFromApiKey()`](https://github.com/criptopoeta/sendero-arc/blob/main/apps/app/lib/api-key-auth.ts),
+Sendero wraps this in [`apps/app/lib/api-key-auth.ts::resolveTenantFromApiKey()`](https://github.com/criptopoeta/arc/blob/main/apps/app/lib/api-key-auth.ts),
 which maps `subject` → `tenant.clerkOrgId` → internal `tenantId` and
 exposes `{ keyType, effectiveKeyType }` so downstream code can route
 sandbox vs production traffic correctly.
@@ -186,7 +186,7 @@ Add a webhook in the Clerk dashboard:
 - **Signing secret:** copy to `CLERK_WEBHOOK_SECRET` in your env
 
 Sendero's webhook handler at
-[`apps/app/app/api/webhooks/clerk/route.ts`](https://github.com/criptopoeta/sendero-arc/blob/main/apps/app/app/api/webhooks/clerk/route.ts)
+[`apps/app/app/api/webhooks/clerk/route.ts`](https://github.com/criptopoeta/arc/blob/main/apps/app/app/api/webhooks/clerk/route.ts)
 provisions a tenant row, a Circle wallet, and a sandbox API key on
 `organization.created`.
 

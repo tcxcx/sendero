@@ -79,7 +79,7 @@ echo "  3. .github/workflows/pr.yml already has a TODO marker for these"
 echo "     env vars — uncomment the two 'env:' lines under 'turbo run'."
 echo
 echo "Cloudflare Workers Builds (optional, biggest CF speedup):"
-echo "  Dashboard → sendero-arc-edge → Settings → Build → Variables and Secrets:"
+echo "  Dashboard → arc-edge → Settings → Build → Variables and Secrets:"
 echo "    TURBO_TOKEN = <the token>"
 echo "    TURBO_TEAM  = <team slug>"
 echo "  Next CF build will read from the cache instead of running typecheck cold."

@@ -20,7 +20,7 @@
  * automatically on the client side.
  */
 
-import { type NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@sendero/database';
@@ -99,8 +99,8 @@ export async function GET(req: NextRequest) {
       // supplier event.
       const primeFromDb = async () => {
         try {
-          const row = await prisma.circleWallet.findUnique({
-            where: { address: lowered },
+          const row = await prisma.circleWallet.findFirst({
+            where: { address: lowered, tenantId: tenant.id },
             select: {
               usdcBalanceMicro: true,
               eurcBalanceMicro: true,
@@ -145,8 +145,8 @@ export async function GET(req: NextRequest) {
         fallbackTimer = setInterval(async () => {
           if (closed) return;
           try {
-            const row = await prisma.circleWallet.findUnique({
-              where: { address: lowered },
+            const row = await prisma.circleWallet.findFirst({
+              where: { address: lowered, tenantId: tenant.id },
               select: {
                 usdcBalanceMicro: true,
                 eurcBalanceMicro: true,

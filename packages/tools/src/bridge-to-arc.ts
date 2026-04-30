@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getAppKit, getTreasuryAdapter, summarizeBridge } from '@sendero/circle/app-kit';
 import type { BridgeParams } from '@circle-fin/app-kit';
 import { BRIDGE_CHAINS } from '@sendero/arc/bridge-chains';
+import { materializeGatewayUsdcToArc } from './gateway-service';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -25,7 +26,25 @@ export const bridgeToArcTool: ToolDef = {
       amount: { type: 'string' },
     },
   },
-  async handler(input: any) {
+  async handler(input: any, ctx) {
+    if (ctx?.traveler?.tenantId) {
+      const result = await materializeGatewayUsdcToArc({
+        tenantId: ctx.traveler.tenantId,
+        amount: input.amount,
+        preferredSourceChain: input.fromChain,
+      });
+      return {
+        state: 'success',
+        fromChain: result.from,
+        requestedFromChain: input.fromChain,
+        toChain: 'Arc_Testnet',
+        amount: input.amount,
+        txHash: result.mintHash,
+        explorerUrl: result.explorerUrl,
+        stepCount: 1,
+        source: 'gateway',
+      };
+    }
     const kit = getAppKit();
     const adapter = getTreasuryAdapter();
     const params: BridgeParams = {

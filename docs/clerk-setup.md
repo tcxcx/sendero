@@ -74,7 +74,7 @@ NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/onboarding
 1. Settings → API Keys → copy the three values:
    - `CLERK_SECRET_KEY` (server)
    - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (client)
-2. Add to Vercel env (Development + Preview + Production) on project `sendero-arc-web`.
+2. Add to Vercel env (Development + Preview + Production) on project `arc-web`.
 
 ## 7b. Production checklist (live Clerk instance)
 

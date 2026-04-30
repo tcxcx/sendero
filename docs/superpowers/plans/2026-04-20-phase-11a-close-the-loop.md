@@ -23,8 +23,8 @@
 
 **New files (10):**
 
-- `packages/sendero-duffel/src/webhook.ts`
-- `packages/sendero-duffel/src/webhook.test.ts`
+- `packages/duffel/src/webhook.ts`
+- `packages/duffel/src/webhook.test.ts`
 - `packages/tools/src/confirm-duffel.ts`
 - `packages/tools/src/settle-booking.ts`
 - `packages/tools/src/cancel-booking.ts`
@@ -37,12 +37,12 @@
 **Modified files (9):**
 
 - `packages/database/prisma/schema.prisma` — add `WebhookEvent`, `Booking.duffelOrderId`, `NanopayBatch.retryCount`, `NanopayBatch.lastError`
-- `packages/sendero-nanopayments/src/index.ts` — add `transferUSDC`
+- `packages/nanopayments/src/index.ts` — add `transferUSDC`
 - `packages/billing/src/batch.ts` — retry cap + keep-settling semantics + `retrySettlingBatches`
 - `packages/billing/src/index.ts` — export new function
 - `packages/workflows/src/catalog.ts` — pause + branch in `bookFlightWorkflow` + `guestPrefundWorkflow`
 - `packages/tools/src/index.ts` — register 3 new tools
-- `packages/sendero-env/src/validate.ts` — add `DUFFEL_WEBHOOK_SECRET`, `SENDERO_TREASURY_ADDRESS`
+- `packages/env/src/validate.ts` — add `DUFFEL_WEBHOOK_SECRET`, `SENDERO_TREASURY_ADDRESS`
 - `apps/app/app/api/cron/settle-nanopay-batches/route.ts` — real settle + retrySettlingBatches call
 - `apps/app/app/api/health/route.ts` — surface new env
 
@@ -209,11 +209,11 @@ EOF
 ### Task 3: Add `transferUSDC` to @sendero/nanopayments
 
 **Files:**
-- Modify: `packages/sendero-nanopayments/src/index.ts` (add function at end, export from package)
+- Modify: `packages/nanopayments/src/index.ts` (add function at end, export from package)
 
 - [ ] **Step 1: Add the function after `canonicalSplit` (end of file)**
 
-Append to `packages/sendero-nanopayments/src/index.ts`:
+Append to `packages/nanopayments/src/index.ts`:
 
 ```typescript
 /**
@@ -269,7 +269,7 @@ Expected: 0 errors.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/sendero-nanopayments/src/index.ts
+git add packages/nanopayments/src/index.ts
 git commit -m "$(cat <<'EOF'
 feat(phase-11a): transferUSDC — single-recipient nanopay primitive
 
@@ -288,7 +288,7 @@ EOF
 - [ ] **Step 1: Manual dry run**
 
 ```bash
-bun run -e 'import("./packages/sendero-nanopayments/src/index.ts").then(m => console.log(typeof m.transferUSDC))'
+bun run -e 'import("./packages/nanopayments/src/index.ts").then(m => console.log(typeof m.transferUSDC))'
 ```
 
 Expected: `function`.
@@ -803,7 +803,7 @@ EOF
 ### Task 10: Write failing test for HMAC verify + parser
 
 **Files:**
-- Create: `packages/sendero-duffel/src/webhook.test.ts`
+- Create: `packages/duffel/src/webhook.test.ts`
 
 - [ ] **Step 1: Write tests**
 
@@ -869,7 +869,7 @@ test('parseDuffelWebhook: throws when required fields missing', () => {
 - [ ] **Step 2: Run — expect fail (module not yet created)**
 
 ```bash
-cd packages/sendero-duffel && bun test src/webhook.test.ts 2>&1 | tail -10
+cd packages/duffel && bun test src/webhook.test.ts 2>&1 | tail -10
 ```
 
 Expected: module-not-found errors.
@@ -879,7 +879,7 @@ Expected: module-not-found errors.
 ### Task 11: Implement `webhook.ts`
 
 **Files:**
-- Create: `packages/sendero-duffel/src/webhook.ts`
+- Create: `packages/duffel/src/webhook.ts`
 
 - [ ] **Step 1: Write the module**
 
@@ -949,14 +949,14 @@ export function parseDuffelWebhook(rawBody: string): DuffelWebhookEvent {
 - [ ] **Step 2: Run tests — expect green**
 
 ```bash
-cd packages/sendero-duffel && bun test src/webhook.test.ts 2>&1 | tail -15
+cd packages/duffel && bun test src/webhook.test.ts 2>&1 | tail -15
 ```
 
 Expected: 7 passing.
 
 - [ ] **Step 3: Export from package index**
 
-Append to `packages/sendero-duffel/src/index.ts`:
+Append to `packages/duffel/src/index.ts`:
 
 ```typescript
 export {
@@ -971,7 +971,7 @@ export {
 
 ```bash
 cd ../..
-git add packages/sendero-duffel/src/webhook.ts packages/sendero-duffel/src/webhook.test.ts packages/sendero-duffel/src/index.ts
+git add packages/duffel/src/webhook.ts packages/duffel/src/webhook.test.ts packages/duffel/src/index.ts
 git commit -m "$(cat <<'EOF'
 feat(phase-11a): @sendero/duffel webhook verify + parse
 
@@ -989,19 +989,19 @@ EOF
 ### Task 12: Add `DUFFEL_WEBHOOK_SECRET` accessor to env
 
 **Files:**
-- Modify: `packages/sendero-env/src/index.ts` (or wherever `env.duffelApiToken()` lives) — ensure `env.duffelWebhookSecret()` exists
+- Modify: `packages/env/src/index.ts` (or wherever `env.duffelApiToken()` lives) — ensure `env.duffelWebhookSecret()` exists
 
 - [ ] **Step 1: Inspect current env surface**
 
 ```bash
-grep -n "duffel\|Duffel" packages/sendero-env/src/*.ts
+grep -n "duffel\|Duffel" packages/env/src/*.ts
 ```
 
 If a `duffelWebhookSecret()` getter already exists, skip to step 3.
 
 - [ ] **Step 2: Add the getter**
 
-In `packages/sendero-env/src/index.ts`, add alongside the existing `duffelApiToken()`:
+In `packages/env/src/index.ts`, add alongside the existing `duffelApiToken()`:
 
 ```typescript
   duffelWebhookSecret: () => process.env.DUFFEL_WEBHOOK_SECRET ?? '',
@@ -1011,7 +1011,7 @@ In `packages/sendero-env/src/index.ts`, add alongside the existing `duffelApiTok
 
 ```bash
 bun run typecheck 2>&1 | tail -5
-git add packages/sendero-env/src
+git add packages/env/src
 git commit -m "chore(phase-11a): env accessor for DUFFEL_WEBHOOK_SECRET
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -2010,7 +2010,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ### Task 23: Register `DUFFEL_WEBHOOK_SECRET` + `SENDERO_TREASURY_ADDRESS` in `validate.ts`
 
 **Files:**
-- Modify: `packages/sendero-env/src/validate.ts`
+- Modify: `packages/env/src/validate.ts`
 
 - [ ] **Step 1: Extend REQUIRED array**
 
@@ -2024,7 +2024,7 @@ Append to the `REQUIRED` array (before the closing `]` near line 69):
 - [ ] **Step 2: Run validate**
 
 ```bash
-bun run --cwd packages/sendero-env validate 2>&1 | tail -20
+bun run --cwd packages/env validate 2>&1 | tail -20
 ```
 
 Expected: either `all required present` (if envs are set) or a gap list that includes the two new keys. Populate `.env.local` with placeholders if missing.
@@ -2032,7 +2032,7 @@ Expected: either `all required present` (if envs are set) or a gap list that inc
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/sendero-env/src/validate.ts
+git add packages/env/src/validate.ts
 git commit -m "chore(phase-11a): require DUFFEL_WEBHOOK_SECRET + SENDERO_TREASURY_ADDRESS
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -2338,7 +2338,7 @@ Run all tests and typecheck end-to-end:
 ```bash
 bun run typecheck 2>&1 | tail -10
 cd packages/billing && bun test 2>&1 | tail -5 && cd ../..
-cd packages/sendero-duffel && bun test 2>&1 | tail -5 && cd ../..
+cd packages/duffel && bun test 2>&1 | tail -5 && cd ../..
 cd packages/tools && bun test 2>&1 | tail -5 && cd ../..
 bun run smoke:escrow 2>&1 | tail -10
 bun run smoke:nanopay 2>&1 | tail -5

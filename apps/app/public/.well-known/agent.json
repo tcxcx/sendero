@@ -1,12 +1,12 @@
 {
-  "name": "sendero-arc",
+  "name": "arc",
   "displayName": "Sendero",
   "description": "AI travel agent that books real Duffel flights and settles on Arc L2 in USDC. Exposes an MCP server so any AI can plug it in as a travel rail.",
   "version": "0.9.5-alpha",
   "protocolVersion": "2024-11-05",
   "provider": {
     "organization": "Sendero",
-    "url": "https://sendero-arc.vercel.app"
+    "url": "https://arc.vercel.app"
   },
   "identity": {
     "onchain": {

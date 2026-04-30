@@ -12,13 +12,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatUnits } from 'viem';
 import { useQueryState } from 'nuqs';
-import { useClerk, useUser } from '@clerk/nextjs';
+import { useClerk, useOrganization, useUser } from '@clerk/nextjs';
+import { toast } from '@sendero/ui/sonner';
 import { useSendero } from './store';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { UnifiedBalanceSection } from './unified-balance-section';
 import { useIsMac } from './hooks/use-is-mac';
 import { logout } from '@sendero/circle/modular-wallets';
-
-const ARCSCAN = 'https://testnet.arcscan.app';
+import { TokenIcon } from '@sendero/icons';
 
 type Token = 'USDC' | 'EURC';
 
@@ -27,6 +28,7 @@ export function WalletDropdown() {
   const userAuth = useSendero(s => s.userAuth);
   const setUserAuth = useSendero(s => s.setUserAuth);
   const { user: clerkUser } = useUser();
+  const { organization } = useOrganization();
   const { openUserProfile, signOut: clerkSignOut } = useClerk();
 
   const [open, setOpen] = useState(false);
@@ -121,12 +123,26 @@ export function WalletDropdown() {
     : '';
 
   const copy = async () => {
+    if (!userAuth?.address) return;
     try {
-      await navigator.clipboard.writeText(userAuth.address);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(userAuth.address);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = userAuth.address;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       setCopied(true);
+      toast.success('Your address has been copied', { duration: 2400 });
       setTimeout(() => setCopied(false), 1100);
     } catch {
-      /* older browsers */
+      toast.error('Copy failed', { duration: 3000 });
     }
   };
 
@@ -146,6 +162,7 @@ export function WalletDropdown() {
         });
 
   const selectedBalance = selected === 'USDC' ? usdc : eurc;
+  const walletTitle = `${organization?.name ?? 'Workspace'} Wallet`;
 
   const openAction = (which: 'deposit' | 'send' | 'swap' | 'bridge') => {
     setOpen(false);
@@ -200,9 +217,7 @@ export function WalletDropdown() {
             <div className="wd-id-body">
               <span className="wd-id-name">{userAuth.displayName}</span>
               <span className="wd-id-role">
-                {isZeroAddress
-                  ? 'Provisioning Arc wallet…'
-                  : `Passkey · ${userAuth.email || 'no email'}`}
+                {isZeroAddress ? 'Provisioning Arc wallet…' : userAuth.email || 'no email'}
               </span>
             </div>
           </div>
@@ -239,27 +254,24 @@ export function WalletDropdown() {
             ))}
           </div>
 
+          <div className="wd-service-title">
+            <span>{walletTitle}</span>
+          </div>
+
           {/* Balance card — the screenshot shape */}
           <div className="wd-balance-card">
+            <div className="wd-service-kicker">Business Wallet Service</div>
             <div className={`wd-coin wd-coin-${selected.toLowerCase()}`}>
-              <svg viewBox="0 0 64 64" aria-hidden="true">
-                <circle cx="32" cy="32" r="28" fill="currentColor" />
-                <circle cx="32" cy="32" r="22" fill="none" stroke="#fff" strokeWidth="3" />
-                <text
-                  x="32"
-                  y="40"
-                  textAnchor="middle"
-                  fontSize="22"
-                  fontWeight="700"
-                  fill="#fff"
-                  fontFamily="var(--font-sans)"
-                >
-                  {selected === 'USDC' ? '$' : '€'}
-                </text>
-              </svg>
+              <TokenIcon token={selected} size={88} />
             </div>
             <div className="wd-amount">
-              {fmt(selectedBalance)} <span className="wd-amount-unit">{selected}</span>
+              {selected === 'USDC' && !isZeroAddress ? (
+                <UnifiedBalanceSection chrome="inline" />
+              ) : (
+                <>
+                  {fmt(selectedBalance)} <span className="wd-amount-unit">{selected}</span>
+                </>
+              )}
             </div>
 
             <div className="wd-actions">
@@ -292,21 +304,7 @@ export function WalletDropdown() {
 
           {/* Meta footer */}
           <div className="wd-meta">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <a
-                  className="wd-meta-link"
-                  href={`${ARCSCAN}/address/${userAuth.address}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View on Arcscan ↗
-                </a>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="font-mono text-[10px] tracking-wider">
-                opens Arc block explorer in a new tab
-              </TooltipContent>
-            </Tooltip>
+            <span className="wd-meta-label">Business Wallet Service</span>
             <span className="wd-meta-sep">·</span>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -339,14 +337,19 @@ export function WalletDropdown() {
             <span className="wd-meta-ver">v0.9.4-alpha</span>
           </div>
 
-          <button
-            type="button"
-            className="wd-action"
-            onClick={copy}
-            aria-label={`copy address ${userAuth.address}`}
-          >
-            {copied ? 'Copied' : short}
-          </button>
+          {/* Wallet metadata */}
+          <div className="wd-wallet-meta">
+            <span className="wd-wallet-address">{short.toUpperCase()}</span>
+            <button
+              type="button"
+              className={`wd-copy ${copied ? 'copied' : ''}`}
+              onClick={copy}
+              aria-label={`copy address ${userAuth.address}`}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+
           <button
             type="button"
             className="wd-action"
@@ -587,10 +590,26 @@ export function WalletDropdown() {
           background: #0ea5e9;
         }
 
+        .wd-service-title {
+          padding: 12px 14px 0;
+          font-family: var(--font-sans);
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+          color: var(--ink);
+          text-align: center;
+        }
+        .wd-service-title span {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
         .wd-balance-card {
-          padding: 24px 16px 18px;
+          padding: 16px 16px 18px;
           border: 1px solid var(--border);
-          margin: 14px;
+          margin: 10px 14px 12px;
           border-radius: 14px;
           display: flex;
           flex-direction: column;
@@ -602,9 +621,19 @@ export function WalletDropdown() {
             color-mix(in oklab, var(--bg-panel, #f6f7f9) 100%, transparent) 100%
           );
         }
+        .wd-service-kicker {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--ink);
+          opacity: 0.78;
+        }
         .wd-coin {
-          width: 64px;
-          height: 64px;
+          width: 88px;
+          height: 88px;
+          display: grid;
+          place-items: center;
           color: #2775ca;
         }
         .wd-coin-eurc {
@@ -639,12 +668,51 @@ export function WalletDropdown() {
           padding-top: 4px;
         }
 
+        .wd-wallet-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 10px 14px;
+          border-bottom: 1px solid var(--border);
+          border-top: 1px solid var(--border);
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.06em;
+          flex-wrap: wrap;
+        }
+        .wd-wallet-address {
+          color: var(--text);
+          font-size: 12px;
+          letter-spacing: 0.12em;
+        }
+        .wd-copy {
+          border: 1px solid color-mix(in oklab, var(--ink) 28%, transparent);
+          background: color-mix(in oklab, var(--ink) 6%, transparent);
+          color: var(--ink);
+          cursor: pointer;
+          font-family: var(--font-mono);
+          font-size: 9px;
+          letter-spacing: 0.12em;
+          padding: 4px 8px;
+          text-transform: uppercase;
+          transition:
+            background 120ms,
+            color 120ms,
+            border-color 120ms;
+        }
+        .wd-copy:hover,
+        .wd-copy.copied {
+          border-color: var(--ink);
+          background: var(--ink);
+          color: #fff;
+        }
         .wd-meta {
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 8px;
-          padding: 8px 14px 12px;
+          padding: 0 14px 12px;
           font-family: var(--font-mono);
           font-size: 10px;
           letter-spacing: 0.06em;

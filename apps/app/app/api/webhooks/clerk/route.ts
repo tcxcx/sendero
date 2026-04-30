@@ -23,17 +23,20 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { clerkClient } from '@clerk/nextjs/server';
 import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
 import { verifyClerkWebhook } from '@sendero/auth/webhooks';
+import { PLANS, type PlanTier, resolvePlan } from '@sendero/billing/plans';
 import { provisionTenantWallet } from '@sendero/circle';
-import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
-import { Prisma, prisma } from '@sendero/database';
+import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import type { BillingTier, SubscriptionStatus } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
 import {
   createCustomerUser,
   createCustomerUserGroup,
   findCustomerUserByEmail,
 } from '@sendero/duffel';
+import { getEnabledGatewayDomains, getTenantOperationsChains } from '@sendero/env/chains';
+import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
-import { PLANS, resolvePlan, type PlanTier } from '@sendero/billing/plans';
-import type { BillingTier, SubscriptionStatus } from '@sendero/database';
 
 import { invalidateApiKeyCache } from '@/lib/api-key-auth';
 import { webhookEventStore } from '@/lib/webhook-events';
@@ -353,6 +356,53 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     tenantId: tenant.id,
     clerkOrgId: id,
   });
+
+  // Gateway phase 1 provisioning — non-fatal. Failure here doesn't
+  // block onboarding: a backfill cron (Phase 1 P1.7) picks up tenants
+  // missing TenantGatewaySigner / TenantGatewayConfig / operations DCW
+  // and provisions on next run. Treasury wallet alone is enough for
+  // operator dashboard + sandbox bookings; Gateway is only on the
+  // unified-balance + auto-sweep hot path.
+  try {
+    const signer = await getOrCreateGatewaySigner(tenant.id);
+
+    const opsWallets = await Promise.all(
+      getTenantOperationsChains().map(chain =>
+        provisionTenantOpsDcw({
+          tenantId: tenant.id,
+          clerkOrgId: id,
+          chain,
+        })
+      )
+    );
+    const solanaOpsWallet = opsWallets.find(w => !w.address.startsWith('0x'));
+
+    await prisma.tenantGatewayConfig.upsert({
+      where: { tenantId: tenant.id },
+      create: {
+        tenantId: tenant.id,
+        evmDepositorAddress: signer.address,
+        solanaDepositorAddress: solanaOpsWallet?.address ?? null,
+        enabledDomains: getEnabledGatewayDomains(),
+      },
+      update: {
+        evmDepositorAddress: signer.address,
+        solanaDepositorAddress: solanaOpsWallet?.address ?? undefined,
+        enabledDomains: { set: getEnabledGatewayDomains() },
+      },
+    });
+
+    console.log('[webhooks/clerk] gateway provisioned', {
+      tenantId: tenant.id,
+      depositor: signer.address,
+    });
+  } catch (err) {
+    console.warn('[webhooks/clerk] gateway provisioning failed (non-fatal)', {
+      id,
+      tenantId: tenant.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   // Mint the org's ERC-8004 identity NFT atomically with wallet
   // provisioning. The treasury wallet (just provisioned above) becomes
@@ -811,7 +861,11 @@ async function onSubscriptionUpsert(
   const status = resolveSubscriptionStatus(data);
   const currentPeriodEnd = readCurrentPeriodEnd(data);
   const clerkSubId =
-    typeof data.id === 'string' ? data.id : typeof data.subscription_id === 'string' ? (data.subscription_id as string) : null;
+    typeof data.id === 'string'
+      ? data.id
+      : typeof data.subscription_id === 'string'
+        ? (data.subscription_id as string)
+        : null;
 
   // Server-derived grant — never trust a payload-supplied amount.
   // Free tier returns 0n grant; the unique grant per tier lives in

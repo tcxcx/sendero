@@ -119,7 +119,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="group-data-[collapsible=icon]:hidden">
-        <div className="px-2 pt-1 pb-2">
+        <div className="px-2 pt-1 pb-2 pr-10 md:pr-2">
           <OrganizationSwitcher
             hidePersonal={false}
             afterSelectOrganizationUrl="/dashboard"
@@ -128,7 +128,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
               elements: {
                 rootBox: 'w-full',
                 organizationSwitcherTrigger:
-                  'w-full justify-between rounded-md px-2 py-1.5 hover:bg-[color:var(--tint-vermillion-soft)]',
+                  'w-full min-w-0 justify-between rounded-md px-2 py-1.5 hover:bg-[color:var(--tint-vermillion-soft)]',
               },
             }}
           />

@@ -228,7 +228,7 @@ Tracked so they don't slip. Not all are blockers for testnet.
   GraphQL read layer over escrow state. Indexes all lifecycle +
   admin/UUPS events (`OperatorUpdated`, `Paused`, `Unpaused`,
   `Upgraded`).
-- `packages/sendero-guest/` — TypeScript helpers for claim keypairs, guest
+- `packages/guest/` — TypeScript helpers for claim keypairs, guest
   links, and client-side signing.
-- `packages/sendero-arc/` — Arc RPC + ERC-8004 + ERC-8183 client.
-- `packages/sendero-nanopayments/` — treasury-EOA payout splits.
+- `packages/arc/` — Arc RPC + ERC-8004 + ERC-8183 client.
+- `packages/nanopayments/` — treasury-EOA payout splits.

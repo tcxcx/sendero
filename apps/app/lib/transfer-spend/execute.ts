@@ -7,11 +7,18 @@
  * results, or whatever else.
  */
 
-import { prisma, type Prisma } from '@sendero/database';
+import type { SpendParams } from '@circle-fin/unified-balance-kit';
+import { type Prisma, prisma } from '@sendero/database';
 
 import { reconcileBookingAfterSpend } from '@/lib/booking-reconcile/reconcile';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
-import { getUnifiedBalanceDelegate } from '@/lib/transfer-policy/app-kit';
+import {
+  getCircleUnifiedBalanceDelegate,
+  getUnifiedBalanceDelegate,
+} from '@/lib/transfer-policy/app-kit';
+
+const ARC_TESTNET_CHAIN_ID = 5042002;
+const SOL_DEVNET_GATEWAY_DOMAIN = 5;
 
 function readBookingId(metadata: Record<string, unknown> | undefined): string | null {
   if (!metadata) return null;
@@ -59,6 +66,7 @@ export type ExecuteSpendResult =
   | {
       kind: 'delegate_missing';
       attemptId: string;
+      reason: string;
     }
   | {
       kind: 'failed';
@@ -130,14 +138,55 @@ export async function executeTransferSpend(args: ExecuteSpendArgs): Promise<Exec
     return { kind: 'pending', attemptId: row.id, reason, trace };
   }
 
-  const handle = getUnifiedBalanceDelegate();
+  const travelerWallets = await prisma.wallet.findMany({
+    where: {
+      userId: args.travelerId,
+      provisioner: 'dcw',
+      chainId: { in: [ARC_TESTNET_CHAIN_ID, SOL_DEVNET_GATEWAY_DOMAIN] },
+    },
+    select: { address: true, circleWalletId: true },
+    orderBy: { chainId: 'asc' },
+  });
+  const travelerWallet = travelerWallets.find(w => w.address);
+
+  if (!travelerWallet?.address) {
+    const row = await prisma.transferAttempt.create({
+      data: { ...baseAttempt, status: 'failed', blockReason: 'traveler_wallet_not_configured' },
+      select: { id: true },
+    });
+    return {
+      kind: 'delegate_missing',
+      attemptId: row.id,
+      reason: 'traveler_wallet_not_configured',
+    };
+  }
+
+  const circleHandle = getCircleUnifiedBalanceDelegate();
+  const viemHandle = getUnifiedBalanceDelegate();
+  const handle = circleHandle ?? viemHandle;
+
   if (!handle) {
     const row = await prisma.transferAttempt.create({
       data: { ...baseAttempt, status: 'failed', blockReason: 'delegate_not_configured' },
       select: { id: true },
     });
-    return { kind: 'delegate_missing', attemptId: row.id };
+    return { kind: 'delegate_missing', attemptId: row.id, reason: 'delegate_not_configured' };
   }
+
+  const isCircleWalletsAdapter = handle === circleHandle;
+  const spendSources = isCircleWalletsAdapter
+    ? travelerWallets
+        .filter((w): w is { address: string; circleWalletId: string | null } => Boolean(w.address))
+        .map(w => ({
+          adapter: handle.adapter,
+          address: w.address,
+        }))
+    : [
+        {
+          adapter: handle.adapter,
+          sourceAccount: travelerWallet.address,
+        },
+      ];
 
   const attemptRow = await prisma.transferAttempt.create({
     data: { ...baseAttempt, status: 'passed' },
@@ -148,15 +197,11 @@ export async function executeTransferSpend(args: ExecuteSpendArgs): Promise<Exec
     const spendArgs = {
       amount: args.amount,
       token: 'USDC' as const,
-      from: [
-        {
-          adapter: handle.adapter,
-          sourceAccount: args.travelerId,
-        },
-      ],
+      from: spendSources,
       to: {
         adapter: handle.adapter,
         chain: args.destinationChain,
+        ...(isCircleWalletsAdapter ? { address: travelerWallet.address } : {}),
         recipientAddress: args.recipient,
       },
     };
@@ -164,8 +209,7 @@ export async function executeTransferSpend(args: ExecuteSpendArgs): Promise<Exec
     // accept a string from the body to keep the route flexible (Arc
     // Testnet, Base Sepolia, etc.) and let the kit reject unknown chain
     // names with its own error.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await handle.kit.spend(spendArgs as any);
+    const result = await handle.kit.spend(spendArgs as SpendParams);
     const txHash = (result as { txHash?: string }).txHash ?? null;
 
     await prisma.transferAttempt.update({

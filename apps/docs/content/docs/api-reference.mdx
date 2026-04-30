@@ -54,6 +54,6 @@ Every call bills one x402 nanopayment in micro-USDC. See [`packages/tools/src/pr
 
 ## Changelog highlights
 
-- **2026-04-24** — Published canonical [`/api/openapi.json`](https://app.sendero.travel/api/openapi.json) generated from the tool registry. Added per-page `.md` exports (append `.md` to any docs URL). Added top-nav *Get API key* deep link. Added `check_travel_eligibility` for visa/passport verdicts and `scan_document` for receipt/invoice/boarding-pass OCR. Shipped [`@sendero/sherpa`](https://github.com/tcxcx/sendero/tree/main/packages/sendero-sherpa) with the vendored Sherpa Requirements API v3 spec.
+- **2026-04-24** — Published canonical [`/api/openapi.json`](https://app.sendero.travel/api/openapi.json) generated from the tool registry. Added per-page `.md` exports (append `.md` to any docs URL). Added top-nav *Get API key* deep link. Added `check_travel_eligibility` for visa/passport verdicts and `scan_document` for receipt/invoice/boarding-pass OCR. Shipped [`@sendero/sherpa`](https://github.com/tcxcx/sendero/tree/main/packages/sherpa) with the vendored Sherpa Requirements API v3 spec.
 - **2026-04-23** — Duffel tool names abstracted (`*_duffel_*` → `*_flight_*`) so supplier IP stays out of public MCP/docs/LLM surfaces.
 - **2026-04-17** — Dispatch auth migrated to Clerk native API keys ([GA'd April 17, 2026](https://clerk.com)). Self-service key minting replaces the gated form pattern most of our peers still use.
