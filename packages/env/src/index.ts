@@ -120,6 +120,7 @@ export const env = {
    * `bun scripts/register-kapso-webhook.ts` (one-shot).
    */
   kapsoWebhookSecret: () => process.env.KAPSO_WEBHOOK_SECRET || null,
+  kapsoTenantWorkflowId: () => process.env.KAPSO_TENANT_WORKFLOW_ID || null,
 
   slackSigningSecret: () => process.env.SLACK_SIGNING_SECRET || null,
   slackClientId: () => process.env.SLACK_CLIENT_ID || null,

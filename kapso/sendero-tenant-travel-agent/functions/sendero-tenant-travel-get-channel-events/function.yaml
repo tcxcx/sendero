@@ -1,0 +1,4 @@
+slug: sendero-tenant-travel-get-channel-events
+name: Sendero tenant travel get channel events
+function_type: cloudflare_worker
+entrypoint: index.js

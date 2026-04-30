@@ -18,6 +18,17 @@ Before ship, verify:
 
 Left Hook runs `scripts/check-responsible-ai.ts`. If this section or the guard script is weakened, pre-push must fail.
 
+## Tenant channel operating goal
+
+WhatsApp/Slack/web agents should help tenant travel teams close deals, plan trips across the full lifecycle, and reduce personnel cost without fragmenting state.
+
+- **Kapso orchestration for WhatsApp:** Kapso owns tenant WhatsApp inbound workflow triggers and WhatsApp Flow UX. Sendero stays canonical for tenant auth, tools, MCP, trips, billing, wallets, escrow, audit, internal handoff, and Slack.
+- **Canonical tools first:** new channel flows must call `@sendero/tools`, `@sendero/workflows`, channel renderers, and internal Sendero tool endpoints instead of duplicating booking/payment logic inside Kapso functions.
+- **Internal web handoff is primary:** every human escalation creates a durable Sendero web/internal handoff first. Slack and WhatsApp operator handoff are optional tenant-configured fanout destinations.
+- **Free tenant WhatsApp readiness:** free workspaces can review setup requirements, but do not get a shared live WhatsApp sandbox number. The Sendero-owned sandbox number stays reserved for Sendero customer support. Tenant WhatsApp operations require a paid plan and dedicated WhatsApp Business number.
+- **Paid tenant production:** paid tenants activate their own WhatsApp number after Kapso phone health passes; provisioning attaches the Kapso tenant workflow trigger to that phone number.
+- **Cross-channel continuity:** WhatsApp customer threads, Slack operator threads, web handoff records, and trip events must reconcile around tenant, customer identity, trip id, workflow execution id, and trace id.
+
 ## Billing & pricing (source: `packages/billing/src/plans.ts`)
 
 Two revenue legs, independent: SaaS MRR (Clerk Billing) + nanopayments (per-call x402, agent wallet pays). Trial skips MRR; nanopay keeps flowing.

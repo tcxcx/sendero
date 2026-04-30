@@ -1,0 +1,18 @@
+{
+  "name": "sendero-tenant-travel-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "kapso": "kapso",
+    "build": "kapso build",
+    "push:dry": "kapso push --dry-run",
+    "sync:secrets": "bun run scripts/sync-secrets.js",
+    "validate": "bun run scripts/validate.js",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@kapso/cli": "^0.15.0",
+    "@kapso/workflows": "^0.2.0"
+  }
+}

@@ -92,6 +92,40 @@ export const KapsoWebhookRegistration = z.object({
 });
 export type KapsoWebhookRegistration = z.infer<typeof KapsoWebhookRegistration>;
 
+// ── Workflow triggers ────────────────────────────────────────────────
+export const KapsoWorkflowTrigger = z.object({
+  id: z.string(),
+  workflow_id: z.string().optional(),
+  trigger_type: z.string(),
+  active: z.boolean().optional(),
+  display_name: z.string().nullable().optional(),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+  triggerable: z
+    .object({
+      phone_number_id: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+export type KapsoWorkflowTrigger = z.infer<typeof KapsoWorkflowTrigger>;
+
+export const CreateWorkflowTriggerRequest = z.object({
+  trigger_type: z.enum(['inbound_message', 'api_call']),
+  active: z.boolean().default(true),
+  display_name: z.string().optional(),
+  phone_number_id: z.string().optional(),
+});
+export type CreateWorkflowTriggerRequest = z.infer<typeof CreateWorkflowTriggerRequest>;
+
+export const KapsoPhoneHealth = z.object({
+  ok: z.boolean().optional(),
+  status: z.string().optional(),
+  health_status: z.string().optional(),
+  checks: z.unknown().optional(),
+});
+export type KapsoPhoneHealth = z.infer<typeof KapsoPhoneHealth>;
+
 export const CreateWebhookRequest = z.object({
   scope: WebhookScope,
   url: z.string().url(),

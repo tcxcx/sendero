@@ -21,11 +21,11 @@
  * what Kapso actually delivered.
  */
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 
-import { prisma } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
-import { parseProjectEvent, verifyKapsoSignature } from '@sendero/kapso';
+import { KapsoClient, parseProjectEvent, verifyKapsoSignature } from '@sendero/kapso';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
 import { webhookEventStore } from '@/lib/webhook-events';
@@ -105,7 +105,7 @@ async function dispatchKapsoEvent(event: {
 }): Promise<DispatchResult> {
   const install = await prisma.whatsAppInstall.findUnique({
     where: { kapsoCustomerId: event.customerId },
-    select: { id: true, tenantId: true },
+    select: { id: true, tenantId: true, metadata: true },
   });
   if (!install) {
     console.warn('[webhooks/kapso] no install for customer', {
@@ -114,6 +114,12 @@ async function dispatchKapsoEvent(event: {
     });
     return { matched: false };
   }
+
+  const activation = await activateTenantWorkflowTrigger({
+    tenantId: install.tenantId,
+    phoneNumberId: event.phoneNumberId,
+    displayPhoneNumber: event.displayPhoneNumber,
+  });
 
   await prisma.whatsAppInstall.update({
     where: { id: install.id },
@@ -126,6 +132,9 @@ async function dispatchKapsoEvent(event: {
       kapsoConnectionId: event.phoneNumberId,
       lastHealthyAt: new Date(),
       lastErrorMessage: null,
+      metadata: mergeJsonObject(install.metadata, {
+        tenantWorkflow: activation,
+      }),
     },
   });
 
@@ -137,4 +146,58 @@ async function dispatchKapsoEvent(event: {
     phoneNumberId: event.phoneNumberId,
   });
   return { matched: true, installId: install.id, tenantId: install.tenantId };
+}
+
+function mergeJsonObject(current: unknown, patch: Record<string, unknown>): Prisma.InputJsonObject {
+  const base =
+    current && typeof current === 'object' && !Array.isArray(current)
+      ? (current as Record<string, unknown>)
+      : {};
+  return { ...base, ...patch } as Prisma.InputJsonObject;
+}
+
+async function activateTenantWorkflowTrigger(args: {
+  tenantId: string;
+  phoneNumberId: string;
+  displayPhoneNumber?: string;
+}): Promise<Record<string, unknown>> {
+  const workflowId = env.kapsoTenantWorkflowId();
+  const apiKey = env.kapsoApiKey();
+  if (!workflowId || !apiKey) {
+    return {
+      status: 'skipped',
+      reason: !workflowId ? 'missing_KAPSO_TENANT_WORKFLOW_ID' : 'missing_KAPSO_API_KEY',
+      checkedAt: new Date().toISOString(),
+    };
+  }
+
+  const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
+  const result: Record<string, unknown> = {
+    workflowId,
+    phoneNumberId: args.phoneNumberId,
+    displayPhoneNumber: args.displayPhoneNumber ?? null,
+    checkedAt: new Date().toISOString(),
+  };
+
+  try {
+    result.health = await kapso.checkPhoneHealth(args.phoneNumberId);
+  } catch (err) {
+    result.healthError = err instanceof Error ? err.message : String(err);
+  }
+
+  try {
+    const trigger = await kapso.createWorkflowTrigger(workflowId, {
+      trigger_type: 'inbound_message',
+      phone_number_id: args.phoneNumberId,
+      display_name: `Sendero tenant ${args.tenantId}`,
+      active: true,
+    });
+    result.status = 'active';
+    result.triggerId = trigger.id;
+  } catch (err) {
+    result.status = 'error';
+    result.error = err instanceof Error ? err.message : String(err);
+  }
+
+  return result;
 }

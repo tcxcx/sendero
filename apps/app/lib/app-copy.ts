@@ -444,6 +444,7 @@ const EN_US: AppCopy = {
     nav: [
       { href: '/dashboard', label: 'Home', exact: true },
       { href: '/dashboard/trips', label: 'Trips' },
+      { href: '/dashboard/handoff', label: 'Handoff' },
       { href: '/dashboard/billing/invoices', label: 'Invoices' },
       { href: '/dashboard/spend', label: 'Spend' },
       { href: '/dashboard/caps', label: 'Caps' },
@@ -740,6 +741,7 @@ const ES_MX: AppCopy = {
     nav: [
       { href: '/dashboard', label: 'Inicio', exact: true },
       { href: '/dashboard/trips', label: 'Viajes' },
+      { href: '/dashboard/handoff', label: 'Handoff' },
       { href: '/dashboard/billing/invoices', label: 'Facturas' },
       { href: '/dashboard/spend', label: 'Gasto' },
       { href: '/dashboard/caps', label: 'Límites' },
@@ -1081,6 +1083,7 @@ const PT_BR: AppCopy = {
     nav: [
       { href: '/dashboard', label: 'Início', exact: true },
       { href: '/dashboard/trips', label: 'Viagens' },
+      { href: '/dashboard/handoff', label: 'Handoff' },
       { href: '/dashboard/billing/invoices', label: 'Faturas' },
       { href: '/dashboard/spend', label: 'Gastos' },
       { href: '/dashboard/caps', label: 'Limites' },
