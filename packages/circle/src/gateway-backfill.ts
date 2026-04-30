@@ -104,8 +104,9 @@ export async function backfillTenantTreasuryWallets(
 /**
  * Ensure every chain in `getTenantOperationsChains()` has an ops DCW
  * row for the tenant. Phase 2 = ARC only; Phase 3 adds AVAX-FUJI;
- * Phase 4 adds ARB-SEPOLIA and SOL-DEVNET. Solana branches via a
- * Solana-specific account type inside `provisionTenantOpsDcw`.
+ * Phase 4 adds ARB-SEPOLIA, MATIC-AMOY, and SOL-DEVNET. Solana
+ * branches via a Solana-specific account type inside
+ * `provisionTenantOpsDcw`.
  *
  * Idempotent on (tenantId, kind='operations', chain) via the Phase 2
  * unique constraint. Race-safe: P2002 is absorbed as no-op.

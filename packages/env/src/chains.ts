@@ -2,7 +2,7 @@
  * Per-tenant chain configuration — data-driven, environment-aware.
  *
  * Phase 2 sets up the abstraction so adding a new chain (Phase 3 =
- * Avalanche, Phase 4 = Solana + Arbitrum) is a single-list change. The
+ * Avalanche, Phase 4 = Arbitrum + Polygon + Solana) is a single-list change. The
  * provisioning, backfill, balance, and route layers all read from
  * these helpers; nothing hardcodes 'ARC-TESTNET' anymore.
  *
@@ -32,7 +32,7 @@ import { env } from './index';
 /**
  * Canonical Circle-format chain identifiers Sendero supports across
  * Phase 2+. Phase 2 enables only ARC; Phase 3 adds AVAX; Phase 4 adds
- * SOL + ARB. Adding here doesn't auto-enable — see
+ * ARB + MATIC + SOL. Adding here doesn't auto-enable — see
  * `getTenantTreasuryChains` + `getTenantOperationsChains` below for the
  * per-purpose toggles.
  */
@@ -131,16 +131,16 @@ export function getTenantTreasuryChains(): readonly string[] {
  *
  * Phase 2: Arc only. Phase 3 adds AVAX (corporate-buyer-friendly EVM
  * chain with $-cheap gas; same EOA signs because chainId-aware EIP-3009
- * works on USDC's domain). Phase 4 adds SOL-DEVNET (different
- * provisioning path because Solana can't sign EVM EIP-3009) and
- * ARB-SEPOLIA for Arbitrum testnet coverage.
+ * works on USDC's domain). Phase 4 adds ARB-SEPOLIA, MATIC-AMOY, and
+ * SOL-DEVNET (different provisioning path because Solana can't sign
+ * EVM EIP-3009).
  *
  * The list IS the seam — adding a chain = appending here. Backfill cron
  * + login hook auto-provision for every existing tenant on next pass.
  */
 export function getTenantOperationsChains(): readonly string[] {
   const c = activeChains();
-  return [c.arc, c.avax, c.arbitrum, c.sol] as const;
+  return [c.arc, c.avax, c.arbitrum, c.polygon, c.sol] as const;
 }
 
 /**

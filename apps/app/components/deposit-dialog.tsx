@@ -5,7 +5,8 @@
  *
  * Shows the operator's per-chain deposit addresses for USDC (via Circle
  * Gateway unified balance) and EURC (direct on-chain). USDC chains:
- * Arc Testnet, Avalanche Fuji, Arbitrum Sepolia, Solana Devnet.
+ * Arc Testnet, Avalanche Fuji, Arbitrum Sepolia, Polygon Amoy,
+ * Solana Devnet.
  *
  * USDC deposits pool into the unified Gateway balance visible in the
  * UnifiedBalanceSection. EURC deposits land directly on each chain's
@@ -130,7 +131,7 @@ export function DepositDialog() {
     <DialogShell
       open={open}
       title="Deposit"
-      subtitle="Gateway · Arc · Avalanche · Arbitrum · Solana"
+      subtitle="Gateway · Arc · Avalanche · Arbitrum · Polygon · Solana"
       onClose={close}
     >
       <p className="dlg-sub">
@@ -144,7 +145,7 @@ export function DepositDialog() {
         </strong>
         <span>
           {selectedToken === 'USDC'
-            ? 'USDC deposits on Arc, Avalanche, Arbitrum, or Solana sweep into one spendable balance for ticket profit, send, bridge, swap, traveler spend, and nanopayment billing.'
+            ? 'USDC deposits on Arc, Avalanche, Arbitrum, Polygon, or Solana sweep into one spendable balance for ticket profit, send, bridge, swap, traveler spend, and nanopayment billing.'
             : 'EURC is shown as a wallet balance on each supported chain until Gateway pooling is enabled for that asset.'}
         </span>
       </div>
@@ -180,8 +181,8 @@ export function DepositDialog() {
         <div className="dep-chains">
           {chains.length === 0 &&
             // Skeleton rows while loading
-            Array.from({ length: selectedToken === 'USDC' ? 4 : 2 }, (_, i) => (
-              <div key={i} className="dep-chain-skel" />
+            Array.from({ length: selectedToken === 'USDC' ? 5 : 2 }, (_, i) => (
+              <div key={`${selectedToken}-deposit-skeleton-${i + 1}`} className="dep-chain-skel" />
             ))}
 
           {chains.map(chain => (

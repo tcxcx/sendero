@@ -7,9 +7,9 @@
  * Fast: DB-only, no Circle API calls. Used by DepositDialog to render
  * the copy-to-clipboard chain rows.
  *
- * USDC chains  — Arc, Avalanche, Arbitrum, Solana. EVM chains use
- *                per-chain Circle DCW operations wallets; Solana uses a
- *                separate Solana pubkey (Phase 4).
+ * USDC chains  — Arc, Avalanche, Arbitrum, Polygon, Solana. EVM chains
+ *                use per-chain Circle DCW operations wallets; Solana
+ *                uses a separate Solana pubkey (Phase 4).
  * EURC chains  — Arc and Avalanche only. EURC isn't in the Gateway pool;
  *                each chain balance is independent. Solana EURC excluded
  *                (not deployed on SOL-DEVNET).
@@ -84,6 +84,8 @@ export async function GET() {
   const arcAddress = opsAddressByChain.get('ARC-TESTNET') ?? opsAddressByChain.get('ARC') ?? null;
   const avaxAddress = opsAddressByChain.get('AVAX-FUJI') ?? opsAddressByChain.get('AVAX') ?? null;
   const arbAddress = opsAddressByChain.get('ARB-SEPOLIA') ?? opsAddressByChain.get('ARB') ?? null;
+  const polygonAddress =
+    opsAddressByChain.get('MATIC-AMOY') ?? opsAddressByChain.get('MATIC') ?? null;
   const solAddress =
     opsAddressByChain.get('SOL-DEVNET') ??
     opsAddressByChain.get('SOL') ??
@@ -108,6 +110,12 @@ export async function GET() {
       label: 'Arbitrum Sepolia',
       kind: 'evm',
       address: arbAddress,
+    },
+    {
+      chain: 'Polygon_Amoy_Testnet',
+      label: 'Polygon Amoy',
+      kind: 'evm',
+      address: polygonAddress,
     },
     {
       chain: 'Sol_Devnet',

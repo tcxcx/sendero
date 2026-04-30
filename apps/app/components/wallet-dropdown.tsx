@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatUnits } from 'viem';
 import { useQueryState } from 'nuqs';
-import { useClerk, useUser } from '@clerk/nextjs';
+import { useClerk, useOrganization, useUser } from '@clerk/nextjs';
 import { toast } from '@sendero/ui/sonner';
 import { useSendero } from './store';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -28,6 +28,7 @@ export function WalletDropdown() {
   const userAuth = useSendero(s => s.userAuth);
   const setUserAuth = useSendero(s => s.setUserAuth);
   const { user: clerkUser } = useUser();
+  const { organization } = useOrganization();
   const { openUserProfile, signOut: clerkSignOut } = useClerk();
 
   const [open, setOpen] = useState(false);
@@ -161,6 +162,7 @@ export function WalletDropdown() {
         });
 
   const selectedBalance = selected === 'USDC' ? usdc : eurc;
+  const walletTitle = `${organization?.name ?? 'Workspace'} Wallet`;
 
   const openAction = (which: 'deposit' | 'send' | 'swap' | 'bridge') => {
     setOpen(false);
@@ -252,8 +254,13 @@ export function WalletDropdown() {
             ))}
           </div>
 
+          <div className="wd-service-title">
+            <span>{walletTitle}</span>
+          </div>
+
           {/* Balance card — the screenshot shape */}
           <div className="wd-balance-card">
+            <div className="wd-service-kicker">Business Wallet Service</div>
             <div className={`wd-coin wd-coin-${selected.toLowerCase()}`}>
               <TokenIcon token={selected} size={88} />
             </div>
@@ -295,22 +302,9 @@ export function WalletDropdown() {
             </div>
           </div>
 
-          {/* Wallet metadata */}
-          <div className="wd-wallet-meta">
-            <span className="wd-wallet-address">{short.toUpperCase()}</span>
-            <button
-              type="button"
-              className={`wd-copy ${copied ? 'copied' : ''}`}
-              onClick={copy}
-              aria-label={`copy address ${userAuth.address}`}
-            >
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-          </div>
-
           {/* Meta footer */}
           <div className="wd-meta">
-            <span className="wd-meta-label">Wallet service</span>
+            <span className="wd-meta-label">Business Wallet Service</span>
             <span className="wd-meta-sep">·</span>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -341,6 +335,19 @@ export function WalletDropdown() {
             </Tooltip>
             <span className="wd-meta-sep">·</span>
             <span className="wd-meta-ver">v0.9.4-alpha</span>
+          </div>
+
+          {/* Wallet metadata */}
+          <div className="wd-wallet-meta">
+            <span className="wd-wallet-address">{short.toUpperCase()}</span>
+            <button
+              type="button"
+              className={`wd-copy ${copied ? 'copied' : ''}`}
+              onClick={copy}
+              aria-label={`copy address ${userAuth.address}`}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
           </div>
 
           <button
@@ -583,10 +590,26 @@ export function WalletDropdown() {
           background: #0ea5e9;
         }
 
+        .wd-service-title {
+          padding: 12px 14px 0;
+          font-family: var(--font-sans);
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: -0.01em;
+          color: var(--ink);
+          text-align: center;
+        }
+        .wd-service-title span {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
         .wd-balance-card {
-          padding: 24px 16px 18px;
+          padding: 16px 16px 18px;
           border: 1px solid var(--border);
-          margin: 14px;
+          margin: 10px 14px 12px;
           border-radius: 14px;
           display: flex;
           flex-direction: column;
@@ -597,6 +620,14 @@ export function WalletDropdown() {
             color-mix(in oklab, var(--bg-elev) 100%, transparent) 0%,
             color-mix(in oklab, var(--bg-panel, #f6f7f9) 100%, transparent) 100%
           );
+        }
+        .wd-service-kicker {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--ink);
+          opacity: 0.78;
         }
         .wd-coin {
           width: 88px;
@@ -643,8 +674,8 @@ export function WalletDropdown() {
           justify-content: space-between;
           gap: 8px;
           padding: 10px 14px;
-          border-top: 1px solid var(--border);
           border-bottom: 1px solid var(--border);
+          border-top: 1px solid var(--border);
           font-family: var(--font-mono);
           font-size: 10px;
           letter-spacing: 0.06em;
@@ -681,7 +712,7 @@ export function WalletDropdown() {
           align-items: center;
           justify-content: center;
           gap: 8px;
-          padding: 8px 14px 12px;
+          padding: 0 14px 12px;
           font-family: var(--font-mono);
           font-size: 10px;
           letter-spacing: 0.06em;
