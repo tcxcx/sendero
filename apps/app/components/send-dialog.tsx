@@ -5,7 +5,7 @@
  * State lives in `?send=open&token=USDC&to=0x...&amount=1.00`.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryState } from 'nuqs';
 import { DialogShell } from './dialog-shell';
 import { TokenIcon } from '@sendero/icons';
@@ -59,7 +59,6 @@ export function SendDialog() {
     explorerUrl: string | null;
     transferLogId: string | null;
   } | null>(null);
-  const txPointerOpenedRef = useRef(false);
 
   const open = send === 'open';
   const close = () => {
@@ -110,14 +109,6 @@ export function SendDialog() {
   const useMax = () => {
     if (tok !== 'USDC' || maxSendMicro <= 0n) return;
     setAmount(trimUsdcDecimal(microUsdcToDecimal(maxSendMicro)));
-  };
-
-  const openExplorer = (url: string | null | undefined) => {
-    if (!url) return;
-    const opened = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!opened) {
-      window.location.href = url;
-    }
   };
 
   const submit = async () => {
@@ -268,21 +259,12 @@ export function SendDialog() {
             <a
               className="dlg-link"
               href={result.explorerUrl}
-              target="_blank"
               rel="noreferrer"
-              onPointerDown={e => {
-                e.stopPropagation();
-                txPointerOpenedRef.current = true;
-                openExplorer(result.explorerUrl);
-              }}
               onClick={e => {
                 e.stopPropagation();
-                if (txPointerOpenedRef.current) {
-                  txPointerOpenedRef.current = false;
-                  return;
-                }
+                if (!result.explorerUrl) return;
                 e.preventDefault();
-                openExplorer(result.explorerUrl);
+                window.location.assign(result.explorerUrl);
               }}
             >
               {result.txHash.slice(0, 10)}…{result.txHash.slice(-6)} ↗
