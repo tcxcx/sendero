@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatUnits } from 'viem';
 import { useQueryState } from 'nuqs';
 import { useClerk, useUser } from '@clerk/nextjs';
+import { toast } from '@sendero/ui/sonner';
 import { useSendero } from './store';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { UnifiedBalanceSection } from './unified-balance-section';
@@ -126,6 +127,7 @@ export function WalletDropdown() {
     try {
       await navigator.clipboard.writeText(userAuth.address);
       setCopied(true);
+      toast.success('Your address has been copied');
       setTimeout(() => setCopied(false), 1100);
     } catch {
       /* older browsers */
@@ -284,8 +286,17 @@ export function WalletDropdown() {
             </div>
           </div>
 
-          {/* Meta footer */}
-          <div className="wd-meta">
+          {/* Wallet metadata */}
+          <div className="wd-wallet-meta">
+            <span className="wd-wallet-address">{short.toUpperCase()}</span>
+            <button
+              type="button"
+              className={`wd-copy ${copied ? 'copied' : ''}`}
+              onClick={copy}
+              aria-label={`copy address ${userAuth.address}`}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
             <Tooltip>
               <TooltipTrigger asChild>
                 <a
@@ -301,6 +312,11 @@ export function WalletDropdown() {
                 opens Arc block explorer in a new tab
               </TooltipContent>
             </Tooltip>
+          </div>
+
+          {/* Meta footer */}
+          <div className="wd-meta">
+            <span className="wd-meta-label">Wallet service</span>
             <span className="wd-meta-sep">·</span>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -333,14 +349,6 @@ export function WalletDropdown() {
             <span className="wd-meta-ver">v0.9.4-alpha</span>
           </div>
 
-          <button
-            type="button"
-            className="wd-action"
-            onClick={copy}
-            aria-label={`copy address ${userAuth.address}`}
-          >
-            {copied ? 'Copied' : short}
-          </button>
           <button
             type="button"
             className="wd-action"
@@ -635,6 +643,45 @@ export function WalletDropdown() {
           padding-top: 4px;
         }
 
+        .wd-wallet-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 10px 14px;
+          border-top: 1px solid var(--border);
+          border-bottom: 1px solid var(--border);
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.06em;
+          flex-wrap: wrap;
+        }
+        .wd-wallet-address {
+          color: var(--text);
+          font-size: 12px;
+          letter-spacing: 0.12em;
+        }
+        .wd-copy {
+          border: 1px solid color-mix(in oklab, var(--ink) 28%, transparent);
+          background: color-mix(in oklab, var(--ink) 6%, transparent);
+          color: var(--ink);
+          cursor: pointer;
+          font-family: var(--font-mono);
+          font-size: 9px;
+          letter-spacing: 0.12em;
+          padding: 4px 8px;
+          text-transform: uppercase;
+          transition:
+            background 120ms,
+            color 120ms,
+            border-color 120ms;
+        }
+        .wd-copy:hover,
+        .wd-copy.copied {
+          border-color: var(--ink);
+          background: var(--ink);
+          color: #fff;
+        }
         .wd-meta {
           display: flex;
           align-items: center;

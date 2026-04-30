@@ -199,7 +199,7 @@ const Sidebar = React.forwardRef<
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
-            className="z-[90] w-[min(var(--sidebar-width),calc(100vw-32px))] border-[color:color-mix(in_oklab,var(--ink)_45%,transparent)] bg-sidebar p-0 text-sidebar-foreground shadow-[var(--shadow-xl)] [&>button]:right-3 [&>button]:top-3 [&>button]:text-[color:var(--ink)]"
+            className="z-[90] w-[min(var(--sidebar-width),calc(100vw-32px))] border-[color:color-mix(in_oklab,var(--ink)_45%,transparent)] bg-[color:var(--surface-raised)] p-0 text-sidebar-foreground shadow-[var(--shadow-xl)] backdrop-blur-none [&>button]:right-3 [&>button]:top-3 [&>button]:text-[color:var(--ink)]"
             style={
               {
                 '--sidebar-width': SIDEBAR_WIDTH_MOBILE,
@@ -211,7 +211,9 @@ const Sidebar = React.forwardRef<
               <SheetTitle>Sidebar</SheetTitle>
               <SheetDescription>Displays the mobile sidebar.</SheetDescription>
             </SheetHeader>
-            <div className="flex h-full w-full flex-col">{children}</div>
+            <div className="flex h-full w-full flex-col bg-[color:var(--surface-raised)]">
+              {children}
+            </div>
           </SheetContent>
         </Sheet>
       );
