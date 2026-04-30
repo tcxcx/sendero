@@ -31,6 +31,8 @@ interface PerDomain {
   chain: string;
   label: string;
   balance: string;
+  depositor: string | null;
+  scannerUrl: string | null;
 }
 
 interface PendingCredit {
@@ -38,6 +40,7 @@ interface PendingCredit {
   domain: number;
   amount: string;
   depositTxHash: string | null;
+  scannerUrl: string | null;
   confirmedAt: string | null;
   estimatedAvailableAt: string;
   remainingSeconds: number;
@@ -49,6 +52,7 @@ interface OpsStagingEntry {
   walletAddress: string;
   usdc: string;
   updatedAt: string | null;
+  scannerUrl: string | null;
 }
 
 interface UnifiedBalanceResponse {
@@ -207,9 +211,14 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
           <div className="opacity-70">Per chain</div>
           <ul className="mt-1 space-y-1">
             {data.perDomain.map(d => (
-              <li key={d.domain} className="flex justify-between gap-3">
+              <li key={d.domain} className="flex items-center justify-between gap-3">
                 <span className="min-w-0 truncate">{d.label}</span>
-                <span className="shrink-0 font-mono tabular-nums">${d.balance}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  {d.scannerUrl && (
+                    <ScannerLink href={d.scannerUrl} label={`${d.label} Gateway depositor`} />
+                  )}
+                  <span className="font-mono tabular-nums">${formatGrandTotal(d.balance)}</span>
+                </span>
               </li>
             ))}
           </ul>
@@ -231,8 +240,9 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
                     ? `${formatRemaining(c.remainingSeconds)}`
                     : 'arriving'}
                 </span>
-                <span className="shrink-0 font-mono tabular-nums">
-                  ${formatMicroUsdc(c.amount)}
+                <span className="flex shrink-0 items-center gap-2">
+                  {c.scannerUrl && <ScannerLink href={c.scannerUrl} label={`${c.chain} tx`} />}
+                  <span className="font-mono tabular-nums">${formatMicroUsdc(c.amount)}</span>
                 </span>
               </li>
             ))}
@@ -247,10 +257,13 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
             {data.opsStaging
               .filter(s => s.usdc !== '0')
               .map(s => (
-                <li key={s.walletAddress} className="flex justify-between gap-3">
+                <li key={s.walletAddress} className="flex items-center justify-between gap-3">
                   <span className="min-w-0 truncate">{s.chain}</span>
-                  <span className="shrink-0 font-mono tabular-nums">
-                    ${formatMicroUsdc(s.usdc)}
+                  <span className="flex shrink-0 items-center gap-2">
+                    {s.scannerUrl && (
+                      <ScannerLink href={s.scannerUrl} label={`${s.chain} ops wallet`} />
+                    )}
+                    <span className="font-mono tabular-nums">${formatMicroUsdc(s.usdc)}</span>
                   </span>
                 </li>
               ))}
@@ -258,10 +271,24 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
         </div>
       )}
 
-      <div className="border-t border-white/20 pt-2 font-mono text-[10px] opacity-65">
+      <div className="border-t border-white/20 pt-2 font-mono text-[10px] opacity-75">
         Depositor: {shortAddr(data.depositor)}
       </div>
     </div>
+  );
+}
+
+function ScannerLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={`open ${label} scanner`}
+      className="rounded border border-white/25 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/90 no-underline transition hover:border-white/70 hover:bg-white/10 hover:text-white"
+    >
+      Scan ↗
+    </a>
   );
 }
 

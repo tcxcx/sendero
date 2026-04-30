@@ -33,6 +33,37 @@ interface GatewayBalanceApiResponse {
   balances?: Array<{ domain: number; balance: string }>;
 }
 
+function addressExplorerUrl(
+  chain: (typeof GATEWAY_CHAINS)[keyof typeof GATEWAY_CHAINS] | null,
+  address: string | null
+): string | null {
+  if (!chain || !address) return null;
+  if (chain.kind === 'solana') {
+    const cluster = chain.circleId === 'SOL-DEVNET' ? '?cluster=devnet' : '';
+    return `https://explorer.solana.com/address/${address}${cluster}`;
+  }
+  const base =
+    chain.kitName === 'Arc_Testnet'
+      ? 'https://testnet.arcscan.app'
+      : chain.viemChain.blockExplorers?.default?.url;
+  return base ? `${base}/address/${address}` : null;
+}
+
+function txExplorerUrl(chainName: string, txHash: string | null): string | null {
+  if (!txHash) return null;
+  const chain = GATEWAY_CHAINS[chainName as keyof typeof GATEWAY_CHAINS] ?? null;
+  if (!chain) return null;
+  if (chain.kind === 'solana') {
+    const cluster = chain.circleId === 'SOL-DEVNET' ? '?cluster=devnet' : '';
+    return `https://explorer.solana.com/tx/${txHash}${cluster}`;
+  }
+  const base =
+    chain.kitName === 'Arc_Testnet'
+      ? 'https://testnet.arcscan.app'
+      : chain.viemChain.blockExplorers?.default?.url;
+  return base ? `${base}/tx/${txHash}` : null;
+}
+
 export async function GET() {
   const { orgId } = await auth();
   if (!orgId) {
@@ -109,20 +140,26 @@ export async function GET() {
   // Per-domain breakdown — surfaces 0 for enabled domains that the
   // Gateway API didn't return (e.g. never deposited).
   const domainToChainKey = new Map<number, keyof typeof GATEWAY_CHAINS>();
+  const circleIdToChainKey = new Map<string, keyof typeof GATEWAY_CHAINS>();
   for (const [key, def] of Object.entries(GATEWAY_CHAINS)) {
     if (!domainToChainKey.has(def.domain)) {
       domainToChainKey.set(def.domain, key as keyof typeof GATEWAY_CHAINS);
     }
+    circleIdToChainKey.set(def.circleId, key as keyof typeof GATEWAY_CHAINS);
   }
   const perDomain = enabledDomains.map(domain => {
     const apiEntry = gatewayApiBalances.find(b => b.domain === domain);
     const chainKey = domainToChainKey.get(domain);
     const def = chainKey ? GATEWAY_CHAINS[chainKey] : null;
+    const depositor =
+      domain === 5 ? (config.solanaDepositorAddress ?? null) : config.evmDepositorAddress;
     return {
       domain,
       chain: def?.kitName ?? `domain-${domain}`,
       label: def?.label ?? `Domain ${domain}`,
       balance: apiEntry?.balance ?? '0.000000',
+      depositor,
+      scannerUrl: addressExplorerUrl(def, depositor),
     };
   });
 
@@ -161,6 +198,7 @@ export async function GET() {
         domain: row.domain,
         amount: row.amountMicroUsdc.toString(),
         depositTxHash: row.depositTxHash,
+        scannerUrl: txExplorerUrl(row.chain, row.depositTxHash),
         confirmedAt: row.confirmedAt?.toISOString() ?? null,
         estimatedAvailableAt: new Date(etaMs).toISOString(),
         remainingSeconds: Math.ceil(remainingMs / 1000),
@@ -186,6 +224,10 @@ export async function GET() {
     walletAddress: w.address,
     usdc: w.usdcBalanceMicro?.toString() ?? '0',
     updatedAt: w.balanceUpdatedAt?.toISOString() ?? null,
+    scannerUrl: addressExplorerUrl(
+      GATEWAY_CHAINS[circleIdToChainKey.get(w.chain) as keyof typeof GATEWAY_CHAINS] ?? null,
+      w.address
+    ),
   }));
   const opsStagingMicroTotal = opsWallets.reduce((sum, w) => sum + (w.usdcBalanceMicro ?? 0n), 0n);
 

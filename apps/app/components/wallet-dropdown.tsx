@@ -21,8 +21,6 @@ import { useIsMac } from './hooks/use-is-mac';
 import { logout } from '@sendero/circle/modular-wallets';
 import { TokenIcon } from '@sendero/icons';
 
-const ARCSCAN = 'https://testnet.arcscan.app';
-
 type Token = 'USDC' | 'EURC';
 
 export function WalletDropdown() {
@@ -124,13 +122,26 @@ export function WalletDropdown() {
     : '';
 
   const copy = async () => {
+    if (!userAuth?.address) return;
     try {
-      await navigator.clipboard.writeText(userAuth.address);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(userAuth.address);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = userAuth.address;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       setCopied(true);
-      toast.success('Your address has been copied');
+      toast.success('Your address has been copied', { duration: 2400 });
       setTimeout(() => setCopied(false), 1100);
     } catch {
-      /* older browsers */
+      toast.error('Copy failed', { duration: 3000 });
     }
   };
 
@@ -297,21 +308,6 @@ export function WalletDropdown() {
             >
               {copied ? 'Copied' : 'Copy'}
             </button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <a
-                  className="wd-meta-link"
-                  href={`${ARCSCAN}/address/${userAuth.address}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View on Arcscan ↗
-                </a>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="font-mono text-[10px] tracking-wider">
-                opens Arc block explorer in a new tab
-              </TooltipContent>
-            </Tooltip>
           </div>
 
           {/* Meta footer */}
