@@ -34,6 +34,12 @@
 import type { ReactNode } from 'react';
 
 import { ChatModelTrigger } from '@/components/chat/chat-model-trigger';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import type { ChannelDef } from './channels';
@@ -72,6 +78,7 @@ const QUICK_COMMANDS: ReadonlyArray<{ k: string; hint: string; desc: string }> =
 function HeroBand({ children }: { children: ReactNode }) {
   return (
     <div
+      className="console-hero-band"
       style={{
         // Bleed past MetaInbox's `padding: 12px 0px` so the band's
         // background touches the surface edges (full-width header).
@@ -81,9 +88,10 @@ function HeroBand({ children }: { children: ReactNode }) {
         background: 'linear-gradient(0deg, var(--tint-vermillion-soft) 0%, transparent 100%)',
         borderBottom: '1px solid var(--ink)',
         display: 'grid',
-        gridTemplateColumns: 'minmax(0,1fr) auto',
+        gridTemplateColumns: 'minmax(0,1fr) minmax(330px,auto)',
         gap: 14,
         alignItems: 'stretch',
+        minWidth: 0,
       }}
     >
       {children}
@@ -112,6 +120,7 @@ function MetaLabel({ children }: { children: ReactNode }) {
 function QuickCommandsPanel({ onCommand }: { onCommand?: (prefix: string) => void }) {
   return (
     <div
+      className="console-hero-quick"
       style={{
         paddingLeft: 24,
         borderLeft: '1px solid var(--hairline-color)',
@@ -119,55 +128,113 @@ function QuickCommandsPanel({ onCommand }: { onCommand?: (prefix: string) => voi
         flexDirection: 'column',
         gap: 8,
         justifyContent: 'center',
+        minWidth: 0,
       }}
     >
-      <div
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
-      >
-        <MetaLabel>Quick commands</MetaLabel>
-        <ChatModelTrigger />
-      </div>
-      <TooltipProvider delayDuration={400}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {QUICK_COMMANDS.map(q => (
-            <Tooltip key={q.k}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="sd-corner-hover"
-                  onClick={() => onCommand?.(q.k)}
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10.5,
-                    padding: '4px 9px',
-                    background: 'var(--surface-floating)',
-                    boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
-                    borderRadius: 14,
-                    border: 0,
-                    cursor: onCommand ? 'pointer' : 'default',
-                    display: 'inline-flex',
-                    alignItems: 'baseline',
-                    gap: 5,
-                  }}
-                >
-                  <span style={{ color: 'var(--vermillion)', fontWeight: 600 }}>{q.k}</span>
-                  <span style={{ color: 'var(--text-dim)' }}>{q.hint}</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="bottom"
-                align="start"
-                className="w-64 max-w-none border border-[color:var(--ink)] bg-[color:var(--surface-floating)] p-3 text-[color:var(--midnight)] shadow-[0_4px_16px_rgba(31,42,68,0.12)]"
-              >
-                <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--vermillion)] mb-1">
-                  {q.k} {q.hint}
-                </p>
-                <p className="text-[11px] leading-relaxed opacity-75">{q.desc}</p>
-              </TooltipContent>
-            </Tooltip>
-          ))}
+      <div className="console-hero-quick-desktop">
+        <div
+          className="console-hero-quick-head"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <MetaLabel>Quick commands</MetaLabel>
+          <ChatModelTrigger />
         </div>
-      </TooltipProvider>
+        <TooltipProvider delayDuration={400}>
+          <div
+            className="console-hero-quick-list"
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+          >
+            {QUICK_COMMANDS.map(q => (
+              <Tooltip key={q.k}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="console-hero-quick-chip sd-corner-hover"
+                    onClick={() => onCommand?.(q.k)}
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 10.5,
+                      padding: '4px 9px',
+                      background: 'var(--surface-floating)',
+                      boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+                      borderRadius: 14,
+                      border: 0,
+                      cursor: onCommand ? 'pointer' : 'default',
+                      display: 'inline-flex',
+                      alignItems: 'baseline',
+                      gap: 5,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span style={{ color: 'var(--vermillion)', fontWeight: 600 }}>{q.k}</span>
+                    <span style={{ color: 'var(--text-dim)' }}>{q.hint}</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="bottom"
+                  align="start"
+                  className="w-64 max-w-none border border-[color:var(--ink)] bg-[color:var(--surface-floating)] p-3 text-[color:var(--midnight)] shadow-[0_4px_16px_rgba(31,42,68,0.12)]"
+                >
+                  <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--vermillion)] mb-1">
+                    {q.k} {q.hint}
+                  </p>
+                  <p className="text-[11px] leading-relaxed opacity-75">{q.desc}</p>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
+      </div>
+
+      <div
+        className="console-hero-quick-mobile"
+        style={{ display: 'none', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+      >
+        <ChatModelTrigger />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="sd-corner-hover"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                padding: '6px 10px',
+                background: 'var(--surface-floating)',
+                boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+                borderRadius: 6,
+                border: 0,
+                color: 'var(--ink)',
+              }}
+            >
+              Commands
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="min-w-56 border border-[color:var(--ink)] bg-[color:var(--surface-floating)] p-1 text-[color:var(--midnight)] shadow-[0_4px_16px_rgba(31,42,68,0.12)]"
+          >
+            {QUICK_COMMANDS.map(q => (
+              <DropdownMenuItem
+                key={q.k}
+                onSelect={() => onCommand?.(q.k)}
+                className="flex cursor-pointer items-baseline gap-2 rounded-[4px] px-2 py-2 font-mono text-[11px]"
+              >
+                <span className="font-semibold text-[color:var(--vermillion)]">{q.k}</span>
+                <span className="text-[color:var(--text-dim)]">{q.hint}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
@@ -202,6 +269,7 @@ export function ConsoleHero({
   return (
     <HeroBand>
       <div
+        className="console-hero-kpis"
         style={{
           display: 'grid',
           gridTemplateColumns: 'auto auto auto',
@@ -241,6 +309,7 @@ function KpiCol({
 }) {
   return (
     <div
+      className="console-hero-kpi"
       style={{
         padding: '0 20px',
         borderRight: showDivider ? '1px solid var(--hairline-color)' : 'none',
@@ -251,6 +320,7 @@ function KpiCol({
     >
       <MetaLabel>{label}</MetaLabel>
       <div
+        className="console-hero-kpi-value"
         style={{
           fontFamily: 'var(--font-display)',
           fontSize: 34,
@@ -263,6 +333,7 @@ function KpiCol({
         {big}
       </div>
       <div
+        className="console-hero-kpi-sub"
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 10.5,

@@ -223,7 +223,16 @@ export function MetaInbox({
           />
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: cols, gap: 0, flex: 1, minHeight: 0 }}>
+        <div
+          className="meta-inbox-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `var(--meta-inbox-cols, ${cols})`,
+            gap: 0,
+            flex: 1,
+            minHeight: 0,
+          }}
+        >
           {/* LEFT — collapsible inbox rail. Default-collapsed thin
               strip with awaiting/holds/settled counts; expands to the
               full TripRail with the trip list + filters. */}
@@ -236,6 +245,7 @@ export function MetaInbox({
 
           {/* CENTER — conversation */}
           <div
+            className="meta-inbox-conversation"
             style={{
               padding: '8px 16px',
               display: 'flex',
@@ -299,6 +309,7 @@ export function MetaInbox({
               runs tools. Borderless + transparent so it floats over
               the parchment field per DESIGN.md §9. */}
           <div
+            className="meta-inbox-stage"
             style={{
               minWidth: 0,
               display: 'flex',
@@ -313,6 +324,7 @@ export function MetaInbox({
               footer chip can re-open it for trip context lookups. */}
           {isTrip && customerPanelOpen ? (
             <div
+              className="meta-inbox-customer"
               style={{
                 borderLeft: '1px solid var(--ink)',
                 width: 220,
@@ -345,6 +357,7 @@ export function MetaInbox({
               canonical view across the app. */}
           {showWorkflow ? (
             <div
+              className="meta-inbox-workflow"
               style={{
                 paddingLeft: 12,
                 paddingRight: 8,
