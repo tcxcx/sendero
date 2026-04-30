@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     console.error('[swap] error:', detail, { tenantId: tenant.id, signerAddress: signer.address });
     return NextResponse.json(
       { error: 'swap_failed', message: detail },
-      { status: detail.startsWith('Insufficient EVM Gateway USDC.') ? 409 : 500 }
+      { status: detail.includes('Insufficient') && detail.includes('Gateway USDC') ? 409 : 500 }
     );
   }
 }

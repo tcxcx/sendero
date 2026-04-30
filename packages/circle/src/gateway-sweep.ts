@@ -28,7 +28,7 @@
 
 import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
 import { UnifiedBalanceKit } from '@circle-fin/unified-balance-kit';
-import { prisma } from '@sendero/database';
+import { Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 import { parseUnits } from 'viem';
 
@@ -129,6 +129,43 @@ export async function sweepChain(args: SweepChainArgs): Promise<SweepResult> {
     return { status: 'skipped', reason: 'zero or negative amount' };
   }
 
+  let claimedLogId: string | null = null;
+  if (webhookEventId) {
+    try {
+      const claim = await prisma.gatewayDepositLog.create({
+        data: {
+          tenantId,
+          chain: chain.kitName,
+          domain: chain.domain,
+          amountMicroUsdc: amountBaseUnits,
+          status: 'pending',
+          triggeredBy,
+          webhookEventId,
+        },
+      });
+      claimedLogId = claim.id;
+    } catch (err) {
+      if (!isUniqueConstraint(err)) {
+        return {
+          status: 'failed',
+          error: `failed to claim sweep idempotency key: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+      const existing = await prisma.gatewayDepositLog.findUnique({ where: { webhookEventId } });
+      if (existing?.status === 'confirmed' && existing.depositTxHash) {
+        return {
+          status: 'already-processed',
+          depositLogId: existing.id,
+          depositTxHash: existing.depositTxHash,
+        };
+      }
+      return {
+        status: 'skipped',
+        reason: `gateway sweep ${existing?.status ?? 'unknown'} for webhook ${webhookEventId}`,
+      };
+    }
+  }
+
   if (chain.kind === 'solana') {
     return depositSolanaOpsToGateway({
       tenantId,
@@ -138,6 +175,7 @@ export async function sweepChain(args: SweepChainArgs): Promise<SweepResult> {
       amountBaseUnits,
       triggeredBy,
       webhookEventId,
+      claimedLogId,
     });
   }
 
@@ -178,6 +216,17 @@ export async function sweepChain(args: SweepChainArgs): Promise<SweepResult> {
 
     opsTransferTxHash = await pollCircleTransaction(sdk, challengeId);
   } catch (err) {
+    if (claimedLogId) {
+      await prisma.gatewayDepositLog
+        .update({
+          where: { id: claimedLogId },
+          data: {
+            status: 'failed',
+            errorMessage: err instanceof Error ? err.message : String(err),
+          },
+        })
+        .catch(() => undefined);
+    }
     return {
       status: 'failed',
       error: `ops DCW transfer failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -307,6 +356,7 @@ async function depositSolanaOpsToGateway(args: {
   amountBaseUnits: bigint;
   triggeredBy: 'auto' | 'manual' | 'cron';
   webhookEventId?: string;
+  claimedLogId?: string | null;
 }): Promise<SweepResult> {
   const chain = GATEWAY_CHAINS[args.chainKey];
   if (chain.kind !== 'solana') {
@@ -325,6 +375,9 @@ async function depositSolanaOpsToGateway(args: {
   }
 
   const log =
+    (args.claimedLogId
+      ? await prisma.gatewayDepositLog.findUnique({ where: { id: args.claimedLogId } })
+      : null) ??
     existing ??
     (await prisma.gatewayDepositLog.create({
       data: {
@@ -387,4 +440,12 @@ async function depositSolanaOpsToGateway(args: {
     });
     return { status: 'failed', depositLogId: log.id, error: message };
   }
+}
+
+function isUniqueConstraint(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    return err.code === 'P2002';
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes('P2002') || message.toLowerCase().includes('unique');
 }

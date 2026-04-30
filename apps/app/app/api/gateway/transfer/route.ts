@@ -16,12 +16,18 @@
  */
 
 import { auth } from '@clerk/nextjs/server';
-import { GATEWAY_CHAINS, isSolanaChain, transferViaGateway } from '@sendero/circle/gateway';
+import {
+  GATEWAY_CHAINS,
+  isEvmChain,
+  isSolanaChain,
+  transferViaGateway,
+} from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { decimalUsdcToMicro } from '@/lib/gateway-balance-math';
 import { selectTenantGatewayEvmSource } from '@/lib/gateway-treasury';
 
 export const runtime = 'nodejs';
@@ -134,11 +140,21 @@ export async function POST(req: NextRequest) {
         });
     const signer = selected.signer;
     const fromChain = GATEWAY_CHAINS[selected.from];
+    if (!isEvmChain(fromChain)) {
+      return NextResponse.json(
+        {
+          error: 'unsupported_source_chain',
+          message:
+            'Solana Gateway sources are not supported by this transfer path yet. Choose an EVM Gateway source or leave source auto-selected.',
+        },
+        { status: 400 }
+      );
+    }
 
     // Pre-create the transfer log so transfer failures still leave an
     // audit trail. Source-selection failures happen before a source
     // domain exists, so those return a structured error without a log.
-    const amountMicro = BigInt(Math.round(Number(body.amount) * 1_000_000));
+    const amountMicro = decimalUsdcToMicro(body.amount);
     const recipientForLog = body.recipient
       ? isSolanaChain(toChain)
         ? body.recipient
@@ -214,7 +230,7 @@ export async function POST(req: NextRequest) {
     console.error('[gateway/transfer] error', { tenantId: tenant.id, detail });
     return NextResponse.json(
       { error: 'gateway_transfer_failed', message: detail, transferLogId: log?.id ?? null },
-      { status: detail.startsWith('Insufficient EVM Gateway USDC.') ? 409 : 500 }
+      { status: detail.includes('Insufficient') && detail.includes('Gateway USDC') ? 409 : 500 }
     );
   }
 }

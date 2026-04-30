@@ -16,6 +16,15 @@ import {
   type ArcBridgeSource,
 } from '@sendero/arc/bridge-chains';
 
+const SUPPORTED_GATEWAY_BRIDGE_SOURCES = new Set<ArcBridgeSource>([
+  'Ethereum_Sepolia',
+  'Base_Sepolia',
+  'Polygon_Amoy_Testnet',
+  'Avalanche_Fuji',
+  'Arbitrum_Sepolia',
+  'Optimism_Sepolia',
+]);
+
 export function BridgeDialog() {
   const [bridge, setBridge] = useQueryState('bridge');
   const [fromChain, setFromChain] = useQueryState('fromChain', {
@@ -113,17 +122,22 @@ export function BridgeDialog() {
         <div className="br-chain-grid" role="radiogroup" aria-label="Source chain">
           {ARC_BRIDGE_SOURCES.map(id => {
             const selected = id === chain;
+            const supported = SUPPORTED_GATEWAY_BRIDGE_SOURCES.has(id);
             return (
               <button
                 key={id}
                 type="button"
-                className={`br-chain-card ${selected ? 'selected' : ''}`}
+                className={`br-chain-card ${selected ? 'selected' : ''} ${supported ? '' : 'disabled'}`}
                 role="radio"
                 aria-checked={selected}
-                onClick={() => setFromChain(id)}
+                disabled={!supported}
+                onClick={() => {
+                  if (supported) setFromChain(id);
+                }}
               >
                 <BlockchainIcon chain={id} size={18} />
                 <span>{bridgeChainLabel(id)}</span>
+                {!supported && <em>soon</em>}
               </button>
             );
           })}
@@ -291,12 +305,30 @@ export function BridgeDialog() {
           background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
           color: var(--ink);
         }
+        .br-chain-card.disabled {
+          cursor: not-allowed;
+          color: var(--text-faint);
+          background: color-mix(in oklab, var(--bg-elev) 70%, var(--bg));
+        }
+        .br-chain-card.disabled:hover {
+          border-color: var(--border);
+          color: var(--text-faint);
+          background: color-mix(in oklab, var(--bg-elev) 70%, var(--bg));
+        }
         .br-chain-card span,
         .br-destination-card span {
           min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .br-chain-card em {
+          margin-left: auto;
+          color: var(--text-faint);
+          font-size: 8px;
+          font-style: normal;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
         }
         .br-destination-card {
           width: 100%;

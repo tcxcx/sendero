@@ -256,17 +256,7 @@ export function SendDialog() {
         <div className="dlg-ok">
           <strong>Sent.</strong>{' '}
           {result.txHash && result.explorerUrl && (
-            <a
-              className="dlg-link"
-              href={result.explorerUrl}
-              rel="noreferrer"
-              onClick={e => {
-                e.stopPropagation();
-                if (!result.explorerUrl) return;
-                e.preventDefault();
-                window.location.assign(result.explorerUrl);
-              }}
-            >
+            <a className="dlg-link" href={result.explorerUrl} rel="noreferrer" target="_blank">
               {result.txHash.slice(0, 10)}…{result.txHash.slice(-6)} ↗
             </a>
           )}

@@ -325,6 +325,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'dispatch_failed', message: result.error }, { status: 500 });
   }
   if (result.deduped === true) {
+    after(() => dispatchGatewaySweep(event));
     return NextResponse.json({ ok: true, deduped: true });
   }
 

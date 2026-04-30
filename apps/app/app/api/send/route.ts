@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
         amount: body.amount,
         token: body.token,
         to: body.to,
-        signerAddress: result.signer.address,
+        signerAddress: result.signerAddress,
         source: 'gateway',
         sourceChain: result.from,
         transferLogId: log.id,

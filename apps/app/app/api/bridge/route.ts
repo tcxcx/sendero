@@ -13,10 +13,17 @@ import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
  *
  * Body: { fromChain: 'Ethereum_Sepolia'|'Base_Sepolia'|…, amount: decimal }
  */
-import { BRIDGE_CHAINS } from '@sendero/arc/bridge-chains';
+const SUPPORTED_GATEWAY_BRIDGE_SOURCES = [
+  'Ethereum_Sepolia',
+  'Base_Sepolia',
+  'Polygon_Amoy_Testnet',
+  'Avalanche_Fuji',
+  'Arbitrum_Sepolia',
+  'Optimism_Sepolia',
+] as const;
 
 const BodySchema = z.object({
-  fromChain: z.enum(BRIDGE_CHAINS),
+  fromChain: z.enum(SUPPORTED_GATEWAY_BRIDGE_SOURCES),
   amount: z.string().regex(/^\d+(\.\d{1,6})?$/),
 });
 
@@ -61,7 +68,7 @@ export async function POST(req: NextRequest) {
       fromChain: result.from,
       requestedFromChain: body.fromChain,
       toChain: 'Arc_Testnet',
-      signerAddress: result.signer.address,
+      signerAddress: result.signerAddress,
       source: 'gateway',
     });
   } catch (err) {
@@ -78,7 +85,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(
       { error: 'bridge_failed', message: detail },
-      { status: detail.startsWith('Insufficient EVM Gateway USDC.') ? 409 : 500 }
+      { status: detail.includes('Insufficient') && detail.includes('Gateway USDC') ? 409 : 500 }
     );
   }
 }

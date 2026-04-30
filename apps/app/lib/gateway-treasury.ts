@@ -29,7 +29,7 @@ function gatewayKeyForBridgeChain(chain: string | undefined): keyof typeof GATEW
 }
 
 export interface GatewayMaterializeResult {
-  signer: TenantGatewaySigner;
+  signerAddress: Address;
   from: keyof typeof GATEWAY_CHAINS;
   to: typeof ARC_CHAIN_KEY;
   amount: string;
@@ -151,7 +151,7 @@ export async function materializeGatewayUsdcToArc(args: {
   });
 
   return {
-    signer,
+    signerAddress: signer.address,
     from,
     to: ARC_CHAIN_KEY,
     amount: args.amount,

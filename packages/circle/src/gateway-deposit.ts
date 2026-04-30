@@ -195,6 +195,13 @@ export async function depositToGateway(
         alreadyProcessed: true,
       };
     }
+    if (existing?.depositTxHash) {
+      return {
+        depositLogId: existing.id,
+        depositTxHash: existing.depositTxHash as Hex,
+        alreadyProcessed: true,
+      };
+    }
   }
 
   const signer = await getOrCreateGatewaySigner(tenantId);
@@ -308,7 +315,7 @@ export async function depositToGateway(
     transport: http(chain.rpcUrl, { retryCount: 3, timeout: 15_000 }),
   });
 
-  let depositTxHash: Hex;
+  let depositTxHash: Hex | null = null;
   try {
     depositTxHash = await walletClient.writeContract({
       address: GATEWAY_WALLET_ADDRESS,
@@ -328,12 +335,17 @@ export async function depositToGateway(
       account: sponsor,
       chain: chain.viemChain,
     });
+    await prisma.gatewayDepositLog.update({
+      where: { id: logRow.id },
+      data: { depositTxHash, status: 'pending' },
+    });
     await publicClient.waitForTransactionReceipt({ hash: depositTxHash });
   } catch (err) {
     await prisma.gatewayDepositLog.update({
       where: { id: logRow.id },
       data: {
-        status: 'failed',
+        status: depositTxHash ? 'pending' : 'failed',
+        ...(depositTxHash ? { depositTxHash } : {}),
         errorMessage: err instanceof Error ? err.message : String(err),
       },
     });
@@ -351,7 +363,7 @@ export async function depositToGateway(
 
   return {
     depositLogId: logRow.id,
-    depositTxHash,
+    depositTxHash: depositTxHash as Hex,
     alreadyProcessed: false,
   };
 }
