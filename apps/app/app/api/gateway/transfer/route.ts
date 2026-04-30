@@ -121,48 +121,48 @@ export async function POST(req: NextRequest) {
     ? await prisma.user.findUnique({ where: { clerkUserId: userId }, select: { id: true } })
     : null;
 
-  const selected = body.from
-    ? {
-        signer: await getOrCreateGatewaySigner(tenant.id),
-        from: body.from as keyof typeof GATEWAY_CHAINS,
-      }
-    : await selectTenantGatewayEvmSource({
-        tenantId: tenant.id,
-        amount: body.amount,
-      });
-  const signer = selected.signer;
-  const fromChain = GATEWAY_CHAINS[selected.from];
-
-  // Pre-create the transfer log so failures still leave an audit trail.
-  // Status starts at 'attesting'; we update to 'confirmed' or 'failed'.
-  // Recipient is stored case-preserved for Solana (base58 is case-sensitive)
-  // and lowercased for EVM (canonical equality).
-  const amountMicro = BigInt(Math.round(Number(body.amount) * 1_000_000));
-  const recipientForLog = body.recipient
-    ? isSolanaChain(toChain)
-      ? body.recipient
-      : body.recipient.toLowerCase()
-    : signer.address;
-  const log = await prisma.gatewayTransferLog.create({
-    data: {
-      tenantId: tenant.id,
-      sourceDomain: fromChain.domain,
-      destinationDomain: toChain.domain,
-      destinationChain: toChain.kitName,
-      amountMicroUsdc: amountMicro,
-      recipientAddress: recipientForLog,
-      status: 'attesting',
-      // Phase 1-4 = self-mint path. EVM destinations: tenant EOA mints
-      // via writeContract. Solana destinations: Sendero relayer mints
-      // via @sendero/circle/gateway-solana-mint. Phase 5+ may add Circle
-      // forwarding for EVM destinations to remove the gas dependency.
-      forwardingEnabled: false,
-      triggeredBy: 'manual',
-      initiatedByUserId: initiatedByUser?.id ?? null,
-    },
-  });
-
+  let log: { id: string } | null = null;
   try {
+    const selected = body.from
+      ? {
+          signer: await getOrCreateGatewaySigner(tenant.id),
+          from: body.from as keyof typeof GATEWAY_CHAINS,
+        }
+      : await selectTenantGatewayEvmSource({
+          tenantId: tenant.id,
+          amount: body.amount,
+        });
+    const signer = selected.signer;
+    const fromChain = GATEWAY_CHAINS[selected.from];
+
+    // Pre-create the transfer log so transfer failures still leave an
+    // audit trail. Source-selection failures happen before a source
+    // domain exists, so those return a structured error without a log.
+    const amountMicro = BigInt(Math.round(Number(body.amount) * 1_000_000));
+    const recipientForLog = body.recipient
+      ? isSolanaChain(toChain)
+        ? body.recipient
+        : body.recipient.toLowerCase()
+      : signer.address;
+    log = await prisma.gatewayTransferLog.create({
+      data: {
+        tenantId: tenant.id,
+        sourceDomain: fromChain.domain,
+        destinationDomain: toChain.domain,
+        destinationChain: toChain.kitName,
+        amountMicroUsdc: amountMicro,
+        recipientAddress: recipientForLog,
+        status: 'attesting',
+        // Phase 1-4 = self-mint path. EVM destinations: tenant EOA mints
+        // via writeContract. Solana destinations: Sendero relayer mints
+        // via @sendero/circle/gateway-solana-mint. Phase 5+ may add Circle
+        // forwarding for EVM destinations to remove the gas dependency.
+        forwardingEnabled: false,
+        triggeredBy: 'manual',
+        initiatedByUserId: initiatedByUser?.id ?? null,
+      },
+    });
+
     const result = await transferViaGateway({
       from: selected.from,
       to: body.to as keyof typeof GATEWAY_CHAINS,
@@ -196,23 +196,25 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    await prisma.gatewayTransferLog
-      .update({
-        where: { id: log.id },
-        data: { status: 'failed', errorMessage: detail },
-      })
-      .catch(updateErr => {
-        // Don't let a log-update failure mask the original error.
-        console.error('[gateway/transfer] failed to update log row', {
-          logId: log.id,
-          updateErr,
+    if (log) {
+      await prisma.gatewayTransferLog
+        .update({
+          where: { id: log.id },
+          data: { status: 'failed', errorMessage: detail },
+        })
+        .catch(updateErr => {
+          // Don't let a log-update failure mask the original error.
+          console.error('[gateway/transfer] failed to update log row', {
+            logId: log?.id,
+            updateErr,
+          });
         });
-      });
+    }
 
     console.error('[gateway/transfer] error', { tenantId: tenant.id, detail });
     return NextResponse.json(
-      { error: 'gateway_transfer_failed', message: detail, transferLogId: log.id },
-      { status: 500 }
+      { error: 'gateway_transfer_failed', message: detail, transferLogId: log?.id ?? null },
+      { status: detail.startsWith('Insufficient EVM Gateway USDC.') ? 409 : 500 }
     );
   }
 }

@@ -92,6 +92,15 @@ export async function POST(req: NextRequest) {
       amount: body.amount,
       triggeredBy: 'manual',
     });
+    if ((result as { status: string }).status === 'skipped') {
+      return NextResponse.json(
+        {
+          error: 'no_sweepable_usdc',
+          message: (result as { reason: string }).reason,
+        },
+        { status: 409 }
+      );
+    }
     if (result.status !== 'confirmed' && result.status !== 'already-processed') {
       return NextResponse.json(
         {

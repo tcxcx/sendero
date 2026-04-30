@@ -76,6 +76,9 @@ export async function POST(req: NextRequest) {
     console.error('[bridge] error:', detail, {
       tenantId: tenant.id,
     });
-    return NextResponse.json({ error: 'bridge_failed', message: detail }, { status: 500 });
+    return NextResponse.json(
+      { error: 'bridge_failed', message: detail },
+      { status: detail.startsWith('Insufficient EVM Gateway USDC.') ? 409 : 500 }
+    );
   }
 }

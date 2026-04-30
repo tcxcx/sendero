@@ -150,8 +150,8 @@ export async function sweepChain(args: SweepChainArgs): Promise<SweepResult> {
     const tokenId = await resolveUsdcTokenId(sdk, opsDcwWalletId, chain);
     if (!tokenId) {
       return {
-        status: 'failed',
-        error: `could not resolve USDC tokenId for ops DCW ${opsDcwWalletId} on ${chainKey}`,
+        status: 'skipped',
+        reason: `No USDC balance is available on the ${chain.label} operations wallet.`,
       };
     }
 
