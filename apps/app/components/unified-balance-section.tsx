@@ -111,13 +111,26 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
   }
 
   const Wrapper = chrome === 'inline' ? InlineWrapper : SectionWrapper;
+  const inline = chrome === 'inline';
 
   return (
     <Wrapper>
-      <div className="flex items-center justify-between">
-        <div>
+      <div
+        className={
+          inline
+            ? 'flex flex-col items-center justify-center gap-2 text-center'
+            : 'flex items-center justify-between'
+        }
+      >
+        <div className={inline ? 'flex flex-col items-center' : undefined}>
           <div className="text-xs uppercase tracking-wider text-zinc-500">Unified balance</div>
-          <div className="mt-0.5 font-mono text-lg tabular-nums">
+          <div
+            className={
+              inline
+                ? 'mt-1 font-mono text-3xl font-semibold text-[color:var(--ink)] tabular-nums'
+                : 'mt-0.5 font-mono text-lg tabular-nums'
+            }
+          >
             {data ? `$${formatGrandTotal(data.grandTotal)}` : '—'}
           </div>
         </div>
@@ -126,7 +139,7 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
             <TopographyButton
               type="button"
               size="sm"
-              className="h-8 px-3 text-xs text-[color:var(--ink)]"
+              className="mx-auto h-8 px-3 text-xs text-[color:var(--ink)]"
             >
               Breakdown
             </TopographyButton>

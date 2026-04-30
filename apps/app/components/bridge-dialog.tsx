@@ -78,8 +78,8 @@ export function BridgeDialog() {
       onClose={close}
     >
       <p className="dlg-sub">
-        Pulls USDC from another chain into Arc Testnet via Circle CCTP. Your gateway wallet signs on
-        both chains.
+        Moves USDC from your unified Gateway balance across enabled Gateway chains. Arc remains the
+        default destination while Solana and other chain destinations come online.
       </p>
 
       {/* Live route visualization — updates as chain selection changes */}
@@ -109,20 +109,33 @@ export function BridgeDialog() {
       </div>
 
       <div className="dlg-row">
-        <span className="dlg-label">Source chain</span>
-        <div className="br-chain-select">
-          <BlockchainIcon chain={chain} size={16} />
-          <select
-            className="dlg-select br-select"
-            value={chain}
-            onChange={e => setFromChain(e.target.value)}
-          >
-            {ARC_BRIDGE_SOURCES.map(id => (
-              <option key={id} value={id}>
-                {bridgeChainLabel(id)}
-              </option>
-            ))}
-          </select>
+        <span className="dlg-label">Source chain · Gateway balance</span>
+        <div className="br-chain-grid" role="radiogroup" aria-label="Source chain">
+          {ARC_BRIDGE_SOURCES.map(id => {
+            const selected = id === chain;
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`br-chain-card ${selected ? 'selected' : ''}`}
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setFromChain(id)}
+              >
+                <BlockchainIcon chain={id} size={18} />
+                <span>{bridgeChainLabel(id)}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="dlg-row">
+        <span className="dlg-label">Destination</span>
+        <div className="br-destination-card">
+          <BlockchainIcon chain="Arc_Testnet" size={18} />
+          <span>Arc Testnet</span>
+          <em>default Gateway settlement rail</em>
         </div>
       </div>
 
@@ -244,14 +257,58 @@ export function BridgeDialog() {
           background: var(--bg);
           flex-shrink: 0;
         }
-        .br-chain-select {
-          display: flex;
-          align-items: center;
+        .br-chain-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
           width: 100%;
         }
-        .br-select {
-          flex: 1;
+        .br-chain-card,
+        .br-destination-card {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          border: 1px solid var(--border);
+          background: var(--bg-elev);
+          color: var(--text);
+          padding: 10px 11px;
+          font-family: var(--font-mono);
+          font-size: 10.5px;
+          letter-spacing: 0.05em;
+          text-align: left;
+        }
+        .br-chain-card {
+          cursor: pointer;
+          transition:
+            border-color 140ms ease,
+            background-color 140ms ease,
+            color 140ms ease;
+        }
+        .br-chain-card:hover,
+        .br-chain-card.selected {
+          border-color: var(--ink);
+          background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
+          color: var(--ink);
+        }
+        .br-chain-card span,
+        .br-destination-card span {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .br-destination-card {
+          width: 100%;
+          border-color: color-mix(in oklab, var(--ink) 30%, var(--border));
+        }
+        .br-destination-card em {
+          margin-left: auto;
+          color: var(--text-dim);
+          font-style: normal;
+          font-size: 9px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
         }
         .br-amount-row {
           display: flex;
@@ -270,6 +327,18 @@ export function BridgeDialog() {
           grid-template-columns: auto 1fr auto;
           gap: 8px;
           align-items: center;
+        }
+        @media (max-width: 560px) {
+          .br-chain-grid {
+            grid-template-columns: 1fr;
+          }
+          .br-destination-card {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+          .br-destination-card em {
+            margin-left: 0;
+          }
         }
       `}</style>
     </DialogShell>

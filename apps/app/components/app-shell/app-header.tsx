@@ -9,6 +9,7 @@ import { Button } from '@sendero/ui/button';
 
 import { AgentChip } from '@/components/agent-chip';
 import { WalletDropdown } from '@/components/wallet-dropdown';
+import { WorkspaceReputationChip } from '@/components/workspace-reputation-chip';
 
 import { LanguageSelector } from '../language-selector';
 import { OnboardingAlert } from './onboarding-alert';
@@ -46,6 +47,7 @@ export function AppHeader({
         <div className="flex items-center gap-2">
           <Show when="signed-in">
             <AgentChip />
+            <WorkspaceReputationChip />
             <WalletDropdown />
           </Show>
           <Show when="signed-out">

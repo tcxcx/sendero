@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { UnifiedBalanceSection } from './unified-balance-section';
 import { useIsMac } from './hooks/use-is-mac';
 import { logout } from '@sendero/circle/modular-wallets';
+import { TokenIcon } from '@sendero/icons';
 
 const ARCSCAN = 'https://testnet.arcscan.app';
 
@@ -243,21 +244,7 @@ export function WalletDropdown() {
           {/* Balance card — the screenshot shape */}
           <div className="wd-balance-card">
             <div className={`wd-coin wd-coin-${selected.toLowerCase()}`}>
-              <svg viewBox="0 0 64 64" aria-hidden="true">
-                <circle cx="32" cy="32" r="28" fill="currentColor" />
-                <circle cx="32" cy="32" r="22" fill="none" stroke="#fff" strokeWidth="3" />
-                <text
-                  x="32"
-                  y="40"
-                  textAnchor="middle"
-                  fontSize="22"
-                  fontWeight="700"
-                  fill="#fff"
-                  fontFamily="var(--font-sans)"
-                >
-                  {selected === 'USDC' ? '$' : '€'}
-                </text>
-              </svg>
+              <TokenIcon token={selected} size={88} />
             </div>
             <div className="wd-amount">
               {selected === 'USDC' && !isZeroAddress ? (
@@ -610,8 +597,10 @@ export function WalletDropdown() {
           );
         }
         .wd-coin {
-          width: 64px;
-          height: 64px;
+          width: 88px;
+          height: 88px;
+          display: grid;
+          place-items: center;
           color: #2775ca;
         }
         .wd-coin-eurc {
