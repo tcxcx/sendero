@@ -211,13 +211,18 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
           <div className="opacity-70">Per chain</div>
           <ul className="mt-1 space-y-1">
             {data.perDomain.map(d => (
-              <li key={d.domain} className="flex items-center justify-between gap-3">
+              <li
+                key={d.domain}
+                className="grid grid-cols-[minmax(0,1fr)_74px_72px] items-center gap-2"
+              >
                 <span className="min-w-0 truncate">{d.label}</span>
-                <span className="flex shrink-0 items-center gap-2">
+                <span className="flex justify-center">
                   {d.scannerUrl && (
                     <ScannerLink href={d.scannerUrl} label={`${d.label} Gateway depositor`} />
                   )}
-                  <span className="font-mono tabular-nums">${formatGrandTotal(d.balance)}</span>
+                </span>
+                <span className="text-right font-mono tabular-nums">
+                  ${formatGrandTotal(d.balance)}
                 </span>
               </li>
             ))}
