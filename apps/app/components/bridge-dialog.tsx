@@ -9,11 +9,21 @@
 import { useState } from 'react';
 import { useQueryState } from 'nuqs';
 import { DialogShell } from './dialog-shell';
+import { TokenIcon, BlockchainIcon } from '@sendero/icons';
 import {
   ARC_BRIDGE_SOURCES,
   bridgeChainLabel,
   type ArcBridgeSource,
 } from '@sendero/arc/bridge-chains';
+
+const SUPPORTED_GATEWAY_BRIDGE_SOURCES = new Set<ArcBridgeSource>([
+  'Ethereum_Sepolia',
+  'Base_Sepolia',
+  'Polygon_Amoy_Testnet',
+  'Avalanche_Fuji',
+  'Arbitrum_Sepolia',
+  'Optimism_Sepolia',
+]);
 
 export function BridgeDialog() {
   const [bridge, setBridge] = useQueryState('bridge');
@@ -77,31 +87,85 @@ export function BridgeDialog() {
       onClose={close}
     >
       <p className="dlg-sub">
-        Pulls USDC from another supported chain into Arc Testnet via Circle CCTP. Treasury wallet is
-        both source and destination for the demo.
+        Moves USDC from your Business Balance across enabled Gateway chains. Ticket profit,
+        deposits, and operating funds share this source of truth.
       </p>
 
+      {/* Live route visualization — updates as chain selection changes */}
+      <div className="br-route">
+        <div className="br-route-end">
+          <BlockchainIcon chain={chain} size={20} />
+          <span className="br-route-label">{bridgeChainLabel(chain)}</span>
+        </div>
+        <svg className="br-arrow" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path
+            d="M5 12h14m0 0l-5-5m5 5l-5 5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <div className="br-route-end">
+          <BlockchainIcon chain="Arc_Testnet" size={20} />
+          <span className="br-route-label">Arc Testnet</span>
+        </div>
+        <span className="br-token-pill">
+          <TokenIcon token="USDC" size={13} />
+          <span>USDC</span>
+        </span>
+      </div>
+
       <div className="dlg-row">
-        <span className="dlg-label">Source chain</span>
-        <select className="dlg-select" value={chain} onChange={e => setFromChain(e.target.value)}>
-          {ARC_BRIDGE_SOURCES.map(id => (
-            <option key={id} value={id}>
-              {bridgeChainLabel(id)}
-            </option>
-          ))}
-        </select>
+        <span className="dlg-label">Source chain · Business Balance</span>
+        <div className="br-chain-grid" role="radiogroup" aria-label="Source chain">
+          {ARC_BRIDGE_SOURCES.map(id => {
+            const selected = id === chain;
+            const supported = SUPPORTED_GATEWAY_BRIDGE_SOURCES.has(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`br-chain-card ${selected ? 'selected' : ''} ${supported ? '' : 'disabled'}`}
+                role="radio"
+                aria-checked={selected}
+                disabled={!supported}
+                onClick={() => {
+                  if (supported) setFromChain(id);
+                }}
+              >
+                <BlockchainIcon chain={id} size={18} />
+                <span>{bridgeChainLabel(id)}</span>
+                {!supported && <em>soon</em>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="dlg-row">
+        <span className="dlg-label">Destination</span>
+        <div className="br-destination-card">
+          <BlockchainIcon chain="Arc_Testnet" size={18} />
+          <span>Arc Testnet</span>
+          <em>default Gateway settlement rail</em>
+        </div>
       </div>
 
       <div className="dlg-row">
         <span className="dlg-label">Amount · USDC</span>
-        <input
-          className="dlg-input"
-          style={{ textAlign: 'right', fontFamily: 'var(--font-mono)' }}
-          inputMode="decimal"
-          value={amt}
-          onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-          placeholder="0.00"
-        />
+        <div className="br-amount-row">
+          <TokenIcon token="USDC" size={14} />
+          <input
+            className="dlg-input"
+            style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', flex: 1 }}
+            inputMode="decimal"
+            value={amt}
+            onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+            placeholder="0.00"
+          />
+        </div>
       </div>
 
       {error && <div className="dlg-err">{error}</div>}
@@ -110,24 +174,9 @@ export function BridgeDialog() {
           <strong>
             Bridge submitted — {steps.length} step{steps.length !== 1 && 's'}.
           </strong>
-          <div
-            style={{
-              marginTop: 8,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-            }}
-          >
+          <div className="br-steps">
             {steps.map((s, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'auto 1fr auto',
-                  gap: 8,
-                  alignItems: 'center',
-                }}
-              >
+              <div key={i} className="br-step">
                 <span
                   style={{
                     color:
@@ -136,6 +185,7 @@ export function BridgeDialog() {
                         : s.state === 'error'
                           ? 'var(--accent-rose)'
                           : 'var(--text-dim)',
+                    fontSize: 8,
                   }}
                 >
                   ●
@@ -178,6 +228,151 @@ export function BridgeDialog() {
           </>
         )}
       </button>
+
+      <style jsx>{`
+        .br-route {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+          background: var(--bg-elev);
+        }
+        .br-route-end {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+          min-width: 0;
+        }
+        .br-route-label {
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.06em;
+          color: var(--text);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .br-arrow {
+          color: var(--text-faint);
+          flex-shrink: 0;
+        }
+        .br-token-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-family: var(--font-mono);
+          font-size: 9.5px;
+          letter-spacing: 0.1em;
+          color: var(--text-dim);
+          padding: 2px 7px;
+          border: 1px solid var(--border);
+          background: var(--bg);
+          flex-shrink: 0;
+        }
+        .br-chain-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          width: 100%;
+        }
+        .br-chain-card,
+        .br-destination-card {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          border: 1px solid var(--border);
+          background: var(--bg-elev);
+          color: var(--text);
+          padding: 10px 11px;
+          font-family: var(--font-mono);
+          font-size: 10.5px;
+          letter-spacing: 0.05em;
+          text-align: left;
+        }
+        .br-chain-card {
+          cursor: pointer;
+          transition:
+            border-color 140ms ease,
+            background-color 140ms ease,
+            color 140ms ease;
+        }
+        .br-chain-card:hover,
+        .br-chain-card.selected {
+          border-color: var(--ink);
+          background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
+          color: var(--ink);
+        }
+        .br-chain-card.disabled {
+          cursor: not-allowed;
+          color: var(--text-faint);
+          background: color-mix(in oklab, var(--bg-elev) 70%, var(--bg));
+        }
+        .br-chain-card.disabled:hover {
+          border-color: var(--border);
+          color: var(--text-faint);
+          background: color-mix(in oklab, var(--bg-elev) 70%, var(--bg));
+        }
+        .br-chain-card span,
+        .br-destination-card span {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .br-chain-card em {
+          margin-left: auto;
+          color: var(--text-faint);
+          font-size: 8px;
+          font-style: normal;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+        .br-destination-card {
+          width: 100%;
+          border-color: color-mix(in oklab, var(--ink) 30%, var(--border));
+        }
+        .br-destination-card em {
+          margin-left: auto;
+          color: var(--text-dim);
+          font-style: normal;
+          font-size: 9px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .br-amount-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+        }
+        .br-steps {
+          margin-top: 8px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .br-step {
+          display: grid;
+          grid-template-columns: auto 1fr auto;
+          gap: 8px;
+          align-items: center;
+        }
+        @media (max-width: 560px) {
+          .br-chain-grid {
+            grid-template-columns: 1fr;
+          }
+          .br-destination-card {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+          .br-destination-card em {
+            margin-left: 0;
+          }
+        }
+      `}</style>
     </DialogShell>
   );
 }

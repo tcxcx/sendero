@@ -60,7 +60,7 @@ bun run vercel:deploy
 
 `vercel:build` runs with the local monorepo available and writes
 `.vercel/output`; `vercel:deploy` uploads that prebuilt output to
-`sendero-arc-edge` without asking Vercel to reinstall a partial workspace.
+`arc-edge` without asking Vercel to reinstall a partial workspace.
 
 ## Adapter status
 

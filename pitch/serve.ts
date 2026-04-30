@@ -56,5 +56,5 @@ const server = Bun.serve({
 });
 
 console.log(
-  `\n  ✦ Sendero pitch · http://localhost:${server.port}\n  ✦ Notes window  · press N inside the deck\n  ✦ Password      · sendero-arc\n`
+  `\n  ✦ Sendero pitch · http://localhost:${server.port}\n  ✦ Notes window  · press N inside the deck\n  ✦ Password      · arc\n`
 );

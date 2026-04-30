@@ -38,7 +38,7 @@ export async function HelpHomeForLocale({ locale }: { locale: string }) {
         <div className="hp-nav-tools">
           <nav className="hp-nav-right" aria-label="Sendero help navigation">
             <a href="https://sendero.travel">{content.nav.website}</a>
-            <a href="https://sendero-arc-web.vercel.app">{content.nav.app}</a>
+            <a href="https://arc-web.vercel.app">{content.nav.app}</a>
             <a href="/llms.txt">{content.nav.agents}</a>
           </nav>
           <LocaleSelector

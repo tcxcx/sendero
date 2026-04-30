@@ -8,7 +8,7 @@ export type AgentType =
   | 'sendero-slack' // Slack channel adapter
   | 'sendero-whatsapp' // WhatsApp channel adapter
   | 'sendero-mcp' // MCP server tool call
-  | 'sendero-ocr' // document scanning / OCR
+  | 'ocr' // document scanning / OCR
   | 'sendero-stamp-gen' // NFT stamp image + caption generation
   | 'sendero-inbox-rewrite' // inbox message rewrite
   | 'hitl-approval' // human-in-the-loop booking approval

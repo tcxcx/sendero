@@ -291,7 +291,7 @@ declare global {
 
 ### Wallet provisioning
 
-Port desk-v1's `apps/app/src/app/api/team-wallet/route.ts` pattern into `packages/sendero-circle/src/provision-tenant-wallet.ts`:
+Port desk-v1's `apps/app/src/app/api/team-wallet/route.ts` pattern into `packages/circle/src/provision-tenant-wallet.ts`:
 
 ```ts
 export async function provisionTenantWallet(args: {
@@ -511,7 +511,7 @@ Migration is forward-compatible — all new cols are nullable so the webhook bac
 - `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/onboarding`
 - `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/onboarding`
 
-Update `packages/sendero-env/src/validate.ts` to require the three first entries; the `NEXT_PUBLIC_CLERK_*` URL envs are declared in `.env.example` for DX but not blocked at validate.
+Update `packages/env/src/validate.ts` to require the three first entries; the `NEXT_PUBLIC_CLERK_*` URL envs are declared in `.env.example` for DX but not blocked at validate.
 
 ## Clerk Dashboard setup (one-time, documented in `docs/clerk-setup.md`)
 
@@ -575,7 +575,7 @@ Wallet provisioning is **not a Clerk session task** — it's a custom server-dri
 
 - `packages/auth/src/roles.test.ts` — `hasRole` / `hasPermission` helpers against fixture `Auth` objects for each role
 - `packages/auth/src/webhooks.test.ts` — signature verification against canned svix payloads (valid + tampered); event-dispatch routing
-- `packages/sendero-circle/src/provision-tenant-wallet.test.ts` — idempotency (second call returns existing wallet), error handling when Circle SDK missing methods
+- `packages/circle/src/provision-tenant-wallet.test.ts` — idempotency (second call returns existing wallet), error handling when Circle SDK missing methods
 
 ### Integration (requires Clerk test instance, runs in CI + locally)
 
@@ -593,7 +593,7 @@ Wallet provisioning is **not a Clerk session task** — it's a custom server-dri
 ### New
 
 - `packages/auth/` — entire package (see Architecture)
-- `packages/sendero-circle/src/provision-tenant-wallet.ts`
+- `packages/circle/src/provision-tenant-wallet.ts`
 - `apps/app/proxy.ts` (replaces any existing middleware.ts; delete middleware.ts if present)
 - `apps/app/app/sign-in/[[...sign-in]]/page.tsx`
 - `apps/app/app/sign-up/[[...sign-up]]/page.tsx`
@@ -621,9 +621,9 @@ Wallet provisioning is **not a Clerk session task** — it's a custom server-dri
 - `apps/app/package.json` — add `@clerk/nextjs`, `@clerk/themes`, `svix`, `@sendero/auth` workspace dep, `tailwindcss`, `@tailwindcss/postcss`
 - `apps/app/vercel.json` — `crons: [{ path: '/api/cron/retry-wallet-provision', schedule: '*/5 * * * *' }]` added
 - `packages/database/prisma/schema.prisma` — Wallet model, User.clerkUserId, Tenant.clerkOrgId, Membership.clerkMembershipId
-- `packages/sendero-env/src/validate.ts` — require `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SECRET`
+- `packages/env/src/validate.ts` — require `CLERK_SECRET_KEY`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SECRET`
 - `apps/app/app/api/health/route.ts` — surface clerk + webhook booleans
-- `packages/sendero-circle/src/index.ts` — export `provisionTenantWallet`
+- `packages/circle/src/index.ts` — export `provisionTenantWallet`
 - `.env.example` — add Clerk keys + URL envs with inline docs
 
 ## Migration strategy for existing admin pages

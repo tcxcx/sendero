@@ -13,6 +13,7 @@ import { getMarketingContent } from '@/lib/content';
 import { heroTitleWithHighlights } from '@/lib/hero-title';
 
 import { MarketingBrandHoverCard } from './brand-hover-card';
+import { MarketingEngineBadgeCover } from './marketing-engine-badge-cover';
 import { MarketingEngineScene } from './marketing-engine-scene';
 import { MarketingWaitlist } from './waitlist';
 
@@ -276,6 +277,7 @@ export async function MarketingHomeForLocale({ locale }: { locale: string }) {
 
       <div className="mk-scene-banner" aria-hidden="true">
         <MarketingEngineScene />
+        <MarketingEngineBadgeCover />
       </div>
 
       <section className="mk-pricing" id="pricing">

@@ -37,7 +37,7 @@ Phase-11c1 installs auth + onboarding shell. The visible buyer product still doe
 - Settings forms (Billing, Branding, Profile) with server actions
 - Role/tier enforcement via Clerk `auth.protect()` + custom tier gate
 - Legacy `/admin/spend` + `/admin/caps` → 301 redirect to new paths
-- Wire `apps/storybook` to `@sendero/ui` (publishes to `sendero-arc-storybook` project)
+- Wire `apps/storybook` to `@sendero/ui` (publishes to `arc-storybook` project)
 
 ### Out (deferred)
 
@@ -499,7 +499,7 @@ Sort via clickable column headers → `?sort=-createdAt`.
 ### Storybook
 
 - Every `@sendero/ui` component has one story covering default + variants
-- Published to `sendero-arc-storybook` Vercel project on merge to `development`
+- Published to `arc-storybook` Vercel project on merge to `development`
 
 ### Manual gate
 
@@ -548,7 +548,7 @@ Sort via clickable column headers → `?sort=-createdAt`.
 - `apps/app/package.json` — add `@sendero/ui: workspace:*`
 - `apps/storybook/.storybook/*` — wire `@sendero/ui` + Sendero theme
 - `apps/storybook/tailwind.config.ts` — presets `@sendero/ui/tailwind.config`
-- `packages/sendero-env/src/validate.ts` — nothing new here (reuses 11c1's Clerk + 11b's invoicing envs)
+- `packages/env/src/validate.ts` — nothing new here (reuses 11c1's Clerk + 11b's invoicing envs)
 
 ### Touched but not heavily modified
 

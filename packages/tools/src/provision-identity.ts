@@ -4,8 +4,8 @@
  * lives at `status='pending'` while the on-chain mint is in flight, gets
  * stamped with the assigned `agentId` from the Transfer event on success,
  * and is left `pending` on transient failure (the cron sweeper retries).
- * After `MAX_ATTEMPTS` consecutive failures the row flips to `failed` so
- * the admin UI can surface it.
+ * Rows that previously reached `failed` are not terminal; the sweeper
+ * can reset and retry them after the provisioning dependency is fixed.
  *
  * Wallet provisioning succeeds independently of identity provisioning
  * (try/catch in the caller). The wallet is the source of truth — the
@@ -29,9 +29,9 @@ import { prisma } from '@sendero/database';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
 
-/// After this many consecutive failed mint attempts, the sweeper flips
-/// status='failed' and stops retrying. 12 attempts × 5min cron = ~1 hour
-/// of retries before the admin gets paged.
+/// After this many consecutive failed mint attempts, the sweeper resets
+/// the row back to a fresh pending attempt. 12 attempts × 5min cron =
+/// ~1 hour before it starts a new retry window.
 const MAX_ATTEMPTS = 12;
 
 /// Stable, public URL the contract stores via tokenURI(). The page is
@@ -84,17 +84,6 @@ export async function ensureOrgIdentity(args: {
       txHash: existing.mintTxHash,
     };
   }
-  if (existing && existing.status === 'failed') {
-    return {
-      status: 'pending', // surface as not-yet-minted; admin must intervene
-      identityId: existing.id,
-      agentId: null,
-      contract: existing.contract,
-      holderAddress: existing.holderAddress,
-      txHash: null,
-    };
-  }
-
   const treasury = await prisma.circleWallet.findFirst({
     where: { tenantId, kind: 'treasury', chain: 'ARC-TESTNET' },
     select: { address: true, circleWalletId: true },
@@ -150,17 +139,6 @@ export async function ensureUserIdentity(args: {
       txHash: existing.mintTxHash,
     };
   }
-  if (existing && existing.status === 'failed') {
-    return {
-      status: 'pending',
-      identityId: existing.id,
-      agentId: null,
-      contract: existing.contract,
-      holderAddress: existing.holderAddress,
-      txHash: null,
-    };
-  }
-
   const wallet = await prisma.wallet.findFirst({
     where: { userId, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
     select: { address: true, circleWalletId: true },
@@ -289,29 +267,67 @@ const SWEEP_STALE_AFTER_MS = 60 * 1000;
 
 export async function sweepPendingIdentities(): Promise<{
   picked: number;
+  backfilled: number;
   minted: number;
   stillPending: number;
   failed: number;
 }> {
   const cutoff = new Date(Date.now() - SWEEP_STALE_AFTER_MS);
-  const rows = await prisma.onchainIdentity.findMany({
-    where: { status: 'pending', updatedAt: { lt: cutoff } },
+  const pendingRows = await prisma.onchainIdentity.findMany({
+    where: { status: { in: ['pending', 'failed'] }, updatedAt: { lt: cutoff } },
     take: SWEEP_MAX_PER_RUN,
     orderBy: { createdAt: 'asc' },
   });
 
+  const existingOrgTenantIds = new Set(
+    (
+      await prisma.onchainIdentity.findMany({
+        where: { kind: 'org', tenantId: { not: null } },
+        select: { tenantId: true },
+      })
+    )
+      .map(row => row.tenantId)
+      .filter((tenantId): tenantId is string => Boolean(tenantId))
+  );
+  const missingOrgTenants = await prisma.tenant.findMany({
+    where: {
+      id: { notIn: [...existingOrgTenantIds] },
+      circleWallets: {
+        some: {
+          kind: 'treasury',
+          chain: 'ARC-TESTNET',
+          circleWalletId: { not: null },
+        },
+      },
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+    take: Math.max(0, SWEEP_MAX_PER_RUN - pendingRows.length),
+  });
+
+  const rows = [
+    ...pendingRows,
+    ...missingOrgTenants.map(tenant => ({
+      kind: 'org',
+      tenantId: tenant.id,
+      userId: null,
+      id: `missing-org:${tenant.id}`,
+      attemptCount: 0,
+    })),
+  ];
+
+  let backfilled = 0;
   let minted = 0;
   let stillPending = 0;
   let failed = 0;
 
   for (const row of rows) {
+    const isMissingOrg = row.id.startsWith('missing-org:');
     if (row.attemptCount >= MAX_ATTEMPTS) {
       await prisma.onchainIdentity.update({
         where: { id: row.id },
-        data: { status: 'failed' },
+        data: { status: 'pending', attemptCount: 0, lastError: null },
       });
-      failed += 1;
-      continue;
     }
 
     try {
@@ -323,6 +339,7 @@ export async function sweepPendingIdentities(): Promise<{
             : null;
       if (result?.status === 'minted' || result?.status === 'cached') {
         minted += 1;
+        if (isMissingOrg) backfilled += 1;
       } else {
         stillPending += 1;
       }
@@ -331,5 +348,5 @@ export async function sweepPendingIdentities(): Promise<{
     }
   }
 
-  return { picked: rows.length, minted, stillPending, failed };
+  return { picked: rows.length, backfilled, minted, stillPending, failed };
 }

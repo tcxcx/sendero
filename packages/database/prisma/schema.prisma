@@ -296,6 +296,11 @@ model Tenant {
   pricingPolicies     TenantPricingPolicy[]
   otpDeliveryAttempts OtpDeliveryAttempt[]
   securityAlerts      SecurityAlert[]
+  gatewaySigner       TenantGatewaySigner?
+  gatewayConfig       TenantGatewayConfig?
+  gatewayDeposits     GatewayDepositLog[]
+  gatewayTransfers    GatewayTransferLog[]
+  walletAccessLogs    WalletAccessLog[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -421,27 +426,27 @@ model Membership {
 
 /// One Subscription per Tenant (Clerk Billing mirror).
 model Subscription {
-  id                String             @id @default(cuid())
-  tenantId          String             @unique
-  clerkSubId        String?            @unique
-  tier              BillingTier        @default(free)
-  status            SubscriptionStatus @default(active)
-  currentPeriodEnd  DateTime?          @db.Timestamptz(6)
+  id                   String             @id @default(cuid())
+  tenantId             String             @unique
+  clerkSubId           String?            @unique
+  tier                 BillingTier        @default(free)
+  status               SubscriptionStatus @default(active)
+  currentPeriodEnd     DateTime?          @db.Timestamptz(6)
   /// Signed micro-USDC balance for the current billing period (negative = owed).
   /// Refilled by the Clerk subscription.created/subscription.updated webhook on
   /// cycle renewal. Use-it-or-lose-it: no rollover.
-  meterBalanceMicro BigInt             @default(0)
+  meterBalanceMicro    BigInt             @default(0)
   /// Sum of `status='credit'` MeterEvents inside the current daily window.
   /// Persisted so the atomic preflight UPDATE can enforce the daily sub-cap
   /// (typically 25% of monthlyIncludedCreditsMicro) without a separate
   /// aggregate read race.
-  dailyCreditBurnMicro BigInt          @default(0)
+  dailyCreditBurnMicro BigInt             @default(0)
   /// UTC timestamp when the current daily window opened. Reset by preflight
   /// when wall clock crosses (dailyWindowStartedAt + 24h).
-  dailyWindowStartedAt DateTime?       @db.Timestamptz(6)
-  metadata          Json?
-  createdAt         DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime           @updatedAt @db.Timestamptz(6)
+  dailyWindowStartedAt DateTime?          @db.Timestamptz(6)
+  metadata             Json?
+  createdAt            DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime           @updatedAt @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -593,19 +598,19 @@ model ChatMessage {
 /// is per-traveler and per-itinerary; a single GroupTrip eventually
 /// fans out into N child Trips at booking time.
 model GroupTrip {
-  id              String   @id @default(cuid())
-  tenantId        String
-  name            String
-  destination     String?
+  id            String   @id @default(cuid())
+  tenantId      String
+  name          String
+  destination   String?
   /// Optional capacity cap. Adds beyond this throw at the tool layer.
   /// Null = unlimited.
-  maxPassengers   Int?
+  maxPassengers Int?
   /// Free-form metadata (purpose, deposit terms, etc.).
-  metadata        Json?
-  createdAt       DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+  metadata      Json?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
 
-  tenant     Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   passengers GroupTripPassenger[]
 
   @@index([tenantId, createdAt])
@@ -789,7 +794,11 @@ model CircleWallet {
   id                String    @id @default(cuid())
   tenantId          String
   clerkOrgId        String?
-  address           String    @unique
+  address           String
+  /// 'treasury' (primary tenant wallet, default-Arc settle target) or
+  /// 'operations' (per-chain inbound staging DCW that the Gateway sweep
+  /// loop drains into the tenant Gateway EOA). Phase 1 = both kinds on
+  /// Arc; Phase 2 widens to per-chain operations rows.
   kind              String
   chain             String
   circleWalletSetId String?
@@ -801,13 +810,236 @@ model CircleWallet {
   /// Cached EURC balance, same convention as usdcBalanceMicro.
   eurcBalanceMicro  BigInt?
   balanceUpdatedAt  DateTime? @db.Timestamptz(6)
+  /// SCA deployment cache. Circle DCW SCAs are counterfactual until their
+  /// first OUTBOUND tx — `signTypedData` rejects with "undeployed wallet"
+  /// before that. We self-send 0 native to deploy on first use and stamp
+  /// this column so subsequent transfers skip the round-trip. See
+  /// @sendero/circle/src/sca-deploy.ts (Phase 2).
+  scaDeployedAt     DateTime? @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, kind, chain], name: "tenantId_kind_chain")
+  @@index([address])
   @@index([tenantId, kind])
   @@map("circle_wallets")
+}
+
+/// Self-custody EOA per tenant for Circle Gateway burn-intent signing.
+///
+/// Reason this exists at all: Circle's `/v1/w3s/developer/sign/typedData`
+/// injects `chainId` into the EIP-712 domain, but Circle Gateway's on-chain
+/// DOMAIN_SEPARATOR has no `chainId` — so any DCW-signed burn intent
+/// recovers to the wrong address and Gateway's `/transfer` rejects with
+/// "recovered signer does not match sourceSigner". A throwaway viem EOA
+/// (no chainId in domain) signs cleanly. Per-tenant EOAs replace the
+/// shared `TREASURY_PRIVATE_KEY` for Gateway specifically.
+///
+/// Scope is deliberately narrow — this signer ONLY signs Gateway burns
+/// + deposits. Nanopay batch settlement, App Kit ops, and settle_split
+/// outside Gateway routing keep their existing signing paths.
+///
+/// Encryption: AES-256-GCM via @sendero/encryption. Key material never
+/// leaves the server process. `kekVersion` enables KEK rotation without
+/// re-encrypting historical rows in lockstep — readers decrypt under
+/// the row's KEK version, lazy-rewrite under the latest version on access.
+model TenantGatewaySigner {
+  tenantId            String   @id
+  /// Lowercased 0x… address derived from the encrypted key. We compare
+  /// against this on decrypt to detect KEK mismatch / corruption early
+  /// and bail rather than silently signing with the wrong key.
+  address             String   @unique
+  /// Base64-encoded ciphertext envelope (iv:tag:body) from
+  /// @sendero/encryption. Plaintext is the 0x… private key.
+  encryptedPrivateKey String
+  /// KEK generation. Bumped on rotation; row decrypts under
+  /// SENDERO_KEK_v{kekVersion} and re-encrypts under latest.
+  kekVersion          Int      @default(1)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_gateway_signers")
+}
+
+/// Per-tenant Circle Gateway configuration — which chains are enabled,
+/// what addresses receive deposits / mints, and the sweep policy.
+///
+/// Provisioned at organization.created alongside the signer + ops DCW.
+/// Updated when chains are added (Phase 3+) or sweep policy changes.
+///
+/// `evmDepositorAddress` is denormalized from `TenantGatewaySigner.address`
+/// so Gateway API balance calls don't need a join on the hot path.
+model TenantGatewayConfig {
+  tenantId               String   @id
+  /// Address that signs burn intents (= TenantGatewaySigner.address,
+  /// lowercased). Denormalized to skip the join on /balances calls.
+  evmDepositorAddress    String
+  /// Solana DCW address — null until Phase 4. Used as mint recipient
+  /// on Solana destinations + as the Gateway depositor for Solana-origin
+  /// burns once Solana support lands.
+  solanaDepositorAddress String?
+  /// Circle Gateway domain IDs the tenant has wallets on. Phase 1 = [26]
+  /// (ARC-TESTNET). Phase 3 adds 1 (AVAX-FUJI). Phase 4 adds 5 (SOL).
+  /// See GATEWAY_DOMAINS in @sendero/circle/src/gateway.ts.
+  enabledDomains         Int[]    @default([26])
+  /// Sweep policy for inbound USDC. Null = always sweep 100% (Phase 1
+  /// default — Arc gas is cheap). Phase 3 widens to support thresholds:
+  /// `{ "mode": "always" }` or `{ "mode": "threshold", "minMicroUsdc": 50000000 }`.
+  sweepPolicy            Json?
+  createdAt              DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_gateway_configs")
+}
+
+/// One row per inbound USDC deposit handled by the Gateway auto-sweep
+/// loop. Append-only audit trail for the webhook → ops DCW → tenant EOA
+/// → Gateway path.
+///
+/// Idempotency: `webhookEventId` is unique. Circle fires CONFIRMED +
+/// COMPLETED for the same `notification.id` — both arrivals resolve to
+/// the same row, second one no-ops at the DB layer.
+model GatewayDepositLog {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String
+  chain           String
+  /// Circle Gateway domain ID — matches GATEWAY_DOMAINS in
+  /// @sendero/circle/src/gateway.ts.
+  domain          Int
+  /// USDC amount in micro-USDC (6 decimals). 1_000_000 = 1 USDC.
+  amountMicroUsdc BigInt
+  /// On-chain tx hash for the deposit step (ops DCW → Gateway). Null
+  /// while pending; populated once Circle confirms the sweep tx.
+  depositTxHash   String?
+  /// Optional approve tx hash (pre-deposit ERC-20 approval).
+  approveTxHash   String?
+  /// pending | confirmed | failed
+  status          String    @default("pending")
+  retryCount      Int       @default(0)
+  /// Circle webhook notification.id — unique so dual CONFIRMED/COMPLETED
+  /// fires + at-least-once retries collapse to one row.
+  webhookEventId  String?   @unique
+  /// auto (webhook) | manual (UI) | cron (reaper)
+  triggeredBy     String    @default("auto")
+  errorMessage    String?
+  confirmedAt     DateTime? @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, chain, status])
+  @@index([tenantId, createdAt])
+  @@index([status, createdAt])
+  @@map("gateway_deposit_logs")
+}
+
+/// One row per outbound Gateway burn-mint transfer.
+///
+/// Lifecycle: `attesting` (signed burn submitted) → `minting` (Circle
+/// attestation received, gatewayMint pending) → `confirmed` (mint tx
+/// confirmed) | `failed`.
+///
+/// Reconciled by `/api/cron/reconcile-gateway-transfers` (Phase 5) when
+/// stuck > 5 minutes. Per-row admin reconcile via
+/// `POST /api/gateway/transfer/[logId]/reconcile`.
+model GatewayTransferLog {
+  id                      String    @id @default(uuid()) @db.Uuid
+  tenantId                String
+  /// Source domain — null for unified-balance transfers (Gateway picks
+  /// across the depositor's enabled domains).
+  sourceDomain            Int?
+  destinationDomain       Int
+  destinationChain        String
+  /// USDC amount in micro-USDC.
+  amountMicroUsdc         BigInt
+  recipientAddress        String
+  /// EIP-712 burn intent signature from the tenant Gateway EOA.
+  burnSignature           String?
+  /// Circle attestation payload returned by `/v1/transfer`.
+  attestation             String?
+  /// Circle's transfer id (used for `/v1/transfer/{id}` status polls).
+  circleTransferId        String?   @unique
+  /// On-chain mint tx hash on the destination chain (self-mint path).
+  mintTxHash              String?
+  /// Circle's destination tx hash when Circle forwarding handles the mint.
+  circleDestinationTxHash String?
+  /// True = Circle forwarding mints (default for EVM destinations).
+  /// False = Sendero self-mints (Solana destinations, Phase 4).
+  forwardingEnabled       Boolean   @default(true)
+  forwardingFailureReason String?
+  /// Total fees in micro-USDC (forwarding + gas).
+  feesTotalMicroUsdc      BigInt?
+  feesForwardingMicroUsdc BigInt?
+  /// Per-burn-intent fee breakdown (Json — Circle returns an array).
+  feesPerIntent           Json?
+  /// attesting | minting | confirmed | failed
+  status                  String    @default("attesting")
+  lastReconciledAt        DateTime? @db.Timestamptz(6)
+  initiatedByUserId       String?
+  /// internal_transfer | payroll | invoice | manual | settle_split | nanopay_batch
+  triggeredBy             String
+  errorMessage            String?
+  createdAt               DateTime  @default(now()) @db.Timestamptz(6)
+  confirmedAt             DateTime? @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([status, createdAt])
+  @@map("gateway_transfer_logs")
+}
+
+/// Append-only audit trail of every Gateway-signer key-material access.
+///
+/// Phase 5. Required for compliance + forensics — answers "which user,
+/// from which surface, decrypted tenant X's signer at time T?" Critical
+/// for investigating any leak suspicion. Cache hits do NOT log because
+/// they don't decrypt; only cold-path decrypts (cache miss) record here.
+///
+/// Surfaces include:
+///   - 'route'   — operator UI request (Clerk session)
+///   - 'cron'    — scheduled job (CRON_SECRET)
+///   - 'webhook' — Circle inbound webhook fan-out
+///   - 'tool'    — agent tool call via /api/agent/dispatch
+///   - 'cli'     — out-of-band script (e.g. provisioning, reconciliation)
+///
+/// Failure mode: if an audit insert fails, the decrypt still proceeds —
+/// availability beats audit completeness for the hot path. The DB row
+/// is best-effort; production parity with audit comes from the
+/// app-level "must-log-or-fail" mode (set via env in Phase 5+ if
+/// compliance demands it).
+model WalletAccessLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String
+  /// route | cron | webhook | tool | cli
+  callerSurface String
+  /// Clerk userId when callerSurface='route'. Null for cron/webhook
+  /// (system-driven). 'tool' callers may have it from the dispatch
+  /// path; cli callers don't.
+  callerUserId  String?
+  /// KEK version used to decrypt. Surfaces rotation lag — a row with
+  /// kekVersion < TenantGatewaySigner.kekVersion means the lazy
+  /// re-encrypt-on-read step ran on this access.
+  kekVersion    Int
+  /// Free-form context. Examples: route path, cron name, webhook
+  /// notification.id. Bounded to ~200 chars to keep table small.
+  context       String?
+  occurredAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
+  @@index([occurredAt])
+  @@map("wallet_access_logs")
 }
 
 /// Append-only nanopayment ledger. Mirrors packages/tools/src/meter.ts
@@ -1056,7 +1288,7 @@ model ChannelIdentity {
 /// Enterprise Grid installs spanning multiple workspaces resolve to one
 /// install. `enterpriseId` is nullable for classic (non-Grid) installs.
 model SlackInstall {
-  id                  String   @id @default(uuid()) @db.Uuid
+  id                  String    @id @default(uuid()) @db.Uuid
   tenantId            String
   /// Nullable for classic installs; required for Grid.
   enterpriseId        String?
@@ -1068,7 +1300,7 @@ model SlackInstall {
   /// Encrypt-at-rest in production. Plaintext acceptable on testnet demo.
   botToken            String
   scope               String
-  isEnterpriseInstall Boolean  @default(false)
+  isEnterpriseInstall Boolean   @default(false)
   authedUserId        String
   installedAt         DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
@@ -1223,23 +1455,23 @@ model WhatsAppInstall {
 /// Inserted fire-and-forget after the 200 ack so it never blocks
 /// Slack/Meta's retry-on-non-200 logic.
 model WhatsAppWebhookEvent {
-  id                    String    @id @default(cuid())
-  tenantId              String?   @map("tenant_id")
-  receivedAt            DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
-  signatureValid        Boolean   @map("signature_valid")
-  replayWindowOk        Boolean?  @map("replay_window_ok")
-  payloadHash           String    @map("payload_hash")
-  messageCount          Int       @default(0) @map("message_count")
-  identityChangeCount   Int       @default(0) @map("identity_change_count")
-  statusUpdateCount     Int       @default(0) @map("status_update_count")
-  droppedReplayCount    Int       @default(0) @map("dropped_replay_count")
-  droppedDuplicateCount Int       @default(0) @map("dropped_duplicate_count")
-  dispatchedCount       Int       @default(0) @map("dispatched_count")
-  durationMs            Int?      @map("duration_ms")
-  traceId               String?   @map("trace_id")
+  id                    String   @id @default(cuid())
+  tenantId              String?  @map("tenant_id")
+  receivedAt            DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  signatureValid        Boolean  @map("signature_valid")
+  replayWindowOk        Boolean? @map("replay_window_ok")
+  payloadHash           String   @map("payload_hash")
+  messageCount          Int      @default(0) @map("message_count")
+  identityChangeCount   Int      @default(0) @map("identity_change_count")
+  statusUpdateCount     Int      @default(0) @map("status_update_count")
+  droppedReplayCount    Int      @default(0) @map("dropped_replay_count")
+  droppedDuplicateCount Int      @default(0) @map("dropped_duplicate_count")
+  dispatchedCount       Int      @default(0) @map("dispatched_count")
+  durationMs            Int?     @map("duration_ms")
+  traceId               String?  @map("trace_id")
   /// Optional raw envelope — null in production unless the tenant
   /// opts in via `WhatsAppInstall.metadata.auditRawPayloads`.
-  rawEnvelope           Json?     @map("raw_envelope")
+  rawEnvelope           Json?    @map("raw_envelope")
 
   @@index([tenantId, receivedAt(sort: Desc)])
   @@index([traceId])
@@ -1289,30 +1521,30 @@ model WhatsAppApiLog {
 /// security alerts so ops can answer "did the OTP land?" without
 /// grepping handlers.
 model WhatsAppOutboundMessage {
-  id              String    @id @default(cuid())
-  tenantId        String    @map("tenant_id")
-  wamid           String    @unique
-  phoneNumberId   String    @map("phone_number_id")
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  wamid          String    @unique
+  phoneNumberId  String    @map("phone_number_id")
   /// E.164 or BSUID, whichever was used at send time.
-  recipientId     String    @map("recipient_id")
+  recipientId    String    @map("recipient_id")
   /// 'text' | 'template' | 'interactive' | 'image' | 'document' | 'video' | …
-  kind            String
+  kind           String
   /// 'agent_reply' | 'otp' | 'security_alert' | 'manual' | etc.
-  source          String
-  templateName    String?   @map("template_name")
+  source         String
+  templateName   String?   @map("template_name")
   /// Up to 280-char preview (PII-light). For `template` sends, the
   /// template name + first body parameter; for `text`, the body
   /// truncated.
-  preview         String?
-  sentAt          DateTime  @default(now()) @map("sent_at") @db.Timestamptz(6)
+  preview        String?
+  sentAt         DateTime  @default(now()) @map("sent_at") @db.Timestamptz(6)
   /// Initialised to `'sent'` at insert. Updated by the inbound status
   /// webhook to `'delivered' | 'read' | 'failed'`.
-  deliveryStatus  String    @default("sent") @map("delivery_status")
-  failureReason   String?   @map("failure_reason")
-  deliveredAt     DateTime? @map("delivered_at") @db.Timestamptz(6)
-  readAt          DateTime? @map("read_at") @db.Timestamptz(6)
-  failedAt        DateTime? @map("failed_at") @db.Timestamptz(6)
-  traceId         String?   @map("trace_id")
+  deliveryStatus String    @default("sent") @map("delivery_status")
+  failureReason  String?   @map("failure_reason")
+  deliveredAt    DateTime? @map("delivered_at") @db.Timestamptz(6)
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  failedAt       DateTime? @map("failed_at") @db.Timestamptz(6)
+  traceId        String?   @map("trace_id")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

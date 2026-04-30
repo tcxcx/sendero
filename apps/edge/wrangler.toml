@@ -9,7 +9,7 @@
 # Auto-rollout via .github/workflows/edge-canary-rollout.yml runs the
 # 10% → 50% → 100% gradient on every push to main with health-probe gating.
 # Skip per-PR with the `skip-canary` label.
-name = "sendero-arc-edge"
+name = "arc-edge"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]

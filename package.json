@@ -1,5 +1,5 @@
 {
-  "name": "sendero-arc",
+  "name": "arc",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -42,7 +42,7 @@
     "db:reset": "bun run --cwd packages/database db:reset",
     "llms:test": "bun run --cwd packages/llms test",
     "gen": "bunx turbo gen",
-    "env:validate": "bun run --cwd packages/sendero-env validate",
+    "env:validate": "bun run --cwd packages/env validate",
     "webhooks:ngrok": "bash scripts/start-sendero-ngrok.sh",
     "webhooks:urls": "bash scripts/show-sendero-webhook-urls.sh",
     "ui:sync-exports": "bun run scripts/sync-ui-exports.ts",
@@ -115,7 +115,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/BuFi007/sendero-arc.git"
+    "url": "https://github.com/BuFi007/arc.git"
   },
   "keywords": [
     "arc",

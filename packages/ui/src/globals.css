@@ -1,6 +1,6 @@
 @import "tailwindcss";
-@config "../tailwind.config.ts";
 @import "./motion.css";
+@config "../tailwind.config.ts";
 
 @layer base {
   :root {

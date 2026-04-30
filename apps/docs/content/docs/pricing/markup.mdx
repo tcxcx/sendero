@@ -112,7 +112,7 @@ In `deduct_from_markup` mode, if `senderoTake > markup` the agency leg would cla
 The split is enforced by `commitBookingV2(bookingId, vendorAmount, feeAmount, agencyAmount, vendorAddress, agencyAddress, itineraryHash, itineraryCID)` on `SenderoGuestEscrow` v3.
 
 - Address (testnet): [`0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515`](https://testnet.arcscan.app/address/0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515) (UUPS proxy). Override locally via `ARC_ESCROW_ADDRESS` / `NEXT_PUBLIC_SENDERO_GUEST_ESCROW`.
-- ABI: [`packages/sendero-guest`](https://github.com/tcxcx/sendero/blob/main/packages/sendero-guest/src/index.ts) (`SENDERO_GUEST_ESCROW_ABI`).
+- ABI: [`packages/guest`](https://github.com/tcxcx/sendero/blob/main/packages/guest/src/index.ts) (`SENDERO_GUEST_ESCROW_ABI`).
 - Implementation version: `v3.0.0` (read on-chain via `version()`).
 - Three recipients, one transaction. Reverts atomically.
 - Pairs with `BookingSettledV2(bookingId, vendor, agency, fee, vendorAmount, agencyAmount, feeAmount)` — the off-chain indexer writes three `SettlementLeg` rows from a single event.

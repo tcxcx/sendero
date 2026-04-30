@@ -1,0 +1,17 @@
+{
+  "name": "@sendero/env",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — typed environment-variable accessors shared across every app and package. Adds desk-v1-style `requireX()` accessors + a turbo-invoked `validate` task that fails builds with a named list of missing vars.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./chains": "./src/chains.ts",
+    "./require": "./src/require.ts",
+    "./validate": "./src/validate.ts"
+  },
+  "scripts": {
+    "validate": "bun run src/validate.ts"
+  }
+}

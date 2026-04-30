@@ -30,7 +30,7 @@ export const REPUTATION_TOPICS = {
   // event FeedbackGiven(uint256 indexed agentId, address indexed validator,
   //                     int128 score, uint8 status, string tag, bytes32 feedbackHash)
   // Per Circle's ERC-8004 quickstart and the empirical topic in
-  // packages/sendero-arc/src/identity.ts::REPUTATION_TOPIC0.
+  // packages/arc/src/identity.ts::REPUTATION_TOPIC0.
   // The on-chain ABI is verified by reading the signature from the deployed
   // 0x8004B6… contract via the Circle SCP getContract() endpoint at deploy
   // time; the topic below was confirmed against scripts/check-reputation.ts.

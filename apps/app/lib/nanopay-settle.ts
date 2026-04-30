@@ -2,24 +2,22 @@
  * Shared nanopay settlement helpers.
  *
  * Used by:
- *   - `/api/cron/settle-nanopay-batches` — daily cron sweep + retry of
+ *   - `/api/cron/settle-nanopay-batches` — cron sweep + retry of
  *     stuck `settling` batches.
- *   - `/api/chat` `onFinish` — inline per-turn settle (one `transferUSDC`
- *     fires right after the meter row is written) so Spend / Arcscan
- *     reflect the call within seconds.
  *
- * Inline + cron are belt-and-suspenders: if `transferUSDC` flakes during
- * the inline pass, the event stays at `settlementRef: null` and the
- * cron picks it up next run. No event ever falls between the cracks.
- *
- * `transferUSDC` is the same EOA path the cron uses — `TREASURY_PRIVATE_KEY`
- * → Arc USDC contract → `SENDERO_TREASURY_ADDRESS`. No passkey, no MSCA.
+ * The settlement source is the tenant's Gateway unified balance. That
+ * makes usage billing draw from the same operating balance that receives
+ * deposits and ticket-sale profit, instead of charging the platform
+ * treasury EOA for customer activity.
  */
 
 import { type BatchStore, type SettleFn } from '@sendero/billing/batch';
+import { GATEWAY_CHAINS, transferViaGatewayFromSources } from '@sendero/circle/gateway';
 import { prisma } from '@sendero/database';
-import { transferUSDC } from '@sendero/nanopayments';
 import type { Address } from 'viem';
+
+import { microUsdcToDecimal } from '@/lib/gateway-balance-math';
+import { selectTenantGatewayEvmSources } from '@/lib/gateway-treasury';
 
 export function senderoTreasuryAddress(): Address {
   const a = process.env.SENDERO_TREASURY_ADDRESS;
@@ -105,19 +103,61 @@ export function makeBatchStore(): BatchStore {
 }
 
 /**
- * The actual on-chain transfer. Real EOA → Arc USDC → treasury.
- * Throws on RPC / signing / balance failures; the caller decides
- * whether the failure is fatal (cron) or fire-and-forget (inline).
+ * The actual on-chain transfer. Tenant Gateway unified balance →
+ * Sendero treasury on Arc. Throws on Gateway / signing / balance
+ * failures; the batch caller records retry state.
  */
 export function makeSettleFn(): SettleFn {
   const to = senderoTreasuryAddress();
   return async ({ totalMicroUsdc, batchId, tenantId }) => {
-    const amount = (Number(totalMicroUsdc) / 1e6).toFixed(6);
-    const { txHash } = await transferUSDC({
-      to,
-      amount,
-      label: `nanopay-batch:${tenantId}:${batchId}`,
+    const amount = microUsdcToDecimal(totalMicroUsdc);
+    const selected = await selectTenantGatewayEvmSources({ tenantId, amount });
+    const fromChain = GATEWAY_CHAINS[selected.sources[0].from];
+    const toChain = GATEWAY_CHAINS.Arc_Testnet;
+    const log = await prisma.gatewayTransferLog.create({
+      data: {
+        tenantId,
+        sourceDomain: fromChain.domain,
+        destinationDomain: toChain.domain,
+        destinationChain: toChain.kitName,
+        amountMicroUsdc: totalMicroUsdc,
+        recipientAddress: to.toLowerCase(),
+        status: 'attesting',
+        forwardingEnabled: false,
+        triggeredBy: 'nanopay_batch',
+      },
+      select: { id: true },
     });
-    return { txHash };
+
+    try {
+      const result = await transferViaGatewayFromSources({
+        sources: selected.sources,
+        to: 'Arc_Testnet',
+        recipient: to,
+        signer: selected.signer.account,
+      });
+      await prisma.gatewayTransferLog.update({
+        where: { id: log.id },
+        data: {
+          burnSignature: result.burnSignature,
+          attestation: result.attestation,
+          mintTxHash: result.mintHash,
+          status: 'confirmed',
+          confirmedAt: new Date(),
+        },
+      });
+      return { txHash: result.mintHash };
+    } catch (err) {
+      await prisma.gatewayTransferLog
+        .update({
+          where: { id: log.id },
+          data: {
+            status: 'failed',
+            errorMessage: err instanceof Error ? err.message : String(err),
+          },
+        })
+        .catch(() => undefined);
+      throw err;
+    }
   };
 }

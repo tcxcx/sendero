@@ -16,11 +16,11 @@
  * `SENDERO_UB_DELEGATE_PRIVATE_KEY`.
  */
 
-import { auth } from '@clerk/nextjs/server';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
+import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@sendero/database';
+import { z } from 'zod';
 
 import { executeTransferSpend } from '@/lib/transfer-spend/execute';
 
@@ -140,7 +140,9 @@ export async function POST(req: NextRequest) {
           error: 'delegate_not_configured',
           attemptId: result.attemptId,
           message:
-            'Set SENDERO_UB_DELEGATE_PRIVATE_KEY (or wire a KMS-backed signer) before calling /api/transfer/spend. Policy enforcement passed; only the on-chain leg is blocked.',
+            result.reason === 'traveler_wallet_not_configured'
+              ? 'Traveler has no Circle DCW wallet yet; provision the traveler wallet before spending Unified Balance funds.'
+              : 'Set CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET for the Circle Wallets adapter, or set SENDERO_UB_DELEGATE_PRIVATE_KEY as a fallback. Policy enforcement passed; only the on-chain leg is blocked.',
           docs: 'https://developers.circle.com/app-kit/quickstarts/unified-balance-delegate-deposit-and-spend',
         },
         { status: 503 }

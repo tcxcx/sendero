@@ -44,12 +44,12 @@
 - `apps/app/app/globals.css` — `@tailwind` directives + minimal custom classes
 
 **`@sendero/circle` extension:**
-- `packages/sendero-circle/src/provision-tenant-wallet.ts`
-- `packages/sendero-circle/src/provision-tenant-wallet.test.ts`
-- `packages/sendero-circle/src/index.ts` — export
+- `packages/circle/src/provision-tenant-wallet.ts`
+- `packages/circle/src/provision-tenant-wallet.test.ts`
+- `packages/circle/src/index.ts` — export
 
 **Env + health:**
-- `packages/sendero-env/src/validate.ts` — add 3 Clerk keys
+- `packages/env/src/validate.ts` — add 3 Clerk keys
 - `apps/app/app/api/health/route.ts` — surface Clerk + webhook
 - `apps/app/vercel.json` — retry-wallet-provision cron
 
@@ -500,13 +500,13 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ### Task 9: Implementation
 
 **Files:**
-- Create: `packages/sendero-circle/src/provision-tenant-wallet.ts`
-- Modify: `packages/sendero-circle/src/index.ts` — export
+- Create: `packages/circle/src/provision-tenant-wallet.ts`
+- Modify: `packages/circle/src/index.ts` — export
 
 - [ ] **Step 1: Inspect existing SDK factory**
 
 ```bash
-grep -n "createCircleSdk\|createWalletSet\|createWallets" packages/sendero-circle/src/*.ts | head -10
+grep -n "createCircleSdk\|createWalletSet\|createWallets" packages/circle/src/*.ts | head -10
 ```
 
 Adapt the function below to the actual Circle SDK exports available in this repo.
@@ -588,7 +588,7 @@ export async function provisionTenantWallet(
 - [ ] **Step 3: Export from `src/index.ts`** + commit
 
 ```bash
-git add packages/sendero-circle/src
+git add packages/circle/src
 git commit --no-verify -m "feat(phase-11c1): provisionTenantWallet — Circle walletSet + wallet
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
@@ -597,7 +597,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ### Task 10: Mocked unit test for idempotency
 
 **Files:**
-- Create: `packages/sendero-circle/src/provision-tenant-wallet.test.ts`
+- Create: `packages/circle/src/provision-tenant-wallet.test.ts`
 
 - [ ] **Step 1: Skeleton**
 
@@ -1478,7 +1478,7 @@ export async function GET(req: NextRequest) {
 
 ### Task 26: Env validation
 
-Add to `packages/sendero-env/src/validate.ts`:
+Add to `packages/env/src/validate.ts`:
 
 ```typescript
   { name: 'CLERK_SECRET_KEY', scope: 'auth', hint: 'from Clerk dashboard' },
@@ -1539,7 +1539,7 @@ Manual-gated — requires running dev server + valid Clerk test keys. Uses Clerk
 ```bash
 bun run typecheck 2>&1 | tail -5
 bun test packages/auth 2>&1 | tail -5
-bun test packages/sendero-circle 2>&1 | tail -5
+bun test packages/circle 2>&1 | tail -5
 bun run env:validate
 bun run smoke:clerk-webhook
 ```

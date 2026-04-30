@@ -20,7 +20,7 @@
 | ReputationRegistry | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
 | ValidationRegistry | `0x8004Cb1BF31DAf7788923b405b754f57acEB4272` |
 
-Existing client: `packages/sendero-arc/src/identity.ts` — already exports `registerAgent`, `giveFeedback`, `getReputation`. Need to add: `requestValidation`, `submitValidationResponse`, `getValidationStatus`. Existing bootstrap script `scripts/bootstrap-agent.ts` mints Sendero's own agent NFT (#2286) — proves the pattern end-to-end.
+Existing client: `packages/arc/src/identity.ts` — already exports `registerAgent`, `giveFeedback`, `getReputation`. Need to add: `requestValidation`, `submitValidationResponse`, `getValidationStatus`. Existing bootstrap script `scripts/bootstrap-agent.ts` mints Sendero's own agent NFT (#2286) — proves the pattern end-to-end.
 
 ## Wallet permanence — what's already true
 
@@ -137,7 +137,7 @@ model ReputationPolicy {
 
 ## Provisioning — atomic wallet + identity (+ optional KYC validation kickoff)
 
-New file `packages/sendero-arc/src/provision-identity.ts` exports `ensureOrgIdentity({ tenantId })` and `ensureUserIdentity({ userId })`. State machine mirrors `mintStampTool`:
+New file `packages/arc/src/provision-identity.ts` exports `ensureOrgIdentity({ tenantId })` and `ensureUserIdentity({ userId })`. State machine mirrors `mintStampTool`:
 
 1. Read existing `OnchainIdentity` for `(kind, subjectId)`. Return cached if `status='minted'`.
 2. Resolve `holderAddress` (CircleWallet.address for org, Wallet.address for user). Bail if wallet missing.
@@ -166,7 +166,7 @@ ValidationRegistry is NOT deferred. Both orgs and users have a `ValidationCheck`
 - **Response**: validator wallet calls `validationResponse(requestHash, response, responseURI, responseHash, tag)`. `100 = passed`, `0 = failed`.
 - **Read**: `getValidationStatus(requestHash)` returns the verdict; we cache in `ValidationCheck` table.
 
-New helpers in `packages/sendero-arc/src/identity.ts`:
+New helpers in `packages/arc/src/identity.ts`:
 - `requestValidation({ validatorWalletAddress, validatorAddress, agentId, requestURI, requestHash })`
 - `submitValidationResponse({ validatorWalletAddress, requestHash, response, tag })`
 - `getValidationStatus({ requestHash })` — public read
@@ -286,7 +286,7 @@ These are independent of the reputation work — they block the *previous* stamp
 ## Critical files for implementation
 
 - `packages/database/prisma/schema.prisma`
-- `packages/sendero-arc/src/identity.ts`
+- `packages/arc/src/identity.ts`
 - `packages/tools/src/ensure-traveler-wallet.ts`
 - `packages/tools/src/rate-agent.ts` (replace mock)
 - `apps/app/app/api/webhooks/clerk/route.ts`

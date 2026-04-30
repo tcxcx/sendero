@@ -2,12 +2,15 @@ import { z } from 'zod';
 import {
   getAppKit,
   getKitKey,
+  createAdapterForSigner,
   getTreasuryAdapter,
   summarizeBridge,
   summarizeSwap,
 } from '@sendero/circle/app-kit';
 import type { BridgeParams, SwapParams } from '@circle-fin/app-kit';
 import { BRIDGE_CHAINS } from '@sendero/arc/bridge-chains';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { materializeGatewayUsdcToArc } from './gateway-service';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -40,8 +43,55 @@ export const swapAndBridgeTool: ToolDef = {
       },
     },
   },
-  async handler(input: any) {
+  async handler(input: any, ctx) {
     const kit = getAppKit();
+    if (ctx?.traveler?.tenantId) {
+      const funding = await materializeGatewayUsdcToArc({
+        tenantId: ctx.traveler.tenantId,
+        amount: input.amount,
+        preferredSourceChain: input.fromChain,
+      });
+      if (input.targetToken === 'USDC') {
+        return {
+          state: 'success',
+          fromChain: funding.from,
+          requestedFromChain: input.fromChain,
+          toChain: 'Arc_Testnet',
+          amount: input.amount,
+          targetToken: input.targetToken,
+          bridge: { state: 'success', txHash: funding.mintHash, explorerUrl: funding.explorerUrl },
+          swap: null,
+          txHash: funding.mintHash,
+          explorerUrl: funding.explorerUrl,
+          source: 'gateway',
+        };
+      }
+      const signer = await getOrCreateGatewaySigner(ctx.traveler.tenantId);
+      const adapter = createAdapterForSigner(signer.privateKey);
+      const swapResult = await kit.swap({
+        from: { adapter, chain: 'Arc_Testnet' },
+        tokenIn: 'USDC',
+        tokenOut: input.targetToken,
+        amountIn: input.amount,
+        config: { kitKey: getKitKey() },
+      });
+      const swapSummary = summarizeSwap(swapResult);
+      return {
+        state: swapSummary.state,
+        fromChain: funding.from,
+        requestedFromChain: input.fromChain,
+        toChain: 'Arc_Testnet',
+        amount: input.amount,
+        targetToken: input.targetToken,
+        bridge: { state: 'success', txHash: funding.mintHash, explorerUrl: funding.explorerUrl },
+        swap: swapSummary,
+        txHash: swapSummary.txHash || funding.mintHash,
+        explorerUrl: swapSummary.explorerUrl || funding.explorerUrl,
+        amountOut: swapResult.amountOut,
+        source: 'gateway',
+      };
+    }
+
     const adapter = getTreasuryAdapter();
 
     const bridgeParams: BridgeParams = {

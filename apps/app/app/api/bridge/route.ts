@@ -1,18 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { prisma } from '@sendero/database';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import type { BridgeParams } from '@circle-fin/app-kit';
-import { env } from '@sendero/env';
-import { getAppKit, getTreasuryAdapter, summarizeBridge } from '@sendero/circle/app-kit';
+
+import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
 
 /**
  * POST /api/bridge
  * Cross-chain USDC bridge INTO Arc Testnet via App Kit CCTP.
+ * Uses the calling org's per-tenant gateway signer EOA for both the
+ * source chain (burn) and the Arc destination (mint) — NOT the treasury.
+ *
  * Body: { fromChain: 'Ethereum_Sepolia'|'Base_Sepolia'|…, amount: decimal }
  */
-import { BRIDGE_CHAINS } from '@sendero/arc/bridge-chains';
+const SUPPORTED_GATEWAY_BRIDGE_SOURCES = [
+  'Ethereum_Sepolia',
+  'Base_Sepolia',
+  'Polygon_Amoy_Testnet',
+  'Avalanche_Fuji',
+  'Arbitrum_Sepolia',
+  'Optimism_Sepolia',
+] as const;
 
 const BodySchema = z.object({
-  fromChain: z.enum(BRIDGE_CHAINS),
+  fromChain: z.enum(SUPPORTED_GATEWAY_BRIDGE_SOURCES),
   amount: z.string().regex(/^\d+(\.\d{1,6})?$/),
 });
 
@@ -21,45 +32,60 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 180;
 
 export async function POST(req: NextRequest) {
-  if (!env.circleApiKey() || !env.circleEntitySecret()) {
-    return NextResponse.json(
-      {
-        error: 'circle_not_configured',
-        message: 'CIRCLE_API_KEY + CIRCLE_ENTITY_SECRET required.',
-      },
-      { status: 503 }
-    );
+  const { orgId } = await auth();
+  if (!orgId) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { clerkOrgId: orgId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
+  }
+
   try {
     const body = BodySchema.parse(await req.json());
-    const kit = getAppKit();
-    const adapter = getTreasuryAdapter();
-
-    const params: BridgeParams = {
-      from: {
-        adapter,
-        chain: body.fromChain,
-      },
-      to: {
-        adapter,
-        chain: 'Arc_Testnet',
-      },
+    const result = await materializeGatewayUsdcToArc({
+      tenantId: tenant.id,
       amount: body.amount,
-    };
-
-    const result = await kit.bridge(params);
+      preferredSourceChain: body.fromChain,
+    });
     return NextResponse.json({
-      ...summarizeBridge(result),
+      state: 'success',
+      txHash: result.mintHash,
+      explorerUrl: result.explorerUrl,
+      steps: [
+        {
+          name: 'gateway_transfer',
+          state: 'success',
+          txHash: result.mintHash,
+          explorerUrl: result.explorerUrl,
+        },
+      ],
       amount: body.amount,
-      fromChain: body.fromChain,
+      fromChain: result.from,
+      requestedFromChain: body.fromChain,
       toChain: 'Arc_Testnet',
+      signerAddress: result.signerAddress,
+      source: 'gateway',
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid_input', issues: err.issues }, { status: 400 });
     }
-    const detail = err instanceof Error ? err.message : String(err);
-    console.error('[bridge] error:', detail);
-    return NextResponse.json({ error: 'bridge_failed', message: detail }, { status: 500 });
+    const anyErr = err as any;
+    const detail: string =
+      anyErr?.cause?.trace?.rawError?.shortMessage ||
+      anyErr?.cause?.trace?.rawError?.message ||
+      (err instanceof Error ? err.message : String(err));
+    console.error('[bridge] error:', detail, {
+      tenantId: tenant.id,
+    });
+    return NextResponse.json(
+      { error: 'bridge_failed', message: detail },
+      { status: detail.includes('Insufficient') && detail.includes('Gateway USDC') ? 409 : 500 }
+    );
   }
 }

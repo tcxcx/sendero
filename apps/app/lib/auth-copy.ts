@@ -92,13 +92,13 @@ const AUTH_COPY: Record<string, AuthCopy> = {
     },
     waitlistPrecheck: {
       alreadySignedIn: "You're already signed in. Taking you to the app.",
-      alreadyOnWaitlist: "You're already on the waitlist. Taking you to sign in.",
+      alreadyOnWaitlist: "You're already on the waitlist. Go to sign in.",
       invited: "You've been invited. Continue at sign in.",
       invitedCheckEmail:
         "You've been invited. If you have not finished setup, check your email for the link, then sign in.",
       grantedAccess: 'Your access is approved. Taking you to sign in.',
       allowlistAccess: "You're on the approved access list. Taking you to sign in.",
-      alreadyJoinedSession: "You're already on the waitlist. Taking you to sign in.",
+      alreadyJoinedSession: "You're already on the waitlist. Go to sign in.",
       requestNotApproved:
         'This access request is not approved. Contact us if you think this is a mistake.',
     },

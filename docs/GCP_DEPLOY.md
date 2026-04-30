@@ -116,7 +116,7 @@ Local:
 # .env.local — replace existing values
 GOOGLE_API_KEY=<new-key>
 # GOOGLE_MAPS_API_KEY + GOOGLE_PLACES_API_KEY fall back to GOOGLE_API_KEY
-# per packages/sendero-env/src/index.ts — you can delete the older vars.
+# per packages/env/src/index.ts — you can delete the older vars.
 ```
 
 Vercel:

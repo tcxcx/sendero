@@ -21,13 +21,15 @@
  * notification id.
  */
 
-import { type NextRequest, NextResponse } from 'next/server';
+import { after, type NextRequest, NextResponse } from 'next/server';
 
 import { syncWalletBalance } from '@sendero/circle/balance-sync';
+import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
+import { sweepChain } from '@sendero/circle/gateway-sweep';
 import { prisma } from '@sendero/database';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
-import { gateCircleWebhook, type CircleNotification } from '@/lib/circle-webhook-verify';
+import { type CircleNotification, gateCircleWebhook } from '@/lib/circle-webhook-verify';
 import { webhookEventStore } from '@/lib/webhook-events';
 
 export const runtime = 'nodejs';
@@ -130,6 +132,155 @@ async function syncAll(
   return { synced, skipped, failed };
 }
 
+/**
+ * Map Circle's blockchain identifier ('ARC-TESTNET', 'AVAX-FUJI', …)
+ * to Sendero's GATEWAY_CHAINS key ('Arc_Testnet', 'Avalanche_Fuji', …).
+ * Returns null for chains we don't operate Gateway on yet.
+ *
+ * Matches against `circleId` rather than the kitName. The kitName is a
+ * legacy underscored format ('Avalanche_Fuji') that doesn't always map
+ * cleanly to Circle's dashed id ('AVAX-FUJI'). circleId is the
+ * canonical id everywhere outside App Kit.
+ */
+function mapCircleBlockchainToChainKey(blockchain: string): keyof typeof GATEWAY_CHAINS | null {
+  const normalized = blockchain.toUpperCase();
+  for (const [key, def] of Object.entries(GATEWAY_CHAINS)) {
+    if (def.circleId.toUpperCase() === normalized) {
+      return key as keyof typeof GATEWAY_CHAINS;
+    }
+  }
+  return null;
+}
+
+/**
+ * Dispatch the Gateway sweep loop for an inbound USDC notification.
+ *
+ * Runs after the webhook response is sent (via Next.js `after()`) so
+ * Circle's 3-second ack window isn't blocked by the multi-step sweep
+ * (ops DCW → tenant EOA: ~60s; tenant EOA → Gateway: ~10s on Arc).
+ *
+ * Idempotency at the GatewayDepositLog level (webhookEventId unique)
+ * means duplicate Circle deliveries (CONFIRMED + COMPLETED for the
+ * same notification.id, plus at-least-once retries) collapse to one
+ * sweep.
+ *
+ * Skip conditions (all return cleanly without throwing):
+ *   - Not a transactions.inbound event.
+ *   - notification.walletId doesn't match any Gateway deposit CircleWallet.
+ *   - Tenant has no TenantGatewayConfig (provisioning gap; backfill cron
+ *     will catch).
+ *   - Tenant has explicit metadata.gatewayEnabled === false.
+ *   - Chain not in Sendero's GATEWAY_CHAINS map (Phase 1 = Arc only).
+ */
+async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
+  if (event.notificationType !== 'transactions.inbound') return;
+
+  const body = (event.notification ?? {}) as Record<string, unknown>;
+  const walletId =
+    typeof body.walletId === 'string'
+      ? body.walletId
+      : typeof body.destinationWalletId === 'string'
+        ? body.destinationWalletId
+        : null;
+  if (!walletId) return;
+
+  const blockchain = typeof body.blockchain === 'string' ? body.blockchain : null;
+  const amounts = Array.isArray(body.amounts) ? (body.amounts as unknown[]) : [];
+  const amount = typeof amounts[0] === 'string' ? (amounts[0] as string) : null;
+  const state = typeof body.state === 'string' ? body.state : null;
+  const notificationId = event.notificationId ?? null;
+  if (!blockchain || !amount || !state || !notificationId) return;
+
+  // Only act on finalized inbound. Circle fires CONFIRMED + COMPLETED
+  // for the same notification id; the deposit log's unique index
+  // collapses both into one sweep, but still: filter to finalized
+  // states so we don't trigger on PENDING / SENT.
+  const FINALIZED = new Set(['CONFIRMED', 'COMPLETE', 'COMPLETED']);
+  if (!FINALIZED.has(state)) return;
+
+  const sweepWallet = await prisma.circleWallet.findFirst({
+    where: {
+      circleWalletId: walletId,
+      kind: 'operations',
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      address: true,
+      chain: true,
+      kind: true,
+      tenant: {
+        select: {
+          metadata: true,
+          gatewayConfig: { select: { tenantId: true } },
+        },
+      },
+    },
+  });
+  if (!sweepWallet) return;
+
+  if (!sweepWallet.tenant.gatewayConfig) {
+    console.log('[webhooks/circle] gateway config missing for tenant — skipping sweep', {
+      tenantId: sweepWallet.tenantId,
+      walletId,
+    });
+    return;
+  }
+
+  // Feature flag check — explicit false disables sweeps. Defaulting
+  // enabled keeps the webhook aligned with /api/gateway/deposit-info,
+  // which exposes Gateway deposit addresses once the config exists.
+  const meta = (sweepWallet.tenant.metadata ?? {}) as Record<string, unknown>;
+  if (meta.gatewayEnabled === false) {
+    console.log('[webhooks/circle] gateway disabled for tenant — skipping sweep', {
+      tenantId: sweepWallet.tenantId,
+      walletId,
+    });
+    return;
+  }
+
+  const chainKey = mapCircleBlockchainToChainKey(blockchain);
+  if (!chainKey) {
+    console.log('[webhooks/circle] no GATEWAY_CHAINS mapping — skipping sweep', {
+      blockchain,
+      walletId,
+    });
+    return;
+  }
+
+  console.log('[webhooks/circle] dispatching gateway sweep', {
+    tenantId: sweepWallet.tenantId,
+    chainKey,
+    walletKind: sweepWallet.kind,
+    walletId,
+    amount,
+    notificationId,
+  });
+
+  try {
+    const result = await sweepChain({
+      tenantId: sweepWallet.tenantId,
+      opsDcwWalletId: walletId,
+      opsDcwAddress: sweepWallet.address,
+      chainKey,
+      amount,
+      triggeredBy: 'auto',
+      webhookEventId: notificationId,
+    });
+    console.log('[webhooks/circle] gateway sweep result', {
+      tenantId: sweepWallet.tenantId,
+      notificationId,
+      result,
+    });
+  } catch (err) {
+    console.error('[webhooks/circle] gateway sweep crashed', {
+      tenantId: sweepWallet.tenantId,
+      notificationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const raw = await req.text();
   const gate = await gateCircleWebhook<Record<string, unknown>>({
@@ -174,7 +325,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'dispatch_failed', message: result.error }, { status: 500 });
   }
   if (result.deduped === true) {
+    after(() => dispatchGatewaySweep(event));
     return NextResponse.json({ ok: true, deduped: true });
   }
+
+  // Gateway sweep runs after the response so Circle's 3s ack window
+  // isn't blocked by the multi-step sweep flow. Idempotent at the
+  // GatewayDepositLog level (webhookEventId unique) — duplicate Circle
+  // deliveries collapse to one sweep.
+  after(() => dispatchGatewaySweep(event));
+
   return NextResponse.json({ ok: true, ...result.result });
 }
