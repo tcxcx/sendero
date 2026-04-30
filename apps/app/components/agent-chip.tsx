@@ -82,6 +82,7 @@ export function AgentChip() {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (!wrapRef.current) return;
+      if (isInsideReputationDialog(e.target)) return;
       if (!wrapRef.current.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -274,6 +275,10 @@ export function AgentChip() {
       <style jsx>{chipStyles}</style>
     </div>
   );
+}
+
+function isInsideReputationDialog(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[data-reputation-dialog="true"]') !== null;
 }
 
 function StatBox({ value, label }: { value: string; label: string }) {
