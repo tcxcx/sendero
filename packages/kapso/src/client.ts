@@ -246,10 +246,8 @@ export class KapsoClient {
             trigger_type: body.trigger_type,
             active: body.active,
             display_name: body.display_name,
-            triggerable:
-              body.trigger_type === 'inbound_message'
-                ? { phone_number_id: body.phone_number_id }
-                : undefined,
+            phone_number_id:
+              body.trigger_type === 'inbound_message' ? body.phone_number_id : undefined,
           },
         }),
       }
@@ -263,18 +261,16 @@ export class KapsoClient {
   ): Promise<KapsoWorkflowTrigger[]> {
     const parsed = triggers.map(trigger => CreateWorkflowTriggerRequest.parse(trigger));
     const raw = await this.request<unknown>(
-      `/workflows/${encodeURIComponent(workflowId)}/triggers/replace`,
+      `/workflows/${encodeURIComponent(workflowId)}/triggers`,
       {
-        method: 'POST',
+        method: 'PUT',
         body: JSON.stringify({
           triggers: parsed.map(trigger => ({
             trigger_type: trigger.trigger_type,
             active: trigger.active,
             display_name: trigger.display_name,
-            triggerable:
-              trigger.trigger_type === 'inbound_message'
-                ? { phone_number_id: trigger.phone_number_id }
-                : undefined,
+            phone_number_id:
+              trigger.trigger_type === 'inbound_message' ? trigger.phone_number_id : undefined,
           })),
         }),
       }

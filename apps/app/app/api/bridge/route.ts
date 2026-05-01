@@ -1,9 +1,9 @@
-import { auth } from '@clerk/nextjs/server';
-import { prisma } from '@sendero/database';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
-import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
+import { auth } from '@clerk/nextjs/server';
+import { materializeTenantUnifiedUsdToArc } from '@sendero/circle/unified-balance';
+import { prisma } from '@sendero/database';
+import { z } from 'zod';
 
 /**
  * POST /api/bridge
@@ -31,6 +31,17 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 180;
 
+function errorDetail(err: unknown): string {
+  const traced = err as {
+    cause?: { trace?: { rawError?: { shortMessage?: string; message?: string } } };
+  };
+  return (
+    traced.cause?.trace?.rawError?.shortMessage ||
+    traced.cause?.trace?.rawError?.message ||
+    (err instanceof Error ? err.message : String(err))
+  );
+}
+
 export async function POST(req: NextRequest) {
   const { orgId } = await auth();
   if (!orgId) {
@@ -47,39 +58,35 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = BodySchema.parse(await req.json());
-    const result = await materializeGatewayUsdcToArc({
+    const result = await materializeTenantUnifiedUsdToArc({
       tenantId: tenant.id,
       amount: body.amount,
-      preferredSourceChain: body.fromChain,
     });
     return NextResponse.json({
       state: 'success',
-      txHash: result.mintHash,
+      txHash: result.txHash,
       explorerUrl: result.explorerUrl,
       steps: [
         {
-          name: 'gateway_transfer',
+          name: 'unified_balance_spend',
           state: 'success',
-          txHash: result.mintHash,
+          txHash: result.txHash,
           explorerUrl: result.explorerUrl,
         },
       ],
       amount: body.amount,
-      fromChain: result.from,
+      fromChain: result.allocations?.[0]?.chain ?? null,
+      allocations: result.allocations,
       requestedFromChain: body.fromChain,
       toChain: 'Arc_Testnet',
       signerAddress: result.signerAddress,
-      source: 'gateway',
+      source: result.source,
     });
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid_input', issues: err.issues }, { status: 400 });
     }
-    const anyErr = err as any;
-    const detail: string =
-      anyErr?.cause?.trace?.rawError?.shortMessage ||
-      anyErr?.cause?.trace?.rawError?.message ||
-      (err instanceof Error ? err.message : String(err));
+    const detail = errorDetail(err);
     console.error('[bridge] error:', detail, {
       tenantId: tenant.id,
     });

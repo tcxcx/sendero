@@ -10,7 +10,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { issueSession, parseRoomId } from '@sendero/collaboration/server';
+import { identifySession, issueSession, parseRoomId } from '@sendero/collaboration/server';
 import { prisma } from '@sendero/database';
 
 export const runtime = 'nodejs';
@@ -18,15 +18,11 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 10;
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as { room?: string } | null;
-  if (!body?.room) {
-    return NextResponse.json({ error: 'missing_room' }, { status: 400 });
-  }
-
-  const parsed = parseRoomId(body.room);
-  if (!parsed) {
+  const body = (await req.json().catch(() => ({}))) as { room?: string } | null;
+  const requestedRoom = typeof body?.room === 'string' ? body.room : undefined;
+  const parsed = requestedRoom ? parseRoomId(requestedRoom) : null;
+  if (requestedRoom && !parsed)
     return NextResponse.json({ error: 'invalid_room' }, { status: 400 });
-  }
 
   const { userId, orgId, has } = await auth();
   if (!userId || !orgId) {
@@ -40,11 +36,11 @@ export async function POST(req: NextRequest) {
   if (!tenant) {
     return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
   }
-  if (tenant.id !== parsed.tenantId) {
+  if (parsed && tenant.id !== parsed.tenantId) {
     return NextResponse.json({ error: 'tenant_forbidden' }, { status: 403 });
   }
 
-  if (parsed.kind === 'trip') {
+  if (parsed?.kind === 'trip') {
     const trip = await prisma.trip.findFirst({
       where: { id: parsed.tripId, tenantId: parsed.tenantId },
       select: { id: true },
@@ -67,13 +63,23 @@ export async function POST(req: NextRequest) {
       : has({ role: 'org:finance' })
         ? 'finance'
         : 'member';
-    const session = await issueSession({
-      userId,
-      tenantId: parsed.tenantId,
-      displayName,
-      avatarUrl: clerkUser?.imageUrl ?? null,
-      roomIds: [body.room],
-    });
+    const session = requestedRoom
+      ? await issueSession({
+          userId,
+          tenantId: tenant.id,
+          displayName,
+          avatarUrl: clerkUser?.imageUrl ?? null,
+          role,
+          roomIds: [requestedRoom],
+        })
+      : await identifySession({
+          userId,
+          tenantId: tenant.id,
+          displayName,
+          avatarUrl: clerkUser?.imageUrl ?? null,
+          role,
+          groupIds: [`role:${role}`],
+        });
     return NextResponse.json({ ...session, role });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

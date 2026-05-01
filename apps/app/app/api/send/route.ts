@@ -1,15 +1,15 @@
+import { type NextRequest, NextResponse } from 'next/server';
+
 import type { SendParams } from '@circle-fin/app-kit';
 import { auth } from '@clerk/nextjs/server';
 import { getArcClient } from '@sendero/arc/chain';
-import { getAppKit, createAdapterForSigner, summarizeSend } from '@sendero/circle/app-kit';
+import { createAdapterForSigner, getAppKit, summarizeSend } from '@sendero/circle/app-kit';
 import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { spendTenantUnifiedUsd } from '@sendero/circle/unified-balance';
 import { prisma } from '@sendero/database';
-import { type NextRequest, NextResponse } from 'next/server';
-import { getAddress, parseAbiItem, zeroAddress, type Hex } from 'viem';
+import { getAddress, type Hex, parseAbiItem, zeroAddress } from 'viem';
 import { z } from 'zod';
-
-import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
 
 /**
  * POST /api/send
@@ -34,6 +34,25 @@ function decimalToMicro(decimal: string): bigint {
   const [whole = '0', frac = ''] = decimal.split('.');
   const padded = `${frac}000000`.slice(0, 6);
   return BigInt(whole || '0') * 1_000_000n + BigInt(padded || '0');
+}
+
+function domainForAllocationChain(chainName: string | undefined): number | null {
+  if (!chainName) return null;
+  const normalized =
+    chainName === 'Solana_Devnet' ? 'Sol_Devnet' : chainName === 'Solana' ? 'Sol' : chainName;
+  const chain = Object.values(GATEWAY_CHAINS).find(c => c.kitName === normalized);
+  return chain?.domain ?? null;
+}
+
+function errorDetail(err: unknown): string {
+  const traced = err as {
+    cause?: { trace?: { rawError?: { shortMessage?: string; message?: string } } };
+  };
+  return (
+    traced.cause?.trace?.rawError?.shortMessage ||
+    traced.cause?.trace?.rawError?.message ||
+    (err instanceof Error ? err.message : String(err))
+  );
 }
 
 async function assertArcUsdcMintedToRecipient(args: {
@@ -111,35 +130,37 @@ export async function POST(req: NextRequest) {
         },
       });
       gatewayTransferLogId = log.id;
-      const result = await materializeGatewayUsdcToArc({
+      const result = await spendTenantUnifiedUsd({
         tenantId: tenant.id,
         amount: body.amount,
         recipient: body.to,
+        destinationChain: 'Arc_Testnet',
       });
       await assertArcUsdcMintedToRecipient({
-        txHash: result.mintHash,
+        txHash: result.txHash,
         recipient: body.to,
         amountMicro,
       });
       await prisma.gatewayTransferLog.update({
         where: { id: log.id },
         data: {
-          sourceDomain: GATEWAY_CHAINS[result.from].domain,
-          mintTxHash: result.mintHash,
+          sourceDomain: domainForAllocationChain(result.allocations?.[0]?.chain as string),
+          mintTxHash: result.txHash,
           status: 'confirmed',
           confirmedAt: new Date(),
         },
       });
       return NextResponse.json({
         state: 'success',
-        txHash: result.mintHash,
+        txHash: result.txHash,
         explorerUrl: result.explorerUrl,
         amount: body.amount,
         token: body.token,
         to: body.to,
         signerAddress: result.signerAddress,
-        source: 'gateway',
-        sourceChain: result.from,
+        source: result.source,
+        allocations: result.allocations,
+        destinationChain: result.destinationChainName,
         transferLogId: log.id,
       });
     }
@@ -169,11 +190,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid_input', issues: err.issues }, { status: 400 });
     }
-    const anyErr = err as any;
-    const detail: string =
-      anyErr?.cause?.trace?.rawError?.shortMessage ||
-      anyErr?.cause?.trace?.rawError?.message ||
-      (err instanceof Error ? err.message : String(err));
+    const detail = errorDetail(err);
     if (gatewayTransferLogId) {
       await prisma.gatewayTransferLog
         .update({

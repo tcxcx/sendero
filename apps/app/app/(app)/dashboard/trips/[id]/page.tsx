@@ -8,12 +8,18 @@
  */
 
 import { notFound } from 'next/navigation';
+import { after } from 'next/server';
 
+import { roomIdForTrip } from '@sendero/collaboration/rooms';
+import { ensureRoom } from '@sendero/collaboration/server';
 import { prisma } from '@sendero/database';
 
+import { TripComments } from '@/components/collaboration/trip-comments';
+import { TripLiveblocks } from '@/components/collaboration/trip-liveblocks';
 import { TripChannelBindingsEditor } from '@/components/trips/trip-channel-bindings-editor';
 import { TripDetailCard } from '@/components/trips/trip-detail-card';
 import { TripStepper } from '@/components/trips/trip-stepper';
+import { buildInitialPresence } from '@/lib/collaboration-presence';
 import { stringFromJson } from '@/lib/format';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -37,7 +43,7 @@ function asBindings(value: unknown): Bindings | null {
 
 export default async function TripDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { tenant } = await requireCurrentTenant();
+  const { tenant, userId } = await requireCurrentTenant();
   const trip = await prisma.trip.findFirst({
     where: { id, tenantId: tenant.id },
     include: {
@@ -56,9 +62,22 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
     'Trip';
   const who = trip.traveler?.displayName ?? trip.traveler?.email ?? 'Traveler';
   const lede = ledeFromIntent(intent);
-  const shortId = trip.id.slice(0, 8).toUpperCase();
+  const liveblocksEnabled = Boolean(process.env.LIVEBLOCKS_SECRET_KEY);
+  const tripRoomId = roomIdForTrip(tenant.id, trip.id);
+  const initialPresence = liveblocksEnabled
+    ? await buildInitialPresence({
+        userId,
+        focusedSection: 'bookings',
+        tripId: trip.id,
+        focusLabel: 'trip workspace',
+      })
+    : null;
 
-  return (
+  if (liveblocksEnabled) {
+    after(() => ensureRoom({ tenantId: tenant.id, tripId: trip.id }));
+  }
+
+  const content = (
     <div
       style={{
         padding: '0 20px 20px',
@@ -95,7 +114,19 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
       <TripDetailCard trip={trip} />
 
       <TripChannelBindingsEditor tripId={trip.id} initial={bindings} />
+
+      {liveblocksEnabled ? <TripComments tripId={trip.id} /> : null}
     </div>
+  );
+
+  if (!liveblocksEnabled || !initialPresence) {
+    return content;
+  }
+
+  return (
+    <TripLiveblocks roomId={tripRoomId} tripId={trip.id} initialPresence={initialPresence}>
+      {content}
+    </TripLiveblocks>
   );
 }
 

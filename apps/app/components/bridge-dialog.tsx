@@ -7,14 +7,16 @@
  */
 
 import { useState } from 'react';
-import { useQueryState } from 'nuqs';
-import { DialogShell } from './dialog-shell';
-import { TokenIcon, BlockchainIcon } from '@sendero/icons';
+
 import {
   ARC_BRIDGE_SOURCES,
-  bridgeChainLabel,
   type ArcBridgeSource,
+  bridgeChainLabel,
 } from '@sendero/arc/bridge-chains';
+import { BlockchainIcon, TokenIcon } from '@sendero/icons';
+import { useQueryState } from 'nuqs';
+
+import { DialogShell } from './dialog-shell';
 
 const SUPPORTED_GATEWAY_BRIDGE_SOURCES = new Set<ArcBridgeSource>([
   'Ethereum_Sepolia',
@@ -83,12 +85,12 @@ export function BridgeDialog() {
     <DialogShell
       open={open}
       title="Bridge · → Arc Testnet"
-      subtitle="Circle CCTP v2 · cross-chain"
+      subtitle="AppKit Unified Balance · cross-chain"
       onClose={close}
     >
       <p className="dlg-sub">
-        Moves USDC from your Business Balance across enabled Gateway chains. Ticket profit,
-        deposits, and operating funds share this source of truth.
+        Moves USDC from your unified balance into Arc Testnet. AppKit selects available Gateway
+        liquidity across supported chains, then mints to the settlement address.
       </p>
 
       {/* Live route visualization — updates as chain selection changes */}
@@ -118,7 +120,7 @@ export function BridgeDialog() {
       </div>
 
       <div className="dlg-row">
-        <span className="dlg-label">Source chain · Business Balance</span>
+        <span className="dlg-label">Source preference · Unified Balance</span>
         <div className="br-chain-grid" role="radiogroup" aria-label="Source chain">
           {ARC_BRIDGE_SOURCES.map(id => {
             const selected = id === chain;

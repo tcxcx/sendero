@@ -15,21 +15,15 @@
  * submissions collapse cleanly.
  */
 
-import { auth } from '@clerk/nextjs/server';
-import {
-  GATEWAY_CHAINS,
-  isEvmChain,
-  isSolanaChain,
-  transferViaGatewayFromSources,
-} from '@sendero/circle/gateway';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
-import { prisma } from '@sendero/database';
 import { type NextRequest, NextResponse } from 'next/server';
+
+import { auth } from '@clerk/nextjs/server';
+import { GATEWAY_CHAINS, isSolanaChain } from '@sendero/circle/gateway';
+import { spendTenantUnifiedUsd } from '@sendero/circle/unified-balance';
+import { prisma } from '@sendero/database';
 import { z } from 'zod';
 
 import { decimalUsdcToMicro } from '@/lib/gateway-balance-math';
-import { selectTenantGatewayEvmSources } from '@/lib/gateway-treasury';
-
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -50,6 +44,14 @@ const BodySchema = z.object({
     .regex(/^(0x[a-fA-F0-9]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/)
     .optional(),
 });
+
+function domainForAllocationChain(chainName: string | undefined): number | null {
+  if (!chainName) return null;
+  const normalized =
+    chainName === 'Solana_Devnet' ? 'Sol_Devnet' : chainName === 'Solana' ? 'Sol' : chainName;
+  const chain = Object.values(GATEWAY_CHAINS).find(c => c.kitName === normalized);
+  return chain?.domain ?? null;
+}
 
 export async function POST(req: NextRequest) {
   const { orgId, userId } = await auth();
@@ -129,28 +131,6 @@ export async function POST(req: NextRequest) {
 
   let log: { id: string } | null = null;
   try {
-    const selected = body.from
-      ? {
-          signer: await getOrCreateGatewaySigner(tenant.id),
-          sources: [{ from: body.from as keyof typeof GATEWAY_CHAINS, amountUsdc: body.amount }],
-        }
-      : await selectTenantGatewayEvmSources({
-          tenantId: tenant.id,
-          amount: body.amount,
-        });
-    const signer = selected.signer;
-    const fromChain = GATEWAY_CHAINS[selected.sources[0].from];
-    if (!isEvmChain(fromChain)) {
-      return NextResponse.json(
-        {
-          error: 'unsupported_source_chain',
-          message:
-            'Solana Gateway sources are not supported by this transfer path yet. Choose an EVM Gateway source or leave source auto-selected.',
-        },
-        { status: 400 }
-      );
-    }
-
     // Pre-create the transfer log so transfer failures still leave an
     // audit trail. Source-selection failures happen before a source
     // domain exists, so those return a structured error without a log.
@@ -159,11 +139,11 @@ export async function POST(req: NextRequest) {
       ? isSolanaChain(toChain)
         ? body.recipient
         : body.recipient.toLowerCase()
-      : signer.address;
+      : (tenant.gatewayConfig.evmDepositorAddress ?? 'auto');
     log = await prisma.gatewayTransferLog.create({
       data: {
         tenantId: tenant.id,
-        sourceDomain: fromChain.domain,
+        sourceDomain: null,
         destinationDomain: toChain.domain,
         destinationChain: toChain.kitName,
         amountMicroUsdc: amountMicro,
@@ -179,19 +159,19 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const result = await transferViaGatewayFromSources({
-      sources: selected.sources,
-      to: body.to as keyof typeof GATEWAY_CHAINS,
+    const result = await spendTenantUnifiedUsd({
+      tenantId: tenant.id,
+      amount: body.amount,
+      destinationChain: body.to,
       recipient: body.recipient,
-      signer: signer.account,
     });
 
     await prisma.gatewayTransferLog.update({
       where: { id: log.id },
       data: {
-        burnSignature: result.burnSignature,
-        attestation: result.attestation,
-        mintTxHash: result.mintHash,
+        sourceDomain: domainForAllocationChain(result.allocations?.[0]?.chain as string),
+        recipientAddress: result.recipient,
+        mintTxHash: result.txHash,
         status: 'confirmed',
         confirmedAt: new Date(),
       },
@@ -199,16 +179,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       state: 'success',
-      from: selected.sources[0].from,
-      sources: selected.sources,
+      from: result.allocations?.[0]?.chain ?? null,
+      allocations: result.allocations,
       requestedFrom: body.from ?? null,
       to: body.to,
       amount: body.amount,
       recipient: body.recipient ?? null,
-      mintHash: result.mintHash,
+      mintHash: result.txHash,
       explorerUrl: result.explorerUrl,
-      burnSignature: result.burnSignature,
+      burnSignature: null,
       transferLogId: log.id,
+      source: result.source,
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);

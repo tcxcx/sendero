@@ -1,5 +1,5 @@
 const KAPSO_META_BASE_URL = 'https://api.kapso.ai/meta/whatsapp';
-const DEFAULT_SUPPORT_PHONE_NUMBER_ID = '1050904118113334';
+const DEFAULT_SUPPORT_PHONE_NUMBER_ID = '1133326556530962';
 
 const FLOW_CATALOG = {
   login_signup: {

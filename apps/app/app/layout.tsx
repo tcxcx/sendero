@@ -3,7 +3,6 @@ import Script from 'next/script';
 
 import { ClerkProvider } from '@clerk/nextjs';
 import { senderoFontVars } from '@sendero/fonts';
-import { senderoClerkAppearance } from '@sendero/ui/clerk-appearance';
 import { SUPPORTED_LOCALES } from '@sendero/locale';
 import {
   buildClerkAllowedRedirectOrigins,
@@ -14,12 +13,14 @@ import {
   travelAgencyJsonLd,
 } from '@sendero/seo';
 import { buildOgImageUrl } from '@sendero/seo/og';
+import { senderoClerkAppearance } from '@sendero/ui/clerk-appearance';
 import { Toaster } from '@sendero/ui/sonner';
 import { Analytics } from '@vercel/analytics/next';
 import { Agentation } from 'agentation';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 
 import { getRequestLocale } from '@/lib/request-locale';
+import '@liveblocks/react-ui/styles.css';
 import '@sendero/ui/globals.css';
 import './globals.css';
 

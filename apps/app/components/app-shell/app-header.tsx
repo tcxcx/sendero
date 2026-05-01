@@ -8,6 +8,7 @@ import { Show } from '@clerk/nextjs';
 import { Button } from '@sendero/ui/button';
 
 import { AgentChip } from '@/components/agent-chip';
+import { LiveblocksInboxButton } from '@/components/collaboration/liveblocks-inbox';
 import { WalletDropdown } from '@/components/wallet-dropdown';
 import { WorkspaceReputationChip } from '@/components/workspace-reputation-chip';
 
@@ -28,10 +29,12 @@ export function AppHeader({
   copy = defaultCopy,
   locale = 'en-US',
   startSlot,
+  liveblocksEnabled = false,
 }: {
   copy?: AppHeaderCopy;
   locale?: string;
   startSlot?: ReactNode;
+  liveblocksEnabled?: boolean;
 }) {
   // Borderless: sits directly on the parchment field (DESIGN.md §19).
   // OnboardingAlert hangs below the header strip so signed-in users with
@@ -46,6 +49,7 @@ export function AppHeader({
         </div>
         <div className="flex items-center gap-2">
           <Show when="signed-in">
+            {liveblocksEnabled ? <LiveblocksInboxButton /> : null}
             <AgentChip />
             <WorkspaceReputationChip />
             <WalletDropdown />
