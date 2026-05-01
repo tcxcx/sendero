@@ -14,7 +14,7 @@
  * uses Meta's own signature.
  *
  * Signature: HMAC-SHA256 hex in `x-webhook-signature`. The secret is
- * project-wide (`KAPSO_WEBHOOK_SECRET`), set once via
+ * project-wide (`KAPSO_GLOBAL_WEBHOOK_SECRET`), set once via
  * `bun scripts/register-kapso-webhook.ts`. Per-install secrets were
  * dropped because Kapso signs per-project, not per-customer — the
  * earlier per-install scan was wasted work and never aligned with
@@ -35,7 +35,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
-  const secret = env.kapsoWebhookSecret();
+  const secret = env.kapsoGlobalWebhookSecret();
   if (!secret) {
     return NextResponse.json({ error: 'webhook_not_configured' }, { status: 503 });
   }

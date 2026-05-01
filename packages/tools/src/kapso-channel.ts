@@ -24,11 +24,10 @@
  * without waiting on Kapso API additions.
  */
 
-import { z } from 'zod';
-
-import { prisma, Prisma } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 import { KapsoClient, setupLinkSnapshot, startOnboarding } from '@sendero/kapso';
+import { z } from 'zod';
 
 import type { ToolDef } from './types';
 
@@ -190,7 +189,7 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
           countryIsos: [input.countryIso.toUpperCase()],
         });
         // Stamp the pending row so the wizard can resume from a refresh.
-        // The webhook secret is project-wide (set via
+        // The provisioning webhook secret is project-wide (set via
         // `bun scripts/register-kapso-webhook.ts`), so we stamp the env
         // value here for parity with the inbound handler. The column
         // is NOT NULL on the schema; falling back to a marker string
@@ -198,7 +197,7 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
         // in dev.
         const previewE164 = input.preferredE164 ?? `+${input.countryIso.toLowerCase()}-pending`;
         const webhookSecret =
-          env.kapsoWebhookSecret() ?? 'configure-via-scripts/register-kapso-webhook.ts';
+          env.kapsoGlobalWebhookSecret() ?? 'configure-via-scripts/register-kapso-webhook.ts';
         const setupLink = setupLinkSnapshot(onboarding.setupLink);
         const metadata = {
           setupLink,
