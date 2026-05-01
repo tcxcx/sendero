@@ -29,6 +29,7 @@ import { KapsoClient, parseProjectEvent, verifyKapsoSignature } from '@sendero/k
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
 import { webhookEventStore } from '@/lib/webhook-events';
+import { ensureTenantWhatsAppFlows } from '@/lib/whatsapp-flow-registry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -105,7 +106,12 @@ async function dispatchKapsoEvent(event: {
 }): Promise<DispatchResult> {
   const install = await prisma.whatsAppInstall.findUnique({
     where: { kapsoCustomerId: event.customerId },
-    select: { id: true, tenantId: true, metadata: true },
+    select: {
+      id: true,
+      tenantId: true,
+      metadata: true,
+      tenant: { select: { displayName: true } },
+    },
   });
   if (!install) {
     console.warn('[webhooks/kapso] no install for customer', {
@@ -119,6 +125,12 @@ async function dispatchKapsoEvent(event: {
     tenantId: install.tenantId,
     phoneNumberId: event.phoneNumberId,
     displayPhoneNumber: event.displayPhoneNumber,
+  });
+  const tenantFlows = await ensureTenantWhatsAppFlows({
+    tenantId: install.tenantId,
+    tenantDisplayName: install.tenant.displayName,
+    phoneNumberId: event.phoneNumberId,
+    businessAccountId: event.businessAccountId,
   });
 
   await prisma.whatsAppInstall.update({
@@ -134,6 +146,7 @@ async function dispatchKapsoEvent(event: {
       lastErrorMessage: null,
       metadata: mergeJsonObject(install.metadata, {
         tenantWorkflow: activation,
+        tenantFlows,
       }),
     },
   });
