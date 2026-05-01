@@ -33,6 +33,8 @@ Every escalation creates a durable Sendero internal web handoff first. Slack and
 
 Free tenants do not get a shared live WhatsApp sandbox number. The Sendero-owned sandbox number is reserved for Sendero customer support. Tenant WhatsApp operations require a paid plan and a dedicated WhatsApp Business number connected through Kapso.
 
+The included Kapso phone-number slots are Sendero-owned platform inventory for support, sandbox, and ops. Do not assign those numbers to tenant customers; use the `WhatsAppInstall` BYO onboarding flow instead.
+
 ## Local validation
 
 ```bash

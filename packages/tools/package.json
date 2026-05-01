@@ -30,6 +30,7 @@
     "@ai-sdk/google": "*",
     "@ai-sdk/openai": "*",
     "@circle-fin/app-kit": "*",
+    "@circle-fin/unified-balance-kit": "*",
     "@sendero/arc": "*",
     "@sendero/circle": "*",
     "@sendero/database": "*",

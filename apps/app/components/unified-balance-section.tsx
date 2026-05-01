@@ -70,6 +70,21 @@ interface UnifiedBalanceResponse {
   opsStaging: OpsStagingEntry[];
   depositor: string;
   enabledDomains: number[];
+  appKit: {
+    token: string;
+    totalConfirmedBalance: string;
+    totalPendingBalance: string;
+    breakdown: Array<{
+      depositor: string;
+      totalConfirmed: string;
+      totalPending?: string;
+      breakdown: Array<{
+        chain: string;
+        confirmedBalance: string;
+        pendingBalance?: string;
+      }>;
+    }>;
+  } | null;
 }
 
 interface UnifiedBalanceErrorResponse {
@@ -132,7 +147,7 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
         }
       >
         <div className={inline ? 'flex flex-col items-center' : undefined}>
-          <div className="text-xs uppercase tracking-wider text-zinc-500">Business balance</div>
+          <div className="text-xs uppercase tracking-wider text-zinc-500">Unified balance</div>
           <div
             className={
               inline
@@ -165,7 +180,7 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
               <BreakdownContent data={data} />
             ) : (
               <div className="font-mono text-[11px] uppercase tracking-[0.12em] opacity-80">
-                Loading balance
+                Loading unified balance
               </div>
             )}
           </HoverCardContent>
@@ -197,9 +212,9 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
     <div className="space-y-3">
       <div>
         <div className="font-mono text-[10px] uppercase tracking-[0.12em] opacity-70">
-          Business balance
+          Unified balance
         </div>
-        <div className="mt-0.5 text-sm font-medium">Operating balance breakdown</div>
+        <div className="mt-0.5 text-sm font-medium">AppKit balance breakdown</div>
       </div>
 
       <div className="space-y-1.5">
@@ -252,6 +267,30 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
         </div>
       )}
 
+      {data.appKit?.breakdown?.length ? (
+        <div className="border-t border-white/20 pt-2">
+          <div className="opacity-70">AppKit getBalances</div>
+          <ul className="mt-1 space-y-1">
+            {data.appKit.breakdown.flatMap(account =>
+              account.breakdown.map(row => (
+                <li
+                  key={`${account.depositor}-${row.chain}`}
+                  className="grid grid-cols-[minmax(0,1fr)_72px_72px] items-center gap-2"
+                >
+                  <span className="min-w-0 truncate">{row.chain}</span>
+                  <span className="text-right font-mono tabular-nums">
+                    ${formatGrandTotal(row.confirmedBalance)}
+                  </span>
+                  <span className="text-right font-mono tabular-nums opacity-65">
+                    {row.pendingBalance ? `+${formatGrandTotal(row.pendingBalance)}` : ''}
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      ) : null}
+
       {data.pendingCredits.length > 0 && (
         <div className="border-t border-white/20 pt-2">
           <div className="opacity-70">Pending credits</div>
@@ -299,7 +338,7 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
       )}
 
       <div className="border-t border-white/20 pt-2 font-mono text-[10px] opacity-75">
-        Depositor: {shortAddr(data.depositor)}
+        Gateway account: {shortAddr(data.depositor)}
       </div>
     </div>
   );

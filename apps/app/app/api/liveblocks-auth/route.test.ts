@@ -24,6 +24,13 @@ let issuedSessions: Array<{
   avatarUrl: string | null;
   roomIds: string[];
 }>;
+let identifiedSessions: Array<{
+  userId: string;
+  tenantId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  groupIds?: string[];
+}>;
 
 mock.module('@clerk/nextjs/server', () => ({
   auth: async () => ({
@@ -53,14 +60,18 @@ mock.module('@sendero/collaboration/server', () => ({
     issuedSessions.push(args);
     return { token: 'liveblocks-token' };
   },
+  identifySession: async (args: (typeof identifiedSessions)[number]) => {
+    identifiedSessions.push(args);
+    return { token: 'liveblocks-id-token' };
+  },
 }));
 
 const { POST } = await import('./route');
 
-function request(room: string): Request {
+function request(room?: string): Request {
   return new Request('https://app.sendero.test/api/liveblocks-auth', {
     method: 'POST',
-    body: JSON.stringify({ room }),
+    body: JSON.stringify(room ? { room } : {}),
   });
 }
 
@@ -80,6 +91,7 @@ beforeEach(() => {
   tenantByOrg = { org_123: { id: 'ten_123' }, org_other: { id: 'ten_other' } };
   trips = [{ id: 'trip_123', tenantId: 'ten_123' }];
   issuedSessions = [];
+  identifiedSessions = [];
 });
 
 describe('POST /api/liveblocks-auth', () => {
@@ -115,5 +127,22 @@ describe('POST /api/liveblocks-auth', () => {
     expect(response.status).toBe(404);
     expect(json.error).toBe('trip_not_found');
     expect(issuedSessions).toHaveLength(0);
+  });
+
+  test('issues a project-level identity token when Liveblocks notifications auth has no room', async () => {
+    const response = await POST(request() as never);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toEqual({ token: 'liveblocks-id-token', role: 'admin' });
+    expect(issuedSessions).toHaveLength(0);
+    expect(identifiedSessions).toHaveLength(1);
+    expect(identifiedSessions[0]).toMatchObject({
+      userId: 'user_123',
+      tenantId: 'ten_123',
+      displayName: 'Tomas Cordero',
+      avatarUrl: 'https://img.example.com/tomas.png',
+      groupIds: ['role:admin'],
+    });
   });
 });

@@ -23,7 +23,7 @@ cp .env.example .env.local
 Set the required values in `.env.local`:
 
 - `KAPSO_API_KEY`: Kapso Platform API key used by scripts and the Slack resume function.
-- `WHATSAPP_PHONE_NUMBER_ID`: Kapso WhatsApp phone number ID that should trigger this workflow.
+- `WHATSAPP_PHONE_NUMBER_ID`: Kapso WhatsApp phone number ID that should trigger this workflow. Production Sendero Customer Support is `1133326556530962` (`+1 201-471-6461`).
 - `PROVIDER_MODEL_NAME`: Agent model name, defaults to `gpt-5-mini`.
 - `SLACK_BOT_TOKEN`: Bot token for the Slack app installed in the support workspace.
 - `SLACK_CHANNEL_ID`: Channel that receives support escalations, for example `C...` or `G...`.
@@ -51,7 +51,10 @@ escalation function, and optional GitHub sandbox context for Sendero docs/code.
 
 Shared WhatsApp Flow JSON lives in `../shared-whatsapp-flows`. The support agent
 is the live-test harness for the canonical Flow contract before the same Flow
-keys are enabled for tenant-owned WhatsApp numbers.
+keys are enabled for tenant-owned WhatsApp numbers. Kapso plan phone-number
+slots are Sendero-owned platform inventory for support, sandbox, and ops; tenant
+customers connect their own dedicated WhatsApp Business numbers through the app's
+BYO Kapso onboarding.
 
 Every support tool and Flow submission that reaches Sendero goes through
 `/api/internal/support/tools`, which emits a Langfuse trace via `@sendero/langfuse`,

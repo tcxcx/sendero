@@ -119,6 +119,14 @@
   --hairline-soft: 1px solid var(--hairline-color-soft);
   --hairline-strong: 1px solid var(--hairline-color-strong);
 
+  /* Liveblocks React UI adopts Sendero's map-room palette instead of
+     rendering like a detached vendor widget. */
+  --lb-accent: var(--ink);
+  --lb-background: var(--surface-floating);
+  --lb-foreground: var(--text);
+  --lb-border: var(--hairline-color);
+  --lb-radius: 8px;
+
   /* Dotted grid — micro-illustration graticule. */
   --dot-grid-color: rgba(31, 42, 68, 0.18);
   --dot-grid-size: 8px;

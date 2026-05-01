@@ -1,6 +1,7 @@
-import { GATEWAY_CHAINS, isEvmChain, transferViaGatewayFromSources } from '@sendero/circle/gateway';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { GATEWAY_CHAINS, isEvmChain } from '@sendero/circle/gateway';
 import type { TenantGatewaySigner } from '@sendero/circle/gateway-signer';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { materializeTenantUnifiedUsdToArc } from '@sendero/circle/unified-balance';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
@@ -25,6 +26,18 @@ function gatewayKeyForBridgeChain(chain: string | undefined): keyof typeof GATEW
   if (chain in GATEWAY_CHAINS) return chain as keyof typeof GATEWAY_CHAINS;
   if (chain === 'Polygon_Amoy_Testnet') return 'Polygon_Amoy';
   if (chain === 'Solana_Devnet') return 'Sol_Devnet';
+  return null;
+}
+
+function chainKeyForUnifiedAllocation(
+  chainName: string | undefined
+): keyof typeof GATEWAY_CHAINS | null {
+  if (!chainName) return null;
+  const normalized =
+    chainName === 'Solana_Devnet' ? 'Sol_Devnet' : chainName === 'Solana' ? 'Sol' : chainName;
+  for (const [key, chain] of Object.entries(GATEWAY_CHAINS)) {
+    if (chain.kitName === normalized) return key as keyof typeof GATEWAY_CHAINS;
+  }
   return null;
 }
 
@@ -153,27 +166,20 @@ export async function materializeGatewayUsdcToArc(args: {
   recipient?: string;
   preferredSourceChain?: string;
 }): Promise<GatewayMaterializeResult> {
-  const { signer, sources } = await selectTenantGatewayEvmSources({
+  const result = await materializeTenantUnifiedUsdToArc({
     tenantId: args.tenantId,
     amount: args.amount,
-    preferredSourceChain: args.preferredSourceChain,
-  });
-  const recipient = args.recipient ?? signer.address;
-  const transfer = await transferViaGatewayFromSources({
-    sources,
-    to: ARC_CHAIN_KEY,
-    recipient,
-    signer: signer.account,
+    recipient: args.recipient,
   });
 
   return {
-    signerAddress: signer.address,
-    from: sources[0].from,
+    signerAddress: result.signerAddress,
+    from: chainKeyForUnifiedAllocation(result.allocations?.[0]?.chain as string) ?? ARC_CHAIN_KEY,
     to: ARC_CHAIN_KEY,
     amount: args.amount,
-    recipient,
-    mintHash: transfer.mintHash,
-    explorerUrl: transfer.explorerUrl,
+    recipient: result.recipient,
+    mintHash: result.txHash,
+    explorerUrl: result.explorerUrl ?? '',
   };
 }
 

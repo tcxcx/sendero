@@ -13,9 +13,10 @@
 import { useState, useTransition } from 'react';
 
 import {
-  settleHoldAction,
   type SettleHoldResult,
+  settleHoldAction,
 } from '@/app/(app)/dashboard/trips/[id]/settle-action';
+import { useTripPresenceFocus } from '@/components/collaboration/presence-focus';
 
 interface Props {
   tripId: string;
@@ -27,8 +28,13 @@ interface Props {
 export function SettleHoldButton({ tripId, bookingId, amountUsd, variant = 'card' }: Props) {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<SettleHoldResult | null>(null);
+  const focusEscrow = useTripPresenceFocus({
+    section: 'escrow',
+    label: 'reviewing escrow settlement',
+  });
 
   const onClick = () => {
+    focusEscrow();
     startTransition(async () => {
       const r = await settleHoldAction({ tripId, bookingId });
       setResult(r);
@@ -42,6 +48,8 @@ export function SettleHoldButton({ tripId, bookingId, amountUsd, variant = 'card
       <button
         type="button"
         onClick={onClick}
+        onFocus={focusEscrow}
+        onPointerEnter={focusEscrow}
         disabled={pending}
         style={
           variant === 'inbox'
@@ -84,7 +92,7 @@ function ResultBanner({ result }: { result: SettleHoldResult }) {
     return (
       <div className="t-mono" style={{ fontSize: 11, color: 'var(--accent-green)' }}>
         ✓ Settled · tx{' '}
-        {result.txHash ? result.txHash.slice(0, 12) + '…' : result.attemptId.slice(0, 8)}
+        {result.txHash ? `${result.txHash.slice(0, 12)}…` : result.attemptId.slice(0, 8)}
       </div>
     );
   }
@@ -113,8 +121,12 @@ function ResultBanner({ result }: { result: SettleHoldResult }) {
         <span className="t-mono" style={{ fontWeight: 600 }}>
           Blocked: {result.reason}
         </span>
-        {result.trace.map((t, i) => (
-          <span key={i} className="t-mono" style={{ fontSize: 10, opacity: 0.85 }}>
+        {result.trace.map(t => (
+          <span
+            key={`${t.guard ?? 'chain'}-${t.reason ?? 'ok'}-${t.allowed ? 'allowed' : 'blocked'}`}
+            className="t-mono"
+            style={{ fontSize: 10, opacity: 0.85 }}
+          >
             {t.allowed ? '·' : '✗'} {t.guard ?? 'chain'}
             {t.reason ? ` — ${t.reason}` : ''}
           </span>
@@ -153,5 +165,5 @@ function formatAmount(amount: string): string {
 }
 
 function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 }

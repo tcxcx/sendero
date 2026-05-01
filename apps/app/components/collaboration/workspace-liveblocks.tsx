@@ -111,6 +111,8 @@ function TeamPresence() {
             )}
             style={{ borderColor: user.color }}
             title={`${user.name} · ${user.role}`}
+            role="img"
+            aria-label={`${user.name}, ${roleLabel(user.role)} collaborator`}
           >
             {user.avatarUrl ? (
               <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
@@ -183,6 +185,15 @@ function initials(name: string): string {
     .slice(0, 2)
     .map(part => part[0]?.toUpperCase())
     .join('');
+}
+
+function roleLabel(role: TripPresence['role']): string {
+  if (role === 'admin') return 'admin';
+  if (role === 'finance') return 'finance';
+  if (role === 'agent') return 'agent';
+  if (role === 'approver') return 'approver';
+  if (role === 'traveler') return 'traveler';
+  return 'operator';
 }
 
 function colorForUser(id: string): string {

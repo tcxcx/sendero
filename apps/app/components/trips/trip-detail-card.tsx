@@ -14,6 +14,7 @@
 
 import type { Booking, Prisma, Trip } from '@sendero/database';
 
+import { TripPresenceFocus } from '@/components/collaboration/presence-focus';
 import { SettleHoldButton } from '@/components/trips/settle-hold-button';
 import { formatDateTime, objectFromJson, stringFromJson } from '@/lib/format';
 
@@ -37,113 +38,121 @@ export function TripDetailCard({ trip }: { trip: TripWithBookings }) {
       }}
     >
       {/* LEFT — flights */}
-      <div
-        className="sd-card-flat"
-        style={{
-          boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 14,
-        }}
-      >
-        <div className="t-meta">Flights</div>
-        {flightBookings.length === 0 ? (
-          <div className="t-body ink-60" style={{ fontSize: 13 }}>
-            No flights booked yet.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {flightBookings.map((b, i) => (
-              <div key={b.id}>
-                <FlightBlock booking={b} />
-                {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
-                  <div style={{ marginTop: 10 }}>
-                    <SettleHoldButton
-                      tripId={trip.id}
-                      bookingId={b.id}
-                      amountUsd={b.totalUsd.toString()}
+      <TripPresenceFocus section="quotes" label="reviewing flight quotes">
+        <div
+          className="sd-card-flat"
+          style={{
+            boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+          }}
+        >
+          <div className="t-meta">Flights</div>
+          {flightBookings.length === 0 ? (
+            <div className="t-body ink-60" style={{ fontSize: 13 }}>
+              No flights booked yet.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {flightBookings.map((b, i) => (
+                <div key={b.id}>
+                  <FlightBlock booking={b} />
+                  {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
+                    <div style={{ marginTop: 10 }}>
+                      <SettleHoldButton
+                        tripId={trip.id}
+                        bookingId={b.id}
+                        amountUsd={b.totalUsd.toString()}
+                      />
+                    </div>
+                  ) : null}
+                  {i < flightBookings.length - 1 ? (
+                    <hr
+                      aria-hidden
+                      style={{
+                        border: 0,
+                        height: 1,
+                        background: 'var(--hairline-color-soft)',
+                        marginTop: 14,
+                      }}
                     />
-                  </div>
-                ) : null}
-                {i < flightBookings.length - 1 ? (
-                  <hr
-                    aria-hidden
-                    style={{
-                      border: 0,
-                      height: 1,
-                      background: 'var(--hairline-color-soft)',
-                      marginTop: 14,
-                    }}
-                  />
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </TripPresenceFocus>
 
       {/* RIGHT — stay + spend */}
-      <div
-        className="sd-card-flat"
-        style={{
-          boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
-          padding: '14px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 14,
-        }}
-      >
-        <div className="t-meta">Stay</div>
-        {hotelBookings.length === 0 ? (
-          <div className="t-body ink-60" style={{ fontSize: 13 }}>
-            No hotel booked yet.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {hotelBookings.map(b => (
-              <div key={b.id}>
-                <StayBlock booking={b} />
-                {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
-                  <div style={{ marginTop: 10 }}>
-                    <SettleHoldButton
-                      tripId={trip.id}
-                      bookingId={b.id}
-                      amountUsd={b.totalUsd.toString()}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <hr
-          aria-hidden
+      <TripPresenceFocus section="bookings" label="reviewing bookings">
+        <div
+          className="sd-card-flat"
           style={{
-            border: 0,
-            height: 1,
-            background: 'var(--hairline-color-soft)',
-            margin: '4px 0',
+            boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
           }}
-        />
+        >
+          <div className="t-meta">Stay</div>
+          {hotelBookings.length === 0 ? (
+            <div className="t-body ink-60" style={{ fontSize: 13 }}>
+              No hotel booked yet.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {hotelBookings.map(b => (
+                <div key={b.id}>
+                  <StayBlock booking={b} />
+                  {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
+                    <div style={{ marginTop: 10 }}>
+                      <SettleHoldButton
+                        tripId={trip.id}
+                        bookingId={b.id}
+                        amountUsd={b.totalUsd.toString()}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
 
-        <div>
-          <div className="t-meta">Spend so far</div>
-          <div className="t-num-md" style={{ fontSize: 22, marginTop: 4 }}>
-            {formatUsd(spend)}{' '}
-            <span className="t-mono ink-60" style={{ fontSize: 12 }}>
-              of {formatUsd(trip.totalUsdc)} budget
-            </span>
+          <hr
+            aria-hidden
+            style={{
+              border: 0,
+              height: 1,
+              background: 'var(--hairline-color-soft)',
+              margin: '4px 0',
+            }}
+          />
+
+          <div>
+            <div className="t-meta">Spend so far</div>
+            <div className="t-num-md" style={{ fontSize: 22, marginTop: 4 }}>
+              {formatUsd(spend)}{' '}
+              <span className="t-mono ink-60" style={{ fontSize: 12 }}>
+                of {formatUsd(trip.totalUsdc)} budget
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      </TripPresenceFocus>
 
       {/* ROW 2 LEFT — trip planner stats */}
-      <PlannerCard trip={trip} />
+      <TripPresenceFocus section="notes" label="reviewing trip notes">
+        <PlannerCard trip={trip} />
+      </TripPresenceFocus>
 
       {/* ROW 2 RIGHT — ancillaries */}
-      <AncillariesCard flightBookings={flightBookings} otherBookings={otherBookings} />
+      <TripPresenceFocus section="bookings" label="reviewing ancillaries">
+        <AncillariesCard flightBookings={flightBookings} otherBookings={otherBookings} />
+      </TripPresenceFocus>
     </div>
   );
 }

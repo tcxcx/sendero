@@ -31,6 +31,11 @@
     "@clerk/themes": "^2.4.57",
     "@duffel/api": "^4.0.0",
     "@hookform/resolvers": "^5.2.2",
+    "@liveblocks/client": "2.24.4",
+    "@liveblocks/emails": "2.24.4",
+    "@liveblocks/node": "2.24.4",
+    "@liveblocks/react": "2.24.4",
+    "@liveblocks/react-ui": "2.24.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@neondatabase/serverless": "^0.10.0",
     "@prisma/adapter-neon": "^5.22.0",
@@ -137,6 +142,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@clerk/testing": "^2.0.23",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^22.9.0",

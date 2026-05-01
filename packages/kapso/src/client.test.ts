@@ -145,6 +145,87 @@ describe('KapsoClient', () => {
     expect(capturedUrl).toContain('/platform/v1/whatsapp/phone_numbers/pn_1/health');
   });
 
+  it('creates workflow triggers using Kapso trigger payload shape', async () => {
+    let captured: { url: string; method: string; body: string } | null = null;
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async (input, init) => {
+        captured = {
+          url: String(input),
+          method: String(init?.method),
+          body: String(init?.body ?? ''),
+        };
+        return new Response(
+          JSON.stringify({
+            data: {
+              id: 'tr_1',
+              workflow_id: 'wf_1',
+              trigger_type: 'inbound_message',
+              active: true,
+              display_name: 'Support',
+              triggerable: { phone_number_id: 'pn_1' },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }) as typeof fetch,
+    });
+
+    const trigger = await client.createWorkflowTrigger('wf_1', {
+      trigger_type: 'inbound_message',
+      phone_number_id: 'pn_1',
+      display_name: 'Support',
+      active: true,
+    });
+    expect(trigger.id).toBe('tr_1');
+    expect(captured!.url).toContain('/platform/v1/workflows/wf_1/triggers');
+    expect(captured!.method).toBe('POST');
+    expect(captured!.body).toContain('"phone_number_id":"pn_1"');
+    expect(captured!.body).not.toContain('"triggerable"');
+  });
+
+  it('replaces workflow triggers through the Kapso PUT endpoint', async () => {
+    let captured: { url: string; method: string; body: string } | null = null;
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async (input, init) => {
+        captured = {
+          url: String(input),
+          method: String(init?.method),
+          body: String(init?.body ?? ''),
+        };
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 'tr_1',
+                workflow_id: 'wf_1',
+                trigger_type: 'inbound_message',
+                active: true,
+                triggerable: { phone_number_id: 'pn_1' },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }) as typeof fetch,
+    });
+
+    const triggers = await client.replaceWorkflowTriggers('wf_1', [
+      {
+        trigger_type: 'inbound_message',
+        phone_number_id: 'pn_1',
+        active: true,
+      },
+    ]);
+    expect(triggers).toHaveLength(1);
+    expect(captured!.url).toContain('/platform/v1/workflows/wf_1/triggers');
+    expect(captured!.url).not.toContain('/replace');
+    expect(captured!.method).toBe('PUT');
+    expect(captured!.body).toContain('"phone_number_id":"pn_1"');
+    expect(captured!.body).not.toContain('"triggerable"');
+  });
+
   it('tolerates bare (unwrapped) responses', async () => {
     const client = new KapsoClient({
       apiKey: 'k',

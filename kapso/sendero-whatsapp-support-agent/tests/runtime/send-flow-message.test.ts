@@ -39,7 +39,7 @@ describe('send WhatsApp Flow support function', () => {
 
       const json = await response.json();
       expect(json.ok).toBe(true);
-      expect(calls[0].url).toContain('/1050904118113334/messages');
+      expect(calls[0].url).toContain('/1133326556530962/messages');
       expect(calls[0].body).toMatchObject({
         interactive: {
           action: {

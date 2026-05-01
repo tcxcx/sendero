@@ -1,12 +1,12 @@
+import { type NextRequest, NextResponse } from 'next/server';
+
 import type { SwapParams } from '@circle-fin/app-kit';
 import { auth } from '@clerk/nextjs/server';
-import { getAppKit, createAdapterForSigner, getKitKey } from '@sendero/circle/app-kit';
+import { createAdapterForSigner, getAppKit, getKitKey } from '@sendero/circle/app-kit';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { materializeTenantUnifiedUsdToArc } from '@sendero/circle/unified-balance';
 import { prisma } from '@sendero/database';
-import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-
-import { materializeGatewayUsdcToArc } from '@/lib/gateway-treasury';
 
 /**
  * POST /api/swap
@@ -24,6 +24,17 @@ const BodySchema = z.object({
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
+
+function errorDetail(err: unknown): string {
+  const traced = err as {
+    cause?: { trace?: { rawError?: { shortMessage?: string; message?: string } } };
+  };
+  return (
+    traced.cause?.trace?.rawError?.shortMessage ||
+    traced.cause?.trace?.rawError?.message ||
+    (err instanceof Error ? err.message : String(err))
+  );
+}
 
 export async function POST(req: NextRequest) {
   const { orgId } = await auth();
@@ -55,7 +66,7 @@ export async function POST(req: NextRequest) {
     const adapter = createAdapterForSigner(signer.privateKey);
     const gatewayFunding =
       body.from === 'USDC'
-        ? await materializeGatewayUsdcToArc({
+        ? await materializeTenantUnifiedUsdToArc({
             tenantId: tenant.id,
             amount: body.amount,
             recipient: signer.address,
@@ -89,11 +100,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid_input', issues: err.issues }, { status: 400 });
     }
-    const anyErr = err as any;
-    const detail: string =
-      anyErr?.cause?.trace?.rawError?.shortMessage ||
-      anyErr?.cause?.trace?.rawError?.message ||
-      (err instanceof Error ? err.message : String(err));
+    const detail = errorDetail(err);
     console.error('[swap] error:', detail, { tenantId: tenant.id, signerAddress: signer.address });
     return NextResponse.json(
       { error: 'swap_failed', message: detail },

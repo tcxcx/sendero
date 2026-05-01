@@ -21,6 +21,7 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@clerk/nextjs/server';
 import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
+import { getTenantUnifiedBalances } from '@sendero/circle/unified-balance';
 import { prisma } from '@sendero/database';
 
 import { calculateGatewayBalanceTotals, microUsdcToDecimal } from '@/lib/gateway-balance-math';
@@ -28,12 +29,6 @@ import { calculateGatewayBalanceTotals, microUsdcToDecimal } from '@/lib/gateway
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
-
-const GATEWAY_API = 'https://gateway-api-testnet.circle.com/v1';
-
-interface GatewayBalanceApiResponse {
-  balances?: Array<{ domain: number; balance: string }>;
-}
 
 function addressExplorerUrl(
   chain: (typeof GATEWAY_CHAINS)[keyof typeof GATEWAY_CHAINS] | null,
@@ -95,45 +90,29 @@ export async function GET() {
   const config = tenant.gatewayConfig;
   const enabledDomains = config.enabledDomains;
 
-  // Build the Gateway API request — one source per enabled domain.
-  // EVM domains use the tenant Gateway EOA; Solana uses the tenant's
-  // Solana operations DCW address once Phase 4.5 provisioning is live.
-  const sources = enabledDomains
-    .map(domain => {
-      const depositor =
-        domain === 5 ? (config.solanaDepositorAddress ?? null) : config.evmDepositorAddress;
-      return depositor ? { domain, depositor } : null;
-    })
-    .filter((source): source is { domain: number; depositor: string } => source !== null);
-
-  // Query Gateway API. Explicit timeout to keep the UI responsive
-  // when Circle's API is slow.
   let gatewayApiBalances: Array<{ domain: number; balance: string }> = [];
+  let appKitBalanceResult: Awaited<ReturnType<typeof getTenantUnifiedBalances>> | null = null;
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15_000);
-    try {
-      const res = await fetch(`${GATEWAY_API}/balances`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: 'USDC', sources }),
-        signal: controller.signal,
-      });
-      if (res.ok) {
-        const data = (await res.json()) as GatewayBalanceApiResponse;
-        gatewayApiBalances = data.balances ?? [];
-      } else {
-        console.warn('[gateway/balance] Gateway API non-200', {
-          tenantId: tenant.id,
-          status: res.status,
-          body: await res.text().catch(() => 'unreadable'),
-        });
-      }
-    } finally {
-      clearTimeout(timeoutId);
+    appKitBalanceResult = await getTenantUnifiedBalances({
+      tenantId: tenant.id,
+      includePending: true,
+    });
+    const chainToDomain = new Map<string, number>();
+    for (const chain of Object.values(GATEWAY_CHAINS)) {
+      chainToDomain.set(chain.kitName, chain.domain);
+      if (chain.kitName === 'Sol_Devnet') chainToDomain.set('Solana_Devnet', chain.domain);
+      if (chain.kitName === 'Sol') chainToDomain.set('Solana', chain.domain);
     }
+    gatewayApiBalances = appKitBalanceResult.breakdown.flatMap(account =>
+      account.breakdown
+        .map(row => {
+          const domain = chainToDomain.get(String(row.chain));
+          return domain === undefined ? null : { domain, balance: row.confirmedBalance };
+        })
+        .filter((row): row is { domain: number; balance: string } => row !== null)
+    );
   } catch (err) {
-    console.warn('[gateway/balance] Gateway API call failed (continuing with empty balances)', {
+    console.warn('[gateway/balance] AppKit getBalances failed (continuing with empty balances)', {
       tenantId: tenant.id,
       error: err instanceof Error ? err.message : String(err),
     });
@@ -248,5 +227,13 @@ export async function GET() {
     opsStaging,
     depositor: config.evmDepositorAddress,
     enabledDomains,
+    appKit: appKitBalanceResult
+      ? {
+          token: appKitBalanceResult.token,
+          totalConfirmedBalance: appKitBalanceResult.totalConfirmedBalance,
+          totalPendingBalance: appKitBalanceResult.totalPendingBalance ?? '0.000000',
+          breakdown: appKitBalanceResult.breakdown,
+        }
+      : null,
   });
 }

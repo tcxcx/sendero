@@ -25,13 +25,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
-import { useQueryState } from 'nuqs';
 
 import { useChat } from '@ai-sdk/react';
-import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useUser } from '@clerk/nextjs';
-
-import { useChatModel } from '@/hooks/use-chat-model';
+import { DefaultChatTransport, type UIMessage } from 'ai';
+import { useQueryState } from 'nuqs';
 
 import {
   Conversation,
@@ -48,9 +46,14 @@ import {
   ToolInput,
   ToolOutput,
 } from '@/components/ai-elements/tool';
-import { useChatStoreSync } from '@/components/use-chat-store-sync';
-import { useSendero } from '@/components/store';
 import { registerChatBridge, registerChatNote } from '@/components/chat-bridge';
+import {
+  TripPresenceMountFocus,
+  useTripPresenceFocus,
+} from '@/components/collaboration/presence-focus';
+import { useSendero } from '@/components/store';
+import { useChatStoreSync } from '@/components/use-chat-store-sync';
+import { useChatModel } from '@/hooks/use-chat-model';
 
 import { asChannelKey, type ChannelKey } from './channels';
 import { DemoConversation, type DemoMessage, runDemoTripScript } from './demo-trip';
@@ -259,6 +262,14 @@ export function MetaInboxLive({
   // ── scoped (channel) mode ─────────────────────────────────────────
   const [optimistic, setOptimistic] = useState<UnifiedMessage[]>([]);
   const [posting, setPosting] = useState(false);
+  const focusHandoff = useTripPresenceFocus({
+    section: 'handoff',
+    label: 'support handoff',
+  });
+  const focusNotes = useTripPresenceFocus({
+    section: 'notes',
+    label: 'private trip notes',
+  });
 
   const scopedConversation = useMemo<UnifiedMessage[]>(
     () => [...initialConversation, ...optimistic],
@@ -295,6 +306,7 @@ export function MetaInboxLive({
     // stream renders the agent reply inline. Works even when scoped to
     // a trip — the message is private; only the operator sees it.
     if (composerMode === 'internal') {
+      focusNotes();
       sendMessage({ text });
       return;
     }
@@ -302,6 +314,7 @@ export function MetaInboxLive({
     // channel. Optimistically append, fetch reply, then re-fetch the
     // canonical event log on success.
     if (!scopedTripId) return;
+    focusHandoff();
     const id = `optim_${Date.now().toString(36)}`;
     const optimisticChannel: ChannelKey = focusedChannel === 'internal' ? 'web' : focusedChannel;
     setOptimistic(o => [
@@ -432,9 +445,7 @@ export function MetaInboxLive({
           messages.map(m => (
             <div
               key={m.id}
-              className={
-                'flex w-full items-start gap-3 ' + (m.role === 'user' ? 'flex-row-reverse' : '')
-              }
+              className={`flex w-full items-start gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}
             >
               {m.role === 'user' ? <UserMessageAvatar /> : <AgentMessageAvatar />}
               <Message from={m.role} className="!max-w-[calc(95%-44px)]">
@@ -517,20 +528,28 @@ export function MetaInboxLive({
     ) : undefined;
 
   return (
-    <MetaInbox
-      trips={trips}
-      scopedTripId={scopedTripId}
-      conversation={scopedConversation}
-      conversationSlot={conversationSlot}
-      traveler={traveler}
-      holdExpires={holdExpires}
-      pendingBooking={pendingBooking}
-      kpis={kpis}
-      composerMode={composerMode}
-      onComposerModeChange={setComposerMode}
-      onSubmit={handleSubmit}
-      disabled={posting || isStreaming}
-    />
+    <>
+      {scopedTripId ? (
+        <TripPresenceMountFocus
+          section={composerMode === 'internal' ? 'notes' : 'handoff'}
+          label={composerMode === 'internal' ? 'private trip notes' : 'support handoff'}
+        />
+      ) : null}
+      <MetaInbox
+        trips={trips}
+        scopedTripId={scopedTripId}
+        conversation={scopedConversation}
+        conversationSlot={conversationSlot}
+        traveler={traveler}
+        holdExpires={holdExpires}
+        pendingBooking={pendingBooking}
+        kpis={kpis}
+        composerMode={composerMode}
+        onComposerModeChange={setComposerMode}
+        onSubmit={handleSubmit}
+        disabled={posting || isStreaming}
+      />
+    </>
   );
 }
 

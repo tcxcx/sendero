@@ -17,9 +17,9 @@ import { DepositDialog } from '@/components/deposit-dialog';
 import { SendDialog } from '@/components/send-dialog';
 import { hydrateFromStorage } from '@/components/store';
 import { SwapDialog } from '@/components/swap-dialog';
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { useAppHotkeys } from '@/components/use-app-hotkeys';
 import { useArcChainStream } from '@/components/use-arc-chain-stream';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 
 type ShellHeaderCopy = {
   signIn: string;
@@ -31,11 +31,13 @@ export function AppChrome({
   headerCopy,
   locale,
   defaultSidebarOpen = true,
+  liveblocksEnabled = false,
 }: {
   children: React.ReactNode;
   headerCopy: ShellHeaderCopy;
   locale: string;
   defaultSidebarOpen?: boolean;
+  liveblocksEnabled?: boolean;
 }) {
   const pathname = usePathname() ?? '';
 
@@ -71,6 +73,7 @@ export function AppChrome({
             <AppHeader
               copy={headerCopy}
               locale={locale}
+              liveblocksEnabled={liveblocksEnabled}
               startSlot={<SidebarTrigger className="-ml-1 shrink-0" aria-label="Toggle sidebar" />}
             />
             <DashboardPageHeader />

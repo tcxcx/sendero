@@ -19,15 +19,38 @@ export function roomIdForWorkspace(tenantId: string): string {
   return `sendero:${tenantId}:workspace`;
 }
 
+export function roomIdForRun(tenantId: string, runId: string): string {
+  return `sendero:${tenantId}:run:${runId}`;
+}
+
+export function roomIdForReservation(tenantId: string, reservationId: string): string {
+  return `sendero:${tenantId}:reservation:${reservationId}`;
+}
+
+export function roomIdForSupportCase(tenantId: string, caseId: string): string {
+  return `sendero:${tenantId}:support:${caseId}`;
+}
+
 export type ParsedRoom =
   | { kind: 'workspace'; tenantId: string; tripId?: never }
-  | { kind: 'trip'; tenantId: string; tripId: string };
+  | { kind: 'trip'; tenantId: string; tripId: string }
+  | { kind: 'run'; tenantId: string; runId: string }
+  | { kind: 'reservation'; tenantId: string; reservationId: string }
+  | { kind: 'support'; tenantId: string; caseId: string };
 
 export function parseRoomId(roomId: string): ParsedRoom | null {
   const workspace = /^sendero:([^:]+):workspace$/.exec(roomId);
   if (workspace) return { kind: 'workspace', tenantId: workspace[1] };
-  const trip = /^sendero:([^:]+):trip:(.+)$/.exec(roomId);
+  const trip = /^sendero:([^:]+):trip:([^:]+)$/.exec(roomId);
   if (trip) return { kind: 'trip', tenantId: trip[1], tripId: trip[2] };
+  const run = /^sendero:([^:]+):run:([^:]+)$/.exec(roomId);
+  if (run) return { kind: 'run', tenantId: run[1], runId: run[2] };
+  const reservation = /^sendero:([^:]+):reservation:([^:]+)$/.exec(roomId);
+  if (reservation) {
+    return { kind: 'reservation', tenantId: reservation[1], reservationId: reservation[2] };
+  }
+  const support = /^sendero:([^:]+):support:([^:]+)$/.exec(roomId);
+  if (support) return { kind: 'support', tenantId: support[1], caseId: support[2] };
   return null;
 }
 
@@ -43,10 +66,15 @@ export type TripPresence = {
   role: 'traveler' | 'agent' | 'approver' | 'guest' | 'admin' | 'finance' | 'member';
   cursorX: number | null;
   cursorY: number | null;
+  tripId?: string | null;
   focusedSection:
     | 'workspace'
     | 'inbox'
     | 'trips'
+    | 'quotes'
+    | 'handoff'
+    | 'escrow'
+    | 'bookings'
     | 'billing'
     | 'settings'
     | 'flights'
@@ -54,6 +82,7 @@ export type TripPresence = {
     | 'ground'
     | 'notes'
     | null;
+  focusLabel?: string | null;
   [key: string]: string | number | boolean | null;
 };
 

@@ -11,18 +11,26 @@
  * treasury EOA for customer activity.
  */
 
-import { type BatchStore, type SettleFn } from '@sendero/billing/batch';
-import { GATEWAY_CHAINS, transferViaGatewayFromSources } from '@sendero/circle/gateway';
+import type { BatchStore, SettleFn } from '@sendero/billing/batch';
+import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
+import { spendTenantUnifiedUsd } from '@sendero/circle/unified-balance';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
 import { microUsdcToDecimal } from '@/lib/gateway-balance-math';
-import { selectTenantGatewayEvmSources } from '@/lib/gateway-treasury';
 
 export function senderoTreasuryAddress(): Address {
   const a = process.env.SENDERO_TREASURY_ADDRESS;
   if (!a) throw new Error('SENDERO_TREASURY_ADDRESS not configured');
   return a as Address;
+}
+
+function domainForAllocationChain(chainName: string | undefined): number | null {
+  if (!chainName) return null;
+  const normalized =
+    chainName === 'Solana_Devnet' ? 'Sol_Devnet' : chainName === 'Solana' ? 'Sol' : chainName;
+  const chain = Object.values(GATEWAY_CHAINS).find(c => c.kitName === normalized);
+  return chain?.domain ?? null;
 }
 
 export function makeBatchStore(): BatchStore {
@@ -109,15 +117,13 @@ export function makeBatchStore(): BatchStore {
  */
 export function makeSettleFn(): SettleFn {
   const to = senderoTreasuryAddress();
-  return async ({ totalMicroUsdc, batchId, tenantId }) => {
+  return async ({ totalMicroUsdc, tenantId }) => {
     const amount = microUsdcToDecimal(totalMicroUsdc);
-    const selected = await selectTenantGatewayEvmSources({ tenantId, amount });
-    const fromChain = GATEWAY_CHAINS[selected.sources[0].from];
     const toChain = GATEWAY_CHAINS.Arc_Testnet;
     const log = await prisma.gatewayTransferLog.create({
       data: {
         tenantId,
-        sourceDomain: fromChain.domain,
+        sourceDomain: null,
         destinationDomain: toChain.domain,
         destinationChain: toChain.kitName,
         amountMicroUsdc: totalMicroUsdc,
@@ -130,23 +136,22 @@ export function makeSettleFn(): SettleFn {
     });
 
     try {
-      const result = await transferViaGatewayFromSources({
-        sources: selected.sources,
-        to: 'Arc_Testnet',
+      const result = await spendTenantUnifiedUsd({
+        tenantId,
+        amount,
+        destinationChain: 'Arc_Testnet',
         recipient: to,
-        signer: selected.signer.account,
       });
       await prisma.gatewayTransferLog.update({
         where: { id: log.id },
         data: {
-          burnSignature: result.burnSignature,
-          attestation: result.attestation,
-          mintTxHash: result.mintHash,
+          sourceDomain: domainForAllocationChain(result.allocations?.[0]?.chain as string),
+          mintTxHash: result.txHash,
           status: 'confirmed',
           confirmedAt: new Date(),
         },
       });
-      return { txHash: result.mintHash };
+      return { txHash: result.txHash };
     } catch (err) {
       await prisma.gatewayTransferLog
         .update({

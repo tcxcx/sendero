@@ -14,6 +14,26 @@ const APP_TOOL_SECRETS = [
   'SUPPORT_TOOLS_SECRET',
 ];
 
+const SUPPORT_FLOW_SECRETS = [
+  'KAPSO_API_KEY',
+  'WHATSAPP_PHONE_NUMBER_ID',
+  'KAPSO_META_BASE_URL',
+  'SENDERO_SUPPORT_TRIP_INTAKE_FLOW_ID',
+  'SENDERO_SUPPORT_REQUEST_FLOW_ID',
+  'SENDERO_SUPPORT_LOGIN_SIGNUP_FLOW_ID',
+  'SENDERO_SUPPORT_QUOTE_APPROVAL_FLOW_ID',
+  'SENDERO_SUPPORT_ANCILLARIES_FLOW_ID',
+  'SENDERO_SUPPORT_DISRUPTION_HELP_FLOW_ID',
+  'SENDERO_SUPPORT_PREFUND_CLAIM_FLOW_ID',
+  'SENDERO_SUPPORT_BOOKING_CHANGE_FLOW_ID',
+  'SENDERO_SUPPORT_ACCOMMODATION_FLOW_ID',
+  'SENDERO_SUPPORT_CAR_TRANSFER_FLOW_ID',
+  'SENDERO_SUPPORT_RESTAURANT_EXPERIENCE_FLOW_ID',
+  'SENDERO_SUPPORT_NFT_TRIP_GALLERY_FLOW_ID',
+  'SENDERO_SUPPORT_REFUND_ESCROW_FLOW_ID',
+  'SENDERO_WHATSAPP_FLOW_MODE',
+];
+
 const FUNCTION_SECRETS = {
   [FUNCTION_SLUGS.askTeamQuestion]: [
     'SLACK_BOT_TOKEN',
@@ -31,6 +51,7 @@ const FUNCTION_SECRETS = {
   [FUNCTION_SLUGS.getTripContext]: APP_TOOL_SECRETS,
   [FUNCTION_SLUGS.getWhatsappSetupStatus]: APP_TOOL_SECRETS,
   [FUNCTION_SLUGS.searchSenderoDocs]: APP_TOOL_SECRETS,
+  [FUNCTION_SLUGS.sendFlowMessage]: SUPPORT_FLOW_SECRETS,
   [FUNCTION_SLUGS.slackEvents]: [
     'KAPSO_API_KEY',
     'SLACK_BOT_TOKEN',
@@ -102,13 +123,27 @@ async function readRemoteMap() {
   }
 }
 
-function functionIdForSlug(remoteMap, slug) {
+async function listRemoteFunctions(apiKey) {
+  const data = await request(apiKey, '/platform/v1/functions?limit=100');
+  return Array.isArray(data) ? data : [];
+}
+
+async function functionIdForSlug(apiKey, remoteMap, slug, remoteFunctionsBySlug) {
   const id = remoteMap.functions?.[slug]?.id;
-  if (!id)
+  if (id) return id;
+  if (!remoteFunctionsBySlug.size) {
+    for (const item of await listRemoteFunctions(apiKey)) {
+      if (item?.slug && item?.id) remoteFunctionsBySlug.set(item.slug, item.id);
+    }
+  }
+  const discoveredId = remoteFunctionsBySlug.get(slug);
+  if (!discoveredId) {
     throw new Error(
       `Missing remote function mapping for "${slug}". Run \`bun run kapso -- push\` first.`
     );
-  return id;
+  }
+  console.log(`Discovered ${slug} from Kapso API because .kapso/remote-map.json is stale.`);
+  return discoveredId;
 }
 
 loadLocalEnv(resolve(rootDir, '..', '..'));
@@ -116,9 +151,10 @@ loadLocalEnv(rootDir);
 
 const apiKey = getRequiredEnv('KAPSO_API_KEY');
 const remoteMap = await readRemoteMap();
+const remoteFunctionsBySlug = new Map();
 
 for (const [slug, secretNames] of Object.entries(FUNCTION_SECRETS)) {
-  const functionId = functionIdForSlug(remoteMap, slug);
+  const functionId = await functionIdForSlug(apiKey, remoteMap, slug, remoteFunctionsBySlug);
   for (const secretName of secretNames) {
     const value = process.env[secretName]?.trim();
     if (!value) {
@@ -131,6 +167,14 @@ for (const [slug, secretNames] of Object.entries(FUNCTION_SECRETS)) {
         continue;
       }
       if (secretName === 'SENDERO_APP_ORIGIN' || secretName === 'SUPPORT_TOOLS_SECRET') {
+        console.log(`Skipped optional ${secretName} for ${slug}`);
+        continue;
+      }
+      if (
+        secretName === 'KAPSO_META_BASE_URL' ||
+        secretName === 'SENDERO_WHATSAPP_FLOW_MODE' ||
+        secretName.startsWith('SENDERO_SUPPORT_')
+      ) {
         console.log(`Skipped optional ${secretName} for ${slug}`);
         continue;
       }
@@ -150,7 +194,12 @@ for (const [slug, secretNames] of Object.entries(FUNCTION_SECRETS)) {
 
 const slackEventsFunction = await request(
   apiKey,
-  `/platform/v1/functions/${functionIdForSlug(remoteMap, FUNCTION_SLUGS.slackEvents)}`
+  `/platform/v1/functions/${await functionIdForSlug(
+    apiKey,
+    remoteMap,
+    FUNCTION_SLUGS.slackEvents,
+    remoteFunctionsBySlug
+  )}`
 );
 
 if (slackEventsFunction?.endpoint_url) {

@@ -1,18 +1,11 @@
 'use client';
 
-import type { ComponentProps } from 'react';
+import { type ComponentProps, useEffect, useState } from 'react';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { BrandUpgradeCard } from '@/components/app-shell/brand-upgrade-card';
-import { HelpDocsCard } from '@/components/app-shell/help-docs-card';
-import { LlmsDocsCard } from '@/components/app-shell/llms-docs-card';
-import { OperatorOnboardingCard } from '@/components/app-shell/operator-onboarding-card';
-import { SocialsRow } from '@/components/app-shell/socials-row';
-
 import { OrganizationSwitcher } from '@clerk/nextjs';
-
 import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
@@ -31,6 +24,11 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+import { BrandUpgradeCard } from '@/components/app-shell/brand-upgrade-card';
+import { HelpDocsCard } from '@/components/app-shell/help-docs-card';
+import { LlmsDocsCard } from '@/components/app-shell/llms-docs-card';
+import { OperatorOnboardingCard } from '@/components/app-shell/operator-onboarding-card';
+import { SocialsRow } from '@/components/app-shell/socials-row';
 import { SearchForm } from '@/components/search-form';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
@@ -115,23 +113,35 @@ function isActivePath(pathname: string, href: string, exact?: boolean) {
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pathname = usePathname() ?? '';
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="group-data-[collapsible=icon]:hidden">
         <div className="px-2 pt-1 pb-2 pr-10 md:pr-2">
-          <OrganizationSwitcher
-            hidePersonal={false}
-            afterSelectOrganizationUrl="/dashboard"
-            afterCreateOrganizationUrl="/onboarding"
-            appearance={{
-              elements: {
-                rootBox: 'w-full',
-                organizationSwitcherTrigger:
-                  'w-full min-w-0 justify-between rounded-md px-2 py-1.5 hover:bg-[color:var(--tint-vermillion-soft)]',
-              },
-            }}
-          />
+          {mounted ? (
+            <OrganizationSwitcher
+              hidePersonal={false}
+              afterSelectOrganizationUrl="/dashboard"
+              afterCreateOrganizationUrl="/onboarding"
+              appearance={{
+                elements: {
+                  rootBox: 'w-full',
+                  organizationSwitcherTrigger:
+                    'w-full min-w-0 justify-between rounded-md px-2 py-1.5 hover:bg-[color:var(--tint-vermillion-soft)]',
+                },
+              }}
+            />
+          ) : (
+            <div
+              className="h-9 w-full rounded-md bg-[color:var(--tint-vermillion-soft)]/40"
+              aria-hidden="true"
+            />
+          )}
         </div>
         <SearchForm className="px-0" placeholder="Search trips, invoices…" />
       </SidebarHeader>

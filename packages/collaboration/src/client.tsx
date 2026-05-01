@@ -37,6 +37,14 @@ export const {
   useMyPresence,
   useUpdateMyPresence,
   useThreads,
+  useCreateThread,
+  useDeleteThread,
+  useMarkThreadAsResolved,
+  useMarkThreadAsUnresolved,
+  useSubscribeToThread,
+  useThreadSubscription,
+  useUnsubscribeFromThread,
+  useRoomSubscriptionSettings,
 } = createRoomContext<TripPresence, LiveTripStorage, BaseUserMeta>(
   createClient({
     authEndpoint: '/api/liveblocks-auth',

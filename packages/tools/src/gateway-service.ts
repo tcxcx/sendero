@@ -1,11 +1,7 @@
-import {
-  GATEWAY_CHAINS,
-  isEvmChain,
-  transferViaGateway,
-  type GatewayChain,
-} from '@sendero/circle/gateway';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { GATEWAY_CHAINS, type GatewayChain, isEvmChain } from '@sendero/circle/gateway';
 import type { TenantGatewaySigner } from '@sendero/circle/gateway-signer';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { materializeTenantUnifiedUsdToArc } from '@sendero/circle/unified-balance';
 import { prisma } from '@sendero/database';
 
 const GATEWAY_API = 'https://gateway-api-testnet.circle.com/v1';
@@ -108,14 +104,18 @@ export async function materializeGatewayUsdcToArc(args: {
   recipient?: string;
   preferredSourceChain?: string;
 }) {
-  const { signer, from } = await selectTenantGatewayEvmSource(args);
-  const recipient = args.recipient ?? signer.address;
-  const transfer = await transferViaGateway({
-    from,
-    to: 'Arc_Testnet',
-    amountUsdc: args.amount,
-    recipient,
-    signer: signer.account,
+  const result = await materializeTenantUnifiedUsdToArc({
+    tenantId: args.tenantId,
+    amount: args.amount,
+    recipient: args.recipient,
   });
-  return { signer, from, recipient, ...transfer };
+  return {
+    signer: { address: result.signerAddress },
+    from: result.allocations?.[0]?.chain ?? null,
+    recipient: result.recipient,
+    mintHash: result.txHash,
+    explorerUrl: result.explorerUrl,
+    allocations: result.allocations,
+    source: result.source,
+  };
 }

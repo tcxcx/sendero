@@ -6,10 +6,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useQueryState } from 'nuqs';
-import { DialogShell } from './dialog-shell';
+
 import { TokenIcon } from '@sendero/icons';
+import { useQueryState } from 'nuqs';
+
 import { decimalUsdcToMicro, microUsdcToDecimal } from '@/lib/gateway-balance-math';
+
+import { DialogShell } from './dialog-shell';
 
 type Token = 'USDC' | 'EURC';
 
@@ -139,17 +142,17 @@ export function SendDialog() {
   };
 
   return (
-    <DialogShell open={open} title="Send" subtitle="Business Balance" onClose={close}>
+    <DialogShell open={open} title="Send" subtitle="Unified Balance" onClose={close}>
       <p className="dlg-sub">
         {tok === 'USDC'
-          ? 'Send from your spendable Business Balance. Gateway sources available USDC across supported chains, then settles to the recipient on Arc Testnet.'
+          ? 'Send from your unified USDC balance. AppKit can source USDC across supported Gateway chains and mint it to the recipient on Arc Testnet.'
           : 'Send EURC from the current Arc wallet balance. EURC is not pooled into Gateway yet.'}
       </p>
 
       {tok === 'USDC' ? (
         <div className="snd-balance-panel">
           <div className="snd-balance-head">
-            <span>Business Balance</span>
+            <span>Unified Balance</span>
             <strong>
               {balance ? `$${money(balance.spendableAvailable ?? balance.available)}` : '—'}
             </strong>
