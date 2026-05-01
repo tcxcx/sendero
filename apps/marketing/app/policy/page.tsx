@@ -4,7 +4,7 @@ import { createPageMetadata } from '@/lib/metadata';
 export const metadata = createPageMetadata({
   title: 'Privacy Policy · Sendero',
   description:
-    'How Sendero, operated by Stampa SpA, collects, uses, and protects travel support and trip operations data.',
+    'How Sendero, operated by Fantasmita LLC, collects, uses, and protects travel support and trip operations data.',
   path: '/policy',
   og: {
     title: 'Privacy Policy',
@@ -18,9 +18,9 @@ export default function PolicyPage() {
     <LegalPage eyebrow="Legal" title="Privacy Policy" effectiveDate="2026-04-28">
       <p>
         This policy describes what Sendero collects, why, and how we keep it safe. Sendero is a
-        travel support and trip operations product operated by Stampa SpA. Travelers, agencies, and
-        companies use Sendero to plan trips, coordinate support, manage bookings, and receive help
-        across WhatsApp, Slack, and the web console.
+        travel support and trip operations product operated by Fantasmita LLC. Travelers, agencies,
+        and companies use Sendero to plan trips, coordinate support, manage bookings, and receive
+        help across WhatsApp, Slack, and the web console.
       </p>
 
       <h2>1. What we collect</h2>
