@@ -12,6 +12,7 @@ export const FUNCTION_SLUGS = {
   lifecycleTool: 'sendero-tenant-travel-lifecycle-tool',
   requestWhatsappOtp: 'sendero-tenant-travel-request-whatsapp-otp',
   searchDocs: 'sendero-tenant-travel-search-docs',
+  sendFlowMessage: 'sendero-tenant-travel-send-flow-message',
   verifyWhatsappOtp: 'sendero-tenant-travel-verify-whatsapp-otp',
 };
 
@@ -35,6 +36,8 @@ export const FUNCTION_DESCRIPTIONS = {
   requestWhatsappOtp:
     'Send a short-lived WhatsApp authentication OTP to elevate a remembered WhatsApp session to verified.',
   searchDocs: 'Search Sendero docs and runbooks for product and workflow guidance.',
+  sendFlowMessage:
+    'Send a registered tenant WhatsApp Flow by Flow key. Resolves the tenant-specific Flow id from Sendero before sending, and falls back cleanly when the tenant has not registered that Flow yet.',
   verifyWhatsappOtp:
     'Verify a WhatsApp authentication OTP and mark the current ChannelIdentity as a verified WhatsApp session.',
 };

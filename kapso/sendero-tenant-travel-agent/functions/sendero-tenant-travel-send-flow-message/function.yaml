@@ -1,0 +1,4 @@
+slug: sendero-tenant-travel-send-flow-message
+name: Sendero tenant travel send Flow message
+function_type: cloudflare_worker
+entrypoint: index.js

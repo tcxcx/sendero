@@ -29,6 +29,18 @@ Do not add `export default`, `module.exports`, imports, or a TypeScript build st
 
 Every escalation creates a durable Sendero internal web handoff first. Slack and WhatsApp operator fanout are optional tenant configuration. The same handoff record stores WhatsApp conversation, workflow execution, Slack thread, and trip id when available.
 
+## Tenant WhatsApp Flows
+
+Tenant agents do not store Flow ids in Kapso environment variables. Sendero is
+the source of truth in `whatsapp_flow_registrations`, keyed by tenant,
+`phoneNumberId`, and Flow key. The `sendero-tenant-travel-send-flow-message`
+function calls `/api/internal/support/tools` with `get_tenant_whatsapp_flow`
+before sending a Flow through Kapso's WhatsApp Meta proxy.
+
+If a tenant has not registered a Flow id yet, the function returns
+`configured: false`; the agent should continue with concise text intake using
+the same fields.
+
 ## Free workspace behavior
 
 Free tenants do not get a shared live WhatsApp sandbox number. The Sendero-owned sandbox number is reserved for Sendero customer support. Tenant WhatsApp operations require a paid plan and a dedicated WhatsApp Business number connected through Kapso.

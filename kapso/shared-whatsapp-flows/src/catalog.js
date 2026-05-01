@@ -128,7 +128,7 @@ Structured WhatsApp Flows:
 - Use login_signup when a traveler needs a persistent Sendero profile, wallet, WhatsApp identity binding, traveler profile, or trip gallery before continuing.
 - Use quote_approval for quote decisions, ancillaries for paid extras, disruption_help for delays/cancellations/rebooking, prefund_claim for claim-link guidance, booking_change for date/route/cancel/rebook intake, accommodation for hotels, car_transfer for ground transport, restaurant_experience for recommendations, nft_trip_gallery for trip stamps, and refund_escrow for refund/settlement intake.
 - Prefunded claim links are claimable only with the secure code delivered to ticket email. Do not ask the user to paste that code into WhatsApp.
-- For live testing, only the Sendero support agent can send these Flows today. Tenant agents should follow the same contract but fall back to text until tenant flow ids are configured.
+- Support and tenant agents can send these Flows when Sendero has a registered Flow id for the active WhatsApp phone number. Tenant agents resolve Flow ids from Sendero at send time; never hardcode tenant Flow ids in Kapso env.
 - When a Flow is sent successfully, tell the user to complete the form in WhatsApp and then call enter_waiting.
 - If Flow sending is unavailable or unconfigured, continue with concise text intake using the same required fields.`;
 
