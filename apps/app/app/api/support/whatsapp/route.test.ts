@@ -76,7 +76,7 @@ beforeEach(() => {
 
 describe('GET /api/support/whatsapp', () => {
   test('redirects paid workspaces to the canonical Sendero support number with support context', async () => {
-    process.env.SENDERO_SUPPORT_WA_NUMBER = '12014716461';
+    process.env.SENDERO_SUPPORT_WA_NUMBER = '12014716388';
     delete process.env.SENDERO_SUPPORT_WA_URL;
     delete process.env.NEXT_PUBLIC_SENDERO_SUPPORT_WA_URL;
     delete process.env.NEXT_PUBLIC_SENDERO_WA_URL;
@@ -85,7 +85,7 @@ describe('GET /api/support/whatsapp', () => {
 
     expect(response.status).toBe(307);
     const location = response.headers.get('location');
-    expect(location).toStartWith('https://wa.me/12014716461?');
+    expect(location).toStartWith('https://wa.me/12014716388?');
 
     const redirectUrl = new URL(location ?? '');
     const text = redirectUrl.searchParams.get('text') ?? '';
@@ -108,7 +108,7 @@ describe('GET /api/support/whatsapp', () => {
 
   test('redirects free workspaces to upgrade before support WhatsApp', async () => {
     plan = 'free';
-    process.env.SENDERO_SUPPORT_WA_NUMBER = '12014716461';
+    process.env.SENDERO_SUPPORT_WA_NUMBER = '12014716388';
 
     const response = await GET(new Request('https://app.sendero.test/api/support/whatsapp'));
 

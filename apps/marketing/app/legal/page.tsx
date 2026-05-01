@@ -4,15 +4,15 @@ import { createPageMetadata } from '@/lib/metadata';
 export const metadata = createPageMetadata({
   title: 'Legal Operator & Support · Sendero',
   description:
-    'Legal operator, customer support, privacy, terms, and travel support policies for Sendero, operated by Stampa SpA.',
+    'Legal operator, customer support, privacy, terms, and travel support policies for Sendero, operated by Fantasmita LLC.',
   path: '/legal',
   og: {
     title: 'Legal Operator & Support',
-    description: 'Sendero travel support and trip operations are operated by Stampa SpA.',
+    description: 'Sendero travel support and trip operations are operated by Fantasmita LLC.',
   },
   keywords: [
     'Sendero legal operator',
-    'Stampa SpA',
+    'Fantasmita LLC',
     'Sendero support',
     'travel support policy',
     'WhatsApp business profile',
@@ -24,14 +24,14 @@ export default function LegalOperatorPage() {
     <LegalPage eyebrow="Legal" title="Legal Operator & Support" effectiveDate="2026-05-01">
       <p>
         Sendero is a travel support and trip operations product operated by{' '}
-        <strong>Stampa SpA</strong>. This page provides the public business profile, support
+        <strong>Fantasmita LLC</strong>. This page provides the public business profile, support
         contacts, and policy links used for customer support channels, including WhatsApp.
       </p>
 
       <h2>Business identity</h2>
       <ul>
         <li>
-          <strong>Legal operator:</strong> Stampa SpA
+          <strong>Legal operator:</strong> Fantasmita LLC
         </li>
         <li>
           <strong>Operating product:</strong> Sendero
@@ -77,14 +77,14 @@ export default function LegalOperatorPage() {
       </p>
       <ul>
         <li>
-          <strong>Recommended WhatsApp display name:</strong> Sendero by Stampa SpA
+          <strong>Recommended WhatsApp display name:</strong> Sendero / Fantasmita LLC
         </li>
         <li>
           <strong>Business profile description:</strong> Travel support and trip operations for
-          Sendero, operated by Stampa SpA.
+          Sendero, operated by Fantasmita LLC.
         </li>
         <li>
-          <strong>Support number:</strong> +1 201-471-6461
+          <strong>Support number:</strong> +1 201-471-6388
         </li>
       </ul>
 
@@ -122,10 +122,10 @@ export default function LegalOperatorPage() {
 
       <h2>Review note</h2>
       <p>
-        For account or platform reviews: Stampa SpA is the legal business operator. Sendero is the
-        travel support and trip operations product operated by Stampa SpA. The WhatsApp support
-        channel is intended for travel customer support, trip intake, booking assistance, account
-        help, and escalation to the Sendero support team.
+        For account or platform reviews: Fantasmita LLC is the legal business operator. Sendero is
+        the travel support and trip operations product operated by Fantasmita LLC. The WhatsApp
+        support channel is intended for travel customer support, trip intake, booking assistance,
+        account help, and escalation to the Sendero support team.
       </p>
     </LegalPage>
   );

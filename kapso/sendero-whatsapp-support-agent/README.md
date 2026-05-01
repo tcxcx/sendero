@@ -23,7 +23,7 @@ cp .env.example .env.local
 Set the required values in `.env.local`:
 
 - `KAPSO_API_KEY`: Kapso Platform API key used by scripts and the Slack resume function.
-- `WHATSAPP_PHONE_NUMBER_ID`: Kapso WhatsApp phone number ID that should trigger this workflow. Production Sendero Customer Support is `1133326556530962` (`+1 201-471-6461`).
+- `WHATSAPP_PHONE_NUMBER_ID`: Kapso WhatsApp phone number ID that should trigger this workflow. Production Sendero Customer Support is `1125870723936815` (`+1 201-471-6388`).
 - `PROVIDER_MODEL_NAME`: Agent model name, defaults to `gpt-5-mini`.
 - `SLACK_BOT_TOKEN`: Bot token for the Slack app installed in the support workspace.
 - `SLACK_CHANNEL_ID`: Channel that receives support escalations, for example `C...` or `G...`.
