@@ -77,7 +77,7 @@ async function main() {
   console.log('4. Save. The dashboard shows the signing secret — copy it.');
   console.log('5. Add the secret to your env (.env.local for dev, Vercel env for prod):');
   console.log('');
-  console.log('     KAPSO_WEBHOOK_SECRET=<paste-here>');
+  console.log('     KAPSO_GLOBAL_WEBHOOK_SECRET=<paste-here>');
   console.log('');
   console.log('6. Restart the dev server (env changes need a hot reload).');
   console.log('');
@@ -86,7 +86,9 @@ async function main() {
   console.log("    -H 'x-webhook-signature: <test-signature>' \\");
   console.log("    -H 'content-type: application/json' \\");
   console.log('    -d \'{"type":"whatsapp.phone_number.created","data":{...}}\'');
-  console.log('  → should return {"error":"invalid_signature"} if KAPSO_WEBHOOK_SECRET is set,');
+  console.log(
+    '  → should return {"error":"invalid_signature"} if KAPSO_GLOBAL_WEBHOOK_SECRET is set,'
+  );
   console.log('    or {"error":"webhook_not_configured"} (503) if it is not.');
   console.log('');
   console.log('When a real customer finishes Meta Embedded Signup in the wizard, Kapso will');

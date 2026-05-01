@@ -115,9 +115,14 @@ export const env = {
     process.env.KAPSO_WEBHOOK_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || null,
   /**
    * Project-scope webhook secret returned by Kapso when we register the
-   * Sendero webhook. One value across all tenants — the Sendero project
-   * is the unit Kapso signs against, not per-customer. Populate via
-   * `bun scripts/register-kapso-webhook.ts` (one-shot).
+   * Sendero provisioning webhook. One value across all tenants — the
+   * Sendero project is the unit Kapso signs against, not per-customer.
+   * Populate via `bun scripts/register-kapso-webhook.ts` (one-shot).
+   */
+  kapsoGlobalWebhookSecret: () => process.env.KAPSO_GLOBAL_WEBHOOK_SECRET || null,
+  /**
+   * Customer-service/tool-call secret accepted by `/api/internal/support/tools`.
+   * Kapso support + tenant agent functions use this when calling Sendero tools.
    */
   kapsoWebhookSecret: () => process.env.KAPSO_WEBHOOK_SECRET || null,
   kapsoTenantWorkflowId: () => process.env.KAPSO_TENANT_WORKFLOW_ID || null,
