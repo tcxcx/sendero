@@ -44,7 +44,7 @@ describe('send WhatsApp Flow support function', () => {
         interactive: {
           action: {
             parameters: {
-              flow_id: '454f053b-3b75-4766-aec8-330e21ce3315',
+              flow_id: 'f5f06bd5-3b8e-4a61-8141-155321f29881',
             },
           },
         },

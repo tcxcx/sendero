@@ -4,7 +4,7 @@ const DEFAULT_SUPPORT_PHONE_NUMBER_ID = '1125870723936815';
 const FLOW_CATALOG = {
   login_signup: {
     envVar: 'SENDERO_SUPPORT_LOGIN_SIGNUP_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: '5e22e48e-e4fb-4ef2-a2a0-dd0b4620c99e',
     header: 'Sendero account',
     body: 'Create or link your Sendero traveler profile, WhatsApp identity, travel wallet, and trip gallery.',
     footer: 'Wallets and galleries persist across future trips.',
@@ -12,7 +12,7 @@ const FLOW_CATALOG = {
   },
   trip_intake: {
     envVar: 'SENDERO_SUPPORT_TRIP_INTAKE_FLOW_ID',
-    defaultFlowId: '454f053b-3b75-4766-aec8-330e21ce3315',
+    defaultFlowId: 'f5f06bd5-3b8e-4a61-8141-155321f29881',
     header: 'Sendero trip intake',
     body: 'Share the core trip details in WhatsApp. I will turn it into a Sendero draft for your travel team.',
     footer: 'No booking or payment is committed from this form.',
@@ -20,7 +20,7 @@ const FLOW_CATALOG = {
   },
   support_intake: {
     envVar: 'SENDERO_SUPPORT_REQUEST_FLOW_ID',
-    defaultFlowId: '142d64ba-71e4-42ce-8a834dcddc2b',
+    defaultFlowId: '2167e5fa-263a-420b-803a-f64482c4376c',
     header: 'Sendero support',
     body: 'Use this WhatsApp form to classify the support request and capture the details we need.',
     footer: 'Financial, escrow, and refund actions still require human approval.',
@@ -28,7 +28,7 @@ const FLOW_CATALOG = {
   },
   quote_approval: {
     envVar: 'SENDERO_SUPPORT_QUOTE_APPROVAL_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: '6640f849-cb20-4948-b06c-25096396ebf0',
     header: 'Sendero quote',
     body: 'Review a travel quote and send your decision to the travel team. Payment and ticketing still use a secure approval link.',
     footer: 'No payment or ticketing happens inside WhatsApp.',
@@ -36,7 +36,7 @@ const FLOW_CATALOG = {
   },
   ancillaries: {
     envVar: 'SENDERO_SUPPORT_ANCILLARIES_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: 'a300e63e-b96c-4771-983e-29dcf6dfd4dc',
     header: 'Trip extras',
     body: 'Request bags, seats, insurance, lounge, meals, or priority boarding for an existing trip.',
     footer: 'Paid extras still require secure approval.',
@@ -44,7 +44,7 @@ const FLOW_CATALOG = {
   },
   disruption_help: {
     envVar: 'SENDERO_SUPPORT_DISRUPTION_HELP_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: '950c6a79-0acc-4227-8f6c-252c3da473a9',
     header: 'Travel disruption',
     body: 'Tell Sendero what changed so the travel team can help with rebooking, refunds, hotels, or transport.',
     footer: 'Urgent disruptions are routed to the operator channel.',
@@ -52,7 +52,7 @@ const FLOW_CATALOG = {
   },
   prefund_claim: {
     envVar: 'SENDERO_SUPPORT_PREFUND_CLAIM_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: '7b139aea-9f8c-4585-a7f2-b66b0ba0a4a4',
     header: 'Prefunded trip',
     body: 'Get help claiming a prefunded trip. The secure claim code is sent to ticket email, not WhatsApp.',
     footer: 'Never paste your email claim code into WhatsApp.',
@@ -60,7 +60,7 @@ const FLOW_CATALOG = {
   },
   booking_change: {
     envVar: 'SENDERO_SUPPORT_BOOKING_CHANGE_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: '5b6d17a2-6c60-475f-81ff-271c859d8cc1',
     header: 'Booking change',
     body: 'Request a date, route, rebook, or cancellation change. Fare and refund actions still require secure approval.',
     footer: 'No cancellation or ticketing happens inside WhatsApp.',
@@ -68,7 +68,7 @@ const FLOW_CATALOG = {
   },
   accommodation: {
     envVar: 'SENDERO_SUPPORT_ACCOMMODATION_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: 'ca4f3d3c-98d2-4a7a-bba1-9f3c63aaec4f',
     header: 'Accommodation',
     body: 'Share stay dates, rooms, budget, amenities, and loyalty details for your travel team.',
     footer: 'Paid booking still requires approval.',
@@ -76,7 +76,7 @@ const FLOW_CATALOG = {
   },
   car_transfer: {
     envVar: 'SENDERO_SUPPORT_CAR_TRANSFER_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: 'd97cc078-1b61-47b1-b1bc-36871a634d5d',
     header: 'Ground transport',
     body: 'Request airport transfers, point-to-point rides, or car rentals with pickup, dropoff, and passenger details.',
     footer: 'Payment or confirmation still uses secure approval.',
@@ -84,7 +84,7 @@ const FLOW_CATALOG = {
   },
   restaurant_experience: {
     envVar: 'SENDERO_SUPPORT_RESTAURANT_EXPERIENCE_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: '715c0ab5-5132-4b99-8625-9952f9e68e64',
     header: 'Local recommendations',
     body: 'Capture cuisine, area, budget, time window, dietary needs, or experience preferences.',
     footer: 'Paid reservations need approval.',
@@ -92,7 +92,7 @@ const FLOW_CATALOG = {
   },
   nft_trip_gallery: {
     envVar: 'SENDERO_SUPPORT_NFT_TRIP_GALLERY_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: '47dea4e1-e81f-485b-a1cf-479e638fe3a1',
     header: 'Trip gallery',
     body: 'View or request help with trip stamps, gallery links, and NFT unlock status.',
     footer: 'Unlocks require verification or secure approval.',
@@ -100,7 +100,7 @@ const FLOW_CATALOG = {
   },
   refund_escrow: {
     envVar: 'SENDERO_SUPPORT_REFUND_ESCROW_FLOW_ID',
-    defaultFlowId: null,
+    defaultFlowId: '56f6605c-e6ba-4da1-b4ad-d7e8185591c2',
     header: 'Refund or escrow',
     body: 'Capture refund, escrow, settlement, or validation issues for secure human review.',
     footer: 'Refunds and settlements never execute inside WhatsApp.',
