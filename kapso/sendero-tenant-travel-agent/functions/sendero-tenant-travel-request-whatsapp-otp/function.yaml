@@ -1,0 +1,8 @@
+entrypoint: index.js
+function_type: cloudflare_worker
+invoke_response_mode: passthrough
+name: Request WhatsApp OTP
+public_endpoint: false
+runtime_config: {}
+slug: sendero-tenant-travel-request-whatsapp-otp
+description: Send a short-lived WhatsApp authentication OTP for session verification.

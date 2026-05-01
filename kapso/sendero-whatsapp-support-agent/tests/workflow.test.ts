@@ -1,8 +1,7 @@
+import { buildRepositoryWorkspaceSlug } from '../src/lib/agent-sandbox.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-
-import { buildRepositoryWorkspaceSlug } from '../src/lib/agent-sandbox.js';
 
 const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const ENV_NAMES = [
@@ -76,7 +75,12 @@ describe('sendero whatsapp support workflow', () => {
   });
 
   it('uses provider model names, function slugs, and trigger phone number ids', async () => {
-    setEnv({ PROVIDER_MODEL_NAME: 'provider-model-test' });
+    setEnv({
+      AGENT_SANDBOX_ENABLED: 'false',
+      AGENT_SANDBOX_GITHUB_PAT: '',
+      AGENT_SANDBOX_GITHUB_REPO_URL: '',
+      PROVIDER_MODEL_NAME: 'provider-model-test',
+    });
     const source = await workflowSource();
     const config = agentNodeConfig(source);
 
@@ -92,7 +96,10 @@ describe('sendero whatsapp support workflow', () => {
     expect(
       config.flow_agent_function_tools.some(tool => tool.name === 'get_whatsapp_setup_status')
     ).toBe(true);
-    expect(config.sandbox_enabled).toBeUndefined();
+    expect(
+      config.flow_agent_function_tools.some(tool => tool.name === 'send_whatsapp_flow_message')
+    ).toBe(true);
+    expect(config.sandbox_enabled).toBe(false);
     expect(source.metadata.triggers[0]).toMatchObject({
       phoneNumberId: 'pn_test',
       triggerType: 'inbound_message',

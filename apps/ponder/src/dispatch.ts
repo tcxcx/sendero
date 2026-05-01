@@ -121,6 +121,7 @@ export async function dispatchClaimLockout(
 }
 
 export interface BookingSettledV2DispatchInput {
+  eventVersion?: 'v2';
   bookingId: `0x${string}`;
   vendor: `0x${string}`;
   vendorAmount: string;
@@ -144,5 +145,28 @@ export async function dispatchBookingSettledV2(
   event: BookingSettledV2DispatchInput,
   opts?: DispatchOptions
 ): Promise<DispatchOutcome> {
-  return postJson('/api/internal/billing/settlement-v2', event, opts);
+  return postJson('/api/internal/billing/settlement-v2', { eventVersion: 'v2', ...event }, opts);
+}
+
+export interface BookingSettledV1DispatchInput {
+  eventVersion?: 'v1';
+  bookingId: `0x${string}`;
+  vendor: `0x${string}`;
+  vendorAmount: string;
+  feeAmount: string;
+  txHash: `0x${string}`;
+  blockNumber: string;
+}
+
+/**
+ * Persist the legacy two-leg settlement path so channel tools that
+ * read Sendero's app DB see the same escrow state as the live Ponder
+ * indexer. Without this bridge, WhatsApp/Slack support can miss
+ * settled bookings that only landed as `BookingSettled`.
+ */
+export async function dispatchBookingSettledV1(
+  event: BookingSettledV1DispatchInput,
+  opts?: DispatchOptions
+): Promise<DispatchOutcome> {
+  return postJson('/api/internal/billing/settlement-v2', { eventVersion: 'v1', ...event }, opts);
 }

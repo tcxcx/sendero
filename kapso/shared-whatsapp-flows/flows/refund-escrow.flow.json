@@ -1,0 +1,126 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "REFUND_ESCROW_TYPE": ["REFUND_ESCROW_DETAILS"],
+    "REFUND_ESCROW_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "REFUND_ESCROW_TYPE",
+      "title": "Refund or escrow",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "refund_escrow_type_form",
+            "children": [
+              { "type": "TextHeading", "text": "Refund, escrow, or settlement" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip, booking, or escrow ID",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "request_type",
+                "label": "Request",
+                "required": true,
+                "data-source": [
+                  { "id": "refund_status", "title": "Refund status" },
+                  { "id": "refund_request", "title": "Request refund" },
+                  { "id": "escrow_status", "title": "Escrow status" },
+                  { "id": "settlement_issue", "title": "Settlement issue" },
+                  { "id": "validation_issue", "title": "Validation issue" }
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "urgency",
+                "label": "Urgency",
+                "required": true,
+                "data-source": [
+                  { "id": "normal", "title": "Normal" },
+                  { "id": "urgent", "title": "Urgent" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "request_type": "${form.request_type}",
+                    "urgency": "${form.urgency}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "REFUND_ESCROW_DETAILS",
+      "title": "Details",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "request_type": { "type": "string", "__example__": "refund_request" },
+        "urgency": { "type": "string", "__example__": "normal" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "refund_escrow_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Intake only" },
+              {
+                "type": "TextBody",
+                "text": "Sendero will save this request. Actual refunds, releases, settlement, and policy overrides require human review and secure approval."
+              },
+              {
+                "type": "TextInput",
+                "name": "reference",
+                "label": "Invoice, tx hash, or reference",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "TextArea",
+                "name": "details",
+                "label": "Details",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "request_type": "${data.request_type}",
+                    "urgency": "${data.urgency}",
+                    "reference": "${form.reference}",
+                    "details": "${form.details}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

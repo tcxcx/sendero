@@ -35,17 +35,89 @@ export const SENDERO_TEMPLATES = {
     fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
     bodyVars: ['travelerName', 'tripSummary', 'inviteLink'],
   },
+  TRIP_INTAKE_START: {
+    name: 'sendero_trip_intake_start',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['travelerName', 'tripSummary', 'intakeLink'],
+  },
+  QUOTE_READY: {
+    name: 'sendero_quote_ready',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['tripSummary', 'quoteSummary', 'approvalLink'],
+  },
+  ACTION_REQUIRED: {
+    name: 'sendero_action_required',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['senderName', 'actionSummary', 'actionLink'],
+  },
   BOOKING_CONFIRMATION: {
     name: 'sendero_booking_confirmation',
     defaultLocale: 'en_US',
     fallbackLocales: ['es_MX', 'pt_BR'],
     bodyVars: ['pnr', 'route', 'departAt'],
   },
+  BOOKING_CONFIRMED: {
+    name: 'sendero_booking_confirmed',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['pnr', 'route', 'departAt', 'ticketEmail'],
+  },
+  TICKET_DELIVERY: {
+    name: 'sendero_ticket_delivery',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['tripSummary', 'ticketEmail', 'reference'],
+  },
   CHECKIN_REMINDER: {
     name: 'sendero_checkin_reminder',
     defaultLocale: 'en_US',
     fallbackLocales: ['es_MX', 'pt_BR'],
     bodyVars: ['pnr', 'departAt', 'gate'],
+  },
+  DISRUPTION_ALERT: {
+    name: 'sendero_disruption_alert',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['subject', 'status', 'supportOptions', 'supportLink'],
+  },
+  HANDOFF_UPDATE: {
+    name: 'sendero_handoff_update',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['reference', 'update'],
+  },
+  PREFUND_INVITE: {
+    name: 'sendero_prefund_invite',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['senderName', 'tripSummary', 'claimLink', 'ticketEmail'],
+  },
+  PAYMENT_LINK: {
+    name: 'sendero_payment_link',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['paymentSummary', 'amount', 'paymentLink'],
+  },
+  ESCROW_UPDATE: {
+    name: 'sendero_escrow_update',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['subject', 'status', 'reference'],
+  },
+  NFT_STAMP_READY: {
+    name: 'sendero_nft_stamp_ready',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['tripSummary', 'galleryLink'],
+  },
+  PROFILE_UPDATE_REQUIRED: {
+    name: 'sendero_profile_update_required',
+    defaultLocale: 'en_US',
+    fallbackLocales: ['es_MX', 'es_ES', 'pt_BR'],
+    bodyVars: ['missingInfo', 'actionSummary', 'profileLink'],
   },
   APPROVAL_REQUEST: {
     name: 'sendero_approval_request',
@@ -162,10 +234,7 @@ export function buildOtpComponents(code: string): TemplateComponent[] {
  * send. Header `{{1}}` = subject, body `{{1}}` = body text. Mirrors
  * the in-session free-form sender's `*subject*\n\n${body}` hierarchy.
  */
-export function buildSecurityAlertComponents(
-  subject: string,
-  body: string
-): TemplateComponent[] {
+export function buildSecurityAlertComponents(subject: string, body: string): TemplateComponent[] {
   return [
     {
       type: 'header',

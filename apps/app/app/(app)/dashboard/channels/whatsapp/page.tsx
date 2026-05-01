@@ -26,6 +26,7 @@ import {
 import { WhatsappConnectedPanel } from '@/components/channels/whatsapp-connected-panel';
 import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireCurrentTenant } from '@/lib/tenant-context';
+import { readWhatsappHealth, type WhatsAppHealthSummary } from '@/lib/whatsapp-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,7 @@ export default async function WhatsAppChannelPage() {
       ? `${install.businessDisplayName} · ${install.displayPhoneNumber}`
       : install.displayPhoneNumber
     : null;
+  const health = install?.phoneNumberId ? await readWhatsappHealth(install.phoneNumberId) : null;
 
   async function probe() {
     'use server';
@@ -97,7 +99,7 @@ export default async function WhatsAppChannelPage() {
       }}
     >
       {status === 'active' && install ? (
-        <ConnectedView install={install} />
+        <ConnectedView install={install} health={health} />
       ) : (
         <DisconnectedView
           plan={plan}
@@ -105,6 +107,7 @@ export default async function WhatsAppChannelPage() {
           identifier={identifier}
           lastHealthyAt={install?.lastHealthyAt?.toISOString() ?? null}
           lastErrorMessage={install?.lastErrorMessage ?? null}
+          health={health}
           onProbe={status === 'not_installed' ? undefined : probe}
         />
       )}
@@ -114,12 +117,14 @@ export default async function WhatsAppChannelPage() {
 
 function ConnectedView({
   install,
+  health,
 }: {
   install: {
     displayPhoneNumber: string | null;
     businessDisplayName: string | null;
     metadata: unknown;
   };
+  health: WhatsAppHealthSummary | null;
 }) {
   const metadata = (install.metadata as Record<string, unknown> | null) ?? {};
   const templates = Array.isArray(metadata.templates)
@@ -133,6 +138,7 @@ function ConnectedView({
       templates={templates}
       recentThreads={[]}
       weeklyStats={{ trips: 0, messages: 0, deliveryRate: 100 }}
+      health={health}
     />
   );
 }
@@ -143,6 +149,7 @@ function DisconnectedView({
   identifier,
   lastHealthyAt,
   lastErrorMessage,
+  health,
   onProbe,
 }: {
   plan: string;
@@ -150,6 +157,7 @@ function DisconnectedView({
   identifier: string | null;
   lastHealthyAt: string | null;
   lastErrorMessage: string | null;
+  health: WhatsAppHealthSummary | null;
   onProbe?: () => Promise<{ ok: boolean; message?: string } | undefined>;
 }) {
   return (
@@ -163,6 +171,8 @@ function DisconnectedView({
         connectHref="/dashboard/channels/whatsapp/connect"
         onProbe={onProbe}
       />
+
+      {health ? <WhatsAppMetaReadinessCard health={health} /> : null}
 
       <section
         className="sd-card-flat"
@@ -202,6 +212,58 @@ function DisconnectedView({
 
       {plan === 'free' ? <WhatsAppReadinessCard /> : null}
     </>
+  );
+}
+
+function WhatsAppMetaReadinessCard({ health }: { health: WhatsAppHealthSummary }) {
+  return (
+    <section
+      className="sd-card-flat"
+      style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
+    >
+      <div className="t-meta">Meta readiness</div>
+      <div
+        style={{
+          marginTop: 10,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: 10,
+        }}
+      >
+        <ReadinessItem label="Overall" value={health.status ?? 'unknown'} />
+        <ReadinessItem label="Messaging" value={health.messagingStatus ?? 'unknown'} />
+        <ReadinessItem label="Phone" value={health.phoneStatus ?? 'unknown'} />
+        <ReadinessItem
+          label="Webhook"
+          value={
+            health.webhookVerified
+              ? 'verified'
+              : health.webhookSubscribed
+                ? 'subscribed, waiting for first message'
+                : 'not subscribed'
+          }
+        />
+        <ReadinessItem label="Quality" value={health.qualityRating ?? 'unknown'} />
+      </div>
+      {health.errors.length ? (
+        <ul className="t-body ink-70" style={{ margin: '12px 0 0', paddingLeft: 18, fontSize: 13 }}>
+          {health.errors.slice(0, 3).map(error => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+function ReadinessItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="t-meta">{label}</div>
+      <div className="t-body" style={{ marginTop: 4, fontSize: 13 }}>
+        {value}
+      </div>
+    </div>
   );
 }
 

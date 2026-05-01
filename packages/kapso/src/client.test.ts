@@ -4,8 +4,8 @@
  * Ported from desk-v1 test patterns, adapted for Sendero.
  */
 
-import { describe, expect, it } from 'bun:test';
 import { KapsoClient, KapsoError } from './client';
+import { describe, expect, it } from 'bun:test';
 
 function mockFetch(responses: Array<{ status: number; body: unknown }>): typeof fetch {
   let i = 0;
@@ -125,6 +125,24 @@ describe('KapsoClient', () => {
     expect(hook.id).toBe('wh_1');
     expect(hook.secret).toBe('shh');
     expect(capturedUrl).toContain('/platform/v1/whatsapp/phone_numbers/pn_1/webhooks');
+  });
+
+  it('checks WhatsApp phone health through the WhatsApp phone-number route', async () => {
+    let capturedUrl = '';
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async input => {
+        capturedUrl = String(input);
+        return new Response(JSON.stringify({ data: { status: 'unhealthy', checks: {} } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch,
+    });
+
+    const health = await client.checkPhoneHealth('pn_1');
+    expect(health.status).toBe('unhealthy');
+    expect(capturedUrl).toContain('/platform/v1/whatsapp/phone_numbers/pn_1/health');
   });
 
   it('tolerates bare (unwrapped) responses', async () => {

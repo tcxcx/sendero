@@ -281,11 +281,13 @@ function projectFromSession(
   def: WorkflowDef,
   ctx: PersistedThreadContext
 ): WizardRunSnapshot {
+  const pauseSteps = collectPauseSteps(def);
   const steps = collectWizardSteps(def, {
     nextStepId: ctx.pausedStepId,
     trail: ctx.trail,
   });
   const activeStep = steps.find(s => s.id === ctx.pausedStepId);
+  const activeDefinition = pauseSteps.find(s => s.id === ctx.pausedStepId);
   return {
     sessionId,
     workflowId: ctx.workflowId,
@@ -294,7 +296,10 @@ function projectFromSession(
     scratchpad: ctx.scratchpad,
     steps,
     activeStep,
-    activePayload: ctx.pausePayload,
+    activePayload: {
+      ...(ctx.pausePayload ?? {}),
+      ...(activeDefinition?.payload ?? {}),
+    },
   };
 }
 

@@ -215,9 +215,7 @@ async function handleTokensMinted(log: EventLogNotification): Promise<DispatchRe
 
   // Find by (contract, tokenId) — we may have a pending row from
   // mint_stamp.handler that needs the on-chain confirmation.
-  const stamp = await prisma.nftStamp.findUnique({
-    where: { contract_tokenId: { contract, tokenId } },
-  });
+  const stamp = await findStampByContractToken(contract, tokenId);
   if (!stamp) {
     // Direct on-chain mint with no Sendero side row — log + skip.
     // (Could also happen if mint_stamp ran but we failed to persist
@@ -307,9 +305,7 @@ async function handleUri(log: EventLogNotification): Promise<DispatchResult> {
   const tokenId = topicToBigInt(log.topics[1]).toString();
   const newUri = dataToString(log.data, 0);
   const contract = log.contractAddress!;
-  const stamp = await prisma.nftStamp.findUnique({
-    where: { contract_tokenId: { contract, tokenId } },
-  });
+  const stamp = await findStampByContractToken(contract, tokenId);
   if (!stamp) {
     return { matched: false, reason: `no_stamp_for_token_${tokenId}` };
   }
@@ -331,10 +327,7 @@ async function applyOwnershipDelta(args: {
   txHash?: string;
   blockHeight?: number;
 }): Promise<void> {
-  const stamp = await prisma.nftStamp.findUnique({
-    where: { contract_tokenId: { contract: args.contract, tokenId: args.tokenId } },
-    select: { id: true },
-  });
+  const stamp = await findStampByContractToken(args.contract, args.tokenId, { id: true });
   if (!stamp) return; // unknown token — skip the rollup
 
   // Decrement from-side (skip if mint, from == 0x0).
@@ -380,14 +373,24 @@ async function applyOwnershipDelta(args: {
 }
 
 async function resolveUserIdForAddress(address: string): Promise<string | null> {
-  const wallet = await prisma.circleWallet.findFirst({
-    where: { address: address.toLowerCase() },
-    select: { tenantId: true },
+  const wallet = await prisma.wallet.findFirst({
+    where: {
+      provisioner: 'dcw',
+      address: { equals: address.toLowerCase(), mode: 'insensitive' },
+    },
+    select: { userId: true },
   });
-  // CircleWallet has tenantId, not userId, in this schema. The user
-  // mapping comes via Membership for the tenant. For v1 we leave
-  // userId null when address is a tenant treasury and only fill it
-  // when we wire a per-user wallet table. The collection page can
-  // still query by ownerAddress.
-  return wallet ? null : null;
+  return wallet?.userId ?? null;
+}
+
+async function findStampByContractToken<
+  TSelect extends Parameters<typeof prisma.nftStamp.findFirst>[0]['select'],
+>(contract: string, tokenId: string, select?: TSelect) {
+  return prisma.nftStamp.findFirst({
+    where: {
+      contract: { equals: contract, mode: 'insensitive' },
+      tokenId,
+    },
+    ...(select ? { select } : {}),
+  });
 }

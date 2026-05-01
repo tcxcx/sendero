@@ -1,0 +1,164 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SUPPORT_TYPE": ["SUPPORT_DETAILS"],
+    "SUPPORT_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "SUPPORT_TYPE",
+      "title": "Support request",
+      "data": {
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "support_type_form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "What do you need help with?"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "support_area",
+                "label": "Area",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "whatsapp_setup",
+                    "title": "WhatsApp setup"
+                  },
+                  {
+                    "id": "trip_booking",
+                    "title": "Trip or booking"
+                  },
+                  {
+                    "id": "billing_refund",
+                    "title": "Billing or refund"
+                  },
+                  {
+                    "id": "escrow_payment",
+                    "title": "Escrow or payment"
+                  },
+                  {
+                    "id": "other",
+                    "title": "Other"
+                  }
+                ]
+              },
+              {
+                "type": "Dropdown",
+                "name": "urgency",
+                "label": "Urgency",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "normal",
+                    "title": "Normal"
+                  },
+                  {
+                    "id": "urgent",
+                    "title": "Urgent"
+                  }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "support_area": "${form.support_area}",
+                    "urgency": "${form.urgency}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "SUPPORT_DETAILS",
+      "title": "Details",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "support_area": {
+          "type": "string",
+          "__example__": "whatsapp_setup"
+        },
+        "urgency": {
+          "type": "string",
+          "__example__": "normal"
+        },
+        "area_title": {
+          "type": "string",
+          "__example__": "WhatsApp setup"
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "support_details_form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "${data.area_title}"
+              },
+              {
+                "type": "TextInput",
+                "name": "reference",
+                "label": "Reference",
+                "required": false,
+                "input-type": "text",
+                "helper-text": "Support ref, trip ID, invoice ID, phone number ID, or tx hash"
+              },
+              {
+                "type": "TextArea",
+                "name": "details",
+                "label": "What happened?",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "name": "preferred_contact",
+                "label": "Best contact",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "support_area": "${data.support_area}",
+                    "urgency": "${data.urgency}",
+                    "reference": "${form.reference}",
+                    "details": "${form.details}",
+                    "preferred_contact": "${form.preferred_contact}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

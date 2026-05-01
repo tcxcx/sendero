@@ -11,6 +11,18 @@ caller falls back to one of these templates.
 | ---- | --------- | -------- | ------- |
 | `sendero_otp.json` | `sendero_otp` | AUTHENTICATION | OTP resend for guest claim. Body var = preimage code. Meta auto-renders the body copy + COPY_CODE button. |
 | `sendero_security_alert.json` | `sendero_security_alert` | UTILITY | Lockout / security ping to the buyer when the agency is in-channel. Header var = subject, body var = alert text. |
+| `sendero_trip_intake_start.json` | `sendero_trip_intake_start` | UTILITY | Invites a traveler to complete structured trip intake. |
+| `sendero_quote_ready.json` | `sendero_quote_ready` | UTILITY | Sends quote-ready notification with secure approval link. |
+| `sendero_action_required.json` | `sendero_action_required` | UTILITY | Generic secure action approval reminder. |
+| `sendero_booking_confirmed.json` | `sendero_booking_confirmed` | UTILITY | Booking confirmation with PNR, route, departure, and ticket email. |
+| `sendero_ticket_delivery.json` | `sendero_ticket_delivery` | UTILITY | Confirms ticket or receipt delivery to email. |
+| `sendero_disruption_alert.json` | `sendero_disruption_alert` | UTILITY | Flight/trip disruption notification with support link. |
+| `sendero_handoff_update.json` | `sendero_handoff_update` | UTILITY | Operator or support lifecycle update. |
+| `sendero_prefund_invite.json` | `sendero_prefund_invite` | UTILITY | Prefunded trip claim invitation. Secure code is delivered to ticket email, not WhatsApp. |
+| `sendero_payment_link.json` | `sendero_payment_link` | UTILITY | Secure payment or deposit link. |
+| `sendero_escrow_update.json` | `sendero_escrow_update` | UTILITY | Escrow held/released/validation state update. |
+| `sendero_nft_stamp_ready.json` | `sendero_nft_stamp_ready` | UTILITY | NFT trip stamp/gallery notification. |
+| `sendero_profile_update_required.json` | `sendero_profile_update_required` | UTILITY | Missing traveler profile or ticket-delivery data reminder. |
 
 Each entry must also be present in
 `packages/whatsapp/src/templates.ts → SENDERO_TEMPLATES` so the typed

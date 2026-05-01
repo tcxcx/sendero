@@ -1,0 +1,8 @@
+entrypoint: index.js
+function_type: cloudflare_worker
+invoke_response_mode: passthrough
+name: Get WhatsApp Session Context
+public_endpoint: false
+runtime_config: {}
+slug: sendero-tenant-travel-get-whatsapp-session-context
+description: Resolve remembered/verified WhatsApp session level for the current tenant contact.

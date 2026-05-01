@@ -1,0 +1,21 @@
+{
+  "name": "sendero_profile_update_required",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Sendero needs {{1}} before continuing with {{2}}. Update securely here: {{3}}",
+      "example": {
+        "body_text": [
+          [
+            "ticket delivery email",
+            "your booking",
+            "https://app.sendero.travel/actions/profile/abc"
+          ]
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Use secure links for sensitive profile data" }
+  ]
+}

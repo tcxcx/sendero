@@ -10,6 +10,7 @@
 import { whatsappPanes } from '@/components/channels/setup-wizard/whatsapp-panes';
 import { ChannelSetupWizard } from '@/components/channels/setup-wizard/wizard-shell';
 import { currentOrgPlanTier } from '@/lib/billing-plan';
+import { docsUrl } from '@/lib/docs-url';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 import { loadOrStartWizardSession } from '@/lib/wizard-session';
 
@@ -39,7 +40,7 @@ export default async function WhatsAppConnectPage() {
             ? 'Free workspaces can review setup requirements here. Live tenant WhatsApp operations require upgrading and connecting a dedicated WhatsApp Business number.'
             : 'Connect your WhatsApp Business number through Kapso, then Sendero activates the tenant travel agent workflow.'
         }
-        helpHref="/docs/channels/whatsapp"
+        helpHref={docsUrl('/docs/channels/whatsapp')}
         helpLabel="Read the WhatsApp setup guide →"
         initialRun={run}
         panes={whatsappPanes}

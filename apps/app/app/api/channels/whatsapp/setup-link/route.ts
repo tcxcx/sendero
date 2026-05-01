@@ -57,8 +57,8 @@ export async function POST(): Promise<Response> {
       { status: 503 }
     );
   }
-  const redirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/settings/channels?onboarding=whatsapp&status=connected`;
-  const failureRedirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/settings/channels?onboarding=whatsapp&status=failed`;
+  const redirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/channels/whatsapp/connect?onboarding=whatsapp&status=connected`;
+  const failureRedirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/channels/whatsapp/connect?onboarding=whatsapp&status=failed`;
 
   const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
 

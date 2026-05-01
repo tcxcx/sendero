@@ -12,6 +12,7 @@ export const FUNCTION_SLUGS = {
   getTripContext: 'sendero-whatsapp-support-get-trip-context',
   getWhatsappSetupStatus: 'sendero-whatsapp-support-get-whatsapp-setup-status',
   searchSenderoDocs: 'sendero-whatsapp-support-search-sendero-docs',
+  sendFlowMessage: 'sendero-whatsapp-support-send-flow-message',
   slackEvents: 'sendero-whatsapp-support-slack-events',
   updateSupportTicket: 'sendero-whatsapp-support-update-support-ticket',
 };
@@ -33,5 +34,7 @@ export const FUNCTION_DESCRIPTIONS = {
   getWhatsappSetupStatus:
     'Fetch live WhatsApp install, setup link, phone number, webhook, API, and delivery diagnostics.',
   searchSenderoDocs: 'Search Sendero product docs, runbooks, and WhatsApp templates.',
+  sendFlowMessage:
+    'Send a configured Sendero WhatsApp Flow form to the current support WhatsApp conversation.',
   updateSupportTicket: 'Update the status or summary of a durable Sendero support ticket.',
 };

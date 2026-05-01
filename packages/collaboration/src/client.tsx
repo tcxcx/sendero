@@ -13,10 +13,12 @@
  *   - useThreads() / Thread   → comments on segments
  */
 
-import { createClient, LiveList, type BaseUserMeta } from '@liveblocks/client';
-import { createRoomContext } from '@liveblocks/react';
 import type { ReactNode } from 'react';
-import { type TripPresence, type TripStorage } from './rooms';
+
+import { type BaseUserMeta, createClient, LiveList } from '@liveblocks/client';
+import { createRoomContext } from '@liveblocks/react';
+
+import type { TripPresence, TripStorage } from './rooms';
 
 type LiveTripStorage = {
   itineraryVersion: number;

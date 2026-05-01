@@ -190,7 +190,6 @@ function buildSlackMrkdwn(args: {
 }
 
 export async function exportRouteMap(input: ExportRouteMapInput): Promise<ExportRouteMapResult> {
-  const apiKey = requireGoogleMapsApiKey('export_route_map');
   const title = input.title ?? 'Sendero route';
   const googleMapsUrl = buildGoogleMapsUrl(input.stops, input.mode);
   const appleMapsUrl = buildAppleMapsUrl(
@@ -203,7 +202,9 @@ export async function exportRouteMap(input: ExportRouteMapInput): Promise<Export
     to: getStopLabel(input.stops[index + 1], index + 1),
     appleMapsUrl: buildAppleMapsUrl(stop, input.stops[index + 1], input.mode),
   }));
-  const staticMapUrl = input.includeStaticMap ? buildStaticPreview(apiKey, input.stops) : undefined;
+  const staticMapUrl = input.includeStaticMap
+    ? buildStaticPreview(requireGoogleMapsApiKey('export_route_map'), input.stops)
+    : undefined;
   const stopCount = input.stops.length;
   const hasWaypoints = stopCount > 2;
   const summary = buildSummary({

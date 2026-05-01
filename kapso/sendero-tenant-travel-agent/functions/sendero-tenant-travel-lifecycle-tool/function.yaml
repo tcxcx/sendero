@@ -1,0 +1,4 @@
+slug: sendero-tenant-travel-lifecycle-tool
+name: Sendero tenant travel lifecycle tool
+function_type: cloudflare_worker
+entrypoint: index.js

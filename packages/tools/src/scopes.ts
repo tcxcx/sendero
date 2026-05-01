@@ -60,6 +60,9 @@ export function toolToScope(toolName: string): KeyScope {
     toolName === 'send_pay_link' ||
     toolName === 'guest_claim_link' ||
     toolName === 'confirm_flight' ||
+    toolName === 'give_feedback' ||
+    toolName === 'request_validation' ||
+    toolName === 'submit_validation_response' ||
     // E2 — flipping the activated pricing policy row is an admin write
     // that unlocks the entire settlement pipeline. Lives in the same
     // 'settlement' scope so a leaked read-mostly key can't enable it.
@@ -76,20 +79,17 @@ export function toolToScope(toolName: string): KeyScope {
     toolName === 'bridge_to_arc' ||
     toolName === 'swap_and_bridge' ||
     toolName === 'gateway_balance' ||
-    toolName === 'gateway_transfer'
+    toolName === 'gateway_transfer' ||
+    toolName === 'mint_stamp' ||
+    toolName === 'refresh_stamp_uri'
   ) {
     return 'treasury';
   }
   if (toolName === 'scan_document' || toolName === 'generate_booking_invoice') return 'documents';
-  if (
-    toolName === 'check_travel_eligibility' ||
-    toolName === 'request_validation' ||
-    toolName === 'submit_validation_response' ||
-    toolName === 'read_validation'
-  ) {
+  if (toolName === 'check_travel_eligibility' || toolName === 'read_validation') {
     return 'compliance';
   }
-  if (toolName === 'give_feedback' || toolName === 'read_reputation') {
+  if (toolName === 'read_reputation') {
     return 'trip_assistance';
   }
   if (

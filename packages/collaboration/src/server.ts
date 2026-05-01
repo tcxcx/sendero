@@ -8,7 +8,8 @@
  */
 
 import { Liveblocks } from '@liveblocks/node';
-import { parseRoomId, roomIdForTrip } from './rooms';
+
+import { parseRoomId, roomIdForTrip, roomIdForWorkspace } from './rooms';
 
 let _client: Liveblocks | null | undefined;
 
@@ -78,7 +79,7 @@ export async function issueSession(args: IssueSessionArgs): Promise<IssuedSessio
 }
 
 /** Convenience re-exports so route handlers don't need the /rooms subpath. */
-export { roomIdForTrip, parseRoomId };
+export { roomIdForTrip, roomIdForWorkspace, parseRoomId };
 
 /**
  * Ensure a room exists (idempotent). Call once when a group trip is
@@ -99,6 +100,21 @@ export async function ensureRoom(args: {
     await client.createRoom(roomId, {
       defaultAccesses: args.defaultAccesses ?? ['room:write'],
       metadata: { tenantId: args.tenantId, tripId: args.tripId },
+    });
+  }
+}
+
+/** Ensure the tenant-wide dashboard room exists. */
+export async function ensureWorkspaceRoom(args: { tenantId: string }): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  const roomId = roomIdForWorkspace(args.tenantId);
+  try {
+    await client.getRoom(roomId);
+  } catch {
+    await client.createRoom(roomId, {
+      defaultAccesses: ['room:write'],
+      metadata: { tenantId: args.tenantId, scope: 'workspace' },
     });
   }
 }

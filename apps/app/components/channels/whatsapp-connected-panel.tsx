@@ -28,6 +28,12 @@ interface WhatsappConnectedProps {
     badge?: 'NOW' | null;
   }>;
   weeklyStats: { trips: number; messages: number; deliveryRate: number };
+  health?: {
+    status: string | null;
+    messagingStatus: string | null;
+    webhookVerified: boolean | null;
+    errors: string[];
+  } | null;
 }
 
 export function WhatsappConnectedPanel({
@@ -37,6 +43,7 @@ export function WhatsappConnectedPanel({
   templates,
   recentThreads,
   weeklyStats,
+  health,
 }: WhatsappConnectedProps) {
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -89,6 +96,24 @@ export function WhatsappConnectedPanel({
           pillLabel="SET"
         />
       </div>
+
+      {health ? (
+        <article
+          className="sd-card-flat"
+          style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
+        >
+          <div className="t-meta">Meta readiness</div>
+          <p className="t-body ink-70" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55 }}>
+            Overall {health.status ?? 'unknown'} · messaging {health.messagingStatus ?? 'unknown'} ·
+            webhook {health.webhookVerified ? 'verified' : 'waiting for first inbound message'}
+          </p>
+          {health.errors.length ? (
+            <p className="t-body ink-70" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55 }}>
+              {health.errors[0]}
+            </p>
+          ) : null}
+        </article>
+      ) : null}
 
       <div
         style={{

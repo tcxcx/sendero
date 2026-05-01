@@ -1,0 +1,17 @@
+{
+  "name": "sendero_trip_intake_start",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hi {{1}}, please complete the trip details for {{2}} here: {{3}}",
+      "example": {
+        "body_text": [
+          ["Tomas", "Santiago business trip", "https://app.sendero.travel/actions/trip-intake/abc"]
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Sendero" }
+  ]
+}

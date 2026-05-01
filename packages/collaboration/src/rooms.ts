@@ -1,10 +1,10 @@
 /**
  * Room naming conventions + per-room shape.
  *
- * A Sendero room is a group trip's shared workspace. Room id encodes
- * tenantId + tripId so Liveblocks session auth can enforce tenant
- * isolation on the server: users can only join rooms where their
- * ChannelIdentity.tenantId matches.
+ * A Sendero room is either the tenant workspace or a group trip's
+ * shared workspace. Room id encodes tenantId so Liveblocks session
+ * auth can enforce tenant isolation on the server: users can only join
+ * rooms where their Clerk organization maps to that Tenant.
  *
  * Presence + storage shapes mirror the traveler's mental model — who
  * is viewing, whose cursor is where, and the itinerary document that
@@ -15,10 +15,20 @@ export function roomIdForTrip(tenantId: string, tripId: string): string {
   return `sendero:${tenantId}:trip:${tripId}`;
 }
 
-export function parseRoomId(roomId: string): { tenantId: string; tripId: string } | null {
-  const match = /^sendero:([^:]+):trip:(.+)$/.exec(roomId);
-  if (!match) return null;
-  return { tenantId: match[1], tripId: match[2] };
+export function roomIdForWorkspace(tenantId: string): string {
+  return `sendero:${tenantId}:workspace`;
+}
+
+export type ParsedRoom =
+  | { kind: 'workspace'; tenantId: string; tripId?: never }
+  | { kind: 'trip'; tenantId: string; tripId: string };
+
+export function parseRoomId(roomId: string): ParsedRoom | null {
+  const workspace = /^sendero:([^:]+):workspace$/.exec(roomId);
+  if (workspace) return { kind: 'workspace', tenantId: workspace[1] };
+  const trip = /^sendero:([^:]+):trip:(.+)$/.exec(roomId);
+  if (trip) return { kind: 'trip', tenantId: trip[1], tripId: trip[2] };
+  return null;
 }
 
 /**
@@ -29,10 +39,21 @@ export function parseRoomId(roomId: string): { tenantId: string; tripId: string 
 export type TripPresence = {
   userId: string;
   displayName: string;
-  role: 'traveler' | 'agent' | 'approver' | 'guest';
+  avatarUrl: string | null;
+  role: 'traveler' | 'agent' | 'approver' | 'guest' | 'admin' | 'finance' | 'member';
   cursorX: number | null;
   cursorY: number | null;
-  focusedSection: 'flights' | 'hotels' | 'ground' | 'notes' | null;
+  focusedSection:
+    | 'workspace'
+    | 'inbox'
+    | 'trips'
+    | 'billing'
+    | 'settings'
+    | 'flights'
+    | 'hotels'
+    | 'ground'
+    | 'notes'
+    | null;
   [key: string]: string | number | boolean | null;
 };
 

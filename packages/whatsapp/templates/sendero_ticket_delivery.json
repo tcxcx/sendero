@@ -1,0 +1,15 @@
+{
+  "name": "sendero_ticket_delivery",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Your ticket or receipt for {{1}} was sent to {{2}}. Reference: {{3}}.",
+      "example": {
+        "body_text": [["NYC to Santiago", "traveler@example.com", "ABC123"]]
+      }
+    },
+    { "type": "FOOTER", "text": "Check your inbox before travel" }
+  ]
+}

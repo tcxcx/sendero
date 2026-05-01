@@ -1,0 +1,124 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "ANCILLARY_TYPE": ["ANCILLARY_DETAILS"],
+    "ANCILLARY_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "ANCILLARY_TYPE",
+      "title": "Ancillaries",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "ancillary_type_form",
+            "children": [
+              { "type": "TextHeading", "text": "Add trip extras" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip ID",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "traveler_name",
+                "label": "Traveler",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "CheckboxGroup",
+                "name": "products",
+                "label": "Extras",
+                "required": true,
+                "data-source": [
+                  { "id": "bags", "title": "Bags" },
+                  { "id": "seats", "title": "Seats" },
+                  { "id": "insurance", "title": "Insurance" },
+                  { "id": "lounge", "title": "Lounge" },
+                  { "id": "meals", "title": "Meals" },
+                  { "id": "priority", "title": "Priority boarding" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "traveler_name": "${form.traveler_name}",
+                    "products": "${form.products}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "ANCILLARY_DETAILS",
+      "title": "Extra details",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "traveler_name": { "type": "string", "__example__": "Tomas" },
+        "products": { "type": "array", "items": { "type": "string" }, "__example__": ["bags"] },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "ancillary_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Purchase requires approval" },
+              {
+                "type": "TextBody",
+                "text": "Sendero will save this request. Any paid add-on still uses the secure approval/payment path."
+              },
+              {
+                "type": "TextInput",
+                "name": "budget",
+                "label": "Budget",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "TextArea",
+                "name": "details",
+                "label": "Preferences",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "traveler_name": "${data.traveler_name}",
+                    "products": "${data.products}",
+                    "budget": "${form.budget}",
+                    "details": "${form.details}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

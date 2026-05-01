@@ -1,5 +1,6 @@
 import { START, Workflow } from '@kapso/workflows';
 
+import { WHATSAPP_FLOW_AGENT_PROMPT } from '../../../shared-whatsapp-flows/src/catalog.js';
 import { resolveAgentSandboxTemplatePatchFromEnv } from '../../src/lib/agent-sandbox.js';
 import {
   DEFAULT_PROVIDER_MODEL_NAME,
@@ -52,7 +53,8 @@ Escalation:
 
 Completion:
 - Call complete_task after a resolved customer-facing answer.
-- Call handoff_to_human when the user needs a human operator or the internal answer remains insufficient.`;
+- Call handoff_to_human when the user needs a human operator or the internal answer remains insufficient.
+${WHATSAPP_FLOW_AGENT_PROMPT}`;
 
 loadLocalEnv(process.cwd());
 
@@ -206,6 +208,48 @@ export function buildWorkflow(): Workflow {
               limit: { type: 'number' },
             },
             required: ['query'],
+          },
+        },
+        {
+          name: 'send_whatsapp_flow_message',
+          description: FUNCTION_DESCRIPTIONS.sendFlowMessage,
+          functionSlug: FUNCTION_SLUGS.sendFlowMessage,
+          inputSchema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              flow_key: {
+                type: 'string',
+                enum: [
+                  'login_signup',
+                  'trip_intake',
+                  'support_intake',
+                  'quote_approval',
+                  'ancillaries',
+                  'disruption_help',
+                  'prefund_claim',
+                  'booking_change',
+                  'accommodation',
+                  'car_transfer',
+                  'restaurant_experience',
+                  'nft_trip_gallery',
+                  'refund_escrow',
+                ],
+                description:
+                  'Canonical Sendero WhatsApp Flow to send. Use login_signup for traveler account/wallet setup, trip_intake for travel requests, support_intake for support/refund/setup, quote_approval for quote review, ancillaries for extras, disruption_help for trip disruption, prefund_claim for prefunded claim guidance, booking_change for rebook/cancel/change intake, accommodation for stays, car_transfer for ground transport, restaurant_experience for local recommendations, nft_trip_gallery for trip stamps, and refund_escrow for refund/settlement intake.',
+              },
+              header_text: { type: 'string' },
+              body_text: { type: 'string' },
+              footer_text: { type: 'string' },
+              cta: { type: 'string' },
+              mode: {
+                type: 'string',
+                enum: ['draft', 'published'],
+                description:
+                  'Optional Flow send mode. Use draft only during Flow preview testing before publish.',
+              },
+            },
+            required: ['flow_key'],
           },
         },
         {

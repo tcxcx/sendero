@@ -30,10 +30,34 @@ Set the required values in `.env.local`:
 - `SLACK_SIGNING_SECRET`: Slack app signing secret for request verification.
 - `KAPSO_WEBHOOK_BASE_URL`: Sendero app origin for support context tools, for example `https://app.sendero.travel`.
 - `KAPSO_WEBHOOK_SECRET`: Shared secret accepted by `/api/internal/support/tools`.
+- `SENDERO_SUPPORT_TRIP_INTAKE_FLOW_ID`: Optional Kapso/Meta Flow id for live-testing structured trip intake on the support number.
+- `SENDERO_SUPPORT_REQUEST_FLOW_ID`: Optional Kapso/Meta Flow id for live-testing structured support/refund/setup intake on the support number.
+- `SENDERO_SUPPORT_LOGIN_SIGNUP_FLOW_ID`: Optional Flow id for traveler login/signup and wallet consent.
+- `SENDERO_SUPPORT_QUOTE_APPROVAL_FLOW_ID`: Optional Flow id for quote decision capture.
+- `SENDERO_SUPPORT_ANCILLARIES_FLOW_ID`: Optional Flow id for bags, seats, insurance, lounge, meal, and priority requests.
+- `SENDERO_SUPPORT_DISRUPTION_HELP_FLOW_ID`: Optional Flow id for delay/cancellation/rebooking support.
+- `SENDERO_SUPPORT_PREFUND_CLAIM_FLOW_ID`: Optional Flow id for prefunded trip claim guidance.
+- `SENDERO_SUPPORT_BOOKING_CHANGE_FLOW_ID`: Optional Flow id for change/cancel/rebook intake.
+- `SENDERO_SUPPORT_ACCOMMODATION_FLOW_ID`: Optional Flow id for hotel/stay requests.
+- `SENDERO_SUPPORT_CAR_TRANSFER_FLOW_ID`: Optional Flow id for transfers and car rentals.
+- `SENDERO_SUPPORT_RESTAURANT_EXPERIENCE_FLOW_ID`: Optional Flow id for local recommendations.
+- `SENDERO_SUPPORT_NFT_TRIP_GALLERY_FLOW_ID`: Optional Flow id for gallery/stamp requests.
+- `SENDERO_SUPPORT_REFUND_ESCROW_FLOW_ID`: Optional Flow id for refund, escrow, settlement, and validation intake.
+- `SENDERO_WHATSAPP_FLOW_MODE`: Optional `draft` while testing unpublished Flows.
 
 The workflow source is `workflows/sendero-whatsapp-support-agent/workflow.ts`.
 It uses a Kapso agent node with the built-in WhatsApp context tools, a Slack
 escalation function, and optional GitHub sandbox context for Sendero docs/code.
+
+Shared WhatsApp Flow JSON lives in `../shared-whatsapp-flows`. The support agent
+is the live-test harness for the canonical Flow contract before the same Flow
+keys are enabled for tenant-owned WhatsApp numbers.
+
+Every support tool and Flow submission that reaches Sendero goes through
+`/api/internal/support/tools`, which emits a Langfuse trace via `@sendero/langfuse`,
+scores tool success and latency, returns `traceId`, and echoes
+`x-sendero-trace-id`. Use that trace id when debugging a Slack/WhatsApp/web
+handoff across Kapso execution logs, Sendero support tickets, and Langfuse.
 
 Kapso function entrypoints intentionally stay as plain uploaded Worker files:
 

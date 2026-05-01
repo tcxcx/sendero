@@ -1,0 +1,15 @@
+{
+  "name": "sendero_booking_confirmed",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Booking confirmed. PNR {{1}} for {{2}} departs {{3}}. Tickets were sent to {{4}}.",
+      "example": {
+        "body_text": [["ABC123", "NYC to Santiago", "June 1, 2026 10:00", "traveler@example.com"]]
+      }
+    },
+    { "type": "FOOTER", "text": "Sendero" }
+  ]
+}

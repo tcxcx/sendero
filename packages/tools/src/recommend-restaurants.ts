@@ -12,6 +12,7 @@
 
 import { env } from '@sendero/env';
 import { z } from 'zod';
+
 import type { ToolDef } from './types';
 
 // ─── Public shape returned by the tool ───────────────────────────────
@@ -186,7 +187,7 @@ function mapPlace(place: RawPlace): RestaurantPlace {
 function isRestaurant(place: RestaurantPlace): boolean {
   const primary = place.primaryType;
   if (primary === 'restaurant') return true;
-  if (primary && primary.endsWith('_restaurant')) return true;
+  if (primary?.endsWith('_restaurant')) return true;
   if (place.types.includes('restaurant')) return true;
   return false;
 }
@@ -202,7 +203,13 @@ export async function recommendRestaurants(
   }
 
   const query = buildQuery(input);
-  const body: Record<string, string | number> = {
+  const body: {
+    textQuery: string;
+    languageCode: string;
+    pageSize: number;
+    includedType: string;
+    priceLevels?: string[];
+  } = {
     textQuery: query,
     languageCode: input.languageCode,
     pageSize: input.limit,
@@ -210,7 +217,7 @@ export async function recommendRestaurants(
   };
   if (input.priceLevel) {
     // Google accepts price-level filters as a separate field on the new API.
-    body.priceLevels = PRICE_LEVEL_MAP[input.priceLevel];
+    body.priceLevels = [PRICE_LEVEL_MAP[input.priceLevel]];
   }
 
   const response = await fetch(PLACES_ENDPOINT, {

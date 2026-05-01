@@ -6,6 +6,7 @@
 
 import { ChannelSetupWizard } from '@/components/channels/setup-wizard/wizard-shell';
 import { slackPanes } from '@/components/channels/setup-wizard/slack-panes';
+import { docsUrl } from '@/lib/docs-url';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 import { loadOrStartWizardSession } from '@/lib/wizard-session';
 
@@ -28,7 +29,7 @@ export default async function SlackConnectPage() {
         channel="slack"
         headline="5 steps · about 3 minutes"
         sublineHtml="Sendero installs into your workspace, escalations, and settlements route to the channels you pick."
-        helpHref="/docs/channels/slack"
+        helpHref={docsUrl('/docs/channels/slack')}
         helpLabel="Read the Slack setup guide →"
         initialRun={run}
         panes={slackPanes}

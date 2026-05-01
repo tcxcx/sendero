@@ -1,0 +1,113 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "CLAIM_CONTEXT": ["CLAIM_CONFIRM"],
+    "CLAIM_CONFIRM": []
+  },
+  "screens": [
+    {
+      "id": "CLAIM_CONTEXT",
+      "title": "Prefunded trip",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "claim_context_form",
+            "children": [
+              { "type": "TextHeading", "text": "Claim your prefunded trip" },
+              {
+                "type": "TextBody",
+                "text": "Use the claim link to claim the trip. The secure claim code is sent to your ticket email, not WhatsApp."
+              },
+              {
+                "type": "TextInput",
+                "name": "booking_id",
+                "label": "Booking ID",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "ticket_email",
+                "label": "Ticket email",
+                "required": true,
+                "input-type": "email"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "has_email_code",
+                "label": "Do you have the email code?",
+                "required": false,
+                "data-source": [{ "id": "yes", "title": "Yes" }, { "id": "no", "title": "No" }]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "booking_id": "${form.booking_id}",
+                    "ticket_email": "${form.ticket_email}",
+                    "has_email_code": "${form.has_email_code}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CLAIM_CONFIRM",
+      "title": "Claim help",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "booking_id": { "type": "string", "__example__": "booking_123" },
+        "ticket_email": { "type": "string", "__example__": "traveler@example.com" },
+        "has_email_code": { "type": "string", "__example__": "yes" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "claim_confirm_form",
+            "children": [
+              { "type": "TextHeading", "text": "Keep the code in email" },
+              {
+                "type": "TextBody",
+                "text": "If the link is intercepted, it still cannot be claimed without the code sent to your ticket email. Do not paste the code in WhatsApp."
+              },
+              {
+                "type": "TextArea",
+                "name": "issue",
+                "label": "Need help?",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "booking_id": "${data.booking_id}",
+                    "ticket_email": "${data.ticket_email}",
+                    "has_email_code": "${data.has_email_code}",
+                    "issue": "${form.issue}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

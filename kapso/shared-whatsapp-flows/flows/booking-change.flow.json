@@ -1,0 +1,134 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "CHANGE_REQUEST": ["CHANGE_DETAILS"],
+    "CHANGE_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "CHANGE_REQUEST",
+      "title": "Change booking",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "change_request_form",
+            "children": [
+              { "type": "TextHeading", "text": "Change or cancel a booking" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip or booking ID",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "pnr",
+                "label": "PNR or ticket number",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "change_type",
+                "label": "Request",
+                "required": true,
+                "data-source": [
+                  { "id": "change_dates", "title": "Change dates" },
+                  { "id": "change_route", "title": "Change route" },
+                  { "id": "cancel", "title": "Cancel" },
+                  { "id": "rebook", "title": "Rebook" }
+                ]
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "urgency",
+                "label": "Urgency",
+                "required": true,
+                "data-source": [
+                  { "id": "normal", "title": "Normal" },
+                  { "id": "urgent", "title": "Urgent" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "pnr": "${form.pnr}",
+                    "change_type": "${form.change_type}",
+                    "urgency": "${form.urgency}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CHANGE_DETAILS",
+      "title": "Preferences",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "pnr": { "type": "string", "__example__": "ABC123" },
+        "change_type": { "type": "string", "__example__": "change_dates" },
+        "urgency": { "type": "string", "__example__": "normal" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "change_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Fare rules still apply" },
+              {
+                "type": "TextBody",
+                "text": "Sendero will save the request. Any fare difference, refund, cancellation, or ticketing action requires secure approval."
+              },
+              {
+                "type": "TextArea",
+                "name": "preferred_alternatives",
+                "label": "Preferred alternatives",
+                "required": false
+              },
+              {
+                "type": "TextArea",
+                "name": "reason",
+                "label": "Reason or notes",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "pnr": "${data.pnr}",
+                    "change_type": "${data.change_type}",
+                    "urgency": "${data.urgency}",
+                    "preferred_alternatives": "${form.preferred_alternatives}",
+                    "reason": "${form.reason}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

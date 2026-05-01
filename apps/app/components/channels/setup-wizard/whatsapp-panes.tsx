@@ -9,18 +9,18 @@
  * scratchpad on Continue.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Image from 'next/image';
 
-import { Check, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
 
 import type { WizardPaneProps, WizardPaneRenderer } from './types';
 
 // Paid tenants connect their own WhatsApp Business number through Kapso.
-// The picker still captures the preferred country so Kapso can bias the
-// hosted setup link. Free tenants test from the shared Sendero sandbox
-// number shown on the channel page.
+// The picker captures the preferred country so Kapso can bias the hosted
+// setup link. Free tenants can read the checklist but cannot activate a
+// live tenant WhatsApp number until they upgrade.
 const COUNTRIES = [
   { iso: 'US', label: 'United States' },
   { iso: 'BR', label: 'Brazil' },
@@ -66,34 +66,14 @@ export const whatsappPanes: Record<string, WizardPaneRenderer> = {
 
 function PickNumberPane({ setResolution, pending }: WizardPaneProps) {
   const [country, setCountry] = useState<string>('US');
-  const [numbers, setNumbers] = useState<Array<{ id: string; e164: string; label?: string }>>([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [preferredE164, setPreferredE164] = useState('');
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetch(`/api/channels/whatsapp/numbers?country=${country}`)
-      .then(r => r.json())
-      .then((data: { numbers: Array<{ id: string; e164: string; label?: string }> }) => {
-        if (cancelled) return;
-        setNumbers(data.numbers ?? []);
-        const first = data.numbers?.[0]?.e164 ?? null;
-        setSelected(first);
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [country]);
-
-  useEffect(() => {
-    if (selected) {
-      setResolution({ countryIso: country, e164: selected });
-    } else {
-      setResolution(null);
-    }
-  }, [country, selected, setResolution]);
+    setResolution({
+      countryIso: country,
+      e164: preferredE164.trim() || undefined,
+    });
+  }, [country, preferredE164, setResolution]);
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px]">
@@ -119,49 +99,22 @@ function PickNumberPane({ setResolution, pending }: WizardPaneProps) {
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className={FIELD_LABEL}>Available numbers</span>
-          {loading ? (
-            <p className="text-sm text-[color:var(--text-dim)]">Loading…</p>
-          ) : numbers.length === 0 ? (
-            <p className="text-sm text-[color:var(--text-dim)]">
-              No numbers available in this country yet. Pick another or contact support.
-            </p>
-          ) : (
-            <ul className="flex flex-col divide-y divide-[color:color-mix(in_oklab,var(--ink)_8%,transparent)] overflow-hidden rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)]">
-              {numbers.map(n => (
-                <li key={n.id}>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => setSelected(n.e164)}
-                    className={
-                      'flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors ' +
-                      (selected === n.e164
-                        ? 'bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)]'
-                        : 'hover:bg-[color:color-mix(in_oklab,var(--ink)_4%,transparent)]')
-                    }
-                  >
-                    <div className="flex flex-col">
-                      <span className="font-mono text-[14px] tracking-tight text-[color:var(--ink)]">
-                        {n.e164}
-                      </span>
-                      {n.label ? (
-                        <span className="text-[11px] text-[color:var(--text-dim)]">{n.label}</span>
-                      ) : null}
-                    </div>
-                    {selected === n.e164 ? (
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--accent-rose)] text-white">
-                        <Check className="h-3 w-3" />
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <span className={FIELD_LABEL}>Your WhatsApp number</span>
+          <input
+            disabled={pending}
+            value={preferredE164}
+            onChange={event => setPreferredE164(event.target.value)}
+            placeholder="+12014298750"
+            className="h-10 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_16%,transparent)] bg-[color:var(--surface-raised)] px-3 font-mono text-sm text-[color:var(--ink)] outline-none transition-colors placeholder:text-[color:var(--text-faint)] focus:border-[color:var(--accent-rose)]"
+          />
+          <p className="max-w-[62ch] text-[12px] leading-relaxed text-[color:var(--text-dim)]">
+            Optional. If you already know the number you will connect in Meta, enter it here so the
+            setup record is easier to recognize. Kapso/Meta remain the source of truth after
+            connection.
+          </p>
         </div>
       </div>
-      <NumberPreview e164={selected} />
+      <NumberPreview e164={preferredE164.trim() || null} />
     </div>
   );
 }
@@ -180,8 +133,8 @@ function NumberPreview({ e164 }: { e164: string | null }) {
         </div>
       </div>
       <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--text-dim)]">
-        Paid workspaces connect their WhatsApp Business number through Kapso. Sendero handles the
-        tenant travel workflow, delivery checks, and Meta compliance surfaces.
+        Paid workspaces connect their own WhatsApp Business number through Kapso. Sendero handles
+        the tenant travel workflow, delivery checks, Meta readiness, and compliance surfaces.
       </p>
     </aside>
   );
@@ -201,6 +154,18 @@ interface InstallSnapshot {
   setupLinkProvisionPhoneNumber: boolean | null;
   provisioned: boolean;
   lastErrorMessage: string | null;
+  health: WhatsAppHealthSummary | null;
+}
+
+interface WhatsAppHealthSummary {
+  status: string | null;
+  messagingStatus: string | null;
+  phoneStatus: string | null;
+  webhookSubscribed: boolean | null;
+  webhookVerified: boolean | null;
+  qualityRating: string | null;
+  errors: string[];
+  checkedAt: string;
 }
 
 /**
@@ -223,10 +188,12 @@ interface InstallSnapshot {
 function VerifyNumberPane({ setResolution }: WizardPaneProps) {
   const [snapshot, setSnapshot] = useState<InstallSnapshot | null>(null);
   const [opened, setOpened] = useState(false);
+  const [loadingLink, setLoadingLink] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refreshInstall = useMemo(() => {
     let cancelled = false;
-    const tick = async () => {
+    const fn = async () => {
       try {
         const res = await fetch('/api/channels/whatsapp/install');
         if (cancelled) return;
@@ -236,13 +203,17 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
         /* ignore transient errors */
       }
     };
-    tick();
-    const id = setInterval(tick, 4000);
+    return { fn, cancel: () => (cancelled = true) };
+  }, []);
+
+  useEffect(() => {
+    refreshInstall.fn();
+    const id = setInterval(refreshInstall.fn, 4000);
     return () => {
-      cancelled = true;
+      refreshInstall.cancel();
       clearInterval(id);
     };
-  }, []);
+  }, [refreshInstall]);
 
   useEffect(() => {
     if (snapshot?.provisioned) {
@@ -258,32 +229,77 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
 
   const setupUrl = snapshot?.setupLinkUrl ?? null;
   const provisioned = snapshot?.provisioned ?? false;
+  const createOrRefreshSetupLink = async () => {
+    setLoadingLink(true);
+    setSetupError(null);
+    try {
+      const res = await fetch('/api/channels/whatsapp/setup-link', { method: 'POST' });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        setupLink?: { url?: string };
+      };
+      if (!res.ok) {
+        setSetupError(data.message ?? data.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      await refreshInstall.fn();
+      if (data.setupLink?.url) {
+        setSnapshot(prev =>
+          prev
+            ? { ...prev, setupLinkUrl: data.setupLink?.url ?? prev.setupLinkUrl }
+            : {
+                status: 'pending',
+                phoneNumberId: null,
+                displayPhoneNumber: null,
+                businessDisplayName: null,
+                setupLinkUrl: data.setupLink.url,
+                setupLinkExpiresAt: null,
+                setupLinkStatus: null,
+                setupLinkError: null,
+                setupLinkProvisionPhoneNumber: false,
+                provisioned: false,
+                lastErrorMessage: null,
+                health: null,
+              }
+        );
+      }
+    } catch (err) {
+      setSetupError(err instanceof Error ? err.message : 'Could not create setup link');
+    } finally {
+      setLoadingLink(false);
+    }
+  };
+  const action = describeWhatsAppReadiness(snapshot, setupUrl);
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_280px]">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <span className={FIELD_LABEL}>Provisioned number</span>
+          <span className={FIELD_LABEL}>Connected number</span>
           <span className="font-mono text-[26px] tracking-tight text-[color:var(--ink)]">
             {snapshot?.displayPhoneNumber ?? 'pending'}
           </span>
         </div>
 
         {provisioned ? (
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--accent-green,#16a34a)] text-white">
-              <Check className="h-3 w-3" />
-            </span>
-            <span className="text-sm text-[color:var(--text)]">
-              Verified via Sendero&rsquo;s shared WhatsApp Business Account.
-            </span>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--accent-green,#16a34a)] text-white">
+                <Check className="h-3 w-3" />
+              </span>
+              <span className="text-sm text-[color:var(--text)]">
+                Kapso connected this tenant-owned WhatsApp number.
+              </span>
+            </div>
+            <ReadinessCallout action={action} />
+            <HealthGrid health={snapshot?.health ?? null} />
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             <p className="max-w-[60ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
               Open the Kapso-hosted WhatsApp setup page in a new tab and approve the WhatsApp
-              Business connection. Tenant admins can connect their own number without using the
-              Sendero Kapso owner account.
+              Business connection with the Meta user that can manage this business number.
             </p>
             <div className="flex items-center gap-3">
               {setupUrl ? (
@@ -294,13 +310,32 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
                   onClick={() => setOpened(true)}
                   className="inline-flex items-center gap-2 rounded-md bg-[color:#25D366] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
                 >
+                  <ExternalLink className="h-4 w-4" />
                   Open WhatsApp setup
                 </a>
               ) : (
-                <span className="text-[12px] text-[color:var(--text-dim)]">
-                  Waiting for Kapso to mint the setup link…
-                </span>
+                <button
+                  type="button"
+                  onClick={createOrRefreshSetupLink}
+                  disabled={loadingLink}
+                  className="inline-flex items-center gap-2 rounded-md bg-[color:#25D366] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
+                >
+                  {loadingLink ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ExternalLink className="h-4 w-4" />
+                  )}
+                  Create setup link
+                </button>
               )}
+              <button
+                type="button"
+                onClick={refreshInstall.fn}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_16%,transparent)] px-3 py-2 text-[12px] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Refresh
+              </button>
               {opened ? (
                 <span className="inline-flex items-center gap-1.5 text-[12px] text-[color:var(--text-dim)]">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -308,6 +343,12 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
                 </span>
               ) : null}
             </div>
+            {setupError ? (
+              <div className="flex items-start gap-2 rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{setupError}</span>
+              </div>
+            ) : null}
             {snapshot?.lastErrorMessage ? (
               <div className="rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
                 {snapshot.lastErrorMessage}
@@ -318,6 +359,7 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
                 {snapshot.setupLinkError}
               </div>
             ) : null}
+            <ReadinessCallout action={action} />
           </div>
         )}
       </div>
@@ -332,9 +374,201 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
         </span>
         <span className={`${PILL_FONT} mt-2`}>Link mode</span>
         <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
-          {snapshot?.setupLinkProvisionPhoneNumber ? 'project owner provision' : 'tenant connect'}
+          {snapshot?.setupLinkProvisionPhoneNumber
+            ? 'project owner provision'
+            : 'tenant-owned number'}
+        </span>
+        <span className={`${PILL_FONT} mt-2`}>Meta health</span>
+        <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
+          {snapshot?.health
+            ? `${snapshot.health.status ?? 'unknown'} / ${snapshot.health.messagingStatus ?? 'unknown'}`
+            : 'waiting for phone'}
+        </span>
+        <span className={`${PILL_FONT} mt-2`}>Next step</span>
+        <span className="text-[11px] leading-relaxed text-[color:var(--text-dim)]">
+          {action.next}
         </span>
       </aside>
+    </div>
+  );
+}
+
+type ReadinessTone = 'ok' | 'pending' | 'blocked';
+
+function describeWhatsAppReadiness(
+  snapshot: InstallSnapshot | null,
+  setupUrl: string | null
+): { tone: ReadinessTone; label: string; next: string; details: string[] } {
+  if (!snapshot) {
+    return {
+      tone: 'pending',
+      label: 'No setup record yet',
+      next: 'Create a tenant-scoped Kapso setup link.',
+      details: ['Sendero needs a Kapso customer and setup link before Meta can connect a number.'],
+    };
+  }
+  if (snapshot.setupLinkError) {
+    return {
+      tone: 'blocked',
+      label: 'Setup link error',
+      next: 'Create a fresh setup link, then reopen the Kapso setup page.',
+      details: [snapshot.setupLinkError],
+    };
+  }
+  if (snapshot.lastErrorMessage) {
+    return {
+      tone: 'blocked',
+      label: 'Provisioning error',
+      next: 'Refresh after fixing the reported Kapso or Meta issue.',
+      details: [snapshot.lastErrorMessage],
+    };
+  }
+  if (!setupUrl && !snapshot.provisioned) {
+    return {
+      tone: 'pending',
+      label: 'Setup link needed',
+      next: 'Click Create setup link.',
+      details: ['The link is tenant-scoped and can be safely recreated if it expires.'],
+    };
+  }
+  if (!snapshot.provisioned) {
+    return {
+      tone: 'pending',
+      label: 'Waiting for Meta signup',
+      next: 'Open WhatsApp setup, approve the business connection, then click Refresh.',
+      details: [
+        'Use the Meta account that can manage the target WhatsApp Business number.',
+        'Sendero advances after Kapso sends whatsapp.phone_number.created.',
+      ],
+    };
+  }
+
+  const health = snapshot.health;
+  if (!health) {
+    return {
+      tone: 'pending',
+      label: 'Kapso connected',
+      next: 'Continue while Sendero fetches Meta health in the background.',
+      details: ['The number exists, but the health check has not returned yet.'],
+    };
+  }
+
+  const status = `${health.status ?? ''} ${health.messagingStatus ?? ''} ${health.phoneStatus ?? ''}`;
+  if (/blocked/i.test(status)) {
+    return {
+      tone: 'blocked',
+      label: 'Meta messaging blocked',
+      next: 'Open Meta account status, finish review or fix the payment method, then Refresh.',
+      details: health.errors.length
+        ? health.errors
+        : ['Meta can block business-initiated messaging while a new account is under review.'],
+    };
+  }
+  if (/limited/i.test(status)) {
+    return {
+      tone: 'pending',
+      label: 'Meta messaging limited',
+      next: 'Fix the Meta payment or business-review warning, then send the first inbound test.',
+      details: health.errors.length
+        ? health.errors
+        : ['Inbound messaging may work, but template sends can be limited until Meta clears it.'],
+    };
+  }
+  if (health.webhookVerified === false) {
+    return {
+      tone: 'pending',
+      label: 'Webhook waiting for first message',
+      next: `Send a WhatsApp message to ${snapshot.displayPhoneNumber ?? 'this number'}, then Refresh.`,
+      details: ['Meta often marks webhook verification only after the first inbound message.'],
+    };
+  }
+  if (health.webhookSubscribed === false) {
+    return {
+      tone: 'pending',
+      label: 'Workflow trigger not live yet',
+      next: 'Finish the wizard. Sendero registers the Kapso workflow trigger at Go live.',
+      details: ['This is expected before the final activation step.'],
+    };
+  }
+  if (/healthy|available|active/i.test(status)) {
+    return {
+      tone: 'ok',
+      label: 'Ready to continue',
+      next: 'Continue to brand profile and templates.',
+      details: ['Kapso and Meta health checks look ready for setup completion.'],
+    };
+  }
+  return {
+    tone: 'pending',
+    label: 'Kapso connected',
+    next: 'Continue setup and refresh readiness after the next step.',
+    details: health.errors.length ? health.errors : ['Meta health is not fully reported yet.'],
+  };
+}
+
+function ReadinessCallout({
+  action,
+}: {
+  action: { tone: ReadinessTone; label: string; next: string; details: string[] };
+}) {
+  const toneClass =
+    action.tone === 'ok'
+      ? 'border-[color:#2EA876] bg-[color:color-mix(in_oklab,#2EA876_8%,transparent)] text-[color:#15704e]'
+      : action.tone === 'blocked'
+        ? 'border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] text-[color:var(--accent-rose)]'
+        : 'border-[color:color-mix(in_oklab,var(--ink)_16%,transparent)] bg-[color:var(--surface-raised)] text-[color:var(--text)]';
+  return (
+    <div className={`rounded-md border px-3 py-3 ${toneClass}`}>
+      <div className="flex items-start gap-2">
+        {action.tone === 'ok' ? (
+          <Check className="mt-0.5 h-4 w-4 shrink-0" />
+        ) : action.tone === 'blocked' ? (
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        ) : (
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+        )}
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-sm font-medium">{action.label}</span>
+          <span className="text-[12px] leading-relaxed">{action.next}</span>
+          {action.details.length ? (
+            <ul className="mt-1 list-disc pl-4 text-[11px] leading-relaxed opacity-80">
+              {action.details.slice(0, 3).map(detail => (
+                <li key={detail}>{detail}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HealthGrid({ health }: { health: WhatsAppHealthSummary | null }) {
+  if (!health) return null;
+  return (
+    <div className="grid grid-cols-2 gap-2 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-3 lg:grid-cols-4">
+      <HealthCell label="Overall" value={health.status ?? 'unknown'} />
+      <HealthCell label="Messaging" value={health.messagingStatus ?? 'unknown'} />
+      <HealthCell
+        label="Webhook"
+        value={
+          health.webhookVerified
+            ? 'verified'
+            : health.webhookSubscribed
+              ? 'subscribed'
+              : 'not verified'
+        }
+      />
+      <HealthCell label="Quality" value={health.qualityRating ?? 'unknown'} />
+    </div>
+  );
+}
+
+function HealthCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className={PILL_FONT}>{label}</div>
+      <div className="mt-1 truncate font-mono text-[11px] text-[color:var(--ink)]">{value}</div>
     </div>
   );
 }
@@ -523,11 +757,46 @@ function ApproveTemplatesPane({ setResolution }: WizardPaneProps) {
 
 function GoLivePane({ scratchpad, setResolution }: WizardPaneProps) {
   const reservation = scratchpad.reservation as { e164?: string } | undefined;
+  const [snapshot, setSnapshot] = useState<InstallSnapshot | null>(null);
   const [sendTest, setSendTest] = useState(true);
   const [testToE164, setTestToE164] = useState('');
   const [testBody, setTestBody] = useState('Sendero test ping. You are connected.');
+  const action = describeWhatsAppReadiness(snapshot, snapshot?.setupLinkUrl ?? null);
+  const blockedByMeta = action.tone === 'blocked';
 
-  const ready = useMemo(() => !sendTest || /^\+\d{6,}$/.test(testToE164), [sendTest, testToE164]);
+  const refreshInstall = useCallback(async () => {
+    try {
+      const res = await fetch('/api/channels/whatsapp/install');
+      const data = (await res.json()) as { install: InstallSnapshot | null };
+      setSnapshot(data.install);
+    } catch {
+      /* ignore transient health failures */
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const res = await fetch('/api/channels/whatsapp/install');
+        const data = (await res.json()) as { install: InstallSnapshot | null };
+        if (!cancelled) setSnapshot(data.install);
+      } catch {
+        /* ignore transient health failures */
+      }
+    };
+    refresh();
+    const id = setInterval(refresh, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  const ready = useMemo(
+    () => !blockedByMeta && (!sendTest || /^\+\d{6,}$/.test(testToE164)),
+    [blockedByMeta, sendTest, testToE164]
+  );
 
   useEffect(() => {
     if (!ready) {
@@ -546,21 +815,38 @@ function GoLivePane({ scratchpad, setResolution }: WizardPaneProps) {
       <div className="rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-4">
         <p className="text-sm text-[color:var(--text)]">
           Going live on{' '}
-          <strong className="font-mono text-[color:var(--ink)]">{reservation?.e164 ?? '—'}</strong>.
-          Sendero will start routing inbound traveler messages here once you Continue.
+          <strong className="font-mono text-[color:var(--ink)]">
+            {snapshot?.displayPhoneNumber ?? reservation?.e164 ?? '—'}
+          </strong>
+          . Sendero will start routing inbound traveler messages here once you Continue.
         </p>
       </div>
+      <div className="flex flex-col gap-2">
+        <ReadinessCallout action={action} />
+        <button
+          type="button"
+          onClick={refreshInstall}
+          className="inline-flex w-fit items-center gap-1.5 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_16%,transparent)] px-3 py-2 text-[12px] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh readiness
+        </button>
+      </div>
+      <HealthGrid health={snapshot?.health ?? null} />
       <label className="flex items-start gap-3 text-sm text-[color:var(--text)]">
         <input
           type="checkbox"
           checked={sendTest}
+          disabled={blockedByMeta}
           onChange={e => setSendTest(e.target.checked)}
-          className="mt-1 h-4 w-4 accent-[color:var(--accent-rose)]"
+          className="mt-1 h-4 w-4 accent-[color:var(--accent-rose)] disabled:cursor-not-allowed disabled:opacity-50"
         />
         <span className="flex flex-col gap-0.5">
           <span className="font-medium text-[color:var(--ink)]">Send a test ping first</span>
           <span className="text-[12px] text-[color:var(--text-dim)]">
-            We&rsquo;ll WhatsApp the message below to your phone before flipping the channel live.
+            {blockedByMeta
+              ? 'Meta is blocking messaging right now. Fix the readiness issue above, then refresh before testing.'
+              : "We'll WhatsApp the message below to your phone before flipping the channel live."}
           </span>
         </span>
       </label>

@@ -1,0 +1,22 @@
+{
+  "name": "sendero_prefund_invite",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "{{1}} invited you to claim a prefunded trip: {{2}}. Open {{3}} and use the secure code sent to {{4}}.",
+      "example": {
+        "body_text": [
+          [
+            "Acme Travel",
+            "Santiago onsite",
+            "https://app.sendero.travel/claim/abc",
+            "traveler@example.com"
+          ]
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Do not paste your email code into WhatsApp" }
+  ]
+}

@@ -15,9 +15,13 @@
  * for indexer reprocessing.
  */
 
-import { persistSettlementFromV2Event, prismaSettlementStore } from '@sendero/billing/settlement';
 import { type NextRequest, NextResponse } from 'next/server';
 
+import {
+  persistSettlementFromV1Event,
+  persistSettlementFromV2Event,
+  prismaSettlementStore,
+} from '@sendero/billing/settlement';
 import { z } from 'zod';
 
 import { apiErrorResponse } from '@/lib/api-errors';
@@ -28,16 +32,37 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-const BodySchema = z.object({
-  bookingId: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
-  vendor: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
-  vendorAmount: z.string().regex(/^\d+$/),
-  agencyAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
-  agencyAmount: z.string().regex(/^\d+$/),
-  feeAmount: z.string().regex(/^\d+$/),
-  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
-  blockNumber: z.string().regex(/^\d+$/),
-});
+const BodySchema = z
+  .object({
+    eventVersion: z.enum(['v1', 'v2']).default('v2'),
+    bookingId: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+    vendor: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
+    vendorAmount: z.string().regex(/^\d+$/),
+    agencyAddress: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/)
+      .optional(),
+    agencyAmount: z.string().regex(/^\d+$/).optional(),
+    feeAmount: z.string().regex(/^\d+$/),
+    txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+    blockNumber: z.string().regex(/^\d+$/),
+  })
+  .superRefine((body, ctx) => {
+    if (body.eventVersion === 'v2' && !body.agencyAddress) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['agencyAddress'],
+        message: 'agencyAddress is required for BookingSettledV2.',
+      });
+    }
+    if (body.eventVersion === 'v2' && body.agencyAmount == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['agencyAmount'],
+        message: 'agencyAmount is required for BookingSettledV2.',
+      });
+    }
+  });
 
 function safeEqual(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -80,20 +105,34 @@ export async function POST(req: NextRequest) {
   const chain = req.headers.get('x-sendero-chain') ?? process.env.SENDERO_CHAIN ?? 'arc-testnet';
 
   try {
-    const result = await persistSettlementFromV2Event({
+    const common = {
       store: prismaSettlementStore(),
-      event: {
-        bookingId: body.bookingId as `0x${string}`,
-        vendor: body.vendor as `0x${string}`,
-        vendorAmount: BigInt(body.vendorAmount),
-        agencyAddress: body.agencyAddress as `0x${string}`,
-        agencyAmount: BigInt(body.agencyAmount),
-        feeAmount: BigInt(body.feeAmount),
-      },
       txHash: body.txHash as `0x${string}`,
       blockNumber: BigInt(body.blockNumber),
       chain,
-    });
+    };
+    const result =
+      body.eventVersion === 'v1'
+        ? await persistSettlementFromV1Event({
+            ...common,
+            event: {
+              bookingId: body.bookingId as `0x${string}`,
+              vendor: body.vendor as `0x${string}`,
+              vendorAmount: BigInt(body.vendorAmount),
+              feeAmount: BigInt(body.feeAmount),
+            },
+          })
+        : await persistSettlementFromV2Event({
+            ...common,
+            event: {
+              bookingId: body.bookingId as `0x${string}`,
+              vendor: body.vendor as `0x${string}`,
+              vendorAmount: BigInt(body.vendorAmount),
+              agencyAddress: body.agencyAddress as `0x${string}`,
+              agencyAmount: BigInt(body.agencyAmount as string),
+              feeAmount: BigInt(body.feeAmount),
+            },
+          });
 
     return NextResponse.json({
       ok: true,

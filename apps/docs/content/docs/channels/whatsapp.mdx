@@ -1,0 +1,97 @@
+---
+title: WhatsApp channel setup
+description: Connect a tenant-owned WhatsApp Business number through Kapso and activate Sendero travel operations.
+---
+
+Sendero uses Kapso for WhatsApp orchestration and keeps Sendero as the
+source of truth for tenants, trips, wallets, billing, escrow, audit, and
+handoff records.
+
+Paid workspaces connect their own WhatsApp Business number. Free
+workspaces can review readiness requirements, but live WhatsApp operation
+requires upgrading and connecting a dedicated number.
+
+## Prerequisites
+
+- A paid Sendero workspace and tenant admin access.
+- A Meta user with access to the Business Portfolio that owns the
+  WhatsApp Business number.
+- A WhatsApp Business number that can be connected through Kapso.
+- A valid business payment method in Meta if you want business-initiated
+  template messages.
+
+## Setup Steps
+
+1. Open **Dashboard -> Channels -> WhatsApp -> Connect**.
+2. Select the setup region and optionally enter the number you intend to
+   connect.
+3. Click **Create setup link**. Sendero asks Kapso to mint a tenant-scoped
+   setup link.
+4. Open the Kapso-hosted setup page, sign in with the correct Meta user,
+   and approve the WhatsApp Business connection.
+5. Return to Sendero and click **Refresh**. Sendero waits for Kapso's
+   `whatsapp.phone_number.created` event and resolves the connected
+   `phoneNumberId` to your workspace.
+6. Review the brand profile, submit the required templates and WhatsApp
+   Flow pack, then run the setup test.
+7. Go live after the dashboard shows the Kapso/Meta phone health checks,
+   webhook state, and workflow trigger state as ready.
+
+## What Sendero Activates
+
+After Kapso confirms the phone number, Sendero:
+
+- Persists the WhatsApp install state for the tenant.
+- Registers or replaces the Kapso inbound-message workflow trigger.
+- Publishes the tenant travel agent workflow package.
+- Submits the template and WhatsApp Flow pack.
+- Sends a test message when the phone is healthy enough to receive it.
+- Shows the exact Kapso and Meta readiness state in the dashboard.
+
+## Troubleshooting
+
+**The setup link is stuck on pending.**
+
+Click **Create setup link** again. If it still stays pending, verify that
+the workspace is paid and the Sendero production environment has Kapso API
+credentials configured.
+
+**Kapso says the link must be opened by the project owner.**
+
+Use the tenant-scoped setup link created from the Sendero dashboard. Old
+owner-only project setup links are not valid for tenant onboarding.
+
+**Webhook verification is pending.**
+
+Send a WhatsApp message to the connected number, then click **Refresh**.
+Meta often marks webhook verification only after the first message hits
+the number.
+
+**Messaging is blocked or limited.**
+
+Check the Meta Business Account review and payment-method status. A new
+number can receive messages while business-initiated templates may remain
+blocked until Meta finishes review or a payment issue is fixed.
+
+**The dashboard shows a stale fake or sandbox number.**
+
+Create a new setup link and reconnect a tenant-owned number. Sendero no
+longer provisions shared test numbers for tenant channels.
+
+## Safety Model
+
+WhatsApp can collect requests, intake trip details, show non-sensitive
+status, and create handoffs. Financial or privileged actions such as
+payments, refunds, escrow settlement, wallet transfers, passport vault
+access, and policy overrides require a signed web session, passkey, or
+Sendero approval gate.
+
+Sendero never trusts tenant IDs typed into WhatsApp. Paid tenant traffic
+is resolved from `phoneNumberId -> WhatsAppInstall -> tenant`.
+
+## Observability
+
+Each run preserves the Kapso execution ID, WhatsApp WAMID, webhook event,
+Sendero trace ID, tenant ID, trip ID when known, and workflow run ID. Use
+the channel dashboard and inbox audit views to inspect delivery,
+workflow, and handoff state.
