@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 
-import { loadAgentProfileFresh } from '@/lib/agent-profile';
-import { requireCurrentTenant } from '@/lib/tenant-context';
 import { env } from '@sendero/env';
 import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
+
+import { loadAgentProfileFresh } from '@/lib/agent-profile';
+import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

@@ -1,14 +1,14 @@
 import { auth } from '@clerk/nextjs/server';
-
-import { prisma } from '@sendero/database';
 import {
   BILLING_FEATURES,
-  PLANS,
-  resolvePlan,
   type BillingFeature,
+  PLANS,
   type PlanConfig,
   type PlanTier,
+  resolvePlan,
 } from '@sendero/billing/plans';
+import { prisma } from '@sendero/database';
+
 import { requireCurrentTenant } from './tenant-context';
 
 /**

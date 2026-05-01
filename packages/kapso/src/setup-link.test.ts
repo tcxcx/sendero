@@ -5,9 +5,9 @@
  * fresh primitive built from the integrate-whatsapp SKILL.md spec).
  */
 
-import { describe, expect, it } from 'bun:test';
 import { KapsoClient } from './client';
 import { isSetupLinkExpired, startOnboarding } from './setup-link';
+import { describe, expect, it } from 'bun:test';
 
 function stubClient(responses: unknown[]): KapsoClient {
   let i = 0;
