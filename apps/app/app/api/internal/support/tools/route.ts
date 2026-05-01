@@ -47,6 +47,8 @@ type SupportTool =
   | 'get_wallet_context'
   | 'get_tenant_context'
   | 'get_whatsapp_setup_status'
+  | 'get_tenant_whatsapp_flow'
+  | 'upsert_tenant_whatsapp_flow'
   | 'get_recent_channel_events'
   | 'get_trip_context'
   | 'get_billing_context'
@@ -87,16 +89,6 @@ interface VerifiedSupportContext {
   tenantId: string;
   tenantSlug?: string;
   v: 1;
-}
-
-function json(data: unknown, status = 200): Response {
-  return new Response(
-    JSON.stringify(data, (_key, value) => (typeof value === 'bigint' ? value.toString() : value)),
-    {
-      status,
-      headers: { 'content-type': 'application/json' },
-    }
-  );
 }
 
 function withTrace(data: unknown, traceId: string): unknown {
@@ -258,6 +250,31 @@ function normalizeEmail(value: unknown): string | null {
 function normalizeIso3(value: unknown): string | null {
   const text = asString(value)?.toUpperCase();
   return text && /^[A-Z]{3}$/.test(text) ? text : null;
+}
+
+const WHATSAPP_FLOW_KEYS = new Set([
+  'login_signup',
+  'trip_intake',
+  'support_intake',
+  'quote_approval',
+  'ancillaries',
+  'disruption_help',
+  'prefund_claim',
+  'booking_change',
+  'accommodation',
+  'car_transfer',
+  'restaurant_experience',
+  'nft_trip_gallery',
+  'refund_escrow',
+]);
+
+function normalizeFlowKey(value: unknown): string | null {
+  const text = asString(value)?.toLowerCase().replace(/-/g, '_');
+  return text && WHATSAPP_FLOW_KEYS.has(text) ? text : null;
+}
+
+function normalizeFlowMode(value: unknown): 'draft' | 'published' {
+  return asString(value)?.toLowerCase() === 'published' ? 'published' : 'draft';
 }
 
 function normalizeDate(value: unknown): string | null {
@@ -537,6 +554,177 @@ async function getTenantContext(body: SupportToolBody) {
         }
       : null,
     recentTickets,
+  };
+}
+
+async function getTenantWhatsAppFlow(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+
+  const input = body.input ?? {};
+  const flowKey = normalizeFlowKey(input.flow_key ?? input.flowKey);
+  if (!flowKey) {
+    return {
+      ok: false,
+      configured: false,
+      error: 'invalid_flow_key',
+      allowedFlowKeys: Array.from(WHATSAPP_FLOW_KEYS),
+    };
+  }
+
+  const phoneNumberId = phoneNumberIdFromContext(body);
+  if (!phoneNumberId) {
+    return { ok: false, configured: false, error: 'phone_number_id_required', flowKey };
+  }
+
+  const install = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId: tenant.id },
+    select: { phoneNumberId: true, status: true, displayPhoneNumber: true },
+  });
+  if (!install?.phoneNumberId || install.phoneNumberId !== phoneNumberId) {
+    return {
+      ok: false,
+      configured: false,
+      error: 'tenant_phone_number_mismatch',
+      flowKey,
+      phoneNumberId,
+      tenantPhoneNumberId: install?.phoneNumberId ?? null,
+    };
+  }
+
+  const registration = await prisma.whatsAppFlowRegistration.findUnique({
+    where: {
+      tenantId_phoneNumberId_flowKey: {
+        tenantId: tenant.id,
+        phoneNumberId,
+        flowKey,
+      },
+    },
+  });
+
+  if (!registration || registration.status === 'disabled') {
+    return {
+      ok: true,
+      configured: false,
+      flowKey,
+      phoneNumberId,
+      tenant: {
+        id: tenant.id,
+        slug: tenant.slug,
+        displayName: tenant.displayName,
+      },
+      reason: registration?.status === 'disabled' ? 'flow_disabled' : 'flow_not_registered',
+    };
+  }
+
+  return {
+    ok: true,
+    configured: true,
+    flowKey,
+    phoneNumberId,
+    flow: {
+      id: registration.id,
+      kapsoFlowId: registration.kapsoFlowId,
+      metaFlowId: registration.metaFlowId,
+      status: registration.status,
+      mode: registration.mode,
+      name: registration.name,
+      dataEndpointId: registration.dataEndpointId,
+      lastError: registration.lastError,
+    },
+    tenant: {
+      id: tenant.id,
+      slug: tenant.slug,
+      displayName: tenant.displayName,
+    },
+  };
+}
+
+async function upsertTenantWhatsAppFlow(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+
+  const input = body.input ?? {};
+  const flowKey = normalizeFlowKey(input.flow_key ?? input.flowKey);
+  const phoneNumberId = phoneNumberIdFromContext(body);
+  const kapsoFlowId = asString(input.kapso_flow_id) ?? asString(input.kapsoFlowId);
+  if (!flowKey || !phoneNumberId || !kapsoFlowId) {
+    return {
+      ok: false,
+      error: 'invalid_flow_registration',
+      required: ['flow_key', 'phone_number_id', 'kapso_flow_id'],
+      allowedFlowKeys: Array.from(WHATSAPP_FLOW_KEYS),
+    };
+  }
+
+  const install = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId: tenant.id },
+    select: { phoneNumberId: true },
+  });
+  if (!install?.phoneNumberId || install.phoneNumberId !== phoneNumberId) {
+    return {
+      ok: false,
+      error: 'tenant_phone_number_mismatch',
+      phoneNumberId,
+      tenantPhoneNumberId: install?.phoneNumberId ?? null,
+    };
+  }
+
+  const registration = await prisma.whatsAppFlowRegistration.upsert({
+    where: {
+      tenantId_phoneNumberId_flowKey: {
+        tenantId: tenant.id,
+        phoneNumberId,
+        flowKey,
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      phoneNumberId,
+      flowKey,
+      kapsoFlowId,
+      metaFlowId: asString(input.meta_flow_id) ?? asString(input.metaFlowId),
+      status: asString(input.status) ?? 'draft',
+      mode: normalizeFlowMode(input.mode),
+      name: asString(input.name),
+      dataEndpointId: asString(input.data_endpoint_id) ?? asString(input.dataEndpointId),
+      lastError: asString(input.last_error) ?? asString(input.lastError),
+      metadata: {
+        registeredBy: 'support_tools',
+        registeredAt: new Date().toISOString(),
+      },
+    },
+    update: {
+      kapsoFlowId,
+      metaFlowId: asString(input.meta_flow_id) ?? asString(input.metaFlowId) ?? undefined,
+      status: asString(input.status) ?? undefined,
+      mode: normalizeFlowMode(input.mode),
+      name: asString(input.name) ?? undefined,
+      dataEndpointId:
+        asString(input.data_endpoint_id) ?? asString(input.dataEndpointId) ?? undefined,
+      lastError: asString(input.last_error) ?? asString(input.lastError),
+      metadata: {
+        registeredBy: 'support_tools',
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  });
+
+  return {
+    ok: true,
+    configured: true,
+    flowKey,
+    phoneNumberId,
+    flow: {
+      id: registration.id,
+      kapsoFlowId: registration.kapsoFlowId,
+      metaFlowId: registration.metaFlowId,
+      status: registration.status,
+      mode: registration.mode,
+      name: registration.name,
+      dataEndpointId: registration.dataEndpointId,
+      lastError: registration.lastError,
+    },
   };
 }
 
@@ -2055,6 +2243,7 @@ const OPERATIONS: Record<SupportTool, (body: SupportToolBody) => Promise<unknown
   get_recent_channel_events: getRecentChannelEvents,
   get_tenant_operating_context: getTenantOperatingContext,
   get_tenant_context: getTenantContext,
+  get_tenant_whatsapp_flow: getTenantWhatsAppFlow,
   get_trip_gallery: body => getLifecycleReadContext('get_trip_gallery', body),
   get_trip_context: getTripContext,
   get_wallet_context: getWalletContext,
@@ -2071,6 +2260,7 @@ const OPERATIONS: Record<SupportTool, (body: SupportToolBody) => Promise<unknown
   search_restaurants: body => getLifecycleReadContext('search_restaurants', body),
   search_sendero_docs: searchSenderoDocs,
   update_support_ticket: updateSupportTicket,
+  upsert_tenant_whatsapp_flow: upsertTenantWhatsAppFlow,
   verify_whatsapp_otp: verifyWhatsappOtp,
 };
 
