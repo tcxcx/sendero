@@ -195,15 +195,41 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
     let cancelled = false;
     const fn = async () => {
       try {
-        const res = await fetch('/api/channels/whatsapp/install');
+        const res = await fetch('/api/channels/whatsapp/install', {
+          headers: { Accept: 'application/json' },
+        });
         if (cancelled) return;
-        const data = (await res.json()) as { install: InstallSnapshot | null };
+        const data = await readJsonResponse<{ install: InstallSnapshot | null }>(
+          res,
+          'refresh WhatsApp install'
+        );
+        console.info('[whatsapp wizard] install refresh', {
+          status: res.status,
+          provisioned: data.install?.provisioned ?? false,
+          phoneNumberId: data.install?.phoneNumberId ?? null,
+          installStatus: data.install?.status ?? null,
+          setupLinkStatus: data.install?.setupLinkStatus ?? null,
+          setupLinkError: data.install?.setupLinkError ?? null,
+          lastErrorMessage: data.install?.lastErrorMessage ?? null,
+          health: data.install?.health
+            ? {
+                status: data.install.health.status,
+                messagingStatus: data.install.health.messagingStatus,
+                webhookVerified: data.install.health.webhookVerified,
+              }
+            : null,
+        });
         setSnapshot(data.install);
-      } catch {
-        /* ignore transient errors */
+      } catch (err) {
+        console.warn('[whatsapp wizard] install refresh failed', err);
       }
     };
-    return { fn, cancel: () => (cancelled = true) };
+    return {
+      fn,
+      cancel: () => {
+        cancelled = true;
+      },
+    };
   }, []);
 
   useEffect(() => {
@@ -233,12 +259,22 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
     setLoadingLink(true);
     setSetupError(null);
     try {
-      const res = await fetch('/api/channels/whatsapp/setup-link', { method: 'POST' });
-      const data = (await res.json().catch(() => ({}))) as {
+      const res = await fetch('/api/channels/whatsapp/setup-link', {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await readJsonResponse<{
         error?: string;
         message?: string;
         setupLink?: { url?: string };
-      };
+      }>(res, 'create WhatsApp setup link');
+      console.info('[whatsapp wizard] setup link response', {
+        status: res.status,
+        ok: res.ok,
+        error: data.error ?? null,
+        message: data.message ?? null,
+        hasSetupUrl: Boolean(data.setupLink?.url),
+      });
       if (!res.ok) {
         setSetupError(data.message ?? data.error ?? `HTTP ${res.status}`);
         return;
@@ -265,6 +301,7 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
         );
       }
     } catch (err) {
+      console.warn('[whatsapp wizard] setup link request failed', err);
       setSetupError(err instanceof Error ? err.message : 'Could not create setup link');
     } finally {
       setLoadingLink(false);
@@ -391,6 +428,25 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
       </aside>
     </div>
   );
+}
+
+async function readJsonResponse<T>(response: Response, label: string): Promise<T> {
+  const contentType = response.headers.get('content-type') ?? '';
+  const text = await response.text();
+  if (!contentType.toLowerCase().includes('application/json')) {
+    const snippet = text.slice(0, 240).replace(/\s+/g, ' ').trim();
+    throw new Error(
+      `${label} returned ${response.status} ${response.statusText || ''} as ${contentType || 'unknown content-type'}: ${snippet}`
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch (err) {
+    const snippet = text.slice(0, 240).replace(/\s+/g, ' ').trim();
+    throw new Error(
+      `${label} returned invalid JSON (${err instanceof Error ? err.message : String(err)}): ${snippet}`
+    );
+  }
 }
 
 type ReadinessTone = 'ok' | 'pending' | 'blocked';

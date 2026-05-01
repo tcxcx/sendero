@@ -46,6 +46,10 @@ export async function POST(): Promise<Response> {
   const { tenant, userId } = await requireCurrentTenant();
   const { has } = await auth();
   if (!has({ role: 'org:admin' })) {
+    console.warn('[whatsapp/setup-link] forbidden', {
+      tenantId: tenant.id,
+      userId,
+    });
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
@@ -63,6 +67,13 @@ export async function POST(): Promise<Response> {
   const failureRedirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/channels/whatsapp/connect?onboarding=whatsapp&status=failed`;
 
   const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
+  console.info('[whatsapp/setup-link] request', {
+    tenantId: tenant.id,
+    tenantName: tenant.displayName,
+    userId,
+    redirectUrl,
+    failureRedirectUrl,
+  });
 
   // Reuse the existing Kapso customer when present + setup link still valid.
   const existing = await prisma.whatsAppInstall.findUnique({
@@ -77,7 +88,16 @@ export async function POST(): Promise<Response> {
 
   if (existing) {
     const rawLink = readSetupLinkSnapshot(existing.metadata);
-    if (rawLink && !isSetupLinkExpired({ expires_at: rawLink.expires_at })) {
+    const linkError = rawLink?.whatsapp_setup_error ?? null;
+    const linkStatus = rawLink?.whatsapp_setup_status ?? rawLink?.status ?? null;
+    if (rawLink && !linkError && !isSetupLinkExpired({ expires_at: rawLink.expires_at })) {
+      console.info('[whatsapp/setup-link] reusing existing setup link', {
+        tenantId: tenant.id,
+        installId: existing.id,
+        customerId: existing.kapsoCustomerId,
+        installStatus: existing.status,
+        linkStatus,
+      });
       return NextResponse.json({
         customerId: existing.kapsoCustomerId,
         setupLink: rawLink,
@@ -87,12 +107,33 @@ export async function POST(): Promise<Response> {
     }
 
     // Re-issue link against the same customer.
-    const freshLink = await kapso.createSetupLink(existing.kapsoCustomerId, {
-      success_redirect_url: redirectUrl,
-      failure_redirect_url: failureRedirectUrl,
-      allowed_connection_types: ['coexistence', 'dedicated'],
-      provision_phone_number: false,
+    console.info('[whatsapp/setup-link] creating fresh setup link', {
+      tenantId: tenant.id,
+      installId: existing.id,
+      customerId: existing.kapsoCustomerId,
+      installStatus: existing.status,
+      priorLinkStatus: linkStatus,
+      priorLinkError: linkError,
+      priorLinkExpired: rawLink ? isSetupLinkExpired({ expires_at: rawLink.expires_at }) : null,
     });
+    let freshLink: Awaited<ReturnType<KapsoClient['createSetupLink']>>;
+    try {
+      freshLink = await kapso.createSetupLink(existing.kapsoCustomerId, {
+        success_redirect_url: redirectUrl,
+        failure_redirect_url: failureRedirectUrl,
+        allowed_connection_types: ['coexistence', 'dedicated'],
+        provision_phone_number: false,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[whatsapp/setup-link] Kapso createSetupLink failed', {
+        tenantId: tenant.id,
+        installId: existing.id,
+        customerId: existing.kapsoCustomerId,
+        error: message,
+      });
+      return NextResponse.json({ error: 'kapso_setup_link_failed', message }, { status: 502 });
+    }
     const freshSnapshot = setupLinkSnapshot(freshLink);
     await prisma.whatsAppInstall.update({
       where: { id: existing.id },
@@ -102,6 +143,14 @@ export async function POST(): Promise<Response> {
         metadata: { setupLink: freshSnapshot } as unknown as Prisma.InputJsonValue,
       },
     });
+    console.info('[whatsapp/setup-link] fresh setup link stored', {
+      tenantId: tenant.id,
+      installId: existing.id,
+      customerId: existing.kapsoCustomerId,
+      installStatus: existing.status === 'active' ? 'active' : 'pending',
+      setupLinkId: freshSnapshot.id,
+      setupLinkStatus: freshSnapshot.status ?? null,
+    });
     return NextResponse.json({
       customerId: existing.kapsoCustomerId,
       setupLink: freshSnapshot,
@@ -110,13 +159,25 @@ export async function POST(): Promise<Response> {
     });
   }
 
-  const { customer, setupLink } = await startOnboarding(kapso, {
-    tenantId: tenant.id,
-    tenantName: tenant.displayName,
-    redirectUrl,
-    failureRedirectUrl,
-    countryIsos: tenant.fiscalCountry ? [tenant.fiscalCountry] : undefined,
-  });
+  let onboarding: Awaited<ReturnType<typeof startOnboarding>>;
+  try {
+    onboarding = await startOnboarding(kapso, {
+      tenantId: tenant.id,
+      tenantName: tenant.displayName,
+      redirectUrl,
+      failureRedirectUrl,
+      countryIsos: tenant.fiscalCountry ? [tenant.fiscalCountry] : undefined,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[whatsapp/setup-link] Kapso startOnboarding failed', {
+      tenantId: tenant.id,
+      tenantName: tenant.displayName,
+      error: message,
+    });
+    return NextResponse.json({ error: 'kapso_onboarding_failed', message }, { status: 502 });
+  }
+  const { customer, setupLink } = onboarding;
   const setupLinkData = setupLinkSnapshot(setupLink);
 
   // Mint a per-install webhook secret ahead of the Kapso webhook. Kapso
@@ -134,6 +195,12 @@ export async function POST(): Promise<Response> {
       connectedByUserId: userId,
       metadata: { setupLink: setupLinkData } as unknown as Prisma.InputJsonValue,
     },
+  });
+  console.info('[whatsapp/setup-link] install created', {
+    tenantId: tenant.id,
+    customerId: customer.id,
+    setupLinkId: setupLinkData.id,
+    status: 'pending',
   });
 
   return NextResponse.json({

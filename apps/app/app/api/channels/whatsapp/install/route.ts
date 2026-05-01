@@ -12,6 +12,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { auth } from '@clerk/nextjs/server';
 import { type Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 import { KapsoClient, type KapsoWhatsAppPhoneNumber, readSetupLinkSnapshot } from '@sendero/kapso';
@@ -27,11 +28,16 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const { tenant } = await requireCurrentTenant();
   const plan = await currentOrgPlanTier();
+  console.info('[whatsapp/install] snapshot request', {
+    tenantId: tenant.id,
+    plan,
+  });
   let install = await prisma.whatsAppInstall.findUnique({
     where: { tenantId: tenant.id },
     select: installSelect,
   });
   if (!install) {
+    console.info('[whatsapp/install] no install row', { tenantId: tenant.id });
     return NextResponse.json({
       install: null,
       plan,
@@ -45,6 +51,23 @@ export async function GET() {
   });
   const setupLink = readSetupLinkSnapshot(install.metadata);
   const health = install.phoneNumberId ? await readWhatsappHealth(install.phoneNumberId) : null;
+  console.info('[whatsapp/install] snapshot response', {
+    tenantId: tenant.id,
+    installId: install.id,
+    status: install.status,
+    phoneNumberId: install.phoneNumberId,
+    displayPhoneNumber: install.displayPhoneNumber,
+    setupLinkStatus: setupLink?.whatsapp_setup_status ?? setupLink?.status ?? null,
+    setupLinkError: setupLink?.whatsapp_setup_error ?? null,
+    provisioned: install.status === 'active' && Boolean(install.phoneNumberId),
+    health: health
+      ? {
+          status: health.status,
+          messagingStatus: health.messagingStatus,
+          webhookVerified: health.webhookVerified,
+        }
+      : null,
+  });
   return NextResponse.json({
     plan,
     readiness: readinessForPlan(plan),
@@ -68,6 +91,60 @@ export async function GET() {
   });
 }
 
+export async function DELETE() {
+  const { tenant, userId } = await requireCurrentTenant();
+  const { has } = await auth();
+  if (!has({ role: 'org:admin' })) {
+    console.warn('[whatsapp/install] disconnect forbidden', { tenantId: tenant.id, userId });
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
+  const existing = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId: tenant.id },
+    select: {
+      id: true,
+      status: true,
+      kapsoCustomerId: true,
+      phoneNumberId: true,
+      displayPhoneNumber: true,
+      businessAccountId: true,
+    },
+  });
+  if (!existing) {
+    console.info('[whatsapp/install] disconnect no-op; no install row', {
+      tenantId: tenant.id,
+      userId,
+    });
+    return NextResponse.json({ ok: true, disconnected: false });
+  }
+
+  await prisma.$transaction([
+    prisma.whatsAppFlowRegistration.deleteMany({
+      where: { tenantId: tenant.id },
+    }),
+    prisma.whatsAppInstall.delete({
+      where: { id: existing.id },
+    }),
+  ]);
+
+  console.info('[whatsapp/install] disconnected locally', {
+    tenantId: tenant.id,
+    userId,
+    installId: existing.id,
+    previousStatus: existing.status,
+    kapsoCustomerId: existing.kapsoCustomerId,
+    phoneNumberId: existing.phoneNumberId,
+    displayPhoneNumber: existing.displayPhoneNumber,
+    businessAccountId: existing.businessAccountId,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    disconnected: true,
+    phoneNumberId: existing.phoneNumberId,
+  });
+}
+
 type InstallForSnapshot = {
   id: string;
   status: string;
@@ -87,14 +164,49 @@ async function reconcilePendingInstallFromKapso(args: {
   install: InstallForSnapshot;
 }): Promise<InstallForSnapshot> {
   if (args.install.status === 'active' && args.install.phoneNumberId) return args.install;
+  if (args.install.status === 'disabled') {
+    console.info('[whatsapp/install] skipping Kapso reconciliation for disabled install', {
+      tenantId: args.tenantId,
+      installId: args.install.id,
+      kapsoCustomerId: args.install.kapsoCustomerId,
+    });
+    return args.install;
+  }
 
   const apiKey = env.kapsoApiKey();
-  if (!apiKey) return args.install;
+  if (!apiKey) {
+    console.warn('[whatsapp/install] cannot reconcile; KAPSO_API_KEY missing', {
+      tenantId: args.tenantId,
+      installId: args.install.id,
+    });
+    return args.install;
+  }
 
   try {
     const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
+    console.info('[whatsapp/install] reconciling pending install from Kapso', {
+      tenantId: args.tenantId,
+      installId: args.install.id,
+      kapsoCustomerId: args.install.kapsoCustomerId,
+      status: args.install.status,
+    });
     const phoneNumber = await findProvisionedPhoneNumber(kapso, args.install.kapsoCustomerId);
-    if (!phoneNumber) return args.install;
+    if (!phoneNumber) {
+      console.info('[whatsapp/install] no provisioned phone number found in Kapso', {
+        tenantId: args.tenantId,
+        installId: args.install.id,
+        kapsoCustomerId: args.install.kapsoCustomerId,
+      });
+      return args.install;
+    }
+    console.info('[whatsapp/install] found Kapso phone number for pending install', {
+      tenantId: args.tenantId,
+      installId: args.install.id,
+      phoneNumberId: phoneNumber.phone_number_id,
+      businessAccountId: phoneNumber.business_account_id ?? args.install.businessAccountId,
+      displayPhoneNumber: phoneNumber.display_phone_number ?? null,
+      status: phoneNumber.status ?? null,
+    });
 
     const activation = await activateTenantWorkflowTrigger({
       tenantId: args.tenantId,
@@ -107,6 +219,13 @@ async function reconcilePendingInstallFromKapso(args: {
       tenantDisplayName: args.tenantDisplayName,
       phoneNumberId: phoneNumber.phone_number_id,
       businessAccountId: phoneNumber.business_account_id ?? args.install.businessAccountId,
+    });
+    console.info('[whatsapp/install] Kapso reconciliation side effects complete', {
+      tenantId: args.tenantId,
+      installId: args.install.id,
+      phoneNumberId: phoneNumber.phone_number_id,
+      activationStatus: activation.status ?? null,
+      tenantFlows,
     });
 
     return await prisma.whatsAppInstall.update({

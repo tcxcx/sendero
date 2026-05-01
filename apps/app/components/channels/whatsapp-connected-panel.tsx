@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * WhatsappConnectedPanel — design-canvas WhatsappA layout.
  *
@@ -13,7 +15,10 @@
  * `MeterEvent` + `Trip` counts.
  */
 
+import { useState } from 'react';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface WhatsappConnectedProps {
   displayName: string | null;
@@ -45,6 +50,48 @@ export function WhatsappConnectedPanel({
   weeklyStats,
   health,
 }: WhatsappConnectedProps) {
+  const router = useRouter();
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
+
+  const disconnect = async () => {
+    setDisconnectError(null);
+    setIsDisconnecting(true);
+    console.info('[whatsapp connected panel] disconnect requested', {
+      displayPhoneNumber,
+      displayName,
+    });
+    try {
+      const response = await fetch('/api/channels/whatsapp/install', {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+      const text = await response.text();
+      const data = text ? safeJson(text) : null;
+      console.info('[whatsapp connected panel] disconnect response', {
+        status: response.status,
+        ok: response.ok,
+        data,
+      });
+      if (!response.ok) {
+        const message =
+          data && typeof data === 'object' && 'message' in data
+            ? String(data.message)
+            : data && typeof data === 'object' && 'error' in data
+              ? String(data.error)
+              : `Disconnect failed (HTTP ${response.status})`;
+        setDisconnectError(message);
+        return;
+      }
+      router.refresh();
+    } catch (err) {
+      console.warn('[whatsapp connected panel] disconnect failed', err);
+      setDisconnectError(err instanceof Error ? err.message : 'Disconnect failed');
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <header
@@ -65,14 +112,32 @@ export function WhatsappConnectedPanel({
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" style={ghostBtnStyle}>
-            Disconnect
+          <button
+            type="button"
+            onClick={disconnect}
+            disabled={isDisconnecting}
+            style={ghostBtnStyle}
+          >
+            {isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
           </button>
           <Link href="/dashboard/channels/whatsapp/connect" style={primaryBtnStyle}>
             Open settings
           </Link>
         </div>
       </header>
+      {disconnectError ? (
+        <div
+          className="sd-card-flat"
+          style={{
+            border: '1px solid var(--accent-rose)',
+            color: 'var(--accent-rose)',
+            padding: '10px 12px',
+            fontSize: 12,
+          }}
+        >
+          {disconnectError}
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -260,6 +325,14 @@ export function WhatsappConnectedPanel({
       </div>
     </section>
   );
+}
+
+function safeJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw.slice(0, 240);
+  }
 }
 
 function MetricCard({
