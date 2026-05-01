@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server';
 
 import { type Prisma, prisma } from '@sendero/database';
-import { readSetupLinkSnapshot } from '@sendero/kapso';
+import { KapsoClient, readSetupLinkSnapshot } from '@sendero/kapso';
+import {
+  extractTraceId,
+  flushLangfuse,
+  scoreLatency,
+  scoreToolSuccess,
+  traceAgent,
+} from '@sendero/langfuse';
+import { ensureTravelerWallet } from '@sendero/tools/ensure-traveler-wallet';
+import { buildOtpComponents, SENDERO_TEMPLATES } from '@sendero/whatsapp/templates';
 
 import crypto from 'node:crypto';
 
@@ -11,7 +20,30 @@ export const dynamic = 'force-dynamic';
 type SupportTool =
   | 'get_tenant_operating_context'
   | 'create_trip_intake'
+  | 'create_whatsapp_login_signup'
+  | 'get_whatsapp_session_context'
+  | 'request_whatsapp_otp'
+  | 'verify_whatsapp_otp'
   | 'create_tenant_handoff'
+  | 'create_quote_request'
+  | 'list_quote_options'
+  | 'request_quote_approval'
+  | 'create_prefunded_trip_link'
+  | 'get_prefund_claim_status'
+  | 'request_payment_link'
+  | 'get_booking_context'
+  | 'request_booking_change'
+  | 'search_accommodation'
+  | 'create_accommodation_request'
+  | 'search_car_rentals'
+  | 'create_transfer_request'
+  | 'search_restaurants'
+  | 'create_ancillary_request'
+  | 'get_trip_gallery'
+  | 'get_nft_stamp_status'
+  | 'request_nft_unlock'
+  | 'get_disruption_context'
+  | 'create_disruption_handoff'
   | 'get_wallet_context'
   | 'get_tenant_context'
   | 'get_whatsapp_setup_status'
@@ -65,6 +97,13 @@ function json(data: unknown, status = 200): Response {
       headers: { 'content-type': 'application/json' },
     }
   );
+}
+
+function withTrace(data: unknown, traceId: string): unknown {
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    return { ...data, traceId };
+  }
+  return { ok: true, data, traceId };
 }
 
 function configuredSecret(): string | null {
@@ -140,6 +179,63 @@ function phoneNumberIdFromContext(body: SupportToolBody): string | null {
   return null;
 }
 
+function trustedPhoneNumberIdFromContext(body: SupportToolBody): string | null {
+  const conversation = body.whatsapp_context?.conversation ?? {};
+  const context = body.execution_context?.context ?? {};
+  const candidates = [
+    conversation.phone_number_id,
+    conversation.phoneNumberId,
+    conversation.whatsapp_phone_number_id,
+    conversation.whatsappPhoneNumberId,
+    (conversation.whatsapp_config as Record<string, unknown> | undefined)?.phone_number_id,
+    (conversation.whatsapp_config as Record<string, unknown> | undefined)?.phoneNumberId,
+    context.phone_number_id,
+    context.phoneNumberId,
+    context.whatsapp_phone_number_id,
+  ];
+  for (const candidate of candidates) {
+    const value = asString(candidate);
+    if (value) return value;
+  }
+  return null;
+}
+
+function trustedBusinessScopedUserIdFromContext(body: SupportToolBody): string | null {
+  const conversation = body.whatsapp_context?.conversation ?? {};
+  const context = body.execution_context?.context ?? {};
+  const candidates = [
+    conversation.business_scoped_user_id,
+    conversation.businessScopedUserId,
+    conversation.wa_id,
+    conversation.waId,
+    context.business_scoped_user_id,
+    context.businessScopedUserId,
+  ];
+  for (const candidate of candidates) {
+    const value = asString(candidate);
+    if (value) return value;
+  }
+  return null;
+}
+
+function trustedWhatsappPhoneFromContext(body: SupportToolBody): string | null {
+  const conversation = body.whatsapp_context?.conversation ?? {};
+  const context = body.execution_context?.context ?? {};
+  const candidates = [
+    conversation.phone_number,
+    conversation.phoneNumber,
+    conversation.wa_id,
+    conversation.waId,
+    context.phone_number,
+    context.phoneNumber,
+  ];
+  for (const candidate of candidates) {
+    const value = asString(candidate);
+    if (value) return value;
+  }
+  return null;
+}
+
 function maskIdentifier(value: unknown): string | null {
   const text = asString(value);
   if (!text) return null;
@@ -151,6 +247,48 @@ function safeText(value: unknown, max = 2000): string | null {
   const text = asString(value);
   if (!text) return null;
   return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function normalizeEmail(value: unknown): string | null {
+  const text = asString(value)?.toLowerCase();
+  if (!text || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return null;
+  return text;
+}
+
+function normalizeIso3(value: unknown): string | null {
+  const text = asString(value)?.toUpperCase();
+  return text && /^[A-Z]{3}$/.test(text) ? text : null;
+}
+
+function normalizeDate(value: unknown): string | null {
+  const text = asString(value);
+  if (!text || !/^\d{4}-\d{2}(-\d{2})?$/.test(text)) return null;
+  return text.length === 7 ? `${text}-01` : text;
+}
+
+function otpSecret(): string {
+  const secret = configuredSecret();
+  if (!secret) throw new Error('SUPPORT_TOOLS_SECRET is required for WhatsApp OTP hashing');
+  return secret;
+}
+
+function hashOtp(args: {
+  tenantId: string;
+  channelIdentityId: string;
+  nonce: string;
+  code: string;
+  purpose: string;
+}): string {
+  return crypto
+    .createHmac('sha256', otpSecret())
+    .update(`${args.tenantId}:${args.channelIdentityId}:${args.nonce}:${args.purpose}:${args.code}`)
+    .digest('hex');
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a, 'hex');
+  const right = Buffer.from(b, 'hex');
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
 function verifySupportContextToken(token: string | null): VerifiedSupportContext | null {
@@ -200,8 +338,7 @@ function verifiedSupportContext(body: SupportToolBody): VerifiedSupportContext |
 }
 
 async function resolveTenant(body: SupportToolBody) {
-  const input = body.input ?? {};
-  const phoneNumberId = phoneNumberIdFromContext(body);
+  const phoneNumberId = trustedPhoneNumberIdFromContext(body);
   if (phoneNumberId) {
     const install = await prisma.whatsAppInstall.findUnique({
       where: { phoneNumberId },
@@ -240,21 +377,23 @@ async function resolveTenant(body: SupportToolBody) {
     if (tenant) return tenant;
   }
 
-  const phone =
-    asString(input.phone_number) ??
-    asString(input.customer_phone_number) ??
-    asString(body.execution_context?.context?.phone_number) ??
-    asString(body.whatsapp_context?.conversation?.phone_number);
-  if (phone) {
-    const identity = await prisma.channelIdentity.findFirst({
+  const bsuid = trustedBusinessScopedUserIdFromContext(body);
+  const phone = trustedWhatsappPhoneFromContext(body);
+  if (bsuid || phone) {
+    const identities = await prisma.channelIdentity.findMany({
       where: {
         kind: 'whatsapp',
-        OR: [{ externalUserId: phone }, { businessScopedUserId: phone }],
+        OR: [
+          ...(bsuid ? [{ businessScopedUserId: bsuid }] : []),
+          ...(phone ? [{ externalUserId: phone }, { businessScopedUserId: phone }] : []),
+        ],
       },
       orderBy: { updatedAt: 'desc' },
+      take: 2,
       include: { tenant: true },
     });
-    if (identity?.tenant) return identity.tenant;
+    const tenantIds = new Set(identities.map(identity => identity.tenantId));
+    if (tenantIds.size === 1 && identities[0]?.tenant) return identities[0].tenant;
   }
 
   return null;
@@ -295,7 +434,7 @@ function supportContext(body: SupportToolBody) {
   const input = body.input ?? {};
   return {
     input,
-    phoneNumberId: phoneNumberIdFromContext(body),
+    phoneNumberId: trustedPhoneNumberIdFromContext(body),
     workflowExecutionId:
       asString(body.execution_context?.system?.workflow_execution_id) ??
       asString(body.execution_context?.system?.flow_execution_id),
@@ -560,6 +699,659 @@ async function createTripIntake(body: SupportToolBody) {
   return { ok: true, sandbox, trip };
 }
 
+async function createWhatsappLoginSignup(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+
+  const input = body.input ?? {};
+  const context = supportContext(body);
+  const email = normalizeEmail(
+    input.email ?? input.ticket_delivery_email ?? input.ticketDeliveryEmail
+  );
+  if (!email) return { ok: false, error: 'valid_email_required' };
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, displayName: true, phone: true, metadata: true },
+  });
+  const accountMode = existingUser ? 'login' : 'signup';
+  const trustedIdentity = await resolveTrustedWhatsappIdentity(body, tenant.id);
+  const trustedSession = trustedIdentity
+    ? verifiedSessionFromMetadata(trustedIdentity.metadata)
+    : null;
+  const canMutateExistingUser =
+    Boolean(existingUser) &&
+    Boolean(trustedSession?.verified) &&
+    trustedIdentity?.userId === existingUser?.id;
+  if (existingUser && !canMutateExistingUser) {
+    await prisma.supportTurn.create({
+      data: {
+        tenantId: tenant.id,
+        turnSummary: `WhatsApp traveler login requires verification for ${email}`,
+        outcome: 'deflected',
+        rawIo: {
+          kind: 'whatsapp_login_signup',
+          accountMode: 'login_pending_verification',
+          reason: 'existing_email_requires_verified_session',
+          flowToken: asString(input.flow_token),
+        } as Prisma.InputJsonValue,
+      },
+    });
+    return {
+      ok: false,
+      error: 'email_verification_required',
+      accountMode: 'login_pending_verification',
+      tenant: { id: tenant.id, slug: tenant.slug },
+      message:
+        'This email already belongs to a Sendero user. Complete email/passkey verification or a verified WhatsApp session already linked to that user before linking this chat.',
+    };
+  }
+
+  const displayName =
+    asString(input.display_name) ??
+    asString(input.displayName) ??
+    asString(input.name) ??
+    context.whatsappProfileName ??
+    email.split('@')[0];
+  const profilePhone =
+    asString(input.phone) ??
+    asString(input.phone_number) ??
+    asString(input.phoneNumber) ??
+    context.whatsappPhoneNumber;
+  const channelPhone = trustedWhatsappPhoneFromContext(body);
+  const locale = asString(input.locale) ?? asString(input.language) ?? undefined;
+  const nationalityIso3 = normalizeIso3(input.nationality_iso3 ?? input.nationalityIso3);
+  const passportExpiry = normalizeDate(input.passport_expiry ?? input.passportExpiry);
+
+  const travelerProfile: Record<string, unknown> = {
+    ...(existingUser?.metadata &&
+    typeof existingUser.metadata === 'object' &&
+    !Array.isArray(existingUser.metadata) &&
+    'travelerProfile' in existingUser.metadata &&
+    existingUser.metadata.travelerProfile &&
+    typeof existingUser.metadata.travelerProfile === 'object'
+      ? (existingUser.metadata.travelerProfile as Record<string, unknown>)
+      : {}),
+    source: 'whatsapp_flow',
+    accountMode,
+    emailVerified: Boolean(canMutateExistingUser),
+    locale: locale ?? null,
+    ticketDeliveryEmail: email,
+    linkedAt: new Date().toISOString(),
+  };
+  if (nationalityIso3) travelerProfile.declaredNationalityIso3 = nationalityIso3;
+  if (passportExpiry) travelerProfile.declaredPassportExpiry = passportExpiry;
+
+  const user = await prisma.user.upsert({
+    where: { email },
+    create: {
+      email,
+      displayName,
+      phone: profilePhone ?? channelPhone,
+      source: 'whatsapp',
+      metadata: { travelerProfile } as Prisma.InputJsonValue,
+      lastSeenAt: new Date(),
+    },
+    update: {
+      displayName,
+      phone: profilePhone ?? channelPhone ?? undefined,
+      lastSeenAt: new Date(),
+      metadata: {
+        travelerProfile,
+      } as Prisma.InputJsonValue,
+    },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      phone: true,
+      source: true,
+      metadata: true,
+      mscaAddress: true,
+    },
+  });
+
+  await prisma.membership.upsert({
+    where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
+    create: {
+      tenantId: tenant.id,
+      userId: user.id,
+      role: 'traveler',
+      status: canMutateExistingUser ? 'active' : 'invited',
+      invitedAt: canMutateExistingUser ? undefined : new Date(),
+      joinedAt: canMutateExistingUser ? new Date() : undefined,
+    },
+    update: {
+      status: canMutateExistingUser ? 'active' : 'invited',
+      joinedAt: canMutateExistingUser ? new Date() : undefined,
+    },
+  });
+
+  const bsuid = trustedBusinessScopedUserIdFromContext(body);
+  let channelIdentity = null;
+  if (bsuid) {
+    channelIdentity = await prisma.channelIdentity.upsert({
+      where: {
+        tenantId_kind_businessScopedUserId: {
+          tenantId: tenant.id,
+          kind: 'whatsapp',
+          businessScopedUserId: bsuid,
+        },
+      },
+      create: {
+        tenantId: tenant.id,
+        userId: user.id,
+        kind: 'whatsapp',
+        businessScopedUserId: bsuid,
+        externalUserId: channelPhone,
+        username: displayName,
+        metadata: {
+          locale,
+          source: 'whatsapp_login_signup_flow',
+          emailVerified: Boolean(canMutateExistingUser),
+        } as Prisma.InputJsonValue,
+      },
+      update: {
+        userId: user.id,
+        externalUserId: channelPhone ?? undefined,
+        username: displayName,
+        metadata: {
+          locale,
+          source: 'whatsapp_login_signup_flow',
+          emailVerified: Boolean(canMutateExistingUser),
+        } as Prisma.InputJsonValue,
+      },
+      select: { id: true, kind: true, externalUserId: true, businessScopedUserId: true },
+    });
+  } else if (channelPhone) {
+    channelIdentity = await prisma.channelIdentity.upsert({
+      where: {
+        tenantId_kind_externalUserId: {
+          tenantId: tenant.id,
+          kind: 'whatsapp',
+          externalUserId: channelPhone,
+        },
+      },
+      create: {
+        tenantId: tenant.id,
+        userId: user.id,
+        kind: 'whatsapp',
+        externalUserId: channelPhone,
+        username: displayName,
+        metadata: {
+          locale,
+          source: 'whatsapp_login_signup_flow',
+          emailVerified: Boolean(canMutateExistingUser),
+        } as Prisma.InputJsonValue,
+      },
+      update: {
+        userId: user.id,
+        username: displayName,
+        metadata: {
+          locale,
+          source: 'whatsapp_login_signup_flow',
+          emailVerified: Boolean(canMutateExistingUser),
+        } as Prisma.InputJsonValue,
+      },
+      select: { id: true, kind: true, externalUserId: true, businessScopedUserId: true },
+    });
+  }
+
+  const wallet = canMutateExistingUser ? await ensureTravelerWallet({ userId: user.id }) : null;
+  await prisma.supportTurn.create({
+    data: {
+      tenantId: tenant.id,
+      turnSummary: canMutateExistingUser
+        ? `WhatsApp traveler account linked for ${email}`
+        : `WhatsApp traveler account staged for ${email}`,
+      outcome: wallet ? 'answered' : 'deflected',
+      rawIo: {
+        kind: 'whatsapp_login_signup',
+        accountMode,
+        emailVerified: Boolean(canMutateExistingUser),
+        userId: user.id,
+        channelIdentityId: channelIdentity?.id ?? null,
+        walletProvisioned: Boolean(wallet),
+        flowToken: asString(input.flow_token),
+      } as Prisma.InputJsonValue,
+    },
+  });
+
+  return {
+    ok: true,
+    accountMode: canMutateExistingUser ? accountMode : 'signup_pending_email_verification',
+    tenant: { id: tenant.id, slug: tenant.slug },
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      phone: maskIdentifier(user.phone),
+      source: user.source,
+    },
+    channelIdentity: channelIdentity
+      ? {
+          ...channelIdentity,
+          externalUserId: maskIdentifier(channelIdentity.externalUserId),
+          businessScopedUserId: maskIdentifier(channelIdentity.businessScopedUserId),
+        }
+      : null,
+    walletProvisioned: Boolean(wallet),
+  };
+}
+
+async function resolveOrCreateWhatsappIdentity(body: SupportToolBody, tenantId: string) {
+  const input = body.input ?? {};
+  const context = supportContext(body);
+  const bsuid = trustedBusinessScopedUserIdFromContext(body);
+  const phone = trustedWhatsappPhoneFromContext(body) ?? context.whatsappPhoneNumber;
+  const username =
+    asString(input.display_name) ??
+    asString(input.displayName) ??
+    asString(input.name) ??
+    context.whatsappProfileName;
+  const locale = asString(input.locale) ?? asString(input.language);
+
+  if (bsuid) {
+    return prisma.channelIdentity.upsert({
+      where: {
+        tenantId_kind_businessScopedUserId: {
+          tenantId,
+          kind: 'whatsapp',
+          businessScopedUserId: bsuid,
+        },
+      },
+      create: {
+        tenantId,
+        kind: 'whatsapp',
+        businessScopedUserId: bsuid,
+        externalUserId: phone,
+        username,
+        metadata: { locale, source: 'whatsapp_session' } as Prisma.InputJsonValue,
+      },
+      update: {
+        externalUserId: phone ?? undefined,
+        username: username ?? undefined,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        userId: true,
+        externalUserId: true,
+        businessScopedUserId: true,
+        username: true,
+        metadata: true,
+      },
+    });
+  }
+
+  if (!phone) return null;
+  return prisma.channelIdentity.upsert({
+    where: {
+      tenantId_kind_externalUserId: {
+        tenantId,
+        kind: 'whatsapp',
+        externalUserId: phone,
+      },
+    },
+    create: {
+      tenantId,
+      kind: 'whatsapp',
+      externalUserId: phone,
+      username,
+      metadata: { locale, source: 'whatsapp_session' } as Prisma.InputJsonValue,
+    },
+    update: {
+      username: username ?? undefined,
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      userId: true,
+      externalUserId: true,
+      businessScopedUserId: true,
+      username: true,
+      metadata: true,
+    },
+  });
+}
+
+function verifiedSessionFromMetadata(metadata: unknown) {
+  const record =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  const session =
+    record.whatsappSession && typeof record.whatsappSession === 'object'
+      ? (record.whatsappSession as Record<string, unknown>)
+      : null;
+  const verifiedAt = asString(session?.verifiedAt);
+  const verifiedExpiresAt = asString(session?.verifiedExpiresAt);
+  const verified =
+    Boolean(verifiedAt) &&
+    Boolean(verifiedExpiresAt) &&
+    Date.parse(verifiedExpiresAt!) > Date.now();
+  return {
+    level: verified ? 'verified' : 'remembered',
+    verified,
+    verifiedAt,
+    verifiedExpiresAt,
+    purpose: asString(session?.purpose),
+  };
+}
+
+async function resolveTrustedWhatsappIdentity(body: SupportToolBody, tenantId: string) {
+  const bsuid = trustedBusinessScopedUserIdFromContext(body);
+  const phone = trustedWhatsappPhoneFromContext(body);
+  if (!bsuid && !phone) return null;
+  return prisma.channelIdentity.findFirst({
+    where: {
+      tenantId,
+      kind: 'whatsapp',
+      OR: [
+        ...(bsuid ? [{ businessScopedUserId: bsuid }] : []),
+        ...(phone ? [{ externalUserId: phone }, { businessScopedUserId: phone }] : []),
+      ],
+    },
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true,
+      tenantId: true,
+      userId: true,
+      externalUserId: true,
+      businessScopedUserId: true,
+      username: true,
+      metadata: true,
+    },
+  });
+}
+
+async function requireVerifiedWhatsappSession(body: SupportToolBody, tenantId: string) {
+  const signedContext = verifiedSupportContext(body);
+  if (signedContext?.tenantId === tenantId) {
+    return { ok: true as const, level: 'signed_dashboard_context' as const };
+  }
+
+  const identity = await resolveTrustedWhatsappIdentity(body, tenantId);
+  if (!identity) {
+    return {
+      ok: false as const,
+      error: 'verified_whatsapp_session_required',
+      message:
+        'This tool needs a verified WhatsApp session. Ask the user to complete the Sendero WhatsApp OTP check before showing booking, wallet, billing, escrow, or traveler profile details.',
+    };
+  }
+  const session = verifiedSessionFromMetadata(identity.metadata);
+  if (!session.verified) {
+    return {
+      ok: false as const,
+      error: 'verified_whatsapp_session_required',
+      identityId: identity.id,
+      session,
+      message:
+        'This remembered WhatsApp session can collect intake and status, but sensitive details require OTP verification.',
+    };
+  }
+  return { ok: true as const, identity, session };
+}
+
+async function getWhatsappSessionContext(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+  const identity = await resolveOrCreateWhatsappIdentity(body, tenant.id);
+  if (!identity) return { ok: false, error: 'whatsapp_identity_required' };
+  const user = identity.userId
+    ? await prisma.user.findUnique({
+        where: { id: identity.userId },
+        select: { id: true, email: true, displayName: true, phone: true, mscaAddress: true },
+      })
+    : null;
+  const session = verifiedSessionFromMetadata(identity.metadata);
+  return {
+    ok: true,
+    tenant: { id: tenant.id, slug: tenant.slug },
+    identity: {
+      id: identity.id,
+      userId: identity.userId,
+      externalUserId: maskIdentifier(identity.externalUserId),
+      businessScopedUserId: maskIdentifier(identity.businessScopedUserId),
+      username: identity.username,
+    },
+    user,
+    session,
+    privileges: {
+      remembered: [
+        'itinerary questions',
+        'trip gallery',
+        'support status',
+        'quote intake',
+        'non-sensitive preferences',
+      ],
+      verified: [
+        'ticket-delivery email confirmation',
+        'booking detail display',
+        'wallet address display',
+        'traveler profile updates',
+      ],
+      privilegedAction:
+        'payments, refunds, escrow settlement, wallet transfers, passport vault access, and policy overrides require an action-scoped web/passkey approval link.',
+    },
+  };
+}
+
+async function requestWhatsappOtp(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+  const identity = await resolveOrCreateWhatsappIdentity(body, tenant.id);
+  if (!identity) return { ok: false, error: 'whatsapp_identity_required' };
+  const recipient = identity.externalUserId ?? supportContext(body).whatsappPhoneNumber;
+  if (!recipient) return { ok: false, error: 'whatsapp_phone_required' };
+
+  const recent = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT count(*)::bigint AS count
+    FROM whatsapp_session_verifications
+    WHERE "tenantId" = ${tenant.id}
+      AND "channelIdentityId" = ${identity.id}
+      AND "createdAt" > now() - interval '10 minutes'
+  `;
+  if ((recent[0]?.count ?? 0n) >= 3n) {
+    return { ok: false, error: 'otp_rate_limited' };
+  }
+
+  const purpose = asString(body.input?.purpose) ?? 'session_verify';
+  const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const codeHash = hashOtp({
+    tenantId: tenant.id,
+    channelIdentityId: identity.id,
+    nonce,
+    code,
+    purpose,
+  });
+  const expiresAt = new Date(Date.now() + 10 * 60_000);
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    INSERT INTO whatsapp_session_verifications (
+      id, "tenantId", "channelIdentityId", purpose, status, nonce, "codeHash",
+      "expiresAt", metadata, "createdAt", "updatedAt"
+    )
+    VALUES (
+      ${crypto.randomUUID()}, ${tenant.id}, ${identity.id}, ${purpose}, 'pending', ${nonce},
+      ${codeHash}, ${expiresAt}, ${
+        {
+          requestedBy: 'kapso_whatsapp_tool',
+          phoneNumberId: phoneNumberIdFromContext(body),
+          workflowExecutionId: supportContext(body).workflowExecutionId,
+        } as Prisma.InputJsonValue
+      }, now(), now()
+    )
+    RETURNING id
+  `;
+  const verificationId = rows[0]?.id;
+
+  const install = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId: tenant.id },
+    select: { phoneNumberId: true },
+  });
+  if (!install?.phoneNumberId) return { ok: false, error: 'tenant_whatsapp_not_configured' };
+
+  const apiKey = process.env.KAPSO_API_KEY;
+  if (!apiKey) return { ok: false, error: 'kapso_api_key_missing' };
+
+  const kapso = new KapsoClient({ apiKey, baseUrl: process.env.KAPSO_API_BASE_URL });
+  const tpl = SENDERO_TEMPLATES.OTP_RESEND;
+  try {
+    const sent = await kapso.sendTemplate({
+      phone_number_id: install.phoneNumberId,
+      to: recipient.replace(/[^\d+]/g, ''),
+      template_name: tpl.name,
+      language_code: tpl.defaultLocale,
+      components: buildOtpComponents(code),
+    });
+    await prisma.$executeRaw`
+      UPDATE whatsapp_session_verifications
+      SET status = 'pending', "sentAt" = now(), "providerMessageId" = ${sent.id}, "updatedAt" = now()
+      WHERE id = ${verificationId}
+    `;
+    return {
+      ok: true,
+      verificationId,
+      expiresAt,
+      delivery: { channel: 'whatsapp', providerMessageId: sent.id },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await prisma.$executeRaw`
+      UPDATE whatsapp_session_verifications
+      SET status = 'failed', "failureReason" = ${safeText(message, 500)}, "updatedAt" = now()
+      WHERE id = ${verificationId}
+    `;
+    return { ok: false, error: 'otp_send_failed', verificationId, message };
+  }
+}
+
+async function verifyWhatsappOtp(body: SupportToolBody) {
+  const { tenant, error } = await requireResolvedTenant(body);
+  if (!tenant) return error;
+  const identity = await resolveOrCreateWhatsappIdentity(body, tenant.id);
+  if (!identity) return { ok: false, error: 'whatsapp_identity_required' };
+  const code = asString(body.input?.code)?.replace(/\s+/g, '');
+  if (!code || !/^\d{6}$/.test(code)) return { ok: false, error: 'valid_otp_required' };
+  const verificationId =
+    asString(body.input?.verification_id) ?? asString(body.input?.verificationId);
+  const purpose = asString(body.input?.purpose) ?? 'session_verify';
+
+  const rows = verificationId
+    ? await prisma.$queryRaw<
+        Array<{
+          id: string;
+          purpose: string;
+          nonce: string;
+          codeHash: string;
+          expiresAt: Date;
+          attemptCount: number;
+          maxAttempts: number;
+          status: string;
+        }>
+      >`
+        SELECT id, purpose, nonce, "codeHash", "expiresAt", "attemptCount", "maxAttempts", status
+        FROM whatsapp_session_verifications
+        WHERE id = ${verificationId}
+          AND "tenantId" = ${tenant.id}
+          AND "channelIdentityId" = ${identity.id}
+        LIMIT 1
+      `
+    : await prisma.$queryRaw<
+        Array<{
+          id: string;
+          purpose: string;
+          nonce: string;
+          codeHash: string;
+          expiresAt: Date;
+          attemptCount: number;
+          maxAttempts: number;
+          status: string;
+        }>
+      >`
+        SELECT id, purpose, nonce, "codeHash", "expiresAt", "attemptCount", "maxAttempts", status
+        FROM whatsapp_session_verifications
+        WHERE "tenantId" = ${tenant.id}
+          AND "channelIdentityId" = ${identity.id}
+          AND purpose = ${purpose}
+          AND status = 'pending'
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+      `;
+  const challenge = rows[0];
+  if (!challenge) return { ok: false, error: 'otp_challenge_not_found' };
+  if (challenge.status !== 'pending') return { ok: false, error: `otp_${challenge.status}` };
+
+  const candidateHash = hashOtp({
+    tenantId: tenant.id,
+    channelIdentityId: identity.id,
+    nonce: challenge.nonce,
+    code,
+    purpose: challenge.purpose,
+  });
+  if (!constantTimeEqual(candidateHash, challenge.codeHash)) {
+    const invalidUpdates = await prisma.$executeRaw`
+      UPDATE whatsapp_session_verifications
+      SET "attemptCount" = "attemptCount" + 1,
+          status = CASE WHEN "attemptCount" + 1 >= "maxAttempts" THEN 'failed' ELSE status END,
+          "failureReason" = CASE WHEN "attemptCount" + 1 >= "maxAttempts" THEN 'max_attempts' ELSE "failureReason" END,
+          "updatedAt" = now()
+      WHERE id = ${challenge.id}
+        AND status = 'pending'
+        AND "attemptCount" < "maxAttempts"
+        AND "expiresAt" > now()
+    `;
+    return invalidUpdates === 1
+      ? { ok: false, error: 'otp_invalid' }
+      : { ok: false, error: 'otp_challenge_not_available' };
+  }
+
+  const verifiedAt = new Date();
+  const verifiedExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60_000);
+  const verifiedUpdates = await prisma.$executeRaw`
+    UPDATE whatsapp_session_verifications
+    SET status = 'verified', "verifiedAt" = ${verifiedAt}, "attemptCount" = "attemptCount" + 1, "updatedAt" = now()
+    WHERE id = ${challenge.id}
+      AND status = 'pending'
+      AND "attemptCount" < "maxAttempts"
+      AND "expiresAt" > now()
+      AND "codeHash" = ${candidateHash}
+  `;
+  if (verifiedUpdates !== 1) {
+    return { ok: false, error: 'otp_challenge_not_available' };
+  }
+  const metadata =
+    identity.metadata && typeof identity.metadata === 'object' && !Array.isArray(identity.metadata)
+      ? (identity.metadata as Record<string, unknown>)
+      : {};
+  await prisma.channelIdentity.update({
+    where: { id: identity.id },
+    data: {
+      metadata: {
+        ...metadata,
+        whatsappSession: {
+          level: 'verified',
+          purpose: challenge.purpose,
+          verifiedAt: verifiedAt.toISOString(),
+          verifiedExpiresAt: verifiedExpiresAt.toISOString(),
+          verificationId: challenge.id,
+        },
+      } as Prisma.InputJsonValue,
+    },
+  });
+  return {
+    ok: true,
+    verificationId: challenge.id,
+    session: {
+      level: 'verified',
+      verifiedAt,
+      verifiedExpiresAt,
+      purpose: challenge.purpose,
+    },
+  };
+}
+
 async function createTenantHandoff(body: SupportToolBody) {
   const { tenant, error } = await requireResolvedTenant(body);
   if (!tenant) return error;
@@ -626,6 +1418,8 @@ async function createTenantHandoff(body: SupportToolBody) {
 async function getWalletContext(body: SupportToolBody) {
   const { tenant, error } = await requireResolvedTenant(body);
   if (!tenant) return error;
+  const verified = await requireVerifiedWhatsappSession(body, tenant.id);
+  if (!verified.ok) return verified;
   const input = body.input ?? {};
   const userId = asString(input.user_id) ?? asString(input.userId);
   const [tenantWallets, userWallets, gatewayConfig, signer] = await Promise.all([
@@ -843,6 +1637,8 @@ async function getRecentChannelEvents(body: SupportToolBody) {
 async function getTripContext(body: SupportToolBody) {
   const { tenant, error } = await requireResolvedTenant(body);
   if (!tenant) return error;
+  const verified = await requireVerifiedWhatsappSession(body, tenant.id);
+  if (!verified.ok) return verified;
   const input = body.input ?? {};
   const tripId = asString(input.trip_id) ?? asString(input.tripId) ?? asString(input.id);
   const phone = asString(input.customer_phone_number) ?? asString(input.phone_number);
@@ -921,6 +1717,8 @@ async function getTripContext(body: SupportToolBody) {
 async function getBillingContext(body: SupportToolBody) {
   const { tenant, error } = await requireResolvedTenant(body);
   if (!tenant) return error;
+  const verified = await requireVerifiedWhatsappSession(body, tenant.id);
+  if (!verified.ok) return verified;
   const [subscription, meterEvents, invoices, spendCaps] = await Promise.all([
     prisma.subscription.findUnique({ where: { tenantId: tenant.id } }),
     prisma.meterEvent.findMany({
@@ -973,6 +1771,8 @@ async function getBillingContext(body: SupportToolBody) {
 async function getEscrowContext(body: SupportToolBody) {
   const { tenant, error } = await requireResolvedTenant(body);
   if (!tenant) return error;
+  const verified = await requireVerifiedWhatsappSession(body, tenant.id);
+  if (!verified.ok) return verified;
   const input = body.input ?? {};
   const tripId = asString(input.trip_id) ?? asString(input.tripId);
   const bookingId = asString(input.booking_id) ?? asString(input.bookingId);
@@ -1159,23 +1959,123 @@ function titleFromText(text: string, url: string): string {
   return heading || new URL(url).pathname.split('/').filter(Boolean).pop() || url;
 }
 
+function lifecycleTitle(operation: SupportTool, input: Record<string, unknown>): string {
+  const explicit = asString(input.title);
+  if (explicit) return explicit;
+  const label = operation.replace(/_/g, ' ');
+  const tripId = asString(input.trip_id) ?? asString(input.tripId);
+  const subject =
+    asString(input.quote_id) ??
+    asString(input.booking_id) ??
+    asString(input.reference) ??
+    asString(input.destination) ??
+    asString(input.city) ??
+    tripId;
+  return subject ? `${label}: ${subject}` : label;
+}
+
+async function createLifecycleHandoff(operation: SupportTool, body: SupportToolBody) {
+  const input = body.input ?? {};
+  return createTenantHandoff({
+    ...body,
+    input: {
+      ...input,
+      title: lifecycleTitle(operation, input),
+      summary:
+        asString(input.summary) ??
+        [
+          `Tool: ${operation}`,
+          asString(input.trip_id) || asString(input.tripId)
+            ? `Trip ID: ${asString(input.trip_id) ?? asString(input.tripId)}`
+            : null,
+          asString(input.reference) ? `Reference: ${asString(input.reference)}` : null,
+          asString(input.details) ? `Details: ${asString(input.details)}` : null,
+          'Risk policy: WhatsApp can collect intent; payment, refunds, escrow settlement, booking commits, wallet movement, and NFT unlocks require secure approval or human review.',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+    },
+  });
+}
+
+async function getLifecycleReadContext(operation: SupportTool, body: SupportToolBody) {
+  if (
+    operation === 'get_booking_context' ||
+    operation === 'get_disruption_context' ||
+    operation === 'get_trip_gallery' ||
+    operation === 'get_nft_stamp_status'
+  ) {
+    const tripContext = await getTripContext(body);
+    return {
+      ok: true,
+      tool: operation,
+      riskPolicy:
+        operation === 'get_nft_stamp_status'
+          ? 'Viewing status is allowed; unlock or mint actions require verified identity or secure approval.'
+          : 'Read-only context may be returned to the user after tenant/session resolution.',
+      context: tripContext,
+    };
+  }
+  if (operation === 'get_prefund_claim_status') {
+    const tripContext = await getTripContext(body);
+    return {
+      ok: true,
+      tool: operation,
+      policy:
+        'Prefunded links are claimable only with a secure code sent to ticket email. Do not ask for the code in WhatsApp.',
+      context: tripContext,
+    };
+  }
+  return {
+    ok: true,
+    tool: operation,
+    message:
+      'Search-only lifecycle tool is not connected to a supplier API yet. Create a handoff/request before quoting or booking.',
+  };
+}
+
 const OPERATIONS: Record<SupportTool, (body: SupportToolBody) => Promise<unknown>> = {
+  create_accommodation_request: body =>
+    createLifecycleHandoff('create_accommodation_request', body),
+  create_ancillary_request: body => createLifecycleHandoff('create_ancillary_request', body),
+  create_disruption_handoff: body => createLifecycleHandoff('create_disruption_handoff', body),
+  create_prefunded_trip_link: body => createLifecycleHandoff('create_prefunded_trip_link', body),
+  create_quote_request: body => createLifecycleHandoff('create_quote_request', body),
   create_tenant_handoff: createTenantHandoff,
   create_trip_intake: createTripIntake,
+  create_whatsapp_login_signup: createWhatsappLoginSignup,
   create_support_ticket: createSupportTicket,
+  create_transfer_request: body => createLifecycleHandoff('create_transfer_request', body),
   get_billing_context: getBillingContext,
+  get_booking_context: body => getLifecycleReadContext('get_booking_context', body),
+  get_disruption_context: body => getLifecycleReadContext('get_disruption_context', body),
   get_escrow_context: getEscrowContext,
+  get_nft_stamp_status: body => getLifecycleReadContext('get_nft_stamp_status', body),
+  get_prefund_claim_status: body => getLifecycleReadContext('get_prefund_claim_status', body),
   get_recent_channel_events: getRecentChannelEvents,
   get_tenant_operating_context: getTenantOperatingContext,
   get_tenant_context: getTenantContext,
+  get_trip_gallery: body => getLifecycleReadContext('get_trip_gallery', body),
   get_trip_context: getTripContext,
   get_wallet_context: getWalletContext,
+  get_whatsapp_session_context: getWhatsappSessionContext,
   get_whatsapp_setup_status: getWhatsappSetupStatus,
+  list_quote_options: body => getLifecycleReadContext('list_quote_options', body),
+  request_whatsapp_otp: requestWhatsappOtp,
+  request_booking_change: body => createLifecycleHandoff('request_booking_change', body),
+  request_nft_unlock: body => createLifecycleHandoff('request_nft_unlock', body),
+  request_payment_link: body => createLifecycleHandoff('request_payment_link', body),
+  request_quote_approval: body => createLifecycleHandoff('request_quote_approval', body),
+  search_accommodation: body => getLifecycleReadContext('search_accommodation', body),
+  search_car_rentals: body => getLifecycleReadContext('search_car_rentals', body),
+  search_restaurants: body => getLifecycleReadContext('search_restaurants', body),
   search_sendero_docs: searchSenderoDocs,
   update_support_ticket: updateSupportTicket,
+  verify_whatsapp_otp: verifyWhatsappOtp,
 };
 
 export async function POST(request: Request): Promise<Response> {
+  const startedAt = Date.now();
   const secret = configuredSecret();
   if (!secret) {
     return NextResponse.json({ error: 'support_tools_not_configured' }, { status: 503 });
@@ -1189,5 +2089,66 @@ export async function POST(request: Request): Promise<Response> {
   if (!operation || !(operation in OPERATIONS)) {
     return NextResponse.json({ error: 'unknown_operation', operation }, { status: 400 });
   }
-  return json(await OPERATIONS[operation](body));
+
+  const parentTraceId =
+    extractTraceId(request.headers) ??
+    asString(body.input?.trace_id) ??
+    asString(body.input?.traceId) ??
+    asString(body.execution_context?.system?.trace_id) ??
+    asString(body.execution_context?.system?.traceId) ??
+    asString(body.execution_context?.system?.flow_execution_id) ??
+    asString(body.execution_context?.system?.workflow_execution_id) ??
+    undefined;
+  const context = supportContext(body);
+  const tenantHint =
+    asString(body.input?.tenant_id) ??
+    asString(body.input?.tenantId) ??
+    verifiedSupportContext(body)?.tenantId ??
+    'kapso-support-tools';
+
+  const traced = await traceAgent(
+    'sendero-whatsapp-support-tools',
+    {
+      tenantId: tenantHint,
+      userId: context.whatsappPhoneNumber ?? undefined,
+      sessionId: context.whatsappConversationId ?? parentTraceId,
+      model: 'kapso-worker-tool',
+      trigger: 'webhook',
+      surface: 'whatsapp',
+      channel: 'kapso',
+      turnId: context.workflowExecutionId ?? parentTraceId,
+      parentTraceId,
+      toolCallCount: 1,
+    },
+    async ({ traceId }) => {
+      const result = await OPERATIONS[operation](body);
+      return { result, traceId };
+    }
+  );
+
+  const traceId = traced.traceId;
+  const ok =
+    traced.result.result &&
+    typeof traced.result.result === 'object' &&
+    !Array.isArray(traced.result.result) &&
+    'ok' in traced.result.result
+      ? traced.result.result.ok !== false
+      : true;
+
+  scoreToolSuccess(traceId, [{ toolName: operation, success: ok }]).catch(() => {});
+  scoreLatency(traceId, Date.now() - startedAt).catch(() => {});
+  flushLangfuse().catch(() => {});
+
+  return new Response(
+    JSON.stringify(withTrace(traced.result.result, traceId), (_key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    ),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-sendero-trace-id': traceId,
+      },
+    }
+  );
 }

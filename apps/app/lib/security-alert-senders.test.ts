@@ -14,9 +14,31 @@
  * `packages/notifications/src/security-alerts.test.ts`.
  */
 
+import { buildSecurityAlertSenders } from './security-alert-senders';
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import { buildSecurityAlertSenders } from './security-alert-senders';
+let whatsappSendText = mock(async (_to: string, _message: string) => ({
+  messages: [{ id: 'wamid.default' }],
+}));
+let whatsappSendTemplate = mock(async (_args: unknown) => ({
+  messages: [{ id: 'wamid.template' }],
+}));
+let whatsappIsOutsideSessionWindowError = (_err: unknown) => false;
+
+mock.module('@sendero/whatsapp', () => ({
+  WhatsAppClient: class {
+    sendText = whatsappSendText;
+    sendTemplate = whatsappSendTemplate;
+  },
+  SENDERO_TEMPLATES: {
+    SECURITY_ALERT: { name: 'sendero_security_alert', defaultLocale: 'en_US' },
+  },
+  buildSecurityAlertComponents: (subject: string, body: string) => [
+    { type: 'header', parameters: [{ type: 'text', text: subject }] },
+    { type: 'body', parameters: [{ type: 'text', text: body }] },
+  ],
+  isOutsideSessionWindowError: (err: unknown) => whatsappIsOutsideSessionWindowError(err),
+}));
 
 // Keep snapshot of process.env so we can mutate per-test without
 // leaking. Each test sets only the env it cares about.
@@ -28,6 +50,20 @@ beforeEach(() => {
   delete process.env.WHATSAPP_ACCESS_TOKEN;
   delete process.env.WHATSAPP_PHONE_NUMBER_ID;
   delete process.env.WHATSAPP_API_BASE_URL;
+  mock.module('@sendero/database', () => ({
+    prisma: {
+      slackInstall: {
+        findFirst: async () => null,
+      },
+    },
+  }));
+  whatsappSendText = mock(async (_to: string, _message: string) => ({
+    messages: [{ id: 'wamid.default' }],
+  }));
+  whatsappSendTemplate = mock(async (_args: unknown) => ({
+    messages: [{ id: 'wamid.template' }],
+  }));
+  whatsappIsOutsideSessionWindowError = () => false;
 });
 
 afterEach(() => {
@@ -201,16 +237,11 @@ describe('sendSecurityAlertWhatsapp', () => {
   it('sends a free-form text via WhatsAppClient.sendText on success', async () => {
     process.env.WHATSAPP_ACCESS_TOKEN = 'wa-test-token';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '999';
-    const sendText = mock(async (to: string, message: string) => {
+    whatsappSendText = mock(async (to: string, message: string) => {
       void to;
       void message;
       return { messages: [{ id: 'wamid.HBgL...' }] };
     });
-    mock.module('@sendero/whatsapp', () => ({
-      WhatsAppClient: class {
-        sendText = sendText;
-      },
-    }));
 
     const senders = buildSecurityAlertSenders();
     const result = await senders.sendSecurityAlertWhatsapp(
@@ -220,8 +251,8 @@ describe('sendSecurityAlertWhatsapp', () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(sendText).toHaveBeenCalledTimes(1);
-    const [to, message] = sendText.mock.calls[0]!;
+    expect(whatsappSendText).toHaveBeenCalledTimes(1);
+    const [to, message] = whatsappSendText.mock.calls[0]!;
     // Non-digits stripped except a leading '+'.
     expect(to).toBe('+12025551234');
     // Subject rendered as bold prefix, body follows after a blank line.
@@ -232,11 +263,7 @@ describe('sendSecurityAlertWhatsapp', () => {
   it('returns whatsapp_no_message_id when the API response omits a wamid', async () => {
     process.env.WHATSAPP_ACCESS_TOKEN = 'wa-test-token';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '999';
-    mock.module('@sendero/whatsapp', () => ({
-      WhatsAppClient: class {
-        sendText = async () => ({ messages: [] });
-      },
-    }));
+    whatsappSendText = mock(async () => ({ messages: [] }));
 
     const senders = buildSecurityAlertSenders();
     const result = await senders.sendSecurityAlertWhatsapp('+12025551234', 'Subject', 'Body');
@@ -244,22 +271,21 @@ describe('sendSecurityAlertWhatsapp', () => {
     expect(result.error).toBe('whatsapp_no_message_id');
   });
 
-  it('surfaces thrown Cloud API errors verbatim (e.g. (#131047) outside 24h window)', async () => {
+  it('falls back to the security alert template when free-form text is outside the 24h window', async () => {
     process.env.WHATSAPP_ACCESS_TOKEN = 'wa-test-token';
     process.env.WHATSAPP_PHONE_NUMBER_ID = '999';
-    mock.module('@sendero/whatsapp', () => ({
-      WhatsAppClient: class {
-        sendText = async () => {
-          throw new Error(
-            'WhatsApp API error: 400 - {"error":{"message":"(#131047) Re-engagement message"}}'
-          );
-        };
-      },
-    }));
+    whatsappSendText = mock(async () => {
+      throw new Error(
+        'WhatsApp API error: 400 - {"error":{"message":"(#131047) Re-engagement message"}}'
+      );
+    });
+    whatsappSendTemplate = mock(async () => ({ messages: [{ id: 'wamid.template' }] }));
+    whatsappIsOutsideSessionWindowError = (err: unknown) =>
+      err instanceof Error && err.message.includes('(#131047)');
 
     const senders = buildSecurityAlertSenders();
     const result = await senders.sendSecurityAlertWhatsapp('+12025551234', 'Subject', 'Body');
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain('(#131047)');
+    expect(result.ok).toBe(true);
+    expect(whatsappSendTemplate).toHaveBeenCalledTimes(1);
   });
 });

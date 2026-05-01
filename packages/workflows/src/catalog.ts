@@ -1518,19 +1518,20 @@ export const whatsappProvisionWorkflow: WorkflowDef = {
   version: 1,
   label: 'Connect WhatsApp',
   description:
-    'Sendero-owned WhatsApp setup wizard via Kapso. Five user-facing steps: pick a phone number, confirm provisioning, brand the business profile, approve message templates, and go live with an optional test ping. No Meta embedded signup — Sendero owns the WABA and shares a number from its pool.',
+    'Tenant WhatsApp setup wizard via Kapso. Five user-facing steps: choose setup region, complete the Kapso-hosted Meta connection, brand the business profile, approve message templates, and go live with an optional test ping.',
   steps: [
-    // Step 1 — number picker
+    // Step 1 — setup region
     {
       kind: 'pause',
       id: 'pick_number',
-      label: 'Pick phone number',
+      label: 'Choose setup region',
       reason: 'user_reply',
       payload: {
         promptId: 'whatsapp.pick_number',
         stepIndex: 1,
         totalSteps: 5,
-        helpText: 'Sendero provisions a fresh WhatsApp number in your country.',
+        helpText:
+          'Choose the country for the WhatsApp Business number you will connect through Kapso.',
       },
     },
     {
@@ -1548,7 +1549,7 @@ export const whatsappProvisionWorkflow: WorkflowDef = {
       retries: 1,
       timeoutMs: 30_000,
     },
-    // Step 2 — verify (Sendero-side: just confirm what we provisioned)
+    // Step 2 — verify Kapso / Meta connection
     {
       kind: 'pause',
       id: 'verify_number',
@@ -1559,7 +1560,7 @@ export const whatsappProvisionWorkflow: WorkflowDef = {
         stepIndex: 2,
         totalSteps: 5,
         helpText:
-          'We provisioned this number in our shared WhatsApp Business Account. No Meta signup needed.',
+          'Open the Kapso-hosted setup link and approve the WhatsApp Business connection with the correct Meta business user.',
       },
     },
     // Step 3 — brand

@@ -1,0 +1,135 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "DISRUPTION_TYPE": ["DISRUPTION_DETAILS"],
+    "DISRUPTION_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "DISRUPTION_TYPE",
+      "title": "Disruption help",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "disruption_type_form",
+            "children": [
+              { "type": "TextHeading", "text": "What changed?" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip ID",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "disruption_type",
+                "label": "Issue",
+                "required": true,
+                "data-source": [
+                  { "id": "delay", "title": "Delay" },
+                  { "id": "cancellation", "title": "Cancellation" },
+                  { "id": "schedule_change", "title": "Schedule change" },
+                  { "id": "missed_connection", "title": "Missed connection" },
+                  { "id": "other", "title": "Other" }
+                ]
+              },
+              {
+                "type": "Dropdown",
+                "name": "urgency",
+                "label": "Urgency",
+                "required": true,
+                "data-source": [
+                  { "id": "normal", "title": "Normal" },
+                  { "id": "urgent", "title": "Urgent" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "disruption_type": "${form.disruption_type}",
+                    "urgency": "${form.urgency}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "DISRUPTION_DETAILS",
+      "title": "Details",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "disruption_type": { "type": "string", "__example__": "delay" },
+        "urgency": { "type": "string", "__example__": "urgent" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "disruption_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Tell us what you need" },
+              {
+                "type": "TextInput",
+                "name": "flight_or_pnr",
+                "label": "Flight or PNR",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "Dropdown",
+                "name": "desired_outcome",
+                "label": "Preferred outcome",
+                "required": false,
+                "data-source": [
+                  { "id": "rebook", "title": "Rebook" },
+                  { "id": "refund", "title": "Refund" },
+                  { "id": "wait", "title": "Wait" },
+                  { "id": "hotel_transport", "title": "Hotel or transport" }
+                ]
+              },
+              {
+                "type": "TextArea",
+                "name": "details",
+                "label": "Details",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "disruption_type": "${data.disruption_type}",
+                    "urgency": "${data.urgency}",
+                    "flight_or_pnr": "${form.flight_or_pnr}",
+                    "desired_outcome": "${form.desired_outcome}",
+                    "details": "${form.details}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

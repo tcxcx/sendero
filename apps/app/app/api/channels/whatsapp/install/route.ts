@@ -17,6 +17,7 @@ import { readSetupLinkSnapshot } from '@sendero/kapso';
 
 import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireCurrentTenant } from '@/lib/tenant-context';
+import { readWhatsappHealth } from '@/lib/whatsapp-health';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +46,7 @@ export async function GET() {
     });
   }
   const setupLink = readSetupLinkSnapshot(install.metadata);
+  const health = install.phoneNumberId ? await readWhatsappHealth(install.phoneNumberId) : null;
   return NextResponse.json({
     plan,
     readiness: readinessForPlan(plan),
@@ -62,6 +64,7 @@ export async function GET() {
       setupLinkError: setupLink?.whatsapp_setup_error ?? null,
       setupLinkProvisionPhoneNumber: setupLink?.provision_phone_number ?? null,
       provisioned: install.status === 'active' && Boolean(install.phoneNumberId),
+      health,
     },
   });
 }

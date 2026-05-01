@@ -1,0 +1,358 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "TRIP_BASICS": ["TRAVELERS"],
+    "TRAVELERS": ["APPROVAL"],
+    "APPROVAL": []
+  },
+  "screens": [
+    {
+      "id": "TRIP_BASICS",
+      "title": "Trip basics",
+      "data": {
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "trip_basics_form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "What should we plan?"
+              },
+              {
+                "type": "TextInput",
+                "name": "destination",
+                "label": "Destination",
+                "required": true,
+                "input-type": "text",
+                "helper-text": "City, country, airport, or route"
+              },
+              {
+                "type": "TextInput",
+                "name": "origin",
+                "label": "Origin",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "DatePicker",
+                "name": "start_date",
+                "label": "Start date",
+                "required": true
+              },
+              {
+                "type": "DatePicker",
+                "name": "end_date",
+                "label": "End date",
+                "required": false
+              },
+              {
+                "type": "Dropdown",
+                "name": "trip_type",
+                "label": "Trip type",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "business",
+                    "title": "Business"
+                  },
+                  {
+                    "id": "leisure",
+                    "title": "Leisure"
+                  },
+                  {
+                    "id": "group",
+                    "title": "Group"
+                  },
+                  {
+                    "id": "other",
+                    "title": "Other"
+                  }
+                ]
+              },
+              {
+                "type": "TextInput",
+                "name": "budget",
+                "label": "Budget",
+                "required": false,
+                "input-type": "text",
+                "helper-text": "Optional total or per traveler"
+              },
+              {
+                "type": "TextArea",
+                "name": "notes",
+                "label": "Important details",
+                "required": false,
+                "helper-text": "Cabin, hotel class, schedule constraints, accessibility, loyalty, etc."
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "destination": "${form.destination}",
+                    "origin": "${form.origin}",
+                    "start_date": "${form.start_date}",
+                    "end_date": "${form.end_date}",
+                    "trip_type": "${form.trip_type}",
+                    "budget": "${form.budget}",
+                    "notes": "${form.notes}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "TRAVELERS",
+      "title": "Travelers",
+      "data": {
+        "destination": {
+          "type": "string",
+          "__example__": "Santiago"
+        },
+        "origin": {
+          "type": "string",
+          "__example__": "Buenos Aires"
+        },
+        "start_date": {
+          "type": "string",
+          "__example__": "2026-06-01"
+        },
+        "end_date": {
+          "type": "string",
+          "__example__": "2026-06-05"
+        },
+        "trip_type": {
+          "type": "string",
+          "__example__": "business"
+        },
+        "budget": {
+          "type": "string",
+          "__example__": "USD 1200"
+        },
+        "notes": {
+          "type": "string",
+          "__example__": "Morning flights preferred"
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "travelers_form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "Who is traveling?"
+              },
+              {
+                "type": "TextInput",
+                "name": "traveler_name",
+                "label": "Primary traveler",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "traveler_email",
+                "label": "Traveler email",
+                "required": false,
+                "input-type": "email"
+              },
+              {
+                "type": "TextInput",
+                "name": "traveler_phone",
+                "label": "Traveler phone",
+                "required": false,
+                "input-type": "phone"
+              },
+              {
+                "type": "Dropdown",
+                "name": "traveler_count",
+                "label": "Travelers",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "1",
+                    "title": "1"
+                  },
+                  {
+                    "id": "2",
+                    "title": "2"
+                  },
+                  {
+                    "id": "3",
+                    "title": "3"
+                  },
+                  {
+                    "id": "4_plus",
+                    "title": "4+"
+                  }
+                ]
+              },
+              {
+                "type": "CheckboxGroup",
+                "name": "needed_products",
+                "label": "Needed",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "flights",
+                    "title": "Flights"
+                  },
+                  {
+                    "id": "hotels",
+                    "title": "Hotels"
+                  },
+                  {
+                    "id": "transfers",
+                    "title": "Transfers"
+                  },
+                  {
+                    "id": "insurance",
+                    "title": "Insurance"
+                  }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Review",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "destination": "${data.destination}",
+                    "origin": "${data.origin}",
+                    "start_date": "${data.start_date}",
+                    "end_date": "${data.end_date}",
+                    "trip_type": "${data.trip_type}",
+                    "budget": "${data.budget}",
+                    "notes": "${data.notes}",
+                    "traveler_name": "${form.traveler_name}",
+                    "traveler_email": "${form.traveler_email}",
+                    "traveler_phone": "${form.traveler_phone}",
+                    "traveler_count": "${form.traveler_count}",
+                    "needed_products": "${form.needed_products}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "APPROVAL",
+      "title": "Submit request",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "summary": {
+          "type": "string",
+          "__example__": "Trip request for Santiago"
+        },
+        "destination": {
+          "type": "string",
+          "__example__": "Santiago"
+        },
+        "origin": {
+          "type": "string",
+          "__example__": "Buenos Aires"
+        },
+        "start_date": {
+          "type": "string",
+          "__example__": "2026-06-01"
+        },
+        "end_date": {
+          "type": "string",
+          "__example__": "2026-06-05"
+        },
+        "trip_type": {
+          "type": "string",
+          "__example__": "business"
+        },
+        "budget": {
+          "type": "string",
+          "__example__": "USD 1200"
+        },
+        "notes": {
+          "type": "string",
+          "__example__": "Morning flights preferred"
+        },
+        "traveler_name": {
+          "type": "string",
+          "__example__": "Tomas Cordero"
+        },
+        "traveler_email": {
+          "type": "string",
+          "__example__": "tomas@example.com"
+        },
+        "traveler_phone": {
+          "type": "string",
+          "__example__": "+56920403095"
+        },
+        "traveler_count": {
+          "type": "string",
+          "__example__": "1"
+        },
+        "needed_products": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "__example__": ["flights", "hotels"]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Ready to send"
+          },
+          {
+            "type": "TextBody",
+            "text": "${data.summary}"
+          },
+          {
+            "type": "Footer",
+            "label": "Send to Sendero",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "destination": "${data.destination}",
+                "origin": "${data.origin}",
+                "start_date": "${data.start_date}",
+                "end_date": "${data.end_date}",
+                "trip_type": "${data.trip_type}",
+                "budget": "${data.budget}",
+                "notes": "${data.notes}",
+                "traveler_name": "${data.traveler_name}",
+                "traveler_email": "${data.traveler_email}",
+                "traveler_phone": "${data.traveler_phone}",
+                "traveler_count": "${data.traveler_count}",
+                "needed_products": "${data.needed_products}"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

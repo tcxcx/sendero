@@ -1,0 +1,15 @@
+{
+  "name": "sendero_payment_link",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Payment is required for {{1}}. Amount: {{2}}. Use this secure link: {{3}}",
+      "example": {
+        "body_text": [["Santiago trip deposit", "USD 250", "https://app.sendero.travel/pay/abc"]]
+      }
+    },
+    { "type": "FOOTER", "text": "Sendero secure payment" }
+  ]
+}

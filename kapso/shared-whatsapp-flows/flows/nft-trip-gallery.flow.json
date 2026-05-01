@@ -1,0 +1,112 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "GALLERY_REQUEST": ["GALLERY_DETAILS"],
+    "GALLERY_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "GALLERY_REQUEST",
+      "title": "Trip gallery",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "gallery_request_form",
+            "children": [
+              { "type": "TextHeading", "text": "NFT trip stamps" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip ID",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "request_type",
+                "label": "Request",
+                "required": true,
+                "data-source": [
+                  { "id": "view_gallery", "title": "View gallery" },
+                  { "id": "resend_link", "title": "Resend link" },
+                  { "id": "explain_stamp", "title": "Explain a stamp" },
+                  { "id": "request_unlock", "title": "Request unlock" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "request_type": "${form.request_type}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "GALLERY_DETAILS",
+      "title": "Details",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "request_type": { "type": "string", "__example__": "view_gallery" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "gallery_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Unlocks need verification" },
+              {
+                "type": "TextBody",
+                "text": "Viewing and support requests can start here. Unlocking or minting valuable stamps requires verified identity or secure approval."
+              },
+              {
+                "type": "TextInput",
+                "name": "stamp_id",
+                "label": "Stamp ID",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "TextArea",
+                "name": "notes",
+                "label": "Notes",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "request_type": "${data.request_type}",
+                    "stamp_id": "${form.stamp_id}",
+                    "notes": "${form.notes}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

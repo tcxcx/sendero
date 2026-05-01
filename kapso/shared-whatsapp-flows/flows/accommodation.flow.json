@@ -1,0 +1,160 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "STAY_BASICS": ["STAY_DETAILS"],
+    "STAY_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "STAY_BASICS",
+      "title": "Accommodation",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "stay_basics_form",
+            "children": [
+              { "type": "TextHeading", "text": "Find a stay" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip ID",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "city",
+                "label": "City or area",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "check_in",
+                "label": "Check-in date",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "check_out",
+                "label": "Check-out date",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "Dropdown",
+                "name": "rooms",
+                "label": "Rooms",
+                "required": true,
+                "data-source": [
+                  { "id": "1", "title": "1" },
+                  { "id": "2", "title": "2" },
+                  { "id": "3", "title": "3" },
+                  { "id": "4_plus", "title": "4+" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "city": "${form.city}",
+                    "check_in": "${form.check_in}",
+                    "check_out": "${form.check_out}",
+                    "rooms": "${form.rooms}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "STAY_DETAILS",
+      "title": "Stay details",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "city": { "type": "string", "__example__": "Paris" },
+        "check_in": { "type": "string", "__example__": "2026-06-01" },
+        "check_out": { "type": "string", "__example__": "2026-06-04" },
+        "rooms": { "type": "string", "__example__": "1" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "stay_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Preferences" },
+              {
+                "type": "TextInput",
+                "name": "budget",
+                "label": "Budget",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "loyalty_number",
+                "label": "Hotel loyalty number",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "CheckboxGroup",
+                "name": "amenities",
+                "label": "Amenities",
+                "required": false,
+                "data-source": [
+                  { "id": "breakfast", "title": "Breakfast" },
+                  { "id": "gym", "title": "Gym" },
+                  { "id": "wifi", "title": "Wi-Fi" },
+                  { "id": "parking", "title": "Parking" },
+                  { "id": "accessible", "title": "Accessible room" }
+                ]
+              },
+              {
+                "type": "TextArea",
+                "name": "notes",
+                "label": "Notes",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "city": "${data.city}",
+                    "check_in": "${data.check_in}",
+                    "check_out": "${data.check_out}",
+                    "rooms": "${data.rooms}",
+                    "budget": "${form.budget}",
+                    "loyalty_number": "${form.loyalty_number}",
+                    "amenities": "${form.amenities}",
+                    "notes": "${form.notes}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

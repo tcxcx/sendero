@@ -2,15 +2,14 @@
  * Liveblocks session auth endpoint.
  *
  * The Liveblocks client calls POST /api/liveblocks-auth with the room
- * id it wants to join. We:
- *   1. Look up the caller (Clerk session; falls back to the demo MSCA
- *      address header if Clerk isn't configured for the local demo).
- *   2. Derive tenantId from the caller's ChannelIdentity / Membership.
- *   3. Verify the requested room belongs to that tenant.
- *   4. Mint a scoped access token via issueSession().
+ * id it wants to join. We resolve the caller through Clerk, map the
+ * active organization to a Sendero tenant, verify the room belongs to
+ * that tenant, and mint a room-scoped Liveblocks access token.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { issueSession, parseRoomId } from '@sendero/collaboration/server';
 import { prisma } from '@sendero/database';
 
@@ -29,50 +28,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_room' }, { status: 400 });
   }
 
-  // Resolve caller → Sendero user. For hackathon demo we accept a
-  // signed MSCA address header and look up the associated user/tenant.
-  // Production will layer Clerk session auth on top via @sendero/auth.
-  const mscaAddress = req.headers.get('x-sendero-msca')?.toLowerCase();
-  if (!mscaAddress) {
+  const { userId, orgId, has } = await auth();
+  if (!userId || !orgId) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { mscaAddress },
-    select: {
-      id: true,
-      displayName: true,
-      imageUrl: true,
-      memberships: { select: { tenantId: true } },
-    },
+  const tenant = await prisma.tenant.findUnique({
+    where: { clerkOrgId: orgId },
+    select: { id: true },
   });
-  if (!user) {
-    return NextResponse.json({ error: 'unknown_user' }, { status: 404 });
+  if (!tenant) {
+    return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
   }
-
-  const tenantIds = user.memberships.map(m => m.tenantId);
-  if (!tenantIds.includes(parsed.tenantId)) {
+  if (tenant.id !== parsed.tenantId) {
     return NextResponse.json({ error: 'tenant_forbidden' }, { status: 403 });
   }
 
-  // Confirm the trip actually exists under this tenant.
-  const trip = await prisma.trip.findFirst({
-    where: { id: parsed.tripId, tenantId: parsed.tenantId },
-    select: { id: true },
-  });
-  if (!trip) {
-    return NextResponse.json({ error: 'trip_not_found' }, { status: 404 });
+  if (parsed.kind === 'trip') {
+    const trip = await prisma.trip.findFirst({
+      where: { id: parsed.tripId, tenantId: parsed.tenantId },
+      select: { id: true },
+    });
+    if (!trip) {
+      return NextResponse.json({ error: 'trip_not_found' }, { status: 404 });
+    }
   }
 
   try {
+    const clerkUser = await currentUser();
+    const displayName =
+      clerkUser?.fullName ||
+      clerkUser?.firstName ||
+      clerkUser?.username ||
+      clerkUser?.primaryEmailAddress?.emailAddress ||
+      'Operator';
+    const role = has({ role: 'org:admin' })
+      ? 'admin'
+      : has({ role: 'org:finance' })
+        ? 'finance'
+        : 'member';
     const session = await issueSession({
-      userId: user.id,
+      userId,
       tenantId: parsed.tenantId,
-      displayName: user.displayName ?? 'traveler',
-      avatarUrl: user.imageUrl,
+      displayName,
+      avatarUrl: clerkUser?.imageUrl ?? null,
       roomIds: [body.room],
     });
-    return NextResponse.json(session);
+    return NextResponse.json({ ...session, role });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: 'session_failed', message: msg }, { status: 500 });

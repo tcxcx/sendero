@@ -13,7 +13,11 @@
  * is on a fork; this file covers the pure helper.
  */
 
-import { dispatchBookingSettledV2, dispatchClaimLockout } from '../src/dispatch';
+import {
+  dispatchBookingSettledV1,
+  dispatchBookingSettledV2,
+  dispatchClaimLockout,
+} from '../src/dispatch';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -169,7 +173,30 @@ describe('dispatchBookingSettledV2', () => {
 
     expect(calls[0]!.url).toBe('https://app.test.local/api/internal/billing/settlement-v2');
     const body = JSON.parse(String(calls[0]!.init.body));
+    expect(body.eventVersion).toBe('v2');
     expect(body.agencyAmount).toBe('50000');
+    expect(body.feeAmount).toBe('10000');
+  });
+});
+
+describe('dispatchBookingSettledV1', () => {
+  it('POSTs the legacy settlement payload to the same app persister', async () => {
+    const calls = installFetchMock(() => new Response('', { status: 200 }));
+
+    await dispatchBookingSettledV1({
+      bookingId: `0x${'55'.repeat(32)}` as `0x${string}`,
+      vendor: `0x${'66'.repeat(20)}` as `0x${string}`,
+      vendorAmount: '1000000',
+      feeAmount: '10000',
+      txHash: `0x${'bb'.repeat(32)}` as `0x${string}`,
+      blockNumber: '100',
+    });
+
+    expect(calls[0]!.url).toBe('https://app.test.local/api/internal/billing/settlement-v2');
+    const body = JSON.parse(String(calls[0]!.init.body));
+    expect(body.eventVersion).toBe('v1');
+    expect(body.vendorAmount).toBe('1000000');
+    expect(body.agencyAmount).toBeUndefined();
     expect(body.feeAmount).toBe('10000');
   });
 });

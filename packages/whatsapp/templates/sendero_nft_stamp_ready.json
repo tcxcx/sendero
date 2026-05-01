@@ -1,0 +1,15 @@
+{
+  "name": "sendero_nft_stamp_ready",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Your Sendero trip stamp is ready for {{1}}. View your gallery: {{2}}",
+      "example": {
+        "body_text": [["Santiago 2026", "https://app.sendero.travel/gallery/abc"]]
+      }
+    },
+    { "type": "FOOTER", "text": "Unlocks may require verification" }
+  ]
+}

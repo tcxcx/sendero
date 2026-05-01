@@ -1,17 +1,21 @@
+import {
+  dispatchBookingSettledV1,
+  dispatchBookingSettledV2,
+  dispatchClaimLockout,
+} from './dispatch';
 import { ponder } from 'ponder:registry';
 import {
-  trip,
-  booking,
   agentAction,
-  tripEvent,
-  buyerAggregate,
   agentAggregate,
-  systemEvent,
+  booking,
+  buyerAggregate,
   claimAttempt,
-  claimLockout,
   claimCodeRotation,
+  claimLockout,
+  systemEvent,
+  trip,
+  tripEvent,
 } from 'ponder:schema';
-import { dispatchBookingSettledV2, dispatchClaimLockout } from './dispatch';
 
 // ════════════════════════════════════════════════════════════════════
 // Trip lifecycle
@@ -270,6 +274,27 @@ ponder.on('SenderoGuestEscrow:BookingSettled', async ({ event, context }) => {
     blockNumber: event.block.number,
     timestamp: event.block.timestamp,
   });
+
+  // Keep Sendero's app DB in sync for channel tools. The Ponder DB is
+  // authoritative for on-chain history, but WhatsApp/Slack/web support
+  // tools read the app DB settlement tables for tenant-isolated context.
+  try {
+    const outcome = await dispatchBookingSettledV1({
+      bookingId: event.args.bookingId,
+      vendor: event.args.vendor,
+      vendorAmount: event.args.vendorAmount.toString(),
+      feeAmount: event.args.feeAmount.toString(),
+      txHash: event.transaction.hash,
+      blockNumber: event.block.number.toString(),
+    });
+    if (!outcome.ok) {
+      console.error(
+        `[indexer] BookingSettled dispatch failed for ${event.args.bookingId}: ${outcome.error}`
+      );
+    }
+  } catch (err) {
+    console.error(`[indexer] BookingSettled dispatch threw for ${event.args.bookingId}:`, err);
+  }
 });
 
 ponder.on('SenderoGuestEscrow:BookingRefunded', async ({ event, context }) => {

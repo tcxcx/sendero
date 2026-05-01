@@ -1,0 +1,175 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "ACCOUNT": ["TRAVELER_PROFILE"],
+    "TRAVELER_PROFILE": []
+  },
+  "screens": [
+    {
+      "id": "ACCOUNT",
+      "title": "Sendero account",
+      "data": {
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "account_form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "Create or link your travel account"
+              },
+              {
+                "type": "TextInput",
+                "name": "display_name",
+                "label": "Full name",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "email",
+                "label": "Ticket email",
+                "required": true,
+                "input-type": "email",
+                "helper-text": "Airline tickets and receipts are sent here"
+              },
+              {
+                "type": "TextInput",
+                "name": "phone",
+                "label": "WhatsApp phone",
+                "required": true,
+                "input-type": "phone"
+              },
+              {
+                "type": "Dropdown",
+                "name": "locale",
+                "label": "Language",
+                "required": true,
+                "data-source": [
+                  {
+                    "id": "en-US",
+                    "title": "English"
+                  },
+                  {
+                    "id": "es-CL",
+                    "title": "Español"
+                  },
+                  {
+                    "id": "pt-BR",
+                    "title": "Português"
+                  }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "display_name": "${form.display_name}",
+                    "email": "${form.email}",
+                    "phone": "${form.phone}",
+                    "locale": "${form.locale}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "TRAVELER_PROFILE",
+      "title": "Traveler profile",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "display_name": {
+          "type": "string",
+          "__example__": "Tomas Cordero"
+        },
+        "email": {
+          "type": "string",
+          "__example__": "tomas@example.com"
+        },
+        "phone": {
+          "type": "string",
+          "__example__": "+12014298750"
+        },
+        "locale": {
+          "type": "string",
+          "__example__": "en-US"
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "traveler_profile_form",
+            "children": [
+              {
+                "type": "TextHeading",
+                "text": "Finish travel setup"
+              },
+              {
+                "type": "TextBody",
+                "text": "Returning travelers are linked immediately. New travelers get a Sendero wallet and trip gallery."
+              },
+              {
+                "type": "TextInput",
+                "name": "nationality_iso3",
+                "label": "Nationality",
+                "required": false,
+                "input-type": "text",
+                "helper-text": "ISO-3 code, for example USA, CHL, BRA"
+              },
+              {
+                "type": "TextInput",
+                "name": "passport_expiry",
+                "label": "Passport expiry",
+                "required": false,
+                "input-type": "text",
+                "helper-text": "YYYY-MM or YYYY-MM-DD"
+              },
+              {
+                "type": "OptIn",
+                "name": "wallet_consent",
+                "label": "Create my Sendero travel wallet and trip gallery",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Finish",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "display_name": "${data.display_name}",
+                    "email": "${data.email}",
+                    "phone": "${data.phone}",
+                    "locale": "${data.locale}",
+                    "nationality_iso3": "${form.nationality_iso3}",
+                    "passport_expiry": "${form.passport_expiry}",
+                    "wallet_consent": "${form.wallet_consent}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

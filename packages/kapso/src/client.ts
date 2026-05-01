@@ -188,7 +188,7 @@ export class KapsoClient {
 
   async checkPhoneHealth(phoneNumberId: string): Promise<KapsoPhoneHealth> {
     const raw = await this.request<unknown>(
-      `/phone_numbers/${encodeURIComponent(phoneNumberId)}/health`
+      `/whatsapp/phone_numbers/${encodeURIComponent(phoneNumberId)}/health`
     );
     return KapsoPhoneHealth.parse(unwrap(raw, 'data') ?? unwrap(raw, 'health') ?? raw);
   }

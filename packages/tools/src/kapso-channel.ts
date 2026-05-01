@@ -28,7 +28,7 @@ import { z } from 'zod';
 
 import { prisma, Prisma } from '@sendero/database';
 import { env } from '@sendero/env';
-import { KapsoClient, startOnboarding } from '@sendero/kapso';
+import { KapsoClient, setupLinkSnapshot, startOnboarding } from '@sendero/kapso';
 
 import type { ToolDef } from './types';
 
@@ -199,6 +199,12 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
         const previewE164 = input.preferredE164 ?? `+${input.countryIso.toLowerCase()}-pending`;
         const webhookSecret =
           env.kapsoWebhookSecret() ?? 'configure-via-scripts/register-kapso-webhook.ts';
+        const setupLink = setupLinkSnapshot(onboarding.setupLink);
+        const metadata = {
+          setupLink,
+          countryIso: input.countryIso.toUpperCase(),
+          preferredE164: input.preferredE164 ?? null,
+        } as unknown as Prisma.InputJsonValue;
         await prisma.whatsAppInstall.upsert({
           where: { tenantId: input.tenantId },
           update: {
@@ -206,11 +212,7 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
             displayPhoneNumber: previewE164,
             status: 'pending',
             webhookSecret,
-            metadata: {
-              setupLinkUrl: onboarding.setupLink.url,
-              setupLinkExpiresAt: onboarding.setupLink.expires_at,
-              countryIso: input.countryIso.toUpperCase(),
-            },
+            metadata,
           },
           create: {
             tenantId: input.tenantId,
@@ -218,11 +220,7 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
             displayPhoneNumber: previewE164,
             status: 'pending',
             webhookSecret,
-            metadata: {
-              setupLinkUrl: onboarding.setupLink.url,
-              setupLinkExpiresAt: onboarding.setupLink.expires_at,
-              countryIso: input.countryIso.toUpperCase(),
-            },
+            metadata,
           },
         });
         return {

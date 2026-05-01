@@ -254,53 +254,54 @@ model Tenant {
   parent   Tenant?  @relation("TenantHierarchy", fields: [parentTenantId], references: [id], onDelete: SetNull)
   children Tenant[] @relation("TenantHierarchy")
 
-  memberships         Membership[]
-  policies            Policy[]
-  trips               Trip[]
-  bookings            Booking[]
-  suppliers           Supplier[]
-  meterEvents         MeterEvent[]
-  settlements         Settlement[]
-  subscription        Subscription?
-  sessions            Session[]
-  attestations        Attestation[]
-  agentMemories       AgentMemory[]
-  preferenceLogs      PreferenceLog[]
-  channelIdentities   ChannelIdentity[]
-  groupTrips          GroupTrip[]
-  chatSessions        ChatSession[]
-  slackInstalls       SlackInstall[]
-  slackUserBindings   SlackUserBinding[]
-  whatsappInstall     WhatsAppInstall?
-  whatsappOutbound    WhatsAppOutboundMessage[]
-  whatsappLinkTokens  WhatsAppLinkToken[]
-  bookingPayTokens    BookingPayToken[]
-  spendCaps           TenantSpendCap[]
-  transferPolicies    TransferPolicy[]
-  transferAttempts    TransferAttempt[]
-  nanopayBatches      NanopayBatch[]
-  invoices            Invoice[]
-  circleWallets       CircleWallet[]
-  ancillarySelections AncillarySelection[]
-  disruptionRuns      DisruptionRun[]
-  checkInNudges       CheckInNudge[]
-  safetyBriefs        SafetyBrief[]
-  arrivalPlaybookRuns ArrivalPlaybookRun[]
-  supportTurns        SupportTurn[]
-  pendingMultisigOps  PendingMultisigOp[]
-  passportVaults      PassportVault[]
-  tripEligibilityRuns TripEligibilityRun[]
-  nftStamps           NftStamp[]
-  onchainIdentities   OnchainIdentity[]
-  reputationPolicy    ReputationPolicy?
-  pricingPolicies     TenantPricingPolicy[]
-  otpDeliveryAttempts OtpDeliveryAttempt[]
-  securityAlerts      SecurityAlert[]
-  gatewaySigner       TenantGatewaySigner?
-  gatewayConfig       TenantGatewayConfig?
-  gatewayDeposits     GatewayDepositLog[]
-  gatewayTransfers    GatewayTransferLog[]
-  walletAccessLogs    WalletAccessLog[]
+  memberships                  Membership[]
+  policies                     Policy[]
+  trips                        Trip[]
+  bookings                     Booking[]
+  suppliers                    Supplier[]
+  meterEvents                  MeterEvent[]
+  settlements                  Settlement[]
+  subscription                 Subscription?
+  sessions                     Session[]
+  attestations                 Attestation[]
+  agentMemories                AgentMemory[]
+  preferenceLogs               PreferenceLog[]
+  channelIdentities            ChannelIdentity[]
+  groupTrips                   GroupTrip[]
+  chatSessions                 ChatSession[]
+  slackInstalls                SlackInstall[]
+  slackUserBindings            SlackUserBinding[]
+  whatsappInstall              WhatsAppInstall?
+  whatsappOutbound             WhatsAppOutboundMessage[]
+  whatsappSessionVerifications WhatsAppSessionVerification[]
+  whatsappLinkTokens           WhatsAppLinkToken[]
+  bookingPayTokens             BookingPayToken[]
+  spendCaps                    TenantSpendCap[]
+  transferPolicies             TransferPolicy[]
+  transferAttempts             TransferAttempt[]
+  nanopayBatches               NanopayBatch[]
+  invoices                     Invoice[]
+  circleWallets                CircleWallet[]
+  ancillarySelections          AncillarySelection[]
+  disruptionRuns               DisruptionRun[]
+  checkInNudges                CheckInNudge[]
+  safetyBriefs                 SafetyBrief[]
+  arrivalPlaybookRuns          ArrivalPlaybookRun[]
+  supportTurns                 SupportTurn[]
+  pendingMultisigOps           PendingMultisigOp[]
+  passportVaults               PassportVault[]
+  tripEligibilityRuns          TripEligibilityRun[]
+  nftStamps                    NftStamp[]
+  onchainIdentities            OnchainIdentity[]
+  reputationPolicy             ReputationPolicy?
+  pricingPolicies              TenantPricingPolicy[]
+  otpDeliveryAttempts          OtpDeliveryAttempt[]
+  securityAlerts               SecurityAlert[]
+  gatewaySigner                TenantGatewaySigner?
+  gatewayConfig                TenantGatewayConfig?
+  gatewayDeposits              GatewayDepositLog[]
+  gatewayTransfers             GatewayTransferLog[]
+  walletAccessLogs             WalletAccessLog[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -1274,14 +1275,49 @@ model ChannelIdentity {
   createdAt                  DateTime    @default(now()) @db.Timestamptz(6)
   updatedAt                  DateTime    @updatedAt @db.Timestamptz(6)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant               Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                 User?                         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionVerifications WhatsAppSessionVerification[]
 
   @@unique([tenantId, kind, businessScopedUserId])
   @@unique([tenantId, kind, externalUserId])
   @@index([tenantId, kind])
   @@index([userId])
   @@map("channel_identities")
+}
+
+/// Short-lived WhatsApp verification challenge for session elevation.
+///
+/// This is intentionally separate from `OtpDeliveryAttempt`, which audits
+/// on-chain trip claim-code rotation. These rows verify the WhatsApp channel
+/// identity itself: remembered session -> verified session. Cleartext OTPs
+/// are never persisted; only a keyed hash, nonce, expiry, attempts, and
+/// provider message id are stored.
+model WhatsAppSessionVerification {
+  id                String    @id @default(cuid())
+  tenantId          String
+  channelIdentityId String    @db.Uuid
+  purpose           String    @default("session_verify")
+  status            String    @default("pending") // pending | verified | expired | failed
+  nonce             String
+  codeHash          String
+  expiresAt         DateTime  @db.Timestamptz(6)
+  sentAt            DateTime? @db.Timestamptz(6)
+  verifiedAt        DateTime? @db.Timestamptz(6)
+  attemptCount      Int       @default(0)
+  maxAttempts       Int       @default(5)
+  providerMessageId String?
+  failureReason     String?
+  metadata          Json?
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelIdentity ChannelIdentity @relation(fields: [channelIdentityId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, channelIdentityId, createdAt])
+  @@index([tenantId, status, expiresAt])
+  @@map("whatsapp_session_verifications")
 }
 
 /// Persisted Slack OAuth install. Keyed on (enterpriseId, teamId) so

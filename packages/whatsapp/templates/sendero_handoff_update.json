@@ -1,0 +1,15 @@
+{
+  "name": "sendero_handoff_update",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Sendero support update for {{1}}: {{2}}",
+      "example": {
+        "body_text": [["SR-123", "A travel specialist is reviewing your request now."]]
+      }
+    },
+    { "type": "FOOTER", "text": "Reply here if you need to add details" }
+  ]
+}

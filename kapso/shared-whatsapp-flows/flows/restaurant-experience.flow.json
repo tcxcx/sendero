@@ -1,0 +1,135 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "EXPERIENCE_BASICS": ["EXPERIENCE_DETAILS"],
+    "EXPERIENCE_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "EXPERIENCE_BASICS",
+      "title": "Recommendations",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "experience_basics_form",
+            "children": [
+              { "type": "TextHeading", "text": "Restaurants and experiences" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip ID",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "city_or_area",
+                "label": "City or area",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "request_type",
+                "label": "What do you want?",
+                "required": true,
+                "data-source": [
+                  { "id": "restaurant", "title": "Restaurant" },
+                  { "id": "experience", "title": "Experience" },
+                  { "id": "both", "title": "Both" }
+                ]
+              },
+              {
+                "type": "TextInput",
+                "name": "date_time",
+                "label": "Date and time window",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "city_or_area": "${form.city_or_area}",
+                    "request_type": "${form.request_type}",
+                    "date_time": "${form.date_time}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "EXPERIENCE_DETAILS",
+      "title": "Preferences",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "city_or_area": { "type": "string", "__example__": "Madrid" },
+        "request_type": { "type": "string", "__example__": "restaurant" },
+        "date_time": { "type": "string", "__example__": "Friday dinner" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "experience_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Taste and budget" },
+              {
+                "type": "TextInput",
+                "name": "cuisine_or_theme",
+                "label": "Cuisine or theme",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "budget",
+                "label": "Budget",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "TextArea",
+                "name": "constraints",
+                "label": "Dietary, access, or style notes",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "city_or_area": "${data.city_or_area}",
+                    "request_type": "${data.request_type}",
+                    "date_time": "${data.date_time}",
+                    "cuisine_or_theme": "${form.cuisine_or_theme}",
+                    "budget": "${form.budget}",
+                    "constraints": "${form.constraints}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

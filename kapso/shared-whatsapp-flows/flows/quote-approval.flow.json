@@ -1,0 +1,123 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "QUOTE_REVIEW": ["QUOTE_DETAILS"],
+    "QUOTE_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "QUOTE_REVIEW",
+      "title": "Quote review",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "quote_review_form",
+            "children": [
+              { "type": "TextHeading", "text": "Review a quote" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip ID",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "quote_id",
+                "label": "Quote ID",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "selected_option",
+                "label": "Selected option",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "decision",
+                "label": "Decision",
+                "required": true,
+                "data-source": [
+                  { "id": "approve_intent", "title": "Looks good" },
+                  { "id": "ask_changes", "title": "Request changes" },
+                  { "id": "human_review", "title": "Ask a person" }
+                ]
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "quote_id": "${form.quote_id}",
+                    "selected_option": "${form.selected_option}",
+                    "decision": "${form.decision}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "QUOTE_DETAILS",
+      "title": "Quote notes",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "quote_id": { "type": "string", "__example__": "quote_123" },
+        "selected_option": { "type": "string", "__example__": "Option A" },
+        "decision": { "type": "string", "__example__": "approve_intent" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "quote_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Approval is not payment" },
+              {
+                "type": "TextBody",
+                "text": "Sendero will save this decision. Any payment, ticketing, refund, or escrow action still requires a secure approval link."
+              },
+              {
+                "type": "TextArea",
+                "name": "notes",
+                "label": "Notes",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "quote_id": "${data.quote_id}",
+                    "selected_option": "${data.selected_option}",
+                    "decision": "${data.decision}",
+                    "notes": "${form.notes}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

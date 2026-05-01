@@ -1,0 +1,22 @@
+{
+  "name": "sendero_disruption_alert",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Travel update for {{1}}: {{2}}. Sendero can help with {{3}} here: {{4}}",
+      "example": {
+        "body_text": [
+          [
+            "Flight LA123",
+            "departure delayed",
+            "rebooking or hotel support",
+            "https://app.sendero.travel/actions/disruption/abc"
+          ]
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Sendero disruption support" }
+  ]
+}

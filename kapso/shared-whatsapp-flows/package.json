@@ -1,0 +1,10 @@
+{
+  "name": "sendero-shared-whatsapp-flows",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "bun run scripts/validate.js",
+    "test": "bun test"
+  }
+}

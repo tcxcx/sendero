@@ -20,6 +20,7 @@
  */
 
 import { prisma } from '@sendero/database';
+import { ensureTravelerWallet } from '@sendero/tools/ensure-traveler-wallet';
 
 import type {
   StampBookingContext,
@@ -88,7 +89,11 @@ export async function loadStampContext(args: {
 
   const travelers: StampTraveler[] = [];
   if (trip.traveler) {
-    const addr = trip.traveler.wallets[0]?.address;
+    let addr = trip.traveler.wallets[0]?.address;
+    if (!addr) {
+      const provisioned = await ensureTravelerWallet({ userId: trip.traveler.id });
+      addr = provisioned?.address;
+    }
     if (addr) {
       travelers.push({
         userId: trip.traveler.id,

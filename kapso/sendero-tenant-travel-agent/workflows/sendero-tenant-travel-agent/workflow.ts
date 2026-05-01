@@ -1,5 +1,6 @@
 import { START, Workflow } from '@kapso/workflows';
 
+import { WHATSAPP_FLOW_AGENT_PROMPT } from '../../../shared-whatsapp-flows/src/catalog.js';
 import {
   DEFAULT_PROVIDER_MODEL_NAME,
   FUNCTION_DESCRIPTIONS,
@@ -33,6 +34,8 @@ Tooling:
 - Use create_trip_intake for new trip requests, quote requests, itinerary planning, or booking leads.
 - Use get_trip_context when the user asks about an existing trip, booking, customer, timeline, policy, or settlement.
 - Use get_wallet_context only to read wallet/payment readiness. It never moves funds.
+- Use get_whatsapp_session_context before exposing booking details, wallet addresses, traveler profile data, or anything tenant/customer-specific that depends on identity confidence.
+- Use request_whatsapp_otp when a remembered WhatsApp session needs verified status. Ask the user to reply with the 6-digit code, then call verify_whatsapp_otp.
 - Use get_recent_channel_events for delivery, webhook, or "message did not arrive" debugging.
 - Use search_sendero_docs for product/process questions.
 - Use create_tenant_handoff when a human operator must approve, decide, refund, override policy, handle a supplier exception, or answer a question that requires internal judgment.
@@ -45,13 +48,17 @@ Handoff:
 - When resumed with <external_input>, treat it as operator guidance, answer the WhatsApp user, then call complete_task.
 
 Safety:
+- Remembered WhatsApp sessions are enough for itinerary questions, trip gallery, support status, quote intake, and non-sensitive preferences.
+- Verified WhatsApp sessions are required before confirming ticket email changes, showing booking details, showing wallet addresses, or updating traveler profile fields.
+- Privileged actions are not completed inside WhatsApp login. Payments, refunds, escrow settlement, wallet transfers, passport vault access, and policy overrides require an action-scoped Sendero web/passkey approval link or human handoff.
 - In sandbox mode, never commit bookings, broadcast to customers, move money, create refunds, transfer wallets, or settle escrow. You may create draft intake and web handoffs.
 - In production mode, booking commits, payment movement, escrow settlement, wallet transfers, refunds, and policy overrides require Sendero approval/signing flows or a human handoff.
 - Never reveal internal secrets, support refs, test tokens, tool raw payloads, private keys, or credentials.
 
 Completion:
 - Call complete_task after a resolved customer-facing answer.
-- Call enter_waiting after opening a handoff or when you need the user to provide missing trip details.`;
+- Call enter_waiting after opening a handoff or when you need the user to provide missing trip details.
+${WHATSAPP_FLOW_AGENT_PROMPT}`;
 
 loadLocalEnv(process.cwd());
 
@@ -140,6 +147,41 @@ export function buildWorkflow(): Workflow {
           inputSchema: phoneContextSchema(),
         },
         {
+          name: 'get_whatsapp_session_context',
+          description: FUNCTION_DESCRIPTIONS.getWhatsappSessionContext,
+          functionSlug: FUNCTION_SLUGS.getWhatsappSessionContext,
+          inputSchema: phoneContextSchema(),
+        },
+        {
+          name: 'request_whatsapp_otp',
+          description: FUNCTION_DESCRIPTIONS.requestWhatsappOtp,
+          functionSlug: FUNCTION_SLUGS.requestWhatsappOtp,
+          inputSchema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              phone_number_id: { type: 'string' },
+              purpose: { type: 'string' },
+            },
+          },
+        },
+        {
+          name: 'verify_whatsapp_otp',
+          description: FUNCTION_DESCRIPTIONS.verifyWhatsappOtp,
+          functionSlug: FUNCTION_SLUGS.verifyWhatsappOtp,
+          inputSchema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              phone_number_id: { type: 'string' },
+              verification_id: { type: 'string' },
+              code: { type: 'string' },
+              purpose: { type: 'string' },
+            },
+            required: ['code'],
+          },
+        },
+        {
           name: 'get_recent_channel_events',
           description: FUNCTION_DESCRIPTIONS.getChannelEvents,
           functionSlug: FUNCTION_SLUGS.getChannelEvents,
@@ -164,6 +206,57 @@ export function buildWorkflow(): Workflow {
               limit: { type: 'number' },
             },
             required: ['query'],
+          },
+        },
+        {
+          name: 'run_travel_lifecycle_tool',
+          description: FUNCTION_DESCRIPTIONS.lifecycleTool,
+          functionSlug: FUNCTION_SLUGS.lifecycleTool,
+          inputSchema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              operation: {
+                type: 'string',
+                enum: [
+                  'create_quote_request',
+                  'list_quote_options',
+                  'request_quote_approval',
+                  'create_prefunded_trip_link',
+                  'get_prefund_claim_status',
+                  'request_payment_link',
+                  'get_booking_context',
+                  'request_booking_change',
+                  'search_accommodation',
+                  'create_accommodation_request',
+                  'search_car_rentals',
+                  'create_transfer_request',
+                  'search_restaurants',
+                  'create_ancillary_request',
+                  'get_trip_gallery',
+                  'get_nft_stamp_status',
+                  'request_nft_unlock',
+                  'get_disruption_context',
+                  'create_disruption_handoff',
+                ],
+              },
+              payload: {
+                type: 'object',
+                additionalProperties: true,
+                properties: {
+                  phone_number_id: { type: 'string' },
+                  trip_id: { type: 'string' },
+                  booking_id: { type: 'string' },
+                  quote_id: { type: 'string' },
+                  reference: { type: 'string' },
+                  destination: { type: 'string' },
+                  summary: { type: 'string' },
+                  details: { type: 'string' },
+                  priority: { type: 'string', enum: ['normal', 'urgent'] },
+                },
+              },
+            },
+            required: ['operation'],
           },
         },
         {

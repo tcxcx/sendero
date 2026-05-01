@@ -1,0 +1,21 @@
+{
+  "name": "sendero_quote_ready",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Your Sendero quote for {{1}} is ready. Review summary: {{2}}. Secure approval link: {{3}}",
+      "example": {
+        "body_text": [
+          [
+            "NYC to Santiago",
+            "Option A, refundable, USD 920",
+            "https://app.sendero.travel/actions/quote/abc"
+          ]
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Payment and ticketing require secure approval" }
+  ]
+}

@@ -1,0 +1,164 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "GROUND_BASICS": ["GROUND_DETAILS"],
+    "GROUND_DETAILS": []
+  },
+  "screens": [
+    {
+      "id": "GROUND_BASICS",
+      "title": "Car or transfer",
+      "data": {
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "ground_basics_form",
+            "children": [
+              { "type": "TextHeading", "text": "Ground transport" },
+              {
+                "type": "TextInput",
+                "name": "trip_id",
+                "label": "Trip ID",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "RadioButtonsGroup",
+                "name": "service_type",
+                "label": "Service",
+                "required": true,
+                "data-source": [
+                  { "id": "airport_transfer", "title": "Airport transfer" },
+                  { "id": "point_to_point", "title": "Point to point" },
+                  { "id": "car_rental", "title": "Car rental" }
+                ]
+              },
+              {
+                "type": "TextInput",
+                "name": "pickup",
+                "label": "Pickup",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "dropoff",
+                "label": "Dropoff",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "TextInput",
+                "name": "pickup_time",
+                "label": "Date and time",
+                "required": true,
+                "input-type": "text"
+              },
+              {
+                "type": "Footer",
+                "label": "Next",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${form.trip_id}",
+                    "service_type": "${form.service_type}",
+                    "pickup": "${form.pickup}",
+                    "dropoff": "${form.dropoff}",
+                    "pickup_time": "${form.pickup_time}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "GROUND_DETAILS",
+      "title": "Details",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "trip_id": { "type": "string", "__example__": "trip_123" },
+        "service_type": { "type": "string", "__example__": "airport_transfer" },
+        "pickup": { "type": "string", "__example__": "JFK" },
+        "dropoff": { "type": "string", "__example__": "Manhattan" },
+        "pickup_time": { "type": "string", "__example__": "2026-06-01 10:00" },
+        "error_message": { "type": "string", "__example__": "" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "ground_details_form",
+            "children": [
+              { "type": "TextHeading", "text": "Vehicle needs" },
+              {
+                "type": "TextInput",
+                "name": "flight_number",
+                "label": "Flight number",
+                "required": false,
+                "input-type": "text"
+              },
+              {
+                "type": "Dropdown",
+                "name": "passengers",
+                "label": "Passengers",
+                "required": true,
+                "data-source": [
+                  { "id": "1", "title": "1" },
+                  { "id": "2", "title": "2" },
+                  { "id": "3", "title": "3" },
+                  { "id": "4_plus", "title": "4+" }
+                ]
+              },
+              {
+                "type": "Dropdown",
+                "name": "vehicle_class",
+                "label": "Vehicle class",
+                "required": true,
+                "data-source": [
+                  { "id": "economy", "title": "Economy" },
+                  { "id": "sedan", "title": "Sedan" },
+                  { "id": "suv", "title": "SUV" },
+                  { "id": "van", "title": "Van" },
+                  { "id": "premium", "title": "Premium" }
+                ]
+              },
+              {
+                "type": "TextArea",
+                "name": "notes",
+                "label": "Notes",
+                "required": false
+              },
+              {
+                "type": "Footer",
+                "label": "Submit",
+                "on-click-action": {
+                  "name": "data_exchange",
+                  "payload": {
+                    "trip_id": "${data.trip_id}",
+                    "service_type": "${data.service_type}",
+                    "pickup": "${data.pickup}",
+                    "dropoff": "${data.dropoff}",
+                    "pickup_time": "${data.pickup_time}",
+                    "flight_number": "${form.flight_number}",
+                    "passengers": "${form.passengers}",
+                    "vehicle_class": "${form.vehicle_class}",
+                    "notes": "${form.notes}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

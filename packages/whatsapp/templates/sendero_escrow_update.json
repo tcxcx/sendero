@@ -1,0 +1,15 @@
+{
+  "name": "sendero_escrow_update",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Escrow update for {{1}}: {{2}}. Reference: {{3}}.",
+      "example": {
+        "body_text": [["Trip trip_123", "funds are held pending validation", "0xabc123"]]
+      }
+    },
+    { "type": "FOOTER", "text": "Release or refund requires secure approval" }
+  ]
+}

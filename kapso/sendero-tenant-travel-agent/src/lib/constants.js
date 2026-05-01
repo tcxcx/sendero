@@ -8,7 +8,11 @@ export const FUNCTION_SLUGS = {
   getContext: 'sendero-tenant-travel-get-context',
   getTripContext: 'sendero-tenant-travel-get-trip-context',
   getWalletContext: 'sendero-tenant-travel-get-wallet-context',
+  getWhatsappSessionContext: 'sendero-tenant-travel-get-whatsapp-session-context',
+  lifecycleTool: 'sendero-tenant-travel-lifecycle-tool',
+  requestWhatsappOtp: 'sendero-tenant-travel-request-whatsapp-otp',
   searchDocs: 'sendero-tenant-travel-search-docs',
+  verifyWhatsappOtp: 'sendero-tenant-travel-verify-whatsapp-otp',
 };
 
 export const FUNCTION_DESCRIPTIONS = {
@@ -24,5 +28,13 @@ export const FUNCTION_DESCRIPTIONS = {
     'Fetch live trip, traveler, policy, booking, settlement, and timeline context for a tenant trip or customer.',
   getWalletContext:
     'Fetch tenant wallet, gateway, and traveler-wallet context without moving funds.',
+  getWhatsappSessionContext:
+    'Resolve the remembered or verified WhatsApp session for the current tenant contact and explain allowed action levels.',
+  lifecycleTool:
+    'Run controlled Sendero trip lifecycle tools for quotes, prefunds, payments, bookings, accommodation, transfers, restaurants, ancillaries, NFT trip gallery, disruption help, refunds, and escrow. Read/search/planning operations may be automatic; payment movement, refunds, escrow settlement, booking commits, wallet transfers, and NFT unlocks still require secure approval or human review.',
+  requestWhatsappOtp:
+    'Send a short-lived WhatsApp authentication OTP to elevate a remembered WhatsApp session to verified.',
   searchDocs: 'Search Sendero docs and runbooks for product and workflow guidance.',
+  verifyWhatsappOtp:
+    'Verify a WhatsApp authentication OTP and mark the current ChannelIdentity as a verified WhatsApp session.',
 };

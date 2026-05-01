@@ -1,0 +1,17 @@
+{
+  "name": "sendero_action_required",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "{{1}} requires your secure approval for {{2}}. Open: {{3}}",
+      "example": {
+        "body_text": [
+          ["Sendero", "payment authorization", "https://app.sendero.travel/actions/approve/abc"]
+        ]
+      }
+    },
+    { "type": "FOOTER", "text": "Never share one-time codes in chat" }
+  ]
+}

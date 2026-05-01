@@ -89,18 +89,18 @@
   "workflows": {
     "sendero-tenant-travel-agent": {
       "files": {
-        "workflows/sendero-tenant-travel-agent/definition.json": "c77d07f4b9f1d12c38e678e9d17b79543b8ffbccad9ae3e9e553207d1eb38fa4",
+        "workflows/sendero-tenant-travel-agent/definition.json": "ac057c3d62777690bb9a30db0a84f2bd46e8ee26db6c44be05582f850a62c396",
         "workflows/sendero-tenant-travel-agent/workflow.yaml": "88a7bb58b6d4ea05c9707726bd0946942c486eb1c82815044bc07ad7491174c7"
       },
       "id": "325dbf4b-1d92-4260-89df-d17e38e1b314",
-      "lockVersion": 3,
+      "lockVersion": 4,
       "slug": "sendero-tenant-travel-agent",
       "sourceFile": {
-        "hash": "56172c08031bdbb14542e4ffe1e3b4291f388a733a5aea6ddf7aa57c33f90a95",
+        "hash": "734d22f032e019debe93aeda64c743ab90270e2eba8fc25865464c10530a4d1f",
         "path": "workflows/sendero-tenant-travel-agent/workflow.ts"
       },
       "status": "active",
-      "updatedAt": "2026-04-30T19:00:15-04:00"
+      "updatedAt": "2026-04-30T19:21:55-04:00"
     }
   }
 }
