@@ -4,7 +4,7 @@ import { createPageMetadata } from '@/lib/metadata';
 export const metadata = createPageMetadata({
   title: 'Terms of Service · Sendero',
   description:
-    'Terms governing your use of Sendero — the agentic travel-ops platform with on-chain USDC settlement. Covers acceptable use, API key handling, settlement liability, and termination.',
+    'Terms governing your use of Sendero, the travel support and trip operations product operated by Stampa SpA.',
   path: '/terms',
   og: {
     title: 'Terms of Service',
@@ -17,9 +17,9 @@ export default function TermsPage() {
   return (
     <LegalPage eyebrow="Legal" title="Terms of Service" effectiveDate="2026-04-28">
       <p>
-        These terms govern your use of Sendero (the "Service"), operated by Sendero Travel Inc.
-        ("we," "us"). By signing up for a workspace, minting an API key, or settling a booking
-        through Sendero, you agree to these terms.
+        These terms govern your use of Sendero (the "Service"), a travel support and trip operations
+        product operated by Stampa SpA ("we," "us"). By signing up for a workspace, minting an API
+        key, or settling a booking through Sendero, you agree to these terms.
       </p>
 
       <h2>1. The service</h2>

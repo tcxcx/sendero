@@ -129,6 +129,7 @@ export const SENDERO_MARKETING_ROUTES: SitemapRoute[] = [
   { path: '/agents', changeFrequency: 'weekly', priority: 0.9 },
   { path: '/pricing', changeFrequency: 'weekly', priority: 0.85 },
   { path: '/updates', changeFrequency: 'weekly', priority: 0.8 },
+  { path: '/legal', changeFrequency: 'monthly', priority: 0.6 },
   { path: '/policy', changeFrequency: 'monthly', priority: 0.5 },
   { path: '/terms', changeFrequency: 'monthly', priority: 0.5 },
   { path: '/llms.txt', changeFrequency: 'daily', priority: 0.95 },
