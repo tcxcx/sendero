@@ -145,6 +145,57 @@ describe('KapsoClient', () => {
     expect(capturedUrl).toContain('/platform/v1/whatsapp/phone_numbers/pn_1/health');
   });
 
+  it('lists and creates WhatsApp Flows', async () => {
+    const calls: Array<{ url: string; method: string; body: string }> = [];
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async (input, init) => {
+        calls.push({
+          url: String(input),
+          method: String(init?.method ?? 'GET'),
+          body: String(init?.body ?? ''),
+        });
+        if (!init?.method) {
+          return new Response(
+            JSON.stringify({
+              data: [{ id: 'flow_1', name: 'Sendero Trip intake', phone_number_id: 'pn_1' }],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            data: {
+              id: 'flow_2',
+              name: 'Sendero Support intake',
+              phone_number_id: 'pn_1',
+              meta_flow_id: 'meta_2',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }) as typeof fetch,
+    });
+
+    const flows = await client.listWhatsAppFlows({ limit: 25 });
+    expect(flows[0]?.id).toBe('flow_1');
+    expect(calls[0]?.url).toContain('/platform/v1/whatsapp/flows?limit=25');
+
+    const created = await client.createWhatsAppFlow({
+      name: 'Sendero Support intake',
+      business_account_id: 'waba_1',
+      phone_number_id: 'pn_1',
+      flow_json: { version: '7.3', screens: [] },
+    });
+    expect(created.id).toBe('flow_2');
+    expect(created.meta_flow_id).toBe('meta_2');
+    expect(calls[1]?.url).toContain('/platform/v1/whatsapp/flows');
+    expect(calls[1]?.method).toBe('POST');
+    expect(calls[1]?.body).toContain('"business_account_id":"waba_1"');
+    expect(calls[1]?.body).toContain('"json_version":"7.3"');
+    expect(calls[1]?.body).toContain('"data_api_version":"3.0"');
+  });
+
   it('creates workflow triggers using Kapso trigger payload shape', async () => {
     let captured: { url: string; method: string; body: string } | null = null;
     const client = new KapsoClient({

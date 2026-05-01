@@ -126,6 +126,39 @@ export const KapsoPhoneHealth = z.object({
 });
 export type KapsoPhoneHealth = z.infer<typeof KapsoPhoneHealth>;
 
+// ── WhatsApp Flows ──────────────────────────────────────────────────
+export const KapsoWhatsAppFlow = z
+  .object({
+    id: z.string(),
+    name: z.string().optional(),
+    flow_id: z.string().optional(),
+    meta_flow_id: z.string().nullable().optional(),
+    metaFlowId: z.string().nullable().optional(),
+    phone_number_id: z.string().nullable().optional(),
+    phoneNumberId: z.string().nullable().optional(),
+    business_account_id: z.string().nullable().optional(),
+    businessAccountId: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+    json_version: z.string().nullable().optional(),
+    jsonVersion: z.string().nullable().optional(),
+    data_api_version: z.string().nullable().optional(),
+    dataApiVersion: z.string().nullable().optional(),
+    has_data_endpoint: z.boolean().nullable().optional(),
+    hasDataEndpoint: z.boolean().nullable().optional(),
+  })
+  .passthrough();
+export type KapsoWhatsAppFlow = z.infer<typeof KapsoWhatsAppFlow>;
+
+export const CreateWhatsAppFlowRequest = z.object({
+  name: z.string().min(1),
+  business_account_id: z.string().min(1),
+  phone_number_id: z.string().min(1),
+  json_version: z.string().default('7.3'),
+  data_api_version: z.string().default('3.0'),
+  flow_json: z.record(z.unknown()),
+});
+export type CreateWhatsAppFlowRequest = z.infer<typeof CreateWhatsAppFlowRequest>;
+
 export const CreateWebhookRequest = z.object({
   scope: WebhookScope,
   url: z.string().url(),

@@ -17,11 +17,13 @@
 import {
   CreateSetupLinkRequest,
   CreateWebhookRequest,
+  CreateWhatsAppFlowRequest,
   CreateWorkflowTriggerRequest,
   KapsoCustomer,
   KapsoPhoneHealth,
   KapsoSetupLink,
   KapsoWebhookRegistration,
+  KapsoWhatsAppFlow,
   KapsoWhatsAppPhoneNumber,
   KapsoWorkflowTrigger,
   SendTemplateRequest,
@@ -191,6 +193,28 @@ export class KapsoClient {
       `/whatsapp/phone_numbers/${encodeURIComponent(phoneNumberId)}/health`
     );
     return KapsoPhoneHealth.parse(unwrap(raw, 'data') ?? unwrap(raw, 'health') ?? raw);
+  }
+
+  // ── WhatsApp Flows ───────────────────────────────────────────────
+  async listWhatsAppFlows(input: { limit?: number } = {}): Promise<KapsoWhatsAppFlow[]> {
+    const limit = input.limit ?? 100;
+    const raw = await this.request<unknown>(
+      `/whatsapp/flows?limit=${encodeURIComponent(String(limit))}`
+    );
+    const list = unwrap(raw, 'flows') ?? unwrap(raw, 'data') ?? raw;
+    if (!Array.isArray(list)) return [];
+    return list.map(item => KapsoWhatsAppFlow.parse(item));
+  }
+
+  async createWhatsAppFlow(
+    input: Parameters<typeof CreateWhatsAppFlowRequest.parse>[0]
+  ): Promise<KapsoWhatsAppFlow> {
+    const body = CreateWhatsAppFlowRequest.parse(input);
+    const raw = await this.request<unknown>('/whatsapp/flows', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return KapsoWhatsAppFlow.parse(unwrap(raw, 'flow') ?? unwrap(raw, 'data') ?? raw);
   }
 
   // ── Webhooks ──────────────────────────────────────────────────────

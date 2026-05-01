@@ -18,6 +18,7 @@ import { KapsoClient, type KapsoWhatsAppPhoneNumber, readSetupLinkSnapshot } fro
 
 import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireCurrentTenant } from '@/lib/tenant-context';
+import { ensureTenantWhatsAppFlows } from '@/lib/whatsapp-flow-registry';
 import { readWhatsappHealth } from '@/lib/whatsapp-health';
 
 export const runtime = 'nodejs';
@@ -101,6 +102,12 @@ async function reconcilePendingInstallFromKapso(args: {
       phoneNumberId: phoneNumber.phone_number_id,
       displayPhoneNumber: phoneNumber.display_phone_number ?? undefined,
     });
+    const tenantFlows = await ensureTenantWhatsAppFlows({
+      tenantId: args.tenantId,
+      tenantDisplayName: args.tenantDisplayName,
+      phoneNumberId: phoneNumber.phone_number_id,
+      businessAccountId: phoneNumber.business_account_id ?? args.install.businessAccountId,
+    });
 
     return await prisma.whatsAppInstall.update({
       where: { id: args.install.id },
@@ -115,6 +122,7 @@ async function reconcilePendingInstallFromKapso(args: {
         lastErrorMessage: null,
         metadata: mergeJsonObject(args.install.metadata, {
           tenantWorkflow: activation,
+          tenantFlows,
           reconciledFromKapsoAt: new Date().toISOString(),
           reconciledFromKapsoReason: 'install_refresh_fallback',
         }),
