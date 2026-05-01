@@ -272,6 +272,7 @@ model Tenant {
   slackInstalls                SlackInstall[]
   slackUserBindings            SlackUserBinding[]
   whatsappInstall              WhatsAppInstall?
+  whatsappFlowRegistrations    WhatsAppFlowRegistration[]
   whatsappOutbound             WhatsAppOutboundMessage[]
   whatsappSessionVerifications WhatsAppSessionVerification[]
   whatsappLinkTokens           WhatsAppLinkToken[]
@@ -1480,6 +1481,37 @@ model WhatsAppInstall {
   @@index([tenantId, status])
   @@index([phoneNumberId])
   @@map("whatsapp_installs")
+}
+
+/// Sendero-owned registry of WhatsApp Flow ids per tenant phone number.
+///
+/// Kapso functions ask Sendero for the Flow id at send time instead of
+/// storing tenant-specific Flow ids in Kapso env vars. This lets tenant
+/// phone provisioning clone/register the canonical Sendero Flow pack later
+/// while keeping runtime resolution stable today.
+model WhatsAppFlowRegistration {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String
+  phoneNumberId  String
+  flowKey        String
+  kapsoFlowId    String
+  metaFlowId     String?
+  status         String   @default("draft") // draft | published | disabled | error
+  mode           String   @default("draft") // draft | published
+  name           String?
+  dataEndpointId String?
+  lastError      String?
+  metadata       Json?
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, phoneNumberId, flowKey])
+  @@index([tenantId])
+  @@index([phoneNumberId])
+  @@index([flowKey])
+  @@map("whatsapp_flow_registrations")
 }
 
 /// Audit row for every WhatsApp webhook delivery.
