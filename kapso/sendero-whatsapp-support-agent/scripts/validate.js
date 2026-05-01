@@ -1,7 +1,7 @@
+import { FUNCTION_SLUGS } from '../src/lib/constants.js';
 import { access, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { FUNCTION_SLUGS } from '../src/lib/constants.js';
 
 const root = process.cwd();
 

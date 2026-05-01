@@ -14,6 +14,8 @@
  * primitive.
  */
 
+import { NextResponse } from 'next/server';
+
 import { auth } from '@clerk/nextjs/server';
 import { type Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
@@ -24,10 +26,10 @@ import {
   setupLinkSnapshot,
   startOnboarding,
 } from '@sendero/kapso';
-import crypto from 'node:crypto';
-import { NextResponse } from 'next/server';
 
 import { requireCurrentTenant } from '@/lib/tenant-context';
+
+import crypto from 'node:crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

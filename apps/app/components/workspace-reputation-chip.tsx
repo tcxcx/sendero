@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 import {
-  ReputationStatDialog,
   type ReputationRecentFeedback,
+  ReputationStatDialog,
   type ReputationValidation,
 } from './reputation-stat-dialog';
 

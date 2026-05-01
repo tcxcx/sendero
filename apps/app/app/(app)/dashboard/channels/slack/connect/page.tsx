@@ -4,8 +4,8 @@
  * Two-pane setup wizard bound to `sendero.slack_install`.
  */
 
-import { ChannelSetupWizard } from '@/components/channels/setup-wizard/wizard-shell';
 import { slackPanes } from '@/components/channels/setup-wizard/slack-panes';
+import { ChannelSetupWizard } from '@/components/channels/setup-wizard/wizard-shell';
 import { docsUrl } from '@/lib/docs-url';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 import { loadOrStartWizardSession } from '@/lib/wizard-session';

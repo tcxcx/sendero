@@ -11,8 +11,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { loadAgentProfile, loadSenderoAgentProfile } from '@/lib/agent-profile';
 import { env } from '@sendero/env';
+
+import { loadAgentProfile, loadSenderoAgentProfile } from '@/lib/agent-profile';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

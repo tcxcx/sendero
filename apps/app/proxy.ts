@@ -7,6 +7,10 @@
  * produces a TS overload error at the call site. Runtime behavior is identical
  * either way (both resolve to Clerk's own server entrypoint).
  */
+
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import {
   detectLocale,
@@ -16,8 +20,6 @@ import {
   LOCALE_QUERY_PARAM,
   normalizeLocale,
 } from '@sendero/locale';
-import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 
 const isPublicRoute = createRouteMatcher([
   '/',

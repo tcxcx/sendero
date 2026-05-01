@@ -29,8 +29,9 @@
 
 import { NextResponse } from 'next/server';
 
-import { loadSenderoAgentProfile } from '@/lib/agent-profile';
 import { prisma } from '@sendero/database';
+
+import { loadSenderoAgentProfile } from '@/lib/agent-profile';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

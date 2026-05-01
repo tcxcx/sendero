@@ -23,7 +23,8 @@
  * HTTP route from inside the same process.
  */
 
-import { prisma, Prisma } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
+import { type ToolContext, toolList } from '@sendero/tools';
 import {
   findWorkflow,
   resumeRun,
@@ -32,7 +33,6 @@ import {
   type WorkflowDef,
   type WorkflowRun,
 } from '@sendero/workflows';
-import { toolList, type ToolContext } from '@sendero/tools';
 
 import type { WizardRunSnapshot, WizardStepDef } from '@/components/channels/setup-wizard/types';
 

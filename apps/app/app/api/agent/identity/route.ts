@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { env } from '@sendero/env';
+
 import { getAgentIdentity, getReputation, IDENTITY_REGISTRY } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
