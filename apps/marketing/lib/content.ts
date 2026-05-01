@@ -198,6 +198,7 @@ const FOOTER_GROUPS_EN: MarketingFooterGroup[] = [
   {
     label: 'Legal',
     links: [
+      { label: 'Operator', href: '/legal' },
       { label: 'Privacy', href: '/policy' },
       { label: 'Terms', href: '/terms' },
     ],
@@ -227,9 +228,17 @@ const FOOTER_GROUPS_ES: MarketingFooterGroup[] = [
   {
     label: 'Compañía',
     links: [
+      { label: 'Operador legal', href: '/legal' },
       { label: 'Soporte', href: 'https://help.sendero.travel' },
       { label: 'Ventas', href: 'mailto:sales@sendero.travel' },
       { label: 'Twitter', href: 'https://x.com/sendero_travel' },
+    ],
+  },
+  {
+    label: 'Legal',
+    links: [
+      { label: 'Privacidad', href: '/policy' },
+      { label: 'Términos', href: '/terms' },
     ],
   },
 ];
@@ -257,9 +266,17 @@ const FOOTER_GROUPS_PT: MarketingFooterGroup[] = [
   {
     label: 'Empresa',
     links: [
+      { label: 'Operador legal', href: '/legal' },
       { label: 'Suporte', href: 'https://help.sendero.travel' },
       { label: 'Vendas', href: 'mailto:sales@sendero.travel' },
       { label: 'Twitter', href: 'https://x.com/sendero_travel' },
+    ],
+  },
+  {
+    label: 'Legal',
+    links: [
+      { label: 'Privacidade', href: '/policy' },
+      { label: 'Termos', href: '/terms' },
     ],
   },
 ];

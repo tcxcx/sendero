@@ -4,7 +4,7 @@ import { createPageMetadata } from '@/lib/metadata';
 export const metadata = createPageMetadata({
   title: 'Privacy Policy · Sendero',
   description:
-    'How Sendero collects, uses, and protects your data. Travel-ops platform with on-chain settlement — covers traveler data, agent telemetry, payment data, and our Clerk + Circle + Duffel sub-processor chain.',
+    'How Sendero, operated by Stampa SpA, collects, uses, and protects travel support and trip operations data.',
   path: '/policy',
   og: {
     title: 'Privacy Policy',
@@ -17,9 +17,10 @@ export default function PolicyPage() {
   return (
     <LegalPage eyebrow="Legal" title="Privacy Policy" effectiveDate="2026-04-28">
       <p>
-        This policy describes what Sendero collects, why, and how we keep it safe. We are a
-        travel-ops platform: travelers, agencies, and corporates use us to plan, book, and settle
-        trips. Our agents run across MCP, WhatsApp, Slack, and the web console.
+        This policy describes what Sendero collects, why, and how we keep it safe. Sendero is a
+        travel support and trip operations product operated by Stampa SpA. Travelers, agencies, and
+        companies use Sendero to plan trips, coordinate support, manage bookings, and receive help
+        across WhatsApp, Slack, and the web console.
       </p>
 
       <h2>1. What we collect</h2>
