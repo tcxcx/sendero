@@ -92,57 +92,77 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  const { tenant, userId } = await requireCurrentTenant();
-  const { has } = await auth();
-  if (!has({ role: 'org:admin' })) {
-    console.warn('[whatsapp/install] disconnect forbidden', { tenantId: tenant.id, userId });
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
+  try {
+    const { tenant, userId } = await requireCurrentTenant();
+    const { has } = await auth();
+    if (!has({ role: 'org:admin' })) {
+      console.warn('[whatsapp/install] disconnect forbidden', { tenantId: tenant.id, userId });
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    }
 
-  const existing = await prisma.whatsAppInstall.findUnique({
-    where: { tenantId: tenant.id },
-    select: {
-      id: true,
-      status: true,
-      kapsoCustomerId: true,
-      phoneNumberId: true,
-      displayPhoneNumber: true,
-      businessAccountId: true,
-    },
-  });
-  if (!existing) {
-    console.info('[whatsapp/install] disconnect no-op; no install row', {
+    const existing = await prisma.whatsAppInstall.findUnique({
+      where: { tenantId: tenant.id },
+      select: {
+        id: true,
+        status: true,
+        kapsoCustomerId: true,
+        phoneNumberId: true,
+        displayPhoneNumber: true,
+        businessAccountId: true,
+      },
+    });
+    if (!existing) {
+      console.info('[whatsapp/install] disconnect no-op; no install row', {
+        tenantId: tenant.id,
+        userId,
+      });
+      return NextResponse.json({ ok: true, disconnected: false });
+    }
+
+    const flowRegistrationDelegate = (
+      prisma as typeof prisma & {
+        whatsAppFlowRegistration?: {
+          deleteMany: typeof prisma.whatsAppInstall.deleteMany;
+        };
+      }
+    ).whatsAppFlowRegistration;
+    const transaction = flowRegistrationDelegate
+      ? [
+          flowRegistrationDelegate.deleteMany({
+            where: { tenantId: tenant.id },
+          }),
+          prisma.whatsAppInstall.delete({
+            where: { id: existing.id },
+          }),
+        ]
+      : [
+          prisma.whatsAppInstall.delete({
+            where: { id: existing.id },
+          }),
+        ];
+    await prisma.$transaction(transaction);
+
+    console.info('[whatsapp/install] disconnected locally', {
       tenantId: tenant.id,
       userId,
+      installId: existing.id,
+      previousStatus: existing.status,
+      kapsoCustomerId: existing.kapsoCustomerId,
+      phoneNumberId: existing.phoneNumberId,
+      displayPhoneNumber: existing.displayPhoneNumber,
+      businessAccountId: existing.businessAccountId,
     });
-    return NextResponse.json({ ok: true, disconnected: false });
+
+    return NextResponse.json({
+      ok: true,
+      disconnected: true,
+      phoneNumberId: existing.phoneNumberId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[whatsapp/install] disconnect failed', { error: message });
+    return NextResponse.json({ error: 'disconnect_failed', message }, { status: 500 });
   }
-
-  await prisma.$transaction([
-    prisma.whatsAppFlowRegistration.deleteMany({
-      where: { tenantId: tenant.id },
-    }),
-    prisma.whatsAppInstall.delete({
-      where: { id: existing.id },
-    }),
-  ]);
-
-  console.info('[whatsapp/install] disconnected locally', {
-    tenantId: tenant.id,
-    userId,
-    installId: existing.id,
-    previousStatus: existing.status,
-    kapsoCustomerId: existing.kapsoCustomerId,
-    phoneNumberId: existing.phoneNumberId,
-    displayPhoneNumber: existing.displayPhoneNumber,
-    businessAccountId: existing.businessAccountId,
-  });
-
-  return NextResponse.json({
-    ok: true,
-    disconnected: true,
-    phoneNumberId: existing.phoneNumberId,
-  });
 }
 
 type InstallForSnapshot = {
