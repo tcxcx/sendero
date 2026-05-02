@@ -234,7 +234,10 @@ async function reconcilePendingInstallFromKapso(args: {
       kapsoCustomerId: args.install.kapsoCustomerId,
       status: args.install.status,
     });
-    const phoneNumber = await findProvisionedPhoneNumber(kapso, args.install.kapsoCustomerId);
+    const phoneNumber = await findProvisionedPhoneNumberForTenant(kapso, {
+      tenantId: args.tenantId,
+      currentCustomerId: args.install.kapsoCustomerId,
+    });
     if (!phoneNumber) {
       console.info('[whatsapp/install] no provisioned phone number found in Kapso', {
         tenantId: args.tenantId,
@@ -304,6 +307,7 @@ async function reconcilePendingInstallFromKapso(args: {
       where: { id: args.install.id },
       data: {
         status: 'active',
+        kapsoCustomerId: phoneNumber.customer_id ?? args.install.kapsoCustomerId,
         phoneNumberId: phoneNumber.phone_number_id,
         businessAccountId: phoneNumber.business_account_id ?? undefined,
         displayPhoneNumber: phoneNumber.display_phone_number ?? args.install.displayPhoneNumber,
@@ -315,7 +319,10 @@ async function reconcilePendingInstallFromKapso(args: {
           tenantWorkflow: activation,
           tenantFlows,
           reconciledFromKapsoAt: new Date().toISOString(),
-          reconciledFromKapsoReason: 'install_refresh_fallback',
+          reconciledFromKapsoReason:
+            phoneNumber.customer_id && phoneNumber.customer_id !== args.install.kapsoCustomerId
+              ? 'install_refresh_duplicate_display_phone_number_fallback'
+              : 'install_refresh_fallback',
         }),
       },
       select: installSelect,
@@ -337,11 +344,59 @@ async function reconcilePendingInstallFromKapso(args: {
   }
 }
 
-async function findProvisionedPhoneNumber(
+async function findProvisionedPhoneNumberForTenant(
   kapso: KapsoClient,
-  kapsoCustomerId: string
+  args: { tenantId: string; currentCustomerId: string }
 ): Promise<KapsoWhatsAppPhoneNumber | null> {
-  const phoneNumbers = await kapso.listPhoneNumbersForCustomer(kapsoCustomerId);
+  const phoneNumbers = await kapso.listPhoneNumbersForCustomer(args.currentCustomerId);
+  const currentCustomerPhoneNumber = selectProvisionedPhoneNumber(phoneNumbers);
+  if (currentCustomerPhoneNumber) return currentCustomerPhoneNumber;
+
+  const allPhoneNumbers = await kapso.listPhoneNumbers();
+  const candidatePhoneNumbers = allPhoneNumbers.filter(
+    item =>
+      item.customer_id &&
+      item.customer_id !== args.currentCustomerId &&
+      !isMetaMockPhoneNumber(item.display_phone_number) &&
+      Boolean(item.phone_number_id)
+  );
+  for (const phoneNumber of candidatePhoneNumbers) {
+    let customer: Awaited<ReturnType<KapsoClient['getCustomer']>>;
+    try {
+      customer = await kapso.getCustomer(phoneNumber.customer_id!);
+    } catch (err) {
+      console.warn('[whatsapp/install] skipped Kapso phone number with unreadable customer', {
+        tenantId: args.tenantId,
+        currentCustomerId: args.currentCustomerId,
+        candidateCustomerId: phoneNumber.customer_id,
+        phoneNumberId: phoneNumber.phone_number_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      continue;
+    }
+    const externalCustomerId = customer.external_customer_id ?? '';
+    if (
+      externalCustomerId === args.tenantId ||
+      externalCustomerId.startsWith(`${args.tenantId}:`)
+    ) {
+      console.info('[whatsapp/install] found tenant phone number on prior Kapso customer', {
+        tenantId: args.tenantId,
+        currentCustomerId: args.currentCustomerId,
+        recoveredCustomerId: phoneNumber.customer_id,
+        recoveredExternalCustomerId: externalCustomerId,
+        phoneNumberId: phoneNumber.phone_number_id,
+        displayPhoneNumber: phoneNumber.display_phone_number ?? null,
+      });
+      return phoneNumber;
+    }
+  }
+
+  return null;
+}
+
+function selectProvisionedPhoneNumber(
+  phoneNumbers: KapsoWhatsAppPhoneNumber[]
+): KapsoWhatsAppPhoneNumber | null {
   const realPhoneNumbers = phoneNumbers.filter(
     item => !isMetaMockPhoneNumber(item.display_phone_number)
   );

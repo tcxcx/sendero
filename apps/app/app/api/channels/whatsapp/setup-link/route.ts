@@ -152,6 +152,7 @@ export async function POST(): Promise<Response> {
           metadata: {
             setupLink: freshSnapshot,
             setupAttemptId,
+            customerExternalId: `${tenant.id}:whatsapp:${setupAttemptId}`,
             metaMockPhoneNumberRestartedAt: new Date().toISOString(),
             metaMockPhoneNumber: existing.displayPhoneNumber,
             metaMockPhoneNumberId: existing.phoneNumberId,
@@ -233,7 +234,6 @@ export async function POST(): Promise<Response> {
   try {
     onboarding = await startOnboarding(kapso, {
       tenantId: tenant.id,
-      customerExternalId: `${tenant.id}:whatsapp:${setupAttemptId}`,
       tenantName: tenant.displayName,
       redirectUrl,
       failureRedirectUrl,
@@ -264,7 +264,11 @@ export async function POST(): Promise<Response> {
       webhookSecret: projectWebhookSecret,
       status: 'pending',
       connectedByUserId: userId,
-      metadata: { setupLink: setupLinkData, setupAttemptId } as unknown as Prisma.InputJsonValue,
+      metadata: {
+        setupLink: setupLinkData,
+        setupAttemptId,
+        customerExternalId: tenant.id,
+      } as unknown as Prisma.InputJsonValue,
     },
   });
   console.info('[whatsapp/setup-link] install created', {

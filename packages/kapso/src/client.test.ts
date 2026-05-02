@@ -145,6 +145,35 @@ describe('KapsoClient', () => {
     expect(capturedUrl).toContain('/platform/v1/whatsapp/phone_numbers/pn_1/health');
   });
 
+  it('lists all WhatsApp phone numbers when no customer filter is supplied', async () => {
+    let capturedUrl = '';
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async input => {
+        capturedUrl = String(input);
+        return new Response(
+          JSON.stringify({
+            phone_numbers: [
+              {
+                id: 'row_1',
+                phone_number_id: 'pn_1',
+                customer_id: 'cus_1',
+                display_phone_number: '+1 201-471-6388',
+                status: 'active',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }) as typeof fetch,
+    });
+
+    const phoneNumbers = await client.listPhoneNumbers();
+    expect(phoneNumbers[0]?.phone_number_id).toBe('pn_1');
+    expect(capturedUrl).toContain('/platform/v1/whatsapp/phone_numbers');
+    expect(capturedUrl).not.toContain('customer_id=');
+  });
+
   it('lists and creates WhatsApp Flows', async () => {
     const calls: Array<{ url: string; method: string; body: string }> = [];
     const client = new KapsoClient({
