@@ -174,13 +174,16 @@ export class KapsoClient {
   }
 
   // ── WhatsApp phone numbers ────────────────────────────────────────
-  async listPhoneNumbersForCustomer(customerId: string): Promise<KapsoWhatsAppPhoneNumber[]> {
-    const raw = await this.request<unknown>(
-      `/whatsapp/phone_numbers?customer_id=${encodeURIComponent(customerId)}`
-    );
+  async listPhoneNumbers(input: { customerId?: string } = {}): Promise<KapsoWhatsAppPhoneNumber[]> {
+    const query = input.customerId ? `?customer_id=${encodeURIComponent(input.customerId)}` : '';
+    const raw = await this.request<unknown>(`/whatsapp/phone_numbers${query}`);
     const list = unwrap(raw, 'phone_numbers') ?? unwrap(raw, 'data') ?? raw;
     if (!Array.isArray(list)) return [];
     return list.map(item => KapsoWhatsAppPhoneNumber.parse(item));
+  }
+
+  async listPhoneNumbersForCustomer(customerId: string): Promise<KapsoWhatsAppPhoneNumber[]> {
+    return this.listPhoneNumbers({ customerId });
   }
 
   async getPhoneNumber(phoneNumberId: string): Promise<KapsoWhatsAppPhoneNumber> {
