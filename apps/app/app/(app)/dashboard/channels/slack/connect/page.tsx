@@ -28,7 +28,7 @@ export default async function SlackConnectPage() {
       <ChannelSetupWizard
         channel="slack"
         headline="5 steps · about 3 minutes"
-        sublineHtml="Sendero installs into your workspace, escalations, and settlements route to the channels you pick."
+        subline="Sendero installs into your workspace, escalations, and settlements route to the channels you pick."
         helpHref={docsUrl('/docs/channels/slack')}
         helpLabel="Read the Slack setup guide →"
         initialRun={run}

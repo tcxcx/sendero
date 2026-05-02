@@ -13,10 +13,10 @@ import { tierDots } from '@/components/chat/chat-model-trigger';
 import { useChatModel } from '@/hooks/use-chat-model';
 
 import { WorkflowVisibilityToggle } from './console/workflow-visibility-toggle';
+import { DigitTicker, SmoothNumber } from './footer-numbers';
 import { useSendero } from './store';
 import { useMeterStream, useMeterSummary } from './use-meter';
 import { WorkflowGraph } from './workflow-graph';
-import { DigitTicker, SmoothNumber } from './footer-numbers';
 
 interface Runtime {
   provider: string | null;
@@ -158,7 +158,7 @@ export function WorkflowLog() {
                         ? '✕'
                         : '○'}
                 </span>
-                <span className="txt" dangerouslySetInnerHTML={{ __html: e.text }} />
+                <span className="txt">{e.text}</span>
                 <span className="t">{e.t}</span>
               </div>
             ))}

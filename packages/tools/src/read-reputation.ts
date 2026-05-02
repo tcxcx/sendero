@@ -16,10 +16,9 @@
  * score (score / 20).
  */
 
-import { z } from 'zod';
-
 import { getReputation } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
+import { z } from 'zod';
 
 import type { ToolDef } from './types';
 
@@ -170,10 +169,11 @@ export const readReputationTool: ToolDef<Input, ReputationReadResult> = {
           cachedAt: new Date(summary.updatedAt).toISOString(),
           recent: [],
         };
-      } catch {
+      } catch (err) {
         // Chain read failed — return empty rather than throw. Callers
         // typically use this read to gate engagement; an unknown
         // agent should be {ok:'unknown'}, not 500.
+        console.warn('[read-reputation] chain RPC fallback failed for agentId', input.agentId, err);
       }
     }
 

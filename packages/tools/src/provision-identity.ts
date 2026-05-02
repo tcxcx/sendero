@@ -22,10 +22,9 @@
  * Circle response — fail loudly rather than silently corrupt.
  */
 
-import type { Address } from 'viem';
-
 import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
+import type { Address } from 'viem';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
 
@@ -319,7 +318,7 @@ export async function sweepPendingIdentities(): Promise<{
   let backfilled = 0;
   let minted = 0;
   let stillPending = 0;
-  let failed = 0;
+  const failed = 0;
 
   for (const row of rows) {
     const isMissingOrg = row.id.startsWith('missing-org:');
@@ -343,7 +342,8 @@ export async function sweepPendingIdentities(): Promise<{
       } else {
         stillPending += 1;
       }
-    } catch {
+    } catch (err) {
+      console.warn('[provision-identity] identity sweep failed for row', row.id, err);
       stillPending += 1;
     }
   }

@@ -35,17 +35,17 @@ import { prisma } from '@sendero/database';
 import {
   ALLOWED_OCR_MIME_TYPES,
   base64ByteSize,
+  type ExtractDocumentResult,
   extractDocument,
   extractWithGemini,
   isAllowedOcrMimeType,
   MAX_OCR_BYTES,
-  type ExtractDocumentResult,
 } from '@sendero/ocr';
 import { extractPassportFromMrz, upsertPassportVault } from '@sendero/vault';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 import type { ToolContext, ToolDef } from './types';
+import { createHash } from 'node:crypto';
 
 const inputSchema = z.object({
   documentUrl: z
@@ -318,7 +318,8 @@ function assertFetchableUrl(raw: string): void {
   let parsed: URL;
   try {
     parsed = new URL(raw);
-  } catch {
+  } catch (err) {
+    console.warn('[scan-document-auto] invalid URL supplied', raw, err);
     throw new Error('scan_document_auto: invalid URL');
   }
   if (parsed.protocol !== 'https:') {
