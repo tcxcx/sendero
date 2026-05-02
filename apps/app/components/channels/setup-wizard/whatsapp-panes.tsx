@@ -296,125 +296,107 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
       setLoadingLink(false);
     }
   };
+  const restartSetup = async () => {
+    setLoadingLink(true);
+    setSetupError(null);
+    try {
+      const res = await fetch('/api/channels/whatsapp/install', {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      });
+      const data = await readJsonResponse<{ ok?: boolean; message?: string; error?: string }>(
+        res,
+        'restart WhatsApp setup'
+      );
+      if (!res.ok || data.ok !== true) {
+        setSetupError(data.message ?? data.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      setOpened(false);
+      setSnapshot(null);
+      await createOrRefreshSetupLink();
+    } catch (err) {
+      console.warn('[whatsapp wizard] restart setup failed', err);
+      setSetupError(err instanceof Error ? err.message : 'Could not restart setup');
+    } finally {
+      setLoadingLink(false);
+    }
+  };
   const action = describeWhatsAppReadiness(snapshot, setupUrl);
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_280px]">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <span className={FIELD_LABEL}>Connected number</span>
-          <span className="font-mono text-[26px] tracking-tight text-[color:var(--ink)]">
-            {snapshot?.displayPhoneNumber ?? 'pending'}
-          </span>
+    <div className="flex max-w-2xl flex-col gap-4">
+      <div className="rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-4">
+        <div className={FIELD_LABEL}>Number</div>
+        <div className="mt-1 font-mono text-[22px] tracking-tight text-[color:var(--ink)]">
+          {snapshot?.displayPhoneNumber ?? 'Not connected'}
         </div>
-
-        {provisioned ? (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--accent-green,#16a34a)] text-white">
-                <Check className="h-3 w-3" />
-              </span>
-              <span className="text-sm text-[color:var(--text)]">
-                Kapso connected this tenant-owned WhatsApp number.
-              </span>
-            </div>
-            <ReadinessCallout action={action} />
-            <HealthGrid health={snapshot?.health ?? null} />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <p className="max-w-[60ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
-              Open the Kapso-hosted WhatsApp setup page in a new tab and approve the WhatsApp
-              Business connection with the Meta user that can manage this business number.
-            </p>
-            <div className="flex items-center gap-3">
-              {setupUrl ? (
-                <a
-                  href={setupUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setOpened(true)}
-                  className="inline-flex items-center gap-2 rounded-md bg-[color:#25D366] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open WhatsApp setup
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={createOrRefreshSetupLink}
-                  disabled={loadingLink}
-                  className="inline-flex items-center gap-2 rounded-md bg-[color:#25D366] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
-                >
-                  {loadingLink ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ExternalLink className="h-4 w-4" />
-                  )}
-                  Create setup link
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void refreshInstall()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_16%,transparent)] px-3 py-2 text-[12px] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Refresh
-              </button>
-              {opened ? (
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[color:var(--text-dim)]">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Watching for the webhook…
-                </span>
-              ) : null}
-            </div>
-            {setupError ? (
-              <div className="flex items-start gap-2 rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>{setupError}</span>
-              </div>
-            ) : null}
-            {snapshot?.lastErrorMessage ? (
-              <div className="rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
-                {snapshot.lastErrorMessage}
-              </div>
-            ) : null}
-            {snapshot?.setupLinkError ? (
-              <div className="rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
-                {snapshot.setupLinkError}
-              </div>
-            ) : null}
-            <ReadinessCallout action={action} />
-          </div>
-        )}
-      </div>
-      <aside className="flex flex-col gap-2 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-4">
-        <span className={PILL_FONT}>Connection ID</span>
-        <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
-          {snapshot?.phoneNumberId ?? 'pending'}
-        </span>
-        <span className={`${PILL_FONT} mt-2`}>Status</span>
-        <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
-          {snapshot?.status ?? 'unknown'}
-        </span>
-        <span className={`${PILL_FONT} mt-2`}>Link mode</span>
-        <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
-          {snapshot?.setupLinkProvisionPhoneNumber
-            ? 'project owner provision'
-            : 'tenant-owned number'}
-        </span>
-        <span className={`${PILL_FONT} mt-2`}>Meta health</span>
-        <span className="font-mono text-[11px] text-[color:var(--text-dim)]">
-          {snapshot?.health
-            ? `${snapshot.health.status ?? 'unknown'} / ${snapshot.health.messagingStatus ?? 'unknown'}`
-            : 'waiting for phone'}
-        </span>
-        <span className={`${PILL_FONT} mt-2`}>Next step</span>
-        <span className="text-[11px] leading-relaxed text-[color:var(--text-dim)]">
+        <div className="mt-2 text-sm leading-relaxed text-[color:var(--text-dim)]">
           {action.next}
-        </span>
-      </aside>
+        </div>
+      </div>
+
+      <ReadinessCallout action={action} />
+
+      {setupError || snapshot?.lastErrorMessage || snapshot?.setupLinkError ? (
+        <div className="flex items-start gap-2 rounded-md border border-[color:var(--accent-rose)] bg-[color:color-mix(in_oklab,var(--accent-rose)_8%,transparent)] px-3 py-2 text-xs text-[color:var(--accent-rose)]">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{setupError ?? snapshot?.lastErrorMessage ?? snapshot?.setupLinkError}</span>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {provisioned ? null : setupUrl ? (
+          <a
+            href={setupUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpened(true)}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-[color:#25D366] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Open setup
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={createOrRefreshSetupLink}
+            disabled={loadingLink}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-[color:#25D366] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
+          >
+            {loadingLink ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ExternalLink className="h-4 w-4" />
+            )}
+            Create setup link
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => void refreshInstall()}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_16%,transparent)] px-3 text-[12px] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </button>
+        {snapshot ? (
+          <button
+            type="button"
+            onClick={() => void restartSetup()}
+            disabled={loadingLink}
+            className="inline-flex h-9 items-center rounded-md border border-[color:color-mix(in_oklab,var(--ink)_16%,transparent)] px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--ink)] hover:text-[color:var(--ink)] disabled:cursor-wait disabled:opacity-60"
+          >
+            Restart
+          </button>
+        ) : null}
+        {opened && !provisioned ? (
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-[color:var(--text-dim)]">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Waiting
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -591,29 +573,10 @@ function ReadinessCallout({
 function HealthGrid({ health }: { health: WhatsAppHealthSummary | null }) {
   if (!health) return null;
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-3 lg:grid-cols-4">
-      <HealthCell label="Overall" value={health.status ?? 'unknown'} />
-      <HealthCell label="Messaging" value={health.messagingStatus ?? 'unknown'} />
-      <HealthCell
-        label="Webhook"
-        value={
-          health.webhookVerified
-            ? 'verified'
-            : health.webhookSubscribed
-              ? 'subscribed'
-              : 'not verified'
-        }
-      />
-      <HealthCell label="Quality" value={health.qualityRating ?? 'unknown'} />
-    </div>
-  );
-}
-
-function HealthCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className={PILL_FONT}>{label}</div>
-      <div className="mt-1 truncate font-mono text-[11px] text-[color:var(--ink)]">{value}</div>
+    <div className="flex flex-wrap gap-2 text-[11px] text-[color:var(--text-dim)]">
+      <span>Meta: {health.status ?? 'unknown'}</span>
+      <span>Messaging: {health.messagingStatus ?? 'unknown'}</span>
+      <span>Webhook: {health.webhookVerified ? 'verified' : 'waiting'}</span>
     </div>
   );
 }

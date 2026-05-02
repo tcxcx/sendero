@@ -1,38 +1,12 @@
 'use client';
 
-/**
- * WhatsappConnectedPanel — design-canvas WhatsappA layout.
- *
- *   3-card metric strip (Status / Number / Display name) above a
- *   1.2fr/1fr grid: recent conversations on the left, templates +
- *   weekly KPIs on the right. Reads only the fields we already
- *   compute for this tenant — no hardcoded counts or sample threads.
- *
- * Kapso plumbing is unchanged: the channel page server-renders this
- * with `displayName` + `displayPhoneNumber` from `WhatsAppInstall`,
- * `templates` from the `metadata.templates` JSON, real recent threads
- * from `ChannelIdentity` + `Trip`, and weekly aggregates from
- * `MeterEvent` + `Trip` counts.
- */
-
 import { useState } from 'react';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 interface WhatsappConnectedProps {
   displayName: string | null;
   displayPhoneNumber: string | null;
-  status: string;
-  templates: Array<{ name: string; status: string }>;
-  recentThreads: Array<{
-    initial: string;
-    name: string;
-    snippet: string;
-    timeAgo: string;
-    badge?: 'NOW' | null;
-  }>;
-  weeklyStats: { trips: number; messages: number; deliveryRate: number };
   health?: {
     status: string | null;
     messagingStatus: string | null;
@@ -41,13 +15,16 @@ interface WhatsappConnectedProps {
   } | null;
 }
 
+type DisconnectResponse = {
+  ok?: boolean;
+  disconnected?: boolean;
+  error?: string;
+  message?: string;
+};
+
 export function WhatsappConnectedPanel({
   displayName,
   displayPhoneNumber,
-  status,
-  templates,
-  recentThreads,
-  weeklyStats,
   health,
 }: WhatsappConnectedProps) {
   const router = useRouter();
@@ -55,377 +32,138 @@ export function WhatsappConnectedPanel({
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
 
   const disconnect = async () => {
+    if (isDisconnecting) return;
     setDisconnectError(null);
     setIsDisconnecting(true);
-    console.info('[whatsapp connected panel] disconnect requested', {
-      displayPhoneNumber,
-      displayName,
-    });
     try {
       const response = await fetch('/api/channels/whatsapp/install', {
         method: 'DELETE',
         headers: { Accept: 'application/json' },
+        cache: 'no-store',
       });
-      const text = await response.text();
-      const data = text ? safeJson(text) : null;
-      console.info('[whatsapp connected panel] disconnect response', {
-        status: response.status,
-        ok: response.ok,
-        data,
-      });
-      if (!response.ok) {
-        const message =
-          data && typeof data === 'object' && 'message' in data
-            ? String(data.message)
-            : data && typeof data === 'object' && 'error' in data
-              ? String(data.error)
-              : `Disconnect failed (HTTP ${response.status})`;
-        setDisconnectError(message);
-        return;
+      const data = await readJson<DisconnectResponse>(response);
+      if (!response.ok || data.ok !== true) {
+        throw new Error(data.message ?? data.error ?? `Disconnect failed (${response.status})`);
       }
+
+      const verify = await fetch('/api/channels/whatsapp/install', {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      const snapshot = await readJson<{ install: unknown | null }>(verify);
+      if (snapshot.install !== null) {
+        throw new Error('Disconnect did not clear the WhatsApp install. Refresh and try again.');
+      }
+
+      router.replace('/dashboard/channels/whatsapp/connect');
       router.refresh();
     } catch (err) {
-      console.warn('[whatsapp connected panel] disconnect failed', err);
       setDisconnectError(err instanceof Error ? err.message : 'Disconnect failed');
     } finally {
       setIsDisconnecting(false);
     }
   };
 
+  const state = summarizeHealth(health);
+
   return (
-    <section style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: 24,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <h1 className="t-h1">WhatsApp</h1>
-          <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
-            Connected via Kapso · {recentThreads.length} active thread
-            {recentThreads.length === 1 ? '' : 's'} · {weeklyStats.trips} trip
-            {weeklyStats.trips === 1 ? '' : 's'} this week
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            onClick={disconnect}
-            disabled={isDisconnecting}
-            style={ghostBtnStyle}
-          >
-            {isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
-          </button>
-          <Link href="/dashboard/channels/whatsapp/connect" style={primaryBtnStyle}>
-            Open settings
-          </Link>
-        </div>
+    <section className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-1 py-2">
+      <header className="flex flex-col gap-2">
+        <h1 className="t-h1">WhatsApp</h1>
+        <p className="max-w-[58ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
+          This workspace is connected to a tenant-owned WhatsApp Business number through Kapso.
+        </p>
       </header>
-      {disconnectError ? (
-        <div
-          className="sd-card-flat"
-          style={{
-            border: '1px solid var(--accent-rose)',
-            color: 'var(--accent-rose)',
-            padding: '10px 12px',
-            fontSize: 12,
-          }}
-        >
-          {disconnectError}
-        </div>
-      ) : null}
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 18,
-        }}
-      >
-        <MetricCard label="Status" value={status} pillTone="sea" pillLabel="LIVE" />
-        <MetricCard
-          label="Number"
-          value={displayPhoneNumber ?? '—'}
-          pillTone="outline"
-          pillLabel="SET"
-          mono
-        />
-        <MetricCard
-          label="Display name"
-          value={displayName ?? '—'}
-          pillTone="outline"
-          pillLabel="SET"
-        />
-      </div>
-
-      {health ? (
-        <article
-          className="sd-card-flat"
-          style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
-        >
-          <div className="t-meta">Meta readiness</div>
-          <p className="t-body ink-70" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55 }}>
-            Overall {health.status ?? 'unknown'} · messaging {health.messagingStatus ?? 'unknown'} ·
-            webhook {health.webhookVerified ? 'verified' : 'waiting for first inbound message'}
-          </p>
-          {health.errors.length ? (
-            <p className="t-body ink-70" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55 }}>
-              {health.errors[0]}
-            </p>
-          ) : null}
-        </article>
-      ) : null}
-
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'grid',
-          gridTemplateColumns: '1.2fr 1fr',
-          gap: 20,
-        }}
-      >
-        <article
-          className="sd-card-raised"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 14,
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <div className="t-h3">Recent conversations</div>
-            <span className="t-mono ink-60" style={{ fontSize: 11 }}>
-              last 24h
-            </span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {recentThreads.length === 0 ? (
-              <div className="t-body ink-60" style={{ fontSize: 13, padding: '8px 0' }}>
-                No threads yet. Travelers&rsquo; first messages will appear here.
-              </div>
-            ) : (
-              recentThreads.map((t, i) => (
-                <div
-                  key={`${t.name}-${i}`}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    padding: '10px 0',
-                    borderBottom:
-                      i < recentThreads.length - 1
-                        ? '1px solid var(--hairline-color-soft)'
-                        : 'none',
-                  }}
-                >
-                  <div
-                    aria-hidden
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      background: 'var(--surface-floating)',
-                      display: 'grid',
-                      placeItems: 'center',
-                      fontFamily: 'var(--font-display)',
-                      fontWeight: 500,
-                      color: 'var(--midnight)',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {t.initial}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="t-body" style={{ fontWeight: 500, fontSize: 13 }}>
-                      {t.name}
-                    </div>
-                    <div className="t-body ink-70" style={{ fontSize: 13 }}>
-                      {t.snippet}
-                    </div>
-                  </div>
-                  {t.badge ? (
-                    <span
-                      className="sd-pill sd-pill-verm"
-                      style={{ fontSize: 9, padding: '2px 7px', fontWeight: 700 }}
-                    >
-                      {t.badge}
-                    </span>
-                  ) : null}
-                  <div
-                    className="t-mono ink-60"
-                    style={{ fontSize: 11, width: 36, textAlign: 'right' }}
-                  >
-                    {t.timeAgo}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </article>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <article
-            className="sd-card-flat"
-            style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
-          >
-            <div className="t-meta">Templates</div>
-            {templates.length === 0 ? (
-              <div className="t-body ink-60" style={{ fontSize: 12, marginTop: 8 }}>
-                No templates submitted.
-              </div>
-            ) : (
-              <ul
-                className="t-body ink-70"
-                style={{ margin: '10px 0 0', paddingLeft: 18, lineHeight: 1.7, fontSize: 13 }}
-              >
-                {templates.map(t => (
-                  <li
-                    key={t.name}
-                    style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}
-                  >
-                    <span className="t-mono" style={{ fontSize: 12 }}>
-                      {t.name}
-                    </span>
-                    <span
-                      className="sd-pill sd-pill-outline"
-                      style={{ fontSize: 9, padding: '2px 7px', fontWeight: 700 }}
-                    >
-                      {t.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
-
-          <article
-            className="sd-card-flat"
-            style={{
-              boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
-              padding: '14px 16px',
-              flex: 1,
-            }}
-          >
-            <div className="t-meta">This week</div>
-            <div
-              style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, gap: 12 }}
-            >
-              <Stat label="Trips" value={weeklyStats.trips} />
-              <Stat label="Messages" value={weeklyStats.messages} />
-              <Stat label="Delivery" value={`${weeklyStats.deliveryRate}%`} />
+      <article className="rounded-md border border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] bg-[color:var(--surface-raised)] p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--text-faint)]">
+              Connected number
             </div>
-          </article>
+            <div className="mt-1 truncate font-mono text-xl text-[color:var(--ink)]">
+              {displayPhoneNumber ?? 'Unknown'}
+            </div>
+            {displayName ? (
+              <div className="mt-1 text-sm text-[color:var(--text-dim)]">{displayName}</div>
+            ) : null}
+          </div>
+          <span
+            className={`inline-flex w-fit rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] ${state.className}`}
+          >
+            {state.label}
+          </span>
         </div>
+
+        <div className="mt-4 border-t border-[color:color-mix(in_oklab,var(--ink)_10%,transparent)] pt-4">
+          <div className="text-sm leading-relaxed text-[color:var(--text)]">{state.next}</div>
+          {health?.errors[0] ? (
+            <div className="mt-1 text-xs leading-relaxed text-[color:var(--text-dim)]">
+              {health.errors[0]}
+            </div>
+          ) : null}
+        </div>
+      </article>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={disconnect}
+          disabled={isDisconnecting}
+          className="inline-flex h-9 items-center rounded-md border border-[color:color-mix(in_oklab,var(--ink)_18%,transparent)] px-3 font-mono text-[11px] uppercase tracking-[0.08em] text-[color:var(--ink)] transition-colors hover:border-[color:var(--ink)] disabled:cursor-wait disabled:opacity-60"
+        >
+          {isDisconnecting ? 'Disconnecting...' : 'Disconnect and restart'}
+        </button>
+        {disconnectError ? (
+          <span className="text-xs text-[color:var(--accent-rose)]">{disconnectError}</span>
+        ) : null}
       </div>
     </section>
   );
 }
 
-function safeJson(raw: string): unknown {
+async function readJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text) return {} as T;
   try {
-    return JSON.parse(raw);
+    return JSON.parse(text) as T;
   } catch {
-    return raw.slice(0, 240);
+    throw new Error(`Expected JSON response, received ${text.slice(0, 120)}`);
   }
 }
 
-function MetricCard({
-  label,
-  value,
-  pillTone,
-  pillLabel,
-  mono,
-}: {
+function summarizeHealth(health: WhatsappConnectedProps['health']): {
   label: string;
-  value: string;
-  pillTone: 'sea' | 'outline';
-  pillLabel: string;
-  mono?: boolean;
-}) {
-  return (
-    <div
-      className="sd-card-flat"
-      style={{
-        boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
-        padding: '14px 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}
-    >
-      <div className="t-meta">{label}</div>
-      <div
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
-      >
-        <div
-          className="t-h3"
-          style={mono ? { fontFamily: 'var(--font-mono-x)', fontSize: 16 } : undefined}
-        >
-          {value}
-        </div>
-        <span
-          className={`sd-pill sd-pill-${pillTone}`}
-          style={{ fontSize: 9, padding: '2px 7px', fontWeight: 700 }}
-        >
-          {pillLabel}
-        </span>
-      </div>
-    </div>
-  );
+  next: string;
+  className: string;
+} {
+  const status = `${health?.status ?? ''} ${health?.messagingStatus ?? ''}`.trim();
+  if (/blocked/i.test(status)) {
+    return {
+      label: 'Blocked',
+      next: 'Meta is blocking messaging. Fix the Meta account issue, then refresh.',
+      className:
+        'bg-[color:color-mix(in_oklab,var(--accent-rose)_10%,transparent)] text-[color:var(--accent-rose)]',
+    };
+  }
+  if (/limited|degraded/i.test(status)) {
+    return {
+      label: 'Limited',
+      next: 'Inbound may work, but outbound templates can fail until Meta clears the account.',
+      className: 'bg-[color:color-mix(in_oklab,#f59e0b_12%,transparent)] text-[color:#9a5a00]',
+    };
+  }
+  if (health?.webhookVerified === false) {
+    return {
+      label: 'Waiting',
+      next: 'Send the first inbound WhatsApp message, then refresh.',
+      className:
+        'bg-[color:color-mix(in_oklab,var(--ink)_8%,transparent)] text-[color:var(--text-dim)]',
+    };
+  }
+  return {
+    label: 'Ready',
+    next: 'Send an inbound WhatsApp message to confirm the tenant agent receives it.',
+    className: 'bg-[color:color-mix(in_oklab,#2EA876_12%,transparent)] text-[color:#15704e]',
+  };
 }
-
-function Stat({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}
-    >
-      <span
-        className="t-num-md"
-        style={{ fontSize: 24, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}
-      >
-        {value}
-      </span>
-      <span className="t-meta">{label}</span>
-    </div>
-  );
-}
-
-const primaryBtnStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '8px 18px',
-  background: 'var(--vermillion)',
-  color: '#fdfbf7',
-  border: 0,
-  borderRadius: 8,
-  fontSize: 12,
-  fontWeight: 600,
-  fontFamily: 'var(--font-mono-x)',
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  cursor: 'pointer',
-  textDecoration: 'none',
-};
-
-const ghostBtnStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '8px 14px',
-  background: 'transparent',
-  color: 'var(--midnight)',
-  border: 0,
-  boxShadow: 'inset 0 0 0 1px var(--hairline-color)',
-  borderRadius: 8,
-  fontSize: 11,
-  fontWeight: 600,
-  fontFamily: 'var(--font-mono-x)',
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  cursor: 'pointer',
-};

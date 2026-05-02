@@ -20,6 +20,8 @@ import type { CreateSetupLinkRequest, KapsoCustomer, KapsoSetupLink } from './ty
 export interface StartOnboardingInput {
   /** Sendero tenant id — used as Kapso external_id so lookups stay stable. */
   tenantId: string;
+  /** Override when a setup attempt must not reuse a prior Kapso customer. */
+  customerExternalId?: string;
   /** Tenant display name (shown in Kapso dashboards). */
   tenantName: string;
   /** Post-onboarding redirect, e.g. /dashboard/settings/channels?onboarding=whatsapp. */
@@ -48,7 +50,7 @@ export async function startOnboarding(
 ): Promise<StartOnboardingResult> {
   const customer = await kapso.findOrCreateCustomer({
     name: input.tenantName,
-    externalCustomerId: input.tenantId,
+    externalCustomerId: input.customerExternalId ?? input.tenantId,
   });
 
   const setupLinkInput: Partial<CreateSetupLinkRequest> = {

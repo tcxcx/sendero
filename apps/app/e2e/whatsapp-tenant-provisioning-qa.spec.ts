@@ -57,14 +57,6 @@ test('WhatsApp tenant provisioning creates JSON setup state and disconnect reset
   await mkdir(path.resolve('../../.gstack/qa-reports/screenshots'), { recursive: true });
   await clerkSetup();
 
-  const consoleMessages: string[] = [];
-  page.on('console', message => {
-    const text = message.text();
-    if (text.includes('[whatsapp')) {
-      consoleMessages.push(`${message.type()}: ${text}`);
-    }
-  });
-
   await setupClerkTestingToken({ context: page.context() });
   await page.goto(`${baseURL}/sign-in`);
   await page.waitForFunction(() => Boolean(window.Clerk?.loaded), undefined, { timeout: 60_000 });
@@ -141,7 +133,7 @@ test('WhatsApp tenant provisioning creates JSON setup state and disconnect reset
   await expect(page.getByRole('heading', { name: /Verify business number/i })).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByRole('link', { name: /^Open WhatsApp setup$/ })).toBeVisible({
+  await expect(page.getByRole('link', { name: /^Open setup$/ })).toBeVisible({
     timeout: 30_000,
   });
   await page.screenshot({
@@ -173,7 +165,7 @@ test('WhatsApp tenant provisioning creates JSON setup state and disconnect reset
     fullPage: true,
   });
 
-  await page.getByRole('button', { name: /^Disconnect$/ }).click();
+  await page.getByRole('button', { name: /^Disconnect and restart$/ }).click();
   await expect(page.getByRole('button', { name: /Disconnecting/i })).toBeVisible();
   await expect
     .poll(async () => {
@@ -196,8 +188,6 @@ test('WhatsApp tenant provisioning creates JSON setup state and disconnect reset
     path: path.resolve('../../.gstack/qa-reports/screenshots/whatsapp-tenant-disconnected.png'),
     fullPage: true,
   });
-
-  expect(consoleMessages.some(text => text.includes('[whatsapp connected panel]'))).toBe(true);
 });
 
 async function signInWithTicket(page: import('@playwright/test').Page, emailAddress: string) {
