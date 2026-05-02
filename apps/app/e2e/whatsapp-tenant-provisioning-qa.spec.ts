@@ -186,7 +186,9 @@ test('WhatsApp tenant provisioning creates JSON setup state and disconnect reset
     .toBeNull();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await expect(page.getByLabel(/WhatsApp channel status: Not connected/i)).toBeVisible({
+  await expect(
+    page.getByRole('main').getByLabel(/WhatsApp channel status: Not connected/i)
+  ).toBeVisible({
     timeout: 30_000,
   });
   await expect(page.getByRole('link', { name: /Start setup/i })).toBeVisible();
