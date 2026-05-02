@@ -50,6 +50,55 @@ describe('startOnboarding', () => {
     expect(out.setupLink.id).toBe('sl_x');
     expect(out.setupLink.url).toMatch(/^https:\/\/setup.kapso.ai/);
   });
+
+  it('uses an isolated customer external id when provided', async () => {
+    let capturedBody = '';
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async (url, init) => {
+        if (String(url).includes('/setup_links')) {
+          return new Response(
+            JSON.stringify({
+              setup_link: {
+                id: 'sl_y',
+                url: 'https://setup.kapso.ai/sl_y',
+                expires_at: new Date(Date.now() + 3600_000).toISOString(),
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (String(url).includes('/customers') && init?.method === 'POST') {
+          capturedBody = String(init.body);
+          return new Response(
+            JSON.stringify({
+              customer: { id: 'cus_y', name: 'Acme', external_customer_id: 'tenant_x:attempt_1' },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (String(url).includes('/customers?')) {
+          return new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof fetch,
+    });
+
+    await startOnboarding(client, {
+      tenantId: 'tenant_x',
+      customerExternalId: 'tenant_x:attempt_1',
+      tenantName: 'Acme',
+      redirectUrl: 'https://sendero.travel/dashboard/channels/whatsapp',
+    });
+
+    expect(capturedBody).toContain('"external_customer_id":"tenant_x:attempt_1"');
+  });
 });
 
 describe('isSetupLinkExpired', () => {

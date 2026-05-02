@@ -130,22 +130,13 @@ function ConnectedView({
   install: {
     displayPhoneNumber: string | null;
     businessDisplayName: string | null;
-    metadata: unknown;
   };
   health: WhatsAppHealthSummary | null;
 }) {
-  const metadata = (install.metadata as Record<string, unknown> | null) ?? {};
-  const templates = Array.isArray(metadata.templates)
-    ? (metadata.templates as Array<{ name: string; status: string }>)
-    : [];
   return (
     <WhatsappConnectedPanel
       displayName={install.businessDisplayName}
       displayPhoneNumber={install.displayPhoneNumber}
-      status="Connected"
-      templates={templates}
-      recentThreads={[]}
-      weeklyStats={{ trips: 0, messages: 0, deliveryRate: 100 }}
       health={health}
     />
   );

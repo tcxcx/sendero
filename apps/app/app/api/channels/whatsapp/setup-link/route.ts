@@ -68,10 +68,12 @@ export async function POST(): Promise<Response> {
   const failureRedirectUrl = `${webhookBase.replace(/\/$/, '')}/dashboard/channels/whatsapp/connect?onboarding=whatsapp&status=failed`;
 
   const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
+  const setupAttemptId = crypto.randomUUID();
   console.info('[whatsapp/setup-link] request', {
     tenantId: tenant.id,
     tenantName: tenant.displayName,
     userId,
+    setupAttemptId,
     redirectUrl,
     failureRedirectUrl,
   });
@@ -115,13 +117,71 @@ export async function POST(): Promise<Response> {
       });
     }
 
+    if (hasMockPhoneNumber) {
+      let onboarding: Awaited<ReturnType<typeof startOnboarding>>;
+      try {
+        onboarding = await startOnboarding(kapso, {
+          tenantId: tenant.id,
+          customerExternalId: `${tenant.id}:whatsapp:${setupAttemptId}`,
+          tenantName: tenant.displayName,
+          redirectUrl,
+          failureRedirectUrl,
+          countryIsos: tenant.fiscalCountry ? [tenant.fiscalCountry] : undefined,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[whatsapp/setup-link] Kapso restart onboarding failed', {
+          tenantId: tenant.id,
+          installId: existing.id,
+          error: message,
+        });
+        return NextResponse.json({ error: 'kapso_onboarding_failed', message }, { status: 502 });
+      }
+
+      const freshSnapshot = setupLinkSnapshot(onboarding.setupLink);
+      await prisma.whatsAppInstall.update({
+        where: { id: existing.id },
+        data: {
+          kapsoCustomerId: onboarding.customer.id,
+          status: 'pending',
+          phoneNumberId: null,
+          kapsoConnectionId: null,
+          displayPhoneNumber: null,
+          businessDisplayName: null,
+          lastErrorMessage: null,
+          metadata: {
+            setupLink: freshSnapshot,
+            setupAttemptId,
+            metaMockPhoneNumberRestartedAt: new Date().toISOString(),
+            metaMockPhoneNumber: existing.displayPhoneNumber,
+            metaMockPhoneNumberId: existing.phoneNumberId,
+            metaMockPhoneNumberReason: META_MOCK_PHONE_NUMBER_MESSAGE,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      console.info('[whatsapp/setup-link] restarted setup after Meta mock number', {
+        tenantId: tenant.id,
+        installId: existing.id,
+        previousCustomerId: existing.kapsoCustomerId,
+        customerId: onboarding.customer.id,
+        setupAttemptId,
+        setupLinkId: freshSnapshot.id,
+      });
+      return NextResponse.json({
+        customerId: onboarding.customer.id,
+        setupLink: freshSnapshot,
+        status: 'pending',
+        reused: false,
+        restartedAfterMockPhoneNumber: true,
+      });
+    }
+
     // Re-issue link against the same customer.
     console.info('[whatsapp/setup-link] creating fresh setup link', {
       tenantId: tenant.id,
       installId: existing.id,
       customerId: existing.kapsoCustomerId,
       installStatus: existing.status,
-      hadMockPhoneNumber: hasMockPhoneNumber,
       priorLinkStatus: linkStatus,
       priorLinkError: linkError,
       priorLinkExpired: rawLink ? isSetupLinkExpired({ expires_at: rawLink.expires_at }) : null,
@@ -148,47 +208,24 @@ export async function POST(): Promise<Response> {
     await prisma.whatsAppInstall.update({
       where: { id: existing.id },
       data: {
-        status: hasMockPhoneNumber
-          ? 'pending'
-          : existing.status === 'active'
-            ? 'active'
-            : 'pending',
-        phoneNumberId: hasMockPhoneNumber ? null : undefined,
-        kapsoConnectionId: hasMockPhoneNumber ? null : undefined,
-        displayPhoneNumber: hasMockPhoneNumber ? null : undefined,
-        businessDisplayName: hasMockPhoneNumber ? null : undefined,
+        status: existing.status === 'active' ? 'active' : 'pending',
         lastErrorMessage: null,
-        metadata: {
-          setupLink: freshSnapshot,
-          ...(hasMockPhoneNumber
-            ? {
-                metaMockPhoneNumberRestartedAt: new Date().toISOString(),
-                metaMockPhoneNumber: existing.displayPhoneNumber,
-                metaMockPhoneNumberId: existing.phoneNumberId,
-                metaMockPhoneNumberReason: META_MOCK_PHONE_NUMBER_MESSAGE,
-              }
-            : {}),
-        } as unknown as Prisma.InputJsonValue,
+        metadata: { setupLink: freshSnapshot } as unknown as Prisma.InputJsonValue,
       },
     });
     console.info('[whatsapp/setup-link] fresh setup link stored', {
       tenantId: tenant.id,
       installId: existing.id,
       customerId: existing.kapsoCustomerId,
-      installStatus: hasMockPhoneNumber
-        ? 'pending'
-        : existing.status === 'active'
-          ? 'active'
-          : 'pending',
+      installStatus: existing.status === 'active' ? 'active' : 'pending',
       setupLinkId: freshSnapshot.id,
       setupLinkStatus: freshSnapshot.status ?? null,
     });
     return NextResponse.json({
       customerId: existing.kapsoCustomerId,
       setupLink: freshSnapshot,
-      status: hasMockPhoneNumber ? 'pending' : existing.status === 'active' ? 'active' : 'pending',
+      status: existing.status === 'active' ? 'active' : 'pending',
       reused: true,
-      restartedAfterMockPhoneNumber: hasMockPhoneNumber,
     });
   }
 
@@ -196,6 +233,7 @@ export async function POST(): Promise<Response> {
   try {
     onboarding = await startOnboarding(kapso, {
       tenantId: tenant.id,
+      customerExternalId: `${tenant.id}:whatsapp:${setupAttemptId}`,
       tenantName: tenant.displayName,
       redirectUrl,
       failureRedirectUrl,
@@ -226,7 +264,7 @@ export async function POST(): Promise<Response> {
       webhookSecret: projectWebhookSecret,
       status: 'pending',
       connectedByUserId: userId,
-      metadata: { setupLink: setupLinkData } as unknown as Prisma.InputJsonValue,
+      metadata: { setupLink: setupLinkData, setupAttemptId } as unknown as Prisma.InputJsonValue,
     },
   });
   console.info('[whatsapp/setup-link] install created', {
