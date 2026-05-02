@@ -191,52 +191,41 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
   const [loadingLink, setLoadingLink] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
 
-  const refreshInstall = useMemo(() => {
-    let cancelled = false;
-    const fn = async () => {
-      try {
-        const res = await fetch('/api/channels/whatsapp/install', {
-          headers: { Accept: 'application/json' },
-        });
-        if (cancelled) return;
-        const data = await readJsonResponse<{ install: InstallSnapshot | null }>(
-          res,
-          'refresh WhatsApp install'
-        );
-        console.info('[whatsapp wizard] install refresh', {
-          status: res.status,
-          provisioned: data.install?.provisioned ?? false,
-          phoneNumberId: data.install?.phoneNumberId ?? null,
-          installStatus: data.install?.status ?? null,
-          setupLinkStatus: data.install?.setupLinkStatus ?? null,
-          setupLinkError: data.install?.setupLinkError ?? null,
-          lastErrorMessage: data.install?.lastErrorMessage ?? null,
-          health: data.install?.health
-            ? {
-                status: data.install.health.status,
-                messagingStatus: data.install.health.messagingStatus,
-                webhookVerified: data.install.health.webhookVerified,
-              }
-            : null,
-        });
-        setSnapshot(data.install);
-      } catch (err) {
-        console.warn('[whatsapp wizard] install refresh failed', err);
-      }
-    };
-    return {
-      fn,
-      cancel: () => {
-        cancelled = true;
-      },
-    };
+  const refreshInstall = useCallback(async () => {
+    try {
+      const res = await fetch('/api/channels/whatsapp/install', {
+        headers: { Accept: 'application/json' },
+      });
+      const data = await readJsonResponse<{ install: InstallSnapshot | null }>(
+        res,
+        'refresh WhatsApp install'
+      );
+      console.info('[whatsapp wizard] install refresh', {
+        status: res.status,
+        provisioned: data.install?.provisioned ?? false,
+        phoneNumberId: data.install?.phoneNumberId ?? null,
+        installStatus: data.install?.status ?? null,
+        setupLinkStatus: data.install?.setupLinkStatus ?? null,
+        setupLinkError: data.install?.setupLinkError ?? null,
+        lastErrorMessage: data.install?.lastErrorMessage ?? null,
+        health: data.install?.health
+          ? {
+              status: data.install.health.status,
+              messagingStatus: data.install.health.messagingStatus,
+              webhookVerified: data.install.health.webhookVerified,
+            }
+          : null,
+      });
+      setSnapshot(data.install);
+    } catch (err) {
+      console.warn('[whatsapp wizard] install refresh failed', err);
+    }
   }, []);
 
   useEffect(() => {
-    refreshInstall.fn();
-    const id = setInterval(refreshInstall.fn, 4000);
+    void refreshInstall();
+    const id = setInterval(() => void refreshInstall(), 4000);
     return () => {
-      refreshInstall.cancel();
       clearInterval(id);
     };
   }, [refreshInstall]);
@@ -279,7 +268,7 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
         setSetupError(data.message ?? data.error ?? `HTTP ${res.status}`);
         return;
       }
-      await refreshInstall.fn();
+      await refreshInstall();
       if (data.setupLink?.url) {
         setSnapshot(prev =>
           prev
@@ -367,7 +356,7 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
               )}
               <button
                 type="button"
-                onClick={refreshInstall.fn}
+                onClick={() => void refreshInstall()}
                 className="inline-flex items-center gap-1.5 rounded-md border border-[color:color-mix(in_oklab,var(--ink)_16%,transparent)] px-3 py-2 text-[12px] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--ink)] hover:text-[color:var(--ink)]"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
