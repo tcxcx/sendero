@@ -30,6 +30,7 @@ import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
 import { webhookEventStore } from '@/lib/webhook-events';
 import { ensureTenantWhatsAppFlows } from '@/lib/whatsapp-flow-registry';
+import { isMetaMockPhoneNumber, META_MOCK_PHONE_NUMBER_MESSAGE } from '@/lib/whatsapp-mock-number';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -119,6 +120,31 @@ async function dispatchKapsoEvent(event: {
       phoneNumberId: event.phoneNumberId,
     });
     return { matched: false };
+  }
+
+  if (isMetaMockPhoneNumber(event.displayPhoneNumber)) {
+    await prisma.whatsAppInstall.update({
+      where: { id: install.id },
+      data: {
+        status: 'error',
+        phoneNumberId: null,
+        displayPhoneNumber: null,
+        businessDisplayName: null,
+        kapsoConnectionId: null,
+        lastErrorMessage: META_MOCK_PHONE_NUMBER_MESSAGE,
+        metadata: mergeJsonObject(install.metadata, {
+          metaMockPhoneNumberRejectedAt: new Date().toISOString(),
+          metaMockPhoneNumber: event.displayPhoneNumber,
+          metaMockPhoneNumberId: event.phoneNumberId,
+        }),
+      },
+    });
+    console.warn('[webhooks/kapso] rejected Meta mock phone number', {
+      tenantId: install.tenantId,
+      phoneNumberId: event.phoneNumberId,
+      displayPhoneNumber: event.displayPhoneNumber,
+    });
+    return { matched: true, installId: install.id, tenantId: install.tenantId };
   }
 
   const activation = await activateTenantWorkflowTrigger({

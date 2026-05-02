@@ -28,6 +28,7 @@ import {
 } from '@sendero/kapso';
 
 import { requireCurrentTenant } from '@/lib/tenant-context';
+import { isMetaMockPhoneNumber, META_MOCK_PHONE_NUMBER_MESSAGE } from '@/lib/whatsapp-mock-number';
 
 import crypto from 'node:crypto';
 
@@ -82,15 +83,23 @@ export async function POST(): Promise<Response> {
       id: true,
       kapsoCustomerId: true,
       metadata: true,
+      displayPhoneNumber: true,
+      phoneNumberId: true,
       status: true,
     },
   });
 
   if (existing) {
+    const hasMockPhoneNumber = isMetaMockPhoneNumber(existing.displayPhoneNumber);
     const rawLink = readSetupLinkSnapshot(existing.metadata);
     const linkError = rawLink?.whatsapp_setup_error ?? null;
     const linkStatus = rawLink?.whatsapp_setup_status ?? rawLink?.status ?? null;
-    if (rawLink && !linkError && !isSetupLinkExpired({ expires_at: rawLink.expires_at })) {
+    if (
+      !hasMockPhoneNumber &&
+      rawLink &&
+      !linkError &&
+      !isSetupLinkExpired({ expires_at: rawLink.expires_at })
+    ) {
       console.info('[whatsapp/setup-link] reusing existing setup link', {
         tenantId: tenant.id,
         installId: existing.id,
@@ -112,6 +121,7 @@ export async function POST(): Promise<Response> {
       installId: existing.id,
       customerId: existing.kapsoCustomerId,
       installStatus: existing.status,
+      hadMockPhoneNumber: hasMockPhoneNumber,
       priorLinkStatus: linkStatus,
       priorLinkError: linkError,
       priorLinkExpired: rawLink ? isSetupLinkExpired({ expires_at: rawLink.expires_at }) : null,
@@ -138,24 +148,47 @@ export async function POST(): Promise<Response> {
     await prisma.whatsAppInstall.update({
       where: { id: existing.id },
       data: {
-        status: existing.status === 'active' ? 'active' : 'pending',
+        status: hasMockPhoneNumber
+          ? 'pending'
+          : existing.status === 'active'
+            ? 'active'
+            : 'pending',
+        phoneNumberId: hasMockPhoneNumber ? null : undefined,
+        kapsoConnectionId: hasMockPhoneNumber ? null : undefined,
+        displayPhoneNumber: hasMockPhoneNumber ? null : undefined,
+        businessDisplayName: hasMockPhoneNumber ? null : undefined,
         lastErrorMessage: null,
-        metadata: { setupLink: freshSnapshot } as unknown as Prisma.InputJsonValue,
+        metadata: {
+          setupLink: freshSnapshot,
+          ...(hasMockPhoneNumber
+            ? {
+                metaMockPhoneNumberRestartedAt: new Date().toISOString(),
+                metaMockPhoneNumber: existing.displayPhoneNumber,
+                metaMockPhoneNumberId: existing.phoneNumberId,
+                metaMockPhoneNumberReason: META_MOCK_PHONE_NUMBER_MESSAGE,
+              }
+            : {}),
+        } as unknown as Prisma.InputJsonValue,
       },
     });
     console.info('[whatsapp/setup-link] fresh setup link stored', {
       tenantId: tenant.id,
       installId: existing.id,
       customerId: existing.kapsoCustomerId,
-      installStatus: existing.status === 'active' ? 'active' : 'pending',
+      installStatus: hasMockPhoneNumber
+        ? 'pending'
+        : existing.status === 'active'
+          ? 'active'
+          : 'pending',
       setupLinkId: freshSnapshot.id,
       setupLinkStatus: freshSnapshot.status ?? null,
     });
     return NextResponse.json({
       customerId: existing.kapsoCustomerId,
       setupLink: freshSnapshot,
-      status: existing.status === 'active' ? 'active' : 'pending',
+      status: hasMockPhoneNumber ? 'pending' : existing.status === 'active' ? 'active' : 'pending',
       reused: true,
+      restartedAfterMockPhoneNumber: hasMockPhoneNumber,
     });
   }
 

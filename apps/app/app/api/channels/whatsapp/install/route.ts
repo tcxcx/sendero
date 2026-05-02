@@ -21,6 +21,7 @@ import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 import { ensureTenantWhatsAppFlows } from '@/lib/whatsapp-flow-registry';
 import { readWhatsappHealth } from '@/lib/whatsapp-health';
+import { isMetaMockPhoneNumber, META_MOCK_PHONE_NUMBER_MESSAGE } from '@/lib/whatsapp-mock-number';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -183,6 +184,29 @@ async function reconcilePendingInstallFromKapso(args: {
   tenantDisplayName: string;
   install: InstallForSnapshot;
 }): Promise<InstallForSnapshot> {
+  if (isMetaMockPhoneNumber(args.install.displayPhoneNumber)) {
+    console.warn('[whatsapp/install] refusing Meta mock phone number install', {
+      tenantId: args.tenantId,
+      installId: args.install.id,
+      phoneNumberId: args.install.phoneNumberId,
+      displayPhoneNumber: args.install.displayPhoneNumber,
+    });
+    return await prisma.whatsAppInstall.update({
+      where: { id: args.install.id },
+      data: {
+        status: 'error',
+        phoneNumberId: null,
+        kapsoConnectionId: null,
+        lastErrorMessage: META_MOCK_PHONE_NUMBER_MESSAGE,
+        metadata: mergeJsonObject(args.install.metadata, {
+          metaMockPhoneNumberRejectedAt: new Date().toISOString(),
+          metaMockPhoneNumber: args.install.displayPhoneNumber,
+          metaMockPhoneNumberId: args.install.phoneNumberId,
+        }),
+      },
+      select: installSelect,
+    });
+  }
   if (args.install.status === 'active' && args.install.phoneNumberId) return args.install;
   if (args.install.status === 'disabled') {
     console.info('[whatsapp/install] skipping Kapso reconciliation for disabled install', {
@@ -218,6 +242,34 @@ async function reconcilePendingInstallFromKapso(args: {
         kapsoCustomerId: args.install.kapsoCustomerId,
       });
       return args.install;
+    }
+    if (isMetaMockPhoneNumber(phoneNumber.display_phone_number)) {
+      console.warn(
+        '[whatsapp/install] Kapso returned Meta mock phone number during reconciliation',
+        {
+          tenantId: args.tenantId,
+          installId: args.install.id,
+          phoneNumberId: phoneNumber.phone_number_id,
+          displayPhoneNumber: phoneNumber.display_phone_number,
+        }
+      );
+      return await prisma.whatsAppInstall.update({
+        where: { id: args.install.id },
+        data: {
+          status: 'error',
+          phoneNumberId: null,
+          kapsoConnectionId: null,
+          displayPhoneNumber: null,
+          businessDisplayName: null,
+          lastErrorMessage: META_MOCK_PHONE_NUMBER_MESSAGE,
+          metadata: mergeJsonObject(args.install.metadata, {
+            metaMockPhoneNumberRejectedAt: new Date().toISOString(),
+            metaMockPhoneNumber: phoneNumber.display_phone_number,
+            metaMockPhoneNumberId: phoneNumber.phone_number_id,
+          }),
+        },
+        select: installSelect,
+      });
     }
     console.info('[whatsapp/install] found Kapso phone number for pending install', {
       tenantId: args.tenantId,
@@ -290,9 +342,12 @@ async function findProvisionedPhoneNumber(
   kapsoCustomerId: string
 ): Promise<KapsoWhatsAppPhoneNumber | null> {
   const phoneNumbers = await kapso.listPhoneNumbersForCustomer(kapsoCustomerId);
+  const realPhoneNumbers = phoneNumbers.filter(
+    item => !isMetaMockPhoneNumber(item.display_phone_number)
+  );
   return (
-    phoneNumbers.find(item => /active|connected|available/i.test(item.status ?? '')) ??
-    phoneNumbers.find(item => Boolean(item.phone_number_id)) ??
+    realPhoneNumbers.find(item => /active|connected|available/i.test(item.status ?? '')) ??
+    realPhoneNumbers.find(item => Boolean(item.phone_number_id)) ??
     null
   );
 }

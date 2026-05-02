@@ -27,6 +27,7 @@ import { WhatsappConnectedPanel } from '@/components/channels/whatsapp-connected
 import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 import { readWhatsappHealth, type WhatsAppHealthSummary } from '@/lib/whatsapp-health';
+import { isMetaMockPhoneNumber, META_MOCK_PHONE_NUMBER_MESSAGE } from '@/lib/whatsapp-mock-number';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,8 +48,11 @@ export default async function WhatsAppChannelPage() {
     },
   });
 
+  const hasMockPhoneNumber = isMetaMockPhoneNumber(install?.displayPhoneNumber);
   const status: ChannelStatusKind = install
-    ? (install.status as ChannelStatusKind)
+    ? hasMockPhoneNumber
+      ? 'error'
+      : (install.status as ChannelStatusKind)
     : 'not_installed';
   const identifier = install?.displayPhoneNumber
     ? install.businessDisplayName
@@ -106,7 +110,11 @@ export default async function WhatsAppChannelPage() {
           status={status}
           identifier={identifier}
           lastHealthyAt={install?.lastHealthyAt?.toISOString() ?? null}
-          lastErrorMessage={install?.lastErrorMessage ?? null}
+          lastErrorMessage={
+            hasMockPhoneNumber
+              ? META_MOCK_PHONE_NUMBER_MESSAGE
+              : (install?.lastErrorMessage ?? null)
+          }
           health={health}
           onProbe={status === 'not_installed' ? undefined : probe}
         />
