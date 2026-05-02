@@ -156,7 +156,7 @@ test('WhatsApp tenant provisioning creates JSON setup state and disconnect reset
       phoneNumberId: `qa_phone_${Date.now()}`,
       kapsoConnectionId: `qa_connection_${Date.now()}`,
       businessAccountId: 'qa_business_account',
-      displayPhoneNumber: '+1 555-932-5668',
+      displayPhoneNumber: '+1 201-471-6388',
       businessDisplayName: 'QA Corporate Travel',
       lastErrorMessage: null,
       lastHealthyAt: new Date(),
@@ -167,7 +167,7 @@ test('WhatsApp tenant provisioning creates JSON setup state and disconnect reset
     waitUntil: 'domcontentloaded',
   });
   await expect(page.getByRole('heading', { name: 'WhatsApp', exact: true })).toBeVisible();
-  await expect(page.getByText('+1 555-932-5668')).toBeVisible();
+  await expect(page.getByText('+1 201-471-6388')).toBeVisible();
   await page.screenshot({
     path: path.resolve('../../.gstack/qa-reports/screenshots/whatsapp-tenant-connected.png'),
     fullPage: true,
