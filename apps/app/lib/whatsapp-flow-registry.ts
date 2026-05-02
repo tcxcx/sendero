@@ -67,8 +67,23 @@ export async function ensureTenantWhatsAppFlows(args: {
     };
   }
 
+  const flowRegistrations = getWhatsAppFlowRegistrationDelegate();
+  if (!flowRegistrations) {
+    console.warn('[whatsapp/flows] Prisma WhatsApp Flow registration delegate is unavailable', {
+      tenantId: args.tenantId,
+      phoneNumberId: args.phoneNumberId,
+    });
+    return {
+      ok: false,
+      registered: 0,
+      skipped: 0,
+      errors: [],
+      reason: 'missing_prisma_flow_registration_delegate',
+    };
+  }
+
   const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
-  const existingRows = await prisma.whatsAppFlowRegistration.findMany({
+  const existingRows = await flowRegistrations.findMany({
     where: { tenantId: args.tenantId, phoneNumberId: args.phoneNumberId },
   });
   const existingByKey = new Map(existingRows.map(row => [row.flowKey, row]));
@@ -108,7 +123,7 @@ export async function ensureTenantWhatsAppFlows(args: {
           flow_json: definition.json,
         }));
 
-      await prisma.whatsAppFlowRegistration.upsert({
+      await flowRegistrations.upsert({
         where: {
           tenantId_phoneNumberId_flowKey: {
             tenantId: args.tenantId,
@@ -148,7 +163,7 @@ export async function ensureTenantWhatsAppFlows(args: {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push({ flowKey: definition.key, error: message });
-      await prisma.whatsAppFlowRegistration.upsert({
+      await flowRegistrations.upsert({
         where: {
           tenantId_phoneNumberId_flowKey: {
             tenantId: args.tenantId,
@@ -180,6 +195,34 @@ export async function ensureTenantWhatsAppFlows(args: {
     skipped,
     errors,
   };
+}
+
+type WhatsAppFlowRegistrationDelegate = {
+  findMany: (args: { where: { tenantId: string; phoneNumberId: string } }) => Promise<
+    Array<{
+      flowKey: string;
+      kapsoFlowId: string;
+      status: string;
+    }>
+  >;
+  upsert: (args: {
+    where: {
+      tenantId_phoneNumberId_flowKey: {
+        tenantId: string;
+        phoneNumberId: string;
+        flowKey: string;
+      };
+    };
+    create: Record<string, unknown>;
+    update: Record<string, unknown>;
+  }) => Promise<unknown>;
+};
+
+function getWhatsAppFlowRegistrationDelegate(): WhatsAppFlowRegistrationDelegate | null {
+  const maybePrisma = prisma as typeof prisma & {
+    whatsAppFlowRegistration?: WhatsAppFlowRegistrationDelegate;
+  };
+  return maybePrisma.whatsAppFlowRegistration ?? null;
 }
 
 function flowDisplayName(definition: FlowDefinition, tenantDisplayName?: string | null): string {
