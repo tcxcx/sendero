@@ -16,8 +16,10 @@
  * touches the integration directly.
  */
 
-import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+
+import { useRouter } from 'next/navigation';
+
 import { Check, ChevronLeft, Loader2 } from 'lucide-react';
 
 import type {
@@ -29,10 +31,10 @@ import type {
 
 interface WizardShellProps {
   channel: 'whatsapp' | 'slack';
-  /** "5 steps · about 5 minutes" headline above the rail. */
+  /** Headline above the rail. */
   headline: string;
   /** One-sentence subline shown under the headline. */
-  sublineHtml: string;
+  subline: React.ReactNode;
   /** Help link target (e.g. /docs/channels/whatsapp). */
   helpHref: string;
   helpLabel: string;
@@ -55,6 +57,37 @@ export function ChannelSetupWizard(props: WizardShellProps) {
   const isComplete = run.status === 'completed';
   const isFailed = run.status === 'failed';
   const activePane = run.activeStep?.promptId ? props.panes[run.activeStep.promptId] : null;
+  const activeStepIndex = run.activeStep
+    ? run.steps.findIndex(step => step.id === run.activeStep?.id)
+    : -1;
+  const previousStep =
+    activeStepIndex > 0
+      ? [...run.steps.slice(0, activeStepIndex)].reverse().find(step => step.status === 'completed')
+      : null;
+
+  const jumpToStep = (stepId: string) => {
+    if (!run.activeStep || stepId === run.activeStep.id) return;
+    setErrorMsg(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch('/api/channels/wizard/jump', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionId: run.sessionId, stepId }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          setErrorMsg(body.error ?? `HTTP ${res.status}`);
+          return;
+        }
+        const next = (await res.json()) as WizardRunSnapshot;
+        setRun(next);
+        setResolution(null);
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : 'Network error');
+      }
+    });
+  };
 
   const submitContinue = () => {
     if (!run.activeStep) return;
@@ -88,8 +121,6 @@ export function ChannelSetupWizard(props: WizardShellProps) {
 
   const exit = () => router.push(props.doneHref);
 
-  const channelName = props.channel === 'whatsapp' ? 'WhatsApp' : 'Slack';
-
   return (
     <div
       style={{
@@ -113,9 +144,11 @@ export function ChannelSetupWizard(props: WizardShellProps) {
       >
         <StepRail
           headline={props.headline}
-          sublineHtml={props.sublineHtml}
+          subline={props.subline}
           steps={run.steps}
           activeStepId={run.activeStep?.id ?? null}
+          pending={pending}
+          onStepClick={jumpToStep}
           helpHref={props.helpHref}
           helpLabel={props.helpLabel}
         />
@@ -151,11 +184,21 @@ export function ChannelSetupWizard(props: WizardShellProps) {
             <Footer
               pending={pending}
               resolutionReady={resolution !== null}
-              onBack={() => router.back()}
+              onBack={() => {
+                if (previousStep) {
+                  jumpToStep(previousStep.id);
+                } else {
+                  router.back();
+                }
+              }}
               onSaveExit={exit}
               onContinue={submitContinue}
               continueLabel={
-                run.activeStep?.id === 'await_oauth_callback' ? 'I have installed it' : 'Continue'
+                run.activeStep?.id === 'await_oauth_callback'
+                  ? 'I have installed it'
+                  : run.activeStep?.id === 'go_live'
+                    ? 'Activate'
+                    : 'Continue'
               }
               errorMsg={errorMsg}
               savedAt={savedAt}
@@ -169,16 +212,20 @@ export function ChannelSetupWizard(props: WizardShellProps) {
 
 function StepRail({
   headline,
-  sublineHtml,
+  subline,
   steps,
   activeStepId,
+  pending,
+  onStepClick,
   helpHref,
   helpLabel,
 }: {
   headline: string;
-  sublineHtml: string;
+  subline: React.ReactNode;
   steps: WizardStepDef[];
   activeStepId: string | null;
+  pending: boolean;
+  onStepClick: (stepId: string) => void;
   helpHref: string;
   helpLabel: string;
 }) {
@@ -197,11 +244,9 @@ function StepRail({
       <h2 className="t-h2" style={{ marginTop: 8 }}>
         {headline}
       </h2>
-      <p
-        className="t-body ink-70"
-        style={{ marginTop: 10, lineHeight: 1.55, fontSize: 13 }}
-        dangerouslySetInnerHTML={{ __html: sublineHtml }}
-      />
+      <p className="t-body ink-70" style={{ marginTop: 10, lineHeight: 1.55, fontSize: 13 }}>
+        {subline}
+      </p>
       <hr aria-hidden style={hairlineSoft} />
       <ol
         style={{
@@ -218,6 +263,8 @@ function StepRail({
             step={step}
             isActive={step.id === activeStepId}
             isLast={i === steps.length - 1}
+            disabled={pending}
+            onClick={onStepClick}
           />
         ))}
       </ol>
@@ -243,12 +290,17 @@ function StepRailItem({
   step,
   isActive,
   isLast,
+  disabled,
+  onClick,
 }: {
   step: WizardStepDef;
   isActive: boolean;
   isLast: boolean;
+  disabled: boolean;
+  onClick: (stepId: string) => void;
 }) {
   const done = step.status === 'completed';
+  const canJump = done && !isActive && !disabled;
   const dotBg = done ? '#2EA876' : isActive ? 'var(--vermillion)' : 'var(--surface-base)';
   const dotColor = done || isActive ? '#fdfbf7' : 'rgba(31,42,68,0.5)';
   const dotShadow = isActive
@@ -278,43 +330,61 @@ function StepRailItem({
           }}
         />
       ) : null}
-      <div
+      <button
+        type="button"
+        disabled={!canJump}
+        onClick={() => onClick(step.id)}
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 14,
-          flexShrink: 0,
-          position: 'relative',
-          zIndex: 1,
-          background: dotBg,
-          color: dotColor,
-          display: 'grid',
-          placeItems: 'center',
-          fontFamily: 'var(--font-sans)',
-          fontSize: 12,
-          fontWeight: 600,
-          boxShadow: dotShadow,
+          appearance: 'none',
+          border: 0,
+          padding: 0,
+          textAlign: 'left',
+          background: 'transparent',
+          cursor: canJump ? 'pointer' : 'default',
+          opacity: disabled && done ? 0.7 : 1,
+          display: 'flex',
+          gap: 14,
+          minWidth: 0,
         }}
       >
-        {done ? <Check className="h-3.5 w-3.5" /> : step.index}
-      </div>
-      <div style={{ paddingTop: 3, minWidth: 0 }}>
-        <div
-          className="t-body"
+        <span
           style={{
-            fontWeight: isActive ? 600 : 500,
-            color: labelColor,
-            fontSize: 13,
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            flexShrink: 0,
+            position: 'relative',
+            zIndex: 1,
+            background: dotBg,
+            color: dotColor,
+            display: 'grid',
+            placeItems: 'center',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 12,
+            fontWeight: 600,
+            boxShadow: dotShadow,
           }}
         >
-          {step.label}
-        </div>
-        {step.sublabel ? (
-          <div className="t-mono ink-60" style={{ marginTop: 2, fontSize: 11 }}>
-            {step.sublabel}
+          {done ? <Check className="h-3.5 w-3.5" /> : step.index}
+        </span>
+        <div style={{ paddingTop: 3, minWidth: 0 }}>
+          <div
+            className="t-body"
+            style={{
+              fontWeight: isActive ? 600 : 500,
+              color: labelColor,
+              fontSize: 13,
+            }}
+          >
+            {step.label}
           </div>
-        ) : null}
-      </div>
+          {step.sublabel ? (
+            <div className="t-mono ink-60" style={{ marginTop: 2, fontSize: 11 }}>
+              {step.sublabel}
+            </div>
+          ) : null}
+        </div>
+      </button>
     </li>
   );
 }

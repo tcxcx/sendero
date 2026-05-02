@@ -11,6 +11,15 @@
  */
 
 import { Duffel } from '@duffel/api';
+import type {
+  CreatePayment,
+  Guest,
+  Offer,
+  OfferRequest,
+  Payment,
+  StaysSearchResponse,
+  StaysSearchResult,
+} from '@duffel/api/types';
 import { env } from '@sendero/env';
 
 import type {
@@ -54,14 +63,14 @@ import type {
   DuffelStaysRateId,
 } from './types';
 
-export {
-  verifyDuffelSignature,
-  parseDuffelWebhook,
-  type DuffelWebhookEvent,
-  type DuffelWebhookStatus,
-  type DuffelWebhookEventType,
-} from './webhook';
 export * from './types';
+export {
+  type DuffelWebhookEvent,
+  type DuffelWebhookEventType,
+  type DuffelWebhookStatus,
+  parseDuffelWebhook,
+  verifyDuffelSignature,
+} from './webhook';
 
 let client: Duffel | null = null;
 
@@ -71,7 +80,7 @@ export function getDuffel(): Duffel {
     if (!token) {
       throw new Error('DUFFEL_API_TOKEN not set. Add it to .env.local.');
     }
-    client = new Duffel({ token } as any);
+    client = new Duffel({ token });
   }
   return client;
 }
@@ -200,30 +209,31 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
     body as unknown as Parameters<typeof duffel.offerRequests.create>[0]
   );
 
-  const offers = ((response.data as any).offers || []).slice(0, 10);
+  const offerRequest = response.data as unknown as OfferRequest;
+  const offers = (offerRequest.offers || []).slice(0, 10);
 
-  return offers.map((o: any): FlightOfferSummary => {
+  return offers.map((o: Omit<Offer, 'available_services'>): FlightOfferSummary => {
     const firstSegment = o.slices?.[0]?.segments?.[0];
     const lastSegment = o.slices?.[0]?.segments?.[o.slices[0].segments.length - 1];
-    const owner = o.owner ?? {};
-    const iata = owner.iata_code || '';
+    const owner = o.owner;
+    const iata = owner?.iata_code || '';
     return {
       id: o.id,
-      airline: owner.name || 'Unknown',
+      airline: owner?.name || 'Unknown',
       airlineIataCode: iata,
       // Prefer Duffel-supplied URLs; fall back to the CDN pattern that exists
       // for every IATA carrier.
       airlineLogoUrl:
-        owner.logo_symbol_url ||
+        owner?.logo_symbol_url ||
         (iata
           ? `https://assets.duffel.com/img/airlines/for-light-background/full-color-logo/${iata}.svg`
           : null),
       airlineLockupUrl:
-        owner.logo_lockup_url ||
+        owner?.logo_lockup_url ||
         (iata
           ? `https://assets.duffel.com/img/airlines/for-light-background/full-color-lockup/${iata}.svg`
           : null),
-      airlineConditionsOfCarriageUrl: owner.conditions_of_carriage_url || null,
+      airlineConditionsOfCarriageUrl: owner?.conditions_of_carriage_url || null,
       price: o.total_amount,
       currency: o.total_currency,
       departure: firstSegment?.departing_at || '',
@@ -356,18 +366,21 @@ export async function payFromBalance(orderId: string): Promise<PayFromBalanceRes
   const totalAmount = latest.data.total_amount;
   const totalCurrency = latest.data.total_currency;
 
-  const response = await duffel.payments.create({
+  const createPayment: CreatePayment = {
     order_id: orderId,
     payment: {
       type: 'balance',
       amount: totalAmount,
       currency: totalCurrency,
     },
-  } as any);
+  };
+  const response = await duffel.payments.create(createPayment);
+  const paymentData: Payment = response.data;
 
   return {
-    paymentId: (response.data as any).id,
-    status: (response.data as any).status || 'succeeded',
+    paymentId: paymentData.id,
+    // SDK Payment type has no `status` field; balance payments always succeed synchronously.
+    status: 'succeeded',
     amount: totalAmount,
     currency: totalCurrency,
   };
@@ -480,9 +493,29 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOffe
   const coords = resolveCoords(params.location);
   const radiusKm = params.radiusKm ?? 5;
 
-  let response: any;
+  /**
+   * `StaysSearchResult` from the SDK omits `rates` (returned only when fetching
+   * individual search results, not in the list response). We extend it locally
+   * for the cancellation-policy check. `distance_meters` is also not on the SDK
+   * `StaysLocation` but may appear in the raw API response.
+   * TODO(duffel-types): upstream to @duffel/api once SDK catches up.
+   */
+  type StaysSearchResultExtended = StaysSearchResult & {
+    rates?: Array<{
+      total_amount: string;
+      cancellation_timeline?: Array<{ refund_amount: string }>;
+    }>;
+  };
+
+  type StaysLocationExtended = {
+    address?: { city_name?: string; country_code?: string };
+    /** Not in SDK StaysLocation but present in raw API for some search results. */
+    distance_meters?: number | null;
+  };
+
+  let response: Awaited<ReturnType<typeof duffel.stays.search>>;
   try {
-    response = await (duffel.stays as any).search({
+    response = await duffel.stays.search({
       location: {
         radius: radiusKm,
         geographic_coordinates: {
@@ -493,31 +526,37 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOffe
       check_in_date: params.checkInDate,
       check_out_date: params.checkOutDate,
       rooms: params.rooms ?? 1,
-      guests: Array.from({ length: params.guests ?? 1 }, () => ({ type: 'adult' }) as any),
-    } as any);
-  } catch (err) {
+      guests: Array.from({ length: params.guests ?? 1 }, (): Guest => ({ type: 'adult' })),
+    });
+  } catch (err: unknown) {
     // Duffel Stays is an opt-in product — most sandbox tokens don't have
     // it enabled. Surface a useful, actionable error instead of "unknown".
-    const anyErr = err as any;
+    const anyErr = err as Record<string, unknown>;
     console.error('[stays] raw error:', {
       name: anyErr?.name,
       code: anyErr?.code,
-      statusCode: anyErr?.statusCode ?? anyErr?.meta?.status,
+      statusCode:
+        (anyErr?.statusCode as number | undefined) ??
+        (anyErr?.meta as Record<string, unknown> | undefined)?.status,
       meta: anyErr?.meta,
       errors: anyErr?.errors,
       message: anyErr?.message,
     });
-    const firstDuffel = anyErr?.errors?.[0] ?? anyErr?.meta?.errors?.[0];
+    const errs = anyErr?.errors as Array<Record<string, unknown>> | undefined;
+    const metaErrs = (anyErr?.meta as Record<string, unknown> | undefined)?.errors as
+      | Array<Record<string, unknown>>
+      | undefined;
+    const firstDuffel = errs?.[0] ?? metaErrs?.[0];
     if (firstDuffel) {
       throw new Error(
         firstDuffel.title
-          ? `${firstDuffel.title}: ${firstDuffel.message || firstDuffel.detail || ''}`.trim()
-          : firstDuffel.message || JSON.stringify(firstDuffel)
+          ? `${String(firstDuffel.title)}: ${String(firstDuffel.message ?? firstDuffel.detail ?? '')}`.trim()
+          : String(firstDuffel.message ?? JSON.stringify(firstDuffel))
       );
     }
     if (anyErr?.message) {
       throw new Error(
-        `Duffel Stays request failed (${anyErr.name || 'Error'}): ${anyErr.message}. Most sandbox tokens don't have Stays enabled — contact Duffel to turn it on.`
+        `Duffel Stays request failed (${String(anyErr.name ?? 'Error')}): ${String(anyErr.message)}. Most sandbox tokens don't have Stays enabled — contact Duffel to turn it on.`
       );
     }
     throw new Error(
@@ -525,41 +564,42 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOffe
     );
   }
 
-  const results = ((response.data as any)?.results ?? []).slice(0, 6);
+  const searchResponse: StaysSearchResponse = response.data;
+  const results = (searchResponse?.results ?? []).slice(0, 6) as StaysSearchResultExtended[];
 
-  return results.map((r: any): HotelOfferSummary => {
-    const acc = r.accommodation ?? {};
-    const cheapest = (r.cheapest_rate_total_amount as string) ?? null;
-    const currency = (r.cheapest_rate_currency as string) ?? 'USD';
+  return results.map((r: StaysSearchResultExtended): HotelOfferSummary => {
+    const acc = r.accommodation;
+    const cheapest = r.cheapest_rate_total_amount ?? null;
+    const currency = r.cheapest_rate_currency ?? 'USD';
     const photos = (acc.photos ?? [])
-      .map((p: any) => p?.url)
+      .map(p => p?.url)
       .filter(Boolean)
       .slice(0, 3);
-    const loc = acc.location ?? {};
-    const cancellation: HotelOfferSummary['cancellation'] = (r.rates ?? []).some((rate: any) =>
+    const loc = acc.location as StaysLocationExtended;
+    const cancellation: HotelOfferSummary['cancellation'] = (r.rates ?? []).some(rate =>
       rate.cancellation_timeline?.some(
-        (c: any) => parseFloat(c.refund_amount) >= parseFloat(rate.total_amount)
+        c => parseFloat(c.refund_amount) >= parseFloat(rate.total_amount)
       )
     )
       ? 'free'
-      : (r.rates ?? []).some((rate: any) => parseFloat(rate.total_amount) > 0)
+      : (r.rates ?? []).some(rate => parseFloat(rate.total_amount) > 0)
         ? 'partial'
         : 'unknown';
 
     return {
       id: r.id,
       name: acc.name ?? 'Unknown property',
-      city: loc.address?.city_name ?? null,
-      country: loc.address?.country_code ?? null,
+      city: loc?.address?.city_name ?? null,
+      country: loc?.address?.country_code ?? null,
       stars: acc.rating ?? null,
       reviewScore: acc.review_score ?? null,
       photos,
       price: cheapest ?? '0',
       currency,
       cancellation,
-      distanceMeters: loc.distance_meters ?? null,
+      distanceMeters: loc?.distance_meters ?? null,
       amenities: (acc.amenities ?? [])
-        .map((a: any) => a?.type || a?.name)
+        .map(a => a?.type)
         .filter(Boolean)
         .slice(0, 5),
     };

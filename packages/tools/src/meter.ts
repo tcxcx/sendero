@@ -41,8 +41,8 @@ export function logMeter(event: MeterEvent): void {
   for (const l of _listeners) {
     try {
       l(event);
-    } catch {
-      /* listener errors don't break other listeners */
+    } catch (err) {
+      console.warn('[meter] listener error (non-fatal)', err);
     }
   }
 }

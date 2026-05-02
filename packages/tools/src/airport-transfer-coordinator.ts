@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 import { exportRouteMap } from './export-route-map';
 import { geocodeTripStop } from './geocode-trip-stop';
-import { travelSafetyAid, type TravelSafetyAidResult } from './travel-safety-aid';
+import { type TravelSafetyAidResult, travelSafetyAid } from './travel-safety-aid';
 import type { ToolDef } from './types';
 import { validateTravelAddress } from './validate-travel-address';
 
@@ -130,6 +130,7 @@ function arrivalHint(iso?: string): string | undefined {
     if (Number.isNaN(d.getTime())) return undefined;
     return `Flight arrives ${d.toISOString().slice(0, 16).replace('T', ' ')} UTC.`;
   } catch {
+    // expected — invalid or unparseable ISO string
     return undefined;
   }
 }

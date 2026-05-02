@@ -412,8 +412,9 @@ async function _runAgentTurnInner(
         });
       }
       await flushLangfuse();
-    } catch {
-      // already logged inside the helpers; never throw out of fire-and-forget
+    } catch (err) {
+      // never throw out of fire-and-forget
+      console.warn('[agent.run] Langfuse scoring/flush failed (non-fatal)', err);
     }
   });
 

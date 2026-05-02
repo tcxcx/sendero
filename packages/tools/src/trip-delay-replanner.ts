@@ -13,7 +13,7 @@ import { searchFlights, searchHotels } from '@sendero/duffel';
 import { z } from 'zod';
 
 import { exportRouteMap } from './export-route-map';
-import type { ToolDef, ToolContext } from './types';
+import type { ToolContext, ToolDef } from './types';
 
 const disruptionSchema = z.object({
   kind: z.enum(['delay', 'cancellation', 'missed_connection', 'weather', 'other']),
@@ -199,8 +199,8 @@ export async function tripDelayReplanner(
           neighborhood: top?.address?.city_name ?? top?.neighborhood,
         };
       }
-    } catch {
-      // silent — hotel search is optional
+    } catch (err) {
+      console.warn('[trip-delay-replanner] hotel fallback search failed (non-critical)', err);
     }
   }
 
@@ -229,8 +229,8 @@ export async function tripDelayReplanner(
         appleMapsUrl: route.appleMapsUrl,
         staticMapUrl: route.staticMapUrl,
       };
-    } catch {
-      // route export is non-critical
+    } catch (err) {
+      console.warn('[trip-delay-replanner] route export failed (non-critical)', err);
     }
   }
 
