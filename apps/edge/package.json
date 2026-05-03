@@ -33,6 +33,7 @@
     "@sendero/agent": "workspace:*",
     "@sendero/arc": "workspace:*",
     "@sendero/circle": "workspace:*",
+    "@sendero/collaboration": "workspace:*",
     "@sendero/duffel": "workspace:*",
     "@sendero/guest": "workspace:*",
     "@sendero/llms": "workspace:*",

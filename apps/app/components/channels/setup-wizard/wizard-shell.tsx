@@ -16,7 +16,7 @@
  * touches the integration directly.
  */
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 
@@ -54,6 +54,12 @@ export function ChannelSetupWizard(props: WizardShellProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
+  useEffect(() => {
+    setRun(props.initialRun);
+    setResolution(null);
+    setErrorMsg(null);
+  }, [props.initialRun]);
+
   const isComplete = run.status === 'completed';
   const isFailed = run.status === 'failed';
   const activePane = run.activeStep?.promptId ? props.panes[run.activeStep.promptId] : null;
@@ -77,6 +83,10 @@ export function ChannelSetupWizard(props: WizardShellProps) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
+          if (body.error === 'wizard_session_not_found') {
+            window.location.reload();
+            return;
+          }
           setErrorMsg(body.error ?? `HTTP ${res.status}`);
           return;
         }
@@ -102,6 +112,10 @@ export function ChannelSetupWizard(props: WizardShellProps) {
         });
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
+          if (body.error === 'wizard_session_not_found') {
+            window.location.reload();
+            return;
+          }
           setErrorMsg(body.error ?? `HTTP ${res.status}`);
           return;
         }

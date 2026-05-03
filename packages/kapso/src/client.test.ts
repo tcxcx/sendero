@@ -174,6 +174,32 @@ describe('KapsoClient', () => {
     expect(capturedUrl).not.toContain('customer_id=');
   });
 
+  it('accepts phone numbers with null Kapso status', async () => {
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: mockFetch([
+        {
+          status: 200,
+          body: {
+            phone_numbers: [
+              {
+                id: 'row_1',
+                phone_number_id: 'pn_1',
+                customer_id: 'cus_1',
+                display_phone_number: '+1 201-471-6388',
+                status: null,
+              },
+            ],
+          },
+        },
+      ]),
+    });
+
+    const phoneNumbers = await client.listPhoneNumbersForCustomer('cus_1');
+    expect(phoneNumbers[0]?.status).toBeNull();
+    expect(phoneNumbers[0]?.phone_number_id).toBe('pn_1');
+  });
+
   it('lists and creates WhatsApp Flows', async () => {
     const calls: Array<{ url: string; method: string; body: string }> = [];
     const client = new KapsoClient({

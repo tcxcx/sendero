@@ -289,6 +289,7 @@ model Tenant {
   safetyBriefs                 SafetyBrief[]
   arrivalPlaybookRuns          ArrivalPlaybookRun[]
   supportTurns                 SupportTurn[]
+  channelHandoffs              ChannelHandoff[]
   pendingMultisigOps           PendingMultisigOp[]
   passportVaults               PassportVault[]
   tripEligibilityRuns          TripEligibilityRun[]
@@ -356,6 +357,7 @@ model User {
   pricingPoliciesCreated TenantPricingPolicy[] @relation("TenantPricingPolicyCreatedBy")
   groupTripMemberships   GroupTripPassenger[]  @relation("GroupTripPassengers")
   chatSessions           ChatSession[]         @relation("ChatSessionUser")
+  handoffsAnswered       ChannelHandoff[]      @relation("ChannelHandoffAnsweredBy")
 
   @@index([createdAt])
   @@map("users")
@@ -534,6 +536,7 @@ model Trip {
   nftStamps          NftStamp[]
   reputationFeedback ReputationFeedback[]
   chatSessions       ChatSession[]        @relation("ChatSessionTrip")
+  channelHandoffs    ChannelHandoff[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
@@ -1279,6 +1282,7 @@ model ChannelIdentity {
   tenant               Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user                 User?                         @relation(fields: [userId], references: [id], onDelete: SetNull)
   sessionVerifications WhatsAppSessionVerification[]
+  handoffs             ChannelHandoff[]
 
   @@unique([tenantId, kind, businessScopedUserId])
   @@unique([tenantId, kind, externalUserId])
@@ -2068,6 +2072,55 @@ model SupportTurn {
   @@index([tenantId, outcome])
   @@index([userId])
   @@map("support_turns")
+}
+
+/// Human handoff request — the agent escalates here when it's not
+/// confident enough to answer the customer alone. Replicates the
+/// Kapso support-agent example's `ask_team_question` pattern but
+/// terminates in Sendero's own operator surface (MetaInbox, trip
+/// inbox, Liveblocks inbox notification on `agent:customer-support`).
+///
+/// Lifecycle: pending → answered → closed. The customer-facing reply
+/// is composed by the operator in the dashboard; the resolve route
+/// pushes it back to the originating channel (today: WhatsApp).
+model ChannelHandoff {
+  id                String   @id @default(cuid())
+  tenantId          String
+  /// Optional trip context — when set, the trip inbox renders this
+  /// handoff inline alongside other channel events.
+  tripId            String?
+  /// ChannelIdentity that initiated the escalation (BSUID-keyed for
+  /// WhatsApp). Drives recipient lookup on resolve.
+  channelIdentityId String   @db.Uuid
+  channel           String
+  /// Inbound message id (wamid for WhatsApp) that triggered escalation.
+  inboundMessageId  String?
+  /// What the agent asked the team to answer.
+  question          String
+  /// Optional context summary the agent attached when escalating.
+  summary           String?
+  /// pending | answered | closed
+  status            String   @default("pending")
+  /// Liveblocks room id used for operator notifications + collaboration.
+  liveblocksRoomId  String
+  /// Operator-composed answer (delivered to the traveler verbatim or
+  /// via reformulating turn).
+  answer            String?
+  answeredByUserId  String?
+  answeredAt        DateTime?
+  closedAt          DateTime?
+  createdAt         DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip            Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  channelIdentity ChannelIdentity @relation(fields: [channelIdentityId], references: [id], onDelete: Cascade)
+  answeredBy      User?           @relation("ChannelHandoffAnsweredBy", fields: [answeredByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, tripId])
+  @@index([channelIdentityId])
+  @@map("channel_handoffs")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -33,6 +33,7 @@
     "@circle-fin/unified-balance-kit": "*",
     "@sendero/arc": "*",
     "@sendero/circle": "*",
+    "@sendero/collaboration": "*",
     "@sendero/database": "*",
     "@sendero/duffel": "*",
     "@sendero/env": "*",

@@ -8,7 +8,12 @@
  * 2026).
  */
 
-import crypto from 'node:crypto';
+import {
+  identityFromContact,
+  identityFromMessage,
+  normalizeSystemIdentityChange,
+  normalizeUserIdUpdate,
+} from './identity';
 import type {
   NormalizedIdentityChange,
   NormalizedInboundMessage,
@@ -16,12 +21,7 @@ import type {
   WhatsAppStatus,
   WhatsAppWebhookPayload,
 } from './types';
-import {
-  identityFromContact,
-  identityFromMessage,
-  normalizeSystemIdentityChange,
-  normalizeUserIdUpdate,
-} from './identity';
+import crypto from 'node:crypto';
 
 /**
  * Per-message delivery status update extracted from Meta's `statuses[]`
@@ -85,23 +85,85 @@ export function handleVerifyHandshake(
 
 interface KapsoV2Envelope {
   type: 'whatsapp.message.received' | string;
-  data: Array<{
-    message: WhatsAppMessage;
-    phone_number_id: string;
-    contact?: {
-      profile: { name: string };
-      wa_id?: string | null;
-      business_scoped_user_id?: string | null;
-      parent_business_scoped_user_id?: string | null;
-      username?: string | null;
-    };
-  }>;
+  data:
+    | Array<{
+        message: WhatsAppMessage;
+        phone_number_id: string;
+        contact?: {
+          profile: { name: string };
+          wa_id?: string | null;
+          business_scoped_user_id?: string | null;
+          parent_business_scoped_user_id?: string | null;
+          username?: string | null;
+        };
+        conversation?: {
+          phone_number?: string | null;
+          business_scoped_user_id?: string | null;
+          parent_business_scoped_user_id?: string | null;
+          username?: string | null;
+        };
+      }>
+    | {
+        message: WhatsAppMessage;
+        phone_number_id: string;
+        contact?: {
+          profile: { name: string };
+          wa_id?: string | null;
+          business_scoped_user_id?: string | null;
+          parent_business_scoped_user_id?: string | null;
+          username?: string | null;
+        };
+        conversation?: {
+          phone_number?: string | null;
+          business_scoped_user_id?: string | null;
+          parent_business_scoped_user_id?: string | null;
+          username?: string | null;
+        };
+      };
 }
 
 export interface NormalizedWebhook {
   messages: NormalizedInboundMessage[];
   identityChanges: NormalizedIdentityChange[];
   statusUpdates: NormalizedStatusUpdate[];
+}
+
+type KapsoV2Item = KapsoV2Envelope extends { data: infer D }
+  ? D extends Array<infer I>
+    ? I
+    : D
+  : never;
+
+function collectKapsoV2Items(body: unknown): KapsoV2Item[] {
+  if (!body || typeof body !== 'object') return [];
+  const record = body as Record<string, unknown>;
+
+  let items: KapsoV2Item[] = [];
+
+  // Wrapped batch shape — `{ type: 'whatsapp.message.received', data: ... }`.
+  if (record.type === 'whatsapp.message.received') {
+    const data = record.data;
+    if (Array.isArray(data)) items = data as KapsoV2Item[];
+    else if (data && typeof data === 'object') items = [data as KapsoV2Item];
+  }
+
+  // Flat per-message shape — top-level `message` + `phone_number_id`.
+  // Kapso's sandbox phone-number webhooks deliver this directly, with
+  // the event type carried in headers rather than the body.
+  if (items.length === 0 && record.message && record.phone_number_id) {
+    items = [record as KapsoV2Item];
+  }
+
+  // Drop bot-side echoes. Kapso's phone-number webhooks fan inbound +
+  // outbound through the same `whatsapp.message.received` event for
+  // each phone number; without this filter, every reply Sendero sends
+  // bounces back as a fresh inbound, dispatches a new agent turn, and
+  // loops indefinitely. `message.kapso.direction === 'outbound'` is
+  // the canonical discriminator.
+  return items.filter(item => {
+    const msg = (item as { message?: { kapso?: { direction?: string } } }).message;
+    return msg?.kapso?.direction !== 'outbound';
+  });
 }
 
 function normalizeStatus(status: WhatsAppStatus, phoneNumberId: string): NormalizedStatusUpdate {
@@ -135,13 +197,32 @@ export function normalizeWebhookPayload(
   const identityChanges: NormalizedIdentityChange[] = [];
   const statusUpdates: NormalizedStatusUpdate[] = [];
 
-  // Kapso v2 batched envelope
-  if ('type' in body && body.type === 'whatsapp.message.received' && Array.isArray(body.data)) {
-    for (const item of body.data) {
+  // Kapso v2 envelopes. Two shapes observed in the wild:
+  //   1. Wrapped batch:    `{ type: 'whatsapp.message.received', data: [item, ...] | item }`
+  //   2. Flat per-message: `{ message, conversation?, contact?, phone_number_id, is_new_conversation? }`
+  // The flat shape is what Kapso actually delivers for sandbox phone-
+  // number-scoped webhooks (event type carried only in headers). Treat
+  // both as the same logical envelope by unwrapping into a list of
+  // items, then run one extraction loop.
+  const kapsoItems = collectKapsoV2Items(body);
+  if (kapsoItems.length > 0) {
+    for (const item of kapsoItems) {
+      if (!item?.message || !item.phone_number_id) continue;
+      const contact =
+        item.contact ??
+        (item.conversation
+          ? {
+              profile: { name: item.conversation.username ?? '' },
+              wa_id: item.conversation.phone_number,
+              business_scoped_user_id: item.conversation.business_scoped_user_id,
+              parent_business_scoped_user_id: item.conversation.parent_business_scoped_user_id,
+              username: item.conversation.username,
+            }
+          : undefined);
       // Prefer contact-derived identity when the envelope carries it
       // (Kapso enriches contacts with BSUID before forwarding).
-      const identity = item.contact
-        ? identityFromContact(item.contact, opts.defaultCountry)
+      const identity = contact
+        ? identityFromContact(contact, opts.defaultCountry)
         : identityFromMessage(item.message, opts.defaultCountry);
 
       const systemChange = normalizeSystemIdentityChange(

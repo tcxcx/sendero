@@ -247,4 +247,164 @@ describe('eventsToUnifiedMessages', () => {
     ]);
     expect(out[0]!.id).toBe('evt-0');
   });
+
+  test('handoff_requested: rendered as internal system_note from agent', () => {
+    const out = eventsToUnifiedMessages([
+      {
+        id: 'ho_h1_handoff_requested',
+        kind: 'handoff_requested',
+        handoffId: 'h1',
+        channel: 'whatsapp',
+        question: 'Can we waive the no-show fee on this booking?',
+        summary: 'Customer was rerouted by airline; arrived after check-in cutoff.',
+        createdAt: '2026-05-02T19:30:00Z',
+      },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.kind).toBe('system_note');
+    expect(out[0]!.direction).toBe('internal');
+    expect(out[0]!.channel).toBe('whatsapp');
+    expect(out[0]!.author.kind).toBe('agent');
+    expect(out[0]!.body).toContain('Asked the team');
+    expect(out[0]!.body).toContain('waive the no-show fee');
+    expect(out[0]!.body).toContain('rerouted by airline');
+  });
+
+  test('handoff_answered: rendered as outbound operator reply on the channel', () => {
+    const out = eventsToUnifiedMessages([
+      {
+        id: 'ho_h1_handoff_answered',
+        kind: 'handoff_answered',
+        handoffId: 'h1',
+        channel: 'whatsapp',
+        direction: 'outbound',
+        text: "Yes, we can waive it — I've credited the fare.",
+        answeredByUserId: 'user_op_1',
+        createdAt: '2026-05-02T19:33:00Z',
+      },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.kind).toBe('message');
+    expect(out[0]!.direction).toBe('outbound');
+    expect(out[0]!.channel).toBe('whatsapp');
+    expect(out[0]!.author.kind).toBe('operator');
+    expect(out[0]!.body).toBe("Yes, we can waive it — I've credited the fare.");
+  });
+
+  test('workflow_step_finished: rendered as internal system note with check/cross + label', () => {
+    const out = eventsToUnifiedMessages([
+      {
+        id: 'wf_run_1_search',
+        kind: 'workflow_step_finished',
+        workflowId: 'sendero.book_flight',
+        runId: 'run_1',
+        stepId: 'search',
+        stepKind: 'tool',
+        label: 'Search Duffel inventory',
+        ok: true,
+        startedAt: '2026-05-02T20:00:00Z',
+        finishedAt: '2026-05-02T20:00:03Z',
+        createdAt: '2026-05-02T20:00:03Z',
+      },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.kind).toBe('system_note');
+    expect(out[0]!.direction).toBe('internal');
+    expect(out[0]!.channel).toBe('internal');
+    expect(out[0]!.author.kind).toBe('agent');
+    expect(out[0]!.body).toContain('✓');
+    expect(out[0]!.body).toContain('Search Duffel inventory');
+    expect(out[0]!.body).toContain('sendero.book_flight');
+  });
+
+  test('workflow_step_finished: failed step renders with cross mark', () => {
+    const out = eventsToUnifiedMessages([
+      {
+        id: 'wf_run_1_eligibility',
+        kind: 'workflow_step_finished',
+        workflowId: 'sendero.book_flight',
+        runId: 'run_1',
+        stepId: 'eligibility',
+        stepKind: 'tool',
+        label: 'Verify travel documents',
+        ok: false,
+        startedAt: '2026-05-02T20:00:00Z',
+        finishedAt: '2026-05-02T20:00:02Z',
+        createdAt: '2026-05-02T20:00:02Z',
+      },
+    ]);
+    expect(out[0]!.body).toContain('✕');
+    expect(out[0]!.body).toContain('Verify travel documents');
+  });
+
+  test('workflow steps interleave chronologically with channel events', () => {
+    const out = eventsToUnifiedMessages([
+      {
+        id: 'wa_in',
+        kind: 'inbox_reply',
+        direction: 'inbound',
+        channel: 'whatsapp',
+        text: 'book me to Lima',
+        createdAt: '2026-05-02T20:00:00Z',
+      },
+      {
+        id: 'wf_run_1_search',
+        kind: 'workflow_step_finished',
+        workflowId: 'sendero.book_flight',
+        runId: 'run_1',
+        stepId: 'search',
+        stepKind: 'tool',
+        label: 'Search flights',
+        ok: true,
+        startedAt: '2026-05-02T20:00:01Z',
+        finishedAt: '2026-05-02T20:00:04Z',
+        createdAt: '2026-05-02T20:00:04Z',
+      },
+      {
+        id: 'wa_out',
+        kind: 'inbox_reply',
+        direction: 'outbound',
+        channel: 'whatsapp',
+        text: 'Three options on May 5; tap Hold cheapest.',
+        createdAt: '2026-05-02T20:00:05Z',
+      },
+    ]);
+    expect(out.map(m => m.id)).toEqual(['wa_in', 'wf_run_1_search', 'wa_out']);
+    expect(out[1]!.kind).toBe('system_note');
+  });
+
+  test('handoff lifecycle interleaves with channel events chronologically', () => {
+    const out = eventsToUnifiedMessages([
+      {
+        id: 'wa_in',
+        kind: 'inbox_reply',
+        direction: 'inbound',
+        channel: 'whatsapp',
+        text: 'Was reroute charged twice?',
+        createdAt: '2026-05-02T19:29:00Z',
+      },
+      {
+        id: 'ho_h1_handoff_requested',
+        kind: 'handoff_requested',
+        handoffId: 'h1',
+        channel: 'whatsapp',
+        question: 'Was the duplicate charge real or pending auth release?',
+        createdAt: '2026-05-02T19:30:00Z',
+      },
+      {
+        id: 'ho_h1_handoff_answered',
+        kind: 'handoff_answered',
+        handoffId: 'h1',
+        channel: 'whatsapp',
+        direction: 'outbound',
+        text: 'Pending auth — drops in 24h. No double-charge.',
+        createdAt: '2026-05-02T19:33:00Z',
+      },
+    ]);
+    expect(out.map(m => m.id)).toEqual([
+      'wa_in',
+      'ho_h1_handoff_requested',
+      'ho_h1_handoff_answered',
+    ]);
+  });
 });

@@ -88,6 +88,25 @@ export interface AgentOutput {
     kind: 'image' | 'link' | 'button_row' | 'itinerary_card' | 'trip_link';
     data: Record<string, unknown>;
   }>;
+  /**
+   * Tool-emitted share cards captured during the turn. Each entry is
+   * the canonical cross-channel `share` payload (title / body / bullets
+   * / CTAs / imageUrl) plus the originating tool name. Channel adapters
+   * pass these through `renderForX` → `sendChannelMessageX` so the
+   * traveler sees a native card / interactive buttons / list rather
+   * than the agent's stringified summary.
+   */
+  shareCards?: Array<{
+    toolName: string;
+    share: {
+      title: string;
+      body: string;
+      bullets?: string[];
+      primaryCta?: { label: string; kind: string };
+      secondaryCtas?: Array<{ label: string; kind: string }>;
+      imageUrl?: string;
+    };
+  }>;
   /** Tool-call trail for analytics + admin display. */
   trail: Array<{
     toolName: string;

@@ -69,7 +69,7 @@ export const KapsoWhatsAppPhoneNumber = z.object({
   display_phone_number: z.string().nullable().optional(),
   verified_name: z.string().nullable().optional(),
   customer_id: z.string().nullable().optional(),
-  status: z.string().optional(),
+  status: z.string().nullable().optional(),
   connected_at: z.string().nullable().optional(),
 });
 export type KapsoWhatsAppPhoneNumber = z.infer<typeof KapsoWhatsAppPhoneNumber>;
@@ -88,6 +88,7 @@ export const KapsoWebhookRegistration = z.object({
   payload_version: z.enum(['v1', 'v2']).default('v2'),
   /** Kapso-issued secret used to sign deliveries (HMAC-SHA256 hex). */
   secret: z.string().optional(),
+  secret_key: z.string().optional(),
   phone_number_id: z.string().nullable().optional(),
 });
 export type KapsoWebhookRegistration = z.infer<typeof KapsoWebhookRegistration>;
@@ -169,6 +170,8 @@ export const CreateWebhookRequest = z.object({
   buffer_enabled: z.boolean().optional(),
   buffer_window_seconds: z.number().int().min(1).max(60).optional(),
   max_buffer_size: z.number().int().min(1).max(100).optional(),
+  /** Optional caller-supplied signing secret for Kapso deliveries. */
+  secret_key: z.string().optional(),
   /** Required when scope === 'phone_number'. */
   phone_number_id: z.string().optional(),
 });

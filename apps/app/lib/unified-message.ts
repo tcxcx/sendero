@@ -170,6 +170,60 @@ function mapOneEvent(raw: unknown, idx: number): UnifiedMessage | null {
     };
   }
 
+  // Workflow step transition — appended by the agent-workflow-session
+  // runner's `onStep` hook so multi-step flows (book_flight, refund,
+  // group_trip, …) progress visibly in MetaInbox + trip inbox in real
+  // time. Mirrors Kapso's `execution events` log.
+  if (kind === 'workflow_step_finished') {
+    const stepLabel = pickString(r.label) ?? pickString(r.stepId) ?? 'step';
+    const stepKind = pickString(r.stepKind) ?? 'tool';
+    const ok = typeof r.ok === 'boolean' ? r.ok : true;
+    const wfId = pickString(r.workflowId);
+    const head = `${ok ? '✓' : '✕'} ${stepKind} · ${stepLabel}`;
+    const body = wfId ? `${head}  ⟶  ${wfId}` : head;
+    return {
+      id,
+      at,
+      channel: 'internal',
+      direction: 'internal',
+      kind: 'system_note',
+      author: { kind: 'agent', displayName: 'Sendero · workflow', initials: 'SW' },
+      body,
+    };
+  }
+
+  // Handoff lifecycle — agent escalation that pauses for an operator
+  // answer. Renders inline in MetaInbox / trip inbox so the operator
+  // sees the question alongside the rest of the conversation. The
+  // answer event is `direction: outbound` because it ends up sent to
+  // the traveler verbatim (or via reformulating turn).
+  if (kind === 'handoff_requested') {
+    const question = pickString(r.question) ?? text;
+    if (!question) return null;
+    const summary = pickString(r.summary);
+    return {
+      id,
+      at,
+      channel: channel ?? 'internal',
+      direction: 'internal',
+      kind: 'system_note',
+      author: { kind: 'agent', displayName: 'Sendero AI', initials: 'S' },
+      body: summary ? `Asked the team: ${question}\n\n${summary}` : `Asked the team: ${question}`,
+    };
+  }
+  if (kind === 'handoff_answered') {
+    if (!text) return null;
+    return {
+      id,
+      at,
+      channel: channel ?? 'internal',
+      direction: 'outbound',
+      kind: 'message',
+      author: { kind: 'operator', displayName: 'Operator', initials: 'OP' },
+      body: text,
+    };
+  }
+
   // Operator note (private from /sendero note <trip>) and explicit
   // system notes (legacy). Both render as internal-tagged messages.
   if (kind === 'operator_note' || kind === 'system_note') {

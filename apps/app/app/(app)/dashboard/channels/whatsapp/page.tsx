@@ -49,6 +49,7 @@ export default async function WhatsAppChannelPage() {
   });
 
   const hasMockPhoneNumber = isMetaMockPhoneNumber(install?.displayPhoneNumber);
+  const isSandbox = isSandboxMetadata(install?.metadata);
   const status: ChannelStatusKind = install
     ? hasMockPhoneNumber
       ? 'error'
@@ -59,7 +60,12 @@ export default async function WhatsAppChannelPage() {
       ? `${install.businessDisplayName} · ${install.displayPhoneNumber}`
       : install.displayPhoneNumber
     : null;
-  const health = install?.phoneNumberId ? await readWhatsappHealth(install.phoneNumberId) : null;
+  // Sandbox installs share a Kapso-owned number with no real Meta WABA
+  // behind it, so the live health probe (phone-access / messaging /
+  // webhook-verified) always fails. Skip it — UI renders a sandbox-
+  // specific state instead.
+  const health =
+    install?.phoneNumberId && !isSandbox ? await readWhatsappHealth(install.phoneNumberId) : null;
 
   async function probe() {
     'use server';
@@ -103,7 +109,7 @@ export default async function WhatsAppChannelPage() {
       }}
     >
       {status === 'active' && install ? (
-        <ConnectedView install={install} health={health} />
+        <ConnectedView install={install} health={health} isSandbox={isSandbox} />
       ) : (
         <DisconnectedView
           plan={plan}
@@ -126,20 +132,29 @@ export default async function WhatsAppChannelPage() {
 function ConnectedView({
   install,
   health,
+  isSandbox,
 }: {
   install: {
     displayPhoneNumber: string | null;
     businessDisplayName: string | null;
   };
   health: WhatsAppHealthSummary | null;
+  isSandbox: boolean;
 }) {
   return (
     <WhatsappConnectedPanel
       displayName={install.businessDisplayName}
       displayPhoneNumber={install.displayPhoneNumber}
+      isSandbox={isSandbox}
       health={health}
     />
   );
+}
+
+function isSandboxMetadata(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+  const record = metadata as Record<string, unknown>;
+  return record.sandbox === true || record.source === 'provider_sandbox';
 }
 
 function DisconnectedView({
@@ -182,8 +197,8 @@ function DisconnectedView({
           className="t-body ink-70"
           style={{ marginTop: 8, fontSize: 13, lineHeight: 1.55, maxWidth: '64ch' }}
         >
-          The 5-step wizard takes about 5 minutes. Claim a number, verify ownership, brand the
-          experience, send a test message, and go live.
+          Open the hosted WhatsApp setup, finish the business connection, then send a test message.
+          Sendero activates the channel after that.
         </p>
         <Link
           href="/dashboard/channels/whatsapp/connect"

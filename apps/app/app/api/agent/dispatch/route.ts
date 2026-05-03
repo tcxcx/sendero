@@ -52,6 +52,7 @@ import { appendTripEvent, type TripEvent } from '@/lib/trip-events';
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
+import { buildStartWorkflowTool } from '@/lib/start-workflow-tool';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -99,6 +100,13 @@ const BodySchema = z.object({
   /** Optional — adapters pass their native message id for idempotency. */
   turnId: z.string().optional(),
   attachments: z.array(MediaAttachmentSchema).max(MAX_ATTACHMENTS).optional(),
+  /** ChannelIdentity row id — set by channel adapters (WhatsApp/Slack)
+   *  so internal tools like `request_human_handoff` can anchor escalation
+   *  records to the originating traveler. */
+  channelIdentityId: z.string().optional(),
+  /** Traveler E.164 phone — only the channel adapter knows this; falls
+   *  back to ctx-derived lookups when absent. */
+  travelerPhone: z.string().optional(),
 });
 
 // Persona resolution moved to apps/app/lib/agent-persona.ts. Resolves
@@ -264,10 +272,48 @@ export async function POST(req: NextRequest) {
   // Both filters happen pre-prompt, so prompt injection can't sneak
   // the model into calling something it shouldn't see.
   const grantedScopes = apiKey?.scopes ?? (['*'] as const);
-  const publicTools = filterPublicTools(toolList);
-  const scopedTools = filterToolsByScopes(publicTools, grantedScopes);
+  // Internal tools (channel provisioning, `request_human_handoff`, etc.)
+  // are gated to trusted callers: shared-secret webhooks (no apiKey)
+  // and full-scope (`*`) keys. External user-minted keys see the
+  // public catalog only so prompt-injection on a third-party MCP
+  // client can't escalate to operators.
+  const allowInternal = !apiKey || grantedScopes.includes('*');
+  const surfacedTools = allowInternal ? toolList : filterPublicTools(toolList);
+  // Append `start_workflow` for trusted internal callers when the
+  // turn is bound to a channel identity (i.e. a traveler thread, not
+  // an operator agent-chat turn). The tool persists Session state per
+  // traveler so multi-step flows can pause + auto-resume on the next
+  // inbound. Lives in apps/app to keep persistence out of the
+  // workspace-level tools package.
+  const channelToolList =
+    allowInternal && body.channelIdentityId
+      ? [
+          ...surfacedTools,
+          buildStartWorkflowTool({
+            tenantId: body.tenantId,
+            channelIdentityId: body.channelIdentityId,
+            channel: body.channel === 'whatsapp' || body.channel === 'slack' ? body.channel : 'web',
+            userId: body.userId,
+            ...(body.tripId ? { tripId: body.tripId } : {}),
+            innerToolCtx: {
+              traveler: {
+                userId: body.userId,
+                tenantId: body.tenantId,
+                ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
+              },
+              channelIdentityId: body.channelIdentityId,
+            },
+          }),
+        ]
+      : surfacedTools;
+  const scopedTools = filterToolsByScopes(channelToolList, grantedScopes);
   const tools = buildAiSdkTools(scopedTools, {
-    traveler: { userId: body.userId, tenantId: body.tenantId },
+    traveler: {
+      userId: body.userId,
+      tenantId: body.tenantId,
+      ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
+    },
+    ...(body.channelIdentityId ? { channelIdentityId: body.channelIdentityId } : {}),
     // Caller identity flows from the API key resolver into every tool
     // handler via ctx.caller. Tools that gate on scope or key type
     // (e.g., confirm_booking's markup-override gate) read from here so
@@ -506,6 +552,7 @@ export async function POST(req: NextRequest) {
     trail: result.trail,
     latencyMs: result.latencyMs,
     billed: result.billed,
+    ...(result.shareCards && result.shareCards.length > 0 ? { shareCards: result.shareCards } : {}),
   });
   return new NextResponse(successBody, {
     status: 200,

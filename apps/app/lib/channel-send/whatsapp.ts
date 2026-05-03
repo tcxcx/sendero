@@ -37,6 +37,12 @@ export interface SendWhatsAppArgs {
    * unset, falls back to the global `WHATSAPP_ACCESS_TOKEN` env.
    */
   accessToken?: string;
+  /**
+   * Override the WhatsApp Cloud API base URL. Use the Kapso Meta proxy
+   * (`https://api.kapso.ai/meta/whatsapp/v24.0`) for sandbox / Kapso-
+   * mediated installs; default falls back to `WHATSAPP_API_BASE_URL`.
+   */
+  apiBaseUrl?: string;
 }
 
 export type SendWhatsAppResult =
@@ -63,7 +69,7 @@ export async function sendChannelMessageWhatsApp(
   const client = new WhatsAppClient({
     phoneNumberId: args.install.phoneNumberId,
     accessToken,
-    apiBaseUrl: env.whatsappApiBaseUrl() ?? undefined,
+    apiBaseUrl: args.apiBaseUrl ?? env.whatsappApiBaseUrl() ?? undefined,
   });
 
   // Stamp the recipient onto the rendered payload. The renderer leaves

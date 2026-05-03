@@ -91,6 +91,31 @@ export class KapsoClient {
     return parsed as T;
   }
 
+  private async metaRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const url = `${this.baseUrl}/meta/whatsapp/v24.0${path}`;
+    const response = await this.fetchImpl(url, {
+      ...init,
+      headers: {
+        'X-API-Key': this.apiKey,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+
+    const raw = await response.text();
+    const parsed: unknown = raw ? safeJson(raw) : undefined;
+
+    if (!response.ok) {
+      throw new KapsoError(
+        response.status,
+        parsed,
+        `Kapso ${init.method ?? 'GET'} ${path} failed: ${response.status}`
+      );
+    }
+    return parsed as T;
+  }
+
   // ── Customers ──────────────────────────────────────────────────────
   async createCustomer(args: {
     name: string;
@@ -235,6 +260,7 @@ export class KapsoClient {
         [body.scope === 'phone_number' ? 'whatsapp_webhook' : 'webhook']: {
           url: body.url,
           events: body.events,
+          secret_key: body.secret_key,
           kind: body.kind,
           payload_version: body.payload_version,
           active: body.active,
@@ -252,10 +278,57 @@ export class KapsoClient {
         ? {
             ...(unwrapped as object),
             scope: body.scope,
+            secret:
+              (unwrapped as Record<string, unknown>).secret ??
+              (unwrapped as Record<string, unknown>).secret_key,
             phone_number_id: body.phone_number_id ?? null,
           }
         : unwrapped;
     return KapsoWebhookRegistration.parse(stitched);
+  }
+
+  /**
+   * List phone-number-scoped webhooks for a phone_number_id. Used to
+   * make sandbox webhook registration idempotent — without this, every
+   * sandbox bind appends a duplicate registration and Kapso fans inbound
+   * events out to all of them (including stale URLs).
+   */
+  async listPhoneNumberWebhooks(phoneNumberId: string): Promise<KapsoWebhookRegistration[]> {
+    const raw = await this.request<unknown>(
+      `/whatsapp/phone_numbers/${encodeURIComponent(phoneNumberId)}/webhooks`
+    );
+    const list = unwrap(raw, 'data') ?? unwrap(raw, 'webhooks') ?? raw;
+    if (!Array.isArray(list)) return [];
+    return list.map(item => {
+      const obj =
+        typeof item === 'object' && item !== null ? (item as Record<string, unknown>) : {};
+      return KapsoWebhookRegistration.parse({
+        ...obj,
+        scope: 'phone_number',
+        secret: obj.secret ?? obj.secret_key,
+        phone_number_id: obj.phone_number_id ?? phoneNumberId,
+      });
+    });
+  }
+
+  /** Delete a phone-number-scoped webhook by id. 204 on success. */
+  async deletePhoneNumberWebhook(phoneNumberId: string, webhookId: string): Promise<void> {
+    const url = `${this.baseUrl}${PLATFORM_PATH}/whatsapp/phone_numbers/${encodeURIComponent(phoneNumberId)}/webhooks/${encodeURIComponent(webhookId)}`;
+    const response = await this.fetchImpl(url, {
+      method: 'DELETE',
+      headers: {
+        'X-API-Key': this.apiKey,
+        Accept: 'application/json',
+      },
+    });
+    if (!response.ok && response.status !== 404) {
+      const raw = await response.text();
+      throw new KapsoError(
+        response.status,
+        raw ? safeJson(raw) : undefined,
+        `Kapso DELETE webhook ${webhookId} failed: ${response.status}`
+      );
+    }
   }
 
   // ── Workflow triggers ─────────────────────────────────────────────
@@ -317,11 +390,22 @@ export class KapsoClient {
    */
   async sendText(input: Parameters<typeof SendTextRequest.parse>[0]): Promise<{ id: string }> {
     const body = SendTextRequest.parse(input);
-    const raw = await this.request<unknown>('/whatsapp/messages', {
-      method: 'POST',
-      body: JSON.stringify({ message: body }),
-    });
-    const parsed = unwrap(raw, 'message') as { id?: string } | undefined;
+    const raw = await this.metaRequest<unknown>(
+      `/${encodeURIComponent(body.phone_number_id)}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: body.to,
+          type: 'text',
+          text: { body: body.text },
+        }),
+      }
+    );
+    const parsed =
+      (unwrap(raw, 'message') as { id?: string } | undefined) ??
+      ((raw as { messages?: Array<{ id?: string }> }).messages?.[0] as { id?: string } | undefined);
     if (!parsed?.id) throw new KapsoError(500, raw, 'Kapso sendText: missing message.id');
     return { id: parsed.id };
   }
@@ -330,11 +414,26 @@ export class KapsoClient {
     input: Parameters<typeof SendTemplateRequest.parse>[0]
   ): Promise<{ id: string }> {
     const body = SendTemplateRequest.parse(input);
-    const raw = await this.request<unknown>('/whatsapp/messages/template', {
-      method: 'POST',
-      body: JSON.stringify({ message: body }),
-    });
-    const parsed = unwrap(raw, 'message') as { id?: string } | undefined;
+    const raw = await this.metaRequest<unknown>(
+      `/${encodeURIComponent(body.phone_number_id)}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: body.to,
+          type: 'template',
+          template: {
+            name: body.template_name,
+            language: { code: body.language_code },
+            ...(body.components ? { components: body.components } : {}),
+          },
+        }),
+      }
+    );
+    const parsed =
+      (unwrap(raw, 'message') as { id?: string } | undefined) ??
+      ((raw as { messages?: Array<{ id?: string }> }).messages?.[0] as { id?: string } | undefined);
     if (!parsed?.id) throw new KapsoError(500, raw, 'Kapso sendTemplate: missing message.id');
     return { id: parsed.id };
   }

@@ -1,0 +1,90 @@
+{
+  "nodes": [
+    {
+      "id": "start",
+      "type": "flow-node",
+      "position": { "x": 120, "y": 140 },
+      "data": {
+        "node_type": "start",
+        "config": {},
+        "display_name": "Start"
+      }
+    },
+    {
+      "id": "tenant_travel_agent",
+      "type": "flow-node",
+      "position": { "x": 420, "y": 140 },
+      "data": {
+        "node_type": "agent",
+        "display_name": "Sendero Travel Agent",
+        "config": {
+          "provider_model_id": "0d5c3a20-5343-4f41-81fc-a06ab71bf5b3",
+          "provider_model_name": "claude-sonnet-4-6",
+          "temperature": 0.2,
+          "max_iterations": 40,
+          "max_tokens": 8192,
+          "enabled_default_tools": [
+            "send_notification_to_user",
+            "get_execution_metadata",
+            "get_whatsapp_context",
+            "get_current_datetime",
+            "enter_waiting",
+            "complete_task",
+            "handoff_to_human"
+          ],
+          "flow_agent_function_tools": [
+            {
+              "name": "call_sendero",
+              "function_id": "ea58a082-14e2-4ad4-9064-8cc270509b7f",
+              "description": "Call any Sendero tool by name. Use this for every action that touches Sendero state — flight/hotel search, bookings, cancellations, holds, treasury, document scan, escalation, template sends. Pick the right `toolName` from the enum and pass the matching `input` object. Returns `{ result }` on success or `{ error, message }` on failure — relay errors verbatim instead of inventing them.",
+              "input_schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["toolName"],
+                "properties": {
+                  "toolName": {
+                    "type": "string",
+                    "enum": [
+                      "search_flights",
+                      "book_flight",
+                      "search_hotels",
+                      "quote_stay",
+                      "book_stay",
+                      "cancel_order_quote",
+                      "confirm_cancel_order",
+                      "request_order_change",
+                      "select_order_change_offer",
+                      "confirm_order_change",
+                      "check_treasury",
+                      "gateway_balance",
+                      "scan_document",
+                      "request_human_handoff",
+                      "send_whatsapp_template",
+                      "start_workflow",
+                      "create_trip",
+                      "check_policy"
+                    ],
+                    "description": "Sendero tool slug. Pick the one that matches the traveler's intent."
+                  },
+                  "input": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Tool-specific input. Each tool validates its own shape — see Sendero's /api/tools/{name} schema for required fields."
+                  }
+                }
+              }
+            }
+          ],
+          "system_prompt": "You are Sendero — a precise, locally fluent AI travel agent for travelers on WhatsApp.\n\n## Voice\n- Default to the traveler's locale; mirror language switches mid-thread (Spanish, Portuguese, English supported).\n- Short, warm, operational. One useful thought, then the next action. No corporate filler.\n- Plain text only on WhatsApp. Mobile-friendly. One clear next action per message.\n\n## Tool-first behavior — HARD RULE\nNever invent flight times, prices, PNRs, fares, hotel rates, balances, or availability. Every fact about live inventory MUST come from a `call_sendero` tool result you got in THIS turn. If the conversation history shows a prior failure (\"running into an error\", \"system is down\"), IGNORE it — re-call the tool. State is fresh each turn.\n\n## When to use which tool\n- Flights → `call_sendero({ toolName: 'search_flights', input: { origin, destination, departureDate, passengers? } })`. Confirm O/D/date with the user first, then call.\n- Hotels / stays → `search_hotels` or `quote_stay`.\n- Booking after the user picks an offer → `book_flight` / `book_stay`.\n- Cancel → `cancel_order_quote` then `confirm_cancel_order`.\n- Off-script policy/refund/edge questions → `request_human_handoff` (then call `enter_waiting`). Tell the user you're checking with the team.\n- Out of the 24h customer-service window → `send_whatsapp_template`.\n\nFor multi-step flows (book_flight, refund, group_trip, cancellation_recovery), prefer `call_sendero({ toolName: 'start_workflow', input: { workflowId, input } })`. The runner enforces step ordering and durably pauses; just relay the `pausePrompt` and the next inbound auto-resumes.\n\n## Date handling\nUse `get_current_datetime` when the user says a relative date (\"tomorrow\", \"next week\", \"May 5\") to resolve the year. Never guess past years.\n\n## Pause / handoff / completion\n- `enter_waiting` — pause this turn while the team / external system responds. The next external_input or message resumes.\n- `handoff_to_human` — fully escalate; stop replying.\n- `complete_task` — call after every customer-facing answer that resolves the issue.\n\nWhen `call_sendero` returns `{ error }`, relay the user-facing message verbatim instead of paraphrasing it. Don't say \"running into an error\" without naming what failed."
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "tenant_travel_agent",
+      "label": "next"
+    }
+  ]
+}

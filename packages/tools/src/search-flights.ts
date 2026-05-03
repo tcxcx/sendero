@@ -172,7 +172,14 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
         airlineCreditIds: input.airlineCreditIds as FlightSearchParams['airlineCreditIds'],
         customerUserId,
       });
-      return { offers: offers.slice(0, 3) };
+      const top = offers.slice(0, 3);
+      const share = buildSearchFlightsShare({
+        origin: input.origin,
+        destination: input.destination,
+        departureDate: input.departureDate,
+        offers: top,
+      });
+      return share ? { offers: top, share } : { offers: top };
     } catch (err) {
       // Duffel can throw bare Error('') from network failures; surface
       // a contextual message so smoke probes + tool-audit tests show
@@ -185,3 +192,66 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
     }
   },
 };
+
+interface SearchFlightShareInput {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  offers: Array<{
+    id?: string;
+    airline?: string;
+    airlineIataCode?: string;
+    price?: string;
+    currency?: string;
+    departure?: string;
+    arrival?: string;
+    stops?: number;
+  }>;
+}
+
+/**
+ * Build the cross-channel share card for a flight-search result. Top
+ * 3 offers as bullets, cheapest stamped with the price headline,
+ * "Hold cheapest" as the primary CTA so a WhatsApp interactive card
+ * can wire that to `select_offer`. Returns null when there's nothing
+ * to surface (no offers / malformed result). Reads the flat offer
+ * shape that `@sendero/duffel.searchFlights` returns (not the raw
+ * Duffel API envelope).
+ */
+function buildSearchFlightsShare(args: SearchFlightShareInput): {
+  title: string;
+  body: string;
+  bullets: string[];
+  primaryCta: { label: string; kind: 'select_offer' };
+} | null {
+  if (args.offers.length === 0) return null;
+  const lines = args.offers.map(offer => {
+    const carrier = offer.airline ?? offer.airlineIataCode ?? 'Unknown';
+    const dep = offer.departure ? offer.departure.slice(11, 16) : null;
+    const arr = offer.arrival ? offer.arrival.slice(11, 16) : null;
+    const time = dep && arr ? ` · ${dep}–${arr}` : '';
+    const price = offer.price && offer.currency ? ` · ${offer.currency} ${offer.price}` : '';
+    const stops =
+      typeof offer.stops === 'number'
+        ? offer.stops === 0
+          ? ' · nonstop'
+          : ` · ${offer.stops} stop${offer.stops === 1 ? '' : 's'}`
+        : '';
+    return `${carrier}${time}${stops}${price}`;
+  });
+  const cheapest = args.offers.reduce<{ amt: number; ccy: string } | null>((acc, o) => {
+    const n = Number(o.price);
+    if (!Number.isFinite(n) || !o.currency) return acc;
+    if (!acc || n < acc.amt) return { amt: n, ccy: o.currency };
+    return acc;
+  }, null);
+  const head = cheapest
+    ? `${args.offers.length} options ${args.origin}→${args.destination} on ${args.departureDate}, from ${cheapest.ccy} ${cheapest.amt}`
+    : `${args.offers.length} options ${args.origin}→${args.destination} on ${args.departureDate}`;
+  return {
+    title: `Flights ${args.origin} → ${args.destination}`,
+    body: head,
+    bullets: lines,
+    primaryCta: { label: 'Hold cheapest', kind: 'select_offer' },
+  };
+}
