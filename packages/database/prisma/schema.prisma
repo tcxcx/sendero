@@ -359,6 +359,7 @@ model User {
   chatSessions           ChatSession[]         @relation("ChatSessionUser")
   handoffsAnswered       ChannelHandoff[]      @relation("ChannelHandoffAnsweredBy")
   gatewaySigner          UserGatewaySigner?
+  moonpayTopUps          MoonPayTopUp[]
 
   @@index([createdAt])
   @@map("users")
@@ -2111,14 +2112,14 @@ model SupportTurn {
 /// is composed by the operator in the dashboard; the resolve route
 /// pushes it back to the originating channel (today: WhatsApp).
 model ChannelHandoff {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   tenantId          String
   /// Optional trip context — when set, the trip inbox renders this
   /// handoff inline alongside other channel events.
   tripId            String?
   /// ChannelIdentity that initiated the escalation (BSUID-keyed for
   /// WhatsApp). Drives recipient lookup on resolve.
-  channelIdentityId String   @db.Uuid
+  channelIdentityId String    @db.Uuid
   channel           String
   /// Inbound message id (wamid for WhatsApp) that triggered escalation.
   inboundMessageId  String?
@@ -2127,7 +2128,7 @@ model ChannelHandoff {
   /// Optional context summary the agent attached when escalating.
   summary           String?
   /// pending | answered | closed
-  status            String   @default("pending")
+  status            String    @default("pending")
   /// Liveblocks room id used for operator notifications + collaboration.
   liveblocksRoomId  String
   /// Operator-composed answer (delivered to the traveler verbatim or
@@ -2136,8 +2137,8 @@ model ChannelHandoff {
   answeredByUserId  String?
   answeredAt        DateTime?
   closedAt          DateTime?
-  createdAt         DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime @updatedAt @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(6)
 
   tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   trip            Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
@@ -2762,4 +2763,82 @@ model SecurityAlert {
   @@index([tenantId, createdAt])
   @@index([kind, severity, createdAt])
   @@map("security_alerts")
+}
+
+/// MoonPay buy-widget transaction state. One row per checkout MoonPay
+/// reports via webhook. `transaction.created` inserts; `transaction.updated`
+/// mutates `status` + `failureReason`. Indexed by user for `/me/wallet`
+/// "recent top-ups" UI; `(moonpayTransactionId)` UNIQUE for idempotent
+/// webhook replay.
+///
+/// Status maps directly to MoonPay's lifecycle: `pending → waitingPayment
+/// → waitingAuthorization → completed`, or `failed` / `abandoned` as
+/// terminal states. Sandbox transactions never auto-confirm — the test
+/// flow always completes synthetically after a brief delay.
+model MoonPayTopUp {
+  id                    String    @id @default(cuid())
+  userId                String    @map("user_id")
+  /// MoonPay transaction id (UUID). UNIQUE so webhook handlers can upsert.
+  moonpayTransactionId  String    @unique @map("moonpay_transaction_id")
+  /// MoonPay customer id (UUID). Helps cross-reference KYC events.
+  moonpayCustomerId     String?   @map("moonpay_customer_id")
+  /// USD amount the buyer agreed to spend.
+  baseCurrencyAmount    Decimal   @map("base_currency_amount") @db.Decimal(18, 2)
+  baseCurrencyCode      String    @default("usd") @map("base_currency_code")
+  /// Crypto received — populated as MoonPay updates the txn.
+  quoteCurrencyAmount   Decimal?  @map("quote_currency_amount") @db.Decimal(38, 18)
+  /// 'usdc_base' | 'usdc_sol' | 'usdc_polygon' etc.
+  cryptoCurrencyCode    String    @map("crypto_currency_code")
+  /// Destination wallet (the traveler's evmAddress or solanaAddress).
+  walletAddress         String    @map("wallet_address")
+  /// 'pending' | 'waitingPayment' | 'waitingAuthorization' | 'completed' | 'failed' | 'abandoned'
+  status                String    @default("pending")
+  failureReason         String?   @map("failure_reason")
+  /// On-chain settlement hash once MoonPay broadcasts.
+  cryptoTransactionHash String?   @map("crypto_transaction_hash")
+  /// Free-form additional event/payload context.
+  metadata              Json?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  completedAt           DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("moonpay_topups")
+}
+
+/// Append-only audit row for every inbound MoonPay webhook delivery.
+///
+/// Mirrors `WhatsAppWebhookEvent`: post-200 insert via `after()` so audit
+/// can't extend the ack window. Captures sig validity + dedup outcome +
+/// dispatch result so ops can answer "did event X fire and did we handle
+/// it correctly" without grepping logs.
+///
+/// `userId` / `topUpId` are nullable: many event types (sell, vendor,
+/// virtual-account, account-reviewed) aren't tied to a specific Sendero
+/// user. The `eventType` column groups all events for monitoring.
+model MoonPayWebhookEvent {
+  id             String   @id @default(cuid())
+  userId         String?  @map("user_id")
+  topUpId        String?  @map("top_up_id")
+  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  /// MoonPay event id (UUID) — used for replay dedup. UNIQUE so a
+  /// duplicate delivery can't double-write the audit row.
+  moonpayEventId String   @unique @map("moonpay_event_id")
+  /// 'transaction_updated' | 'transaction_failed' | 'kyc_completed' | …
+  eventType      String   @map("event_type")
+  signatureValid Boolean  @map("signature_valid")
+  replayWindowOk Boolean? @map("replay_window_ok")
+  /// 'processed' | 'skipped' | 'failed' | 'duplicate'
+  dispatchStatus String   @default("processed") @map("dispatch_status")
+  dispatchError  String?  @map("dispatch_error")
+  durationMs     Int?     @map("duration_ms")
+  rawPayload     Json     @map("raw_payload")
+
+  @@index([userId, receivedAt(sort: Desc)])
+  @@index([eventType, receivedAt(sort: Desc)])
+  @@index([dispatchStatus, receivedAt(sort: Desc)])
+  @@map("moonpay_webhook_events")
 }
