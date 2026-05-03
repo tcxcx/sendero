@@ -11,7 +11,10 @@
     { "path": "/api/cron/provision-gateway", "schedule": "*/30 * * * *" },
     { "path": "/api/cron/reconcile-booking-holds", "schedule": "*/10 * * * *" },
     { "path": "/api/cron/reconcile-gateway-transfers", "schedule": "*/10 * * * *" },
-    { "path": "/api/cron/reconcile-wallet-balances", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/reconcile-wallet-balances", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/trip-checkin-reminder", "schedule": "0 * * * *" },
+    { "path": "/api/cron/trip-arrival-playbook", "schedule": "*/30 * * * *" },
+    { "path": "/api/cron/post-trip-feedback", "schedule": "0 * * * *" }
   ],
   "ignoreCommand": "bash -c '[[ \"$VERCEL_GIT_COMMIT_REF\" == \"main\" || \"$VERCEL_GIT_COMMIT_REF\" == \"development\" ]] && exec npx turbo-ignore @sendero/app; exit 0'"
 }
