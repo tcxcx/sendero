@@ -100,6 +100,84 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+/**
+ * Extract a sensible list-header from the body's first non-empty line
+ * AND return the body with that line removed so the card doesn't
+ * render it twice. Strips markdown asterisks (Meta renders the header
+ * bold automatically; literal asterisks would show up).
+ *
+ * Returns null when the body has no first line worth lifting.
+ */
+function deriveHeaderFromBody(
+  body: string
+): { headerText: string; bodyWithoutHeader: string } | null {
+  const lines = body.split('\n');
+  const firstNonEmptyIdx = lines.findIndex(l => l.trim().length > 0);
+  if (firstNonEmptyIdx === -1) return null;
+  const headerSource = lines[firstNonEmptyIdx]
+    .replace(/\*+/g, '')
+    .replace(/:\s*$/, '')
+    .trim();
+  if (!headerSource) return null;
+  // Drop the lifted line plus any blank lines immediately after it,
+  // so the body that follows starts at the next meaningful content.
+  let nextIdx = firstNonEmptyIdx + 1;
+  while (nextIdx < lines.length && lines[nextIdx].trim().length === 0) nextIdx++;
+  const bodyWithoutHeader = lines.slice(nextIdx).join('\n').trim();
+  return {
+    headerText: headerSource,
+    bodyWithoutHeader: bodyWithoutHeader || ' ',
+  };
+}
+
+/**
+ * Common carrier-name compaction map. Run as a fallback for over-
+ * length list-row titles before truncation: agents often produce
+ * "Duffel Airways · USD 69.50" (26 chars) when the persona asked for
+ * "Duffel · $69.50" (15 chars). Doing the rewrite in the handler
+ * prevents the agent's mistake from manifesting as a "USD 69…" cut
+ * that hides the price.
+ */
+const CARRIER_ABBREVIATIONS: Array<[RegExp, string]> = [
+  [/\bAerolíneas Argentinas\b/g, 'Aerolíneas AR'],
+  [/\bAmerican Airlines\b/g, 'AA'],
+  [/\bBritish Airways\b/g, 'BA'],
+  [/\bDuffel Airways\b/g, 'Duffel'],
+  [/\bIberia Líneas Aéreas\b/g, 'Iberia'],
+  [/\bLATAM Airlines\b/g, 'LATAM'],
+  [/\bLufthansa\b/g, 'LH'],
+  [/\bAir Canada\b/g, 'AC'],
+  [/\bAir France\b/g, 'AF'],
+  [/\bUnited Airlines\b/g, 'UA'],
+  [/\bDelta Air Lines\b/g, 'Delta'],
+  [/\bJetBlue Airways\b/g, 'JetBlue'],
+  [/\bSouthwest Airlines\b/g, 'Southwest'],
+  [/\bKLM\b/g, 'KLM'],
+  [/\bRyanair\b/g, 'Ryanair'],
+  [/\bEasyJet\b/g, 'EasyJet'],
+];
+
+/**
+ * Compact a list-row title that's too long for Meta's 24-char cap.
+ * Order of operations:
+ *   1. Replace "USD " currency word with "$" sign (saves 3 chars).
+ *   2. Apply carrier abbreviation map (Duffel Airways → Duffel etc.).
+ *   3. Tidy double spaces / trailing punctuation.
+ *   4. Final fallback: ellipsis truncation.
+ */
+function compactListTitle(title: string, maxLen: number): string {
+  if (title.length <= maxLen) return title;
+  let out = title.replace(/\bUSD\s+/g, '$').replace(/\bUS\$\s*/g, '$');
+  if (out.length <= maxLen) return out;
+  for (const [pattern, short] of CARRIER_ABBREVIATIONS) {
+    out = out.replace(pattern, short);
+    if (out.length <= maxLen) break;
+  }
+  out = out.replace(/\s{2,}/g, ' ').trim();
+  if (out.length <= maxLen) return out;
+  return truncate(out, maxLen);
+}
+
 const sendInteractiveListInput = z.object({
   body: z.string().min(1).max(1024).describe('Message body shown above the open-list button.'),
   buttonText: z
@@ -112,13 +190,21 @@ const sendInteractiveListInput = z.object({
     .min(1)
     .max(10)
     .describe('Sections of selectable rows. Meta caps at 10 sections × 10 rows.'),
-  /** Lists only support text headers (no media — Meta restriction). */
+  /**
+   * Strongly recommended. Lists only support text headers (Meta
+   * doesn't accept image/video headers on type=list — use buttons
+   * for that). Optional in the schema because the handler auto-
+   * derives one from the first line of `body` when omitted, which
+   * is more graceful than rejecting the whole call.
+   */
   headerText: z
     .string()
     .min(1)
     .max(60)
     .optional()
-    .describe('Optional bold text title at the top of the list (max 60 chars). Lists do NOT support image/video headers — use buttons for that.'),
+    .describe(
+      'Bold text title at the top of the list (max 60 chars). Lists DO NOT support image/video headers; use plain text describing the list (e.g. "✈️ EZE → LIM · 6 may"). For image headers, use `send_interactive_buttons` instead. If omitted, the first line of `body` is auto-extracted.'
+    ),
   footer: z
     .string()
     .min(1)
@@ -237,7 +323,7 @@ export const sendInteractiveListTool: ToolDef<
   name: 'send_interactive_list',
   internal: true,
   description:
-    "Send a WhatsApp scrollable list of selectable rows — far better UX than typing \"1\" / \"2\" / \"3\" for offer selection. Use for: flight/hotel offer lists, restaurant shortlists, time-slot pickers, multi-passenger picks, group-trip seat lists. Each row has an `id` Sendero reads on the next inbound. Hard limit: 10 sections × 10 rows, title ≤ 24 chars, description ≤ 72 chars.",
+    "Send a WhatsApp scrollable list of selectable rows — far better UX than typing \"1\" / \"2\" / \"3\" for offer selection. Use for: flight/hotel offer lists, restaurant shortlists, time-slot pickers, multi-passenger picks, group-trip seat lists. Each row has an `id` Sendero reads on the next inbound. REQUIRED: `headerText` (bold title at top, ≤ 60 chars) — lists without a header look naked. Hard limit: 10 sections × 10 rows, title ≤ 24 chars, description ≤ 72 chars. Footer is auto-defaulted to brand text when omitted.",
   inputSchema: sendInteractiveListInput,
   jsonSchema: {
     type: 'object',
@@ -278,9 +364,10 @@ export const sendInteractiveListTool: ToolDef<
   },
   async handler(input, ctx) {
     const { client, recipient } = await resolveOutboundClient(ctx, input.toE164);
-    // Truncate title/description down to Meta's hard limits. Agents
-    // routinely miscount Unicode width — silently shortening produces
-    // a usable list instead of failing the whole call.
+    // Truncate title/description down to Meta's hard limits. Row
+    // titles get smart compaction first (USD → $, carrier abbrevs)
+    // so prices don't get cut mid-number when the agent uses a long
+    // format like "Duffel Airways · USD 69.50" (26 chars > 24 cap).
     const sections = (input.sections as Array<{
       title: string;
       rows: Array<{ id: string; title: string; description?: string }>;
@@ -288,28 +375,41 @@ export const sendInteractiveListTool: ToolDef<
       title: truncate(s.title, META_LIST_TITLE_MAX),
       rows: s.rows.map(r => ({
         id: r.id,
-        title: truncate(r.title, META_LIST_TITLE_MAX),
+        title: compactListTitle(r.title, META_LIST_TITLE_MAX),
         ...(r.description
           ? { description: truncate(r.description, META_LIST_DESCRIPTION_MAX) }
           : {}),
       })),
     }));
-    const headerText = input.headerText
-      ? truncate(input.headerText, META_HEADER_TEXT_MAX)
-      : undefined;
+    // Auto-derive a header from the first non-empty line of body
+    // when the agent omits one, AND strip that line from the body so
+    // the rendered card doesn't show the same line twice. Lists
+    // without headers look naked; forcing a 400 retry makes the agent
+    // panic and fall back to text prose. Strip markdown asterisks.
+    const explicitHeader = input.headerText?.trim();
+    let bodyText = input.body;
+    let headerText: string;
+    if (explicitHeader) {
+      headerText = truncate(explicitHeader, META_HEADER_TEXT_MAX);
+    } else {
+      const derived = deriveHeaderFromBody(input.body);
+      if (derived) {
+        headerText = truncate(derived.headerText, META_HEADER_TEXT_MAX);
+        bodyText = derived.bodyWithoutHeader;
+      } else {
+        headerText = 'Selecciona una opción';
+      }
+    }
     // Default footer keeps brand presence even when the agent forgets
     // to pass one. The agent can override with anything more specific
     // (hold expiry, traveler name, etc.).
     const footer = truncate(input.footer ?? DEFAULT_BRAND_FOOTER, META_FOOTER_TEXT_MAX);
     const result = (await client.sendListMessage(
       recipient,
-      truncate(input.body, META_INTERACTIVE_BODY_MAX),
+      truncate(bodyText, META_INTERACTIVE_BODY_MAX),
       truncate(input.buttonText, META_BUTTON_TITLE_MAX),
       sections,
-      {
-        ...(headerText ? { headerText } : {}),
-        footer,
-      }
+      { headerText, footer }
     )) as { messages?: Array<{ id?: string }> };
     return { ok: true as const, recipient, ...wamidFrom(result) };
   },
