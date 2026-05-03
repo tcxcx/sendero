@@ -787,8 +787,9 @@ async function markReadAndTyping(msg: NormalizedInboundMessage): Promise<void> {
  * — anything substantive (e.g. "hola, busco vuelo a Lima") flows
  * through the agent so the traveler's actual request is handled.
  */
+// biome-ignore lint/suspicious/noMisleadingCharacterClass: emoji ZWJ sequences (🙋‍♂️ / 🙋‍♀️) intentionally combined as optional variants.
 const GREETING_PATTERNS =
-  /^\s*(hi|hello|hey|hola|buenas?|buen[oa]s?\s+(d[ií]as|tardes|noches)|holi|qué onda|que onda|q[uúù]bo|oi|ol[aá]|bom dia|boa tarde|boa noite|hej|salut|bonjour|ciao|👋|🙋[‍♂️♀️]?)\s*[!?.\s]*$/i;
+  /^\s*(hi|hello|hey|hola|buenas?|buen[oa]s?\s+(d[ií]as|tardes|noches)|holi|qué onda|que onda|q[uúù]bo|oi|ol[aá]|bom dia|boa tarde|boa noite|hej|salut|bonjour|ciao|👋|🙋(?:‍♂️|‍♀️)?)\s*[!?.\s]*$/i;
 
 function isGreeting(text: string): boolean {
   return text.length <= 32 && GREETING_PATTERNS.test(text);
