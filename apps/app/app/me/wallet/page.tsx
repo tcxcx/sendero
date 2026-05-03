@@ -96,17 +96,29 @@ export default async function TravelerWalletPage() {
       </StatGrid>
 
       {signer && moonpayApiKey ? (
-        <section className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
+        <section className="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-0.5">
-            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Top up</p>
-            <p className="text-sm">Buy USDC with a card — funds land in your unified balance.</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Top up · Cash out
+            </p>
+            <p className="text-sm">
+              Move money in or out — USDC ↔ fiat via MoonPay, settled to your unified balance.
+            </p>
           </div>
-          <Link
-            href="/me/wallet?topup=usdc&amount=100"
-            className="inline-flex rounded-md border border-border bg-foreground px-3 py-2 text-xs uppercase tracking-[0.14em] text-background hover:opacity-90"
-          >
-            Top up · USDC
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/me/wallet?topup=usdc&amount=100"
+              className="inline-flex rounded-md border border-border bg-foreground px-3 py-2 text-xs uppercase tracking-[0.14em] text-background hover:opacity-90"
+            >
+              Top up · USDC
+            </Link>
+            <Link
+              href="/me/wallet?cashout=usdc&amount=100"
+              className="inline-flex rounded-md border border-border bg-card px-3 py-2 text-xs uppercase tracking-[0.14em] text-foreground hover:bg-muted"
+            >
+              Cash out · USDC
+            </Link>
+          </div>
         </section>
       ) : null}
 

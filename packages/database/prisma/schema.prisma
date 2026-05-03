@@ -360,6 +360,7 @@ model User {
   handoffsAnswered       ChannelHandoff[]      @relation("ChannelHandoffAnsweredBy")
   gatewaySigner          UserGatewaySigner?
   moonpayTopUps          MoonPayTopUp[]
+  moonpayOffRamps        MoonPayOffRamp[]
 
   @@index([createdAt])
   @@map("users")
@@ -2417,6 +2418,7 @@ model NftStamp {
   bookingId  String?
   travelerId String?
   /// One of: BoardingPass | SettlementReceipt | ItineraryMap | TripPassport
+  /// | StayCheckIn | TripCompletion
   kind       String
   /// Domain key for idempotency: bookingId for BoardingPass / Receipt,
   /// tripId for ItineraryMap / TripPassport. Used in the unique pair
@@ -2809,6 +2811,41 @@ model MoonPayTopUp {
   @@map("moonpay_topups")
 }
 
+/// MoonPay sell (off-ramp) attempt. Mirrors `MoonPayTopUp` but tracks
+/// crypto → fiat. Webhook events `sell_transaction_*` upsert on
+/// `moonpaySellTransactionId`.
+model MoonPayOffRamp {
+  id                       String    @id @default(cuid())
+  userId                   String    @map("user_id")
+  /// MoonPay sell-transaction id (UUID). UNIQUE so webhook handlers can upsert.
+  moonpaySellTransactionId String    @unique @map("moonpay_sell_transaction_id")
+  moonpayCustomerId        String?   @map("moonpay_customer_id")
+  /// Crypto amount the seller is offering (e.g. 100.00 USDC).
+  baseCurrencyAmount       Decimal   @map("base_currency_amount") @db.Decimal(38, 18)
+  /// 'usdc_base' | 'usdc_sol' | 'usdc_polygon' etc.
+  baseCurrencyCode         String    @map("base_currency_code")
+  /// Fiat amount the seller will receive — populated as MoonPay quotes.
+  quoteCurrencyAmount      Decimal?  @map("quote_currency_amount") @db.Decimal(18, 2)
+  quoteCurrencyCode        String    @default("usd") @map("quote_currency_code")
+  /// Refund destination if the sell is cancelled (the traveler's evmAddress).
+  refundWalletAddress      String    @map("refund_wallet_address")
+  /// 'pending' | 'waitingForDeposit' | 'completed' | 'failed' | 'abandoned'
+  status                   String    @default("pending")
+  failureReason            String?   @map("failure_reason")
+  /// On-chain hash of the deposit MoonPay observed.
+  cryptoTransactionHash    String?   @map("crypto_transaction_hash")
+  metadata                 Json?
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  completedAt              DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("moonpay_offramps")
+}
+
 /// Append-only audit row for every inbound MoonPay webhook delivery.
 ///
 /// Mirrors `WhatsAppWebhookEvent`: post-200 insert via `after()` so audit
@@ -2823,6 +2860,7 @@ model MoonPayWebhookEvent {
   id             String   @id @default(cuid())
   userId         String?  @map("user_id")
   topUpId        String?  @map("top_up_id")
+  offRampId      String?  @map("off_ramp_id")
   receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
   /// MoonPay event id (UUID) — used for replay dedup. UNIQUE so a
   /// duplicate delivery can't double-write the audit row.

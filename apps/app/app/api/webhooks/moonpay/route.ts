@@ -51,6 +51,7 @@ interface AuditInput {
   rawPayload: unknown;
   userId?: string;
   topUpId?: string;
+  offRampId?: string;
 }
 
 function writeAudit(input: AuditInput): Promise<unknown> {
@@ -67,6 +68,7 @@ function writeAudit(input: AuditInput): Promise<unknown> {
         rawPayload: input.rawPayload as object,
         userId: input.userId,
         topUpId: input.topUpId,
+        offRampId: input.offRampId,
       },
     })
     .catch((err: unknown) => {
@@ -204,6 +206,7 @@ export async function POST(req: NextRequest) {
       dispatchError: dispatch.error,
       userId: dispatch.userId,
       topUpId: dispatch.topUpId,
+      offRampId: dispatch.offRampId,
     })
   );
 

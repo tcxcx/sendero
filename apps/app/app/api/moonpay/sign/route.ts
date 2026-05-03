@@ -33,6 +33,9 @@ const ALLOWED_HOSTS = new Set([
   'buy.moonpay.com',
   'buy-sandbox.moonpay.com',
   'buy-staging.moonpay.com',
+  'sell.moonpay.com',
+  'sell-sandbox.moonpay.com',
+  'sell-staging.moonpay.com',
 ]);
 
 function envTag(): string {
