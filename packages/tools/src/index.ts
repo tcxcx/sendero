@@ -32,6 +32,8 @@ import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
 import { findAirportsNearbyTool } from './find-airports-nearby';
 import { mintStampTool, refreshStampUriTool } from './mint-stamp';
+import { moonpayTopupTool } from './moonpay-topup';
+import { getMoonpayTopupStatusTool } from './get-moonpay-topup-status';
 import { demoMintBoardingPassTool } from './demo-mint-boarding-pass';
 import {
   kapsoActivatePhoneNumberTool,
@@ -43,11 +45,7 @@ import {
 } from './kapso-channel';
 import { listAirlineCreditsTool } from './list-airline-credits';
 import { listFlightAncillariesTool } from './list-flight-ancillaries';
-import {
-  gatewayBalanceTool,
-  travelerBalanceTool,
-  treasuryBalanceTool,
-} from './gateway-balance';
+import { gatewayBalanceTool, travelerBalanceTool, treasuryBalanceTool } from './gateway-balance';
 import { prepareTravelerSigninTool } from './prepare-traveler-signin';
 import {
   requestLocationTool,
@@ -335,6 +333,12 @@ export const toolList: ToolDef[] = [
   // Wallet flow — pay-link dispatch (Step 5 agent surface)
   sendPayLinkTool,
   generateBookingInvoiceTool,
+  // MoonPay fiat → USDC top-up. `moonpay_topup` mints a signed
+  // checkout URL + QR + /me/wallet deep-link; `get_moonpay_topup_status`
+  // reads recent attempts so the agent can confirm completion before
+  // retrying a stalled booking.
+  moonpayTopupTool,
+  getMoonpayTopupStatusTool,
   // Tenant pricing policy agent surface (E1 + E2)
   getPricingPolicyTool,
   activatePricingPolicyTool,
