@@ -21,6 +21,7 @@ import { createTripTool } from './create-trip';
 import { displayOfferConditionsTool } from './display-offer-conditions';
 import {
   addPassengerToGroupTripTool,
+  claimGroupSeatTool,
   createGroupTripTool,
   removePassengerFromGroupTripTool,
   removePassengerTool,
@@ -42,7 +43,20 @@ import {
 } from './kapso-channel';
 import { listAirlineCreditsTool } from './list-airline-credits';
 import { listFlightAncillariesTool } from './list-flight-ancillaries';
-import { gatewayBalanceTool } from './gateway-balance';
+import {
+  gatewayBalanceTool,
+  travelerBalanceTool,
+  treasuryBalanceTool,
+} from './gateway-balance';
+import { prepareTravelerSigninTool } from './prepare-traveler-signin';
+import {
+  requestLocationTool,
+  requestPhoneNumberTool,
+  sendDocumentMessageTool,
+  sendImageMessageTool,
+  sendInteractiveButtonsTool,
+  sendInteractiveListTool,
+} from './whatsapp-interactive';
 import { manageStaysNegotiatedRateTool } from './manage-stays-negotiated-rate';
 import { quoteStayTool } from './quote-stay';
 import { gatewayTransferTool } from './gateway-transfer';
@@ -292,6 +306,9 @@ export const toolList: ToolDef[] = [
   searchHotelsTool,
   checkTreasuryTool,
   gatewayBalanceTool,
+  treasuryBalanceTool,
+  travelerBalanceTool,
+  prepareTravelerSigninTool,
   gatewayTransferTool,
   swapTokensTool,
   sendTokensTool,
@@ -365,6 +382,7 @@ export const toolList: ToolDef[] = [
   // Group trips — multi-passenger journeys with capacity ceilings.
   createGroupTripTool,
   addPassengerToGroupTripTool,
+  claimGroupSeatTool,
   removePassengerFromGroupTripTool,
   removePassengerTool,
   // Multimodal OCR / document extraction
@@ -399,6 +417,14 @@ export const toolList: ToolDef[] = [
   // when outside the 24-hour window or when a branded touch-point is
   // warranted (QUOTE_READY, BOOKING_CONFIRMED, CHECKIN_REMINDER, …).
   sendWhatsAppTemplateTool,
+  // Native WhatsApp interactive UX — buttons, lists, image / document
+  // sends, location + phone-number prompts. All internal-only.
+  sendInteractiveButtonsTool,
+  sendInteractiveListTool,
+  sendImageMessageTool,
+  sendDocumentMessageTool,
+  requestLocationTool,
+  requestPhoneNumberTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */

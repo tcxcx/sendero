@@ -21,7 +21,8 @@
     "./gateway-solana-mint": "./src/gateway-solana-mint.ts",
     "./sca-deploy": "./src/sca-deploy.ts",
     "./modular-wallets": "./src/modular-wallets.ts",
-    "./provision-tenant-wallet": "./src/provision-tenant-wallet.ts"
+    "./provision-tenant-wallet": "./src/provision-tenant-wallet.ts",
+    "./sync-wallet-set": "./src/sync-wallet-set.ts"
   },
   "dependencies": {
     "@sendero/arc": "workspace:*",

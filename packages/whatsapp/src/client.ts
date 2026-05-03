@@ -363,29 +363,55 @@ export class WhatsAppClient {
     return result;
   }
 
+  /**
+   * Send an interactive-button message with up to 3 quick replies.
+   *
+   * Optional `header` lets you decorate the card with a route map, a
+   * carrier logo, or just a short text title. Meta supports media
+   * headers on `type: 'button'` (image / video / document) — lists
+   * only support text headers (validated in `sendListMessage`).
+   *
+   * Optional `footer` is a small grey caption beneath the buttons
+   * (Meta caps at 60 chars; longer is rejected — caller truncates).
+   */
   async sendInteractiveButtons(
     to: string,
     body: string,
-    buttons: Array<{ id: string; title: string }>
+    buttons: Array<{ id: string; title: string }>,
+    opts?: {
+      header?:
+        | { type: 'text'; text: string }
+        | { type: 'image'; imageUrl: string }
+        | { type: 'video'; videoUrl: string }
+        | { type: 'document'; documentUrl: string; filename?: string };
+      footer?: string;
+    }
   ) {
     if (buttons.length > 3) {
       throw new Error('WhatsApp interactive messages allow a maximum of 3 buttons');
+    }
+    const interactive: Record<string, unknown> = {
+      type: 'button',
+      body: { text: body },
+      action: {
+        buttons: buttons.map(b => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title },
+        })),
+      },
+    };
+    if (opts?.header) {
+      interactive.header = serializeInteractiveHeader(opts.header);
+    }
+    if (opts?.footer) {
+      interactive.footer = { text: opts.footer };
     }
     const result = await this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'interactive',
-      interactive: {
-        type: 'button',
-        body: { text: body },
-        action: {
-          buttons: buttons.map(b => ({
-            type: 'reply',
-            reply: { id: b.id, title: b.title },
-          })),
-        },
-      },
+      interactive,
     });
     const wamid = extractWamid(result);
     if (wamid) {
@@ -399,6 +425,11 @@ export class WhatsAppClient {
     return result;
   }
 
+  /**
+   * Send a tappable list-of-rows. Meta restricts list headers to text
+   * only (no media), so `headerText` is the only header option here.
+   * Footer is a small grey caption shown below the open-list button.
+   */
   async sendListMessage(
     to: string,
     body: string,
@@ -406,7 +437,8 @@ export class WhatsAppClient {
     sections: Array<{
       title: string;
       rows: Array<{ id: string; title: string; description?: string }>;
-    }>
+    }>,
+    opts?: { headerText?: string; footer?: string }
   ) {
     if (sections.length > 10) {
       throw new Error('Maximum 10 sections allowed in list message');
@@ -416,26 +448,33 @@ export class WhatsAppClient {
         throw new Error('Maximum 10 rows allowed per section');
       }
     }
+    const interactive: Record<string, unknown> = {
+      type: 'list',
+      body: { text: body },
+      action: {
+        button: buttonText,
+        sections: sections.map(section => ({
+          title: section.title,
+          rows: section.rows.map(row => ({
+            id: row.id,
+            title: row.title,
+            description: row.description,
+          })),
+        })),
+      },
+    };
+    if (opts?.headerText) {
+      interactive.header = { type: 'text', text: opts.headerText };
+    }
+    if (opts?.footer) {
+      interactive.footer = { text: opts.footer };
+    }
     return this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'interactive',
-      interactive: {
-        type: 'list',
-        body: { text: body },
-        action: {
-          button: buttonText,
-          sections: sections.map(section => ({
-            title: section.title,
-            rows: section.rows.map(row => ({
-              id: row.id,
-              title: row.title,
-              description: row.description,
-            })),
-          })),
-        },
-      },
+      interactive,
     });
   }
 
@@ -544,6 +583,36 @@ function extractWamid(response: unknown): string | null {
 function truncatePreview(text: string, max = 280): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1)}…`;
+}
+
+/**
+ * Convert an interactive-button header option into Meta's wire shape.
+ * Meta accepts `text`, `image`, `video`, `document` — image / video /
+ * document use `link: <publicUrl>` (Meta downloads + re-hosts).
+ */
+function serializeInteractiveHeader(
+  header:
+    | { type: 'text'; text: string }
+    | { type: 'image'; imageUrl: string }
+    | { type: 'video'; videoUrl: string }
+    | { type: 'document'; documentUrl: string; filename?: string }
+): Record<string, unknown> {
+  switch (header.type) {
+    case 'text':
+      return { type: 'text', text: header.text };
+    case 'image':
+      return { type: 'image', image: { link: header.imageUrl } };
+    case 'video':
+      return { type: 'video', video: { link: header.videoUrl } };
+    case 'document':
+      return {
+        type: 'document',
+        document: {
+          link: header.documentUrl,
+          ...(header.filename ? { filename: header.filename } : {}),
+        },
+      };
+  }
 }
 
 /**

@@ -56,7 +56,7 @@ export async function elevationRiskBrief(
 export const elevationRiskBriefTool: ToolDef<ElevationRiskBriefInput, ElevationRiskBriefResult> = {
   name: 'elevation_risk_brief',
   description:
-    'Get elevation for a location and classify altitude sensitivity risk. Use for mountain destinations, hiking, and high-altitude arrival warnings.',
+    'Get elevation + altitude-sensitivity risk for a location. REQUIRES latitude + longitude — does NOT accept city names. If the user gave a place name, call `geocode_trip_stop` first to resolve it to coordinates, then pass those coordinates here.',
   inputSchema,
   jsonSchema: {
     type: 'object',

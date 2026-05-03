@@ -1,0 +1,106 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "INTAKE": ["CONFIRM"]
+  },
+  "screens": [
+    {
+      "id": "INTAKE",
+      "title": "Passenger details",
+      "data": {},
+      "terminal": false,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "Form",
+            "name": "passenger_form",
+            "children": [
+              {
+                "type": "TextInput",
+                "label": "Full name (as on passport)",
+                "name": "full_name",
+                "input-type": "text",
+                "required": true,
+                "min-chars": 2,
+                "max-chars": 80
+              },
+              {
+                "type": "DatePicker",
+                "label": "Date of birth",
+                "name": "date_of_birth",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "label": "Passport number",
+                "name": "passport_number",
+                "input-type": "text",
+                "required": true,
+                "min-chars": 5,
+                "max-chars": 20
+              },
+              {
+                "type": "DatePicker",
+                "label": "Passport expiry",
+                "name": "passport_expiry",
+                "required": true
+              },
+              {
+                "type": "TextInput",
+                "label": "Nationality (ISO-3166 alpha-2, e.g. AR, US)",
+                "name": "nationality",
+                "input-type": "text",
+                "required": true,
+                "min-chars": 2,
+                "max-chars": 2
+              },
+              {
+                "type": "TextInput",
+                "label": "Email",
+                "name": "email",
+                "input-type": "email",
+                "required": true
+              },
+              {
+                "type": "Footer",
+                "label": "Confirm passenger",
+                "on-click-action": {
+                  "name": "complete",
+                  "payload": {
+                    "full_name": "${form.full_name}",
+                    "date_of_birth": "${form.date_of_birth}",
+                    "passport_number": "${form.passport_number}",
+                    "passport_expiry": "${form.passport_expiry}",
+                    "nationality": "${form.nationality}",
+                    "email": "${form.email}"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONFIRM",
+      "title": "Saved",
+      "data": {},
+      "terminal": true,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Passenger saved"
+          },
+          {
+            "type": "TextBody",
+            "text": "Sendero has the details. Continuing your trip booking now."
+          }
+        ]
+      }
+    }
+  ]
+}

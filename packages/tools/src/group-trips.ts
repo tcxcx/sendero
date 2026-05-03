@@ -167,6 +167,17 @@ interface AddPassengerResult {
   passengerCount: number;
   /** True when the row was just inserted; false on idempotent re-add. */
   isNew: boolean;
+  /**
+   * Hint for the agent persona — present when the resolved User has
+   * already taken at least one trip with any tenant. Lets the agent
+   * skip passport / contact intake and greet by name instead of
+   * starting from scratch.
+   */
+  recurringTraveler?: {
+    displayName: string | null;
+    priorTripCount: number;
+    hasSavedPassport: boolean;
+  };
 }
 
 export const addPassengerToGroupTripTool: ToolDef<
@@ -253,12 +264,39 @@ export const addPassengerToGroupTripTool: ToolDef<
       return { trip, userId, passengerCount: passengerCount + 1, isNew: true };
     });
 
+    // Recurring-traveler hint — pulled outside the transaction since
+    // it's read-only and shouldn't block the write path. The persona
+    // uses this to greet returning travelers and skip passport intake.
+    let recurringTraveler: AddPassengerResult['recurringTraveler'];
+    try {
+      const profile = await prisma.user.findUnique({
+        where: { id: result.userId },
+        select: {
+          displayName: true,
+          _count: { select: { travelerTrips: true, passportVaults: true } },
+        },
+      });
+      if (profile && profile._count.travelerTrips > 0) {
+        recurringTraveler = {
+          displayName: profile.displayName,
+          priorTripCount: profile._count.travelerTrips,
+          hasSavedPassport: profile._count.passportVaults > 0,
+        };
+      }
+    } catch (err) {
+      console.warn('[add_passenger_to_group_trip] recurring-traveler lookup failed', {
+        userId: result.userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     return {
       ok: true,
       groupTripId: result.trip.id,
       userId: result.userId,
       passengerCount: result.passengerCount,
       isNew: result.isNew,
+      ...(recurringTraveler ? { recurringTraveler } : {}),
     };
   },
 };
@@ -432,6 +470,96 @@ export const removePassengerTool: ToolDef<
       removed: true,
       userId: user.id,
       blockedBy: [],
+    };
+  },
+};
+
+// ─── claim_group_seat ─────────────────────────────────────────────────
+
+const claimSeatInputSchema = z.object({
+  token: z
+    .string()
+    .min(1)
+    .describe(
+      "Claim token that resolves to a GroupTrip. Today's tokens are the GroupTrip cuid; tomorrow's may be JWT-signed (the contract here doesn't change). Trim whitespace and any leading 'claim:' prefix before passing."
+    ),
+  role: z
+    .string()
+    .min(1)
+    .max(40)
+    .default('attendee')
+    .describe('Role label stored on the GroupTripPassenger row.'),
+});
+
+interface ClaimSeatResult {
+  ok: true;
+  groupTripId: string;
+  userId: string;
+  passengerCount: number;
+  /** True when this call attached a new passenger; false on idempotent re-claim. */
+  isNew: boolean;
+  /** Capacity headroom snapshot. `null` when the GroupTrip has no max. */
+  remainingSeats: number | null;
+}
+
+export const claimGroupSeatTool: ToolDef<
+  z.infer<typeof claimSeatInputSchema>,
+  ClaimSeatResult
+> = {
+  name: 'claim_group_seat',
+  description:
+    "Resolve a group-trip claim token to a GroupTrip and attach the calling traveler. Use when the inbound message contains a `claim:<token>` deep-link payload (operator-distributed invite). The traveler's User row is auto-provisioned by the tools-route resolver before this fires; capacity is enforced by `add_passenger_to_group_trip` (throws on the (max+1)th claim). Idempotent — re-claiming returns isNew=false.",
+  internal: false,
+  inputSchema: claimSeatInputSchema,
+  jsonSchema: {
+    type: 'object',
+    required: ['token'],
+    properties: {
+      token: { type: 'string', minLength: 1 },
+      role: { type: 'string', minLength: 1, maxLength: 40 },
+    },
+  },
+  async handler(input, ctx) {
+    const callerTenantId = requireTenantId(ctx);
+    // The traveler's User.id was resolved upstream by the tools-route
+    // resolver (`apps/app/lib/agent-traveler-resolver.ts`); without a
+    // real userId we'd attach a service-account row to the trip.
+    const userId = ctx?.traveler?.userId;
+    if (!userId || userId.startsWith('svc:')) {
+      throw new Error(
+        'claim_group_seat: caller is not bound to a real traveler. Pass `travelerPhone` on the call so the resolver can mint the wallet + user before claiming.'
+      );
+    }
+
+    const cleanedToken = input.token.replace(/^claim:/i, '').trim();
+
+    const trip = await prisma.groupTrip.findFirst({
+      where: { id: cleanedToken, tenantId: callerTenantId },
+      select: { id: true, tenantId: true, maxPassengers: true },
+    });
+    if (!trip) {
+      throw new Error(
+        `claim_group_seat: no GroupTrip resolves to that token in tenant ${callerTenantId}. The link may be expired, malformed, or for a different workspace.`
+      );
+    }
+
+    // Reuse `add_passenger_to_group_trip` — it owns capacity gating,
+    // idempotency, and the (groupTripId, userId) UNIQUE race-safety.
+    const attached = await addPassengerToGroupTripTool.handler(
+      { groupTripId: trip.id, userId, role: input.role },
+      ctx
+    );
+
+    const remainingSeats =
+      trip.maxPassengers != null ? Math.max(0, trip.maxPassengers - attached.passengerCount) : null;
+
+    return {
+      ok: true,
+      groupTripId: trip.id,
+      userId: attached.userId,
+      passengerCount: attached.passengerCount,
+      isNew: attached.isNew,
+      remainingSeats,
     };
   },
 };

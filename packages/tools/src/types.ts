@@ -21,6 +21,14 @@ export interface ToolContext {
     phone?: string;
     userId?: string;
     tenantId?: string;
+    /**
+     * True when the resolved User row has no `clerkUserId` — they exist
+     * only as the placeholder created on first WhatsApp inbound. Tools
+     * that require a real signed-in identity (booking flows, settlement,
+     * NFT mint, prefund) should refuse and ask the agent to surface the
+     * sign-in flow first via `prepare_traveler_signin`.
+     */
+    isPlaceholder?: boolean;
   };
   /**
    * Caller identity derived server-side from the API key (or absent

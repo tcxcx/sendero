@@ -47,6 +47,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/agent/dispatch', // internal fan-in — protected by AGENT_DISPATCH_SECRET / CRON_SECRET in-route
   '/api/tools/(.*)', // single-tool HTTP surface for Kapso agent runtime — auth via X-API-Key OR x-sendero-dispatch-secret in-route
   '/api/internal/support/tools', // Kapso support tools — protected by x-sendero-support-secret in-route
+  '/api/internal/booking-fanout', // book_flight post-ticketing fan-out — protected by AGENT_DISPATCH_SECRET in-route
   '/api/pay-link/(.*)', // pay-link dispatch — protected by AGENT_DISPATCH_SECRET in-route
   '/api/workflows/stamps/(.*)', // stamp WDK fan-in — same secret/session auth as dispatch, in-route
   '/api/workflows/reputation/(.*)', // reputation WDK fan-in — same secret/session auth, in-route
@@ -61,7 +62,22 @@ const isPublicRoute = createRouteMatcher([
 
 const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)', '/tasks(.*)']);
 
+/**
+ * Traveler portal — Clerk-authed but org-less. Recurring travelers sign
+ * in via phone OTP without joining an org; they live in the global User
+ * table with `publicMetadata.kind = 'traveler'`. The proxy bypasses the
+ * choose-org redirect for these paths so they can render with `userId`
+ * alone.
+ */
+const isTravelerRoute = createRouteMatcher([
+  '/me(.*)',
+  '/sign-in/traveler(.*)',
+  '/api/me/(.*)',
+  '/api/whatsapp/link-clerk',
+]);
+
 type OrgMetadata = { onboardingComplete?: boolean } | undefined;
+type UserPublicMetadata = { kind?: 'traveler' | 'operator' } | undefined;
 
 const LOCALE_COOKIE_OPTIONS = {
   path: '/',
@@ -135,10 +151,26 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     return applyLocaleCookie(NextResponse.redirect(signInUrl), locale);
   }
 
+  // Traveler-kind users (B2C) — confined to `/me/*`. Block them from
+  // operator dashboard, org creation, and the choose-org flow even if
+  // they manually navigate. The discriminator is stamped on Clerk
+  // `publicMetadata.kind = 'traveler'` by the link-clerk merge route.
+  const userMeta = sessionClaims?.public_metadata as UserPublicMetadata;
+  const isTravelerKind = userMeta?.kind === 'traveler';
+  if (isTravelerKind && !isTravelerRoute(req)) {
+    return applyLocaleCookie(NextResponse.redirect(new URL('/me', req.url)), locale);
+  }
+
   if (isOnboardingRoute(req)) {
     const res = NextResponse.next({ request: { headers: requestHeadersWithLocale(req, locale) } });
     res.headers.set('x-pathname', new URL(req.url).pathname);
     return applyLocaleCookie(res, locale);
+  }
+
+  // Traveler portal — Clerk session sufficient, no org required. Routes
+  // gate themselves on `publicMetadata.kind === 'traveler'`.
+  if (isTravelerRoute(req)) {
+    return passThrough(req, locale);
   }
 
   if (!orgId) {

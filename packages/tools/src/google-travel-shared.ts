@@ -29,6 +29,44 @@ export function toQueryLatLng(input: LatLng): string {
   return `${input.latitude},${input.longitude}`;
 }
 
+/**
+ * Reverse-geocode a lat/lng pair into a city/locality string suitable
+ * for downstream text-search APIs (e.g. Google Places). Returns the
+ * shortest meaningful name we can extract (locality > admin level 1 >
+ * country) so a Places `textQuery` like "restaurants in Lima" is
+ * unambiguous.
+ *
+ * Throws if the API call fails — callers wrap with try/catch and fall
+ * back to passing raw coords.
+ */
+export async function reverseGeocodeToLocality(
+  args: { latitude: number; longitude: number; apiKey: string; languageCode?: string }
+): Promise<string | null> {
+  const params = new URLSearchParams({
+    key: args.apiKey,
+    latlng: `${args.latitude},${args.longitude}`,
+    language: args.languageCode ?? 'en',
+  });
+  const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?${params}`);
+  if (!response.ok) return null;
+  const data = (await response.json()) as {
+    results?: Array<{
+      address_components?: Array<{ long_name?: string; types?: string[] }>;
+      formatted_address?: string;
+    }>;
+  };
+  const components = data.results?.[0]?.address_components ?? [];
+  const pick = (...wanted: string[]) =>
+    components.find(c => c.types?.some(t => wanted.includes(t)))?.long_name;
+  const locality = pick('locality', 'postal_town', 'administrative_area_level_2');
+  const region = pick('administrative_area_level_1');
+  const country = pick('country');
+  if (locality && country) return `${locality}, ${country}`;
+  if (locality) return locality;
+  if (region && country) return `${region}, ${country}`;
+  return data.results?.[0]?.formatted_address ?? null;
+}
+
 export function mapTravelModeToGoogle(mode: TravelMode): string {
   return mode;
 }

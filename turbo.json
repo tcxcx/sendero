@@ -1,7 +1,6 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
-  "daemon": true,
   "globalDependencies": ["**/.env", "**/.env.local", ".mise.toml"],
   "globalEnv": [
     "NODE_ENV",

@@ -2,20 +2,34 @@ import { z } from 'zod';
 
 import { airQualityBrief } from './air-quality-brief';
 import { elevationRiskBrief } from './elevation-risk-brief';
+import { geocodeTripStop } from './geocode-trip-stop';
 import { buildStreetViewStaticUrl, requireGoogleMapsApiKey } from './google-travel-shared';
 import { timezoneBrief } from './timezone-brief';
 import { tripWeatherBrief } from './trip-weather-brief';
 import type { ToolDef } from './types';
 import { validateTravelAddress } from './validate-travel-address';
 
-const inputSchema = z.object({
-  latitude: z.number(),
-  longitude: z.number(),
-  addressLines: z.array(z.string().min(1)).min(1).max(5).optional(),
-  regionCode: z.string().optional(),
-  travelerNotes: z.string().optional(),
-  languageCode: z.string().default('en'),
-});
+const inputSchema = z
+  .object({
+    latitude: z.number().optional(),
+    longitude: z.number().optional(),
+    /** Free-form place text. When provided WITHOUT lat/lng, the handler
+     *  geocodes internally so the agent doesn't have to chain. */
+    place: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Free-form place name (e.g. "Cusco, Peru" or "Plaza de Armas, Lima"). Provide this OR latitude+longitude.'),
+    addressLines: z.array(z.string().min(1)).min(1).max(5).optional(),
+    regionCode: z.string().optional(),
+    travelerNotes: z.string().optional(),
+    languageCode: z.string().default('en'),
+  })
+  .refine(
+    v =>
+      Boolean(v.place || (typeof v.latitude === 'number' && typeof v.longitude === 'number')),
+    { message: 'Provide `place` (string) OR both `latitude` and `longitude`.' }
+  );
 
 export type TravelSafetyAidInput = z.infer<typeof inputSchema>;
 
@@ -78,25 +92,42 @@ function buildSummary(args: {
 }
 
 export async function travelSafetyAid(input: TravelSafetyAidInput): Promise<TravelSafetyAidResult> {
+  // Resolve coordinates. Either the caller provided lat/lng directly,
+  // or they passed a `place` string and we geocode it inline.
+  let latitude = input.latitude;
+  let longitude = input.longitude;
+  if ((typeof latitude !== 'number' || typeof longitude !== 'number') && input.place) {
+    const geocoded = await geocodeTripStop({
+      address: input.place,
+      languageCode: input.languageCode,
+      ...(input.regionCode ? { regionCode: input.regionCode } : {}),
+    });
+    latitude = geocoded.latitude;
+    longitude = geocoded.longitude;
+  }
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+    throw new Error('travel_safety_aid: failed to resolve coordinates from input.');
+  }
+
   const [weather, airQuality, timezone, elevation, addressValidation] = await Promise.all([
     tripWeatherBrief({
-      latitude: input.latitude,
-      longitude: input.longitude,
+      latitude,
+      longitude,
       languageCode: input.languageCode,
       unitsSystem: 'METRIC',
     }),
     airQualityBrief({
-      latitude: input.latitude,
-      longitude: input.longitude,
+      latitude,
+      longitude,
       languageCode: input.languageCode,
     }),
     timezoneBrief({
-      latitude: input.latitude,
-      longitude: input.longitude,
+      latitude,
+      longitude,
     }),
     elevationRiskBrief({
-      latitude: input.latitude,
-      longitude: input.longitude,
+      latitude,
+      longitude,
     }),
     input.addressLines?.length
       ? validateTravelAddress({
@@ -129,7 +160,7 @@ export async function travelSafetyAid(input: TravelSafetyAidInput): Promise<Trav
     addressValidation,
     streetViewPreviewUrl: buildStreetViewStaticUrl({
       apiKey,
-      location: `${input.latitude},${input.longitude}`,
+      location: `${latitude},${longitude}`,
     }),
     riskLevel,
   };
@@ -138,7 +169,7 @@ export async function travelSafetyAid(input: TravelSafetyAidInput): Promise<Trav
 export const travelSafetyAidTool: ToolDef<TravelSafetyAidInput, TravelSafetyAidResult> = {
   name: 'travel_safety_aid',
   description:
-    'Combine weather, air quality, timezone, elevation, street-level arrival preview, and optional address validation into a single travel safety brief.',
+    'Combine weather, air quality, timezone, elevation, street-level arrival preview into a single travel safety brief. REQUIRES latitude + longitude — does NOT accept city/country names. If the user gave a place, call `geocode_trip_stop` first to resolve it to coordinates.',
   inputSchema,
   jsonSchema: {
     type: 'object',

@@ -17,6 +17,7 @@ import { resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflo
 import type { DuffelAirlineCreditWire, DuffelWebhookEvent } from '@sendero/duffel';
 import { getAirlineCredit } from '@sendero/duffel';
 import { notifier } from '@sendero/notifications';
+import { env } from '@sendero/env';
 
 import { upsertAirlineCredit } from './airline-credits-sync';
 import { makeToolRegistry } from './tool-registry';
@@ -51,7 +52,7 @@ export async function dispatchDuffelEvent(args: {
 
   const booking = await prisma.booking.findUnique({
     where: { duffelOrderId: args.event.orderId },
-    select: { id: true, tenantId: true, metadata: true },
+    select: { id: true, tenantId: true, tripId: true, metadata: true },
   });
   if (!booking) {
     console.warn('[duffel-dispatcher] no booking for duffelOrderId', args.event.orderId);
@@ -122,6 +123,19 @@ export async function dispatchDuffelEvent(args: {
       bookingId: booking.id,
       tenantId: booking.tenantId,
       duffelOrderId: args.event.orderId,
+    });
+    // D2: WhatsApp BOOKING_CONFIRMED template + kick off the BoardingPass
+    // stamp WDK workflow. Both are fire-and-forget; the WhatsApp template
+    // gives the traveler immediate native confirmation, the stamp
+    // workflow eventually surfaces a deep-link to the on-chain proof.
+    void notifyWhatsAppOnBooking({
+      bookingId: booking.id,
+      tenantId: booking.tenantId,
+      duffelOrderId: args.event.orderId,
+    });
+    void kickOffBoardingPassStamp({
+      bookingId: booking.id,
+      tripId: booking.tripId,
     });
   }
 
@@ -212,5 +226,153 @@ async function emailBookingConfirmed(args: {
     }
   } catch (err) {
     console.warn('[duffel-dispatcher] emailBookingConfirmed outer failure', err);
+  }
+}
+
+/**
+ * D2 — send the BOOKING_CONFIRMED HSM template on the traveler's
+ * WhatsApp thread the moment Duffel confirms ticketing.
+ *
+ * Looks up the traveler's WhatsApp ChannelIdentity (auto-provisioned
+ * by the resolver on first inbound — see `apps/app/lib/agent-traveler-resolver.ts`).
+ * Skips silently when the traveler has no WhatsApp identity (web /
+ * Slack / API booking) or when no WhatsApp install is wired for the
+ * tenant. Fails-soft on any send error — email already covers the
+ * baseline confirmation path.
+ */
+export async function notifyWhatsAppOnBooking(args: {
+  bookingId: string;
+  tenantId: string;
+  duffelOrderId: string;
+}): Promise<void> {
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: args.bookingId },
+      select: {
+        pnr: true,
+        currency: true,
+        totalUsd: true,
+        segments: true,
+        trip: {
+          select: {
+            travelerId: true,
+            traveler: { select: { displayName: true } },
+          },
+        },
+      },
+    });
+    if (!booking?.trip?.travelerId) return;
+
+    // Find the traveler's WhatsApp phone via ChannelIdentity.
+    const identity = await prisma.channelIdentity.findFirst({
+      where: {
+        tenantId: args.tenantId,
+        userId: booking.trip.travelerId,
+        kind: 'whatsapp',
+      },
+      select: { externalUserId: true },
+    });
+    const recipient = identity?.externalUserId;
+    if (!recipient) return;
+
+    const install = await prisma.whatsAppInstall.findUnique({
+      where: { tenantId: args.tenantId },
+      select: { phoneNumberId: true, status: true },
+    });
+    if (!install?.phoneNumberId || install.status === 'disabled') return;
+
+    const accessToken = env.whatsappAccessToken() ?? env.kapsoApiKey();
+    if (!accessToken) return;
+
+    const apiBaseUrl =
+      env.whatsappApiBaseUrl() ??
+      (env.kapsoApiKey() ? `${env.kapsoApiBaseUrl()}/meta/whatsapp/v24.0` : undefined);
+
+    // Build the template body vars from booking data.
+    const segments = Array.isArray(booking.segments)
+      ? (booking.segments as Array<Record<string, unknown>>)
+      : [];
+    const firstSegment = segments[0];
+    const route = firstSegment
+      ? `${String(firstSegment.origin ?? firstSegment.originIata ?? '')} → ${String(firstSegment.destination ?? firstSegment.destinationIata ?? '')}`
+      : 'Trip';
+    const departAt = firstSegment
+      ? String(
+          firstSegment.departureAt ??
+            firstSegment.departure_at ??
+            firstSegment.departAt ??
+            ''
+        ).slice(0, 16)
+      : '';
+
+    const { WhatsAppClient, SENDERO_TEMPLATES, buildTemplateComponents, resolveTemplateLocale } =
+      await import('@sendero/whatsapp');
+    const def = SENDERO_TEMPLATES.BOOKING_CONFIRMED;
+    const components = buildTemplateComponents(def, {
+      pnr: booking.pnr ?? args.duffelOrderId,
+      route,
+      departAt,
+      ticketEmail: booking.trip.traveler?.displayName ?? 'your inbox',
+    });
+
+    const client = new WhatsAppClient({
+      phoneNumberId: install.phoneNumberId,
+      accessToken,
+      apiBaseUrl,
+    });
+    await client.sendTemplate({
+      to: recipient,
+      templateName: def.name,
+      languageCode: resolveTemplateLocale(def, undefined),
+      components,
+    });
+  } catch (err) {
+    console.warn('[duffel-dispatcher] notifyWhatsAppOnBooking failed (non-fatal)', {
+      bookingId: args.bookingId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * D2 — kick off the WDK BoardingPass stamp workflow. The workflow
+ * generates the OG image, uploads to IPFS, mints on Arc via Circle
+ * SCP, persists the NftStamp row, and (TODO) sends the
+ * NFT_STAMP_READY follow-up template once the on-chain tx confirms.
+ *
+ * Fire-and-forget HTTP — the WDK workflow runs out-of-band on a
+ * separate request lifecycle. We just trigger it; failures are
+ * logged but don't affect the Duffel webhook ack.
+ */
+export async function kickOffBoardingPassStamp(args: {
+  bookingId: string;
+  tripId: string | null;
+}): Promise<void> {
+  if (!args.tripId) return;
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? process.env.KAPSO_WEBHOOK_BASE_URL ?? 'http://localhost:3010';
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  if (!secret) return;
+
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/workflows/stamps/BoardingPass`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-sendero-dispatch-secret': secret,
+      },
+      body: JSON.stringify({ tripId: args.tripId, bookingId: args.bookingId }),
+    });
+    if (!res.ok) {
+      console.warn('[duffel-dispatcher] stamp workflow kickoff non-OK', {
+        bookingId: args.bookingId,
+        status: res.status,
+      });
+    }
+  } catch (err) {
+    console.warn('[duffel-dispatcher] stamp workflow kickoff failed (non-fatal)', {
+      bookingId: args.bookingId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }

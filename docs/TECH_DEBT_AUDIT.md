@@ -1,3 +1,54 @@
+# Tech Debt Notes — 2026-05-02
+
+Items observed while shipping the `/me` traveler portal + Gateway-deposit traveler wallets. Open atomically, none are ship-blockers.
+
+### A. `/me` routes lack the dashboard's display-grade header pattern
+`/dashboard/reputation/page.tsx` uses a tight, branded header pattern that none of the `/me/*` routes adopt yet:
+```tsx
+<header className="flex flex-col gap-1">
+  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendero × Arc</p>
+  <h1 className="font-display text-3xl">Your reputation</h1>
+  <p className="text-sm text-muted-foreground">…subhead with one sentence on what this surface shows.</p>
+</header>
+<section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+  <Stat label="Stars" value={…} />
+  …
+</section>
+```
+The Stat-grid + dashed empty-state cards (`rounded-2xl border border-dashed`) read as a deliberate visual system. `/me`, `/me/wallet`, `/me/stamps`, `/me/passport` should reuse the exact same shell:
+- "Sendero · me" eyebrow → "Sendero × Arc" rhythm match
+- `font-display text-3xl` for the H1
+- One-sentence subhead under each H1
+- Stat grid at top of `/me/wallet` (chains × balance summary) and `/me/stamps` (collection size, latest mint)
+- Dashed empty-state cards instead of plain `<p>` for "no trips / no stamps / passport not uploaded"
+
+Atomic commit: extract `<TravelerSurfaceHeader>` + `<Stat>` into `apps/app/components/traveler/` and replace the four pages.
+
+### B. Circle SCA wallets index only one chain per wallet set
+`circle_wallets` rows store `(tenantId, kind, chain)` but a Circle wallet set produces the **same address on every supported chain** (each as its own SCA contract). When operator onboarding registers the treasury for `MATIC-AMOY`, the matching Arc/Avax/Arb/etc. SCAs are silently created in Circle but never persisted in our DB. Any USDC sent to the address on those "ghost" chains becomes unfindable from Sendero queries — only discoverable by enumerating the wallet set via `listWallets`.
+
+Concrete loss: $500 USDC testnet stranded for ~10 days at `0xfa5c635c1db7472a604d042355a184ef11af3204` on Arc Testnet (recovered via wallet-set enumeration on 2026-05-02, drain hash `0x6491af34…b7515e`).
+
+Fix: in the tenant-wallet provisioning path, after the Circle wallet set is created, walk every `wallets[]` entry from `listWallets({ walletSetId })` and persist one `circle_wallets` row per `(address, blockchain)` pair. Backfill cron: `scripts/backfill-circle-wallet-chains.ts` running once per existing tenant.
+
+Acceptance: querying `circle_wallets` for any tenant returns one row per (kind, chain) where Circle has a wallet, not just the chain we manually registered.
+
+### D. UserGatewaySigner ciphertext rebound across merges silently auth-failed (FIXED 2026-05-03)
+The phone-anchored and token-bound traveler merges (`apps/app/lib/traveler-merge.ts`, `apps/app/app/api/whatsapp/link-clerk/route.ts`) used to rewrite `UserGatewaySigner.userId` from the placeholder id to the Clerk user id without re-encrypting the private key. The encrypt path uses `(purpose, contextId, kekVersion)` to derive the AES-GCM DEK with `contextId = userId`, so post-merge `decryptSigner({ contextId: clerkUserId })` derived a different DEK than the one used at encrypt time. AES-GCM `final()` then threw on the auth-tag check, surfacing as `decrypt: authentication failed (tampered ciphertext or wrong context)` and rendering `/me/wallet` unloadable.
+
+**Symptom:** every traveler who completed phone-OTP sign-in (token-less or expired-token path) saw the runtime error on first `/me/wallet` load. Their Gateway depositor address was unrecoverable from the existing row — only fix was deleting the row and letting `ensureTravelerWallet` mint fresh on next inbound (which loses any USDC at the prior address — zero impact in practice today, real cost later).
+
+**Fix:** both merge paths now decrypt the placeholder's ciphertext under `contextId = placeholderUserId`, re-encrypt under `contextId = clerkUserId`, and write `userId + encryptedPrivateKey + kekVersion` together inside the same `prisma.$transaction([...])`. A crash mid-merge can't leave the row in the broken state because the row write is atomic. `invalidateUserGatewaySignerCache` is called for both ids post-transaction so the in-memory cache doesn't serve stale decrypts.
+
+**Lesson:** anywhere we move encrypted-at-rest data across `contextId` boundaries (User merges, tenant merges, KEK rotation), the merge MUST decrypt + re-encrypt before rewriting the foreign key. Add a lint rule (or at least a code-review checklist) for any future call to `*.updateMany({ data: { userId: ... }})` against tables that contain `encryptedPrivateKey` columns.
+
+### C. User DCWs can't drain when balance ≤ Circle Gas Station fee floor
+`createTransaction` returns `155258 / insufficient_value` when the user DCW's USDC balance equals the requested amount because the gas-station fee is taken in USDC and exceeds the leftover. Surfaced during the rescue drain at $0.095684 — Circle wanted "> 0.095684176" native tokens.
+
+Fix: in `wallets.transferUSDC`, compute `amount = balance - feeEstimate` instead of passing the raw balance. Or call `estimateContractExecution` before the `createTransaction` and subtract.
+
+---
+
 # Tech Debt Audit — 2026-04-23
 
 Branch: `feat/phase-11-invoicing`

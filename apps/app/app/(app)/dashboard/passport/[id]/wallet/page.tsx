@@ -17,10 +17,10 @@ import { CopyAddress } from '@/components/wallet/copy-address';
 import { PrefundForm } from '@/components/wallet/prefund-form';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
+import { getCircleUnifiedBalanceDelegate } from '@/lib/transfer-policy/app-kit';
 import { getTenantTreasury } from '@/lib/wallet/tenant-treasury-adapter';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
-const APP_KIT_CHAIN = 'Arc_Testnet';
 const FAUCET_URL = 'https://faucet.circle.com';
 
 export const dynamic = 'force-dynamic';
@@ -47,7 +47,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
 
   const wallet = await prisma.wallet.findFirst({
     where: { userId: id, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
-    select: { id: true, address: true, circleWalletId: true, createdAt: true },
+    select: { id: true, address: true, chainId: true, circleWalletId: true, createdAt: true },
   });
 
   const [deposits, spends, balance, pendingBookings] = await Promise.all([
@@ -77,7 +77,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
         createdAt: true,
       },
     }),
-    wallet ? fetchUnifiedBalance(tenant.id, wallet.address) : Promise.resolve(null),
+    wallet ? fetchUnifiedBalance(wallet.address, wallet.chainId) : Promise.resolve(null),
     prisma.booking.findMany({
       where: {
         tenantId: tenant.id,
@@ -367,13 +367,20 @@ function SpendHistory({
   );
 }
 
-async function fetchUnifiedBalance(tenantId: string, address: string): Promise<string | null> {
-  const treasury = getTenantTreasury(tenantId);
-  if (!treasury) return null;
+function unifiedBalanceChainForWallet(chainId: number): 'Arc_Testnet' | 'Solana_Devnet' {
+  return chainId === 5 ? 'Solana_Devnet' : 'Arc_Testnet';
+}
+
+async function fetchUnifiedBalance(address: string, chainId: number): Promise<string | null> {
+  const delegate = getCircleUnifiedBalanceDelegate();
+  if (!delegate) return null;
   try {
-    const result = await treasury.kit.getBalances({
-      sources: { address, chains: APP_KIT_CHAIN },
+    const result = await delegate.kit.getBalances({
+      sources: [
+        { adapter: delegate.adapter, address, chains: unifiedBalanceChainForWallet(chainId) },
+      ],
       networkType: 'testnet',
+      includePending: true,
     });
     return result.totalConfirmedBalance;
   } catch (err) {

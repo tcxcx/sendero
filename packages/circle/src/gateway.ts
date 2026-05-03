@@ -325,12 +325,37 @@ export interface GatewayBalance {
  * Sendero-tracked testnet chains in one round-trip.
  */
 export async function queryUnifiedBalance(
-  depositor?: Address
+  depositor?: Address | { evm?: Address; solana?: string }
 ): Promise<{ total: string; balances: GatewayBalance[] }> {
-  const acct = depositor ?? treasuryAccount().address;
-  const sources = Object.values(GATEWAY_CHAINS).map(c => ({
+  // Treasury default applies ONLY to the legacy single-arg / undefined
+  // call. When the caller explicitly passes an options object, we
+  // honor exactly the depositors they specified — otherwise a
+  // traveler with only a Solana DCW would incorrectly query treasury
+  // on every EVM chain and report platform balances as their own.
+  const usedOptionsObject = typeof depositor === 'object' && depositor !== null;
+  const evmDepositor = usedOptionsObject
+    ? depositor?.evm
+    : (depositor as Address | undefined) ?? treasuryAccount().address;
+  const solanaDepositor = usedOptionsObject ? depositor?.solana : undefined;
+
+  // Per-chain depositor map. Circle Gateway's /balances endpoint
+  // validates the depositor address format against the destination
+  // domain — a 0x… EVM address against the Solana domain (5) returns
+  // `Invalid depositor address format`. Use the matching depositor
+  // type per chain; skip Solana when no Solana depositor was passed.
+  // Dedupe by domain so Sol_Devnet + Sol (both domain 5) collapse into
+  // one entry (testnet-first order means Sol_Devnet wins).
+  const seenDomains = new Set<number>();
+  const reachableChains = Object.values(GATEWAY_CHAINS)
+    .filter(c => (isEvmChain(c) ? Boolean(evmDepositor) : Boolean(solanaDepositor)))
+    .filter(c => {
+      if (seenDomains.has(c.domain)) return false;
+      seenDomains.add(c.domain);
+      return true;
+    });
+  const sources = reachableChains.map(c => ({
     domain: c.domain,
-    depositor: acct,
+    depositor: isEvmChain(c) ? (evmDepositor as string) : (solanaDepositor as string),
   }));
 
   const res = await fetch(`${GATEWAY_API}/balances`, {
@@ -345,7 +370,7 @@ export async function queryUnifiedBalance(
     balances: Array<{ domain: number; balance: string }>;
   };
 
-  const balances: GatewayBalance[] = Object.values(GATEWAY_CHAINS).map(c => {
+  const balances: GatewayBalance[] = reachableChains.map(c => {
     const match = data.balances.find(b => b.domain === c.domain);
     return {
       chain: c.kitName,

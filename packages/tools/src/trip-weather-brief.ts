@@ -64,7 +64,7 @@ export async function tripWeatherBrief(
 export const tripWeatherBriefTool: ToolDef<TripWeatherBriefInput, TripWeatherBriefResult> = {
   name: 'trip_weather_brief',
   description:
-    'Get the current weather conditions for a location. Use for departure readiness, disruption checks, and travel safety guidance.',
+    'Get current weather for a location (temp, humidity, UV, conditions). REQUIRES latitude + longitude — does NOT accept city names. If the user gave a place name, call `geocode_trip_stop` first to resolve it to coordinates, then pass those coordinates here.',
   inputSchema,
   jsonSchema: {
     type: 'object',

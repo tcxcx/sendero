@@ -160,5 +160,14 @@ export const bookStayTool: ToolDef<BookStayInput, BookStayResult> = {
       },
     },
   },
-  handler: bookStay,
+  async handler(input, ctx) {
+    if (ctx?.traveler?.isPlaceholder) {
+      return {
+        status: 'signin_required',
+        message:
+          "I need you to sign in once before booking — that's how your wallet, balances, and NFT stamps follow you across trips. Reply with the magic link the agent sends, sign in via WhatsApp OTP, and I'll continue this booking automatically.",
+      } as unknown as BookStayResult;
+    }
+    return bookStay(input, ctx);
+  },
 };

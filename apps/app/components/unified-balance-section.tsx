@@ -23,6 +23,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { BlockchainIcon } from '@sendero/icons';
 import { TopographyButton } from '@sendero/ui/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@sendero/ui/hover-card';
 
@@ -174,7 +175,7 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
             sideOffset={10}
             collisionPadding={16}
             data-variant="ink"
-            className="z-[100] w-80 max-w-[calc(100vw-24px)] p-4 text-xs"
+            className="z-[100] w-[336px] max-w-[calc(100vw-24px)] p-0 text-xs shadow-[0_18px_48px_-28px_rgba(31,42,68,0.45)]"
           >
             {data ? (
               <BreakdownContent data={data} />
@@ -207,104 +208,110 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
   const spendableTotal = data.spendableTotal ?? data.grandTotal;
   const unsupportedSourceTotal = data.unsupportedSourceTotal ?? '0.000000';
   const hasUnsupportedSource = unsupportedSourceTotal !== '0.000000';
+  const fundedGatewayRoutes = data.perDomain.filter(d => !isZeroAmount(d.balance));
+  const appKitRows =
+    data.appKit?.breakdown.flatMap(account =>
+      account.breakdown.map(row => ({
+        depositor: account.depositor,
+        chain: row.chain,
+        confirmedBalance: row.confirmedBalance,
+        pendingBalance: row.pendingBalance ?? '0.000000',
+        scannerUrl: explorerUrlForAddress(row.chain, account.depositor),
+      }))
+    ) ?? [];
+  const fundedAppKitRows = appKitRows
+    .filter(row => !isZeroAmount(row.confirmedBalance) || !isZeroAmount(row.pendingBalance))
+    .sort((a, b) => Number(b.confirmedBalance) - Number(a.confirmedBalance));
+  const activeRouteCount = fundedGatewayRoutes.length || fundedAppKitRows.length;
+  const connectedRouteCount = data.perDomain.length || appKitRows.length;
+  const emptyRouteCount = Math.max(connectedRouteCount - activeRouteCount, 0);
+  const inFlightTotal = Number(data.pendingCreditTotal || 0) + Number(data.opsStagingTotal || 0);
 
   return (
-    <div className="space-y-3">
-      <div>
-        <div className="font-mono text-[10px] uppercase tracking-[0.12em] opacity-70">
-          Unified balance
+    <div className="overflow-hidden rounded-md">
+      <div className="border-b border-[color:var(--hairline-color)] px-4 py-3">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/65">
+              Unified balance
+            </div>
+            <div className="mt-1 flex items-end gap-2">
+              <span className="text-[28px] leading-none font-semibold tracking-[-0.02em] tabular-nums text-black">
+                ${formatGrandTotal(spendableAvailable)}
+              </span>
+              <span className="pb-0.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-black/55">
+                USDC
+              </span>
+            </div>
+          </div>
+          <div className="rounded-[5px] border border-black/10 bg-black/[0.035] px-2.5 py-1.5 text-right text-black">
+            <div className="text-[9px] uppercase tracking-[0.13em] text-black/55">Routes</div>
+            <div className="mt-0.5 font-mono text-[12px] tabular-nums">
+              {activeRouteCount}/{connectedRouteCount || 0}
+            </div>
+          </div>
         </div>
-        <div className="mt-0.5 text-sm font-medium">AppKit balance breakdown</div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <BalanceStat label="Spendable" value={`$${formatGrandTotal(spendableAvailable)}`} />
+          <BalanceStat label="In flight" value={`$${formatGrandTotal(String(inFlightTotal))}`} />
+        </div>
       </div>
 
-      <div className="space-y-1.5">
-        <BreakdownRow label="Spendable now" value={`$${formatGrandTotal(spendableAvailable)}`} />
-        <BreakdownRow
-          label="Total tracked"
-          value={`$${formatGrandTotal(data.grandTotal)}`}
-          muted={data.grandTotal === spendableTotal}
-        />
-        <BreakdownRow label="Gateway available" value={`$${formatGrandTotal(data.available)}`} />
-        <BreakdownRow
-          label="Finalizing"
-          value={`$${formatGrandTotal(data.pendingCreditTotal)}`}
-          muted={data.pendingCreditTotal === '0.000000'}
-        />
-        <BreakdownRow
-          label="Ops staging"
-          value={`$${formatGrandTotal(data.opsStagingTotal)}`}
-          muted={data.opsStagingTotal === '0.000000'}
-        />
-        {hasUnsupportedSource && (
-          <BreakdownRow
-            label="Unsupported source"
-            value={`$${formatGrandTotal(unsupportedSourceTotal)}`}
-          />
-        )}
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-black/65">
+            Live route
+          </div>
+          {emptyRouteCount > 0 && (
+            <div className="text-[10px] text-black/55">{emptyRouteCount} quiet</div>
+          )}
+        </div>
+
+        <div className="mt-2 space-y-1.5">
+          {fundedGatewayRoutes.length > 0 ? (
+            fundedGatewayRoutes.map(route => (
+              <ChainBalanceRow
+                key={route.domain}
+                chain={route.chain}
+                label={route.label}
+                amount={route.balance}
+                scannerUrl={route.scannerUrl}
+              />
+            ))
+          ) : fundedAppKitRows.length > 0 ? (
+            fundedAppKitRows.map(row => (
+              <ChainBalanceRow
+                key={`${row.depositor}-${row.chain}`}
+                chain={row.chain}
+                label={prettyChainName(row.chain)}
+                amount={row.confirmedBalance}
+                pending={row.pendingBalance}
+                scannerUrl={row.scannerUrl}
+              />
+            ))
+          ) : (
+            <div className="rounded-[6px] border border-black/10 bg-[color:color-mix(in_oklab,var(--bg-elev)_90%,white)] px-3 py-2 text-black/70">
+              No funded Gateway routes yet.
+            </div>
+          )}
+        </div>
       </div>
-
-      {data.perDomain.length > 0 && (
-        <div className="border-t border-white/20 pt-2">
-          <div className="opacity-70">Per chain</div>
-          <ul className="mt-1 space-y-1">
-            {data.perDomain.map(d => (
-              <li
-                key={d.domain}
-                className="grid grid-cols-[minmax(0,1fr)_74px_72px] items-center gap-2"
-              >
-                <span className="min-w-0 truncate">{d.label}</span>
-                <span className="flex justify-center">
-                  {d.scannerUrl && (
-                    <ScannerLink href={d.scannerUrl} label={`${d.label} Gateway depositor`} />
-                  )}
-                </span>
-                <span className="text-right font-mono tabular-nums">
-                  ${formatGrandTotal(d.balance)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {data.appKit?.breakdown?.length ? (
-        <div className="border-t border-white/20 pt-2">
-          <div className="opacity-70">AppKit getBalances</div>
-          <ul className="mt-1 space-y-1">
-            {data.appKit.breakdown.flatMap(account =>
-              account.breakdown.map(row => (
-                <li
-                  key={`${account.depositor}-${row.chain}`}
-                  className="grid grid-cols-[minmax(0,1fr)_72px_72px] items-center gap-2"
-                >
-                  <span className="min-w-0 truncate">{row.chain}</span>
-                  <span className="text-right font-mono tabular-nums">
-                    ${formatGrandTotal(row.confirmedBalance)}
-                  </span>
-                  <span className="text-right font-mono tabular-nums opacity-65">
-                    {row.pendingBalance ? `+${formatGrandTotal(row.pendingBalance)}` : ''}
-                  </span>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      ) : null}
 
       {data.pendingCredits.length > 0 && (
-        <div className="border-t border-white/20 pt-2">
-          <div className="opacity-70">Pending credits</div>
-          <ul className="mt-1 space-y-1">
+        <div className="border-t border-[color:var(--hairline-color)] px-4 py-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/65">
+            Finalizing deposits
+          </div>
+          <ul className="mt-2 space-y-1.5">
             {data.pendingCredits.map(c => (
               <li
                 key={`${c.depositTxHash ?? c.confirmedAt}-${c.domain}`}
-                className="flex justify-between gap-3"
+                className="flex items-center justify-between gap-3"
               >
-                <span className="min-w-0 truncate">
-                  {c.chain} ·{' '}
-                  {c.status === 'finalizing'
-                    ? `${formatRemaining(c.remainingSeconds)}`
-                    : 'arriving'}
+                <span className="min-w-0 truncate text-black/70">
+                  <ChainLabel chain={c.chain} label={prettyChainName(c.chain)} /> ·{' '}
+                  {c.status === 'finalizing' ? formatRemaining(c.remainingSeconds) : 'arriving'}
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
                   {c.scannerUrl && <ScannerLink href={c.scannerUrl} label={`${c.chain} tx`} />}
@@ -317,14 +324,18 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
       )}
 
       {data.opsStaging.length > 0 && data.opsStaging.some(s => s.usdc !== '0') && (
-        <div className="border-t border-white/20 pt-2">
-          <div className="opacity-70">In sweep</div>
-          <ul className="mt-1 space-y-1">
+        <div className="border-t border-[color:var(--hairline-color)] px-4 py-3">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-black/65">
+            In sweep
+          </div>
+          <ul className="mt-2 space-y-1.5">
             {data.opsStaging
               .filter(s => s.usdc !== '0')
               .map(s => (
                 <li key={s.walletAddress} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate">{s.chain}</span>
+                  <span className="min-w-0 truncate text-black/70">
+                    <ChainLabel chain={s.chain} label={prettyChainName(s.chain)} />
+                  </span>
                   <span className="flex shrink-0 items-center gap-2">
                     {s.scannerUrl && (
                       <ScannerLink href={s.scannerUrl} label={`${s.chain} ops wallet`} />
@@ -337,10 +348,102 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
         </div>
       )}
 
-      <div className="border-t border-white/20 pt-2 font-mono text-[10px] opacity-75">
-        Gateway account: {shortAddr(data.depositor)}
+      {(hasUnsupportedSource || data.grandTotal !== spendableTotal || data.appKit) && (
+        <div className="border-t border-[color:var(--hairline-color)] px-4 py-2.5">
+          <div className="space-y-1">
+            {hasUnsupportedSource && (
+              <BreakdownRow
+                label="Unsupported source"
+                value={`$${formatGrandTotal(unsupportedSourceTotal)}`}
+              />
+            )}
+            <BreakdownRow
+              label="Total tracked"
+              value={`$${formatGrandTotal(data.grandTotal)}`}
+              muted={data.grandTotal === spendableTotal}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-3 text-[10px] text-black/55">
+            <span className="min-w-0 truncate">Gateway {shortAddr(data.depositor)}</span>
+            <span className="shrink-0">AppKit · pending included</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BalanceStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-[5px] border border-black/10 bg-[color:color-mix(in_oklab,var(--bg-elev)_90%,white)] px-2.5 py-1.5 text-black shadow-[0_1px_0_rgba(0,0,0,0.035)]">
+      <span className="min-w-0 truncate text-[10px] uppercase tracking-[0.1em] text-black/55">
+        {label}
+      </span>
+      <span className="shrink-0 font-mono text-[12px] tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function ChainBalanceRow({
+  chain,
+  label,
+  amount,
+  pending,
+  scannerUrl,
+}: {
+  chain: string;
+  label: string;
+  amount: string;
+  pending?: string;
+  scannerUrl?: string | null;
+}) {
+  const hasPending = pending && !isZeroAmount(pending);
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[6px] border border-black/10 bg-[color:color-mix(in_oklab,var(--bg-elev)_91%,white)] px-3 py-2.5 text-black shadow-[inset_0_1px_0_rgba(255,255,255,0.42),0_1px_0_rgba(0,0,0,0.035)]">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <ChainIcon chain={chain} size="lg" />
+        <div className="min-w-0">
+          <div className="truncate text-[14px] leading-4 font-semibold">{label}</div>
+          <div className="mt-0.5 text-[10px] uppercase tracking-[0.1em] text-black/50">
+            Gateway route
+          </div>
+          {hasPending && (
+            <div className="mt-0.5 text-[11px] text-black/60">
+              +${formatGrandTotal(pending)} pending
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="font-mono text-[14px] tabular-nums">${formatGrandTotal(amount)}</div>
+        {scannerUrl && <ScannerLink href={scannerUrl} label={`${label} Gateway depositor`} />}
       </div>
     </div>
+  );
+}
+
+function ChainLabel({ chain, label }: { chain: string; label: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 align-middle">
+      <ChainIcon chain={chain} size="sm" />
+      <span className="min-w-0 truncate">{label}</span>
+    </span>
+  );
+}
+
+function ChainIcon({ chain, size }: { chain: string; size: 'sm' | 'lg' }) {
+  const boxClass =
+    size === 'lg'
+      ? 'size-6 bg-[color:color-mix(in_oklab,var(--bg-elev)_72%,white)]'
+      : 'size-4 bg-white/80';
+  const iconSize = size === 'lg' ? 18 : 13;
+
+  return (
+    <span
+      className={`grid shrink-0 place-items-center rounded-full ring-1 ring-black/10 ${boxClass}`}
+    >
+      <BlockchainIcon chain={chain} size={iconSize} />
+    </span>
   );
 }
 
@@ -363,7 +466,7 @@ function ScannerLink({ href, label }: { href: string; label: string }) {
       href={href}
       target="_blank"
       rel="noreferrer"
-      aria-label={`open ${label} scanner`}
+      aria-label={`open ${label} block explorer`}
       onPointerDown={e => {
         openedFromPointerRef.current = true;
         openScanner(e);
@@ -377,20 +480,76 @@ function ScannerLink({ href, label }: { href: string; label: string }) {
         }
         openScanner(e);
       }}
-      className="rounded border border-white/25 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/90 no-underline transition hover:border-white/70 hover:bg-white/10 hover:text-white"
+      className="mt-0.5 inline-flex items-center justify-end font-mono text-[9px] uppercase tracking-[0.11em] text-black/55 underline decoration-black/20 underline-offset-2 transition-[color,text-decoration-color,transform] duration-150 ease-out hover:text-black hover:decoration-black active:scale-[0.97]"
     >
-      Scan ↗
+      Explorer ↗
     </a>
   );
 }
 
 function BreakdownRow({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <div className={`flex justify-between gap-3 ${muted ? 'opacity-55' : ''}`}>
-      <span>{label}</span>
+    <div
+      className={`flex justify-between gap-3 text-[11px] ${muted ? 'text-black/60' : 'text-black'}`}
+    >
+      <span className="min-w-0 truncate">{label}</span>
       <span className="shrink-0 font-mono tabular-nums">{value}</span>
     </div>
   );
+}
+
+function isZeroAmount(s: string | undefined | null): boolean {
+  if (!s) return true;
+  const n = Number(s);
+  return Number.isFinite(n) && Math.abs(n) < 0.000001;
+}
+
+function prettyChainName(chain: string): string {
+  return chain
+    .replace(/_Sepolia$/u, ' Sepolia')
+    .replace(/_Testnet$/u, ' Testnet')
+    .replace(/_Fuji$/u, ' Fuji')
+    .replace(/_Amoy_Testnet$/u, ' Amoy')
+    .replace(/_/gu, ' ');
+}
+
+function explorerUrlForAddress(chain: string, address: string | null | undefined): string | null {
+  if (!address) return null;
+  const base = explorerBaseForChain(chain);
+  if (!base) return null;
+  if (chain === 'Solana_Devnet' || chain === 'Sol_Devnet' || chain === 'Solana') {
+    const cluster = chain === 'Solana' ? '' : '?cluster=devnet';
+    return `${base}/address/${address}${cluster}`;
+  }
+  return `${base}/address/${address}`;
+}
+
+function explorerBaseForChain(chain: string): string | null {
+  switch (chain) {
+    case 'Arc_Testnet':
+      return 'https://testnet.arcscan.app';
+    case 'Ethereum_Sepolia':
+      return 'https://sepolia.etherscan.io';
+    case 'Base_Sepolia':
+      return 'https://sepolia.basescan.org';
+    case 'Avalanche_Fuji':
+      return 'https://testnet.snowtrace.io';
+    case 'Arbitrum_Sepolia':
+      return 'https://sepolia.arbiscan.io';
+    case 'Optimism_Sepolia':
+      return 'https://sepolia-optimism.etherscan.io';
+    case 'Polygon_Amoy':
+    case 'Polygon_Amoy_Testnet':
+      return 'https://amoy.polygonscan.com';
+    case 'Sol_Devnet':
+    case 'Solana_Devnet':
+    case 'Solana':
+      return 'https://explorer.solana.com';
+    case 'Unichain_Sepolia':
+      return 'https://sepolia.uniscan.xyz';
+    default:
+      return null;
+  }
 }
 
 /** Format a 6-decimal USDC string like '12.345600' as '12.35'. */

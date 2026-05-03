@@ -68,7 +68,7 @@ export async function airQualityBrief(input: AirQualityBriefInput): Promise<AirQ
 export const airQualityBriefTool: ToolDef<AirQualityBriefInput, AirQualityBriefResult> = {
   name: 'air_quality_brief',
   description:
-    'Get current air quality for a location, including AQI and health recommendations. Use for respiratory-risk and outdoor-activity guidance.',
+    'Get current air quality for a location (AQI + health recommendations). REQUIRES latitude + longitude — does NOT accept city names. If the user gave a place name, call `geocode_trip_stop` first to resolve it to coordinates, then pass those coordinates here.',
   inputSchema,
   jsonSchema: {
     type: 'object',
