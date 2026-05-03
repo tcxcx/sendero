@@ -34,6 +34,8 @@ import { findAirportsNearbyTool } from './find-airports-nearby';
 import { mintStampTool, refreshStampUriTool } from './mint-stamp';
 import { moonpayTopupTool } from './moonpay-topup';
 import { getMoonpayTopupStatusTool } from './get-moonpay-topup-status';
+import { moonpayOfframpTool } from './moonpay-offramp';
+import { getMoonpayOfframpStatusTool } from './get-moonpay-offramp-status';
 import { demoMintBoardingPassTool } from './demo-mint-boarding-pass';
 import {
   kapsoActivatePhoneNumberTool,
@@ -339,6 +341,8 @@ export const toolList: ToolDef[] = [
   // retrying a stalled booking.
   moonpayTopupTool,
   getMoonpayTopupStatusTool,
+  moonpayOfframpTool,
+  getMoonpayOfframpStatusTool,
   // Tenant pricing policy agent surface (E1 + E2)
   getPricingPolicyTool,
   activatePricingPolicyTool,

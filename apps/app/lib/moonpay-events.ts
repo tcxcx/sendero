@@ -30,6 +30,8 @@ export interface DispatchResult {
   /** When the event resolves to a known top-up, surface ids for audit. */
   userId?: string;
   topUpId?: string;
+  /** When the event resolves to a known off-ramp, surface ids for audit. */
+  offRampId?: string;
 }
 
 /**
@@ -81,6 +83,25 @@ interface MoonPayTransactionData {
   failureReason?: string | null;
 }
 
+/**
+ * MoonPay sell-transaction payload shape. Same envelope as buys but the
+ * `baseCurrency*` fields describe the crypto being sold and `quoteCurrency*`
+ * the fiat to receive. Refund destination is the source-of-funds wallet.
+ */
+interface MoonPaySellTransactionData {
+  id: string;
+  status?: string;
+  customerId?: string;
+  externalCustomerId?: string;
+  refundWalletAddress?: string;
+  cryptoTransactionId?: string;
+  baseCurrencyAmount?: number | string;
+  baseCurrencyCode?: string;
+  quoteCurrencyAmount?: number | string | null;
+  quoteCurrencyCode?: string;
+  failureReason?: string | null;
+}
+
 interface MoonPayPayload {
   type: string;
   data?: Record<string, unknown>;
@@ -95,6 +116,12 @@ const TX_STATE_EVENTS = new Set([
   'transaction_updated',
   'transaction_failed',
   'transaction_abandoned',
+]);
+
+const SELL_TX_STATE_EVENTS = new Set([
+  'sell_transaction_created',
+  'sell_transaction_updated',
+  'sell_transaction_failed',
 ]);
 
 const REFUND_EVENTS = new Set(['refunded', 'chargeback']);
@@ -192,6 +219,72 @@ async function applyTransactionState(
 }
 
 /**
+ * Maps a MoonPay sell-transaction event to our `MoonPayOffRamp` row,
+ * upserting on `(moonpaySellTransactionId)`. Mirrors `applyTransactionState`
+ * but for the cash-out leg.
+ */
+async function applySellTransactionState(
+  type: string,
+  data: MoonPaySellTransactionData
+): Promise<DispatchResult> {
+  if (!data.id) {
+    return { status: 'failed', error: 'sell_transaction_event_missing_id' };
+  }
+
+  const userId = data.externalCustomerId;
+  if (!userId) {
+    return { status: 'skipped', error: 'no_external_customer_id' };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  if (!user) {
+    return { status: 'skipped', error: 'user_not_found', userId };
+  }
+
+  const status = type === 'sell_transaction_failed' ? 'failed' : (data.status ?? 'pending');
+
+  const completedAt = status === 'completed' ? new Date() : undefined;
+
+  const row = await prisma.moonPayOffRamp.upsert({
+    where: { moonpaySellTransactionId: data.id },
+    create: {
+      userId,
+      moonpaySellTransactionId: data.id,
+      moonpayCustomerId: data.customerId ?? null,
+      baseCurrencyAmount: new Prisma.Decimal(String(data.baseCurrencyAmount ?? '0')),
+      baseCurrencyCode: data.baseCurrencyCode ?? 'unknown',
+      quoteCurrencyAmount:
+        data.quoteCurrencyAmount != null
+          ? new Prisma.Decimal(String(data.quoteCurrencyAmount))
+          : null,
+      quoteCurrencyCode: data.quoteCurrencyCode ?? 'usd',
+      refundWalletAddress: data.refundWalletAddress ?? '',
+      status,
+      failureReason: data.failureReason ?? null,
+      cryptoTransactionHash: data.cryptoTransactionId ?? null,
+      completedAt,
+    },
+    update: {
+      status,
+      moonpayCustomerId: data.customerId ?? undefined,
+      quoteCurrencyAmount:
+        data.quoteCurrencyAmount != null
+          ? new Prisma.Decimal(String(data.quoteCurrencyAmount))
+          : undefined,
+      cryptoTransactionHash: data.cryptoTransactionId ?? undefined,
+      failureReason: data.failureReason ?? undefined,
+      completedAt: completedAt ?? undefined,
+    },
+    select: { id: true, userId: true },
+  });
+
+  return { status: 'processed', userId: row.userId, offRampId: row.id };
+}
+
+/**
  * Best-effort handler that always returns a result. Catches every
  * domain-side error so MoonPay never retries on our bugs.
  */
@@ -202,6 +295,13 @@ export async function dispatchMoonPayEvent(payload: MoonPayPayload): Promise<Dis
   try {
     if (TX_STATE_EVENTS.has(type)) {
       return await applyTransactionState(type, data);
+    }
+
+    if (SELL_TX_STATE_EVENTS.has(type)) {
+      return await applySellTransactionState(
+        type,
+        payload.data as unknown as MoonPaySellTransactionData
+      );
     }
 
     if (REFUND_EVENTS.has(type)) {

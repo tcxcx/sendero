@@ -12,6 +12,7 @@
 
 import { MoonPayProvider } from '@moonpay/moonpay-react';
 
+import { MoonPayCashout } from './moonpay-cashout';
 import { MoonPayTopUp } from './moonpay-topup';
 
 interface Props {
@@ -27,6 +28,7 @@ export function MoonPayTopUpShell({ apiKey, evmAddress, email, userId }: Props) 
   return (
     <MoonPayProvider apiKey={apiKey} debug={false}>
       <MoonPayTopUp evmAddress={evmAddress} email={email} userId={userId} />
+      <MoonPayCashout evmAddress={evmAddress} email={email} userId={userId} />
     </MoonPayProvider>
   );
 }
