@@ -35,7 +35,14 @@ import type { ToolDef } from './types';
 
 const mintStampInput = z.object({
   /** Stamp kind. Maps to the StampKind enum in the workflow + manifest. */
-  kind: z.enum(['BoardingPass', 'SettlementReceipt', 'ItineraryMap', 'TripPassport']),
+  kind: z.enum([
+    'BoardingPass',
+    'SettlementReceipt',
+    'ItineraryMap',
+    'TripPassport',
+    'StayCheckIn',
+    'TripCompletion',
+  ]),
   /**
    * Domain primary key — bookingId for BoardingPass / Receipt,
    * tripId for ItineraryMap / TripPassport. Used as the (kind,
@@ -91,7 +98,14 @@ export const mintStampTool: ToolDef<z.infer<typeof mintStampInput>, MintStampRes
     properties: {
       kind: {
         type: 'string',
-        enum: ['BoardingPass', 'SettlementReceipt', 'ItineraryMap', 'TripPassport'],
+        enum: [
+          'BoardingPass',
+          'SettlementReceipt',
+          'ItineraryMap',
+          'TripPassport',
+          'StayCheckIn',
+          'TripCompletion',
+        ],
       },
       primaryKey: { type: 'string' },
       to: { type: 'string', pattern: '^0x[a-fA-F0-9]{40}$' },
@@ -242,7 +256,14 @@ export const mintStampTool: ToolDef<z.infer<typeof mintStampInput>, MintStampRes
  * Internal + privileged.
  */
 const refreshUriInput = z.object({
-  kind: z.enum(['BoardingPass', 'SettlementReceipt', 'ItineraryMap', 'TripPassport']),
+  kind: z.enum([
+    'BoardingPass',
+    'SettlementReceipt',
+    'ItineraryMap',
+    'TripPassport',
+    'StayCheckIn',
+    'TripCompletion',
+  ]),
   primaryKey: z.string().min(1),
   newUri: z.string().min(1),
 });
@@ -262,7 +283,14 @@ export const refreshStampUriTool: ToolDef<
     properties: {
       kind: {
         type: 'string',
-        enum: ['BoardingPass', 'SettlementReceipt', 'ItineraryMap', 'TripPassport'],
+        enum: [
+          'BoardingPass',
+          'SettlementReceipt',
+          'ItineraryMap',
+          'TripPassport',
+          'StayCheckIn',
+          'TripCompletion',
+        ],
       },
       primaryKey: { type: 'string' },
       newUri: { type: 'string' },

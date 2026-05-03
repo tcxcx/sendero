@@ -36,6 +36,7 @@ import { moonpayTopupTool } from './moonpay-topup';
 import { getMoonpayTopupStatusTool } from './get-moonpay-topup-status';
 import { moonpayOfframpTool } from './moonpay-offramp';
 import { getMoonpayOfframpStatusTool } from './get-moonpay-offramp-status';
+import { completeTripTool } from './complete-trip';
 import { demoMintBoardingPassTool } from './demo-mint-boarding-pass';
 import {
   kapsoActivatePhoneNumberTool,
@@ -343,6 +344,7 @@ export const toolList: ToolDef[] = [
   getMoonpayTopupStatusTool,
   moonpayOfframpTool,
   getMoonpayOfframpStatusTool,
+  completeTripTool,
   // Tenant pricing policy agent surface (E1 + E2)
   getPricingPolicyTool,
   activatePricingPolicyTool,
