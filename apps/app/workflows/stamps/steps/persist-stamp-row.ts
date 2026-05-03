@@ -10,7 +10,7 @@
  * exactly one row per stamp and the update is idempotent.
  */
 
-import { prisma, Prisma } from '@sendero/database';
+import { prisma, type Prisma } from '@sendero/database';
 
 import type { StampContext } from '../shared/types';
 
