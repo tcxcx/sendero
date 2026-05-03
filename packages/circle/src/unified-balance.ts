@@ -87,10 +87,7 @@ export async function getTenantUnifiedBalances(args: {
   const ctx = await getTenantUnifiedBalanceContext(args.tenantId);
   return getUnifiedBalanceKit().getBalances({
     token: 'USDC',
-    sources: {
-      address: ctx.signer.address,
-      chains: ctx.enabledChains,
-    },
+    sources: [{ adapter: ctx.adapter }],
     includePending: args.includePending ?? true,
     networkType: 'testnet',
   } as never);

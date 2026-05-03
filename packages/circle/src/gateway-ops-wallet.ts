@@ -27,6 +27,8 @@
 
 import { prisma } from '@sendero/database';
 
+import { syncCircleWalletSet, type SyncCircleSdk } from './sync-wallet-set';
+
 export interface ProvisionTenantOpsDcwArgs {
   tenantId: string;
   clerkOrgId: string;
@@ -54,6 +56,8 @@ export interface OpsCircleSdk {
   }) => Promise<{
     data?: { wallets?: Array<{ id: string; address: string }> };
   }>;
+  /** See `provision-tenant-wallet.ts` — used by the post-create sync. */
+  listWallets?: SyncCircleSdk['listWallets'];
 }
 
 export interface ProvisionTenantOpsDcwResult {
@@ -157,6 +161,26 @@ export async function provisionTenantOpsDcw(
     },
   });
 
+  // Same post-create sync as the treasury path. See
+  // `provision-tenant-wallet.ts` for the rationale (the $500 incident).
+  if (sdk.listWallets) {
+    try {
+      await syncCircleWalletSet({
+        tenantId: args.tenantId,
+        clerkOrgId: args.clerkOrgId,
+        walletSetId,
+        sdk: { listWallets: sdk.listWallets },
+      });
+    } catch (err) {
+      console.warn('[provisionTenantOpsDcw] post-create wallet-set sync failed (non-fatal)', {
+        tenantId: args.tenantId,
+        walletSetId,
+        chain: args.chain,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return {
     walletSetId,
     walletId: wallet.id,
@@ -172,10 +196,12 @@ async function resolveSdk(): Promise<OpsCircleSdk> {
       const circle = (mod as { getCircle: () => unknown }).getCircle() as {
         createWalletSet: OpsCircleSdk['createWalletSet'];
         createWallets: OpsCircleSdk['createWallets'];
+        listWallets: NonNullable<OpsCircleSdk['listWallets']>;
       };
       return {
         createWalletSet: a => circle.createWalletSet(a),
         createWallets: a => circle.createWallets(a),
+        listWallets: a => circle.listWallets(a),
       };
     }
   } catch {

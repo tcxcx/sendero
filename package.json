@@ -40,6 +40,7 @@
     "db:seed": "bun run --cwd packages/database db:seed",
     "db:studio": "bun run --cwd packages/database db:studio",
     "db:reset": "bun run --cwd packages/database db:reset",
+    "backfill:circle-wallet-chains": "bun run --cwd apps/app scripts/backfill-circle-wallet-chains.ts",
     "llms:test": "bun run --cwd packages/llms test",
     "gen": "bunx turbo gen",
     "env:validate": "bun run --cwd packages/env validate",

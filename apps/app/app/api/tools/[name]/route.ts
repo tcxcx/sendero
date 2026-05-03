@@ -37,6 +37,7 @@ import type { ToolContext } from '@sendero/tools/types';
 
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
+import { resolveTravelerByPhone } from '@/lib/agent-traveler-resolver';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -149,19 +150,48 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
     );
   }
 
-  // 5. build context — same shape `/api/agent/dispatch` uses so the
+  // 5. resolve traveler — when the caller passed `travelerPhone`
+  //    (Kapso WhatsApp proxy always does), upsert the
+  //    ChannelIdentity, auto-provision a Sendero User, and
+  //    fire-and-forget the wallet ensure on Arc + Solana. Idempotent
+  //    on (tenantId, phone). Tools that need a real userId for
+  //    settlement / handoff / meter attribution see one here instead
+  //    of the `svc:<keyId>` placeholder. See plan D1.
+  let resolvedUserId: string | null = null;
+  let resolvedChannelIdentityId: string | null = body.channelIdentityId ?? null;
+  let resolvedIsPlaceholder: boolean | undefined;
+  if (body.travelerPhone) {
+    try {
+      const traveler = await resolveTravelerByPhone({
+        tenantId: tenantId!,
+        phoneE164: body.travelerPhone,
+      });
+      resolvedUserId = traveler.userId;
+      resolvedChannelIdentityId = traveler.channelIdentityId;
+      resolvedIsPlaceholder = traveler.isPlaceholder;
+    } catch (err) {
+      console.warn('[api/tools] traveler resolve failed (non-fatal)', {
+        phone: body.travelerPhone,
+        tenantId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // 6. build context — same shape `/api/agent/dispatch` uses so the
   //    handler experience is identical regardless of caller.
   const ctx: ToolContext = {
     traveler: {
       tenantId: tenantId!,
-      // Service-account caller — userId mirrors `/api/agent/dispatch`'s
-      // shared-secret path. Tools that need a real Sendero user
-      // (handoff anchoring, meter attribution) resolve from
-      // `channelIdentityId` when set.
-      userId: `svc:${keyId}`,
+      // Real user id when the phone resolved; falls back to the
+      // service-account placeholder otherwise.
+      userId: resolvedUserId ?? `svc:${keyId}`,
       ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
+      ...(resolvedIsPlaceholder !== undefined
+        ? { isPlaceholder: resolvedIsPlaceholder }
+        : {}),
     },
-    ...(body.channelIdentityId ? { channelIdentityId: body.channelIdentityId } : {}),
+    ...(resolvedChannelIdentityId ? { channelIdentityId: resolvedChannelIdentityId } : {}),
     caller: {
       scopes: grantedScopes,
       keyType,
@@ -169,11 +199,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
     },
   };
 
-  // 6. run — handler validates input via its own zod schema and
-  //    returns the result. Throw becomes a 500 with the message so
-  //    the caller (Kapso function) can surface it to the agent.
+  // 7. validate input via the tool's zod schema BEFORE invoking the
+  //    handler. Applies defaults (e.g. `unitsSystem: 'METRIC'`) so the
+  //    agent doesn't have to know about every optional field. Each
+  //    tool's handler typed signature already assumes Zod-parsed shape.
+  let parsedInput: unknown;
   try {
-    const result = await def.handler(body.input ?? {}, ctx);
+    parsedInput = def.inputSchema.parse(body.input ?? {});
+  } catch (err) {
+    const issues =
+      (err as { issues?: Array<{ path: (string | number)[]; message: string }> })?.issues ?? [];
+    return NextResponse.json(
+      {
+        error: 'invalid_input',
+        tool: name,
+        message:
+          issues.length > 0
+            ? issues
+                .map(i => `${i.path.join('.') || '(root)'}: ${i.message}`)
+                .join('; ')
+            : 'Input failed schema validation.',
+      },
+      { status: 400 }
+    );
+  }
+
+  // 8. run — handler returns the result. Throw becomes a 500 with the
+  //    message so the caller (Kapso function) can surface it to the
+  //    agent.
+  try {
+    const result = await def.handler(parsedInput, ctx);
     return NextResponse.json({ result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

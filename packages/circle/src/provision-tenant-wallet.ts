@@ -13,6 +13,8 @@
 
 import { prisma } from '@sendero/database';
 
+import { syncCircleWalletSet, type SyncCircleSdk } from './sync-wallet-set';
+
 export interface ProvisionTenantWalletArgs {
   tenantId: string;
   clerkOrgId: string;
@@ -41,6 +43,12 @@ export interface CircleSdkLike {
   }) => Promise<{
     data?: { wallets?: Array<{ id: string; address: string }> };
   }>;
+  /**
+   * Used by the post-create wallet-set sync to enumerate every chain
+   * Circle has automatically spawned for the same Owner. See
+   * `sync-wallet-set.ts` for the full rationale (the $500 incident).
+   */
+  listWallets?: SyncCircleSdk['listWallets'];
 }
 
 export interface ProvisionTenantWalletResult {
@@ -109,6 +117,28 @@ export async function provisionTenantWallet(
     },
   });
 
+  // 4. Sync any other-chain SCAs Circle spawned automatically for this
+  // wallet set. Without this, addresses on Avax / Polygon / Arb / etc.
+  // remain "ghost" — receivable but unfindable from Sendero queries.
+  // Best-effort: a sync failure should not roll back the treasury
+  // wallet creation; the backfill cron will catch up later.
+  if (sdk.listWallets) {
+    try {
+      await syncCircleWalletSet({
+        tenantId: args.tenantId,
+        clerkOrgId: args.clerkOrgId,
+        walletSetId,
+        sdk: { listWallets: sdk.listWallets },
+      });
+    } catch (err) {
+      console.warn('[provisionTenantWallet] post-create wallet-set sync failed (non-fatal)', {
+        tenantId: args.tenantId,
+        walletSetId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   return {
     walletSetId,
     walletId: wallet.id,
@@ -130,10 +160,12 @@ async function resolveSdk(): Promise<CircleSdkLike> {
       const circle = (mod as { getCircle: () => unknown }).getCircle() as {
         createWalletSet: CircleSdkLike['createWalletSet'];
         createWallets: CircleSdkLike['createWallets'];
+        listWallets: NonNullable<CircleSdkLike['listWallets']>;
       };
       return {
         createWalletSet: a => circle.createWalletSet(a),
         createWallets: a => circle.createWallets(a),
+        listWallets: a => circle.listWallets(a),
       };
     }
   } catch {

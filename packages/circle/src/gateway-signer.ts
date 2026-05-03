@@ -94,6 +94,7 @@ interface CacheEntry {
 
 const SIGNER_CACHE_TTL_MS = 60_000;
 const signerCache = new Map<string, CacheEntry>();
+const userSignerCache = new Map<string, CacheEntry>();
 
 function cacheGet(tenantId: string): TenantGatewaySigner | null {
   const entry = signerCache.get(tenantId);
@@ -109,12 +110,30 @@ function cacheSet(tenantId: string, signer: TenantGatewaySigner): void {
   signerCache.set(tenantId, { signer, expiresAt: Date.now() + SIGNER_CACHE_TTL_MS });
 }
 
+function userCacheGet(userId: string): TenantGatewaySigner | null {
+  const entry = userSignerCache.get(userId);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    userSignerCache.delete(userId);
+    return null;
+  }
+  return entry.signer;
+}
+
+function userCacheSet(userId: string, signer: TenantGatewaySigner): void {
+  userSignerCache.set(userId, { signer, expiresAt: Date.now() + SIGNER_CACHE_TTL_MS });
+}
+
 /**
  * Drop a tenant's cache entry — call after rotating the row, after
  * a `kekVersion` bump, or in test teardown.
  */
 export function invalidateGatewaySignerCache(tenantId: string): void {
   signerCache.delete(tenantId);
+}
+
+export function invalidateUserGatewaySignerCache(userId: string): void {
+  userSignerCache.delete(userId);
 }
 
 // ── Public API ────────────────────────────────────────────────────────
@@ -151,7 +170,8 @@ export async function getOrCreateGatewaySigner(
 
   if (existing) {
     const signer = await decryptSigner({
-      tenantId,
+      contextLabel: `tenant:${tenantId}`,
+      contextId: tenantId,
       address: existing.address,
       encryptedPrivateKey: existing.encryptedPrivateKey,
       kekVersion: existing.kekVersion,
@@ -189,7 +209,8 @@ export async function getOrCreateGatewaySigner(
       });
       if (winner) {
         const signer = await decryptSigner({
-          tenantId,
+          contextLabel: `tenant:${tenantId}`,
+          contextId: tenantId,
           address: winner.address,
           encryptedPrivateKey: winner.encryptedPrivateKey,
           kekVersion: winner.kekVersion,
@@ -207,6 +228,7 @@ export async function getOrCreateGatewaySigner(
   // decrypts log via decryptSigner.
   void writeAuditLog({
     tenantId,
+    userId: null,
     kekVersion,
     caller: options?.caller,
     contextSuffix: 'create',
@@ -244,7 +266,8 @@ export async function getGatewaySigner(
   if (!row) return null;
 
   const signer = await decryptSigner({
-    tenantId,
+    contextLabel: `tenant:${tenantId}`,
+    contextId: tenantId,
     address: row.address,
     encryptedPrivateKey: row.encryptedPrivateKey,
     kekVersion: row.kekVersion,
@@ -254,10 +277,138 @@ export async function getGatewaySigner(
   return signer;
 }
 
+/**
+ * Per-user variant. Returns the user's Gateway depositor EOA, generating
+ * a fresh one on first call. Same shape as the tenant variant; cached
+ * separately so a misbehaving user doesn't poison the tenant cache.
+ *
+ * Idempotent on `userId`. Concurrent first-time calls race on the
+ * `prisma.userGatewaySigner.create` unique constraint — the loser
+ * catches the constraint error and re-reads.
+ */
+export async function getOrCreateUserGatewaySigner(
+  userId: string,
+  options?: GetGatewaySignerOptions
+): Promise<TenantGatewaySigner> {
+  if (!userId) {
+    throw new Error('getOrCreateUserGatewaySigner: userId required');
+  }
+
+  const cached = userCacheGet(userId);
+  if (cached) return cached;
+
+  const existing = await prisma.userGatewaySigner.findUnique({
+    where: { userId },
+  });
+
+  if (existing) {
+    const signer = await decryptSigner({
+      contextLabel: `user:${userId}`,
+      contextId: userId,
+      address: existing.address,
+      encryptedPrivateKey: existing.encryptedPrivateKey,
+      kekVersion: existing.kekVersion,
+      caller: options?.caller,
+    });
+    userCacheSet(userId, signer);
+    return signer;
+  }
+
+  const privateKey = generatePrivateKey();
+  const account = privateKeyToAccount(privateKey);
+  const lowerAddress = account.address.toLowerCase();
+  const { ciphertext, kekVersion } = await encrypt({
+    plaintext: privateKey,
+    purpose: 'gateway-signer',
+    contextId: userId,
+  });
+
+  try {
+    await prisma.userGatewaySigner.create({
+      data: {
+        userId,
+        address: lowerAddress,
+        encryptedPrivateKey: ciphertext,
+        kekVersion,
+      },
+    });
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      const winner = await prisma.userGatewaySigner.findUnique({
+        where: { userId },
+      });
+      if (winner) {
+        const signer = await decryptSigner({
+          contextLabel: `user:${userId}`,
+          contextId: userId,
+          address: winner.address,
+          encryptedPrivateKey: winner.encryptedPrivateKey,
+          kekVersion: winner.kekVersion,
+          caller: options?.caller,
+        });
+        userCacheSet(userId, signer);
+        return signer;
+      }
+    }
+    throw err;
+  }
+
+  void writeAuditLog({
+    tenantId: null,
+    userId,
+    kekVersion,
+    caller: options?.caller,
+    contextSuffix: 'create:user',
+  });
+
+  const signer: TenantGatewaySigner = {
+    address: lowerAddress as Hex,
+    account,
+    privateKey,
+    kekVersion,
+  };
+  userCacheSet(userId, signer);
+  return signer;
+}
+
+/**
+ * Read-only variant for the user signer — null if not yet provisioned.
+ */
+export async function getUserGatewaySigner(
+  userId: string,
+  options?: GetGatewaySignerOptions
+): Promise<TenantGatewaySigner | null> {
+  if (!userId) {
+    throw new Error('getUserGatewaySigner: userId required');
+  }
+
+  const cached = userCacheGet(userId);
+  if (cached) return cached;
+
+  const row = await prisma.userGatewaySigner.findUnique({
+    where: { userId },
+  });
+  if (!row) return null;
+
+  const signer = await decryptSigner({
+    contextLabel: `user:${userId}`,
+    contextId: userId,
+    address: row.address,
+    encryptedPrivateKey: row.encryptedPrivateKey,
+    kekVersion: row.kekVersion,
+    caller: options?.caller,
+  });
+  userCacheSet(userId, signer);
+  return signer;
+}
+
 // ── Internals ─────────────────────────────────────────────────────────
 
 interface DecryptArgs {
-  tenantId: string;
+  /** Either tenant:<id> or user:<id> for log lines. */
+  contextLabel: string;
+  /** Encryption contextId — tenantId or userId. */
+  contextId: string;
   address: string;
   encryptedPrivateKey: string;
   kekVersion: number;
@@ -278,28 +429,31 @@ async function decryptSigner(args: DecryptArgs): Promise<TenantGatewaySigner> {
   const plaintext = await decrypt({
     ciphertext: args.encryptedPrivateKey,
     purpose: 'gateway-signer',
-    contextId: args.tenantId,
+    contextId: args.contextId,
     kekVersion: args.kekVersion,
   });
 
   const account = privateKeyToAccount(plaintext as Hex);
   if (account.address.toLowerCase() !== args.address.toLowerCase()) {
     throw new Error(
-      `Gateway signer key mismatch for tenant ${args.tenantId}: stored address ` +
+      `Gateway signer key mismatch for ${args.contextLabel}: stored address ` +
         `${args.address} but decrypted key derives ${account.address}. ` +
         `KEK rotation gap or row tamper — refusing to sign with the wrong key.`
     );
   }
 
   // Audit the decrypt event. Fire-and-forget — don't gate the hot path
-  // on the audit DB. If audit writes fall over, signing still works;
-  // the operator gets a log warning instead of a wedged Gateway flow.
-  void writeAuditLog({
-    tenantId: args.tenantId,
-    kekVersion: args.kekVersion,
-    caller: args.caller,
-    contextSuffix: 'decrypt',
-  });
+  // on the audit DB. Tenant-scoped only for now (WalletAccessLog FK
+  // requires tenantId); user-scoped signer decrypts skip the audit row.
+  if (args.contextLabel.startsWith('tenant:')) {
+    void writeAuditLog({
+      tenantId: args.contextId,
+      userId: null,
+      kekVersion: args.kekVersion,
+      caller: args.caller,
+      contextSuffix: 'decrypt',
+    });
+  }
 
   return {
     address: account.address.toLowerCase() as Hex,
@@ -316,14 +470,22 @@ async function decryptSigner(args: DecryptArgs): Promise<TenantGatewaySigner> {
  * visible but signing still proceeds.
  */
 async function writeAuditLog(args: {
-  tenantId: string;
+  tenantId: string | null;
+  /** Reserved for future user-scope audit. Currently no-op when set. */
+  userId: string | null;
   kekVersion: number;
   caller: GatewaySignerCallerContext | undefined;
   contextSuffix: string;
 }): Promise<void> {
+  if (!args.tenantId) {
+    // User-scope audit not yet supported by WalletAccessLog (FK requires
+    // tenantId). The decrypt is logged via console.warn at the call site
+    // if it fails; routine successes go unrecorded for now.
+    return;
+  }
   try {
     const callerSurface = args.caller?.surface ?? 'unknown';
-    const callerUserId = args.caller?.userId ?? null;
+    const callerUserId = args.caller?.userId ?? args.userId ?? null;
     // Truncate context to ~200 chars so adversarial / accidental long
     // strings don't bloat the table.
     const callerContext = args.caller?.context

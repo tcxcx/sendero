@@ -358,6 +358,7 @@ model User {
   groupTripMemberships   GroupTripPassenger[]  @relation("GroupTripPassengers")
   chatSessions           ChatSession[]         @relation("ChatSessionUser")
   handoffsAnswered       ChannelHandoff[]      @relation("ChannelHandoffAnsweredBy")
+  gatewaySigner          UserGatewaySigner?
 
   @@index([createdAt])
   @@map("users")
@@ -850,6 +851,32 @@ model CircleWallet {
 /// leaves the server process. `kekVersion` enables KEK rotation without
 /// re-encrypting historical rows in lockstep — readers decrypt under
 /// the row's KEK version, lazy-rewrite under the latest version on access.
+/// Per-user Circle Gateway depositor — same EOA pattern as
+/// `TenantGatewaySigner`, scoped to a User instead of a Tenant.
+///
+/// Each traveler gets a self-custody EOA recorded as the Gateway
+/// depositor across every supported chain. The traveler's DCW rows
+/// (Wallet on Arc + Solana) keep their role for native-chain custody;
+/// this signer is what the Gateway API's /balances + /transfer return.
+///
+/// Same EIP-712 chainId issue applies: Circle's signTypedData injects
+/// `chainId` into the domain but Gateway's DOMAIN_SEPARATOR has none,
+/// so DCW-signed burn intents recover to the wrong address. A viem EOA
+/// signs cleanly. Encryption: AES-256-GCM via @sendero/encryption,
+/// purpose 'user-gateway-signer', contextId = userId.
+model UserGatewaySigner {
+  userId              String   @id
+  address             String   @unique
+  encryptedPrivateKey String
+  kekVersion          Int      @default(1)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_gateway_signers")
+}
+
 model TenantGatewaySigner {
   tenantId            String   @id
   /// Lowercased 0x… address derived from the encrypted key. We compare

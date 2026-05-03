@@ -54,7 +54,7 @@ export async function timezoneBrief(input: TimezoneBriefInput): Promise<Timezone
 export const timezoneBriefTool: ToolDef<TimezoneBriefInput, TimezoneBriefResult> = {
   name: 'timezone_brief',
   description:
-    'Return time zone and local-time context for a location. Use for arrival planning, meeting safety, and transfer timing.',
+    'Return time zone + local-time context for a location. REQUIRES latitude + longitude — does NOT accept city names. If the user gave a place name, call `geocode_trip_stop` first to resolve it to coordinates, then pass those coordinates here.',
   inputSchema,
   jsonSchema: {
     type: 'object',

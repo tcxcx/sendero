@@ -28,25 +28,42 @@ import { z } from 'zod';
 
 import type { ToolDef, ToolContext } from './types';
 
-const requestHumanHandoffInput = z.object({
-  question: z
-    .string()
-    .min(5)
-    .max(2000)
-    .describe(
-      "The exact question Sendero needs the operator team to answer. Phrase it so an operator who hasn't seen this thread can respond directly."
-    ),
-  summary: z
-    .string()
-    .max(2000)
-    .optional()
-    .describe(
-      'Optional 1-3 sentence customer/context summary so the operator can answer quickly without reading the full thread.'
-    ),
-  /** Optional active trip — when present, the handoff is anchored to that trip
-   *  and the trip inbox surfaces it. Falls back to tool context when omitted. */
-  tripId: z.string().min(1).optional(),
-});
+/**
+ * Schema accepts either `question` (canonical) or `reason` (alias the
+ * agent sometimes synthesizes from natural-language framing). Coerced
+ * to `question` in the handler. The persona explicitly tells the agent
+ * to use `question`; the alias is defense-in-depth for prompt drift.
+ */
+const requestHumanHandoffInput = z
+  .object({
+    question: z
+      .string()
+      .min(5)
+      .max(2000)
+      .optional()
+      .describe(
+        "The exact question Sendero needs the operator team to answer. Phrase it so an operator who hasn't seen this thread can respond directly."
+      ),
+    reason: z
+      .string()
+      .min(5)
+      .max(2000)
+      .optional()
+      .describe('Alias of `question`. Provide one or the other — never both.'),
+    summary: z
+      .string()
+      .max(2000)
+      .optional()
+      .describe(
+        'Optional 1-3 sentence customer/context summary so the operator can answer quickly without reading the full thread.'
+      ),
+    /** Optional active trip — when present, the handoff is anchored to that trip
+     *  and the trip inbox surfaces it. Falls back to tool context when omitted. */
+    tripId: z.string().min(1).optional(),
+  })
+  .refine(v => Boolean(v.question || v.reason), {
+    message: 'request_human_handoff requires `question` (or `reason`) describing what to ask the team.',
+  });
 
 interface RequestHumanHandoffOutput {
   handoffId: string;
@@ -68,7 +85,6 @@ export const requestHumanHandoffTool: ToolDef<
   inputSchema: requestHumanHandoffInput,
   jsonSchema: {
     type: 'object',
-    required: ['question'],
     properties: {
       question: {
         type: 'string',
@@ -76,6 +92,12 @@ export const requestHumanHandoffTool: ToolDef<
         maxLength: 2000,
         description:
           "The exact question for the operator team. Phrase it so an operator who hasn't seen this thread can respond directly.",
+      },
+      reason: {
+        type: 'string',
+        minLength: 5,
+        maxLength: 2000,
+        description: 'Alias of `question`. Provide one or the other — never both.',
       },
       summary: {
         type: 'string',
@@ -89,6 +111,11 @@ export const requestHumanHandoffTool: ToolDef<
     const tenantId = ctx?.traveler?.tenantId;
     if (!tenantId) throw new Error('handoff_missing_tenant_context');
 
+    // Coerce `reason` → `question` so prompt drift doesn't 500. The
+    // refine() above guarantees at least one is present.
+    const question = (input.question ?? input.reason ?? '').trim();
+    if (!question) throw new Error('handoff_missing_question');
+
     const channelIdentity = await resolveChannelIdentity(tenantId, ctx);
     if (!channelIdentity) throw new Error('handoff_missing_channel_identity');
 
@@ -100,7 +127,7 @@ export const requestHumanHandoffTool: ToolDef<
         tripId: tripId ?? null,
         channelIdentityId: channelIdentity.id,
         channel: channelIdentity.kind,
-        question: input.question,
+        question,
         summary: input.summary ?? null,
         liveblocksRoomId: 'pending',
       },
@@ -120,7 +147,7 @@ export const requestHumanHandoffTool: ToolDef<
         tripId,
         kind: 'handoff_requested',
         handoffId: handoff.id,
-        question: input.question,
+        question,
         summary: input.summary ?? null,
         channel: channelIdentity.kind,
       });
@@ -134,8 +161,23 @@ export const requestHumanHandoffTool: ToolDef<
       tenantId,
       handoffId: handoff.id,
       liveblocksRoomId,
-      question: input.question,
+      question,
       summary: input.summary ?? null,
+    });
+
+    // Slack fan-out — when the tenant has Slack installed, post the
+    // handoff request to their `routing.defaultChannel` as an
+    // internal-message card. Liveblocks already handles the dashboard
+    // inbox notification; this surfaces handoffs to operators living
+    // in Slack without forcing a context switch. Best-effort; failures
+    // log + drop.
+    void notifyOperatorSlack({
+      tenantId,
+      handoffId: handoff.id,
+      question,
+      summary: input.summary ?? null,
+      channel: channelIdentity.kind,
+      tripId: tripId ?? null,
     });
 
     return {
@@ -243,6 +285,98 @@ async function notifyOperatorInbox(args: {
   } catch (err) {
     console.warn('[handoff] liveblocks notify failed', {
       handoffId: args.handoffId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Slack fan-out for handoff requests. Posts a Block Kit "internal
+ * message" card to the tenant's `routing.defaultChannel`. The card
+ * approximates the Liveblocks inbox notification's content so an
+ * operator who lives in Slack sees the same payload they would in
+ * the web dashboard.
+ *
+ * No-op when the tenant has no SlackInstall, no defaultChannel
+ * configured, or the install is revoked. Best-effort throughout — a
+ * Slack outage must never block the agent's traveler-facing reply.
+ */
+async function notifyOperatorSlack(args: {
+  tenantId: string;
+  handoffId: string;
+  question: string;
+  summary: string | null;
+  channel: string;
+  tripId: string | null;
+}): Promise<void> {
+  try {
+    const install = await prisma.slackInstall.findFirst({
+      where: { tenantId: args.tenantId, revokedAt: null },
+      select: { botToken: true, routing: true },
+    });
+    if (!install?.botToken) return;
+
+    const routing = (install.routing ?? {}) as Record<string, unknown>;
+    const defaultChannel =
+      typeof routing.defaultChannel === 'string' ? routing.defaultChannel : null;
+    if (!defaultChannel) return;
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+    const handoffUrl = `${baseUrl.replace(/\/$/, '')}/dashboard/handoffs/${args.handoffId}`;
+
+    // Lazy-import to avoid bundling Slack SDK into edge surfaces that
+    // never use it (every consumer of @sendero/tools).
+    const { createSlackClient, sendBlocks } = await import('@sendero/slack');
+    const client = createSlackClient(install.botToken);
+
+    await sendBlocks({
+      client,
+      channel: defaultChannel,
+      text: `Sendero handoff: ${args.question}`,
+      blocks: [
+        {
+          type: 'header',
+          text: { type: 'plain_text', text: '🛎  Sendero needs your input' },
+        },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*Question*\n${args.question}` },
+        },
+        ...(args.summary
+          ? [
+              {
+                type: 'section' as const,
+                text: { type: 'mrkdwn' as const, text: `*Context*\n${args.summary}` },
+              },
+            ]
+          : []),
+        {
+          type: 'context',
+          elements: [
+            { type: 'mrkdwn', text: `Channel: \`${args.channel}\`` },
+            ...(args.tripId
+              ? [{ type: 'mrkdwn' as const, text: `Trip: \`${args.tripId}\`` }]
+              : []),
+            { type: 'mrkdwn', text: `Handoff: \`${args.handoffId}\`` },
+          ],
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: 'Answer in Sendero' },
+              url: handoffUrl,
+              style: 'primary',
+            },
+          ],
+        },
+      ],
+    });
+  } catch (err) {
+    console.warn('[handoff] slack fanout failed', {
+      handoffId: args.handoffId,
+      tenantId: args.tenantId,
       error: err instanceof Error ? err.message : String(err),
     });
   }

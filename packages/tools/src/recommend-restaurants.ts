@@ -13,6 +13,7 @@
 import { env } from '@sendero/env';
 import { z } from 'zod';
 
+import { reverseGeocodeToLocality } from './google-travel-shared';
 import type { ToolDef } from './types';
 
 // ─── Public shape returned by the tool ───────────────────────────────
@@ -80,28 +81,39 @@ interface RawPlacesResponse {
 
 // ─── Tool schema ─────────────────────────────────────────────────────
 
-const inputSchema = z.object({
-  location: z
-    .string()
-    .min(1)
-    .describe(
-      'City, neighborhood, landmark, or free-form text (e.g. "near Plaza de Mayo, Buenos Aires").'
-    ),
-  cuisine: z
-    .string()
-    .optional()
-    .describe('Optional cuisine hint — e.g. "parrilla", "sushi", "vegan", "pizza".'),
-  priceLevel: z
-    .enum(['inexpensive', 'moderate', 'expensive', 'very_expensive'])
-    .optional()
-    .describe('Filter by price tier.'),
-  partySize: z.number().int().min(1).max(20).optional(),
-  limit: z.number().int().min(1).max(10).default(6),
-  languageCode: z
-    .string()
-    .default('en')
-    .describe('BCP-47 (e.g. en, es, pt) — steers returned name/address language.'),
-});
+const inputSchema = z
+  .object({
+    location: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'City, neighborhood, landmark, or free-form text (e.g. "near Plaza de Mayo, Buenos Aires"). Provide this OR latitude+longitude.'
+      ),
+    /** Coord pair — accepted as a fallback for callers that already have
+     *  lat/lng (e.g. after a `geocode_trip_stop`). The handler synthesizes
+     *  a Google-Places-friendly text query from them. */
+    latitude: z.number().optional(),
+    longitude: z.number().optional(),
+    cuisine: z
+      .string()
+      .optional()
+      .describe('Optional cuisine hint — e.g. "parrilla", "sushi", "vegan", "pizza".'),
+    priceLevel: z
+      .enum(['inexpensive', 'moderate', 'expensive', 'very_expensive'])
+      .optional()
+      .describe('Filter by price tier.'),
+    partySize: z.number().int().min(1).max(20).optional(),
+    limit: z.number().int().min(1).max(10).default(6),
+    languageCode: z
+      .string()
+      .default('en')
+      .describe('BCP-47 (e.g. en, es, pt) — steers returned name/address language.'),
+  })
+  .refine(
+    v => Boolean(v.location || (typeof v.latitude === 'number' && typeof v.longitude === 'number')),
+    { message: 'Provide `location` (string) OR both `latitude` and `longitude`.' }
+  );
 
 export type RecommendRestaurantsInput = z.infer<typeof inputSchema>;
 
@@ -142,7 +154,14 @@ const PRICE_LEVEL_MAP = {
 function buildQuery(input: RecommendRestaurantsInput): string {
   const parts = ['restaurant'];
   if (input.cuisine) parts.unshift(input.cuisine);
-  parts.push(`in ${input.location}`);
+  // Prefer the explicit `location` string; fall back to coordinates
+  // when the caller passed lat/lng instead. Google Places' textSearch
+  // accepts coord-anchored queries like "restaurant near 12.04°S, 77.03°W".
+  if (input.location) {
+    parts.push(`in ${input.location}`);
+  } else if (typeof input.latitude === 'number' && typeof input.longitude === 'number') {
+    parts.push(`near ${input.latitude.toFixed(4)},${input.longitude.toFixed(4)}`);
+  }
   return parts.join(' ');
 }
 
@@ -202,7 +221,32 @@ export async function recommendRestaurants(
     );
   }
 
-  const query = buildQuery(input);
+  // If the agent passed lat/lng without a place string, reverse-geocode
+  // to a city name so Places' textSearch returns results in the right
+  // city. The lat/lng-only path used to fall back to "near 12.04,77.03"
+  // text queries which Google interpreted loosely (e.g. matched a
+  // Buenos Aires restaurant for Lima coords).
+  const enriched: RecommendRestaurantsInput = { ...input };
+  if (
+    !enriched.location &&
+    typeof enriched.latitude === 'number' &&
+    typeof enriched.longitude === 'number'
+  ) {
+    try {
+      const mapsKey = env.googleMapsApiKey() ?? apiKey;
+      const locality = await reverseGeocodeToLocality({
+        latitude: enriched.latitude,
+        longitude: enriched.longitude,
+        apiKey: mapsKey,
+        languageCode: enriched.languageCode,
+      });
+      if (locality) enriched.location = locality;
+    } catch {
+      // Fall through — buildQuery will use the raw coords as text.
+    }
+  }
+
+  const query = buildQuery(enriched);
   const body: {
     textQuery: string;
     languageCode: string;
@@ -257,7 +301,7 @@ export const recommendRestaurantsTool: ToolDef<
 > = {
   name: 'recommend_restaurants',
   description:
-    'Suggest restaurants for the traveler during a trip. Wraps Google Places API (New) text search, filtered to restaurants. Use when the traveler asks for food recommendations, a dinner spot, or a specific cuisine in a city/neighborhood. Returns up to 10 places with name, address, phone, website, rating, price level, and open-now status.',
+    "Suggest restaurants for the traveler. REQUIRES `location` as a free-form STRING — e.g. \"Plaza de Armas, Lima\" or \"near Miraflores beach\". DO NOT pass `latitude`/`longitude` — Google Places handles the geocoding internally. Returns up to 10 places with name, address, phone, website, rating, price level, and open-now status.",
   inputSchema,
   jsonSchema: {
     type: 'object',

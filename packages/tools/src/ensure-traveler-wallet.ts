@@ -23,6 +23,7 @@
  */
 
 import { getCircle } from '@sendero/circle';
+import { getOrCreateUserGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 
@@ -77,6 +78,8 @@ export async function ensureTravelerWallet(args: {
         err instanceof Error ? err.message : err
       );
     });
+    // Backfill Gateway signer for users that pre-date T4. Idempotent.
+    void ensureUserGatewaySigner({ userId: args.userId });
     return {
       walletId: existing.id,
       rowId: existing.id,
@@ -139,6 +142,13 @@ export async function ensureTravelerWallet(args: {
     });
 
     await ensureTravelerSolanaWallet({ userId: args.userId, walletSetId, circle });
+
+    // Provision the traveler's Gateway depositor EOA. Same pattern as
+    // tenants — a self-custody viem EOA whose address is recorded as
+    // the Circle Gateway depositor. The DCW above remains for native
+    // Arc/Solana custody; this signer is what Gateway's /balances API
+    // recognizes for the unified cross-chain USDC view.
+    await ensureUserGatewaySigner({ userId: args.userId });
 
     // Mint the traveler's ERC-8004 identity NFT atomically with wallet
     // provisioning. Failure is non-fatal — the wallet stands on its
@@ -293,6 +303,25 @@ async function ensureTravelerSolanaWallet(args: {
  * Implementation: SHA-256 of the seed, take 16 bytes, set the version
  * + variant bits to make a valid v4-shaped uuid.
  */
+/**
+ * Provision the user's Gateway depositor EOA. Idempotent — re-runs are
+ * cache hits in `getOrCreateUserGatewaySigner`. Failure is non-fatal:
+ * the DCW still works for Arc/Solana, only the unified-balance view is
+ * deferred until next call.
+ */
+async function ensureUserGatewaySigner(args: { userId: string }): Promise<void> {
+  try {
+    await getOrCreateUserGatewaySigner(args.userId, {
+      caller: { surface: 'tool', userId: args.userId, context: 'ensure-traveler-wallet' },
+    });
+  } catch (err) {
+    console.warn(
+      '[ensureTravelerWallet] user gateway signer provisioning failed (non-fatal)',
+      { userId: args.userId, error: err instanceof Error ? err.message : String(err) }
+    );
+  }
+}
+
 function uuidv4FromSeed(seed: string): string {
   const hash = createHash('sha256').update(seed).digest();
   const bytes = Buffer.from(hash.subarray(0, 16));
