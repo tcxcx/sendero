@@ -230,6 +230,47 @@ export function buildOtpComponents(code: string): TemplateComponent[] {
 }
 
 /**
+ * Generic component builder for any registered template. Reads the
+ * template's `bodyVars` + `headerVars` ordering from the registry and
+ * positions the supplied `vars` map into Meta's positional parameters.
+ *
+ * Returns components ready to hand to `WhatsAppClient.sendTemplate`.
+ * Throws when a required variable is missing — caller should validate
+ * upstream so the throw is a programmer error, not user-facing.
+ */
+export function buildTemplateComponents(
+  def: TemplateDef,
+  vars: Record<string, string>
+): TemplateComponent[] {
+  const components: TemplateComponent[] = [];
+  if (def.headerVars && def.headerVars.length > 0) {
+    components.push({
+      type: 'header',
+      parameters: def.headerVars.map(name => {
+        const value = vars[name];
+        if (value === undefined) {
+          throw new Error(`template_missing_header_var:${def.name}:${name}`);
+        }
+        return { type: 'text', text: value };
+      }),
+    });
+  }
+  if (def.bodyVars.length > 0) {
+    components.push({
+      type: 'body',
+      parameters: def.bodyVars.map(name => {
+        const value = vars[name];
+        if (value === undefined) {
+          throw new Error(`template_missing_body_var:${def.name}:${name}`);
+        }
+        return { type: 'text', text: value };
+      }),
+    });
+  }
+  return components;
+}
+
+/**
  * Build the components array for a `sendero_security_alert` (UTILITY)
  * send. Header `{{1}}` = subject, body `{{1}}` = body text. Mirrors
  * the in-session free-form sender's `*subject*\n\n${body}` hierarchy.

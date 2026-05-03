@@ -32,6 +32,7 @@ import {
   type ToolRegistry,
   type WorkflowDef,
   type WorkflowRun,
+  type WorkflowStep,
 } from '@sendero/workflows';
 
 import type { WizardRunSnapshot, WizardStepDef } from '@/components/channels/setup-wizard/types';
@@ -121,7 +122,21 @@ export async function loadOrStartWizardSession(args: LoadOrStartArgs): Promise<W
   });
 
   if (existing && isPersistedThreadContext(existing.threadContext)) {
-    return projectFromSession(existing.id, def, existing.threadContext);
+    const pauseStepIds = new Set(collectPauseSteps(def).map(step => step.id));
+    if (pauseStepIds.has(existing.threadContext.pausedStepId)) {
+      const stale = await shouldDiscardWizardSession({
+        tenantId: args.tenantId,
+        surfaceKey: args.surfaceKey,
+        ctx: existing.threadContext,
+      });
+      if (stale) {
+        await prisma.session.delete({ where: { id: existing.id } }).catch(() => {});
+      } else {
+        return projectFromSession(existing.id, def, existing.threadContext);
+      }
+    } else {
+      await prisma.session.delete({ where: { id: existing.id } }).catch(() => {});
+    }
   }
 
   // No active session — start fresh and persist whatever the run hits
@@ -156,6 +171,25 @@ export async function loadOrStartWizardSession(args: LoadOrStartArgs): Promise<W
   };
 }
 
+async function shouldDiscardWizardSession(args: {
+  tenantId: string;
+  surfaceKey: string;
+  ctx: PersistedThreadContext;
+}): Promise<boolean> {
+  if (args.surfaceKey !== 'channels:whatsapp') return false;
+  if (args.ctx.pausedStepId === 'verify_number') return false;
+
+  const install = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId: args.tenantId },
+    select: { phoneNumberId: true, displayPhoneNumber: true, status: true },
+  });
+  if (!install) return true;
+  if (install.status === 'disabled' || install.status === 'error') return true;
+  if (!install.phoneNumberId || install.phoneNumberId === 'pending') return true;
+  if (!install.displayPhoneNumber || /pending/i.test(install.displayPhoneNumber)) return true;
+  return false;
+}
+
 // ─── resume ───────────────────────────────────────────────────────────
 
 interface ResumeArgs {
@@ -178,9 +212,10 @@ export async function resumeWizardSession(args: ResumeArgs): Promise<WizardRunSn
   if (!isPersistedThreadContext(session.threadContext)) {
     throw new Error('wizard_session_invalid_context');
   }
+  const ctx: PersistedThreadContext = session.threadContext;
 
-  const def = findWorkflow(session.threadContext.workflowId);
-  if (!def) throw new Error(`unknown_workflow:${session.threadContext.workflowId}`);
+  const def = findWorkflow(ctx.workflowId);
+  if (!def) throw new Error(`unknown_workflow:${ctx.workflowId}`);
 
   const tools = buildWizardToolRegistry(args.ctx);
   const previous: WorkflowRun = {
@@ -226,6 +261,73 @@ export async function resumeWizardSession(args: ResumeArgs): Promise<WizardRunSn
     steps: collectWizardSteps(def, next),
     error: next.error,
   };
+}
+
+interface JumpArgs {
+  tenantId: string;
+  sessionId: string;
+  stepId: string;
+}
+
+/**
+ * Move an open wizard session back to a completed pause step.
+ *
+ * This is intentionally a rewind, not arbitrary navigation: future
+ * steps remain locked, and any scratchpad/trail entries from the target
+ * step onward are dropped so the next Continue replays downstream tools
+ * with the corrected inputs.
+ */
+export async function jumpWizardSession(args: JumpArgs): Promise<WizardRunSnapshot> {
+  const session = await prisma.session.findUnique({ where: { id: args.sessionId } });
+  if (!session) throw new Error('wizard_session_not_found');
+  if (session.tenantId !== args.tenantId) throw new Error('wizard_session_tenant_mismatch');
+  if (!isPersistedThreadContext(session.threadContext)) {
+    throw new Error('wizard_session_invalid_context');
+  }
+  const ctx: PersistedThreadContext = session.threadContext;
+
+  const def = findWorkflow(ctx.workflowId);
+  if (!def) throw new Error(`unknown_workflow:${ctx.workflowId}`);
+
+  const pauseSteps = collectPauseSteps(def);
+  const target = pauseSteps.find(step => step.id === args.stepId);
+  if (!target) throw new Error('wizard_step_not_found');
+
+  const currentStepId = ctx.pausedStepId;
+  if (currentStepId === args.stepId) {
+    return projectFromSession(session.id, def, ctx);
+  }
+
+  const orderedStepIds = collectStepIds(def.steps);
+  const targetIndex = orderedStepIds.indexOf(args.stepId);
+  const currentIndex = orderedStepIds.indexOf(currentStepId);
+  if (targetIndex < 0 || currentIndex < 0) throw new Error('wizard_step_order_invalid');
+  if (targetIndex > currentIndex) throw new Error('wizard_step_not_reachable');
+
+  const pruneFrom = new Set(orderedStepIds.slice(targetIndex));
+  const scratchpad = { ...ctx.scratchpad };
+  for (const key of pruneFrom) delete scratchpad[key];
+  for (const step of collectSteps(def.steps)) {
+    if (pruneFrom.has(step.id) && step.kind === 'tool' && step.as) {
+      delete scratchpad[step.as];
+    }
+  }
+
+  const nextContext: PersistedThreadContext = {
+    ...ctx,
+    pausedStepId: args.stepId,
+    pauseReason: 'user_reply',
+    pausePayload: target.payload,
+    scratchpad,
+    trail: (ctx.trail ?? []).filter(entry => !pruneFrom.has(entry.stepId)),
+  };
+
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { threadContext: nextContext as unknown as Prisma.InputJsonValue },
+  });
+
+  return projectFromSession(session.id, def, nextContext);
 }
 
 // ─── persistence helpers ──────────────────────────────────────────────
@@ -343,4 +445,25 @@ function collectPauseSteps(def: WorkflowDef): PauseStepWithPayload[] {
   };
   walk(def.steps);
   return out;
+}
+
+function collectSteps(steps: WorkflowDef['steps']): WorkflowStep[] {
+  const out: WorkflowStep[] = [];
+  const walk = (items: WorkflowDef['steps']) => {
+    for (const step of items) {
+      out.push(step);
+      if (step.kind === 'branch') {
+        walk(step.then);
+        if (step.otherwise) walk(step.otherwise);
+      } else if (step.kind === 'parallel') {
+        for (const branch of step.branches) walk(branch.steps);
+      }
+    }
+  };
+  walk(steps);
+  return out;
+}
+
+function collectStepIds(steps: WorkflowDef['steps']): string[] {
+  return collectSteps(steps).map(step => step.id);
 }

@@ -290,6 +290,31 @@ export class WhatsAppClient {
     });
   }
 
+  /**
+   * Mark an inbound message as read AND show a typing indicator on the
+   * traveler's WhatsApp thread for up to 25s (or until the bot's reply
+   * is sent — whichever comes first). Best-effort — failures here must
+   * never block the inbound webhook ack or the agent reply.
+   *
+   * Reference: Meta WhatsApp Cloud API "Read Receipts" endpoint, with
+   * the `typing_indicator` extension shipped in Cloud API v23+.
+   */
+  async markReadAndTyping(messageId: string): Promise<void> {
+    try {
+      await this.request('/messages', {
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+        typing_indicator: { type: 'text' },
+      });
+    } catch (err) {
+      // Swallow — typing presence is cosmetic. The reply path runs
+      // regardless. The API-call audit hook already captured the
+      // failure for ops.
+      void err;
+    }
+  }
+
   async removeReaction(to: string, messageId: string) {
     return this.reactToMessage(to, messageId, '');
   }

@@ -126,6 +126,13 @@ export const env = {
    */
   kapsoWebhookSecret: () => process.env.KAPSO_WEBHOOK_SECRET || null,
   kapsoTenantWorkflowId: () => process.env.KAPSO_TENANT_WORKFLOW_ID || null,
+  kapsoSandboxPhoneNumberId: () => process.env.KAPSO_SANDBOX_PHONE_NUMBER_ID || '597907523413541',
+  kapsoSandboxConfigurationId: () =>
+    process.env.KAPSO_SANDBOX_CONFIGURATION_ID || '19e6b256-5761-4fdf-85c9-7a3d102f087c',
+  kapsoSandboxBusinessAccountId: () =>
+    process.env.KAPSO_SANDBOX_BUSINESS_ACCOUNT_ID || '2102230076919824',
+  kapsoSandboxDisplayPhoneNumber: () =>
+    process.env.KAPSO_SANDBOX_DISPLAY_PHONE_NUMBER || 'Sandbox WhatsApp',
 
   slackSigningSecret: () => process.env.SLACK_SIGNING_SECRET || null,
   slackClientId: () => process.env.SLACK_CLIENT_ID || null,

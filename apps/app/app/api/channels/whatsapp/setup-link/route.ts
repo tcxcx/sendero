@@ -35,7 +35,17 @@ import crypto from 'node:crypto';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(): Promise<Response> {
+type WhatsAppNumberSource = 'existing' | 'kapso_provisioned';
+
+interface SetupLinkRequestBody {
+  numberSource?: WhatsAppNumberSource;
+  provisionPhoneNumber?: boolean;
+  countryIso?: string;
+}
+
+export async function POST(request: Request): Promise<Response> {
+  const { searchParams } = new URL(request.url);
+  const queryProvision = parseBooleanQuery(searchParams.get('provision'));
   const apiKey = env.kapsoApiKey();
   if (!apiKey) {
     return NextResponse.json(
@@ -69,11 +79,18 @@ export async function POST(): Promise<Response> {
 
   const kapso = new KapsoClient({ apiKey, baseUrl: env.kapsoApiBaseUrl() });
   const setupAttemptId = crypto.randomUUID();
+  const body = await readSetupLinkRequestBody(request);
+  if (queryProvision !== undefined) {
+    body.provisionPhoneNumber = queryProvision;
+    body.numberSource = queryProvision ? 'kapso_provisioned' : 'existing';
+  }
   console.info('[whatsapp/setup-link] request', {
     tenantId: tenant.id,
     tenantName: tenant.displayName,
     userId,
     setupAttemptId,
+    numberSource: body.numberSource ?? null,
+    provisionPhoneNumber: body.provisionPhoneNumber ?? null,
     redirectUrl,
     failureRedirectUrl,
   });
@@ -92,15 +109,28 @@ export async function POST(): Promise<Response> {
   });
 
   if (existing) {
+    if (isSandboxInstall(existing.metadata)) {
+      return NextResponse.json({
+        customerId: existing.kapsoCustomerId,
+        setupLink: null,
+        status: existing.status,
+        numberSource: 'kapso_provisioned',
+        provisionPhoneNumber: true,
+        reused: true,
+        sandbox: true,
+      });
+    }
     const hasMockPhoneNumber = isMetaMockPhoneNumber(existing.displayPhoneNumber);
     const rawLink = readSetupLinkSnapshot(existing.metadata);
+    const setupMode = resolveSetupMode(existing.metadata, body, tenant.fiscalCountry ?? undefined);
     const linkError = rawLink?.whatsapp_setup_error ?? null;
     const linkStatus = rawLink?.whatsapp_setup_status ?? rawLink?.status ?? null;
     if (
       !hasMockPhoneNumber &&
       rawLink &&
       !linkError &&
-      !isSetupLinkExpired({ expires_at: rawLink.expires_at })
+      !isSetupLinkExpired({ expires_at: rawLink.expires_at }) &&
+      rawLink.provision_phone_number === setupMode.provisionPhoneNumber
     ) {
       console.info('[whatsapp/setup-link] reusing existing setup link', {
         tenantId: tenant.id,
@@ -108,11 +138,15 @@ export async function POST(): Promise<Response> {
         customerId: existing.kapsoCustomerId,
         installStatus: existing.status,
         linkStatus,
+        numberSource: setupMode.numberSource,
+        provisionPhoneNumber: setupMode.provisionPhoneNumber,
       });
       return NextResponse.json({
         customerId: existing.kapsoCustomerId,
         setupLink: rawLink,
         status: existing.status,
+        numberSource: setupMode.numberSource,
+        provisionPhoneNumber: setupMode.provisionPhoneNumber,
         reused: true,
       });
     }
@@ -126,7 +160,8 @@ export async function POST(): Promise<Response> {
           tenantName: tenant.displayName,
           redirectUrl,
           failureRedirectUrl,
-          countryIsos: tenant.fiscalCountry ? [tenant.fiscalCountry] : undefined,
+          countryIsos: [setupMode.countryIso],
+          provisionPhoneNumber: setupMode.provisionPhoneNumber,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -153,6 +188,9 @@ export async function POST(): Promise<Response> {
             setupLink: freshSnapshot,
             setupAttemptId,
             customerExternalId: `${tenant.id}:whatsapp:${setupAttemptId}`,
+            numberSource: setupMode.numberSource,
+            provisionPhoneNumber: setupMode.provisionPhoneNumber,
+            countryIso: setupMode.countryIso,
             metaMockPhoneNumberRestartedAt: new Date().toISOString(),
             metaMockPhoneNumber: existing.displayPhoneNumber,
             metaMockPhoneNumberId: existing.phoneNumberId,
@@ -172,6 +210,8 @@ export async function POST(): Promise<Response> {
         customerId: onboarding.customer.id,
         setupLink: freshSnapshot,
         status: 'pending',
+        numberSource: setupMode.numberSource,
+        provisionPhoneNumber: setupMode.provisionPhoneNumber,
         reused: false,
         restartedAfterMockPhoneNumber: true,
       });
@@ -193,7 +233,8 @@ export async function POST(): Promise<Response> {
         success_redirect_url: redirectUrl,
         failure_redirect_url: failureRedirectUrl,
         allowed_connection_types: ['coexistence', 'dedicated'],
-        provision_phone_number: false,
+        provision_phone_number: setupMode.provisionPhoneNumber,
+        phone_number_country_isos: [setupMode.countryIso],
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -211,7 +252,12 @@ export async function POST(): Promise<Response> {
       data: {
         status: existing.status === 'active' ? 'active' : 'pending',
         lastErrorMessage: null,
-        metadata: { setupLink: freshSnapshot } as unknown as Prisma.InputJsonValue,
+        metadata: mergeJsonObject(existing.metadata, {
+          setupLink: freshSnapshot,
+          numberSource: setupMode.numberSource,
+          provisionPhoneNumber: setupMode.provisionPhoneNumber,
+          countryIso: setupMode.countryIso,
+        }),
       },
     });
     console.info('[whatsapp/setup-link] fresh setup link stored', {
@@ -221,15 +267,20 @@ export async function POST(): Promise<Response> {
       installStatus: existing.status === 'active' ? 'active' : 'pending',
       setupLinkId: freshSnapshot.id,
       setupLinkStatus: freshSnapshot.status ?? null,
+      numberSource: setupMode.numberSource,
+      provisionPhoneNumber: setupMode.provisionPhoneNumber,
     });
     return NextResponse.json({
       customerId: existing.kapsoCustomerId,
       setupLink: freshSnapshot,
       status: existing.status === 'active' ? 'active' : 'pending',
+      numberSource: setupMode.numberSource,
+      provisionPhoneNumber: setupMode.provisionPhoneNumber,
       reused: true,
     });
   }
 
+  const setupMode = resolveSetupMode(null, body, tenant.fiscalCountry ?? undefined);
   let onboarding: Awaited<ReturnType<typeof startOnboarding>>;
   try {
     onboarding = await startOnboarding(kapso, {
@@ -237,7 +288,8 @@ export async function POST(): Promise<Response> {
       tenantName: tenant.displayName,
       redirectUrl,
       failureRedirectUrl,
-      countryIsos: tenant.fiscalCountry ? [tenant.fiscalCountry] : undefined,
+      countryIsos: [setupMode.countryIso],
+      provisionPhoneNumber: setupMode.provisionPhoneNumber,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -268,6 +320,9 @@ export async function POST(): Promise<Response> {
         setupLink: setupLinkData,
         setupAttemptId,
         customerExternalId: tenant.id,
+        numberSource: setupMode.numberSource,
+        provisionPhoneNumber: setupMode.provisionPhoneNumber,
+        countryIso: setupMode.countryIso,
       } as unknown as Prisma.InputJsonValue,
     },
   });
@@ -282,6 +337,89 @@ export async function POST(): Promise<Response> {
     customerId: customer.id,
     setupLink: setupLinkData,
     status: 'pending',
+    numberSource: setupMode.numberSource,
+    provisionPhoneNumber: setupMode.provisionPhoneNumber,
     reused: false,
   });
+}
+
+async function readSetupLinkRequestBody(request: Request): Promise<SetupLinkRequestBody> {
+  try {
+    const raw = (await request.json()) as unknown;
+    if (!raw || typeof raw !== 'object') return {};
+    const record = raw as Record<string, unknown>;
+    const numberSource =
+      record.numberSource === 'kapso_provisioned' || record.numberSource === 'existing'
+        ? record.numberSource
+        : undefined;
+    return {
+      numberSource,
+      provisionPhoneNumber:
+        typeof record.provisionPhoneNumber === 'boolean' ? record.provisionPhoneNumber : undefined,
+      countryIso:
+        typeof record.countryIso === 'string' && /^[a-z]{2}$/i.test(record.countryIso)
+          ? record.countryIso.toUpperCase()
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function resolveSetupMode(
+  metadata: Prisma.JsonValue | null,
+  body: SetupLinkRequestBody,
+  fallbackCountryIso = 'US'
+): { numberSource: WhatsAppNumberSource; provisionPhoneNumber: boolean; countryIso: string } {
+  const record =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  const storedSource =
+    record.numberSource === 'kapso_provisioned' || record.numberSource === 'existing'
+      ? record.numberSource
+      : undefined;
+  const requestedKapsoProvision = body.numberSource
+    ? body.numberSource === 'kapso_provisioned'
+    : undefined;
+  const storedKapsoProvision =
+    typeof record.provisionPhoneNumber === 'boolean' ? record.provisionPhoneNumber : undefined;
+  const storedSourceKapsoProvision = storedSource === 'kapso_provisioned';
+  const provisionPhoneNumber =
+    body.provisionPhoneNumber ??
+    requestedKapsoProvision ??
+    storedKapsoProvision ??
+    storedSourceKapsoProvision;
+  const numberSource: WhatsAppNumberSource = provisionPhoneNumber
+    ? 'kapso_provisioned'
+    : 'existing';
+  const countryIso =
+    body.countryIso ??
+    (typeof record.countryIso === 'string' && /^[a-z]{2}$/i.test(record.countryIso)
+      ? record.countryIso.toUpperCase()
+      : fallbackCountryIso.toUpperCase());
+
+  return { numberSource, provisionPhoneNumber, countryIso };
+}
+
+function mergeJsonObject(current: unknown, patch: Record<string, unknown>): Prisma.InputJsonObject {
+  const base =
+    current && typeof current === 'object' && !Array.isArray(current)
+      ? (current as Record<string, unknown>)
+      : {};
+  return { ...base, ...patch } as Prisma.InputJsonObject;
+}
+
+function isSandboxInstall(metadata: Prisma.JsonValue | null): boolean {
+  const record =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  return record.sandbox === true || record.source === 'provider_sandbox';
+}
+
+function parseBooleanQuery(value: string | null): boolean | undefined {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
 }

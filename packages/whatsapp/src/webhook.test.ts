@@ -10,9 +10,8 @@
  * Run: `bun test packages/whatsapp/src/webhook.test.ts`
  */
 
-import { describe, expect, test } from 'bun:test';
-
 import { normalizeWebhookPayload } from './webhook';
+import { describe, expect, test } from 'bun:test';
 
 describe('normalizeWebhookPayload — Meta envelope statuses', () => {
   test('extracts a delivered status', () => {
@@ -231,5 +230,83 @@ describe('normalizeWebhookPayload — Meta envelope statuses', () => {
       data: [],
     });
     expect(result.statusUpdates).toEqual([]);
+  });
+
+  test('Kapso v2 unbatched message envelope normalizes inbound text', () => {
+    const result = normalizeWebhookPayload({
+      type: 'whatsapp.message.received',
+      data: {
+        phone_number_id: '597907523413541',
+        message: {
+          id: 'wamid.IN',
+          timestamp: '1745764800',
+          type: 'text',
+          from: '14155550123',
+          text: { body: 'hello sandbox' },
+        },
+        conversation: {
+          phone_number: '14155550123',
+          business_scoped_user_id: 'US.123',
+          parent_business_scoped_user_id: 'US.ENT.456',
+          username: '@traveler',
+        },
+      },
+    });
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]!.tenantPhoneNumberId).toBe('597907523413541');
+    expect(result.messages[0]!.message.text?.body).toBe('hello sandbox');
+    expect(result.messages[0]!.identity.businessScopedUserId).toBe('US.123');
+  });
+
+  test('Kapso v2 outbound echo (direction=outbound) is filtered out', () => {
+    // Kapso fans both inbound AND outbound through the same
+    // `whatsapp.message.received` event for phone-number-scoped
+    // webhooks. Without this filter, Sendero replies bounce back as
+    // fresh inbound and the agent talks to itself forever.
+    const result = normalizeWebhookPayload({
+      message: {
+        id: 'wamid.OUTBOUND',
+        timestamp: '1777748743',
+        type: 'text',
+        from: '593980668984',
+        text: { body: 'have a great day!' },
+        kapso: { direction: 'outbound' },
+      },
+      phone_number_id: '597907523413541',
+    } as unknown as Parameters<typeof normalizeWebhookPayload>[0]);
+
+    expect(result.messages).toHaveLength(0);
+  });
+
+  test('Kapso v2 flat envelope (sandbox phone-number webhook) normalizes inbound text', () => {
+    // Kapso's phone-number-scoped sandbox webhook delivers a FLAT body
+    // (no `type`/`data` wrapper); the event type is carried in headers.
+    // Captured live from `WhatsAppWebhookEvent.rawEnvelope` on
+    // 2026-05-02 while debugging sandbox round-trip.
+    const result = normalizeWebhookPayload({
+      message: {
+        id: 'wamid.HBgMNTkzOTgwNjY4OTg0FQI',
+        timestamp: '1777748743',
+        type: 'text',
+        from: '593980668984',
+        text: { body: 'hellohello' },
+      },
+      conversation: {
+        phone_number: '593980668984',
+        phone_number_id: '597907523413541',
+        business_scoped_user_id: 'EC.1005170881970428',
+        parent_business_scoped_user_id: null,
+        username: null,
+        contact_name: 'Tomas',
+      },
+      phone_number_id: '597907523413541',
+      is_new_conversation: false,
+    } as unknown as Parameters<typeof normalizeWebhookPayload>[0]);
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]!.tenantPhoneNumberId).toBe('597907523413541');
+    expect(result.messages[0]!.message.text?.body).toBe('hellohello');
+    expect(result.messages[0]!.identity.businessScopedUserId).toBe('EC.1005170881970428');
   });
 });

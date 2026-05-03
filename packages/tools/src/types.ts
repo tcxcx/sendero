@@ -34,6 +34,14 @@ export interface ToolContext {
    * should treat `ctx.caller` as the source of truth and fall back
    * gracefully when absent (test fixtures, in-process callers, etc.).
    */
+  /**
+   * ChannelIdentity row id when the agent turn was triggered by a
+   * channel inbound (WhatsApp / Slack / web). Used by escalation tools
+   * (`request_human_handoff`) to anchor handoffs to the originating
+   * traveler so the resolve route can deliver back through the same
+   * channel. Optional — operator console turns leave it unset.
+   */
+  channelIdentityId?: string;
   caller?: {
     scopes?: readonly string[];
     /**

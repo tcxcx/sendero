@@ -51,7 +51,9 @@ export async function GET() {
     install,
   });
   const setupLink = readSetupLinkSnapshot(install.metadata);
-  const health = install.phoneNumberId ? await readWhatsappHealth(install.phoneNumberId) : null;
+  const sandbox = isSandboxInstall(install.metadata);
+  const health =
+    install.phoneNumberId && !sandbox ? await readWhatsappHealth(install.phoneNumberId) : null;
   console.info('[whatsapp/install] snapshot response', {
     tenantId: tenant.id,
     installId: install.id,
@@ -87,6 +89,7 @@ export async function GET() {
       setupLinkError: setupLink?.whatsapp_setup_error ?? null,
       setupLinkProvisionPhoneNumber: setupLink?.provision_phone_number ?? null,
       provisioned: install.status === 'active' && Boolean(install.phoneNumberId),
+      sandbox,
       health,
     },
   });
@@ -142,6 +145,11 @@ export async function DELETE() {
           }),
         ];
     await prisma.$transaction(transaction);
+    await prisma.session
+      .deleteMany({
+        where: { tenantId: tenant.id, subjectKey: 'channels:whatsapp' },
+      })
+      .catch(() => {});
 
     console.info('[whatsapp/install] disconnected locally', {
       tenantId: tenant.id,
@@ -234,30 +242,31 @@ async function reconcilePendingInstallFromKapso(args: {
       kapsoCustomerId: args.install.kapsoCustomerId,
       status: args.install.status,
     });
+    const installWithFreshSetupLink = await refreshSetupLinkSnapshot(kapso, args.install);
     const phoneNumber = await findProvisionedPhoneNumberForTenant(kapso, {
       tenantId: args.tenantId,
-      currentCustomerId: args.install.kapsoCustomerId,
+      currentCustomerId: installWithFreshSetupLink.kapsoCustomerId,
     });
     if (!phoneNumber) {
       console.info('[whatsapp/install] no provisioned phone number found in Kapso', {
         tenantId: args.tenantId,
-        installId: args.install.id,
-        kapsoCustomerId: args.install.kapsoCustomerId,
+        installId: installWithFreshSetupLink.id,
+        kapsoCustomerId: installWithFreshSetupLink.kapsoCustomerId,
       });
-      return args.install;
+      return await clearStaleRefreshFallbackError(installWithFreshSetupLink);
     }
     if (isMetaMockPhoneNumber(phoneNumber.display_phone_number)) {
       console.warn(
         '[whatsapp/install] Kapso returned Meta mock phone number during reconciliation',
         {
           tenantId: args.tenantId,
-          installId: args.install.id,
+          installId: installWithFreshSetupLink.id,
           phoneNumberId: phoneNumber.phone_number_id,
           displayPhoneNumber: phoneNumber.display_phone_number,
         }
       );
       return await prisma.whatsAppInstall.update({
-        where: { id: args.install.id },
+        where: { id: installWithFreshSetupLink.id },
         data: {
           status: 'error',
           phoneNumberId: null,
@@ -265,7 +274,7 @@ async function reconcilePendingInstallFromKapso(args: {
           displayPhoneNumber: null,
           businessDisplayName: null,
           lastErrorMessage: META_MOCK_PHONE_NUMBER_MESSAGE,
-          metadata: mergeJsonObject(args.install.metadata, {
+          metadata: mergeJsonObject(installWithFreshSetupLink.metadata, {
             metaMockPhoneNumberRejectedAt: new Date().toISOString(),
             metaMockPhoneNumber: phoneNumber.display_phone_number,
             metaMockPhoneNumberId: phoneNumber.phone_number_id,
@@ -276,9 +285,10 @@ async function reconcilePendingInstallFromKapso(args: {
     }
     console.info('[whatsapp/install] found Kapso phone number for pending install', {
       tenantId: args.tenantId,
-      installId: args.install.id,
+      installId: installWithFreshSetupLink.id,
       phoneNumberId: phoneNumber.phone_number_id,
-      businessAccountId: phoneNumber.business_account_id ?? args.install.businessAccountId,
+      businessAccountId:
+        phoneNumber.business_account_id ?? installWithFreshSetupLink.businessAccountId,
       displayPhoneNumber: phoneNumber.display_phone_number ?? null,
       status: phoneNumber.status ?? null,
     });
@@ -289,38 +299,56 @@ async function reconcilePendingInstallFromKapso(args: {
       phoneNumberId: phoneNumber.phone_number_id,
       displayPhoneNumber: phoneNumber.display_phone_number ?? undefined,
     });
-    const tenantFlows = await ensureTenantWhatsAppFlows({
-      tenantId: args.tenantId,
-      tenantDisplayName: args.tenantDisplayName,
-      phoneNumberId: phoneNumber.phone_number_id,
-      businessAccountId: phoneNumber.business_account_id ?? args.install.businessAccountId,
-    });
+    let tenantFlows: unknown;
+    try {
+      tenantFlows = await ensureTenantWhatsAppFlows({
+        tenantId: args.tenantId,
+        tenantDisplayName: args.tenantDisplayName,
+        phoneNumberId: phoneNumber.phone_number_id,
+        businessAccountId:
+          phoneNumber.business_account_id ?? installWithFreshSetupLink.businessAccountId,
+      });
+    } catch (err) {
+      tenantFlows = {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        checkedAt: new Date().toISOString(),
+      };
+      console.warn('[whatsapp/install] tenant flow registration failed after phone activation', {
+        tenantId: args.tenantId,
+        phoneNumberId: phoneNumber.phone_number_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     console.info('[whatsapp/install] Kapso reconciliation side effects complete', {
       tenantId: args.tenantId,
-      installId: args.install.id,
+      installId: installWithFreshSetupLink.id,
       phoneNumberId: phoneNumber.phone_number_id,
       activationStatus: activation.status ?? null,
       tenantFlows,
     });
 
     return await prisma.whatsAppInstall.update({
-      where: { id: args.install.id },
+      where: { id: installWithFreshSetupLink.id },
       data: {
         status: 'active',
-        kapsoCustomerId: phoneNumber.customer_id ?? args.install.kapsoCustomerId,
+        kapsoCustomerId: phoneNumber.customer_id ?? installWithFreshSetupLink.kapsoCustomerId,
         phoneNumberId: phoneNumber.phone_number_id,
         businessAccountId: phoneNumber.business_account_id ?? undefined,
-        displayPhoneNumber: phoneNumber.display_phone_number ?? args.install.displayPhoneNumber,
-        businessDisplayName: phoneNumber.verified_name ?? args.install.businessDisplayName,
+        displayPhoneNumber:
+          phoneNumber.display_phone_number ?? installWithFreshSetupLink.displayPhoneNumber,
+        businessDisplayName:
+          phoneNumber.verified_name ?? installWithFreshSetupLink.businessDisplayName,
         kapsoConnectionId: phoneNumber.phone_number_id,
         lastHealthyAt: new Date(),
         lastErrorMessage: null,
-        metadata: mergeJsonObject(args.install.metadata, {
+        metadata: mergeJsonObject(installWithFreshSetupLink.metadata, {
           tenantWorkflow: activation,
           tenantFlows,
           reconciledFromKapsoAt: new Date().toISOString(),
           reconciledFromKapsoReason:
-            phoneNumber.customer_id && phoneNumber.customer_id !== args.install.kapsoCustomerId
+            phoneNumber.customer_id &&
+            phoneNumber.customer_id !== installWithFreshSetupLink.kapsoCustomerId
               ? 'install_refresh_duplicate_display_phone_number_fallback'
               : 'install_refresh_fallback',
         }),
@@ -342,6 +370,55 @@ async function reconcilePendingInstallFromKapso(args: {
       select: installSelect,
     });
   }
+}
+
+async function refreshSetupLinkSnapshot(
+  kapso: KapsoClient,
+  install: InstallForSnapshot
+): Promise<InstallForSnapshot> {
+  const setupLink = readSetupLinkSnapshot(install.metadata);
+  if (!setupLink?.id) return install;
+  try {
+    const fresh = await kapso.getSetupLink(setupLink.id);
+    return await prisma.whatsAppInstall.update({
+      where: { id: install.id },
+      data: {
+        metadata: mergeJsonObject(install.metadata, {
+          setupLink: {
+            id: fresh.id,
+            url: fresh.url,
+            expires_at: fresh.expires_at,
+            status: fresh.status,
+            success_redirect_url: fresh.success_redirect_url ?? null,
+            failure_redirect_url: fresh.failure_redirect_url ?? null,
+            provision_phone_number: fresh.provision_phone_number,
+            allowed_connection_types: fresh.allowed_connection_types,
+            whatsapp_setup_status: fresh.whatsapp_setup_status ?? null,
+            whatsapp_setup_error: fresh.whatsapp_setup_error ?? null,
+          },
+        }),
+      },
+      select: installSelect,
+    });
+  } catch (err) {
+    console.warn('[whatsapp/install] setup link status refresh failed', {
+      installId: install.id,
+      setupLinkId: setupLink.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return install;
+  }
+}
+
+async function clearStaleRefreshFallbackError(
+  install: InstallForSnapshot
+): Promise<InstallForSnapshot> {
+  if (!install.lastErrorMessage?.startsWith('Kapso refresh fallback failed:')) return install;
+  return await prisma.whatsAppInstall.update({
+    where: { id: install.id },
+    data: { lastErrorMessage: null },
+    select: installSelect,
+  });
 }
 
 async function findProvisionedPhoneNumberForTenant(
@@ -461,6 +538,14 @@ function mergeJsonObject(current: unknown, patch: Record<string, unknown>): Pris
       ? (current as Record<string, unknown>)
       : {};
   return { ...base, ...patch } as Prisma.InputJsonObject;
+}
+
+function isSandboxInstall(metadata: Prisma.JsonValue | null): boolean {
+  const record =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  return record.sandbox === true || record.source === 'provider_sandbox';
 }
 
 const installSelect = {

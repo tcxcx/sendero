@@ -407,6 +407,32 @@ export async function runSlackAgentTurn(
     );
   }
 
+  // Surface tool-emitted share cards as native Block Kit cards in the
+  // thread BEFORE the agent's text reply. Each share renders through
+  // the canonical channel-render layer so the card is visually
+  // primary; the agent's prose follow-up is the commentary. Failures
+  // here are non-fatal — the text reply still posts.
+  if (result.shareCards && result.shareCards.length > 0) {
+    try {
+      const { dispatchAgentShareCardsSlack } = await import('@/lib/channel-send');
+      const cardResult = await dispatchAgentShareCardsSlack({
+        install: args.install,
+        channel: args.channelId,
+        ...(args.threadTs ? { threadTs: args.threadTs } : {}),
+        cards: result.shareCards,
+        idPrefix: `tr_${turnId}`,
+      });
+      for (const skip of cardResult.skipped) {
+        console.warn('[slack.agent] share-card send skipped', skip);
+      }
+    } catch (err) {
+      console.warn('[slack.agent] share-card render failed (non-fatal)', {
+        teamId: args.install.teamId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // Post the agent's final reply into the originating thread. We always
   // thread (`thread_ts`) — never broadcast — so noisy channels don't
   // turn into a top-level firehose. If we already posted a "Thinking…"

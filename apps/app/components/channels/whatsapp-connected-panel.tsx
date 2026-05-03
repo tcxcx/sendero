@@ -7,6 +7,10 @@ import { useRouter } from 'next/navigation';
 interface WhatsappConnectedProps {
   displayName: string | null;
   displayPhoneNumber: string | null;
+  /** True when this install is bound to the shared Kapso sandbox number.
+   * Sandbox numbers can't pass Meta health checks (no real WABA), so we
+   * skip the live probe and render a sandbox-specific state. */
+  isSandbox?: boolean;
   health?: {
     status: string | null;
     messagingStatus: string | null;
@@ -25,6 +29,7 @@ type DisconnectResponse = {
 export function WhatsappConnectedPanel({
   displayName,
   displayPhoneNumber,
+  isSandbox,
   health,
 }: WhatsappConnectedProps) {
   const router = useRouter();
@@ -64,14 +69,16 @@ export function WhatsappConnectedPanel({
     }
   };
 
-  const state = summarizeHealth(health);
+  const state = isSandbox ? SANDBOX_STATE : summarizeHealth(health);
 
   return (
     <section className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-1 py-2">
       <header className="flex flex-col gap-2">
         <h1 className="t-h1">WhatsApp</h1>
         <p className="max-w-[58ch] text-sm leading-relaxed text-[color:var(--text-dim)]">
-          This workspace is connected to a tenant-owned WhatsApp Business number through Kapso.
+          {isSandbox
+            ? 'This workspace is bound to the shared Kapso sandbox number for development testing.'
+            : 'This workspace is connected to a tenant-owned WhatsApp Business number through Kapso.'}
         </p>
       </header>
 
@@ -131,6 +138,12 @@ async function readJson<T>(response: Response): Promise<T> {
     throw new Error(`Expected JSON response, received ${text.slice(0, 120)}`);
   }
 }
+
+const SANDBOX_STATE = {
+  label: 'Sandbox',
+  next: 'Send an inbound message to the Kapso sandbox number to confirm Sendero receives it. Outbound replies route through the Kapso Meta proxy.',
+  className: 'bg-[color:color-mix(in_oklab,#f59e0b_12%,transparent)] text-[color:#9a5a00]',
+} as const;
 
 function summarizeHealth(health: WhatsappConnectedProps['health']): {
   label: string;

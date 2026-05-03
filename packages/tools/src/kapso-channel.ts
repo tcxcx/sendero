@@ -124,6 +124,8 @@ const reserveNumberInput = z.object({
   tenantId: z.string().min(1),
   tenantName: z.string().min(1),
   countryIso: z.string().length(2),
+  numberSource: z.enum(['existing', 'kapso_provisioned']).optional(),
+  provisionPhoneNumber: z.boolean().optional(),
   /** Optional explicit pick from `kapso_list_numbers`. If omitted we pick the first available. */
   preferredE164: z.string().optional(),
   /** Where Kapso redirects after embedded signup (only used if a real provisioning hop is needed). */
@@ -143,7 +145,7 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
   name: 'kapso_reserve_number',
   internal: true,
   description:
-    'Claim a WhatsApp phone number for a tenant via Kapso. Creates (or reuses) the Kapso customer scoped on the Sendero tenantId, then issues a setup link with `provision_phone_number=true` so Kapso allocates the number from its pool. Persists a pending WhatsAppInstall row keyed on tenantId. Idempotent — re-reserving returns the existing reservation.',
+    'Claim a WhatsApp phone number path for a tenant via Kapso. Creates (or reuses) the Kapso customer scoped on the Sendero tenantId, then issues a setup link either for an existing Meta/WABA number or for a fresh Kapso-provisioned number. Persists a pending WhatsAppInstall row keyed on tenantId. Idempotent — re-reserving returns the existing reservation.',
   inputSchema: reserveNumberInput,
   jsonSchema: {
     type: 'object',
@@ -152,11 +154,15 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
       tenantId: { type: 'string' },
       tenantName: { type: 'string' },
       countryIso: { type: 'string', minLength: 2, maxLength: 2 },
+      numberSource: { type: 'string', enum: ['existing', 'kapso_provisioned'] },
+      provisionPhoneNumber: { type: 'boolean' },
       preferredE164: { type: 'string' },
       redirectUrl: { type: 'string', format: 'uri' },
     },
   },
   async handler(input) {
+    const requestedKapsoProvision = input.numberSource === 'kapso_provisioned';
+    const provisionPhoneNumber = input.provisionPhoneNumber ?? requestedKapsoProvision;
     const existing = await prisma.whatsAppInstall.findUnique({
       where: { tenantId: input.tenantId },
       select: {
@@ -187,6 +193,7 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
             input.redirectUrl ??
             `${env.kapsoWebhookBaseUrl() ?? 'https://app.sendero.travel'}/dashboard/channels/whatsapp`,
           countryIsos: [input.countryIso.toUpperCase()],
+          provisionPhoneNumber,
         });
         // Stamp the pending row so the wizard can resume from a refresh.
         // The provisioning webhook secret is project-wide (set via
@@ -195,14 +202,18 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
         // is NOT NULL on the schema; falling back to a marker string
         // when the env isn't populated yet keeps reservations working
         // in dev.
-        const previewE164 = input.preferredE164 ?? `+${input.countryIso.toLowerCase()}-pending`;
+        const previewE164 = provisionPhoneNumber
+          ? `Kapso ${input.countryIso.toUpperCase()} pending`
+          : (input.preferredE164 ?? `+${input.countryIso.toLowerCase()}-pending`);
         const webhookSecret =
           env.kapsoGlobalWebhookSecret() ?? 'configure-via-scripts/register-kapso-webhook.ts';
         const setupLink = setupLinkSnapshot(onboarding.setupLink);
         const metadata = {
           setupLink,
           countryIso: input.countryIso.toUpperCase(),
-          preferredE164: input.preferredE164 ?? null,
+          preferredE164: provisionPhoneNumber ? null : (input.preferredE164 ?? null),
+          numberSource: provisionPhoneNumber ? 'kapso_provisioned' : 'existing',
+          provisionPhoneNumber,
         } as unknown as Prisma.InputJsonValue;
         await prisma.whatsAppInstall.upsert({
           where: { tenantId: input.tenantId },
@@ -239,7 +250,9 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
     // can demo end-to-end without Kapso configured.
     const country = input.countryIso.toUpperCase();
     const pool = SAMPLE_POOL[country] ?? [];
-    const e164 = input.preferredE164 ?? pool[0]?.e164 ?? `+0000000${country}`;
+    const e164 = provisionPhoneNumber
+      ? (pool[0]?.e164 ?? `+0000000${country}`)
+      : (input.preferredE164 ?? pool[0]?.e164 ?? `+0000000${country}`);
     const customerId = `cu_stub_${input.tenantId.slice(-8)}`;
     const phoneNumberId = `pn_stub_${e164.replace(/\D/g, '').slice(-8)}`;
     await prisma.whatsAppInstall.upsert({
@@ -250,7 +263,12 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
         displayPhoneNumber: e164,
         status: 'pending',
         webhookSecret: 'stub-webhook-secret',
-        metadata: { stub: true, countryIso: country },
+        metadata: {
+          stub: true,
+          countryIso: country,
+          numberSource: provisionPhoneNumber ? 'kapso_provisioned' : 'existing',
+          provisionPhoneNumber,
+        },
       },
       create: {
         tenantId: input.tenantId,
@@ -259,7 +277,12 @@ export const kapsoReserveNumberTool: ToolDef<z.infer<typeof reserveNumberInput>,
         displayPhoneNumber: e164,
         status: 'pending',
         webhookSecret: 'stub-webhook-secret',
-        metadata: { stub: true, countryIso: country },
+        metadata: {
+          stub: true,
+          countryIso: country,
+          numberSource: provisionPhoneNumber ? 'kapso_provisioned' : 'existing',
+          provisionPhoneNumber,
+        },
       },
     });
     return {
@@ -408,13 +431,19 @@ export const kapsoSubmitMessageTemplatesTool: ToolDef<
       select: { id: true, metadata: true },
     });
     if (!install) throw new Error('whatsapp_install_not_found');
+    // Sandbox installs share the Kapso-owned dev WABA. Meta won't
+    // review templates against it (no real business identity), so the
+    // wizard would stay stuck in `pending_review` forever. Auto-approve
+    // sandbox submissions so the go-live step proceeds; production
+    // installs still go through the real review flow.
+    const sandbox = isSandboxInstall(install.metadata);
     const submissions: TemplateSubmission[] = input.templateNames.map(name => {
       const def = TEMPLATE_PACK.find(t => t.name === name);
       return {
         name,
         category: def?.category ?? 'UTILITY',
-        status: 'pending_review' as const,
-        submissionId: `mt_stub_${name}_${Date.now().toString(36)}`,
+        status: sandbox ? ('approved' as const) : ('pending_review' as const),
+        submissionId: `mt_${sandbox ? 'sandbox' : 'stub'}_${name}_${Date.now().toString(36)}`,
       };
     });
     const metadata = (install.metadata as Record<string, unknown> | null) ?? {};
@@ -470,6 +499,7 @@ export const kapsoActivatePhoneNumberTool: ToolDef<
         displayPhoneNumber: true,
         businessDisplayName: true,
         status: true,
+        metadata: true,
       },
     });
     if (!install?.phoneNumberId || !install?.displayPhoneNumber) {
@@ -498,12 +528,25 @@ export const kapsoActivatePhoneNumberTool: ToolDef<
       }
     }
 
+    const inboundWebhook =
+      client && !install.phoneNumberId.startsWith('pn_stub_')
+        ? await ensureInboundWebhook(client, install.phoneNumberId)
+        : null;
+
     await prisma.whatsAppInstall.update({
       where: { id: install.id },
       data: {
         status: 'active',
         lastErrorMessage: null,
         lastHealthyAt: new Date(),
+        ...(inboundWebhook
+          ? {
+              metadata: {
+                ...jsonObject(install.metadata),
+                inboundWebhook,
+              } as Prisma.InputJsonValue,
+            }
+          : {}),
       },
     });
     return {
@@ -515,6 +558,61 @@ export const kapsoActivatePhoneNumberTool: ToolDef<
     };
   },
 };
+
+async function ensureInboundWebhook(
+  client: KapsoClient,
+  phoneNumberId: string
+): Promise<Record<string, unknown>> {
+  const secret = env.kapsoGlobalWebhookSecret();
+  const baseUrl = env.kapsoWebhookBaseUrl();
+  if (!secret || !baseUrl) {
+    return {
+      status: 'skipped',
+      reason: !secret ? 'missing_secret' : 'missing_webhook_url',
+      checkedAt: new Date().toISOString(),
+    };
+  }
+  const url = `${baseUrl.replace(/\/$/, '')}/api/webhooks/whatsapp`;
+  if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1')) {
+    return {
+      status: 'skipped',
+      reason: 'webhook_url_not_public',
+      url,
+      checkedAt: new Date().toISOString(),
+    };
+  }
+  try {
+    const webhook = await client.registerWebhook({
+      scope: 'phone_number',
+      phone_number_id: phoneNumberId,
+      url,
+      events: [
+        'whatsapp.message.received',
+        'whatsapp.message.delivered',
+        'whatsapp.message.read',
+        'whatsapp.message.failed',
+      ],
+      kind: 'kapso',
+      payload_version: 'v2',
+      active: true,
+      secret_key: secret,
+    });
+    return {
+      status: 'active',
+      id: webhook.id,
+      url: webhook.url,
+      events: webhook.events,
+      checkedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    return {
+      status: 'error',
+      url,
+      error: err instanceof Error ? err.message : String(err),
+      checkedAt: new Date().toISOString(),
+    };
+  }
+}
 
 // ─── kapso_send_test_message ─────────────────────────────────────────
 
@@ -545,9 +643,16 @@ export const kapsoSendTestMessageTool: ToolDef<
   async handler(input) {
     const install = await prisma.whatsAppInstall.findUnique({
       where: { tenantId: input.tenantId },
-      select: { phoneNumberId: true },
+      select: { phoneNumberId: true, metadata: true },
     });
     if (!install?.phoneNumberId) throw new Error('whatsapp_install_not_found');
+    if (isSandboxInstall(install.metadata)) {
+      return {
+        ok: true,
+        messageId: `wamid.sandbox_${Date.now().toString(36)}`,
+        mode: 'stub',
+      };
+    }
 
     const client = kapsoClient();
     if (client && !install.phoneNumberId.startsWith('pn_stub_')) {
@@ -570,3 +675,17 @@ export const kapsoSendTestMessageTool: ToolDef<
     };
   },
 };
+
+function isSandboxInstall(metadata: Prisma.JsonValue | null): boolean {
+  const record =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : {};
+  return record.sandbox === true || record.source === 'provider_sandbox';
+}
+
+function jsonObject(metadata: Prisma.JsonValue | null): Record<string, unknown> {
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? (metadata as Record<string, unknown>)
+    : {};
+}

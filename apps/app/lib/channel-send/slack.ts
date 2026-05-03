@@ -17,7 +17,6 @@
  * returns the posted message handle from `chat.postMessage`.
  */
 
-import type { SlackInstall } from '@prisma/client';
 import type { KnownBlock } from '@slack/web-api';
 import { createSlackClient, sendBlocks } from '@sendero/slack';
 // renderForSlack pulls @sendero/slack which loads @slack/web-api (node:fs).
@@ -26,8 +25,16 @@ import { createSlackClient, sendBlocks } from '@sendero/slack';
 import { renderForSlack } from '@/lib/channel-render/channels/slack';
 import type { ChannelMessage } from '@/lib/channel-render';
 
+/** Structural subset the orchestrator actually needs. Looser than
+ *  Prisma's `SlackInstall` so callers using a structural install type
+ *  (e.g. `slack-agent.ts::PersistedSlackInstall` which avoids
+ *  importing `@prisma/client` directly) pass through unchanged. */
+export interface SendSlackInstall {
+  botToken: string;
+}
+
 export interface SendSlackArgs {
-  install: SlackInstall;
+  install: SendSlackInstall;
   /** User id (DM) or channel id, already resolved by the caller. */
   channel: string;
   threadTs?: string;

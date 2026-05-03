@@ -79,6 +79,8 @@ import {
   slackSendTestMessageTool,
   slackStartOauthInstallTool,
 } from './slack-channel';
+import { requestHumanHandoffTool } from './request-human-handoff';
+import { sendWhatsAppTemplateTool } from './send-whatsapp-template';
 import { settleBookingTool } from './settle-booking';
 import { settleSplitTool } from './settle-split';
 import { swapAndBridgeTool } from './swap-and-bridge';
@@ -389,6 +391,14 @@ export const toolList: ToolDef[] = [
   // NEXT_PUBLIC_DEMO_TRIP_ENABLED === 'true'. The agent can call this even
   // for users without a passkey wallet because it routes to org treasury.
   demoMintBoardingPassTool,
+  // Human-in-the-loop escalation. Internal-only — never exposed to API
+  // keys or MCP clients; the agent calls it when uncertain and the
+  // operator answers in MetaInbox / trip inbox / `/dashboard/handoffs`.
+  requestHumanHandoffTool,
+  // Outbound HSM templates. Internal-only — the agent picks a template
+  // when outside the 24-hour window or when a branded touch-point is
+  // warranted (QUOTE_READY, BOOKING_CONFIRMED, CHECKIN_REMINDER, …).
+  sendWhatsAppTemplateTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */

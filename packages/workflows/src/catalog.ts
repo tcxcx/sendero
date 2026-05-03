@@ -1501,7 +1501,7 @@ export const verifyTravelDocumentsWorkflow: WorkflowDef = {
   ],
 };
 
-// ─── whatsapp-provision: 5-step Sendero-owned WhatsApp setup ─────────
+// ─── whatsapp-provision: minimal Sendero-owned WhatsApp setup ────────
 //
 // Replaces the legacy "Connect Meta Business" flow. Sendero owns the
 // WABA + phone-number pool via Kapso. Tenant picks a country, we
@@ -1518,38 +1518,25 @@ export const whatsappProvisionWorkflow: WorkflowDef = {
   version: 1,
   label: 'Connect WhatsApp',
   description:
-    'Tenant WhatsApp setup wizard via Kapso. Five user-facing steps: choose setup region, complete the Kapso-hosted Meta connection, brand the business profile, approve message templates, and go live with an optional test ping.',
+    'Tenant WhatsApp setup wizard. Two user-facing steps: complete the hosted WhatsApp connection, then send an optional test ping and activate.',
   steps: [
-    // Step 1 — setup region
-    {
-      kind: 'pause',
-      id: 'pick_number',
-      label: 'Choose setup region',
-      reason: 'user_reply',
-      payload: {
-        promptId: 'whatsapp.pick_number',
-        stepIndex: 1,
-        totalSteps: 5,
-        helpText:
-          'Choose the country for the WhatsApp Business number you will connect through Kapso.',
-      },
-    },
     {
       kind: 'tool',
       id: 'reserve',
       tool: 'kapso_reserve_number',
-      label: 'Reserve the chosen number',
+      label: 'Create WhatsApp setup link',
       as: 'reservation',
       args: {
         tenantId: $('input.tenantId'),
         tenantName: $('input.tenantName'),
-        countryIso: $('pick_number.countryIso'),
-        preferredE164: $('pick_number.e164'),
+        countryIso: 'US',
+        numberSource: 'kapso_provisioned',
+        provisionPhoneNumber: true,
       },
       retries: 1,
       timeoutMs: 30_000,
     },
-    // Step 2 — verify Kapso / Meta connection
+    // Step 1 — verify Kapso / Meta connection
     {
       kind: 'pause',
       id: 'verify_number',
@@ -1557,83 +1544,23 @@ export const whatsappProvisionWorkflow: WorkflowDef = {
       reason: 'user_reply',
       payload: {
         promptId: 'whatsapp.verify_number',
-        stepIndex: 2,
-        totalSteps: 5,
+        stepIndex: 1,
+        totalSteps: 2,
         helpText:
-          'Open the Kapso-hosted setup link and approve the WhatsApp Business connection with the correct Meta business user.',
+          'Open the hosted setup link and finish WhatsApp Business setup with the correct Meta business user.',
       },
     },
-    // Step 3 — brand
-    {
-      kind: 'pause',
-      id: 'brand_profile',
-      label: 'Brand the experience',
-      reason: 'user_reply',
-      payload: {
-        promptId: 'whatsapp.brand_profile',
-        stepIndex: 3,
-        totalSteps: 5,
-        helpText: 'Set the display name, profile photo, bio, and default greeting.',
-      },
-    },
-    {
-      kind: 'tool',
-      id: 'update_profile',
-      tool: 'kapso_update_business_profile',
-      label: 'Update business profile',
-      args: {
-        tenantId: $('input.tenantId'),
-        displayName: $('brand_profile.displayName'),
-        about: $('brand_profile.about'),
-        profilePhotoUrl: $('brand_profile.profilePhotoUrl'),
-        defaultGreeting: $('brand_profile.defaultGreeting'),
-      },
-      retries: 1,
-      timeoutMs: 20_000,
-    },
-    // Step 4 — templates
-    {
-      kind: 'pause',
-      id: 'approve_templates',
-      label: 'Approve message templates',
-      reason: 'user_reply',
-      payload: {
-        promptId: 'whatsapp.approve_templates',
-        stepIndex: 4,
-        totalSteps: 5,
-        helpText:
-          'Sendero ships three canonical templates. Pick the ones you want submitted to Meta.',
-        templates: [
-          { name: 'trip_intake_v3', description: 'Initial trip-intake greeting.' },
-          { name: 'hold_confirmation_v2', description: 'Sent when a hold is placed.' },
-          { name: 'cap_warning_v1', description: 'Fires near the spend cap.' },
-        ],
-      },
-    },
-    {
-      kind: 'tool',
-      id: 'submit_templates',
-      tool: 'kapso_submit_message_templates',
-      label: 'Submit templates to Meta',
-      args: {
-        tenantId: $('input.tenantId'),
-        templateNames: $('approve_templates.templateNames'),
-      },
-      retries: 1,
-      timeoutMs: 20_000,
-    },
-    // Step 5 — go live (optional test ping, then activate)
+    // Step 2 — test and activate
     {
       kind: 'pause',
       id: 'go_live',
-      label: 'Go live',
+      label: 'Send test',
       reason: 'user_reply',
       payload: {
         promptId: 'whatsapp.go_live',
-        stepIndex: 5,
-        totalSteps: 5,
-        helpText:
-          'Optional: send a test ping to your own phone to confirm the channel works end-to-end.',
+        stepIndex: 2,
+        totalSteps: 2,
+        helpText: 'Send a test message or skip it. Sendero activates the channel after this step.',
       },
     },
     {

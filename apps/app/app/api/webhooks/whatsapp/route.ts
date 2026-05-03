@@ -14,9 +14,10 @@
  * happens here — keeps p95 latency predictable.
  */
 
-import { after, NextResponse, type NextRequest } from 'next/server';
-import { env } from '@sendero/env';
+import { after, type NextRequest, NextResponse } from 'next/server';
+
 import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
 import { detectLocale, localeForPhone } from '@sendero/locale';
 import {
   handleVerifyHandshake,
@@ -24,12 +25,12 @@ import {
   isAllowedMimeType,
   MAX_MEDIA_BYTES,
   mergeIdentity,
-  normalizeWebhookPayload,
-  verifyWebhookSignature,
-  WhatsAppClient,
   type NormalizedIdentityChange,
   type NormalizedInboundMessage,
   type NormalizedStatusUpdate,
+  normalizeWebhookPayload,
+  verifyWebhookSignature,
+  WhatsAppClient,
   type WhatsAppIdentity,
   type WhatsAppMedia,
 } from '@sendero/whatsapp';
@@ -75,9 +76,15 @@ export async function POST(req: NextRequest) {
   const receivedAt = new Date();
 
   const appSecret = env.whatsappAppSecret();
-  if (!appSecret) {
+  const kapsoSecret = env.kapsoGlobalWebhookSecret();
+  const hasMetaSignature = Boolean(req.headers.get('x-hub-signature-256'));
+  const hasKapsoSignature = Boolean(req.headers.get('x-webhook-signature'));
+  if (!appSecret && !kapsoSecret) {
     return NextResponse.json(
-      { error: 'whatsapp_not_configured', message: 'WHATSAPP_APP_SECRET unset' },
+      {
+        error: 'whatsapp_not_configured',
+        message: 'WHATSAPP_APP_SECRET or KAPSO_GLOBAL_WEBHOOK_SECRET unset',
+      },
       { status: 503 }
     );
   }
@@ -86,7 +93,14 @@ export async function POST(req: NextRequest) {
   const signature =
     req.headers.get('x-hub-signature-256') ?? req.headers.get('x-webhook-signature') ?? null;
 
-  if (!verifyWebhookSignature(rawBody, signature, appSecret)) {
+  const signatureSecret =
+    hasMetaSignature && appSecret
+      ? appSecret
+      : hasKapsoSignature && kapsoSecret
+        ? kapsoSecret
+        : (appSecret ?? kapsoSecret);
+
+  if (!signatureSecret || !verifyWebhookSignature(rawBody, signature, signatureSecret)) {
     // Audit the rejected request for forensics — somebody hit our
     // public endpoint with a bad sig, ops should be able to grep for
     // these without wading through Vercel logs.
@@ -194,6 +208,25 @@ export async function POST(req: NextRequest) {
       const identity = await upsertChannelIdentity(msg);
       if (!identity) continue;
 
+      // UX polish: mark the inbound as read and show a typing indicator
+      // immediately, in parallel with everything else. The typing
+      // presence auto-clears when the reply is sent (or after 25s).
+      // Fire-and-forget — failures here must never block dispatch.
+      void markReadAndTyping(msg);
+
+      // First-touch greeting — when we just provisioned the User row
+      // for this traveler AND they opened with a greeting, send a
+      // deterministic localized welcome instead of burning a turn.
+      // Subsequent inbounds (or non-greeting first inbounds) flow
+      // through the full agent.
+      const kind = msg.message.type;
+      const text = kind === 'text' ? (msg.message.text?.body ?? '') : mediaCaption(msg.message);
+      if (kind === 'text' && identity.provisional && isGreeting(text)) {
+        void sendWhatsAppReply(msg, greetingFor(identity.locale));
+        dispatched++;
+        continue;
+      }
+
       // Resolve an active trip for this traveler so the dispatch route
       // can append inbound + outbound events to the canonical Trip
       // ledger. Null when the traveler has no in-flight trip — dispatch
@@ -204,8 +237,28 @@ export async function POST(req: NextRequest) {
         channelIdentityId: identity.id,
       });
 
-      const kind = msg.message.type;
-      const text = kind === 'text' ? (msg.message.text?.body ?? '') : mediaCaption(msg.message);
+      // Durable multi-step workflow resume: if the traveler has a
+      // paused workflow Session (started via `start_workflow` on a
+      // prior turn), feed the user's reply in as the resolution and
+      // continue the runner. Skips the normal agent-turn fan-out so
+      // the workflow's deterministic step ordering is preserved. The
+      // trip context flows in so each resumed step appends to the
+      // trip ledger.
+      if (kind === 'text' && text) {
+        const handled = await tryResumePausedWorkflow({
+          tenantId: identity.tenantId,
+          channelIdentityId: identity.id,
+          travelerPhone: msg.identity.phone ?? msg.identity.phoneRaw ?? null,
+          userId: identity.userId,
+          userInput: text,
+          tripId,
+          msg,
+        });
+        if (handled) {
+          dispatched++;
+          continue;
+        }
+      }
 
       if (kind === 'text' && text) {
         void dispatchAgent({
@@ -215,16 +268,29 @@ export async function POST(req: NextRequest) {
           locale: identity.locale,
           turnId: `whatsapp:${msg.messageId}`,
           tripId,
+          channelIdentityId: identity.id,
+          travelerPhone: msg.identity.phone ?? msg.identity.phoneRaw ?? null,
           req,
         })
-          .then(result => {
+          .then(async result => {
             if (result?.reply) {
+              if (result.shareCards && result.shareCards.length > 0) {
+                await sendShareCards(msg, result.shareCards).catch(err => {
+                  console.warn('[wa/webhook] share-card render failed', {
+                    messageId: msg.messageId,
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                });
+              }
               void sendWhatsAppReply(msg, result.reply);
             } else {
-              // Dispatch returned null — agent didn't produce text but
-              // didn't throw. Still send a fallback so the user knows
-              // their message landed.
-              void sendDispatchFallback(msg, 'no_reply');
+              // Dispatch returned null. Stay silent — Kapso already
+              // 200-ack'd, retrying with a "having trouble" message
+              // floods the user. Operator surfaces the failure via the
+              // webhook audit log.
+              console.warn('[wa/webhook] dispatch returned no reply', {
+                messageId: msg.messageId,
+              });
             }
           })
           .catch(err => {
@@ -232,7 +298,6 @@ export async function POST(req: NextRequest) {
               messageId: msg.messageId,
               error: err instanceof Error ? err.message : String(err),
             });
-            void sendDispatchFallback(msg, 'dispatch_error');
           });
         dispatched++;
       } else if ((kind === 'image' || kind === 'document') && msg.message[kind]) {
@@ -251,11 +316,21 @@ export async function POST(req: NextRequest) {
           attachmentKind: kind,
           req,
         })
-          .then(result => {
+          .then(async result => {
             if (result?.reply) {
+              if (result.shareCards && result.shareCards.length > 0) {
+                await sendShareCards(msg, result.shareCards).catch(err => {
+                  console.warn('[wa/webhook] share-card render failed', {
+                    messageId: msg.messageId,
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                });
+              }
               void sendWhatsAppReply(msg, result.reply);
             } else {
-              void sendDispatchFallback(msg, 'no_reply');
+              console.warn('[wa/webhook] media dispatch returned no reply', {
+                messageId: msg.messageId,
+              });
             }
           })
           .catch(err => {
@@ -263,7 +338,6 @@ export async function POST(req: NextRequest) {
               messageId: msg.messageId,
               error: err instanceof Error ? err.message : String(err),
             });
-            void sendDispatchFallback(msg, 'dispatch_error');
           });
         dispatched++;
       }
@@ -324,8 +398,10 @@ async function dispatchAgent(args: {
   locale: string;
   turnId: string;
   tripId: string | null;
+  channelIdentityId: string;
+  travelerPhone: string | null;
   req: NextRequest;
-}): Promise<{ reply: string } | null> {
+}): Promise<DispatchReply | null> {
   return postToDispatch(args.req, {
     tenantId: args.tenantId,
     userId: args.userId,
@@ -333,8 +409,27 @@ async function dispatchAgent(args: {
     text: args.text,
     locale: args.locale,
     turnId: args.turnId,
+    channelIdentityId: args.channelIdentityId,
+    ...(args.travelerPhone ? { travelerPhone: args.travelerPhone } : {}),
     ...(args.tripId ? { tripId: args.tripId } : {}),
   });
+}
+
+interface DispatchShareCard {
+  toolName: string;
+  share: {
+    title: string;
+    body: string;
+    bullets?: string[];
+    primaryCta?: { label: string; kind: string };
+    secondaryCtas?: Array<{ label: string; kind: string }>;
+    imageUrl?: string;
+  };
+}
+
+interface DispatchReply {
+  reply: string;
+  shareCards?: DispatchShareCard[];
 }
 
 async function dispatchMediaTurn(args: {
@@ -348,7 +443,7 @@ async function dispatchMediaTurn(args: {
   caption: string;
   attachmentKind: 'image' | 'document';
   req: NextRequest;
-}): Promise<{ reply: string } | null> {
+}): Promise<DispatchReply | null> {
   if (!isAllowedMimeType(args.media.mime_type)) {
     console.warn('[wa/webhook] disallowed media mime-type:', args.media.mime_type);
     return null;
@@ -402,16 +497,48 @@ async function dispatchMediaTurn(args: {
 async function postToDispatch(
   req: NextRequest,
   body: Record<string, unknown>
-): Promise<{ reply: string } | null> {
-  const dispatchUrl = new URL('/api/agent/dispatch', req.nextUrl.origin);
-  const response = await fetch(dispatchUrl, {
-    method: 'POST',
-    headers: agentDispatchHeaders(),
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) return null;
-  const json = (await response.json()) as { text?: string };
-  return json.text ? { reply: json.text } : null;
+): Promise<DispatchReply | null> {
+  // `req.nextUrl.origin` is the public-facing host the request arrived
+  // on (e.g. the ngrok tunnel). Routing internal dispatch through that
+  // is a round-trip back through the public edge for no benefit. Prefer
+  // an explicit internal base URL, then localhost on the configured
+  // port; fall through to the request origin only if neither is set.
+  const internalBase =
+    process.env.AGENT_INTERNAL_BASE_URL ||
+    `http://127.0.0.1:${process.env.PORT ?? '3010'}` ||
+    req.nextUrl.origin;
+  const dispatchUrl = new URL('/api/agent/dispatch', internalBase);
+  let response: Response;
+  try {
+    response = await fetch(dispatchUrl, {
+      method: 'POST',
+      headers: agentDispatchHeaders(),
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    console.error('[wa/webhook] dispatch fetch threw', {
+      url: dispatchUrl.toString(),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    console.error('[wa/webhook] dispatch returned non-OK', {
+      status: response.status,
+      body: errText.slice(0, 400),
+    });
+    return null;
+  }
+  const json = (await response.json().catch(() => null)) as {
+    text?: string;
+    shareCards?: DispatchShareCard[];
+  } | null;
+  if (!json?.text) return null;
+  return {
+    reply: json.text,
+    ...(json.shareCards && json.shareCards.length > 0 ? { shareCards: json.shareCards } : {}),
+  };
 }
 
 function mediaCaption(msg: NormalizedInboundMessage['message']): string {
@@ -433,39 +560,16 @@ function agentDispatchHeaders() {
   };
 }
 
-/**
- * Last-resort fallback message when the agent dispatch fails or returns
- * nothing. Without this, the WhatsApp user sees dead silence — Meta
- * already received our 200 ack so it won't retry, and the user has no
- * indication their message even landed. The fallback closes the loop.
- *
- * Best-effort: a fallback that itself fails just logs. We don't escalate
- * a fallback failure into a 500 because that retriggers Meta's webhook
- * retry which is the worse outcome (duplicate dispatches).
- */
-async function sendDispatchFallback(
-  msg: NormalizedInboundMessage,
-  reason: 'no_reply' | 'dispatch_error'
-): Promise<void> {
-  const text =
-    reason === 'dispatch_error'
-      ? "I'm having trouble reaching the agent right now. Please try again in a minute — your message did come through."
-      : "Got your message. I'm on it — give me a moment.";
-  try {
-    await sendWhatsAppReply(msg, text);
-  } catch (err) {
-    console.error('[wa/webhook] fallback send failed:', {
-      messageId: msg.messageId,
-      reason,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
 async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): Promise<void> {
-  const accessToken = env.whatsappAccessToken();
+  const accessToken = whatsappOutboundAccessToken();
   if (!accessToken) return;
-  const { formatForWhatsApp } = await import('@sendero/whatsapp');
+  const {
+    formatForWhatsApp,
+    isOutsideSessionWindowError,
+    SENDERO_TEMPLATES,
+    buildTemplateComponents,
+    resolveTemplateLocale,
+  } = await import('@sendero/whatsapp');
 
   // Resolve the tenant once so every audit row carries the correct
   // tenantId. Skip auditing entirely when we can't resolve (dev with
@@ -475,7 +579,7 @@ async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): 
   const client = new WhatsAppClient({
     phoneNumberId: msg.tenantPhoneNumberId,
     accessToken,
-    apiBaseUrl: env.whatsappApiBaseUrl() ?? undefined,
+    apiBaseUrl: whatsappOutboundApiBaseUrl(),
     ...(auditTenantId
       ? {
           onSent: event =>
@@ -501,9 +605,207 @@ async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): 
         }
       : {}),
   });
+  const recipient = msg.identity.phoneRaw ?? msg.identity.phone ?? '';
+  if (!recipient) return;
   const chunks = formatForWhatsApp(reply);
   for (const chunk of chunks) {
-    await client.sendText(msg.identity.phoneRaw ?? msg.identity.phone ?? '', chunk);
+    try {
+      await client.sendText(recipient, chunk);
+    } catch (err) {
+      // Outside the 24h customer-service window — Meta rejects free-form
+      // with `(#131047)`. Fall back to the ACTION_REQUIRED HSM template
+      // (registered + approved per `SENDERO_TEMPLATES`) so the traveler
+      // still gets the message; the body summarizes the agent's reply
+      // and the link drops them into Sendero where the full thread
+      // resumes inside-window.
+      if (!isOutsideSessionWindowError(err)) throw err;
+      console.warn('[wa/webhook] free-form rejected outside 24h window; sending template', {
+        recipient,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      const def = SENDERO_TEMPLATES.ACTION_REQUIRED;
+      const components = buildTemplateComponents(def, {
+        senderName: 'Sendero',
+        actionSummary: chunk.slice(0, 240),
+        actionLink: `${env.kapsoWebhookBaseUrl() ?? 'https://app.sendero.travel'}/dashboard`,
+      });
+      await client.sendTemplate({
+        to: recipient,
+        templateName: def.name,
+        languageCode: resolveTemplateLocale(def, undefined),
+        components,
+      });
+      // Don't try the remaining chunks — one template send replaces the
+      // entire free-form payload outside the window.
+      break;
+    }
+  }
+}
+
+/**
+ * Resume the traveler's paused workflow with their latest message as
+ * the resolution payload. Returns `true` when a paused workflow was
+ * found + resumed (caller should skip the normal agent-turn dispatch);
+ * `false` when no paused workflow exists for this channel identity.
+ *
+ * Failures are caught and downgrade to `false` so the inbound falls
+ * through to a fresh agent turn rather than dropping silently.
+ */
+async function tryResumePausedWorkflow(args: {
+  tenantId: string;
+  channelIdentityId: string;
+  travelerPhone: string | null;
+  userId: string;
+  userInput: string;
+  tripId: string | null;
+  msg: NormalizedInboundMessage;
+}): Promise<boolean> {
+  try {
+    const { loadPausedAgentWorkflow, resumeAgentWorkflow } = await import(
+      '@/lib/agent-workflow-session'
+    );
+    const paused = await loadPausedAgentWorkflow({
+      tenantId: args.tenantId,
+      channel: 'whatsapp',
+      channelIdentityId: args.channelIdentityId,
+    });
+    if (!paused) return false;
+
+    const snapshot = await resumeAgentWorkflow({
+      tenantId: args.tenantId,
+      paused,
+      userInput: args.userInput,
+      toolCtx: {
+        traveler: {
+          tenantId: args.tenantId,
+          userId: args.userId,
+          ...(args.travelerPhone ? { phone: args.travelerPhone } : {}),
+        },
+        channelIdentityId: args.channelIdentityId,
+      },
+      userId: args.userId,
+      ...(args.tripId ? { tripId: args.tripId } : {}),
+    });
+
+    const reply =
+      snapshot.pausePrompt ||
+      (snapshot.status === 'completed'
+        ? `Done. ${paused.def.label} finished — anything else I can help with?`
+        : 'Sorry, that step did not complete. Let me know how to proceed.');
+    void sendWhatsAppReply(args.msg, reply);
+    return true;
+  } catch (err) {
+    console.error('[wa/webhook] paused-workflow resume failed', {
+      messageId: args.msg.messageId,
+      channelIdentityId: args.channelIdentityId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+function whatsappOutboundAccessToken(): string | null {
+  return env.whatsappAccessToken() ?? env.kapsoApiKey();
+}
+
+function whatsappOutboundApiBaseUrl(): string | undefined {
+  return (
+    env.whatsappApiBaseUrl() ??
+    (env.kapsoApiKey() ? `${env.kapsoApiBaseUrl()}/meta/whatsapp/v24.0` : undefined)
+  );
+}
+
+/**
+ * Surface tool-emitted share cards as native WhatsApp interactive
+ * payloads. Delegates to the channel-agnostic dispatcher in
+ * `@/lib/channel-send/agent-share-cards`; this wrapper just resolves
+ * the install row + recipient + Kapso-mediated credential overrides.
+ *
+ * Sent BEFORE the agent's text reply so the card is the visible
+ * primary; the prose is follow-up commentary. Failures here are
+ * non-fatal — the text reply still goes out via `sendWhatsAppReply`.
+ */
+async function sendShareCards(
+  msg: NormalizedInboundMessage,
+  cards: DispatchShareCard[]
+): Promise<void> {
+  const accessToken = whatsappOutboundAccessToken();
+  if (!accessToken) return;
+  const auditTenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
+  if (!auditTenantId) return;
+
+  const install = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId: auditTenantId },
+  });
+  if (!install || install.status === 'disabled' || !install.phoneNumberId) return;
+  const recipient = msg.identity.phoneRaw ?? msg.identity.phone ?? '';
+  if (!recipient) return;
+
+  const { dispatchAgentShareCardsWhatsApp } = await import('@/lib/channel-send');
+  const apiBaseUrl = whatsappOutboundApiBaseUrl();
+  const result = await dispatchAgentShareCardsWhatsApp({
+    install,
+    recipient,
+    cards,
+    idPrefix: `tr_${msg.messageId}`,
+    accessToken,
+    ...(apiBaseUrl ? { apiBaseUrl } : {}),
+  });
+  for (const skip of result.skipped) {
+    console.warn('[wa/webhook] share-card send skipped', skip);
+  }
+}
+
+/**
+ * Mark the inbound message as read AND show the typing indicator on
+ * the traveler's WhatsApp thread while the agent runs. Cosmetic — any
+ * failure here is swallowed so the dispatch path is never blocked.
+ *
+ * Meta's typing presence auto-clears when the bot's reply lands or
+ * after 25s, so we don't need to explicitly turn it off.
+ */
+async function markReadAndTyping(msg: NormalizedInboundMessage): Promise<void> {
+  const accessToken = whatsappOutboundAccessToken();
+  if (!accessToken) return;
+  try {
+    const client = new WhatsAppClient({
+      phoneNumberId: msg.tenantPhoneNumberId,
+      accessToken,
+      apiBaseUrl: whatsappOutboundApiBaseUrl(),
+    });
+    await client.markReadAndTyping(msg.messageId);
+  } catch (err) {
+    console.warn('[wa/webhook] markReadAndTyping failed', {
+      messageId: msg.messageId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Greeting heuristic for first-touch UX. Matches short greetings only
+ * — anything substantive (e.g. "hola, busco vuelo a Lima") flows
+ * through the agent so the traveler's actual request is handled.
+ */
+const GREETING_PATTERNS =
+  /^\s*(hi|hello|hey|hola|buenas?|buen[oa]s?\s+(d[ií]as|tardes|noches)|holi|qué onda|que onda|q[uúù]bo|oi|ol[aá]|bom dia|boa tarde|boa noite|hej|salut|bonjour|ciao|👋|🙋[‍♂️♀️]?)\s*[!?.\s]*$/i;
+
+function isGreeting(text: string): boolean {
+  return text.length <= 32 && GREETING_PATTERNS.test(text);
+}
+
+/** First-touch welcome localized to the traveler's inferred locale. */
+function greetingFor(locale: string): string {
+  const lang = locale.toLowerCase().slice(0, 2);
+  switch (lang) {
+    case 'es':
+      return '¡Hola! Soy Sendero, tu agente de viajes. Decime a dónde vamos y yo me encargo: vuelos, hoteles, traslados.';
+    case 'pt':
+      return 'Olá! Sou o Sendero, seu agente de viagens. Diga para onde vamos e eu cuido de tudo: voos, hotéis, traslados.';
+    case 'fr':
+      return 'Bonjour ! Je suis Sendero, votre agent de voyage. Dites-moi où nous allons : vols, hôtels, transferts.';
+    default:
+      return "Hi! I'm Sendero, your travel agent. Tell me where we're headed — flights, stays, ground transport, all sorted.";
   }
 }
 
@@ -567,9 +869,14 @@ async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<s
   return env.whatsappDefaultTenantId();
 }
 
-async function upsertChannelIdentity(
-  msg: NormalizedInboundMessage
-): Promise<{ id: string; tenantId: string; userId: string | null; locale: string } | null> {
+async function upsertChannelIdentity(msg: NormalizedInboundMessage): Promise<{
+  id: string;
+  tenantId: string;
+  userId: string;
+  locale: string;
+  /** True when the User row was created on this turn — drives first-touch UX. */
+  provisional: boolean;
+} | null> {
   const tenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
   if (!tenantId) return null;
 
@@ -586,8 +893,9 @@ async function upsertChannelIdentity(
     phoneRaw: msg.identity.phoneRaw,
   };
 
+  let row: { id: string; tenantId: string; userId: string | null; metadata: unknown } | null = null;
   if (bsuid) {
-    const row = await prisma.channelIdentity.upsert({
+    row = await prisma.channelIdentity.upsert({
       where: {
         tenantId_kind_businessScopedUserId: {
           tenantId,
@@ -612,16 +920,8 @@ async function upsertChannelIdentity(
       },
       select: { id: true, tenantId: true, userId: true, metadata: true },
     });
-    return {
-      id: row.id,
-      tenantId: row.tenantId,
-      userId: row.userId,
-      locale: localeFromMetadata(row.metadata, inferredLocale),
-    };
-  }
-
-  if (externalUserId) {
-    const row = await prisma.channelIdentity.upsert({
+  } else if (externalUserId) {
+    row = await prisma.channelIdentity.upsert({
       where: {
         tenantId_kind_externalUserId: {
           tenantId,
@@ -639,14 +939,60 @@ async function upsertChannelIdentity(
       update: { username: msg.identity.username, metadata },
       select: { id: true, tenantId: true, userId: true, metadata: true },
     });
-    return {
-      id: row.id,
-      tenantId: row.tenantId,
-      userId: row.userId,
-      locale: localeFromMetadata(row.metadata, inferredLocale),
-    };
   }
-  return null;
+  if (!row) return null;
+
+  // Auto-provision a Sendero User on first inbound — meter_events.userId
+  // is FK'd to users.id, and a brand-new traveler's ChannelIdentity row
+  // has userId: null. Mirrors slack-user-mapping's provisional User
+  // pattern (`source: 'whatsapp'`, placeholder email, clerkUserId left
+  // null until the human signs up).
+  let provisional = false;
+  let userId = row.userId;
+  if (!userId) {
+    userId = await ensureUserForWhatsAppIdentity(row.id, msg.identity, bsuid);
+    provisional = true;
+  }
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    userId,
+    locale: localeFromMetadata(row.metadata, inferredLocale),
+    provisional,
+  };
+}
+
+async function ensureUserForWhatsAppIdentity(
+  channelIdentityId: string,
+  identity: WhatsAppIdentity,
+  bsuid: string | null | undefined
+): Promise<string> {
+  const handle = (bsuid ?? identity.phone ?? identity.phoneRaw ?? channelIdentityId)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const placeholderEmail = `wa-${handle}@whatsapp-provisional.sendero.travel`;
+  let userId: string;
+  try {
+    const created = await prisma.user.create({
+      data: { email: placeholderEmail, source: 'whatsapp' },
+      select: { id: true },
+    });
+    userId = created.id;
+  } catch {
+    // Race: another concurrent inbound provisioned this user already.
+    // User.email is globally @unique — re-read.
+    const existing = await prisma.user.findUnique({
+      where: { email: placeholderEmail },
+      select: { id: true },
+    });
+    if (!existing) throw new Error('whatsapp_user_provision_failed');
+    userId = existing.id;
+  }
+  await prisma.channelIdentity.update({
+    where: { id: channelIdentityId },
+    data: { userId },
+  });
+  return userId;
 }
 
 function localeFromMetadata(metadata: unknown, fallback: string): string {

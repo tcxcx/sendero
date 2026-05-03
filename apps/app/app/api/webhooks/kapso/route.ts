@@ -152,12 +152,26 @@ async function dispatchKapsoEvent(event: {
     phoneNumberId: event.phoneNumberId,
     displayPhoneNumber: event.displayPhoneNumber,
   });
-  const tenantFlows = await ensureTenantWhatsAppFlows({
-    tenantId: install.tenantId,
-    tenantDisplayName: install.tenant.displayName,
-    phoneNumberId: event.phoneNumberId,
-    businessAccountId: event.businessAccountId,
-  });
+  let tenantFlows: unknown;
+  try {
+    tenantFlows = await ensureTenantWhatsAppFlows({
+      tenantId: install.tenantId,
+      tenantDisplayName: install.tenant.displayName,
+      phoneNumberId: event.phoneNumberId,
+      businessAccountId: event.businessAccountId,
+    });
+  } catch (err) {
+    tenantFlows = {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      checkedAt: new Date().toISOString(),
+    };
+    console.warn('[webhooks/kapso] tenant flow registration failed after phone activation', {
+      tenantId: install.tenantId,
+      phoneNumberId: event.phoneNumberId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   await prisma.whatsAppInstall.update({
     where: { id: install.id },

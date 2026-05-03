@@ -17,6 +17,13 @@ export type { SendSlackArgs, SendSlackResult } from './slack';
 export { sendChannelMessageWhatsApp } from './whatsapp';
 export type { SendWhatsAppArgs, SendWhatsAppResult } from './whatsapp';
 
+export {
+  shareCardsToChannelMessages,
+  dispatchAgentShareCardsWhatsApp,
+  dispatchAgentShareCardsSlack,
+} from './agent-share-cards';
+export type { AgentShareCard, DispatchShareCardsResult } from './agent-share-cards';
+
 export type {
   ChannelMessage,
   ChannelMessageText,

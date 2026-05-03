@@ -185,6 +185,40 @@ export async function ensureRoom(args: {
   });
 }
 
+/**
+ * Trigger a Liveblocks inbox notification on the support-agent user
+ * for a freshly-queued operator handoff. Fire-and-forget — when the
+ * Liveblocks secret is unset (test envs) this returns silently.
+ *
+ * The room id MUST come from `roomIdForSupportCase(tenantId, handoffId)`
+ * so the notification fans out to the right operator surfaces (the
+ * fanout consumer at `apps/app/lib/liveblocks-webhook-fanout.ts` keys
+ * on this naming convention).
+ */
+export async function notifyOperatorHandoff(args: {
+  tenantId: string;
+  handoffId: string;
+  liveblocksRoomId: string;
+  title: string;
+  message: string;
+  url: string;
+}): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  await client.triggerInboxNotification({
+    userId: 'agent:customer-support',
+    kind: '$handoffRequired',
+    subjectId: args.handoffId,
+    roomId: args.liveblocksRoomId,
+    activityData: {
+      title: args.title,
+      message: args.message,
+      provider: 'sendero',
+      url: args.url,
+    },
+  });
+}
+
 /** Ensure the tenant-wide dashboard room exists. */
 export async function ensureWorkspaceRoom(args: { tenantId: string }): Promise<void> {
   const client = getClient();

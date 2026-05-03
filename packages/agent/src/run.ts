@@ -329,12 +329,25 @@ async function _runAgentTurnInner(
       });
 
   const latencyMs = Date.now() - startedAt;
-  const trail = (result.toolCalls ?? []).map(tc => ({
+  // AI SDK v6 surfaces tool calls + results inside `result.steps[*]`,
+  // not at the top level (the top-level `result.toolCalls` /
+  // `result.toolResults` are empty arrays in the shape we get back).
+  // Aggregate from the steps array so the trail + share-card capture
+  // work regardless of which AI SDK minor version is in flight.
+  const aggregatedToolCalls = aggregateStepToolCalls(result);
+  const aggregatedToolResults = aggregateStepToolResults(result);
+  const trail = aggregatedToolCalls.map(tc => ({
     toolName: tc.toolName,
     ok: true, // AI SDK already reports failed tools via the stream; we coalesce here
     latencyMs: 0,
     priceMicroUsdc: '0',
   }));
+  // Capture share-card payloads from tool results so adapters can
+  // render native interactive elements (WhatsApp interactive buttons,
+  // Slack block kit) instead of stringifying the agent's prose
+  // summary. Tools opt in by returning `{ ..., share: { title, body,
+  // bullets?, primaryCta?, secondaryCtas?, imageUrl? } }`.
+  const shareCards = collectShareCards(aggregatedToolResults);
 
   // 6. idempotent meter write
   const idempotencyKey = buildIdempotencyKey({
@@ -364,6 +377,21 @@ async function _runAgentTurnInner(
   }
 
   // 7. session update
+  //
+  // Defense against past-turn poisoning: if this turn had a tool error
+  // AND emitted no share cards (i.e. nothing user-visible succeeded),
+  // persist a sanitized agent marker instead of the apology prose.
+  // The full apology text would otherwise leak into the next turn's
+  // `## Recent conversation` block and the model would condition on
+  // it ("the system is down, escalate") instead of retrying. The
+  // marker preserves audit ("this turn errored") without poisoning
+  // the next turn's prompt.
+  const stepsHadError = aggregatedToolResultsHadError(result);
+  const noUserVisibleWin = (shareCards?.length ?? 0) === 0;
+  const persistedAgentText =
+    stepsHadError && noUserVisibleWin
+      ? '[turn errored — no user-visible result, retried on next message]'
+      : result.text;
   const nextState = appendTurn(
     appendTurn(state, {
       at: new Date(startedAt).toISOString(),
@@ -375,7 +403,7 @@ async function _runAgentTurnInner(
     {
       at: new Date().toISOString(),
       role: 'agent',
-      text: result.text,
+      text: persistedAgentText,
       channel: input.channel,
       turnId: input.turnId,
       toolCalls: trail.map(t => ({ name: t.toolName, ok: t.ok })),
@@ -424,6 +452,7 @@ async function _runAgentTurnInner(
     latencyMs,
     billed,
     blocked: false,
+    ...(shareCards.length > 0 ? { shareCards } : {}),
     capPeriods: pre.cap.periods.map(p => ({
       period: p.period,
       spentMicro: p.spentMicro,
@@ -434,6 +463,124 @@ async function _runAgentTurnInner(
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────
+
+/**
+ * True when any AI SDK step contained a `tool-error` content block —
+ * i.e. the runtime caught a tool throw and reported it back to the
+ * model. Used to decide whether to persist the agent's reply text in
+ * the conversation history; a turn that ended in apology over a
+ * tool failure shouldn't leak that apology into future prompts.
+ */
+function aggregatedToolResultsHadError(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  const steps = (result as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return false;
+  for (const step of steps) {
+    if (!step || typeof step !== 'object') continue;
+    const content = (step as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const c of content) {
+      if (c && typeof c === 'object' && (c as { type?: unknown }).type === 'tool-error') {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Pull every `toolCall` from `result.steps[*]` into a single flat
+ * list. AI SDK v6's `generateText` returns `result.steps` with the
+ * per-step tool calls; the top-level `result.toolCalls` is empty in
+ * the shape we get back. Returns minimal `{ toolName }` shape — the
+ * trail aggregator only reads the name.
+ */
+function aggregateStepToolCalls(result: unknown): Array<{ toolName: string }> {
+  if (!result || typeof result !== 'object') return [];
+  const steps = (result as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return [];
+  const out: Array<{ toolName: string }> = [];
+  for (const step of steps) {
+    if (!step || typeof step !== 'object') continue;
+    const calls = (step as { toolCalls?: unknown }).toolCalls;
+    if (!Array.isArray(calls)) continue;
+    for (const c of calls) {
+      const name = (c as { toolName?: unknown })?.toolName;
+      if (typeof name === 'string') out.push({ toolName: name });
+    }
+  }
+  return out;
+}
+
+/**
+ * Pull every `toolResult` from `result.steps[*]` into a single flat
+ * list. Used to feed `collectShareCards` so share payloads emitted by
+ * tools (search_flights, hold, book_flight, cancel_order_quote, etc.)
+ * surface as native interactive cards on every adapter.
+ */
+function aggregateStepToolResults(result: unknown): unknown[] {
+  if (!result || typeof result !== 'object') return [];
+  const steps = (result as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return [];
+  const out: unknown[] = [];
+  for (const step of steps) {
+    if (!step || typeof step !== 'object') continue;
+    const results = (step as { toolResults?: unknown }).toolResults;
+    if (!Array.isArray(results)) continue;
+    out.push(...results);
+  }
+  return out;
+}
+
+/**
+ * Extract cross-channel share-card payloads from the AI SDK turn's
+ * tool results. Tools opt-in by returning `{ share: { ... } }` in
+ * their result; everything without a `share` field is ignored. The
+ * returned list is in tool-call order so adapters can render in
+ * sequence.
+ */
+function collectShareCards(toolResults: unknown): NonNullable<AgentOutput['shareCards']> {
+  if (!Array.isArray(toolResults)) return [];
+  const out: NonNullable<AgentOutput['shareCards']> = [];
+  for (const entry of toolResults) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as Record<string, unknown>;
+    const toolName = typeof record.toolName === 'string' ? record.toolName : null;
+    if (!toolName) continue;
+    // AI SDK v6 surfaces tool returns under `output`; older shapes used
+    // `result`. Tolerate both so a runtime upgrade can't strand cards.
+    const output = (record.output ?? record.result) as Record<string, unknown> | undefined;
+    if (!output || typeof output !== 'object') continue;
+    const share = (output as { share?: unknown }).share;
+    if (!share || typeof share !== 'object' || Array.isArray(share)) continue;
+    const s = share as Record<string, unknown>;
+    if (typeof s.title !== 'string' || typeof s.body !== 'string') continue;
+    out.push({
+      toolName,
+      share: {
+        title: s.title,
+        body: s.body,
+        ...(Array.isArray(s.bullets) && s.bullets.every(b => typeof b === 'string')
+          ? { bullets: s.bullets as string[] }
+          : {}),
+        ...(isCta(s.primaryCta)
+          ? { primaryCta: s.primaryCta as { label: string; kind: string } }
+          : {}),
+        ...(Array.isArray(s.secondaryCtas) && s.secondaryCtas.every(isCta)
+          ? { secondaryCtas: s.secondaryCtas as Array<{ label: string; kind: string }> }
+          : {}),
+        ...(typeof s.imageUrl === 'string' ? { imageUrl: s.imageUrl } : {}),
+      },
+    });
+  }
+  return out;
+}
+
+function isCta(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const r = value as Record<string, unknown>;
+  return typeof r.label === 'string' && typeof r.kind === 'string';
+}
 
 /**
  * Turn an AgentMediaAttachment into an AI SDK v6 file content part.
