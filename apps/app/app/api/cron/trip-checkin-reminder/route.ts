@@ -100,7 +100,9 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    const events = Array.isArray(trip.events) ? (trip.events as Array<Record<string, unknown>>) : [];
+    const events = Array.isArray(trip.events)
+      ? (trip.events as Array<Record<string, unknown>>)
+      : [];
     const alreadyFired = events.some(
       e => typeof e.kind === 'string' && e.kind === 'checkin_reminder'
     );
