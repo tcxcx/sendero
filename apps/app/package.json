@@ -37,6 +37,8 @@
     "@liveblocks/react": "2.24.4",
     "@liveblocks/react-ui": "2.24.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@moonpay/moonpay-js": "^0.7.6",
+    "@moonpay/moonpay-react": "^1.10.6",
     "@neondatabase/serverless": "^0.10.0",
     "@prisma/adapter-neon": "^5.22.0",
     "@prisma/client": "^5.22.0",
