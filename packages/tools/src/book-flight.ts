@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { z } from 'zod';
 import {
   createHoldOrder,
@@ -11,14 +13,8 @@ import type { ToolDef, ToolContext } from './types';
 import { ensureFlightCustomer } from './ensure-flight-customer';
 import { ensureTravelerWallet } from './ensure-traveler-wallet';
 import { type Prisma, prisma } from '@sendero/database';
-import {
-  queryUnifiedBalance,
-  transferViaGateway,
-} from '@sendero/circle/gateway';
-import {
-  getOrCreateGatewaySigner,
-  getUserGatewaySigner,
-} from '@sendero/circle/gateway-signer';
+import { queryUnifiedBalance, transferViaGateway } from '@sendero/circle/gateway';
+import { getOrCreateGatewaySigner, getUserGatewaySigner } from '@sendero/circle/gateway-signer';
 import type { Address } from 'viem';
 
 const serviceSchema = z.object({
@@ -175,7 +171,14 @@ export const bookFlightTool: ToolDef = {
       });
       if (!fundsCheck.ok) {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
-        const meWalletUrl = `${baseUrl.replace(/\/$/, '')}/me/wallet`;
+        const trimmedBase = baseUrl.replace(/\/$/, '');
+        // Deep-link the MoonPay top-up flow with the exact required
+        // amount pre-filled — `/me/wallet?topup=usdc&amount=N` opens
+        // the embedded `<MoonPayBuyWidget>` overlay for signed-in
+        // travelers; `moonpayCheckoutUrl` (built below) is the direct
+        // hosted checkout for WhatsApp / SMS deep-links where the
+        // traveler may not be Clerk-signed-in.
+        const meWalletUrl = `${trimmedBase}/me/wallet?topup=usdc&amount=${required.toFixed(2)}`;
         // QR encodes a USDC deposit intent — most wallet apps that
         // scan EVM QR show "send to this address" with USDC pre-
         // selected when the EIP-681 prefix is used.
@@ -186,6 +189,38 @@ export const bookFlightTool: ToolDef = {
           ? `https://quickchart.io/qr?text=${encodeURIComponent(qrPayload)}&size=400&margin=2`
           : null;
 
+        // MoonPay direct checkout URL — built inline (rather than
+        // calling `moonpay_topup` recursively) so the agent receives
+        // a single response. Best-effort: when env keys aren't set we
+        // fall back to the address-only path so the booking flow
+        // still surfaces deposit guidance.
+        let moonpayCheckoutUrl: string | null = null;
+        try {
+          const apiKey = process.env.NEXT_PUBLIC_MOONPAY_API_KEY;
+          const signingSecret = process.env.MOONPAY_SIGNING_SECRET;
+          if (apiKey && signingSecret && fundsCheck.evmAddress) {
+            const isTest = apiKey.startsWith('pk_test_');
+            const host = isTest ? 'buy-sandbox.moonpay.com' : 'buy.moonpay.com';
+            const params = new URLSearchParams({
+              apiKey,
+              currencyCode: 'usdc_base',
+              baseCurrencyCode: 'usd',
+              baseCurrencyAmount: required.toFixed(2),
+              walletAddress: fundsCheck.evmAddress,
+              externalCustomerId: travelerUserId,
+              showWalletAddressForm: 'false',
+            });
+            const search = `?${params.toString()}`;
+            const sig = crypto.createHmac('sha256', signingSecret).update(search).digest('base64');
+            params.set('signature', sig);
+            moonpayCheckoutUrl = `https://${host}/?${params.toString()}`;
+          }
+        } catch (err) {
+          console.warn('[book_flight] moonpay url build failed', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
         return {
           status: 'insufficient_funds',
           requiredUsdc: required.toFixed(2),
@@ -195,6 +230,7 @@ export const bookFlightTool: ToolDef = {
           solanaAddress: fundsCheck.solanaAddress,
           qrImageUrl,
           meWalletUrl,
+          moonpayCheckoutUrl,
           supportedChains: [
             'Arc Testnet',
             'Ethereum Sepolia',
@@ -217,7 +253,10 @@ export const bookFlightTool: ToolDef = {
             (fundsCheck.solanaAddress
               ? `🟣 *Solana Devnet*\n\`${fundsCheck.solanaAddress}\`\n\n`
               : '') +
-            `Manage your wallet: ${meWalletUrl}\n\n` +
+            (moonpayCheckoutUrl
+              ? `💳 *Top up with a card via MoonPay*: ${moonpayCheckoutUrl}\n\n`
+              : '') +
+            `Or open your wallet: ${meWalletUrl}\n\n` +
             `Hold *${hold.bookingReference}* is good for ~30 minutes — reply "confirm" once you've topped up.`,
         };
       }
