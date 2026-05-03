@@ -8,12 +8,14 @@
  */
 
 import { auth } from '@clerk/nextjs/server';
+import Link from 'next/link';
 
 import { queryUnifiedBalance } from '@sendero/circle/gateway';
 import { getUserGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
+import { MoonPayTopUpShell } from '@/components/traveler/moonpay-topup-shell';
 import {
   EmptyStateCard,
   Stat,
@@ -33,9 +35,11 @@ export default async function TravelerWalletPage() {
 
   const user = await prisma.user.findUnique({
     where: { clerkUserId: userId },
-    select: { id: true },
+    select: { id: true, email: true },
   });
   if (!user) return null;
+
+  const moonpayApiKey = process.env.NEXT_PUBLIC_MOONPAY_API_KEY ?? '';
 
   const [signer, solanaWallet] = await Promise.all([
     getUserGatewaySigner(user.id, {
@@ -91,6 +95,21 @@ export default async function TravelerWalletPage() {
         <Stat label="Network" value="Testnet" />
       </StatGrid>
 
+      {signer && moonpayApiKey ? (
+        <section className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
+          <div className="flex flex-col gap-0.5">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Top up</p>
+            <p className="text-sm">Buy USDC with a card — funds land in your unified balance.</p>
+          </div>
+          <Link
+            href="/me/wallet?topup=usdc&amount=100"
+            className="inline-flex rounded-md border border-border bg-foreground px-3 py-2 text-xs uppercase tracking-[0.14em] text-background hover:opacity-90"
+          >
+            Top up · USDC
+          </Link>
+        </section>
+      ) : null}
+
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between">
           <h2 className="font-display text-xl">Per-chain breakdown</h2>
@@ -120,6 +139,15 @@ export default async function TravelerWalletPage() {
           </ul>
         )}
       </section>
+
+      {signer ? (
+        <MoonPayTopUpShell
+          apiKey={moonpayApiKey}
+          evmAddress={signer.address}
+          email={user.email ?? undefined}
+          userId={user.id}
+        />
+      ) : null}
     </TravelerSurface>
   );
 }

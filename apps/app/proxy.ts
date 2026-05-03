@@ -75,6 +75,7 @@ const isTravelerRoute = createRouteMatcher([
   '/sign-in/traveler(.*)',
   '/api/me/(.*)',
   '/api/whatsapp/link-clerk',
+  '/api/moonpay/(.*)', // traveler-only top-up signer; Clerk-authed in-route
 ]);
 
 type OrgMetadata = { onboardingComplete?: boolean } | undefined;
