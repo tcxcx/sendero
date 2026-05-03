@@ -50,9 +50,7 @@
               "input_schema": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "toolName"
-                ],
+                "required": ["toolName"],
                 "properties": {
                   "toolName": {
                     "type": "string",

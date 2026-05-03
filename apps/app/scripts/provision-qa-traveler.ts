@@ -36,7 +36,8 @@ interface QaLogins {
   qaTeams?: unknown[];
 }
 
-const LABEL = process.argv.find(a => a.startsWith('--label='))?.split('=')[1] ?? 'QA Traveler Personal';
+const LABEL =
+  process.argv.find(a => a.startsWith('--label='))?.split('=')[1] ?? 'QA Traveler Personal';
 // qa-logins lives at the repo root, not the cwd of whichever package we run from.
 function findRepoRoot(start: string): string {
   let dir = start;
