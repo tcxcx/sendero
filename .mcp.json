@@ -10,6 +10,10 @@
       "headers": {
         "Authorization": "Basic ${LANGFUSE_MCP_AUTH}"
       }
+    },
+    "moonpay": {
+      "command": "mp",
+      "args": ["mcp"]
     }
   }
 }
