@@ -23,6 +23,7 @@ import {
   kickOffBoardingPassStamp,
   notifyWhatsAppOnBooking,
 } from '@/lib/duffel-dispatcher';
+import { sendBoardingPassImageToTraveler } from '@/lib/booking-boarding-pass';
 
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a, 'utf8');
@@ -64,10 +65,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Both helpers fail-soft and run in parallel — neither blocks the
-  // other. We log outcomes for observability but always return 200 so
-  // the calling tool doesn't keep retrying on transient failures.
-  const [whatsAppResult, stampResult] = await Promise.allSettled([
+  // Three helpers run in parallel; all fail-soft. We log outcomes
+  // for observability but always return 200 so the calling tool
+  // doesn't keep retrying on transient failures.
+  //
+  // The boarding-pass IMAGE is distinct from the boarding-pass NFT
+  // STAMP. Image = Satori-rendered visual sent via send_image_message
+  // (instant gratification). Stamp = on-chain ERC-1155 mint via the
+  // BoardingPass WDK workflow (5-30s, fan-out happens out-of-band).
+  const [whatsAppResult, stampResult, boardingPassImageResult] = await Promise.allSettled([
     notifyWhatsAppOnBooking({
       bookingId: body.bookingId,
       tenantId: body.tenantId,
@@ -77,11 +83,17 @@ export async function POST(req: NextRequest) {
       bookingId: body.bookingId,
       tripId: body.tripId ?? null,
     }),
+    sendBoardingPassImageToTraveler({
+      bookingId: body.bookingId,
+      tenantId: body.tenantId,
+      duffelOrderId: body.duffelOrderId,
+    }),
   ]);
 
   return NextResponse.json({
     ok: true,
     whatsAppTemplate: whatsAppResult.status,
     boardingPassStamp: stampResult.status,
+    boardingPassImage: boardingPassImageResult.status,
   });
 }
