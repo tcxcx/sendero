@@ -290,10 +290,37 @@ export const sendInteractiveButtonsTool: ToolDef<
   },
   async handler(input, ctx) {
     const { client, recipient } = await resolveOutboundClient(ctx, input.toE164);
+
+    // Persona guardrail — model keeps generating the forbidden
+    // "1) Faucet 2) Card 3) Crypto" top-up menu despite explicit rules.
+    // We catch it at the tool layer so a buggy agent turn fails fast
+    // instead of leaking the anti-pattern to the traveler. The error
+    // message names the right path so the model self-corrects on retry.
+    const rawButtons = input.buttons as Array<{ id: string; title: string }>;
+    const violatesFaucetMenuRule = rawButtons.some(b => {
+      const title = b.title.toLowerCase();
+      const id = (b.id ?? '').toLowerCase();
+      return (
+        title.includes('faucet') ||
+        id.includes('faucet') ||
+        id === 'topup:crypto' ||
+        title.includes('transferencia cripto') ||
+        title.includes('crypto transfer')
+      );
+    });
+    if (violatesFaucetMenuRule) {
+      throw new Error(
+        'persona_violation:topup_menu_forbidden — never offer faucet/crypto-transfer buttons on a top-up flow. ' +
+          'For top-up, call `moonpay_topup` directly and relay the returned `checkoutUrl`. ' +
+          'For wallet view, use buttons `[Top up $100, Top up $50, Otro monto]` only. ' +
+          'Faucet is dev-only and only fires when the user types the literal word "faucet".'
+      );
+    }
+
     // Auto-truncate button titles to Meta's 20-char cap. Agents
     // miscount Unicode/emoji frequently — silently shortening keeps
     // the call from failing on a 21-char title.
-    const buttons = (input.buttons as Array<{ id: string; title: string }>).map(b => ({
+    const buttons = rawButtons.map(b => ({
       id: b.id,
       title: truncate(b.title, META_BUTTON_TITLE_MAX),
     }));
