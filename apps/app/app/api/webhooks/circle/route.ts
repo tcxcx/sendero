@@ -220,7 +220,13 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
       tenant: {
         select: {
           metadata: true,
-          gatewayConfig: { select: { tenantId: true } },
+          gatewayConfig: {
+            select: {
+              tenantId: true,
+              evmDepositorAddress: true,
+              solanaDepositorAddress: true,
+            },
+          },
         },
       },
     },
@@ -281,6 +287,17 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
       result,
     });
     if (result.status === 'confirmed' && result.depositTxHash) {
+      // Resolve the address that actually holds the resulting Gateway
+      // unified balance — that's where the email should query the
+      // total. EVM tenants use `depositFor` to credit the
+      // evmDepositorAddress (the gateway-signer EOA); Solana tenants
+      // self-deposit at the DCW. Querying the wrong one returns 0
+      // even when the deposit succeeded.
+      const isEvm = GATEWAY_CHAINS[chainKey]?.kind === 'evm';
+      const cfg = sweepWallet.tenant.gatewayConfig;
+      const gatewayDepositorAddress = isEvm
+        ? (cfg?.evmDepositorAddress ?? sweepWallet.address)
+        : (cfg?.solanaDepositorAddress ?? sweepWallet.address);
       await notifyTreasuryOfDeposit({
         tenantId: sweepWallet.tenantId,
         amount,
@@ -288,6 +305,7 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
         depositTxHash: result.depositTxHash,
         walletAddress: sweepWallet.address,
         walletKind: sweepWallet.kind,
+        gatewayDepositorAddress,
       });
     }
   } catch (err) {

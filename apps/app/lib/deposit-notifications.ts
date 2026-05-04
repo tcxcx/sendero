@@ -112,10 +112,17 @@ export async function notifyTravelerOfDeposit(args: NotifyTravelerArgs): Promise
 /** ── Treasury email ───────────────────────────────────────────── */
 
 export interface NotifyTreasuryArgs extends NotifyArgs {
-  /** Treasury / ops DCW address — used to query the unified balance. */
+  /** DCW address that physically received the on-chain inbound. */
   walletAddress: string;
   /** Tenant CircleWallet kind that received the inbound (`treasury` | `operations`). */
   walletKind: string;
+  /**
+   * Address that holds the resulting Gateway unified balance. When the
+   * sweep used `depositFor` to credit the tenant gateway-signer EOA,
+   * this is that EOA. When the DCW self-deposited, this is the DCW
+   * itself. Defaults to `walletAddress` when omitted (legacy behavior).
+   */
+  gatewayDepositorAddress?: string;
 }
 
 export async function notifyTreasuryOfDeposit(args: NotifyTreasuryArgs): Promise<void> {
@@ -134,7 +141,12 @@ export async function notifyTreasuryOfDeposit(args: NotifyTreasuryArgs): Promise
     });
     const tenantLabel = tenant?.displayName ?? tenant?.slug ?? args.tenantId.slice(0, 8);
 
-    const newTotal = await safeUnifiedTotal({ evm: args.walletAddress as Address });
+    // Query unified balance using the address that actually holds it.
+    // When `depositFor` credited the EOA, that's where Gateway sees
+    // the funds — querying the DCW returns 0 even though the deposit
+    // succeeded.
+    const balanceLookupAddress = args.gatewayDepositorAddress ?? args.walletAddress;
+    const newTotal = await safeUnifiedTotal({ evm: balanceLookupAddress as Address });
     const chainLabel = GATEWAY_CHAINS[args.chainKey]?.label ?? args.chainKey;
     const linkOrigin = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010').replace(
       /\/$/,
@@ -149,7 +161,10 @@ export async function notifyTreasuryOfDeposit(args: NotifyTreasuryArgs): Promise
         `${args.amount} USDC. The funds are now in your Sendero unified balance — total: ` +
         `${newTotal ?? '—'} USDC.`,
       bullets: [
-        `Wallet: ${args.walletAddress}`,
+        `Inbound at: ${args.walletAddress} (${args.walletKind})`,
+        ...(args.gatewayDepositorAddress && args.gatewayDepositorAddress !== args.walletAddress
+          ? [`Gateway depositor: ${args.gatewayDepositorAddress}`]
+          : []),
         `Chain: ${chainLabel}`,
         `Transaction: ${args.depositTxHash}`,
       ],
