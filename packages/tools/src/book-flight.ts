@@ -179,15 +179,17 @@ export const bookFlightTool: ToolDef = {
         // hosted checkout for WhatsApp / SMS deep-links where the
         // traveler may not be Clerk-signed-in.
         const meWalletUrl = `${trimmedBase}/me/wallet?topup=usdc&amount=${required.toFixed(2)}`;
-        // QR encodes a USDC deposit intent — most wallet apps that
-        // scan EVM QR show "send to this address" with USDC pre-
-        // selected when the EIP-681 prefix is used.
-        const qrPayload = fundsCheck.evmAddress
-          ? `ethereum:${fundsCheck.evmAddress}`
-          : (fundsCheck.solanaAddress ?? '');
-        const qrImageUrl = qrPayload
-          ? `https://quickchart.io/qr?text=${encodeURIComponent(qrPayload)}&size=400&margin=2`
-          : null;
+        // QR encodes the Sendero wallet deep-link (NOT a raw ethereum:
+        // EIP-681 deposit intent). Reason: most travelers don't have
+        // MetaMask / Phantom / Rainbow installed, so an `ethereum:0x...`
+        // QR opens nothing useful when scanned with a phone camera.
+        // The meWalletUrl opens /me/wallet?topup=usdc&amount=<n> in the
+        // browser, which auto-opens the embedded MoonPaySellWidget +
+        // MoonPayBuyWidget overlay — card pay path that works without
+        // a crypto wallet. Crypto-native users still see the bare
+        // EVM/Solana addresses in the next button card for direct
+        // wallet deposits.
+        const qrImageUrl = `https://quickchart.io/qr?text=${encodeURIComponent(meWalletUrl)}&size=400&margin=2`;
 
         // MoonPay direct checkout URL — built inline (rather than
         // calling `moonpay_topup` recursively) so the agent receives
