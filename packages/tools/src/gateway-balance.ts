@@ -1,9 +1,26 @@
 import { z } from 'zod';
+import { auditEvmAddresses, GATEWAY_CHAINS, type GatewayChainKey } from '@sendero/circle';
 import { queryUnifiedBalance } from '@sendero/circle/gateway';
 import { getUserGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 import type { ToolContext, ToolDef } from './types';
+
+/**
+ * Map a `Wallet.chainId` (the integer column we stamp DCW rows with —
+ * Arc Testnet = 5042002, Sol Devnet = 5, etc.) back to a Sendero
+ * `GATEWAY_CHAINS` key so we can audit divergence with human-readable
+ * chain labels. Returns `null` when the chainId isn't in the Gateway
+ * map (e.g. legacy chains, MSCA-only entries).
+ */
+function chainIdToGatewayKey(chainId: number): GatewayChainKey | null {
+  for (const [key, chain] of Object.entries(GATEWAY_CHAINS)) {
+    if (chain.kind === 'evm' && chain.viemChain.id === chainId) {
+      return key as GatewayChainKey;
+    }
+  }
+  return null;
+}
 
 /**
  * Sendero stores Solana DCWs with this synthetic chainId (Circle Gateway's
@@ -67,63 +84,85 @@ export const travelerBalanceTool: ToolDef = {
       };
     }
     // Architecture flip (2026-05-04): the EVM Gateway depositor is now
-    // the traveler's Circle DCW EVM address (chainId 5042002, Arc),
-    // not the locally-generated UserGatewaySigner EOA. Reasons:
-    //   - Circle DCW addresses are tracked by Circle's webhook system,
-    //     so transactions.inbound fires on direct deposits and we can
-    //     auto-deposit into Gateway via /api/webhooks/circle.
-    //   - UserGatewaySigner EOAs are off Circle's radar — funds sent
-    //     there strand silently (no webhook, no auto-deposit).
-    // UserGatewaySigner stays the depositor of record on outbound burns
-    // / EIP-712 transfer signatures (chainId-bound EIP-712 domain
-    // pitfall on Circle DCW, see gateway-signer.ts header comment).
-    // For balance reads, the DCW is the source of truth.
-    // Circle DCWs are address-identical across every EVM chain (same
-    // deterministic counterfactual SCA), so the FIRST EVM DCW Wallet
-    // row gives us the canonical EVM address — regardless of which
-    // chain we happen to have a row for. Sendero today persists one
-    // EVM Wallet per traveler (Arc Testnet, chainId 5042002), but
-    // MoonPay doesn't support Arc — it deposits on Base Sepolia /
-    // Polygon Amoy / OP Sepolia / etc. The address still routes
-    // correctly because EVM DCW addresses don't vary by chain.
-    const [evmDcw, solanaWallet, signer] = await Promise.all([
-      prisma.wallet.findFirst({
+    // the traveler's Circle DCW EVM address — Circle's webhook system
+    // tracks these, so transactions.inbound fires and we auto-deposit.
+    // UserGatewaySigner EOAs are off Circle's radar; funds sent there
+    // strand silently. The signer row is still surfaced separately
+    // (for stranded-fund recovery), but the DCW is the source of truth
+    // for balance reads.
+    //
+    // Cross-chain audit (2026-05-04): we used to return ONE canonical
+    // EVM address with the assumption "Circle DCWs are deterministic,
+    // every chain shares the same SCA address". That assumption fails
+    // for tenant treasury wallets (Arc has its own address, others
+    // share another) and could fail for travelers in the future. We
+    // now query EVERY EVM DCW row and run `auditEvmAddresses`. When
+    // all chains agree, `evmAddress` carries the canonical value
+    // (same as before). When they diverge, `evmAddress` is null and
+    // `evmAddresses` lists each chain explicitly so the renderer
+    // can't show an unsafe "valid for all chains" address.
+    const [evmDcwRows, solanaWallet, signer] = await Promise.all([
+      prisma.wallet.findMany({
         where: {
           userId,
           provisioner: 'dcw',
           NOT: { chainId: SOL_DEVNET_CHAIN_ID },
         },
         orderBy: { createdAt: 'asc' },
-        select: { address: true },
+        select: { address: true, chainId: true },
       }),
       prisma.wallet.findFirst({
         where: { userId, provisioner: 'dcw', chainId: SOL_DEVNET_CHAIN_ID },
         select: { address: true },
       }),
-      // Legacy lookup — log the signer-EOA balance separately so we can
-      // detect stranded funds and surface a "claim pending deposit" path.
       getUserGatewaySigner(userId, {
         caller: { surface: 'tool', userId, context: 'traveler_balance' },
       }),
     ]);
-    if (!evmDcw && !solanaWallet) {
+    if (evmDcwRows.length === 0 && !solanaWallet) {
       return {
         status: 'no_wallet',
         message:
           'Wallet provisioning is still in progress. Try again in a few seconds — the next inbound will provision the Gateway depositor.',
       };
     }
+
+    // Map chainId → GatewayChainKey for audit. Rows whose chainId isn't
+    // in `GATEWAY_CHAINS` get dropped with a console-noted warning;
+    // they shouldn't reach the wallet card anyway.
+    const auditRows = evmDcwRows.flatMap(row => {
+      const chainKey = chainIdToGatewayKey(row.chainId);
+      if (!chainKey) {
+        console.warn('[traveler_balance] EVM Wallet row with unmapped chainId — dropping', {
+          userId,
+          chainId: row.chainId,
+        });
+        return [];
+      }
+      return [{ chainKey, address: row.address }];
+    });
+    const evmAudit = auditEvmAddresses(auditRows);
+
+    // For the Gateway REST query we still need ONE EVM depositor —
+    // the canonical when safe, otherwise the first row (Gateway
+    // queries are per-domain, not address-bound; the divergence flag
+    // tells the agent to surface caveat in the wallet card).
+    const evmForBalance = (evmAudit.canonical ?? evmDcwRows[0]?.address ?? null) as Address | null;
     const balance = await queryUnifiedBalance({
-      evm: evmDcw?.address as Address | undefined,
+      evm: evmForBalance ?? undefined,
       solana: solanaWallet?.address ?? undefined,
     });
-    // Surface the EVM + Solana addresses on the response so the agent
-    // can render the wallet card body without a separate Wallet lookup.
-    // `signerAddress` is included for the structural-fix follow-up that
-    // detects funds stranded on the legacy depositor address.
+
     return {
       ...balance,
-      evmAddress: evmDcw?.address ?? null,
+      // Single safe value — populated only when every EVM row uses the
+      // same address. Renderers SHOULD prefer this; the per-chain map
+      // exists for divergent edge cases.
+      evmAddress: evmAudit.canonical,
+      // Always populated. Lets WhatsApp / Slack render per-chain when
+      // divergent without a second DB call.
+      evmAddresses: evmAudit.perChain,
+      evmAddressesDivergent: evmAudit.divergent,
       solanaAddress: solanaWallet?.address ?? null,
       signerAddress: signer?.address ?? null,
     };
