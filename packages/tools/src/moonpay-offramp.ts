@@ -159,10 +159,24 @@ export const moonpayOfframpTool: ToolDef<Input> = {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
     const meWalletUrl = `${baseUrl.replace(/\/$/, '')}/me/wallet?cashout=usdc&amount=${input.amountUsdc}`;
 
+    // Sendero-branded Satori share card. See moonpay-topup.ts for
+    // the inline signer rationale.
+    const cardImageUrl = await buildSenderoShareCardUrl(baseUrl, {
+      title: `Cash out · ${input.amountUsdc} USDC`,
+      body: `Sell USDC for fiat via MoonPay — funds land in your bank in 1-2 business days.`,
+      bullets: [
+        `Selling from ${input.currencyCode.replace('_', ' ').toUpperCase()}`,
+        `Refund to ${refundWalletAddress.slice(0, 8)}…${refundWalletAddress.slice(-6)} if cancelled`,
+        `Powered by Circle Gateway unified balance`,
+      ],
+      ctaLabel: 'Tap to sell',
+    });
+
     return {
       status: 'ready',
       checkoutUrl,
       qrImageUrl,
+      imageUrl: cardImageUrl ?? qrImageUrl,
       meWalletUrl,
       amountUsdc: input.amountUsdc,
       currencyCode: input.currencyCode,
@@ -176,3 +190,38 @@ export const moonpayOfframpTool: ToolDef<Input> = {
     };
   },
 };
+
+/**
+ * Build a signed `/api/og/share?token=…` URL. Mirrors the inline signer
+ * in moonpay-topup.ts — duplicated here rather than shared because tools
+ * can't import from apps/app's lib and we want zero new packages tonight.
+ */
+async function buildSenderoShareCardUrl(
+  baseUrl: string,
+  payload: {
+    title: string;
+    body: string;
+    bullets?: string[];
+    ctaLabel?: string;
+    kicker?: string;
+    footer?: string;
+  }
+): Promise<string | null> {
+  const secret = process.env.OG_SHARE_SIGNING_SECRET;
+  if (!secret || secret.length < 16) return null;
+  const json = JSON.stringify(payload);
+  const body = Buffer.from(json, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  const sigBuf = crypto.createHmac('sha256', secret).update(body).digest();
+  const sig = sigBuf
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  const token = `${body}.${sig}`;
+  const origin = baseUrl.replace(/\/$/, '');
+  return `${origin}/api/og/share?token=${encodeURIComponent(token)}`;
+}
