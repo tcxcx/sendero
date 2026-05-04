@@ -59,6 +59,18 @@ Authority: Circle webhook `/api/webhooks/circle` → `CircleWallet.usdcBalanceMi
 - Arc testnet USDC reports `decimals: 18` but amount strings are human-readable. Normalize to 6-decimal micro-USDC. See `packages/circle/src/balance-sync.ts::toMicro`.
 - Zero address = `arcWalletAddress` not stamped. WalletDropdown renders "Provisioning", skips fetches.
 
+## Solana gas abstraction (platform hot wallet)
+
+Circle Gas Station is EVM-only. Solana DCWs are regular Solana accounts that need lamports to sign Gateway deposits/spends/bridges. Sendero runs a **platform Solana hot wallet** (`SENDERO_SOLANA_PLATFORM_PRIVATE_KEY`) that JIT-drips ~0.01 SOL into any DCW about to sign — same shape as the EVM sponsor EOA pattern. desk-v1 UB-kit post-mortem #5 informed this.
+
+- **Source of truth:** `packages/circle/src/unified-gateway.ts::ensureSolanaGas`. Reads balance, transfers from platform wallet if below `0.005 SOL`, tops up to `0.01 SOL`. Auto-wired into `deposit / depositFor / spend / bridge` for `circle-wallets` principals on `Sol_Devnet` / `Sol`.
+- **Env:** `SENDERO_SOLANA_PLATFORM_PRIVATE_KEY` (base58), `SENDERO_SOLANA_RPC_URL` (defaults to `api.devnet.solana.com`). Same scope rules as `TREASURY_PRIVATE_KEY` — no production keys until mainnet flip.
+- **Bootstrap:** `bun apps/app/scripts/_local/provision-solana-platform.ts` generates a keypair + tries a devnet airdrop. One-time, gitignored output.
+- **Refill cadence:** ≥1 SOL on devnet (https://faucet.solana.com), ≥0.5 SOL on mainnet (corporate ops wallet). 1 SOL covers ~100 deposits.
+- **Low-balance alerts:** `apps/app/lib/platform-wallet-alerts.ts::notifyPlatformWalletLow` posts to the Sendero customer-support Slack channel (`SLACK_CHANNEL_ID` via `SLACK_BOT_TOKEN`) when the platform wallet drops below `0.5 SOL`. Throttled to 1 alert per address per 30 min. Wired in `apps/app/instrumentation.ts` via `setSolanaPlatformLowAlertCallback`.
+- **Fail-soft contract:** missing env → `{ topped: false, reason: 'platform_wallet_not_configured' }`. The SDK still surfaces the real "Insufficient SOL" error rather than this code crashing.
+- **NOT for traveler-side balance display.** The DCW's lamports get spent on tx fees; users may see ~0.01 SOL appear briefly then drop. Cosmetic only. Treat as platform plumbing.
+
 ## SenderoStamps deployment runbook (Circle SCP, Arc-Testnet)
 
 Live: `0xcc0fa83535675a856d773cfbc71232c3d7b71a03` (proxy) → `0xCCf28A443e35F8bD982b8E8651bE9f6caFEd4672` (thirdweb TokenERC1155). Circle ERC-1155 template `aea21da6-0aa2-4971-9a1a-5098842b1248`. Gas via Circle Gas Station (fiat).

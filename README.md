@@ -837,6 +837,45 @@ Every scenario shows a per-invoice breakdown settled via **Circle CCTP v2 on Arc
 - Sub-6s finality target
 - Treasury balance in both tokens
 
+## Solana gas abstraction (platform hot wallet)
+
+Sendero treats Solana as a first-class deposit chain alongside EVM. Travelers and tenants can deposit USDC at their Circle DCW on Solana Devnet (or mainnet) and the funds land directly in their unified Gateway balance — no bridging, no balance migration.
+
+The catch: **Circle Gas Station is EVM-only**. Circle DCWs on Solana are regular Solana accounts that need lamports to sign. Without gas, deposits fail with `Insufficient SOL on Solana Devnet to cover gas fees`.
+
+**Solution:** a Sendero-owned **platform Solana hot wallet** that JIT-drips ~0.01 SOL into any DCW about to sign a Gateway op. Same operational shape as the EVM sponsor EOA pattern (`TREASURY_PRIVATE_KEY`), scoped to Solana.
+
+**Setup (one-time):**
+
+```bash
+# Generate the platform keypair + try a devnet airdrop
+bun apps/app/scripts/_local/provision-solana-platform.ts
+
+# Add to .env.local + Vercel preview/development:
+SENDERO_SOLANA_PLATFORM_PRIVATE_KEY="<base58 secret printed by the script>"
+SENDERO_SOLANA_RPC_URL="https://api.devnet.solana.com"
+```
+
+**How it works:**
+
+- `unifiedGateway.deposit / depositFor / spend / bridge` automatically calls `ensureSolanaGas(dcwAddress)` for every Solana-side op when the principal is a Circle DCW.
+- `ensureSolanaGas` reads on-chain SOL balance; if below `0.005 SOL`, transfers `0.01 - currentBalance` from the platform wallet and waits for confirmation.
+- Idempotent threshold check — already-funded wallets short-circuit without an RPC write.
+- Fail-soft: missing env returns `{ topped: false, reason: 'platform_wallet_not_configured' }` so the SDK surfaces the real error rather than crashing this side-channel.
+
+**Operational runbook:**
+
+- **Refill cadence:** keep ≥1 SOL on devnet, ≥0.5 SOL on mainnet. Each top-up is ~0.01 SOL plus the tx fee — 1 SOL covers ~100 deposits.
+- **Devnet refill:** https://faucet.solana.com → paste `<your platform address>`. Rate-limited to ~10 SOL/day per IP.
+- **Mainnet refill:** treat like the EVM sponsor — fund from corporate ops wallet.
+- **Per-environment isolation:** production must use a separate keypair from preview/development. Rotate before mainnet flip.
+
+**Low-balance alerts:**
+
+After every successful JIT top-up, the unified-gateway service queries the platform wallet's remaining balance. If it drops below `0.5 SOL`, a Slack alert posts to the **Sendero customer-support channel** (`SLACK_CHANNEL_ID`) using `SLACK_BOT_TOKEN` — same surface where tenant escalations land. Throttled to one alert per address per 30 min so a busy day doesn't pump the channel. Wired in `apps/app/instrumentation.ts → setSolanaPlatformLowAlertCallback(notifyPlatformWalletLow)`.
+
+**Background:** desk-v1's UB-kit migration post-mortem #5 ("per-account gas funding doesn't scale without a platform pool") informed this decision. Code at `packages/circle/src/unified-gateway.ts::ensureSolanaGas`.
+
 ## Smart contract indexer (Ponder and Circle Smart Contract Events)
 
 We ship and run a **TypeScript Ponder indexer** for the guest-escrow contract on Arc Testnet (replaces a Goldsky-style subgraph for this chain). It **backfills and follows** `SenderoGuestEscrow` events into **Postgres**, exposes **auto-generated GraphQL** for trips, bookings, and related entities, and is what keeps long-lived escrow and settlement state legible to the product without hammering the RPC. **Circle Smart Contract Events** handles the NFT event listeners and lifecycle usinf Circle Console services.
