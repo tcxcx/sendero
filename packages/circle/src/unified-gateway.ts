@@ -39,8 +39,11 @@
  */
 
 import { AppKit } from '@circle-fin/app-kit';
+import { BridgeKit } from '@circle-fin/bridge-kit';
+import * as bridgeChains from '@circle-fin/bridge-kit/chains';
 import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
 import type { ViemAdapter } from '@circle-fin/adapter-viem-v2';
+import bs58 from 'bs58';
 import type { Address } from 'viem';
 
 import { prisma } from '@sendero/database';
@@ -51,12 +54,18 @@ import { GATEWAY_CHAINS, queryUnifiedBalance } from './gateway';
 
 export type GatewayChainKey = keyof typeof GATEWAY_CHAINS;
 
-// ── Kit singleton ─────────────────────────────────────────────────
+// ── Kit singletons ────────────────────────────────────────────────
 
 let _appKit: AppKit | null = null;
 function appKit(): AppKit {
   _appKit ??= new AppKit();
   return _appKit;
+}
+
+let _bridgeKit: BridgeKit | null = null;
+function bridgeKit(): BridgeKit {
+  _bridgeKit ??= new BridgeKit();
+  return _bridgeKit;
 }
 
 /**
@@ -165,6 +174,12 @@ export function delegateViemPrincipal(): Principal | null {
  * Circle DCW principal — needs the wallet's address to disambiguate
  * within the multi-wallet adapter. Returns null when Circle creds are
  * missing.
+ *
+ * Patches `getTokenDecimals` onto the returned adapter. Bridge Kit
+ * requires this method on every adapter; the `HybridAdapter` base
+ * from `@circle-fin/adapter-circle-wallets` doesn't implement it
+ * (known SDK gap, see desk-v1 multisig-unified-balance-kit/packages/circle/src/bridging).
+ * USDC and EURC are 6-decimal across every chain Sendero supports.
  */
 export function circleWalletsPrincipal(args: {
   address: string;
@@ -173,9 +188,17 @@ export function circleWalletsPrincipal(args: {
   const apiKey = env.circleApiKey?.();
   const entitySecret = env.circleEntitySecret?.();
   if (!apiKey || !entitySecret) return null;
+  const adapter = createCircleWalletsAdapter({ apiKey, entitySecret }) as ReturnType<
+    typeof createCircleWalletsAdapter
+  > & {
+    getTokenDecimals?: (tokenAddress: string, chain: unknown) => Promise<number>;
+  };
+  if (typeof adapter.getTokenDecimals !== 'function') {
+    adapter.getTokenDecimals = async () => 6;
+  }
   return {
     kind: 'circle-wallets',
-    adapter: createCircleWalletsAdapter({ apiKey, entitySecret }),
+    adapter,
     address: args.address,
     label: args.label ?? `dcw:${args.address}`,
   };
@@ -247,6 +270,7 @@ export interface DepositResult {
  * Mirrors the docs' `kit.unifiedBalance.deposit({ from, amount, token })`.
  */
 export async function deposit(args: DepositArgs): Promise<DepositResult> {
+  await maybeTopUpSolanaGas(args.principal, args.chainKey);
   const result = await appKit().unifiedBalance.deposit({
     from: depositFromContext(args.principal, args.chainKey),
     amount: args.amount,
@@ -267,6 +291,7 @@ export interface DepositForArgs extends DepositArgs {
  * Permissionless on Gateway. Mirrors the docs' delegate-deposit example.
  */
 export async function depositFor(args: DepositForArgs): Promise<DepositResult> {
+  await maybeTopUpSolanaGas(args.principal, args.chainKey);
   const result = await appKit().unifiedBalance.depositFor({
     from: depositFromContext(args.principal, args.chainKey),
     amount: args.amount,
@@ -384,6 +409,21 @@ function buildSpendParams(args: SpendArgs) {
 }
 
 export async function spend(args: SpendArgs): Promise<SpendResult> {
+  // Top up SOL on every Solana source — `kit.unifiedBalance.spend`
+  // burns on each source chain, and the Solana-side burn needs SOL
+  // gas. JIT-funds in parallel, fail-soft.
+  await Promise.all(
+    args.sources.map(s => {
+      const principal = s.principal;
+      if (principal.kind !== 'circle-wallets') return Promise.resolve();
+      // Heuristic: top up if the source chain key looks Solana-shaped
+      // via the source allocation (when explicit allocations were
+      // given) or principal address (Solana base58 vs EVM 0x-hex).
+      const isSolanaPrincipal = !principal.address.startsWith('0x');
+      if (!isSolanaPrincipal) return Promise.resolve();
+      return ensureSolanaGas({ address: principal.address }).then(() => undefined);
+    })
+  );
   const result = (await appKit().unifiedBalance.spend(buildSpendParams(args) as never)) as {
     txHash: string;
     explorerUrl?: string;
@@ -497,6 +537,227 @@ export async function getDelegateStatus(args: DelegateArgs) {
     from: delegateFromContext(args.principal, args.chainKey),
     delegateAddress: args.delegateAddress,
   } as never);
+}
+
+// ── Solana gas abstraction (JIT top-up from platform wallet) ──────
+
+/**
+ * Whether a chain key targets the Solana cluster. Used to gate the
+ * SOL-gas top-up before any Solana-side signing operation.
+ */
+export function isSolanaChainKey(chainKey: GatewayChainKey): boolean {
+  return chainKey === 'Sol_Devnet' || chainKey === 'Sol';
+}
+
+export interface EnsureSolanaGasArgs {
+  /** Base58 Solana pubkey of the DCW that will sign the next op. */
+  address: string;
+  /** Drip threshold in lamports. Below this we top up. */
+  minLamports?: number;
+  /** Top-up target in lamports. Default 0.01 SOL — enough for ~50 txs. */
+  topUpLamports?: number;
+}
+
+export interface EnsureSolanaGasResult {
+  topped: boolean;
+  /** Final balance in lamports after any top-up. */
+  lamports: number;
+  /** Solana tx signature when a top-up actually happened. */
+  txSignature?: string;
+  /** When skipped, why. */
+  reason?: 'sufficient' | 'platform_wallet_not_configured' | 'topup_failed';
+  error?: string;
+}
+
+const DEFAULT_MIN_LAMPORTS = 5_000_000; // 0.005 SOL
+const DEFAULT_TOPUP_LAMPORTS = 10_000_000; // 0.01 SOL
+
+/**
+ * Drip SOL into a DCW so it can pay fees on the next Gateway
+ * deposit/spend/bridge transaction. Circle DCWs on Solana are
+ * regular Solana accounts that must hold lamports — Circle Gas
+ * Station is EVM-only. Without this, every Solana deposit fails
+ * with "Insufficient SOL".
+ *
+ * Source of funds: `SENDERO_SOLANA_PLATFORM_PRIVATE_KEY` env (base58).
+ * Same operational pattern as the EVM sponsor EOA we already run, just
+ * scoped to Solana. desk-v1's UB-kit migration post-mortem #5 calls
+ * out per-account gas funding as the right shape ("operationally
+ * untenable at fleet scale" without it).
+ *
+ * Idempotent at the threshold check — already-funded wallets short-
+ * circuit without an RPC write. Fail-soft: when the platform wallet
+ * is unconfigured, returns `{ topped: false, reason: 'platform_wallet_not_configured' }`
+ * so callers can log and let the SDK surface the real "Insufficient
+ * SOL" error rather than crash this side-channel.
+ */
+export async function ensureSolanaGas(args: EnsureSolanaGasArgs): Promise<EnsureSolanaGasResult> {
+  const minLamports = args.minLamports ?? DEFAULT_MIN_LAMPORTS;
+  const topUpLamports = args.topUpLamports ?? DEFAULT_TOPUP_LAMPORTS;
+
+  // Lazy import @solana/web3.js — keeps it out of the cold-path bundle
+  // for callers that never touch Solana.
+  const { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } =
+    await import('@solana/web3.js');
+
+  const rpcUrl = env.senderoSolanaRpcUrl?.() ?? 'https://api.devnet.solana.com';
+  const conn = new Connection(rpcUrl, 'confirmed');
+  const dcwPubkey = new PublicKey(args.address);
+  const currentLamports = await conn.getBalance(dcwPubkey);
+
+  if (currentLamports >= minLamports) {
+    return { topped: false, lamports: currentLamports, reason: 'sufficient' };
+  }
+
+  const platformKey = env.senderoSolanaPlatformPrivateKey?.();
+  if (!platformKey) {
+    return {
+      topped: false,
+      lamports: currentLamports,
+      reason: 'platform_wallet_not_configured',
+    };
+  }
+
+  try {
+    const platformKeypair = Keypair.fromSecretKey(bs58.decode(platformKey));
+    const transferLamports = topUpLamports - currentLamports;
+    const tx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: platformKeypair.publicKey,
+        toPubkey: dcwPubkey,
+        lamports: transferLamports,
+      })
+    );
+    const signature = await sendAndConfirmTransaction(conn, tx, [platformKeypair]);
+    const newBalance = await conn.getBalance(dcwPubkey);
+    console.log('[unifiedGateway.ensureSolanaGas] topped up', {
+      address: args.address,
+      transferLamports,
+      newBalance,
+      txSignature: signature,
+    });
+    return { topped: true, lamports: newBalance, txSignature: signature };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[unifiedGateway.ensureSolanaGas] top-up failed', {
+      address: args.address,
+      error: message,
+    });
+    return {
+      topped: false,
+      lamports: currentLamports,
+      reason: 'topup_failed',
+      error: message,
+    };
+  }
+}
+
+/**
+ * Internal: run JIT gas top-up before a Solana-side op when the
+ * principal is a Circle DCW. No-op for everything else.
+ */
+async function maybeTopUpSolanaGas(principal: Principal, chainKey: GatewayChainKey): Promise<void> {
+  if (principal.kind !== 'circle-wallets') return;
+  if (!isSolanaChainKey(chainKey)) return;
+  const result = await ensureSolanaGas({ address: principal.address });
+  if (result.reason === 'platform_wallet_not_configured') {
+    console.warn(
+      '[unifiedGateway] Solana platform wallet not configured — proceeding without JIT top-up; deposit may fail with "Insufficient SOL"',
+      { address: principal.address }
+    );
+  }
+}
+
+// ── Bridge (CCTP cross-chain via Bridge Kit) ──────────────────────
+
+/**
+ * Sendero `GatewayChainKey` → Bridge Kit `ChainDefinition`. Bridge
+ * Kit ships its own enum for chain identity (separate from App Kit's
+ * `UnifiedBalanceChain`); the mapping is one-way. Only chains we
+ * actually bridge to/from need entries here — extend as Sendero
+ * supports more.
+ */
+function bridgeChainFor(chainKey: GatewayChainKey): unknown {
+  const map: Record<string, unknown> = {
+    Arc_Testnet: bridgeChains.ArcTestnet,
+    Ethereum_Sepolia: bridgeChains.EthereumSepolia,
+    Base_Sepolia: bridgeChains.BaseSepolia,
+    Avalanche_Fuji: bridgeChains.AvalancheFuji,
+    Optimism_Sepolia: bridgeChains.OptimismSepolia,
+    Arbitrum_Sepolia: bridgeChains.ArbitrumSepolia,
+    Polygon_Amoy: bridgeChains.PolygonAmoy,
+    Sol_Devnet: bridgeChains.SolanaDevnet,
+    Sol: bridgeChains.Solana,
+  };
+  const def = map[chainKey];
+  if (!def) {
+    throw new Error(`unifiedGateway.bridge: no Bridge Kit chain definition for ${chainKey}`);
+  }
+  return def;
+}
+
+export interface BridgeArgs {
+  /** Source principal — signs the burn on the source chain. */
+  principal: Principal;
+  fromChainKey: GatewayChainKey;
+  toChainKey: GatewayChainKey;
+  /** Address that receives minted USDC on the destination chain. */
+  recipient: string;
+  /**
+   * Adapter context address on the destination chain. The Circle
+   * Wallets adapter is multi-wallet; `to.address` tells the SDK
+   * which DCW to use as the destination signing context (typically
+   * a Sendero-controlled DCW on the dest chain). Falls back to the
+   * recipient when omitted, which works when the recipient itself
+   * is a DCW we manage. Different from `recipientAddress` (which is
+   * always the actual on-chain receiver).
+   */
+  toAddress?: string;
+  amount: string;
+  token?: SupportedToken;
+}
+
+export interface BridgeResult {
+  txHash: string;
+  explorerUrl?: string;
+  raw: unknown;
+}
+
+/**
+ * Cross-chain USDC transfer via Circle CCTP v2 (Bridge Kit). Burns
+ * on `fromChainKey`, mints on `toChainKey`. Used for Solana → EVM
+ * sweeps when keeping balance in-place isn't practical, and for any
+ * other cross-chain move that doesn't fit the Gateway unified-balance
+ * model.
+ *
+ * The source-side burn needs gas in the `principal`'s native token.
+ * For Solana sources, JIT-tops up via `ensureSolanaGas` first.
+ */
+export async function bridge(args: BridgeArgs): Promise<BridgeResult> {
+  await maybeTopUpSolanaGas(args.principal, args.fromChainKey);
+
+  const fromChain = bridgeChainFor(args.fromChainKey);
+  const toChain = bridgeChainFor(args.toChainKey);
+
+  const result = (await bridgeKit().bridge({
+    from: {
+      adapter: args.principal.adapter,
+      chain: fromChain,
+      address: args.principal.address,
+    },
+    to: {
+      adapter: args.principal.adapter,
+      chain: toChain,
+      address: args.toAddress ?? args.recipient,
+      recipientAddress: args.recipient,
+    },
+    amount: args.amount,
+    token: args.token ?? 'USDC',
+  } as never)) as { txHash?: string; transactionHash?: string; explorerUrl?: string };
+
+  const txHash = result.txHash ?? result.transactionHash;
+  if (!txHash) throw new Error('unifiedGateway.bridge: SDK returned no txHash');
+  return { txHash, explorerUrl: result.explorerUrl, raw: result };
 }
 
 // ── EVM-address divergence detection ──────────────────────────────
