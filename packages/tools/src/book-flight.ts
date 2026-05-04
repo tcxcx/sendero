@@ -12,9 +12,10 @@ import {
 import type { ToolDef, ToolContext } from './types';
 import { ensureFlightCustomer } from './ensure-flight-customer';
 import { ensureTravelerWallet } from './ensure-traveler-wallet';
-import { type Prisma, prisma } from '@sendero/database';
-import { queryUnifiedBalance, transferViaGateway } from '@sendero/circle/gateway';
+import { type Prisma, prisma, type MeterPayerType } from '@sendero/database';
+import { queryUnifiedBalance } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner, getUserGatewaySigner } from '@sendero/circle/gateway-signer';
+import { resolvePayer } from './lib/resolve-payer';
 import type { Address } from 'viem';
 
 const serviceSchema = z.object({
@@ -44,6 +45,16 @@ const inputSchema = z.object({
    * rules — see /guides/using-airline-credits).
    */
   airlineCreditId: z.string().optional(),
+  /**
+   * Override the trip-resolved payer. `tenant` debits the tenant
+   * treasury (NOT yet implemented in book_flight — fail-loud); `traveler`
+   * debits the traveler's Gateway-unified USDC. Defaults to
+   * `Trip.paymentMode` → `Tenant.defaultPaymentMode` → `traveler`.
+   * See `packages/tools/src/lib/resolve-payer.ts`.
+   */
+  provisionedBy: z.enum(['tenant', 'traveler']).optional(),
+  /** Optional Trip.id for payer resolution. */
+  tripId: z.string().optional(),
 });
 
 type BookFlightInput = z.infer<typeof inputSchema>;
@@ -81,6 +92,16 @@ export const bookFlightTool: ToolDef = {
         description:
           'Airline credit id (acd_…) to redeem toward this booking. Remainder paid from balance.',
       },
+      provisionedBy: {
+        type: 'string',
+        enum: ['tenant', 'traveler'],
+        description:
+          'Override the trip-resolved payer. `traveler` = current behavior (Gateway-deposited USDC debits). `tenant` is reserved; book_flight returns `tenant_pay_unsupported` until the treasury-debit runtime path lands.',
+      },
+      tripId: {
+        type: 'string',
+        description: 'Optional Trip.id for payer resolution.',
+      },
     },
   },
   async handler(input: BookFlightInput, ctx?: ToolContext) {
@@ -108,6 +129,41 @@ export const bookFlightTool: ToolDef = {
         message:
           "I need you to sign in once before booking — that's how your wallet, balances, and NFT stamps follow you across trips. Reply with the magic link the agent sends, sign in via WhatsApp OTP, and I'll continue this booking automatically.",
       };
+    }
+
+    // Payer resolution — book_flight currently implements only the
+    // traveler-pay debit path (assertTravelerHasUsdc + Gateway settle).
+    // Tenant-pay (treasury debit at swipe time) is a follow-up runtime
+    // path. Fail loud rather than silently mismatching `recorded payer`
+    // vs `actually-debited wallet`.
+    //
+    // Resolution precedence:
+    //   1. `input.provisionedBy` — explicit per-call override
+    //   2. `ctx.payer.type` — turn-level resolution from dispatch
+    //   3. `resolvePayer()` — fall back when ctx didn't carry it
+    //      (test fixtures, in-process callers)
+    let provisionedBy: MeterPayerType = 'traveler';
+    if (ctx?.traveler?.tenantId) {
+      const ctxPayer = ctx.payer?.type;
+      const resolved =
+        input.provisionedBy ??
+        ctxPayer ??
+        (
+          await resolvePayer({
+            tenantId: ctx.traveler.tenantId,
+            tripId: input.tripId,
+            travelerUserId: travelerUserId,
+          })
+        ).type;
+      if (resolved === 'tenant') {
+        return {
+          status: 'tenant_pay_unsupported',
+          message:
+            'This trip is configured for tenant-treasury debit at swipe time, but `book_flight` only supports traveler-pay today. ' +
+            'Either pre-fund the traveler wallet from the tenant treasury and retry, or set Trip.paymentMode=traveler.',
+        };
+      }
+      provisionedBy = resolved;
     }
 
     const travelerName = ctx?.traveler?.name || 'Traveler';
@@ -138,15 +194,43 @@ export const bookFlightTool: ToolDef = {
       id: s.id,
       quantity: s.quantity ?? 1,
     }));
-    const hold = await createHoldOrder({
+    // Hold-order creation, with a one-shot retry that drops
+    // `customerUserIds` when Duffel rejects them as
+    // `user_already_associated_with_passenger`. The customer-user link
+    // is a nice-to-have (Travel Support Assistant access) — never a
+    // reason to fail the actual booking. The user can be relinked
+    // later via Duffel's relationship API. See
+    // https://duffel.com/docs/api/overview/response-handling for the
+    // error shape.
+    const baseHoldArgs = {
       offerId: input.offerId,
       passengerName: travelerName,
       passengerEmail: travelerEmail,
       passengerPhone: travelerPhone,
       idempotencyKey: `sendero-${input.offerId}-${Date.now()}`,
-      customerUserIds: customerUserIds.length ? customerUserIds : undefined,
       services,
-    });
+    } as const;
+    let hold;
+    try {
+      hold = await createHoldOrder({
+        ...baseHoldArgs,
+        customerUserIds: customerUserIds.length ? customerUserIds : undefined,
+      });
+    } catch (err) {
+      const errors = (err as { errors?: Array<{ code?: string }> })?.errors ?? [];
+      const alreadyAssociated = errors.some(
+        e => e.code === 'user_already_associated_with_passenger'
+      );
+      if (!alreadyAssociated || customerUserIds.length === 0) throw err;
+      console.warn(
+        '[book_flight] customerUserIds rejected as already-associated — retrying without link',
+        { customerUserIds, offerId: input.offerId }
+      );
+      hold = await createHoldOrder({
+        ...baseHoldArgs,
+        idempotencyKey: `sendero-${input.offerId}-${Date.now()}-retry`,
+      });
+    }
 
     // USDC payment gate — testnet treats 1 USD = 1 USDC. Verify the
     // traveler has enough Gateway-deposited USDC to cover the hold
@@ -379,6 +463,7 @@ export const bookFlightTool: ToolDef = {
           currency: hold.totalCurrency,
           paymentStatus,
           usdcSettlement,
+          provisionedBy,
         });
         persistedBookingId = persisted.bookingId;
         persistedTripId = persisted.tripId;
@@ -517,6 +602,7 @@ async function persistBookingAndTrip(args: {
   currency: string;
   paymentStatus: string;
   usdcSettlement: { settlementTxHash: string; explorerUrl: string } | null;
+  provisionedBy: MeterPayerType;
 }): Promise<{ bookingId: string; tripId: string }> {
   const existing = await prisma.booking.findUnique({
     where: { duffelOrderId: args.duffelOrderId },
@@ -547,6 +633,10 @@ async function persistBookingAndTrip(args: {
           travelerId: args.travelerUserId,
           intent: { source: 'book_flight', duffelOrderId: args.duffelOrderId },
           status: 'booked',
+          // Pin trip-level payer mode so re-resolution downstream
+          // (confirm_booking, settlement, refund) sees the same value
+          // without re-deriving from override/tenant default.
+          paymentMode: args.provisionedBy,
         },
         select: { id: true },
       })
@@ -563,6 +653,7 @@ async function persistBookingAndTrip(args: {
       totalUsd: args.totalAmount,
       currency: args.currency,
       bookedAt: new Date(),
+      provisionedBy: args.provisionedBy,
       metadata: {
         paymentStatus: args.paymentStatus,
         ...(args.usdcSettlement ? { usdcSettlement: args.usdcSettlement } : {}),
@@ -648,16 +739,26 @@ async function assertTravelerHasUsdc(args: {
   userId: string;
   requiredUsdc: number;
 }): Promise<FundsCheckResult> {
-  const [signer, solanaWallet] = await Promise.all([
-    getUserGatewaySigner(args.userId, {
-      caller: { surface: 'tool', userId: args.userId, context: 'book_flight:funds_check' },
+  // 2026-05-04 architecture flip: Gateway depositor for travelers is
+  // the Circle DCW (provisioner='dcw'), NOT the legacy
+  // UserGatewaySigner EOA. Mirrors `traveler_balance` so book_flight's
+  // insufficient-funds card directs the user to the SAME address the
+  // wallet card already shows. Querying the legacy signer would
+  // surface 0 USDC (we drained it during recovery) even when the user
+  // has plenty in their unified balance.
+  const SOL_DEVNET_CHAIN_ID = 5;
+  const [evmDcw, solanaWallet] = await Promise.all([
+    prisma.wallet.findFirst({
+      where: { userId: args.userId, provisioner: 'dcw', NOT: { chainId: SOL_DEVNET_CHAIN_ID } },
+      orderBy: { createdAt: 'asc' },
+      select: { address: true },
     }),
     prisma.wallet.findFirst({
-      where: { userId: args.userId, provisioner: 'dcw', chainId: 5 },
+      where: { userId: args.userId, provisioner: 'dcw', chainId: SOL_DEVNET_CHAIN_ID },
       select: { address: true },
     }),
   ]);
-  const evmAddress = (signer?.address as Address | undefined) ?? null;
+  const evmAddress = (evmDcw?.address as Address | undefined) ?? null;
   const solanaAddress = solanaWallet?.address ?? null;
   if (!evmAddress && !solanaAddress) {
     return {
@@ -697,47 +798,51 @@ async function settleTravelerUsdcToTreasury(args: {
   tenantId: string;
   amountUsdc: string;
 }): Promise<{ settlementTxHash: string; explorerUrl: string } | null> {
-  const travelerSigner = await getUserGatewaySigner(args.travelerUserId, {
-    caller: {
-      surface: 'tool',
+  // Architecture-flip alignment (2026-05-04): the traveler's Gateway
+  // balance lives at the Circle DCW (provisioner='dcw'), NOT the
+  // legacy UserGatewaySigner EOA. The burn must be signed by the
+  // DCW — Circle Wallets adapter signs via API, no local private
+  // key needed. Mirrors the funds-check + traveler_balance path.
+  const SOL_DEVNET_CHAIN_ID = 5;
+  const evmDcw = await prisma.wallet.findFirst({
+    where: {
       userId: args.travelerUserId,
-      context: 'book_flight:settle',
+      provisioner: 'dcw',
+      NOT: { chainId: SOL_DEVNET_CHAIN_ID },
     },
+    orderBy: { createdAt: 'asc' },
+    select: { address: true },
   });
-  if (!travelerSigner) return null;
+  if (!evmDcw?.address) return null;
 
   const tenantSigner = await getOrCreateGatewaySigner(args.tenantId, {
     caller: { surface: 'tool', context: 'book_flight:settle' },
   });
 
-  // Pick the EVM chain with the most USDC for the traveler — that's
-  // where the burn intent originates. Arc is the canonical destination
-  // (Sendero's settlement chain); same-chain burn-mints work fine.
-  const balance = await queryUnifiedBalance({ evm: travelerSigner.address as Address });
-  const evmBalances = balance.balances
-    .filter(b => b.chain.toLowerCase() !== 'sol_devnet' && b.chain.toLowerCase() !== 'sol')
-    .sort((a, b) => Number(b.balance) - Number(a.balance));
-  const sourceChain = evmBalances[0];
-  if (!sourceChain || Number(sourceChain.balance) < Number(args.amountUsdc)) {
-    // Should be unreachable — the funds-check already guaranteed
-    // sufficient unified balance. Bail loudly so a future bug surfaces.
-    throw new Error(
-      `settleTravelerUsdcToTreasury: no single chain with sufficient balance ` +
-        `(need ${args.amountUsdc}, top chain ${sourceChain?.chain ?? 'none'} has ${sourceChain?.balance ?? 0}).`
-    );
-  }
-  const sourceKey = sourceChain.chain as Parameters<typeof transferViaGateway>[0]['from'];
+  // Lazy import avoids pulling the full unified-gateway module into
+  // the cold path of every book_flight invocation that doesn't end up
+  // settling (insufficient_funds, tenant_pay_unsupported, etc.).
+  const { circleWalletsPrincipal, spend } = await import('@sendero/circle');
 
-  const result = await transferViaGateway({
-    from: sourceKey,
-    to: 'Arc_Testnet',
-    amountUsdc: args.amountUsdc,
+  const principal = circleWalletsPrincipal({
+    address: evmDcw.address,
+    label: `traveler:${args.travelerUserId}:settle`,
+  });
+  if (!principal) return null;
+
+  // Pick the EVM source chain — Gateway lets you spread allocations
+  // across chains automatically when `from.allocations` is omitted,
+  // so we just need the destination + recipient. Source-account picked
+  // by the SDK from the DCW's available chains.
+  const result = await spend({
+    sources: [{ principal }],
+    toChainKey: 'Arc_Testnet',
     recipient: tenantSigner.address,
-    signer: travelerSigner.account,
+    amount: args.amountUsdc,
   });
 
   return {
-    settlementTxHash: result.mintHash,
-    explorerUrl: result.explorerUrl,
+    settlementTxHash: result.txHash,
+    explorerUrl: result.explorerUrl ?? `https://testnet.arcscan.app/tx/${result.txHash}`,
   };
 }

@@ -62,31 +62,41 @@ export async function ensureFlightCustomer(
   input: EnsureFlightCustomerInput,
   ctx?: ToolContext
 ): Promise<EnsureFlightCustomerResult> {
-  const clerkUserId = input.clerkUserId ?? ctx?.traveler?.userId;
-  if (!clerkUserId) {
+  // `ctx.traveler.userId` carries either:
+  //   • a Sendero `User.id` (cuid) — set by the WhatsApp resolver for
+  //     fresh inbound travelers without a Clerk session yet, or
+  //   • a Clerk user id (`user_…`) — set when the traveler is signed in.
+  // Resolve by either shape so book_flight and search_flights can call
+  // through ctx without first looking up the User row themselves.
+  const idHint = input.clerkUserId ?? ctx?.traveler?.userId;
+  if (!idHint) {
     throw new Error('ensure_flight_customer: no clerkUserId supplied and no ctx.traveler.userId.');
   }
+  const looksLikeClerk = idHint.startsWith('user_');
 
-  const user = await prisma.user.findUnique({
-    where: { clerkUserId },
-    select: {
-      id: true,
-      email: true,
-      displayName: true,
-      phone: true,
-      duffelCustomerUserId: true,
-      memberships: {
-        where: input.tenantId ? { tenantId: input.tenantId } : undefined,
-        take: 1,
-        select: {
-          tenantId: true,
-          tenant: { select: { duffelCustomerUserGroupId: true, displayName: true } },
-        },
+  const userSelect = {
+    id: true,
+    email: true,
+    displayName: true,
+    phone: true,
+    duffelCustomerUserId: true,
+    clerkUserId: true,
+    memberships: {
+      where: input.tenantId ? { tenantId: input.tenantId } : undefined,
+      take: 1,
+      select: {
+        tenantId: true,
+        tenant: { select: { duffelCustomerUserGroupId: true, displayName: true } },
       },
     },
-  });
+  } as const;
+  const user = looksLikeClerk
+    ? await prisma.user.findUnique({ where: { clerkUserId: idHint }, select: userSelect })
+    : await prisma.user.findUnique({ where: { id: idHint }, select: userSelect });
   if (!user) {
-    throw new Error(`ensure_flight_customer: no User row for clerkUserId=${clerkUserId}`);
+    throw new Error(
+      `ensure_flight_customer: no User row for ${looksLikeClerk ? 'clerkUserId' : 'User.id'}=${idHint}`
+    );
   }
 
   const membership = user.memberships[0];
