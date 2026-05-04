@@ -53,6 +53,7 @@ import { prepareTravelerSigninTool } from './prepare-traveler-signin';
 import {
   requestLocationTool,
   requestPhoneNumberTool,
+  sendCtaUrlMessageTool,
   sendDocumentMessageTool,
   sendFlowMessageTool,
   sendImageMessageTool,
@@ -434,6 +435,7 @@ export const toolList: ToolDef[] = [
   sendInteractiveListTool,
   sendImageMessageTool,
   sendDocumentMessageTool,
+  sendCtaUrlMessageTool,
   sendFlowMessageTool,
   requestLocationTool,
   requestPhoneNumberTool,
