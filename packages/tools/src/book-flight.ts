@@ -798,11 +798,41 @@ async function settleTravelerUsdcToTreasury(args: {
   tenantId: string;
   amountUsdc: string;
 }): Promise<{ settlementTxHash: string; explorerUrl: string } | null> {
-  // Architecture-flip alignment (2026-05-04): the traveler's Gateway
-  // balance lives at the Circle DCW (provisioner='dcw'), NOT the
-  // legacy UserGatewaySigner EOA. The burn must be signed by the
-  // DCW — Circle Wallets adapter signs via API, no local private
-  // key needed. Mirrors the funds-check + traveler_balance path.
+  // ── Settlement recipient flip (Phase H billing v1.5, 2026-05-04) ──
+  // Why: book_flight pays Duffel out of Sendero's Duffel pool first
+  // (`payFromBalance`). The traveler's USDC settlement MUST reimburse
+  // Sendero for that draw — otherwise we're underwater on every sale.
+  //
+  // Pre-flip the recipient was `tenantSigner.address` (the per-tenant
+  // gateway-signer EOA). Net P&L per booking: Sendero −$Duffel cost +
+  // ~5% take = catastrophic loss. Today's flip: recipient =
+  // TREASURY_VIEM_ADDRESS (Sendero platform treasury) so the full
+  // Duffel cost reimbursement lands where we paid from.
+  //
+  // What this means for the tenant: until tenant markup is wired
+  // (`Tenant.markupConfig` → quote-time price-up + a SECOND transfer
+  // to the tenant gateway-signer for the markup leg), the tenant
+  // earns $0 on the booking. That's correct — the booking IS at
+  // Duffel cost, and Sendero is the only entity at risk on the float.
+  //
+  // ── Follow-up: Phase H v2 (markup + tenant share) ──
+  // 1. `book_flight` quote-time: read TenantPricingPolicy → return
+  //    fareToTraveler = duffelCost + markup; agent confirm card shows
+  //    breakdown ("Total: $161 (fare $140 + service $21)").
+  // 2. Settlement here splits:
+  //      cost           → Sendero (reimburse) — this is the current
+  //                        recipient
+  //      markup × (1-take) → tenant gateway-signer EOA  ← new transfer
+  //      markup × take    → Sendero (custom fee carve)
+  // 3. Booking row already has columns for this snapshot
+  //    (`costMicroUsdc`, `markupMicroUsdc`, `markupBps`,
+  //    `senderoTakeMicroUsdc`).
+  //
+  // The take-rate-via-customFee logic from the v1 commit is intentionally
+  // dropped here because it's the wrong shape: when recipient =
+  // Sendero, carving a fee FROM Sendero TO Sendero is a no-op; the
+  // carve belongs on the tenant-markup leg in v2.
+
   const SOL_DEVNET_CHAIN_ID = 5;
   const evmDcw = await prisma.wallet.findFirst({
     where: {
@@ -815,9 +845,11 @@ async function settleTravelerUsdcToTreasury(args: {
   });
   if (!evmDcw?.address) return null;
 
-  const tenantSigner = await getOrCreateGatewaySigner(args.tenantId, {
-    caller: { surface: 'tool', context: 'book_flight:settle' },
-  });
+  const senderoRecipient = process.env.TREASURY_VIEM_ADDRESS;
+  if (!senderoRecipient) {
+    console.warn('[book_flight] TREASURY_VIEM_ADDRESS unset — refusing to settle (would lose money)');
+    return null;
+  }
 
   // Lazy import avoids pulling the full unified-gateway module into
   // the cold path of every book_flight invocation that doesn't end up
@@ -830,68 +862,19 @@ async function settleTravelerUsdcToTreasury(args: {
   });
   if (!principal) return null;
 
-  // ── Take-rate split (Phase H billing wiring) ──
-  // Tenant plan dictates Sendero's cut of each booking. The split is
-  // realized via Circle's `customFee` knob on `unifiedBalance.spend`:
-  // App Kit carves the fee from the spend amount, sends 90% to our
-  // recipient + 10% to Arc protocol (per Circle docs). The remaining
-  // (1 - takeRate) of the gross lands at the tenant gateway-signer
-  // EOA. Same single tx — no extra hops.
-  //
-  // Plan tier → take-rate basis points:
-  //   free        → 0    (Sendero takes nothing — testnet beta)
-  //   basic       → 500  (5%)
-  //   pro         → 1000 (10%)
-  //   enterprise  → 1500 (15%)
-  // (per packages/billing/src/plans.ts::bookingTakeRateDiscountBps —
-  //  field name is legacy; the value is the take rate in bps)
-  let customFee: { value: string; recipientAddress: string } | undefined;
-  try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: args.tenantId },
-      select: { billingTier: true },
-    });
-    if (tenant?.billingTier) {
-      const { resolvePlan } = await import('@sendero/billing/plans');
-      const plan = resolvePlan(tenant.billingTier);
-      const takeRateBps = plan.bookingTakeRateDiscountBps;
-      const senderoRecipient = process.env.TREASURY_VIEM_ADDRESS;
-      if (takeRateBps > 0 && senderoRecipient) {
-        // amount × bps / 10_000, rounded to 6 decimals.
-        const grossMicro = BigInt(Math.round(Number(args.amountUsdc) * 1_000_000));
-        const feeMicro = (grossMicro * BigInt(takeRateBps)) / 10_000n;
-        const feeUsdc = (Number(feeMicro) / 1_000_000).toFixed(6);
-        customFee = { value: feeUsdc, recipientAddress: senderoRecipient };
-        console.log('[book_flight] take-rate split', {
-          tenantId: args.tenantId,
-          tier: tenant.billingTier,
-          takeRateBps,
-          gross: args.amountUsdc,
-          customFee: feeUsdc,
-          senderoRecipient,
-        });
-      }
-    }
-  } catch (err) {
-    // Don't let billing-config issues break the settle path. Worst
-    // case: tenant gets 100% (current pre-split behavior), Sendero
-    // logs the gap.
-    console.warn('[book_flight] take-rate resolution failed (settling without split)', {
-      tenantId: args.tenantId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  console.log('[book_flight] settling (cost-reimbursement to Sendero)', {
+    tenantId: args.tenantId,
+    travelerUserId: args.travelerUserId,
+    amountUsdc: args.amountUsdc,
+    recipient: senderoRecipient,
+    note: 'tenant markup share is Phase H v2 — not wired yet',
+  });
 
-  // Pick the EVM source chain — Gateway lets you spread allocations
-  // across chains automatically when `from.allocations` is omitted,
-  // so we just need the destination + recipient. Source-account picked
-  // by the SDK from the DCW's available chains.
   const result = await spend({
     sources: [{ principal }],
     toChainKey: 'Arc_Testnet',
-    recipient: tenantSigner.address,
+    recipient: senderoRecipient,
     amount: args.amountUsdc,
-    ...(customFee ? { customFee } : {}),
   });
 
   return {
