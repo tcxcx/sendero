@@ -24,6 +24,11 @@ export {
   transferViaGateway,
   transferViaGatewayFromSources,
 } from './gateway';
+export {
+  depositTravelerToGateway,
+  type DepositTravelerToGatewayArgs,
+  type DepositTravelerToGatewayResult,
+} from './gateway-deposit-traveler';
 export * as modularWallets from './modular-wallets';
 export {
   type CircleSdkLike,
