@@ -49,9 +49,9 @@ const inputSchema = z.object({
     .describe('USD amount the traveler wants to add. MoonPay min ~$20, max varies by KYC tier.'),
   currencyCode: z
     .enum(SUPPORTED_CURRENCIES)
-    .default('usdc_base')
+    .default('usdc_sol')
     .describe(
-      "Crypto currency to receive. Default 'usdc_base' (USDC on Base) — Circle Gateway bridges to Arc on next booking."
+      "Crypto currency to receive. Default 'usdc_sol' (USDC on Solana Devnet) — Circle Gateway aggregates the balance regardless of the receiving chain. Fallback to 'usdc_base' if MoonPay rejects the destination on a gas / chain error."
     ),
   note: z
     .string()

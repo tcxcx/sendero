@@ -31,6 +31,7 @@ const isPublicRoute = createRouteMatcher([
   '/agents/(.*)', // public ERC-8004 agent metadata + reputation profile (org + user)
   '/install/(.*)', // public per-tenant channel install pages (Persona C — end-customer admins, no Sendero session)
   '/t/(.*)', // public Sendero-branded short-link redirector — host-allowlisted in /api/short-links, no auth on the redirect itself
+  '/api/short-links(.*)', // short-link mint endpoint — protected by x-sendero-dispatch-secret in-route, must bypass Clerk so internal callers (tools, agent) can mint without a session
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/sso-callback(.*)',

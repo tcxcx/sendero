@@ -38,9 +38,9 @@ const inputSchema = z.object({
     .describe('USDC amount the traveler wants to sell. MoonPay min ~$20.'),
   currencyCode: z
     .enum(SUPPORTED_CURRENCIES)
-    .default('usdc_base')
+    .default('usdc_sol')
     .describe(
-      "Crypto being sold. Default 'usdc_base' (USDC on Base) — Circle Gateway sourced from unified balance."
+      "Crypto being sold. Default 'usdc_sol' (USDC on Solana Devnet). Fallback to 'usdc_base' on a gas / chain error."
     ),
   note: z
     .string()
