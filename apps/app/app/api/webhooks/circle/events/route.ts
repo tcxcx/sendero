@@ -231,7 +231,92 @@ async function handleTokensMinted(log: EventLogNotification): Promise<DispatchRe
       mintTxHash: stamp.mintTxHash ?? log.txHash ?? null,
     },
   });
+
+  // Bucket 7 closure — fan out the minted artwork to the traveler via
+  // WhatsApp image_message for kinds the traveler should "feel" land
+  // in their phone. BoardingPass already gets pushed inline from
+  // booking-fanout (no need to double-send), so skip it here.
+  if (
+    stamp.travelerId &&
+    stamp.kind !== 'BoardingPass' &&
+    stamp.blobUrl &&
+    log.txHash
+  ) {
+    void sendStampImageToTraveler({
+      tenantId: stamp.tenantId,
+      travelerId: stamp.travelerId,
+      kind: stamp.kind,
+      tokenId,
+      blobUrl: stamp.blobUrl,
+      caption: stamp.caption ?? null,
+      txHash: log.txHash,
+    }).catch(err => {
+      console.warn('[circle/events] post-mint image fan-out failed', {
+        stampId: stamp.id,
+        kind: stamp.kind,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   return { matched: true, kind: 'minted' };
+}
+
+async function sendStampImageToTraveler(args: {
+  tenantId: string;
+  travelerId: string;
+  kind: string;
+  tokenId: string;
+  blobUrl: string;
+  caption: string | null;
+  txHash: string;
+}): Promise<void> {
+  const { WhatsAppClient } = await import('@sendero/whatsapp');
+  const { env } = await import('@sendero/env');
+
+  const identity = await prisma.channelIdentity.findFirst({
+    where: { tenantId: args.tenantId, userId: args.travelerId, kind: 'whatsapp' },
+    select: { externalUserId: true },
+  });
+  if (!identity?.externalUserId) return;
+
+  const install = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId: args.tenantId },
+    select: { phoneNumberId: true, status: true },
+  });
+  if (!install?.phoneNumberId || install.status === 'disabled') return;
+
+  const accessToken = env.whatsappAccessToken() ?? env.kapsoApiKey();
+  if (!accessToken) return;
+
+  const apiBaseUrl =
+    env.whatsappApiBaseUrl() ??
+    (env.kapsoApiKey() ? `${env.kapsoApiBaseUrl()}/meta/whatsapp/v24.0` : undefined);
+  const client = new WhatsAppClient({
+    phoneNumberId: install.phoneNumberId,
+    accessToken,
+    apiBaseUrl,
+  });
+
+  const explorer = `https://testnet.arcscan.app/tx/${args.txHash}`;
+  const labels: Record<string, string> = {
+    TripPassport: '🎟 Tu *TripPassport* — el capstone NFT de este viaje',
+    ItineraryMap: '🗺 Tu *itinerary map* — actualizado on-chain',
+    SettlementReceipt: '🧾 Tu *settlement receipt* — pago confirmado on-chain',
+    StayCheckIn: '🏨 Tu *stay check-in* stamp — registro de hospedaje',
+    TripCompletion: '✨ Tu *trip completion* stamp — reputación on-chain',
+  };
+  const heading = labels[args.kind] ?? `🪙 Nuevo Sendero stamp · *${args.kind}*`;
+  const captionLine = args.caption ? `\n\n_${args.caption}_` : '';
+  const caption = `${heading}${captionLine}\n\n🔗 ${explorer}`;
+
+  await client.send({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: identity.externalUserId,
+    type: 'image',
+    image: { link: args.blobUrl, caption },
+  });
 }
 
 async function handleTransferSingle(log: EventLogNotification): Promise<DispatchResult> {
