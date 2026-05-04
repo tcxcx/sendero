@@ -139,12 +139,65 @@ export const completeTripTool: ToolDef<Input> = {
       }
     }
 
+    // Bucket 7 closure — auto-fire ERC-8004 give_feedback when the
+    // traveler shared a 1-5 rating. Subject = the trip's tenant (the
+    // agency/operator that ran the trip via Sendero); rater = the
+    // traveler. Best-effort: identity may not be minted yet, or the
+    // tenant may have no OnchainIdentity. Failures don't break the
+    // close — the rating is still recorded in Trip.events.
+    let feedbackStatus: 'recorded' | 'skipped' | 'failed' = 'skipped';
+    let feedbackTxHash: string | null = null;
+    if (input.rating) {
+      try {
+        const subject = await prisma.onchainIdentity.findFirst({
+          where: { kind: 'org', tenantId: trip.tenantId, status: 'minted' },
+          select: { agentId: true },
+        });
+        if (subject?.agentId) {
+          const fb = await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/give_feedback`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-sendero-dispatch-secret': dispatchSecret,
+            },
+            body: JSON.stringify({
+              tenantId: trip.tenantId,
+              userId,
+              input: {
+                subjectAgentId: subject.agentId,
+                stars: input.rating,
+                tag: input.feedbackTag ?? 'trip_completed',
+                fromKind: 'user',
+                fromUserId: userId,
+                tripId: trip.id,
+              },
+            }),
+          });
+          if (fb.ok) {
+            const body = (await fb.json()) as { result?: { txHash?: string } };
+            feedbackTxHash = body.result?.txHash ?? null;
+            feedbackStatus = 'recorded';
+          } else {
+            feedbackStatus = 'failed';
+          }
+        }
+      } catch (err) {
+        console.warn('[complete_trip] give_feedback fan-out failed', {
+          tripId: trip.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        feedbackStatus = 'failed';
+      }
+    }
+
     return {
       status: 'completed',
       tripId: trip.id,
       completedAt,
       stampStatus,
       ratingRecorded: input.rating ?? null,
+      feedbackStatus,
+      feedbackTxHash,
       message:
         stampStatus === 'kicked_off'
           ? 'Trip closed. TripPassport NFT stamp minting in the background — your traveler will get it via WhatsApp once it lands on chain.'
