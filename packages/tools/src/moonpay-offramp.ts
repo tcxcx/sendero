@@ -180,9 +180,19 @@ export const moonpayOfframpTool: ToolDef<Input> = {
       ctaLabel: 'Tap to sell',
     });
 
+    // Sendero-branded short link — same pattern as moonpay_topup.
+    const shortUrl = await mintShortLink({
+      baseUrl,
+      targetUrl: checkoutUrl,
+      userId,
+      purpose: 'moonpay_offramp',
+      expiresInSeconds: 60 * 60 * 24,
+    });
+
     return {
       status: 'ready',
       checkoutUrl,
+      shortUrl: shortUrl ?? checkoutUrl,
       qrImageUrl,
       imageUrl: cardImageUrl ?? qrImageUrl,
       meWalletUrl,
@@ -228,4 +238,40 @@ async function buildSenderoShareCardUrl(
   const token = `${body}.${sig}`;
   const origin = baseUrl.replace(/\/$/, '');
   return `${origin}/api/og/share?token=${encodeURIComponent(token)}`;
+}
+
+/** Mirror of moonpay-topup.ts::mintShortLink — see that comment. */
+async function mintShortLink(args: {
+  baseUrl: string;
+  targetUrl: string;
+  userId?: string;
+  purpose: string;
+  expiresInSeconds?: number;
+}): Promise<string | null> {
+  const dispatchSecret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET;
+  if (!dispatchSecret) return null;
+  try {
+    const origin = args.baseUrl.replace(/\/$/, '');
+    const res = await fetch(`${origin}/api/short-links`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-sendero-dispatch-secret': dispatchSecret,
+      },
+      body: JSON.stringify({
+        targetUrl: args.targetUrl,
+        userId: args.userId,
+        purpose: args.purpose,
+        expiresInSeconds: args.expiresInSeconds,
+      }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { shortUrl?: string };
+    return body.shortUrl ?? null;
+  } catch (err) {
+    console.warn('[moonpay-offramp] mintShortLink failed (non-fatal)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
