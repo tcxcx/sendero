@@ -27,8 +27,12 @@
 import { Prisma, prisma } from '@sendero/database';
 import { parseUnits } from 'viem';
 
-import { GATEWAY_CHAINS } from './gateway';
-import { circleWalletsPrincipal, deposit as unifiedDeposit } from './unified-gateway';
+import { GATEWAY_CHAINS, isEvmChain } from './gateway';
+import {
+  circleWalletsPrincipal,
+  deposit as unifiedDeposit,
+  depositFor as unifiedDepositFor,
+} from './unified-gateway';
 
 export interface SweepChainArgs {
   tenantId: string;
@@ -159,12 +163,43 @@ export async function sweepChain(args: SweepChainArgs): Promise<SweepResult> {
     };
   }
 
+  // Resolve the tenant's Gateway depositor of record. Tenants use the
+  // per-tenant gateway-signer EOA as the depositor (the address every
+  // dashboard, balance query, and explorer link points at). The DCW
+  // signs and pays the on-chain deposit, but the EOA is credited on
+  // Gateway — that's `depositFor`. Travelers don't have a separate
+  // depositor row, so they fall through to self-deposit (`deposit()`)
+  // and the DCW IS their depositor.
+  const config = await prisma.tenantGatewayConfig.findUnique({
+    where: { tenantId },
+    select: { evmDepositorAddress: true },
+  });
+  const useDepositFor =
+    isEvmChain(chain) &&
+    config?.evmDepositorAddress &&
+    config.evmDepositorAddress.toLowerCase() !== opsDcwAddress.toLowerCase();
+
   try {
-    const { txHash: depositTxHash } = await unifiedDeposit({
-      principal,
+    console.log('[gateway-sweep] dispatching deposit', {
+      tenantId,
       chainKey,
+      opsDcwAddress,
+      depositMode: useDepositFor ? 'depositFor' : 'deposit',
+      depositAccount: useDepositFor ? config?.evmDepositorAddress : opsDcwAddress,
       amount,
     });
+    const { txHash: depositTxHash } = useDepositFor
+      ? await unifiedDepositFor({
+          principal,
+          chainKey,
+          amount,
+          depositAccount: config!.evmDepositorAddress,
+        })
+      : await unifiedDeposit({
+          principal,
+          chainKey,
+          amount,
+        });
 
     await prisma.gatewayDepositLog.update({
       where: { id: log.id },
