@@ -14,11 +14,171 @@
       }
     },
     {
+      "id": "router",
+      "type": "flow-node",
+      "position": {
+        "x": 240,
+        "y": 320
+      },
+      "data": {
+        "node_type": "decide",
+        "display_name": "Intent Router",
+        "config": {
+          "decision_type": "ai",
+          "provider_model_id": "94b06839-2a0c-4ad2-a17f-fd242c8a56f4",
+          "provider_model_name": "gpt-4o-mini-2024-07-18",
+          "conditions": [
+            {
+              "label": "money",
+              "description": "User's last message is about wallet view (ver mi wallet, my balance, cuánto tengo, mi wallet), top-up (top up, agregar saldo, cargar wallet, depositar, recargar, add funds, buy USDC), or off-ramp (retirar plata, cash out, withdraw, sacar, pasar a dólares, convertir a fiat). Also: button taps with id starting topup_moonpay_, topup_custom, or check_balance."
+            },
+            {
+              "label": "default",
+              "description": "Anything else: flight search, hotel search, booking confirmation, restaurant recommendations, airport transfers, post-trip wrap, NFT stamps, complaints, refund requests, group trips, prefund claims, file uploads, free-form questions, greetings, gratitude."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "money_agent",
+      "type": "flow-node",
+      "position": {
+        "x": 0,
+        "y": 720
+      },
+      "data": {
+        "node_type": "agent",
+        "display_name": "Money Agent (wallet/topup/offramp)",
+        "config": {
+          "system_prompt": "You are Sendero's WALLET specialist agent on WhatsApp. Your ONLY job is wallet view, top-up, and off-ramp. You have NO knowledge of flights, hotels, restaurants, or anything else — if the user asks about non-wallet topics, call `complete_task` and return control silently.\n\n## Voice\n- Locale-mirror (es-AR, es-MX, pt-BR, en-US). Switch when they switch.\n- Short, warm. WhatsApp formatting: `*bold*` (single asterisks), never `**double**`.\n- DO NOT narrate tool calls.\n\n## Halting protocol\nAfter any send_* tool call, call `complete_task` immediately. NO reflective text. Your tool calls ARE the message.\n\n## First action\nBefore the first `call_sendero`, run `get_whatsapp_context` to learn `from_phone`. Stash it. Pass `travelerPhone` on every `call_sendero`.\n\n## RULE 1 — WALLET VIEW\nTrigger: \"ver mi wallet\", \"my balance\", \"cuánto tengo\", \"show wallet\", \"mi wallet\". Required actions in order:\n1. `call_sendero({toolName:'traveler_balance', travelerPhone, input:{}})` — returns `{totalUsdc, evmAddress, solanaAddress, perChain[]}`.\n2. `call_sendero({toolName:'send_interactive_buttons', travelerPhone, input:{ headerText:'💳 Tu wallet · Sendero', body:<see below>, footer:'Circle Gateway · Sendero × Arc', buttons:[{id:'topup_moonpay_100',title:'Top up $100'},{id:'topup_moonpay_50',title:'Top up $50'},{id:'topup_custom',title:'Otro monto'}] }})`\n3. `complete_task`.\n\nBody shape:\n```\n*Balance: <totalUsdc> USDC*\n\n<if total > 0: per-chain lines; if total === 0: \"Todas las cadenas en cero.\">\n\n🔷 *EVM* — Arc · Sepolia · Base · Avax · Optimism · Arbitrum · Polygon\n`<evmAddress>`\n\n🟣 *Solana Devnet*\n`<solanaAddress>`\n\n_Unified balance — depositá en cualquier cadena, Sendero settle donde lo necesites._\n```\n\nNEVER reply with a bare URL (no ngrok, no localhost, no `/me/wallet`). NEVER plain-text dump.\n\n## RULE 2 — TOP-UP\nTrigger: \"top up\", \"agregar saldo\", \"cargar wallet\", \"depositar\", \"recargar\", \"add funds\", \"buy USDC\", or button id `topup_moonpay_100|topup_moonpay_50|topup_custom`. Required actions:\n1. Resolve amount: button id `topup_moonpay_100` → 100, `topup_moonpay_50` → 50, `topup_custom` → ask \"¿Cuánto querés cargar? (mínimo $20)\" + `enter_waiting`. If user gave a number directly, use it. Else default 100.\n2. `call_sendero({toolName:'moonpay_topup', travelerPhone, input:{amountUsd:<n>}})` → returns `{checkoutUrl, imageUrl, qrImageUrl}`.\n3. `call_sendero({toolName:'send_image_message', travelerPhone, input:{imageUrl:<imageUrl from result>, caption:'*Cargar <n> USD*\\n\\nPagá con tarjeta vía MoonPay — los fondos llegan a tu wallet en segundos.\\n\\nLink directo: <checkoutUrl>'}})` — ALWAYS use `imageUrl`, NEVER `qrImageUrl`.\n4. Reply text: \"Una vez que completes el pago respondé 'listo' y verifico el estado. 💳\"\n5. `enter_waiting`.\n\nNEVER show a \"1) Faucet 2) Card 3) Crypto\" menu — that pattern is FORBIDDEN. Faucet ONLY when user types literal word \"faucet\" → `faucet_drip({amountUsdc:'200'})`.\n\nOn follow-up \"listo\"/\"ya pagué\"/\"hecho\":\n1. `get_moonpay_topup_status({limit:1})` → check newest row.\n2. If `status:'completed'`: confirm with amount + tx hash, then `complete_task`.\n3. Else: \"Veo el pago en proceso — un par de minutos más.\" + `enter_waiting`.\n\n## RULE 3 — OFF-RAMP\nTrigger: \"retirar plata\", \"cash out\", \"withdraw\", \"sacar\", \"pasar a dólares\", \"convertir a fiat\". Required actions:\n1. Resolve amount (default 100 USDC if not given).\n2. `call_sendero({toolName:'moonpay_offramp', travelerPhone, input:{amountUsdc:<n>}})` → returns `{checkoutUrl, imageUrl, qrImageUrl, refundWalletAddress}`.\n3. `call_sendero({toolName:'send_image_message', travelerPhone, input:{imageUrl:<imageUrl>, caption:'*Cash out <n> USDC*\\n\\nCobrá en tu cuenta vía MoonPay — 1-2 días hábiles.\\n\\nLink directo: <checkoutUrl>'}})`\n4. Reply text: \"Una vez que completes el proceso respondé 'listo' y verifico el estado del retiro. 💸\"\n5. `enter_waiting`.\n\nNEVER reply \"retiros no están disponibles\" — the off-ramp WORKS.\n\nOn follow-up \"listo\": `get_moonpay_offramp_status` → confirm or \"en proceso\".\n\n## RULE 4 — NEVER LEAK URLS THAT AREN'T IN A TOOL RESULT\nForbidden in any outbound: `localhost:3010`, `*.ngrok.app`, hand-edited URLs. Only relay `checkoutUrl`/`imageUrl` from the latest tool result.\n\n## RULE 5 — NEVER REUSE A MOONPAY URL FROM HISTORY\nIf amount changes, call `moonpay_topup` or `moonpay_offramp` AGAIN. Hand-editing `baseCurrencyAmount=` produces \"Signature check failed\".\n\n## travelerPhone is mandatory\nEvery `call_sendero` needs `travelerPhone`. If a tool returns `{status:'traveler_required'}`, re-fetch `get_whatsapp_context` and retry.\n\n## Out of scope?\nIf the user asks about flights, hotels, trips, restaurants, transfers, NFTs, or anything not wallet/topup/offramp: just call `complete_task` silently. The router will hand them to the general agent on the next turn. Do NOT explain you can't help — just complete and let the next inbound route correctly.\n\n## Errors\nIf a tool returns `{error}`: relay the user-actionable part only. Don't fabricate technical reasons. After 2-3 retries, `request_human_handoff({question, summary})` then `enter_waiting`. Tell user \"Let me check with the team — I'll be right back.\"\n\n## Closing\nEvery customer-facing answer must end with `complete_task` (or `enter_waiting` when expecting follow-up).\n",
+          "provider_model_id": "0d5c3a20-5343-4f41-81fc-a06ab71bf5b3",
+          "provider_model_name": "claude-sonnet-4-6",
+          "temperature": "0.2",
+          "max_iterations": 40,
+          "max_tokens": 8192,
+          "reasoning_effort": null,
+          "observer_prompt_mode": "analysis_only",
+          "enabled_default_tools": [
+            "send_notification_to_user",
+            "send_media",
+            "get_execution_metadata",
+            "get_whatsapp_context",
+            "get_current_datetime",
+            "save_variable",
+            "get_variable",
+            "ask_about_file",
+            "enter_waiting",
+            "complete_task",
+            "handoff_to_human"
+          ],
+          "sandbox_enabled": false,
+          "sandbox_network_mode": "allow_all",
+          "sandbox_allowed_outbound_hosts": [],
+          "flow_agent_function_tools": [
+            {
+              "name": "call_sendero",
+              "description": "Call any Sendero tool by name. Use this for every action that touches Sendero state — flight/hotel search, bookings, cancellations, holds, treasury, document scan, escalation, template sends. Pick the right `toolName` from the enum and pass the matching `input` object. Returns `{ result }` on success or `{ error, message }` on failure — relay errors verbatim instead of inventing them.",
+              "function_id": "ea58a082-14e2-4ad4-9064-8cc270509b7f",
+              "function_name": "sendero-tool-call",
+              "input_schema": {
+                "type": "object",
+                "required": [
+                  "toolName"
+                ],
+                "properties": {
+                  "input": {
+                    "type": "object",
+                    "description": "Tool-specific input. Each tool validates its own shape — see Sendero's /api/tools/{name} schema for required fields.",
+                    "additionalProperties": true
+                  },
+                  "toolName": {
+                    "enum": [
+                      "search_flights",
+                      "book_flight",
+                      "search_hotels",
+                      "quote_stay",
+                      "book_stay",
+                      "cancel_order_quote",
+                      "confirm_cancel_order",
+                      "request_order_change",
+                      "select_order_change_offer",
+                      "confirm_order_change",
+                      "display_offer_conditions",
+                      "list_flight_ancillaries",
+                      "list_airline_credits",
+                      "find_airports_nearby",
+                      "check_treasury",
+                      "traveler_balance",
+                      "faucet_drip",
+                      "prepare_traveler_signin",
+                      "scan_document",
+                      "check_travel_eligibility",
+                      "create_passenger",
+                      "request_human_handoff",
+                      "send_whatsapp_template",
+                      "send_flow_message",
+                      "send_interactive_buttons",
+                      "send_interactive_list",
+                      "send_image_message",
+                      "send_document_message",
+                      "request_location",
+                      "request_phone_number",
+                      "start_workflow",
+                      "create_trip",
+                      "check_policy",
+                      "give_feedback",
+                      "read_reputation",
+                      "request_validation",
+                      "submit_validation_response",
+                      "create_group_trip",
+                      "add_passenger_to_group_trip",
+                      "claim_group_seat",
+                      "prefund_trip",
+                      "guest_claim_link",
+                      "send_pay_link",
+                      "generate_booking_invoice",
+                      "trip_weather_brief",
+                      "air_quality_brief",
+                      "timezone_brief",
+                      "elevation_risk_brief",
+                      "travel_safety_aid",
+                      "validate_travel_address",
+                      "geocode_trip_stop",
+                      "recommend_restaurants",
+                      "restaurant_route_card",
+                      "export_route_map",
+                      "airport_transfer_coordinator",
+                      "airport_arrival_playbook",
+                      "trip_checkin_reminder",
+                      "trip_delay_replanner"
+                    ],
+                    "type": "string",
+                    "description": "Sendero tool slug. Pick the one that matches the traveler's intent."
+                  },
+                  "travelerPhone": {
+                    "type": "string",
+                    "description": "Traveler's E.164 phone (with leading +). REQUIRED on every call when known — Sendero auto-provisions a wallet + identity + balance on first sight, and stamps the right userId on bookings, holds, settlements, and reputation writes. Pull from get_whatsapp_context once per conversation; reuse for every subsequent call_sendero call. Without this Sendero sees the call as a service-account caller and can't attribute the result to a real traveler."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          ],
+          "flow_agent_app_integration_tools": [],
+          "flow_agent_webhooks": [],
+          "flow_agent_knowledge_bases": [],
+          "flow_agent_mcp_servers": [],
+          "flow_agent_resources": []
+        }
+      }
+    },
+    {
       "id": "tenant_travel_agent",
       "type": "flow-node",
       "position": {
-        "x": 420,
-        "y": 140
+        "x": 480,
+        "y": 720
       },
       "data": {
         "node_type": "agent",
@@ -149,12 +309,22 @@
   ],
   "edges": [
     {
-      "id": "7f84b038-8d3b-40ee-8347-11cf606730b4",
       "source": "start",
-      "target": "tenant_travel_agent",
+      "target": "router",
       "label": "next",
-      "type": "default",
-      "flow_condition_id": null
+      "type": "default"
+    },
+    {
+      "source": "router",
+      "target": "money_agent",
+      "label": "money",
+      "type": "default"
+    },
+    {
+      "source": "router",
+      "target": "tenant_travel_agent",
+      "label": "default",
+      "type": "default"
     }
   ]
 }
