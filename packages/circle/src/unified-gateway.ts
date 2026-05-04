@@ -366,18 +366,26 @@ export interface SpendResult {
 function buildSpendFrom(args: SpendArgs) {
   if (args.allocations && args.sources[0]) {
     // Allocations override per-source: SDK accepts a single from with
-    // allocations + the signer's adapter.
-    return {
-      adapter: args.sources[0].principal.adapter,
+    // allocations + the signer's adapter. Circle Wallets adapter still
+    // needs `address` to disambiguate which DCW signs each allocation.
+    const first = args.sources[0].principal;
+    const base: Record<string, unknown> = {
+      adapter: first.adapter,
       allocations: args.allocations,
-    } as const;
+    };
+    if (first.kind === 'circle-wallets') base.address = first.address;
+    return base;
   }
   return args.sources.map(s => {
-    const base: { adapter: SpendSource['principal']['adapter']; sourceAccount?: string } = {
-      adapter: s.principal.adapter,
-    };
+    const base: Record<string, unknown> = { adapter: s.principal.adapter };
+    // Circle Wallets is a multi-wallet "fleet" adapter — every spend
+    // call needs `address` to identify which DCW signs. The SDK
+    // explicitly rejects circle-wallets sources without it:
+    // "Address is required for developer-controlled adapters."
+    if (s.principal.kind === 'circle-wallets') base.address = s.principal.address;
+    // viem (single-wallet) doesn't need address; sourceAccount is the
+    // delegate-spending hook (signing for another address's balance).
     if (s.sourceAccount) base.sourceAccount = s.sourceAccount;
-    else if (s.principal.kind === 'circle-wallets') base.sourceAccount = s.principal.address;
     return base;
   });
 }
@@ -386,14 +394,25 @@ function buildSpendParams(args: SpendArgs) {
   if (args.sources.length === 0) {
     throw new Error('unifiedGateway.spend: at least one source is required.');
   }
-  const toAdapter = args.toAdapter ?? args.sources[0].principal.adapter;
+  const firstPrincipal = args.sources[0].principal;
+  const toAdapter = args.toAdapter ?? firstPrincipal.adapter;
+  // Circle Wallets adapter on the destination side ALSO needs `address`
+  // — it's the DCW the adapter uses as the signing context on the
+  // destination chain (distinct from `recipientAddress` which is the
+  // actual receiver). Same pattern desk-v1's BridgeKit wrapper uses.
+  // For viem (single-wallet) the field is harmless; we omit it to
+  // match the docs example shape exactly.
+  const toCtx: Record<string, unknown> = {
+    adapter: toAdapter,
+    chain: unifiedBalanceChainName(args.toChainKey),
+    recipientAddress: args.recipient,
+  };
+  if (firstPrincipal.kind === 'circle-wallets' && !args.toAdapter) {
+    toCtx.address = firstPrincipal.address;
+  }
   const params: Record<string, unknown> = {
     from: buildSpendFrom(args),
-    to: {
-      adapter: toAdapter,
-      chain: unifiedBalanceChainName(args.toChainKey),
-      recipientAddress: args.recipient,
-    },
+    to: toCtx,
     amount: args.amount,
     token: args.token ?? 'USDC',
   };
