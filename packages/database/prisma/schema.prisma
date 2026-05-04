@@ -125,6 +125,26 @@ enum MeterStatus {
   credit
 }
 
+/// Who provisioned the spend on a trip.
+/// - `tenant`   — pre-paid corporate / TMC budget (B2B).
+/// - `traveler` — direct purchase by the traveler (B2C / consumer).
+/// - `split`    — reserved for mixed-payer flows; tools must require an
+///                explicit `provisionedBy` input until split-resolution
+///                ships.
+enum TripPaymentMode {
+  tenant
+  traveler
+  split
+}
+
+/// Concrete payer recorded on a charge. Mirrors `TripPaymentMode` minus
+/// `split`, because every individual MeterEvent / Booking has exactly one
+/// payer wallet at debit time.
+enum MeterPayerType {
+  tenant
+  traveler
+}
+
 enum SettlementStatus {
   pending
   submitted
@@ -247,6 +267,12 @@ model Tenant {
   taxId               String?
   brandLogoUrl        String?
   brandColors         Json?
+
+  /// Default payer mode for new trips. Existing tenants backfilled to
+  /// `tenant` (corporate TMC); new tenants default to `traveler`
+  /// (consumer mode is the bigger bet). Per-trip override lives on
+  /// `Trip.paymentMode`.
+  defaultPaymentMode TripPaymentMode @default(traveler)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -495,19 +521,19 @@ model Policy {
 
 /// A persistent conversational thread for one trip. Core object.
 model Trip {
-  id                    String     @id @default(cuid())
+  id                    String           @id @default(cuid())
   tenantId              String
   policyId              String?
   travelerId            String? // User.id — may be guest
   createdById           String? // booking agent
   intent                Json // parsed intent: {origin,dest,dates,pax,purpose}
-  status                TripStatus @default(draft)
+  status                TripStatus       @default(draft)
   /// Append-only event log (agent turns, tool calls, approvals).
-  events                Json       @default("[]")
+  events                Json             @default("[]")
   settlementRef         String? // convenience pointer to latest Settlement
   cfdiRef               String? // MX fiscal invoice reference
   reputationScore       Int? // 0-100, mirrored from Attestation
-  totalUsdc             Decimal?   @db.Decimal(18, 6) // denormalized from bookings
+  totalUsdc             Decimal?         @db.Decimal(18, 6) // denormalized from bookings
   metadata              Json?
   /// Per-trip channel routing override. Shape (see TripChannelBindings
   /// in `apps/app/lib/channel-routing.ts`):
@@ -524,8 +550,14 @@ model Trip {
   /// resend requests against the actual contacts the buyer attached.
   /// Backed by `migrations/20260425133807_trip_guest_verified_contacts`.
   guestVerifiedContacts Json?
-  createdAt             DateTime   @default(now()) @db.Timestamptz(6)
-  updatedAt             DateTime   @updatedAt @db.Timestamptz(6)
+  /// Payer mode for this trip. Resolved at trip creation from
+  /// `Tenant.defaultPaymentMode` with optional UI override. Tools call
+  /// `resolvePayer()` (packages/tools/src/lib/resolve-payer.ts) which
+  /// reads this field. Null on legacy rows; treated as `tenant` by the
+  /// resolver for backwards compatibility (matches pre-retro behavior).
+  paymentMode           TripPaymentMode?
+  createdAt             DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime         @updatedAt @db.Timestamptz(6)
 
   tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   policy    Policy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
@@ -644,21 +676,21 @@ model GroupTripPassenger {
 
 /// One reserved product inside a Trip (flight, hotel, rail, car).
 model Booking {
-  id                   String        @id @default(cuid())
+  id                   String          @id @default(cuid())
   tenantId             String
   tripId               String
   supplierId           String?
   createdById          String?
   kind                 BookingKind
-  status               BookingStatus @default(pending)
+  status               BookingStatus   @default(pending)
   /// Duffel order id, Amadeus PNR locator, etc.
   externalId           String?
   /// Duffel order id once the hold is placed. Separate column (not
   /// externalId) so we can put a global @unique on it for webhook
   /// lookups independent of tenant.
-  duffelOrderId        String?       @unique
+  duffelOrderId        String?         @unique
   pnr                  String?
-  totalUsd             Decimal       @db.Decimal(12, 2)
+  totalUsd             Decimal         @db.Decimal(12, 2)
   /// Supplier net rate, in micro-USDC. Backfilled from totalUsd × 1e6 for
   /// rows that pre-date markup v1 (metadata.markupSource flags those).
   costMicroUsdc        BigInt?
@@ -674,7 +706,7 @@ model Booking {
   /// Human-readable audit pointer to TenantPricingPolicy.version. The
   /// actual race-protected pin lives at metadata.policySnapshot (Eng A2).
   pricingPolicyVersion Int?
-  currency             String        @default("USD") @db.Char(3)
+  currency             String          @default("USD") @db.Char(3)
   /// Raw provider payload (Duffel offer / order), kept for reconciliation.
   rawDuffel            Json?
   segments             Json? // normalized itinerary
@@ -687,9 +719,15 @@ model Booking {
   policyCheckResult    String?
   /// Structured policy violations captured at book time.
   policyViolations     Json?
-  bookedAt             DateTime?     @db.Timestamptz(6)
-  createdAt            DateTime      @default(now()) @db.Timestamptz(6)
-  updatedAt            DateTime      @updatedAt @db.Timestamptz(6)
+  bookedAt             DateTime?       @db.Timestamptz(6)
+  /// Concrete payer at confirm time. Denormalized from MeterEvent for
+  /// fast reconciliation against settlement legs. Null on legacy rows;
+  /// backfilled to `tenant` (matches pre-retro corporate-only behavior).
+  provisionedBy        MeterPayerType?
+  /// CircleWallet.id of the wallet that funded this booking.
+  payerWalletId        String?
+  createdAt            DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime        @updatedAt @db.Timestamptz(6)
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   trip      Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -708,6 +746,7 @@ model Booking {
   @@index([tripId])
   @@index([supplierId])
   @@index([status])
+  @@index([provisionedBy])
   @@map("bookings")
 }
 
@@ -1079,8 +1118,8 @@ model WalletAccessLog {
 /// Append-only nanopayment ledger. Mirrors packages/tools/src/meter.ts
 /// MeterEvent but durable. NEVER update or delete rows — audit trail.
 model MeterEvent {
-  id             String      @id @default(uuid()) @db.Uuid
-  at             DateTime    @default(now()) @db.Timestamptz(6)
+  id             String          @id @default(uuid()) @db.Uuid
+  at             DateTime        @default(now()) @db.Timestamptz(6)
   tenantId       String?
   userId         String?
   payerAddress   String? // on-chain payer (x402)
@@ -1095,6 +1134,16 @@ model MeterEvent {
   /// from retried webhook deliveries no-op at the DB layer.
   idempotencyKey String?
   invoiceRef     String?
+  /// Concrete payer of this charge. Distinct from `userId` (which can
+  /// be the operator triggering on behalf of the traveler). Null on
+  /// legacy rows; backfilled to `tenant` in
+  /// `migrations/20260504140100_add_payer_columns`.
+  payerType      MeterPayerType?
+  /// CircleWallet.id of the wallet actually debited.
+  payerWalletId  String?
+  /// User.id of the wallet-bearing payer. Same as `userId` for traveler
+  /// flows; differs when an operator triggers a tenant-paid spend.
+  payerUserId    String?
 
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -1105,6 +1154,8 @@ model MeterEvent {
   @@index([toolName, at])
   @@index([status, at])
   @@index([tenantId, status, invoiceRef])
+  @@index([payerType, at])
+  @@index([payerUserId, at])
   @@map("meter_events")
 }
 
@@ -2891,35 +2942,35 @@ model MoonPayWebhookEvent {
 /// `tenantId` is nullable so platform-issued links (Sendero customer
 /// support flows) can exist outside any tenant context.
 model ShortLink {
-  id          String    @id @default(cuid())
+  id           String    @id @default(cuid())
   /// Random base32 code. Used in the URL: `/t/<code>`. Globally unique.
-  code        String    @unique
+  code         String    @unique
   /// The full target URL the redirect resolves to. May contain query
   /// strings, signatures, etc. — Sendero only constrains the host
   /// allowlist server-side, not the structure.
-  targetUrl   String    @map("target_url")
+  targetUrl    String    @map("target_url")
   /// Optional tenantId for per-tenant attribution / quotas.
-  tenantId    String?   @map("tenant_id")
+  tenantId     String?   @map("tenant_id")
   /// Optional userId — the Sendero traveler the link was generated for.
-  userId      String?   @map("user_id")
+  userId       String?   @map("user_id")
   /// Free-form purpose label ('moonpay_topup', 'moonpay_offramp',
   /// 'signin_link', 'route_map', …) for analytics / debugging.
-  purpose     String?
+  purpose      String?
   /// Click count, incremented on each successful redirect. Best-effort —
   /// the redirect runs even if the increment fails.
-  clickCount  Int       @default(0) @map("click_count")
+  clickCount   Int       @default(0) @map("click_count")
   /// Soft expiry. Past this timestamp, /t/<code> returns 410 Gone.
   /// Null means no expiry.
-  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  expiresAt    DateTime? @map("expires_at") @db.Timestamptz(6)
   /// Soft revocation — operators can disable a code without deleting it.
-  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
   /// Tracking + audit: when did the code first redirect.
   firstClickAt DateTime? @map("first_click_at") @db.Timestamptz(6)
   /// Last successful redirect timestamp.
   lastClickAt  DateTime? @map("last_click_at") @db.Timestamptz(6)
-  metadata    Json?
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  metadata     Json?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])

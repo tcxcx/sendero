@@ -51,6 +51,7 @@ export {
   bridge,
   ensureSolanaGas,
   isSolanaChainKey,
+  setSolanaPlatformLowAlertCallback,
   type DepositArgs as UnifiedDepositArgs,
   type DepositForArgs as UnifiedDepositForArgs,
   type DepositResult as UnifiedDepositResult,

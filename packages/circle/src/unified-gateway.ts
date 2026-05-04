@@ -571,6 +571,33 @@ export interface EnsureSolanaGasResult {
 
 const DEFAULT_MIN_LAMPORTS = 5_000_000; // 0.005 SOL
 const DEFAULT_TOPUP_LAMPORTS = 10_000_000; // 0.01 SOL
+/** Default alert threshold for the platform hot wallet — 0.5 SOL. */
+const DEFAULT_PLATFORM_LOW_LAMPORTS = 500_000_000;
+
+/**
+ * Alert callback fired AFTER a successful JIT top-up when the platform
+ * wallet's remaining balance falls below the alert threshold. Apps
+ * register this once at boot so unified-gateway stays decoupled from
+ * notification infrastructure (Liveblocks, Slack, email, etc.).
+ *
+ * Default: no-op. Sendero registers a Liveblocks `agent:customer-support`
+ * inbox notification in `apps/app/instrumentation.ts`, which fans out
+ * to Slack + WhatsApp + the app inbox via the existing Liveblocks
+ * webhook fanout.
+ */
+let _platformLowAlertCb:
+  | ((info: {
+      platformAddress: string;
+      lamports: number;
+      thresholdLamports: number;
+    }) => Promise<void> | void)
+  | null = null;
+
+export function setSolanaPlatformLowAlertCallback(
+  cb: NonNullable<typeof _platformLowAlertCb> | null
+): void {
+  _platformLowAlertCb = cb;
+}
 
 /**
  * Drip SOL into a DCW so it can pay fees on the next Gateway
@@ -636,6 +663,28 @@ export async function ensureSolanaGas(args: EnsureSolanaGasArgs): Promise<Ensure
       newBalance,
       txSignature: signature,
     });
+
+    // Platform-wallet low-balance alert. Fires once per top-up that
+    // crosses the threshold so ops sees a fresh signal instead of a
+    // background cron drone. Fail-soft — alert errors must not poison
+    // the deposit path that already succeeded.
+    if (_platformLowAlertCb) {
+      try {
+        const platformLamports = await conn.getBalance(platformKeypair.publicKey);
+        if (platformLamports < DEFAULT_PLATFORM_LOW_LAMPORTS) {
+          await _platformLowAlertCb({
+            platformAddress: platformKeypair.publicKey.toBase58(),
+            lamports: platformLamports,
+            thresholdLamports: DEFAULT_PLATFORM_LOW_LAMPORTS,
+          });
+        }
+      } catch (alertErr) {
+        console.warn('[unifiedGateway.ensureSolanaGas] low-balance alert failed (non-fatal)', {
+          error: alertErr instanceof Error ? alertErr.message : String(alertErr),
+        });
+      }
+    }
+
     return { topped: true, lamports: newBalance, txSignature: signature };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
