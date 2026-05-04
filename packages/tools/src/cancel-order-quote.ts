@@ -15,6 +15,7 @@ import {
   createOrderCancellation,
   type DuffelOrderCancellationWire,
 } from '@sendero/duffel';
+import { prisma } from '@sendero/database';
 
 import type { ToolDef } from './types';
 
@@ -116,10 +117,73 @@ export async function confirmCancelOrder(
   input: ConfirmCancelOrderInput
 ): Promise<ConfirmCancelOrderResult> {
   const q = await confirmOrderCancellation(input.cancellationId);
+
+  // Phase 5 — write 'cancelled' (and 'refunded' when applicable) events
+  // to the Trip ledger. Resolve the Trip via the Booking row keyed on
+  // duffelOrderId. Best-effort: cancellation has already happened on
+  // Duffel's side, so the ledger write must not throw the call.
+  void writeCancelEvents(q).catch(err => {
+    console.warn('[confirm_cancel_order] event append failed (non-fatal)', {
+      orderId: q.order_id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+
   return {
     ...mapQuote(q),
     confirmedAt: q.confirmed_at,
   };
+}
+
+async function writeCancelEvents(q: DuffelOrderCancellationWire): Promise<void> {
+  const booking = await prisma.booking.findFirst({
+    where: { duffelOrderId: q.order_id },
+    select: { id: true, tripId: true, tenantId: true, pnr: true },
+  });
+  if (!booking?.tripId || !booking.tenantId) return;
+
+  const now = new Date().toISOString();
+  const cancelledEvent = {
+    id: `cancelled_${booking.id}_${Date.now()}`,
+    kind: 'cancelled' as const,
+    direction: 'internal' as const,
+    channel: 'internal' as const,
+    createdAt: now,
+    bookingId: booking.id,
+    pnr: booking.pnr,
+    cancellationId: q.id,
+    refundTo: q.refund_to,
+    refundAmount: q.refund_amount,
+    refundCurrency: q.refund_currency,
+  };
+  const events: object[] = [cancelledEvent];
+
+  // 'refunded' is a separate signal — fires when there's an actual
+  // refund amount on the cancellation. Operators reading the ledger
+  // can distinguish "we cancelled, no refund" from "we cancelled +
+  // X USD coming back" without having to inspect the cancelled event.
+  if (q.refund_amount && q.refund_currency) {
+    events.push({
+      id: `refunded_${booking.id}_${Date.now() + 1}`,
+      kind: 'refunded',
+      direction: 'internal',
+      channel: 'internal',
+      createdAt: now,
+      bookingId: booking.id,
+      pnr: booking.pnr,
+      refundTo: q.refund_to,
+      refundAmount: q.refund_amount,
+      refundCurrency: q.refund_currency,
+      cancellationId: q.id,
+    });
+  }
+
+  const payload = JSON.stringify(events);
+  await prisma.$executeRaw`
+    UPDATE "trips"
+    SET events = COALESCE(events, '[]'::jsonb) || ${payload}::jsonb
+    WHERE id = ${booking.tripId} AND "tenantId" = ${booking.tenantId}
+  `;
 }
 
 export const confirmCancelOrderTool: ToolDef<ConfirmCancelOrderInput, ConfirmCancelOrderResult> = {
