@@ -1,48 +1,51 @@
-import {
-  type GetBalancesResult,
-  type SpendResult,
-  UnifiedBalanceKit,
-} from '@circle-fin/unified-balance-kit';
+/**
+ * Tenant-side Unified Balance helpers.
+ *
+ * Thin wrappers over `@sendero/circle/unified-gateway`. The kit
+ * instance, adapter wiring, and chain-name normalization live in the
+ * gateway service; this module knows how to resolve the per-tenant
+ * signer, what `enabledDomains` means, and how to map App Kit
+ * allocation results back to Sendero's `GATEWAY_CHAINS` keys.
+ *
+ * Kept at this path for back-compat with existing imports
+ * (`@sendero/circle/unified-balance` is referenced from
+ * `apps/app/lib/gateway-treasury.ts`).
+ */
+
+import type { GetBalancesResult, SpendResult } from '@circle-fin/unified-balance-kit';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
-import { createAdapterForSigner } from './app-kit';
 import { GATEWAY_CHAINS } from './gateway';
 import type { TenantGatewaySigner } from './gateway-signer';
 import { getOrCreateGatewaySigner } from './gateway-signer';
+import {
+  type GatewayChainKey,
+  type Principal,
+  getBalances,
+  spend,
+  viemPrincipal,
+} from './unified-gateway';
 
-const ARC_CHAIN_KEY = 'Arc_Testnet' as const;
+const ARC_CHAIN_KEY: GatewayChainKey = 'Arc_Testnet';
 
-let kit: UnifiedBalanceKit | null = null;
-
-function getUnifiedBalanceKit(): UnifiedBalanceKit {
-  kit ??= new UnifiedBalanceKit();
-  return kit;
-}
-
-export function resolveUnifiedBalanceChain(input: string | undefined): keyof typeof GATEWAY_CHAINS {
+export function resolveUnifiedBalanceChain(input: string | undefined): GatewayChainKey {
   if (!input) return ARC_CHAIN_KEY;
-  if (input in GATEWAY_CHAINS) return input as keyof typeof GATEWAY_CHAINS;
+  if (input in GATEWAY_CHAINS) return input as GatewayChainKey;
   for (const [key, chain] of Object.entries(GATEWAY_CHAINS)) {
     if (chain.kitName === input || chain.circleId === input) {
-      return key as keyof typeof GATEWAY_CHAINS;
+      return key as GatewayChainKey;
     }
   }
   if (input === 'Solana_Devnet') return 'Sol_Devnet';
   throw new Error(`Unsupported unified-balance chain: ${input}`);
 }
 
-function unifiedBalanceChainName(chainKey: keyof typeof GATEWAY_CHAINS): string {
-  if (chainKey === 'Sol_Devnet') return 'Solana_Devnet';
-  if (chainKey === 'Sol') return 'Solana';
-  return GATEWAY_CHAINS[chainKey].kitName;
-}
-
-function chainsForDomains(domains: number[]): string[] {
-  const seen = new Set<string>();
+function chainsForDomains(domains: number[]): GatewayChainKey[] {
+  const seen = new Set<GatewayChainKey>();
   for (const [key, chain] of Object.entries(GATEWAY_CHAINS)) {
     if (domains.includes(chain.domain)) {
-      seen.add(unifiedBalanceChainName(key as keyof typeof GATEWAY_CHAINS));
+      seen.add(key as GatewayChainKey);
     }
   }
   return [...seen];
@@ -51,8 +54,8 @@ function chainsForDomains(domains: number[]): string[] {
 export interface TenantUnifiedBalanceContext {
   tenantId: string;
   signer: TenantGatewaySigner;
-  adapter: ReturnType<typeof createAdapterForSigner>;
-  enabledChains: string[];
+  principal: Principal;
+  enabledChains: GatewayChainKey[];
 }
 
 export async function getTenantUnifiedBalanceContext(
@@ -75,7 +78,11 @@ export async function getTenantUnifiedBalanceContext(
   return {
     tenantId,
     signer,
-    adapter: createAdapterForSigner(signer.privateKey),
+    principal: viemPrincipal({
+      privateKey: signer.privateKey,
+      address: signer.address,
+      label: `tenant:${tenantId}`,
+    }),
     enabledChains,
   };
 }
@@ -85,12 +92,7 @@ export async function getTenantUnifiedBalances(args: {
   includePending?: boolean;
 }): Promise<GetBalancesResult> {
   const ctx = await getTenantUnifiedBalanceContext(args.tenantId);
-  return getUnifiedBalanceKit().getBalances({
-    token: 'USDC',
-    sources: [{ adapter: ctx.adapter }],
-    includePending: args.includePending ?? true,
-    networkType: 'testnet',
-  } as never);
+  return getBalances({ principal: ctx.principal, includePending: args.includePending });
 }
 
 export interface TenantUnifiedSpendArgs {
@@ -98,13 +100,12 @@ export interface TenantUnifiedSpendArgs {
   amount: string;
   destinationChain?: string;
   recipient?: string;
-  useForwarder?: boolean;
 }
 
 export interface TenantUnifiedSpendResult {
   signerAddress: Address;
   source: 'unified_balance';
-  destinationChain: keyof typeof GATEWAY_CHAINS;
+  destinationChain: GatewayChainKey;
   destinationChainName: string;
   recipient: string;
   amount: string;
@@ -119,35 +120,26 @@ export async function spendTenantUnifiedUsd(
 ): Promise<TenantUnifiedSpendResult> {
   const ctx = await getTenantUnifiedBalanceContext(args.tenantId);
   const destinationChain = resolveUnifiedBalanceChain(args.destinationChain);
-  const destination = GATEWAY_CHAINS[destinationChain];
   const recipient = args.recipient ?? ctx.signer.address;
 
-  const result = await getUnifiedBalanceKit().spend({
-    from: {
-      adapter: ctx.adapter,
-      sourceAccount: ctx.signer.address,
-    },
-    to: {
-      adapter: ctx.adapter,
-      chain: unifiedBalanceChainName(destinationChain),
-      recipientAddress: recipient,
-      useForwarder: args.useForwarder ?? false,
-    },
+  const result = await spend({
+    sources: [{ principal: ctx.principal, sourceAccount: ctx.signer.address }],
+    toChainKey: destinationChain,
+    recipient,
     amount: args.amount,
-    token: 'USDC',
-  } as never);
+  });
 
   return {
     signerAddress: ctx.signer.address,
     source: 'unified_balance',
     destinationChain,
-    destinationChainName: destination.kitName,
+    destinationChainName: GATEWAY_CHAINS[destinationChain].kitName,
     recipient,
     amount: args.amount,
     txHash: result.txHash,
     explorerUrl: result.explorerUrl ?? null,
-    allocations: result.allocations,
-    raw: result,
+    allocations: result.allocations as SpendResult['allocations'],
+    raw: result.raw as SpendResult,
   };
 }
 

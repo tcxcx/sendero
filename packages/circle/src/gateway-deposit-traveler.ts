@@ -1,30 +1,26 @@
 /**
- * Traveler-side Gateway deposit via Unified Balance Kit.
+ * Traveler-side Gateway deposit.
  *
- * Mirror of `gateway-sweep::depositSolanaOpsToGateway` / the EVM tenant
- * deposit path, but for the TRAVELER's Circle DCW: when USDC lands at
- * the traveler's DCW (Circle webhook fires `transactions.inbound`), we
- * push it into the user's Gateway unified balance using
- * `kit.deposit({ from: { adapter, chain, address: dcwAddress } })`.
- *
- * Source of truth for the API: Circle's Unified Balance Kit + the
- * Circle Wallets adapter. We do NOT hand-roll EIP-3009 here — Circle
- * signs via the adapter, internally resolving the DCW address to the
- * matching Circle wallet UUID. Same proven path tenants use for ops
- * DCW sweeps (see `gateway-sweep.ts:411`).
+ * Thin orchestrator: when USDC lands at the traveler's Circle DCW
+ * (Circle webhook fires `transactions.inbound`), push it into the
+ * user's Gateway unified balance. All SDK contact points — the kit
+ * instance, the Circle Wallets adapter, the chain-name mapping —
+ * live in `@sendero/circle/unified-gateway`. This file owns the
+ * audit log + idempotency surface only.
  *
  * Idempotent on `webhookEventId` via `GatewayDepositLog.webhookEventId`
  * unique index — Circle's at-least-once delivery + dual CONFIRMED /
  * COMPLETED firing collapses to one deposit.
  */
 
-import { UnifiedBalanceKit } from '@circle-fin/unified-balance-kit';
-import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
-
 import { prisma } from '@sendero/database';
-import { env } from '@sendero/env';
 
 import { GATEWAY_CHAINS, isEvmChain } from './gateway';
+import {
+  circleWalletsPrincipal,
+  deposit as unifiedDeposit,
+  type GatewayChainKey,
+} from './unified-gateway';
 
 export interface DepositTravelerToGatewayArgs {
   /** Sendero User.id whose DCW received the USDC. Used for audit + log. */
@@ -32,7 +28,7 @@ export interface DepositTravelerToGatewayArgs {
   /** Tenant context — log row needs a tenantId; resolve from User.metadata.primaryTenantId. */
   tenantId: string;
   /** Source chain key (e.g. 'Arc_Testnet', 'Base_Sepolia'). Must exist in GATEWAY_CHAINS. */
-  chainKey: keyof typeof GATEWAY_CHAINS;
+  chainKey: GatewayChainKey;
   /** Traveler's Circle DCW EVM address (depositor + recipient). */
   dcwAddress: string;
   /** Human-readable USDC amount (e.g. "10" for 10 USDC). */
@@ -52,16 +48,19 @@ export interface DepositTravelerToGatewayResult {
   error?: string;
 }
 
-function unifiedBalanceChainName(chainKey: keyof typeof GATEWAY_CHAINS): string {
-  if (chainKey === 'Sol_Devnet') return 'Solana_Devnet';
-  if (chainKey === 'Sol') return 'Solana';
-  return GATEWAY_CHAINS[chainKey].kitName;
-}
-
 export async function depositTravelerToGateway(
   args: DepositTravelerToGatewayArgs
 ): Promise<DepositTravelerToGatewayResult> {
-  const { userId, tenantId, chainKey, dcwAddress, amount, amountBaseUnits, triggeredBy = 'auto', webhookEventId } = args;
+  const {
+    userId,
+    tenantId,
+    chainKey,
+    dcwAddress,
+    amount,
+    amountBaseUnits,
+    triggeredBy = 'auto',
+    webhookEventId,
+  } = args;
 
   const chain = GATEWAY_CHAINS[chainKey];
   if (!chain) {
@@ -75,7 +74,6 @@ export async function depositTravelerToGateway(
     };
   }
 
-  // Idempotency check before any work.
   if (webhookEventId) {
     const existing = await prisma.gatewayDepositLog.findUnique({
       where: { webhookEventId },
@@ -89,9 +87,6 @@ export async function depositTravelerToGateway(
     }
   }
 
-  // Insert the pending log row. `tenantId` is required on
-  // GatewayDepositLog; pass through the user's primary tenant. `userId`
-  // sits in `metadata` (no schema change needed in this commit).
   const logRow = await prisma.gatewayDepositLog.upsert({
     where: webhookEventId ? { webhookEventId } : { id: '00000000-0000-0000-0000-000000000000' },
     create: {
@@ -106,9 +101,11 @@ export async function depositTravelerToGateway(
     update: {},
   });
 
-  const apiKey = env.circleApiKey();
-  const entitySecret = env.circleEntitySecret();
-  if (!apiKey || !entitySecret) {
+  const principal = circleWalletsPrincipal({
+    address: dcwAddress,
+    label: `traveler:${userId}:${chainKey}`,
+  });
+  if (!principal) {
     await prisma.gatewayDepositLog.update({
       where: { id: logRow.id },
       data: { status: 'failed', errorMessage: 'circle_wallets_adapter_not_configured' },
@@ -121,35 +118,15 @@ export async function depositTravelerToGateway(
   }
 
   try {
-    const adapter = createCircleWalletsAdapter({ apiKey, entitySecret });
-    const kit = new UnifiedBalanceKit();
-
-    // Plain `deposit()` — caller (the user's DCW) is both the depositor
-    // and the recipient of the unified balance. `depositFor` is for
-    // delegate flows where Sendero treasury credits the user's balance
-    // from its own funds; that's not this path.
-    const result = await kit.deposit({
-      from: {
-        adapter,
-        chain: unifiedBalanceChainName(chainKey),
-        address: dcwAddress,
-      },
+    const { txHash: depositTxHash } = await unifiedDeposit({
+      principal,
+      chainKey,
       amount,
-      token: 'USDC',
-    } as never);
-
-    const depositTxHash = (result as { txHash?: string }).txHash;
-    if (!depositTxHash) {
-      throw new Error('Unified Balance kit.deposit returned no txHash');
-    }
+    });
 
     await prisma.gatewayDepositLog.update({
       where: { id: logRow.id },
-      data: {
-        status: 'confirmed',
-        depositTxHash,
-        confirmedAt: new Date(),
-      },
+      data: { status: 'confirmed', depositTxHash, confirmedAt: new Date() },
     });
 
     console.log('[gateway-deposit-traveler] confirmed', {
@@ -161,21 +138,13 @@ export async function depositTravelerToGateway(
       depositLogId: logRow.id,
     });
 
-    return {
-      status: 'confirmed',
-      depositLogId: logRow.id,
-      depositTxHash,
-    };
+    return { status: 'confirmed', depositLogId: logRow.id, depositTxHash };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.gatewayDepositLog.update({
       where: { id: logRow.id },
       data: { status: 'failed', errorMessage: message.slice(0, 500) },
     });
-    return {
-      status: 'failed',
-      depositLogId: logRow.id,
-      error: message,
-    };
+    return { status: 'failed', depositLogId: logRow.id, error: message };
   }
 }
