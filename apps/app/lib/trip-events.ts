@@ -56,7 +56,23 @@ export interface TripEvent {
     | 'tool_call'
     | 'tool_result'
     | 'operator_note'
-    | 'system_note';
+    | 'system_note'
+    // Structured lifecycle events — written by tools at state transitions.
+    // Make every change visible in the cross-channel ledger so the
+    // operator console renders one timeline regardless of source channel.
+    | 'booked'
+    | 'paid'
+    | 'cancelled'
+    | 'refunded'
+    | 'stamped'
+    | 'handed_off'
+    // Cron-fired proactive nudges (Phase 4).
+    | 'checkin_reminder'
+    | 'arrival_playbook'
+    | 'feedback_requested'
+    // Trip terminal state. Written by `complete_trip`. Dot-notation kept
+    // for backwards compat with the existing event row.
+    | 'trip.completed';
   direction: 'inbound' | 'outbound' | 'internal';
   channel: 'whatsapp' | 'slack' | 'sms' | 'email' | 'web' | 'internal';
   createdAt: string;

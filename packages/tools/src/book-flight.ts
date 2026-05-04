@@ -400,6 +400,42 @@ export const bookFlightTool: ToolDef = {
         tenantId: ctx.traveler.tenantId,
         duffelOrderId: hold.orderId,
       });
+
+      // Phase 5 — write a structured 'booked' event to Trip.events so the
+      // operator console + cross-channel ledger render the lifecycle
+      // milestone. Atomic jsonb append; tenant double-bound in WHERE
+      // (mirrors complete-trip + slack-views/trip-note pattern).
+      const bookedEvent = {
+        id: `booked_${persistedBookingId}_${Date.now()}`,
+        kind: 'booked' as const,
+        direction: 'internal' as const,
+        channel: 'internal' as const,
+        createdAt: new Date().toISOString(),
+        bookingId: persistedBookingId,
+        pnr: hold.bookingReference,
+        totalAmount: hold.totalAmount,
+        totalCurrency: hold.totalCurrency,
+        paymentStatus,
+        usdcSettlement: usdcSettlement
+          ? {
+              settlementTxHash: usdcSettlement.settlementTxHash,
+              explorerUrl: usdcSettlement.explorerUrl,
+            }
+          : null,
+      };
+      try {
+        const payload = JSON.stringify([bookedEvent]);
+        await prisma.$executeRaw`
+          UPDATE "trips"
+          SET events = COALESCE(events, '[]'::jsonb) || ${payload}::jsonb
+          WHERE id = ${persistedTripId} AND "tenantId" = ${ctx.traveler.tenantId}
+        `;
+      } catch (err) {
+        console.warn('[book_flight] booked event append failed (non-fatal)', {
+          tripId: persistedTripId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     // Recurring-traveler hint — present when the resolved User has at

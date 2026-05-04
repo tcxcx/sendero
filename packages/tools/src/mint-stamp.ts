@@ -239,6 +239,39 @@ export const mintStampTool: ToolDef<z.infer<typeof mintStampInput>, MintStampRes
       },
     });
 
+    // Phase 5 — write a structured 'stamped' event to Trip.events when
+    // the caller provided a tripId, so the operator console renders the
+    // mint as a lifecycle milestone alongside booked / paid / cancelled.
+    // Best-effort; don't fail the mint when the ledger write hiccups.
+    if (input.tripId) {
+      const stampedEvent = {
+        id: `stamped_${minted.id}_${Date.now()}`,
+        kind: 'stamped' as const,
+        direction: 'internal' as const,
+        channel: 'internal' as const,
+        createdAt: new Date().toISOString(),
+        stampKind: input.kind,
+        stampId: minted.id,
+        tokenId: minted.tokenId,
+        contract: minted.contract,
+        txHash: minted.mintTxHash,
+      };
+      try {
+        const payload = JSON.stringify([stampedEvent]);
+        await prisma.$executeRaw`
+          UPDATE "trips"
+          SET events = COALESCE(events, '[]'::jsonb) || ${payload}::jsonb
+          WHERE id = ${input.tripId} AND "tenantId" = ${tenantId}
+        `;
+      } catch (err) {
+        console.warn('[mint_stamp] stamped event append failed (non-fatal)', {
+          tripId: input.tripId,
+          stampId: minted.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return {
       status: 'minted',
       stampId: minted.id,
