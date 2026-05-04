@@ -174,10 +174,28 @@ export const moonpayTopupTool: ToolDef<Input> = {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
     const meWalletUrl = `${baseUrl.replace(/\/$/, '')}/me/wallet?topup=usdc&amount=${input.amountUsd}`;
 
+    // Sendero-branded Satori share card (1200×630). Renders amount,
+    // brand frame, and the same Sendero × MoonPay visual family every
+    // channel uses. Falls back to qrImageUrl when OG_SHARE_SIGNING_SECRET
+    // isn't configured (local dev without it). Returned as `imageUrl`
+    // so persona Story 4.5 step 3 sends a polished image instead of
+    // the bare QR.
+    const cardImageUrl = await buildSenderoShareCardUrl(baseUrl, {
+      title: `Top up · $${input.amountUsd} USD`,
+      body: `Pay with a card via MoonPay — funds land in your Sendero wallet in seconds.`,
+      bullets: [
+        `Receiving on ${input.currencyCode.replace('_', ' ').toUpperCase()}`,
+        `Wallet ${walletAddress.slice(0, 8)}…${walletAddress.slice(-6)}`,
+        `Settles via Circle Gateway across every chain`,
+      ],
+      ctaLabel: 'Tap to pay',
+    });
+
     return {
       status: 'ready',
       checkoutUrl,
       qrImageUrl,
+      imageUrl: cardImageUrl ?? qrImageUrl,
       meWalletUrl,
       amountUsd: input.amountUsd,
       currencyCode: input.currencyCode,
@@ -191,3 +209,40 @@ export const moonpayTopupTool: ToolDef<Input> = {
     };
   },
 };
+
+/**
+ * Build a signed `/api/og/share?token=…` URL that renders a brand
+ * Satori card. Mirrors `apps/app/lib/og/share-url.ts::signSharePayload`
+ * inline because tools can't import from `apps/app`. Same wire format
+ * (`<base64url(JSON)>.<base64url(HMAC-SHA256)>`) so the existing share
+ * route verifies it.
+ */
+async function buildSenderoShareCardUrl(
+  baseUrl: string,
+  payload: {
+    title: string;
+    body: string;
+    bullets?: string[];
+    ctaLabel?: string;
+    kicker?: string;
+    footer?: string;
+  }
+): Promise<string | null> {
+  const secret = process.env.OG_SHARE_SIGNING_SECRET;
+  if (!secret || secret.length < 16) return null;
+  const json = JSON.stringify(payload);
+  const body = Buffer.from(json, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  const sigBuf = crypto.createHmac('sha256', secret).update(body).digest();
+  const sig = sigBuf
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  const token = `${body}.${sig}`;
+  const origin = baseUrl.replace(/\/$/, '');
+  return `${origin}/api/og/share?token=${encodeURIComponent(token)}`;
+}
