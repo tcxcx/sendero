@@ -5,3 +5,4 @@
 # write under the dev server's CWD. Never checked in.
 .gstack-screenshots/
 .vercel
+scripts/_local/
