@@ -108,10 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const targetUrl = typeof body.targetUrl === 'string' ? body.targetUrl.trim() : '';
   if (!targetUrl) {
-    return NextResponse.json(
-      { error: 'missing_required', need: ['targetUrl'] },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'missing_required', need: ['targetUrl'] }, { status: 400 });
   }
 
   let parsed: URL;
@@ -127,19 +124,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
   if (!isAllowedHost(parsed.hostname)) {
-    return NextResponse.json(
-      { error: 'host_not_allowed', host: parsed.hostname },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'host_not_allowed', host: parsed.hostname }, { status: 400 });
   }
 
   let expiresAt: Date | null = null;
   if (typeof body.expiresInSeconds === 'number' && Number.isFinite(body.expiresInSeconds)) {
     if (body.expiresInSeconds <= 0) {
-      return NextResponse.json(
-        { error: 'invalid_expires_in_seconds' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'invalid_expires_in_seconds' }, { status: 400 });
     }
     expiresAt = new Date(Date.now() + Math.floor(body.expiresInSeconds) * 1000);
   }
