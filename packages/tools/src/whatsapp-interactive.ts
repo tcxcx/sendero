@@ -230,6 +230,33 @@ const sendDocumentInput = z.object({
   toE164: z.string().optional(),
 });
 
+const sendCtaUrlInput = z.object({
+  body: z.string().min(1).max(1024).describe('Message body shown above the CTA button.'),
+  ctaUrl: z
+    .string()
+    .url()
+    .describe('Public HTTPS URL the button opens when tapped (e.g. MoonPay checkout, magic link).'),
+  ctaLabel: z
+    .string()
+    .min(1)
+    .max(20)
+    .default('Open')
+    .describe('Button label (≤ 20 chars). Defaults to "Open".'),
+  headerText: z
+    .string()
+    .min(1)
+    .max(60)
+    .optional()
+    .describe('Optional bold text title above the body (max 60 chars). Text headers only.'),
+  footer: z
+    .string()
+    .min(1)
+    .max(60)
+    .optional()
+    .describe('Optional small grey text below the button (max 60 chars).'),
+  toE164: z.string().optional(),
+});
+
 const requestLocationInput = z.object({
   body: z
     .string()
@@ -512,6 +539,67 @@ export const sendDocumentMessageTool: ToolDef<z.infer<typeof sendDocumentInput>,
   },
 };
 
+interface SendCtaUrlResult extends OutboundResult {
+  ctaUrl: string;
+}
+
+export const sendCtaUrlMessageTool: ToolDef<z.infer<typeof sendCtaUrlInput>, SendCtaUrlResult> = {
+  name: 'send_cta_url_message',
+  internal: true,
+  description:
+    'Send a WhatsApp message with a single tappable CTA button that opens a URL. Hides the raw URL — much cleaner than embedding it in plain text. Use for: MoonPay top-up checkout, MoonPay sell widget, sign-in magic links, /me/wallet deep-links, route maps, any flow where the user needs to tap-through to a web page. Body explains why; the button is the action.',
+  inputSchema: sendCtaUrlInput,
+  jsonSchema: {
+    type: 'object',
+    required: ['body', 'ctaUrl'],
+    properties: {
+      body: { type: 'string', minLength: 1, maxLength: 1024 },
+      ctaUrl: { type: 'string', format: 'uri' },
+      ctaLabel: { type: 'string', minLength: 1, maxLength: 20, default: 'Open' },
+      headerText: { type: 'string', minLength: 1, maxLength: 60 },
+      footer: { type: 'string', minLength: 1, maxLength: 60 },
+      toE164: { type: 'string' },
+    },
+  },
+  async handler(input, ctx) {
+    const { client, recipient } = await resolveOutboundClient(ctx, input.toE164);
+    // Meta's interactive.cta_url is a single-button container — no
+    // `buttons` array. The URL is hidden behind `display_text`, which
+    // renders as a clean tappable pill instead of the raw https://…
+    // string wrapping ugly across multiple lines in the chat bubble.
+    const interactive: Record<string, unknown> = {
+      type: 'cta_url',
+      body: { text: truncate(input.body, META_INTERACTIVE_BODY_MAX) },
+      action: {
+        name: 'cta_url',
+        parameters: {
+          display_text: truncate(input.ctaLabel ?? 'Open', META_BUTTON_TITLE_MAX),
+          url: input.ctaUrl,
+        },
+      },
+    };
+    if (input.headerText) {
+      interactive.header = {
+        type: 'text',
+        text: truncate(input.headerText, META_HEADER_TEXT_MAX),
+      };
+    }
+    // Default footer for brand consistency when agent forgets one.
+    interactive.footer = {
+      text: truncate(input.footer ?? DEFAULT_BRAND_FOOTER, META_FOOTER_TEXT_MAX),
+    };
+    const payload: Record<string, unknown> = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipient,
+      type: 'interactive',
+      interactive,
+    };
+    const result = (await client.send(payload)) as { messages?: Array<{ id?: string }> };
+    return { ok: true as const, recipient, ...wamidFrom(result), ctaUrl: input.ctaUrl };
+  },
+};
+
 export const requestLocationTool: ToolDef<z.infer<typeof requestLocationInput>, OutboundResult> = {
   name: 'request_location',
   internal: true,
@@ -679,13 +767,13 @@ const sendFlowMessageInput = z.object({
     .max(60)
     .optional()
     .describe(
-      'Initial screen name. Defaults to the flow JSON\'s first screen — only override when you want to deep-link mid-flow.'
+      "Initial screen name. Defaults to the flow JSON's first screen — only override when you want to deep-link mid-flow."
     ),
   initialData: z
     .record(z.unknown())
     .optional()
     .describe(
-      'Optional payload pre-filled into the flow\'s starting screen. Shape must match the screen\'s data schema.'
+      "Optional payload pre-filled into the flow's starting screen. Shape must match the screen's data schema."
     ),
   toE164: z.string().optional(),
 });
@@ -703,7 +791,7 @@ export const sendFlowMessageTool: ToolDef<SendFlowMessageInput, SendFlowMessageR
   name: 'send_flow_message',
   internal: true,
   description:
-    'Send a Meta WhatsApp Flow (native form) to the traveler. Looks up the tenant\'s registered Flow id by `flowKey` and renders the form inline. The traveler taps the button, fills the form, submits — Meta delivers the response_json on the next inbound (`interactive.nfm_reply`) with the same `flowToken` returned here so the agent can correlate the reply to the right downstream tool. Drafts work in sandbox; published flows work for all users. Use for: passenger intake (`trip_intake`), refund/escrow disputes (`refund_escrow`), accommodation upsell (`accommodation`), quote approval (`quote_approval`), and the 9 other production flows. Falls back gracefully when the tenant has no registration for the requested key.',
+    "Send a Meta WhatsApp Flow (native form) to the traveler. Looks up the tenant's registered Flow id by `flowKey` and renders the form inline. The traveler taps the button, fills the form, submits — Meta delivers the response_json on the next inbound (`interactive.nfm_reply`) with the same `flowToken` returned here so the agent can correlate the reply to the right downstream tool. Drafts work in sandbox; published flows work for all users. Use for: passenger intake (`trip_intake`), refund/escrow disputes (`refund_escrow`), accommodation upsell (`accommodation`), quote approval (`quote_approval`), and the 9 other production flows. Falls back gracefully when the tenant has no registration for the requested key.",
   inputSchema: sendFlowMessageInput,
   jsonSchema: {
     type: 'object',
@@ -794,8 +882,7 @@ export const sendFlowMessageTool: ToolDef<SendFlowMessageInput, SendFlowMessageR
     // Draft Flows can only be sent to test numbers (sandbox); we set
     // `mode: 'draft'` only when the registration row says so. Otherwise
     // we omit the field and Meta defaults to 'published'.
-    const mode: 'draft' | 'published' =
-      registration.mode === 'published' ? 'published' : 'draft';
+    const mode: 'draft' | 'published' = registration.mode === 'published' ? 'published' : 'draft';
 
     const interactive: Record<string, unknown> = {
       type: 'flow',
