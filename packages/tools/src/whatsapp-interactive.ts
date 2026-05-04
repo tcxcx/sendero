@@ -628,3 +628,222 @@ function wamidFrom(result: { messages?: Array<{ id?: string }> }): { wamid?: str
   const wamid = result?.messages?.[0]?.id;
   return wamid ? { wamid } : {};
 }
+
+// ─── send_flow_message ──────────────────────────────────────────────
+//
+// Native Meta WhatsApp Flow trigger. The 13 production Flows live in
+// `kapso/shared-whatsapp-flows/flows/` and get registered per-tenant
+// at WABA install time via `ensureTenantWhatsAppFlows`. This tool
+// looks up the registered Meta Flow id by `(tenantId, phoneNumberId,
+// flowKey)` and renders it into the conversation.
+//
+// Drafts (status='draft') CAN be sent in sandbox — Meta's "draft"
+// mode is exactly the test-number path. Published Flows (status='published')
+// can be sent to any user.
+//
+// On submission, Meta delivers `interactive.nfm_reply` on the next
+// inbound webhook with the Flow's response_json + the same `flow_token`
+// we generate here. The agent reads that JSON and routes to the right
+// downstream tool (e.g., `create_passenger`, `submit_quote_approval`).
+
+const sendFlowMessageInput = z.object({
+  flowKey: z
+    .enum([
+      'login_signup',
+      'trip_intake',
+      'support_intake',
+      'quote_approval',
+      'ancillaries',
+      'disruption_help',
+      'prefund_claim',
+      'booking_change',
+      'accommodation',
+      'car_transfer',
+      'restaurant_experience',
+      'nft_trip_gallery',
+      'refund_escrow',
+    ])
+    .describe('Sendero flow key. Must match an entry in WhatsAppFlowRegistration for this tenant.'),
+  body: z.string().min(1).max(1024).describe('Message body shown above the open-flow button.'),
+  cta: z
+    .string()
+    .min(1)
+    .max(20)
+    .default('Open form')
+    .describe('Button label that opens the flow (≤20 chars).'),
+  headerText: z.string().min(1).max(60).optional(),
+  footer: z.string().min(1).max(60).optional(),
+  initialScreen: z
+    .string()
+    .min(1)
+    .max(60)
+    .optional()
+    .describe(
+      'Initial screen name. Defaults to the flow JSON\'s first screen — only override when you want to deep-link mid-flow.'
+    ),
+  initialData: z
+    .record(z.unknown())
+    .optional()
+    .describe(
+      'Optional payload pre-filled into the flow\'s starting screen. Shape must match the screen\'s data schema.'
+    ),
+  toE164: z.string().optional(),
+});
+
+type SendFlowMessageInput = z.infer<typeof sendFlowMessageInput>;
+
+interface SendFlowMessageResult extends OutboundResult {
+  flowKey: string;
+  flowToken: string;
+  metaFlowId: string;
+  mode: 'draft' | 'published';
+}
+
+export const sendFlowMessageTool: ToolDef<SendFlowMessageInput, SendFlowMessageResult> = {
+  name: 'send_flow_message',
+  internal: true,
+  description:
+    'Send a Meta WhatsApp Flow (native form) to the traveler. Looks up the tenant\'s registered Flow id by `flowKey` and renders the form inline. The traveler taps the button, fills the form, submits — Meta delivers the response_json on the next inbound (`interactive.nfm_reply`) with the same `flowToken` returned here so the agent can correlate the reply to the right downstream tool. Drafts work in sandbox; published flows work for all users. Use for: passenger intake (`trip_intake`), refund/escrow disputes (`refund_escrow`), accommodation upsell (`accommodation`), quote approval (`quote_approval`), and the 9 other production flows. Falls back gracefully when the tenant has no registration for the requested key.',
+  inputSchema: sendFlowMessageInput,
+  jsonSchema: {
+    type: 'object',
+    required: ['flowKey', 'body'],
+    properties: {
+      flowKey: {
+        type: 'string',
+        enum: [
+          'login_signup',
+          'trip_intake',
+          'support_intake',
+          'quote_approval',
+          'ancillaries',
+          'disruption_help',
+          'prefund_claim',
+          'booking_change',
+          'accommodation',
+          'car_transfer',
+          'restaurant_experience',
+          'nft_trip_gallery',
+          'refund_escrow',
+        ],
+      },
+      body: { type: 'string', minLength: 1, maxLength: 1024 },
+      cta: { type: 'string', minLength: 1, maxLength: 20, default: 'Open form' },
+      headerText: { type: 'string', minLength: 1, maxLength: 60 },
+      footer: { type: 'string', minLength: 1, maxLength: 60 },
+      initialScreen: { type: 'string', minLength: 1, maxLength: 60 },
+      initialData: { type: 'object' },
+      toE164: { type: 'string' },
+    },
+  },
+  async handler(input, ctx) {
+    const tenantId = ctx?.traveler?.tenantId;
+    if (!tenantId) {
+      throw new Error('send_flow_message:no_tenant_in_context');
+    }
+
+    // Resolve the WABA phone number id for this tenant — same source
+    // ensureTenantWhatsAppFlows used at registration time, so the
+    // (tenantId, phoneNumberId) pair is guaranteed consistent.
+    const install = await prisma.whatsAppInstall.findUnique({
+      where: { tenantId },
+      select: { phoneNumberId: true, status: true },
+    });
+    if (!install?.phoneNumberId) {
+      throw new Error('send_flow_message:tenant_has_no_whatsapp_install');
+    }
+    if (install.status === 'disabled') {
+      throw new Error('send_flow_message:whatsapp_install_disabled');
+    }
+
+    const registration = await prisma.whatsAppFlowRegistration.findUnique({
+      where: {
+        tenantId_phoneNumberId_flowKey: {
+          tenantId,
+          phoneNumberId: install.phoneNumberId,
+          flowKey: input.flowKey,
+        },
+      },
+      select: {
+        metaFlowId: true,
+        mode: true,
+        status: true,
+      },
+    });
+    if (!registration?.metaFlowId) {
+      throw new Error(
+        `send_flow_message:flow_not_registered_for_tenant — flowKey=${input.flowKey}. Run ensureTenantWhatsAppFlows on the WABA install to register it.`
+      );
+    }
+    if (registration.status === 'disabled' || registration.status === 'error') {
+      throw new Error(
+        `send_flow_message:flow_status_${registration.status} — see WhatsAppFlowRegistration.lastError`
+      );
+    }
+
+    const { client, recipient } = await resolveOutboundClient(ctx, input.toE164);
+
+    // Random per-call token. Meta echoes this on the nfm_reply so the
+    // inbound handler can correlate the submission to the conversation.
+    // Persist later if/when we need cross-turn correlation; for v1 the
+    // agent reads the response_json out of the next inbound and routes
+    // directly via the persona's "Story 1.5 — flow submission" path.
+    const { randomUUID } = await import('node:crypto');
+    const flowToken = `sf_${randomUUID().replace(/-/g, '')}`;
+
+    // Draft Flows can only be sent to test numbers (sandbox); we set
+    // `mode: 'draft'` only when the registration row says so. Otherwise
+    // we omit the field and Meta defaults to 'published'.
+    const mode: 'draft' | 'published' =
+      registration.mode === 'published' ? 'published' : 'draft';
+
+    const interactive: Record<string, unknown> = {
+      type: 'flow',
+      body: { text: input.body },
+      action: {
+        name: 'flow',
+        parameters: {
+          flow_message_version: '3',
+          flow_token: flowToken,
+          flow_id: registration.metaFlowId,
+          flow_cta: input.cta ?? 'Open form',
+          flow_action: input.initialData ? 'data_exchange' : 'navigate',
+          ...(input.initialScreen || input.initialData
+            ? {
+                flow_action_payload: {
+                  ...(input.initialScreen ? { screen: input.initialScreen } : {}),
+                  ...(input.initialData ? { data: input.initialData } : {}),
+                },
+              }
+            : {}),
+          mode,
+        },
+      },
+    };
+    if (input.headerText) {
+      interactive.header = { type: 'text', text: truncate(input.headerText, META_HEADER_TEXT_MAX) };
+    }
+    if (input.footer) {
+      interactive.footer = { text: truncate(input.footer, META_FOOTER_TEXT_MAX) };
+    }
+
+    const payload: Record<string, unknown> = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipient,
+      type: 'interactive',
+      interactive,
+    };
+
+    const result = (await client.send(payload)) as { messages?: Array<{ id?: string }> };
+    return {
+      ok: true as const,
+      recipient,
+      ...wamidFrom(result),
+      flowKey: input.flowKey,
+      flowToken,
+      metaFlowId: registration.metaFlowId,
+      mode,
+    };
+  },
+};
