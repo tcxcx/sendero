@@ -236,12 +236,7 @@ async function handleTokensMinted(log: EventLogNotification): Promise<DispatchRe
   // WhatsApp image_message for kinds the traveler should "feel" land
   // in their phone. BoardingPass already gets pushed inline from
   // booking-fanout (no need to double-send), so skip it here.
-  if (
-    stamp.travelerId &&
-    stamp.kind !== 'BoardingPass' &&
-    stamp.blobUrl &&
-    log.txHash
-  ) {
+  if (stamp.travelerId && stamp.kind !== 'BoardingPass' && stamp.blobUrl && log.txHash) {
     void sendStampImageToTraveler({
       tenantId: stamp.tenantId,
       travelerId: stamp.travelerId,
