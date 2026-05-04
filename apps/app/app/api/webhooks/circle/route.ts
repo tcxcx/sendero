@@ -26,6 +26,7 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 import { syncWalletBalance } from '@sendero/circle/balance-sync';
 import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
 import { sweepChain } from '@sendero/circle/gateway-sweep';
+import { depositTravelerToGateway } from '@sendero/circle/gateway-deposit-traveler';
 import { prisma } from '@sendero/database';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
@@ -281,6 +282,121 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
   }
 }
 
+/**
+ * Traveler-side mirror of `dispatchGatewaySweep`. Detects USDC inbound
+ * to a TRAVELER's Circle DCW (provisioner='dcw' on the Wallet table)
+ * and pushes it into the user's Gateway unified balance via
+ * `depositTravelerToGateway` (Unified Balance Kit).
+ *
+ * Skip conditions (return cleanly):
+ *   - Not a transactions.inbound event.
+ *   - destinationWalletId / walletId doesn't match a traveler DCW.
+ *   - Wallet has no userId (shouldn't happen — DCWs are always
+ *     user-scoped — but defensive).
+ *   - Chain not in GATEWAY_CHAINS or not EVM.
+ *   - State not finalized (PENDING / SENT — wait for CONFIRMED).
+ *
+ * Idempotent at GatewayDepositLog.webhookEventId level via the helper.
+ */
+async function dispatchTravelerGatewayDeposit(event: CircleNotification): Promise<void> {
+  if (event.notificationType !== 'transactions.inbound') return;
+
+  const body = (event.notification ?? {}) as Record<string, unknown>;
+  const walletId =
+    typeof body.walletId === 'string'
+      ? body.walletId
+      : typeof body.destinationWalletId === 'string'
+        ? body.destinationWalletId
+        : null;
+  if (!walletId) return;
+
+  const blockchain = typeof body.blockchain === 'string' ? body.blockchain : null;
+  const amounts = Array.isArray(body.amounts) ? (body.amounts as unknown[]) : [];
+  const amount = typeof amounts[0] === 'string' ? (amounts[0] as string) : null;
+  const state = typeof body.state === 'string' ? body.state : null;
+  const notificationId = event.notificationId ?? null;
+  if (!blockchain || !amount || !state || !notificationId) return;
+
+  const FINALIZED = new Set(['CONFIRMED', 'COMPLETE', 'COMPLETED']);
+  if (!FINALIZED.has(state)) return;
+
+  const travelerWallet = await prisma.wallet.findFirst({
+    where: { circleWalletId: walletId, provisioner: 'dcw' },
+    select: {
+      id: true,
+      address: true,
+      chainId: true,
+      userId: true,
+      user: { select: { id: true, metadata: true } },
+    },
+  });
+  if (!travelerWallet?.user) return;
+
+  const chainKey = mapCircleBlockchainToChainKey(blockchain);
+  if (!chainKey) {
+    console.log('[webhooks/circle] no GATEWAY_CHAINS mapping — skipping traveler deposit', {
+      blockchain,
+      walletId,
+    });
+    return;
+  }
+  if (!GATEWAY_CHAINS[chainKey] || GATEWAY_CHAINS[chainKey].kind !== 'evm') {
+    // Solana traveler deposits flow through their own path; skip here.
+    return;
+  }
+
+  const userMeta = (travelerWallet.user.metadata ?? {}) as Record<string, unknown>;
+  const tenantId =
+    typeof userMeta.primaryTenantId === 'string' ? userMeta.primaryTenantId : null;
+  if (!tenantId) {
+    console.log('[webhooks/circle] traveler has no primaryTenantId — skipping deposit', {
+      userId: travelerWallet.user.id,
+      walletId,
+    });
+    return;
+  }
+
+  // amount is a human-readable decimal (e.g. "10.00"). Compute base
+  // units (10^6) for the audit row.
+  const cleaned = amount.replace(/[^0-9.]/g, '');
+  const [whole, frac = ''] = cleaned.split('.');
+  const fracPadded = (frac + '000000').slice(0, 6);
+  const amountBaseUnits = BigInt(whole + fracPadded);
+
+  console.log('[webhooks/circle] dispatching traveler gateway deposit', {
+    userId: travelerWallet.user.id,
+    tenantId,
+    chainKey,
+    walletId,
+    amount,
+    notificationId,
+  });
+
+  try {
+    const result = await depositTravelerToGateway({
+      userId: travelerWallet.user.id,
+      tenantId,
+      chainKey,
+      dcwAddress: travelerWallet.address,
+      amount,
+      amountBaseUnits,
+      triggeredBy: 'auto',
+      webhookEventId: notificationId,
+    });
+    console.log('[webhooks/circle] traveler deposit result', {
+      userId: travelerWallet.user.id,
+      notificationId,
+      result,
+    });
+  } catch (err) {
+    console.error('[webhooks/circle] traveler deposit crashed', {
+      userId: travelerWallet.user.id,
+      notificationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const raw = await req.text();
   const gate = await gateCircleWebhook<Record<string, unknown>>({
@@ -326,6 +442,7 @@ export async function POST(req: NextRequest) {
   }
   if (result.deduped === true) {
     after(() => dispatchGatewaySweep(event));
+    after(() => dispatchTravelerGatewayDeposit(event));
     return NextResponse.json({ ok: true, deduped: true });
   }
 
@@ -334,6 +451,11 @@ export async function POST(req: NextRequest) {
   // GatewayDepositLog level (webhookEventId unique) — duplicate Circle
   // deliveries collapse to one sweep.
   after(() => dispatchGatewaySweep(event));
+  // Traveler-side mirror: when an inbound USDC tx hits a TRAVELER's
+  // Circle DCW (provisioner='dcw' on the Wallet table), push it into
+  // the user's Gateway unified balance via the Unified Balance Kit.
+  // Same `after()` post-ack pattern + same webhookEventId idempotency.
+  after(() => dispatchTravelerGatewayDeposit(event));
 
   return NextResponse.json({ ok: true, ...result.result });
 }
