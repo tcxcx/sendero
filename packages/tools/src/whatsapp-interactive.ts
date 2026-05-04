@@ -37,7 +37,9 @@ const buttonSchema = z.object({
     .string()
     .min(1)
     .max(200)
-    .describe('Display label. Meta caps at 20 chars; longer titles are auto-truncated server-side.'),
+    .describe(
+      'Display label. Meta caps at 20 chars; longer titles are auto-truncated server-side.'
+    ),
 });
 
 const sendInteractiveButtonsInput = z.object({
@@ -58,13 +60,17 @@ const sendInteractiveButtonsInput = z.object({
     .string()
     .url()
     .optional()
-    .describe('Optional public HTTPS image URL shown as the header (e.g. route map, carrier logo).'),
+    .describe(
+      'Optional public HTTPS image URL shown as the header (e.g. route map, carrier logo).'
+    ),
   footer: z
     .string()
     .min(1)
     .max(60)
     .optional()
-    .describe('Optional small grey text below the buttons (max 60 chars). Use for context like "Hold expires in 30 min" or "Powered by Sendero".'),
+    .describe(
+      'Optional small grey text below the buttons (max 60 chars). Use for context like "Hold expires in 30 min" or "Powered by Sendero".'
+    ),
   toE164: z.string().optional(),
 });
 
@@ -114,10 +120,7 @@ function deriveHeaderFromBody(
   const lines = body.split('\n');
   const firstNonEmptyIdx = lines.findIndex(l => l.trim().length > 0);
   if (firstNonEmptyIdx === -1) return null;
-  const headerSource = lines[firstNonEmptyIdx]
-    .replace(/\*+/g, '')
-    .replace(/:\s*$/, '')
-    .trim();
+  const headerSource = lines[firstNonEmptyIdx].replace(/\*+/g, '').replace(/:\s*$/, '').trim();
   if (!headerSource) return null;
   // Drop the lifted line plus any blank lines immediately after it,
   // so the body that follows starts at the next meaningful content.
@@ -232,9 +235,7 @@ const requestLocationInput = z.object({
     .string()
     .min(1)
     .max(1024)
-    .describe(
-      'Prompt shown to the traveler. The native "share location" pin is rendered below.'
-    ),
+    .describe('Prompt shown to the traveler. The native "share location" pin is rendered below.'),
   toE164: z.string().optional(),
 });
 
@@ -262,7 +263,7 @@ export const sendInteractiveButtonsTool: ToolDef<
   name: 'send_interactive_buttons',
   internal: true,
   description:
-    "Send a WhatsApp message with up to 3 tappable quick-reply buttons. Use for confirmations (Yes/No), short choices (Book / Hold / Skip), and explicit hand-offs to humans. Each button has an `id` Sendero reads off the next inbound to know which choice the traveler made. Hard limit: 3 buttons, title ≤ 20 chars.",
+    'Send a WhatsApp message with up to 3 tappable quick-reply buttons. Use for confirmations (Yes/No), short choices (Book / Hold / Skip), and explicit hand-offs to humans. Each button has an `id` Sendero reads off the next inbound to know which choice the traveler made. Hard limit: 3 buttons, title ≤ 20 chars.',
   inputSchema: sendInteractiveButtonsInput,
   jsonSchema: {
     type: 'object',
@@ -309,11 +310,15 @@ export const sendInteractiveButtonsTool: ToolDef<
       );
     });
     if (violatesFaucetMenuRule) {
+      // Imperative error so the agent retries via the right path
+      // instead of fabricating ("service unstable") and falling back
+      // to plain text.
       throw new Error(
-        'persona_violation:topup_menu_forbidden — never offer faucet/crypto-transfer buttons on a top-up flow. ' +
-          'For top-up, call `moonpay_topup` directly and relay the returned `checkoutUrl`. ' +
-          'For wallet view, use buttons `[Top up $100, Top up $50, Otro monto]` only. ' +
-          'Faucet is dev-only and only fires when the user types the literal word "faucet".'
+        'TOOL_REJECTED — DO NOT show this message to the user. DO NOT say the service is unstable. ' +
+          'DO NOT emit the same options as plain text. ' +
+          'YOUR NEXT ACTION: call `moonpay_topup` with `amountUsd: 100` (or whatever amount the user mentioned). ' +
+          'THEN relay the returned `checkoutUrl` to the user. ' +
+          'NO MENU. NO FAUCET. NO CRYPTO TRANSFER OPTION. JUST THE MOONPAY URL.'
       );
     }
 
@@ -327,9 +332,9 @@ export const sendInteractiveButtonsTool: ToolDef<
     // Build optional header + footer. Image header takes precedence
     // when both `headerImageUrl` and `headerText` are provided.
     const header = input.headerImageUrl
-      ? ({ type: 'image' as const, imageUrl: input.headerImageUrl })
+      ? { type: 'image' as const, imageUrl: input.headerImageUrl }
       : input.headerText
-        ? ({ type: 'text' as const, text: truncate(input.headerText, META_HEADER_TEXT_MAX) })
+        ? { type: 'text' as const, text: truncate(input.headerText, META_HEADER_TEXT_MAX) }
         : undefined;
     // Default footer for brand consistency when agent forgets one.
     const footer = truncate(input.footer ?? DEFAULT_BRAND_FOOTER, META_FOOTER_TEXT_MAX);
@@ -350,7 +355,7 @@ export const sendInteractiveListTool: ToolDef<
   name: 'send_interactive_list',
   internal: true,
   description:
-    "Send a WhatsApp scrollable list of selectable rows — far better UX than typing \"1\" / \"2\" / \"3\" for offer selection. Use for: flight/hotel offer lists, restaurant shortlists, time-slot pickers, multi-passenger picks, group-trip seat lists. Each row has an `id` Sendero reads on the next inbound. REQUIRED: `headerText` (bold title at top, ≤ 60 chars) — lists without a header look naked. Hard limit: 10 sections × 10 rows, title ≤ 24 chars, description ≤ 72 chars. Footer is auto-defaulted to brand text when omitted.",
+    'Send a WhatsApp scrollable list of selectable rows — far better UX than typing "1" / "2" / "3" for offer selection. Use for: flight/hotel offer lists, restaurant shortlists, time-slot pickers, multi-passenger picks, group-trip seat lists. Each row has an `id` Sendero reads on the next inbound. REQUIRED: `headerText` (bold title at top, ≤ 60 chars) — lists without a header look naked. Hard limit: 10 sections × 10 rows, title ≤ 24 chars, description ≤ 72 chars. Footer is auto-defaulted to brand text when omitted.',
   inputSchema: sendInteractiveListInput,
   jsonSchema: {
     type: 'object',
@@ -395,10 +400,12 @@ export const sendInteractiveListTool: ToolDef<
     // titles get smart compaction first (USD → $, carrier abbrevs)
     // so prices don't get cut mid-number when the agent uses a long
     // format like "Duffel Airways · USD 69.50" (26 chars > 24 cap).
-    const sections = (input.sections as Array<{
-      title: string;
-      rows: Array<{ id: string; title: string; description?: string }>;
-    }>).map(s => ({
+    const sections = (
+      input.sections as Array<{
+        title: string;
+        rows: Array<{ id: string; title: string; description?: string }>;
+      }>
+    ).map(s => ({
       title: truncate(s.title, META_LIST_TITLE_MAX),
       rows: s.rows.map(r => ({
         id: r.id,
@@ -471,10 +478,7 @@ export const sendImageMessageTool: ToolDef<z.infer<typeof sendImageInput>, Outbo
   },
 };
 
-export const sendDocumentMessageTool: ToolDef<
-  z.infer<typeof sendDocumentInput>,
-  OutboundResult
-> = {
+export const sendDocumentMessageTool: ToolDef<z.infer<typeof sendDocumentInput>, OutboundResult> = {
   name: 'send_document_message',
   internal: true,
   description:
@@ -512,7 +516,7 @@ export const requestLocationTool: ToolDef<z.infer<typeof requestLocationInput>, 
   name: 'request_location',
   internal: true,
   description:
-    "Send a WhatsApp message with a native \"Share location\" pin. The traveler taps it and Meta returns a precise lat/lng on the next inbound (`messages[0].location`). Use for: airport transfer pickup, ground-transport coordination, \"where are you?\" disruption recovery, walking-route start point. Body explains why you need it.",
+    'Send a WhatsApp message with a native "Share location" pin. The traveler taps it and Meta returns a precise lat/lng on the next inbound (`messages[0].location`). Use for: airport transfer pickup, ground-transport coordination, "where are you?" disruption recovery, walking-route start point. Body explains why you need it.',
   inputSchema: requestLocationInput,
   jsonSchema: {
     type: 'object',
@@ -549,7 +553,7 @@ export const requestPhoneNumberTool: ToolDef<
   name: 'request_phone_number',
   internal: true,
   description:
-    "Ask the traveler to share a phone number. Meta has no first-class \"share phone\" interactive type, so this sends a single text prompt and the agent reads the answer on the next inbound. Use for: adding passengers to a group trip, capturing emergency-contact numbers, switching the conversation to a different traveler. Provide a clear `prompt` so the traveler knows the format you want (E.164 with leading +).",
+    'Ask the traveler to share a phone number. Meta has no first-class "share phone" interactive type, so this sends a single text prompt and the agent reads the answer on the next inbound. Use for: adding passengers to a group trip, capturing emergency-contact numbers, switching the conversation to a different traveler. Provide a clear `prompt` so the traveler knows the format you want (E.164 with leading +).',
   inputSchema: requestPhoneNumberInput,
   jsonSchema: {
     type: 'object',
