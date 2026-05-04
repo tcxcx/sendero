@@ -7,6 +7,8 @@ import type { ToolContext, ToolDef } from './types';
 
 /** Sendero stores Solana DCWs with this synthetic chainId (Circle Gateway's Solana domain id). */
 const SOL_DEVNET_CHAIN_ID = 5;
+/** Arc Testnet chain id used by `ensureTravelerWallet` for the EVM DCW row. */
+const ARC_TESTNET_CHAIN_ID = 5042002;
 
 /**
  * `treasury_balance` — operator-only Gateway unified balance for the
@@ -63,26 +65,54 @@ export const travelerBalanceTool: ToolDef = {
           'No signed-in traveler on this turn. Pass `travelerPhone` on `call_sendero` so Sendero can resolve the wallet, or ask the traveler to sign in first.',
       };
     }
-    const [signer, solanaWallet] = await Promise.all([
-      getUserGatewaySigner(userId, {
-        caller: { surface: 'tool', userId, context: 'traveler_balance' },
+    // Architecture flip (2026-05-04): the EVM Gateway depositor is now
+    // the traveler's Circle DCW EVM address (chainId 5042002, Arc),
+    // not the locally-generated UserGatewaySigner EOA. Reasons:
+    //   - Circle DCW addresses are tracked by Circle's webhook system,
+    //     so transactions.inbound fires on direct deposits and we can
+    //     auto-deposit into Gateway via /api/webhooks/circle.
+    //   - UserGatewaySigner EOAs are off Circle's radar — funds sent
+    //     there strand silently (no webhook, no auto-deposit).
+    // UserGatewaySigner stays the depositor of record on outbound burns
+    // / EIP-712 transfer signatures (chainId-bound EIP-712 domain
+    // pitfall on Circle DCW, see gateway-signer.ts header comment).
+    // For balance reads, the DCW is the source of truth.
+    const [evmDcw, solanaWallet, signer] = await Promise.all([
+      prisma.wallet.findFirst({
+        where: { userId, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
+        select: { address: true },
       }),
       prisma.wallet.findFirst({
         where: { userId, provisioner: 'dcw', chainId: SOL_DEVNET_CHAIN_ID },
         select: { address: true },
       }),
+      // Legacy lookup — log the signer-EOA balance separately so we can
+      // detect stranded funds and surface a "claim pending deposit" path.
+      getUserGatewaySigner(userId, {
+        caller: { surface: 'tool', userId, context: 'traveler_balance' },
+      }),
     ]);
-    if (!signer && !solanaWallet) {
+    if (!evmDcw && !solanaWallet) {
       return {
         status: 'no_wallet',
         message:
           'Wallet provisioning is still in progress. Try again in a few seconds — the next inbound will provision the Gateway depositor.',
       };
     }
-    return queryUnifiedBalance({
-      evm: (signer?.address as Address | undefined),
+    const balance = await queryUnifiedBalance({
+      evm: (evmDcw?.address as Address | undefined),
       solana: solanaWallet?.address ?? undefined,
     });
+    // Surface the EVM + Solana addresses on the response so the agent
+    // can render the wallet card body without a separate Wallet lookup.
+    // `signerAddress` is included for the structural-fix follow-up that
+    // detects funds stranded on the legacy depositor address.
+    return {
+      ...balance,
+      evmAddress: evmDcw?.address ?? null,
+      solanaAddress: solanaWallet?.address ?? null,
+      signerAddress: signer?.address ?? null,
+    };
   },
 };
 

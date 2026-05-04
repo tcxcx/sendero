@@ -113,18 +113,25 @@ export const moonpayOfframpTool: ToolDef<Input> = {
       }
       refundWalletAddress = sol.address;
     } else {
-      const signer = await prisma.userGatewaySigner.findUnique({
-        where: { userId },
+      // Architecture flip (2026-05-04): refund destination is the
+      // Circle DCW EVM address — same Circle-watched destination MoonPay
+      // funds land in. Cancelled-flow refunds bounce back into a wallet
+      // we already track, so a re-deposit triggers the inbound webhook
+      // and auto-pushes back into Gateway. UserGatewaySigner is no
+      // longer the deposit target.
+      const ARC_TESTNET_CHAIN_ID = 5042002;
+      const dcw = await prisma.wallet.findFirst({
+        where: { userId, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
         select: { address: true },
       });
-      if (!signer?.address) {
+      if (!dcw?.address) {
         return {
           status: 'wallet_not_provisioned',
           message:
-            "EVM Gateway signer not yet provisioned. The agent-traveler-resolver mints these on first WhatsApp inbound — if you're seeing this, the resolver hasn't run yet.",
+            "EVM DCW not yet provisioned. The agent-traveler-resolver mints these on first WhatsApp inbound — if you're seeing this, the resolver hasn't run yet.",
         };
       }
-      refundWalletAddress = signer.address;
+      refundWalletAddress = dcw.address;
     }
 
     const traveler = await prisma.user.findUnique({
@@ -216,11 +223,7 @@ async function buildSenderoShareCardUrl(
     .replace(/\//g, '_')
     .replace(/=+$/, '');
   const sigBuf = crypto.createHmac('sha256', secret).update(body).digest();
-  const sig = sigBuf
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  const sig = sigBuf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const token = `${body}.${sig}`;
   const origin = baseUrl.replace(/\/$/, '');
   return `${origin}/api/og/share?token=${encodeURIComponent(token)}`;

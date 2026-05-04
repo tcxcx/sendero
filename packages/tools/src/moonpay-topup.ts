@@ -106,10 +106,13 @@ export const moonpayTopupTool: ToolDef<Input> = {
       };
     }
 
-    // Wallet address — every EVM chain MoonPay supports uses the same
-    // deterministic Circle DCW EVM address. Solana would need a
-    // separate lookup, but `usdc_base` (default) is EVM, so we read
-    // the gateway signer.
+    // Architecture flip (2026-05-04): the deposit destination is the
+    // traveler's Circle DCW EVM address (chainId 5042002, Arc), NOT
+    // the locally-generated UserGatewaySigner. Reason: Circle's
+    // webhook system fires on inbound transfers to DCW addresses, so
+    // /api/webhooks/circle can auto-deposit MoonPay funds into Gateway
+    // without a manual sweep. UserGatewaySigner remains for outbound
+    // EIP-712 burn signatures only.
     const isSolana = input.currencyCode === 'usdc_sol';
 
     let walletAddress: string;
@@ -128,18 +131,19 @@ export const moonpayTopupTool: ToolDef<Input> = {
       }
       walletAddress = sol.address;
     } else {
-      const signer = await prisma.userGatewaySigner.findUnique({
-        where: { userId },
+      const ARC_TESTNET_CHAIN_ID = 5042002;
+      const dcw = await prisma.wallet.findFirst({
+        where: { userId, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
         select: { address: true },
       });
-      if (!signer?.address) {
+      if (!dcw?.address) {
         return {
           status: 'wallet_not_provisioned',
           message:
-            "EVM Gateway signer not yet provisioned for this traveler. The agent-traveler-resolver mints these on first WhatsApp inbound — if you're seeing this, the resolver hasn't run yet.",
+            "EVM DCW not yet provisioned for this traveler. The agent-traveler-resolver mints these on first WhatsApp inbound — if you're seeing this, the resolver hasn't run yet.",
         };
       }
-      walletAddress = signer.address;
+      walletAddress = dcw.address;
     }
 
     const traveler = await prisma.user.findUnique({
@@ -237,11 +241,7 @@ async function buildSenderoShareCardUrl(
     .replace(/\//g, '_')
     .replace(/=+$/, '');
   const sigBuf = crypto.createHmac('sha256', secret).update(body).digest();
-  const sig = sigBuf
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  const sig = sigBuf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const token = `${body}.${sig}`;
   const origin = baseUrl.replace(/\/$/, '');
   return `${origin}/api/og/share?token=${encodeURIComponent(token)}`;
