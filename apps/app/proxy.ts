@@ -30,6 +30,7 @@ const isPublicRoute = createRouteMatcher([
   '/stamps/(.*)', // public NFT stamp viewer + OG unfurl target (Slack/WhatsApp)
   '/agents/(.*)', // public ERC-8004 agent metadata + reputation profile (org + user)
   '/install/(.*)', // public per-tenant channel install pages (Persona C — end-customer admins, no Sendero session)
+  '/t/(.*)', // public Sendero-branded short-link redirector — host-allowlisted in /api/short-links, no auth on the redirect itself
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/sso-callback(.*)',

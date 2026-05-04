@@ -2880,3 +2880,49 @@ model MoonPayWebhookEvent {
   @@index([dispatchStatus, receivedAt(sort: Desc)])
   @@map("moonpay_webhook_events")
 }
+
+/// Short-link redirector record. Maps a short opaque code to a long
+/// target URL so Sendero can publish clean `app.sendero.travel/t/<code>`
+/// links instead of embedding 500-char MoonPay checkout URLs verbatim
+/// in WhatsApp messages.
+///
+/// Codes are random base32 (8 chars, ~40 bits — collision-resistant for
+/// the volume we expect; generated server-side, never user-supplied).
+/// `tenantId` is nullable so platform-issued links (Sendero customer
+/// support flows) can exist outside any tenant context.
+model ShortLink {
+  id          String    @id @default(cuid())
+  /// Random base32 code. Used in the URL: `/t/<code>`. Globally unique.
+  code        String    @unique
+  /// The full target URL the redirect resolves to. May contain query
+  /// strings, signatures, etc. — Sendero only constrains the host
+  /// allowlist server-side, not the structure.
+  targetUrl   String    @map("target_url")
+  /// Optional tenantId for per-tenant attribution / quotas.
+  tenantId    String?   @map("tenant_id")
+  /// Optional userId — the Sendero traveler the link was generated for.
+  userId      String?   @map("user_id")
+  /// Free-form purpose label ('moonpay_topup', 'moonpay_offramp',
+  /// 'signin_link', 'route_map', …) for analytics / debugging.
+  purpose     String?
+  /// Click count, incremented on each successful redirect. Best-effort —
+  /// the redirect runs even if the increment fails.
+  clickCount  Int       @default(0) @map("click_count")
+  /// Soft expiry. Past this timestamp, /t/<code> returns 410 Gone.
+  /// Null means no expiry.
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  /// Soft revocation — operators can disable a code without deleting it.
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  /// Tracking + audit: when did the code first redirect.
+  firstClickAt DateTime? @map("first_click_at") @db.Timestamptz(6)
+  /// Last successful redirect timestamp.
+  lastClickAt  DateTime? @map("last_click_at") @db.Timestamptz(6)
+  metadata    Json?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("short_links")
+}
