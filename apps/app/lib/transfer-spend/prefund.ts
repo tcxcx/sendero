@@ -77,19 +77,13 @@ export async function prefundTraveler(args: PrefundArgs): Promise<PrefundResult>
   });
 
   try {
-    const params = {
-      from: { adapter: treasury.adapter, chain: args.sourceChain },
+    const result = await treasury.depositFor({
       amount: args.amount,
-      token: 'USDC' as const,
+      sourceChain: args.sourceChain,
       depositAccount: args.travelerAddress,
-    };
-    // The kit's depositFor signature expects a typed `chain` literal;
-    // we accept a string from the form to keep the route flexible
-    // (Arc Testnet today, more chains later).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await treasury.kit.depositFor(params as any);
-    const txHash = (result as { txHash?: string }).txHash ?? null;
-    const explorerUrl = (result as { explorerUrl?: string }).explorerUrl ?? null;
+    });
+    const txHash = result.txHash ?? null;
+    const explorerUrl = result.explorerUrl ?? null;
 
     await prisma.transferAttempt.update({
       where: { id: attemptRow.id },
@@ -106,7 +100,7 @@ export async function prefundTraveler(args: PrefundArgs): Promise<PrefundResult>
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[prefundTraveler] kit.depositFor failed', { message });
+    console.error('[prefundTraveler] unifiedGateway.depositFor failed', { message });
     await prisma.transferAttempt.update({
       where: { id: attemptRow.id },
       data: { status: 'failed', blockReason: message.slice(0, 500) },

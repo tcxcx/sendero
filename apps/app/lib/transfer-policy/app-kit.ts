@@ -1,64 +1,73 @@
 /**
- * Unified Balance Kit handle for `/api/transfer/spend`.
+ * Unified Balance delegate handles for `/api/transfer/spend`.
  *
- * Constructs a singleton `UnifiedBalanceKit` instance + a Viem-backed
- * delegate adapter from `SENDERO_UB_DELEGATE_PRIVATE_KEY`. The route
- * uses this adapter as the signer for `kit.spend()`.
+ * The `transfer-spend/execute.ts` flow builds a multi-source spend
+ * fan-out (one source per traveler DCW row) which doesn't fit the
+ * single-call `unifiedGateway.spend` helper today. So we keep the
+ * `{ kit, adapter }` shape the route expects — but BOTH come from
+ * the centralized `@sendero/circle/unified-gateway` so kit instance
+ * and adapter wiring stay consistent across the app.
  *
- * Returns `null` when the env is missing so the route can return a
+ * `kit` here is the App Kit `unifiedBalance` namespace (one instance
+ * across the whole app). It exposes `deposit / depositFor / spend /
+ * estimateSpend / getBalances / addDelegate / removeDelegate /
+ * getDelegateStatus / initiateRemoveFund / removeFund` per the
+ * Circle docs.
+ *
+ * - `getUnifiedBalanceDelegate()`     — viem-backed delegate
+ *   (`SENDERO_UB_DELEGATE_PRIVATE_KEY`).
+ * - `getCircleUnifiedBalanceDelegate()` — Circle Wallets-backed delegate
+ *   for traveler-DCW spends (no private key on Sendero servers).
+ *
+ * Both return `null` when the relevant env is missing so the route can
  * 503 with a clear "configure delegate" message instead of crashing.
- *
- *   The delegate model is the App Kit pattern from
- *   https://developers.circle.com/app-kit/quickstarts/unified-balance-delegate-deposit-and-spend.
- *   In production this should resolve from a KMS-backed secret;
- *   stashing a private key in an env var is fine for hackathon /
- *   testnet dev.
  */
 
-import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
-import { createViemAdapterFromPrivateKey } from '@circle-fin/adapter-viem-v2';
-import { UnifiedBalanceKit } from '@circle-fin/unified-balance-kit';
-import { env } from '@sendero/env';
+import type { ViemAdapter } from '@circle-fin/adapter-viem-v2';
+import type { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
+import {
+  circleWalletsPrincipal,
+  delegateViemPrincipal,
+  getUnifiedBalanceNamespace,
+} from '@sendero/circle';
 
-let cached: {
-  kit: UnifiedBalanceKit;
-  adapter: ReturnType<typeof createViemAdapterFromPrivateKey>;
-} | null = null;
+type UnifiedBalanceNamespace = ReturnType<typeof getUnifiedBalanceNamespace>;
 
-let circleCached: {
-  kit: UnifiedBalanceKit;
-  adapter: ReturnType<typeof createCircleWalletsAdapter>;
-} | null = null;
-
-export function getUnifiedBalanceDelegate(): {
-  kit: UnifiedBalanceKit;
-  adapter: ReturnType<typeof createViemAdapterFromPrivateKey>;
-} | null {
-  if (cached) return cached;
-  const key = env.unifiedBalanceDelegateKey();
-  if (!key) return null;
-  const normalized = key.startsWith('0x') ? key : `0x${key}`;
-  const adapter = createViemAdapterFromPrivateKey({
-    privateKey: normalized as `0x${string}`,
-  });
-  const kit = new UnifiedBalanceKit();
-  cached = { kit, adapter };
-  return cached;
+interface ViemDelegateHandle {
+  kit: UnifiedBalanceNamespace;
+  adapter: ViemAdapter;
 }
 
-export function getCircleUnifiedBalanceDelegate(): {
-  kit: UnifiedBalanceKit;
+interface CircleDelegateHandle {
+  kit: UnifiedBalanceNamespace;
   adapter: ReturnType<typeof createCircleWalletsAdapter>;
-} | null {
+}
+
+let viemCached: ViemDelegateHandle | null = null;
+let circleCached: CircleDelegateHandle | null = null;
+
+export function getUnifiedBalanceDelegate(): ViemDelegateHandle | null {
+  if (viemCached) return viemCached;
+  const principal = delegateViemPrincipal();
+  if (!principal || principal.kind !== 'viem') return null;
+  viemCached = { kit: getUnifiedBalanceNamespace(), adapter: principal.adapter };
+  return viemCached;
+}
+
+/**
+ * Circle Wallets delegate. The principal factory wants an address; the
+ * delegate model doesn't have a single address (it dispatches to many
+ * traveler DCWs at spend time), so we pass `0x0…0` as a placeholder
+ * and only consume the adapter. Caller must supply real source
+ * addresses in `kit.spend({ from: [{ adapter, address }] })`.
+ */
+export function getCircleUnifiedBalanceDelegate(): CircleDelegateHandle | null {
   if (circleCached) return circleCached;
-  const apiKey = env.circleApiKey();
-  const entitySecret = env.circleEntitySecret();
-  if (!apiKey || !entitySecret) return null;
-  const adapter = createCircleWalletsAdapter({
-    apiKey,
-    entitySecret,
+  const principal = circleWalletsPrincipal({
+    address: '0x0000000000000000000000000000000000000000',
+    label: 'circle-delegate',
   });
-  const kit = new UnifiedBalanceKit();
-  circleCached = { kit, adapter };
+  if (!principal || principal.kind !== 'circle-wallets') return null;
+  circleCached = { kit: getUnifiedBalanceNamespace(), adapter: principal.adapter };
   return circleCached;
 }
