@@ -174,6 +174,20 @@ export const env = {
    */
   unifiedBalanceDelegateKey: () => process.env.SENDERO_UB_DELEGATE_PRIVATE_KEY || null,
 
+  /**
+   * Platform-owned Solana hot wallet private key (base58).  Used by
+   * `unifiedGateway.ensureSolanaGas` to JIT-drip SOL into traveler /
+   * tenant DCWs before a Gateway deposit, spend, or bridge — Solana
+   * DCWs need SOL on the source account to pay tx fees, and Circle
+   * Gas Station is EVM-only.  Kept here rather than per-tenant so
+   * the gas footprint matches the EVM sponsor pattern (see desk-v1
+   * UB-kit migration post-mortem #5).  Returns null when unset, in
+   * which case the Solana deposit path proceeds without top-up and
+   * surfaces "Insufficient SOL" if the DCW is empty.
+   */
+  senderoSolanaPlatformPrivateKey: () => process.env.SENDERO_SOLANA_PLATFORM_PRIVATE_KEY || null,
+  senderoSolanaRpcUrl: () => process.env.SENDERO_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
+
   // ── Traveler DCW provisioning (lazy at hold) ──────────────────────
   /**
    * Platform-level Circle walletset id.  All traveler DCWs are created

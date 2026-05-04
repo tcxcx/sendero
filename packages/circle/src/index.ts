@@ -39,11 +39,18 @@ export {
 export * as unifiedBalance from './unified-balance';
 export * as unifiedGateway from './unified-gateway';
 export {
+  type BridgeArgs as UnifiedBridgeArgs,
+  type BridgeResult as UnifiedBridgeResult,
   type CustomFee,
   type DelegateArgs,
+  type EnsureSolanaGasArgs,
+  type EnsureSolanaGasResult,
   type EvmAddressAudit,
   type EvmAddressByChain,
   auditEvmAddresses,
+  bridge,
+  ensureSolanaGas,
+  isSolanaChainKey,
   type DepositArgs as UnifiedDepositArgs,
   type DepositForArgs as UnifiedDepositForArgs,
   type DepositResult as UnifiedDepositResult,
