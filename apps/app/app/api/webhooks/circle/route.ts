@@ -31,6 +31,7 @@ import { prisma } from '@sendero/database';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
 import { type CircleNotification, gateCircleWebhook } from '@/lib/circle-webhook-verify';
+import { notifyTravelerOfDeposit, notifyTreasuryOfDeposit } from '@/lib/deposit-notifications';
 import { webhookEventStore } from '@/lib/webhook-events';
 
 export const runtime = 'nodejs';
@@ -199,10 +200,16 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
   const FINALIZED = new Set(['CONFIRMED', 'COMPLETE', 'COMPLETED']);
   if (!FINALIZED.has(state)) return;
 
+  // Both `operations` (per-chain source-of-funds DCWs) AND `treasury`
+  // (Arc destination DCW where the unified balance settles) should
+  // auto-deposit on inbound USDC. Earlier this filter only matched
+  // 'operations', so a tenant treasury wallet receiving USDC on Arc
+  // was silently skipped — Gateway balance never moved, even though
+  // the centralized service would have handled it.
   const sweepWallet = await prisma.circleWallet.findFirst({
     where: {
       circleWalletId: walletId,
-      kind: 'operations',
+      kind: { in: ['operations', 'treasury'] },
     },
     select: {
       id: true,
@@ -273,6 +280,16 @@ async function dispatchGatewaySweep(event: CircleNotification): Promise<void> {
       notificationId,
       result,
     });
+    if (result.status === 'confirmed' && result.depositTxHash) {
+      await notifyTreasuryOfDeposit({
+        tenantId: sweepWallet.tenantId,
+        amount,
+        chainKey,
+        depositTxHash: result.depositTxHash,
+        walletAddress: sweepWallet.address,
+        walletKind: sweepWallet.kind,
+      });
+    }
   } catch (err) {
     console.error('[webhooks/circle] gateway sweep crashed', {
       tenantId: sweepWallet.tenantId,
@@ -346,8 +363,7 @@ async function dispatchTravelerGatewayDeposit(event: CircleNotification): Promis
   }
 
   const userMeta = (travelerWallet.user.metadata ?? {}) as Record<string, unknown>;
-  const tenantId =
-    typeof userMeta.primaryTenantId === 'string' ? userMeta.primaryTenantId : null;
+  const tenantId = typeof userMeta.primaryTenantId === 'string' ? userMeta.primaryTenantId : null;
   if (!tenantId) {
     console.log('[webhooks/circle] traveler has no primaryTenantId — skipping deposit', {
       userId: travelerWallet.user.id,
@@ -388,6 +404,16 @@ async function dispatchTravelerGatewayDeposit(event: CircleNotification): Promis
       notificationId,
       result,
     });
+    if (result.status === 'confirmed' && result.depositTxHash) {
+      await notifyTravelerOfDeposit({
+        userId: travelerWallet.user.id,
+        tenantId,
+        amount,
+        chainKey,
+        depositTxHash: result.depositTxHash,
+        dcwAddress: travelerWallet.address,
+      });
+    }
   } catch (err) {
     console.error('[webhooks/circle] traveler deposit crashed', {
       userId: travelerWallet.user.id,
