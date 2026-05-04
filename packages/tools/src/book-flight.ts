@@ -401,37 +401,49 @@ export const bookFlightTool: ToolDef = {
         duffelOrderId: hold.orderId,
       });
 
-      // Phase 5 — write a structured 'booked' event to Trip.events so the
-      // operator console + cross-channel ledger render the lifecycle
-      // milestone. Atomic jsonb append; tenant double-bound in WHERE
-      // (mirrors complete-trip + slack-views/trip-note pattern).
-      const bookedEvent = {
-        id: `booked_${persistedBookingId}_${Date.now()}`,
-        kind: 'booked' as const,
-        direction: 'internal' as const,
-        channel: 'internal' as const,
-        createdAt: new Date().toISOString(),
-        bookingId: persistedBookingId,
-        pnr: hold.bookingReference,
-        totalAmount: hold.totalAmount,
-        totalCurrency: hold.totalCurrency,
-        paymentStatus,
-        usdcSettlement: usdcSettlement
-          ? {
-              settlementTxHash: usdcSettlement.settlementTxHash,
-              explorerUrl: usdcSettlement.explorerUrl,
-            }
-          : null,
-      };
+      // Phase 5 — structured lifecycle events on Trip.events. 'booked'
+      // always fires; 'paid' fires separately when a USDC settlement
+      // landed (so operators can distinguish hold-vs-paid in the ledger).
+      // Atomic jsonb append; tenant double-bound in WHERE.
+      const now = new Date().toISOString();
+      const events: object[] = [
+        {
+          id: `booked_${persistedBookingId}_${Date.now()}`,
+          kind: 'booked',
+          direction: 'internal',
+          channel: 'internal',
+          createdAt: now,
+          bookingId: persistedBookingId,
+          pnr: hold.bookingReference,
+          totalAmount: hold.totalAmount,
+          totalCurrency: hold.totalCurrency,
+          paymentStatus,
+        },
+      ];
+      if (usdcSettlement) {
+        events.push({
+          id: `paid_${persistedBookingId}_${Date.now() + 1}`,
+          kind: 'paid',
+          direction: 'internal',
+          channel: 'internal',
+          createdAt: now,
+          bookingId: persistedBookingId,
+          pnr: hold.bookingReference,
+          totalAmount: hold.totalAmount,
+          totalCurrency: hold.totalCurrency,
+          settlementTxHash: usdcSettlement.settlementTxHash,
+          explorerUrl: usdcSettlement.explorerUrl,
+        });
+      }
       try {
-        const payload = JSON.stringify([bookedEvent]);
+        const payload = JSON.stringify(events);
         await prisma.$executeRaw`
           UPDATE "trips"
           SET events = COALESCE(events, '[]'::jsonb) || ${payload}::jsonb
           WHERE id = ${persistedTripId} AND "tenantId" = ${ctx.traveler.tenantId}
         `;
       } catch (err) {
-        console.warn('[book_flight] booked event append failed (non-fatal)', {
+        console.warn('[book_flight] lifecycle event append failed (non-fatal)', {
           tripId: persistedTripId,
           error: err instanceof Error ? err.message : String(err),
         });
