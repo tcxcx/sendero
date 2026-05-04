@@ -54,6 +54,7 @@ import {
   requestLocationTool,
   requestPhoneNumberTool,
   sendDocumentMessageTool,
+  sendFlowMessageTool,
   sendImageMessageTool,
   sendInteractiveButtonsTool,
   sendInteractiveListTool,
@@ -433,6 +434,7 @@ export const toolList: ToolDef[] = [
   sendInteractiveListTool,
   sendImageMessageTool,
   sendDocumentMessageTool,
+  sendFlowMessageTool,
   requestLocationTool,
   requestPhoneNumberTool,
 ];
