@@ -118,6 +118,48 @@ Complete Phase A booking → wait ~15s
 
 ---
 
+## Phase C.5 — eSIM ready (in parallel with Phase C)
+
+**Goal:** Post-ticketing the traveler receives a destination-country eSIM activation card alongside the boarding pass — installed via WhatsApp tap, no app store, no SIM swap. Mirrors the boarding-pass dispatcher pattern: HMAC-signed token → public install page + signed QR PNG → unfurl-safe.
+
+### Tools
+
+- [▲] `book_esim` — provisions an Airalo/equivalent supplier order, persists `Esim` row, generates HMAC-signed install token. Tool exists at `packages/tools/src/book-esim.ts`; unit tests in `book-esim.test.ts`. Status `▲`: implementation present, not yet exercised end-to-end on the dogfood tenant.
+- [ ] eSIM tariff lookup / search (TBD — depends on supplier API integration; `book_esim` currently takes a destination country code + plan size)
+- [ ] eSIM upsert wired to `Trip` lifecycle on `book_flight` ticketed → kicks `book_esim` for the destination country (parallel with NFT mint trigger)
+- [▲] `/api/esim/qr/[token]/route.ts` — public PNG endpoint (allowlisted in `proxy.ts:49`); HMAC token in path gates the lookup
+- [▲] `/install/esim/[token]` — public install page (allowlisted in `proxy.ts:50`); deep-links to platform eSIM activation
+- [ ] `send_image_message` (eSIM card delivery) — Sendero-branded card with QR + install CTA
+- [ ] `send_cta_url_message` — single-tap "Install eSIM" button to `/install/esim/<token>`
+
+### Dogfood script
+
+```
+Complete Phase A booking → wait ~10s
+  → expect "📡 Your eSIM for <country>" image card in WhatsApp
+  → expect tappable "Install eSIM" CTA button below the image
+  → tap → land on /install/esim/<token>
+  → page renders QR + step-by-step iOS/Android instructions
+  → scan QR with phone camera → eSIM activates
+  → traveler now has data on arrival, no roaming charges
+```
+
+### Success criteria
+
+- [ ] `Esim` row written to DB (`status='provisioned'`, `iccid`, `plan`, `countryCode`)
+- [ ] HMAC token in `/api/esim/qr/<token>.png` URL verifies + returns valid PNG
+- [ ] `/install/esim/<token>` renders with correct trip + country context
+- [ ] Card delivered to WhatsApp within ~10s of ticketing
+- [ ] Trip.events `esim_ready` entry appended (kind: `esim_ready`, primaryKey: `Esim.id`)
+
+### Known dependencies
+
+- Supplier API (Airalo / Holafly / etc.) — set `ESIM_SUPPLIER_API_KEY` + base URL in env
+- HMAC signing secret — `ESIM_TOKEN_SIGNING_SECRET` (mirror of `OG_SHARE_SIGNING_SECRET` pattern)
+- Tenant policy gate — should this be auto-included in every booking, or a tenant-configurable upsell? (default: auto for free/basic; upsell for pro/enterprise per markup config)
+
+---
+
 ## Phase D — Document intake (passport OCR)
 
 **Goal:** Passenger details captured via WhatsApp Flow form OR via image-based passport scan.

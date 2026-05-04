@@ -830,6 +830,58 @@ async function settleTravelerUsdcToTreasury(args: {
   });
   if (!principal) return null;
 
+  // ── Take-rate split (Phase H billing wiring) ──
+  // Tenant plan dictates Sendero's cut of each booking. The split is
+  // realized via Circle's `customFee` knob on `unifiedBalance.spend`:
+  // App Kit carves the fee from the spend amount, sends 90% to our
+  // recipient + 10% to Arc protocol (per Circle docs). The remaining
+  // (1 - takeRate) of the gross lands at the tenant gateway-signer
+  // EOA. Same single tx — no extra hops.
+  //
+  // Plan tier → take-rate basis points:
+  //   free        → 0    (Sendero takes nothing — testnet beta)
+  //   basic       → 500  (5%)
+  //   pro         → 1000 (10%)
+  //   enterprise  → 1500 (15%)
+  // (per packages/billing/src/plans.ts::bookingTakeRateDiscountBps —
+  //  field name is legacy; the value is the take rate in bps)
+  let customFee: { value: string; recipientAddress: string } | undefined;
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: args.tenantId },
+      select: { billingTier: true },
+    });
+    if (tenant?.billingTier) {
+      const { resolvePlan } = await import('@sendero/billing/plans');
+      const plan = resolvePlan(tenant.billingTier);
+      const takeRateBps = plan.bookingTakeRateDiscountBps;
+      const senderoRecipient = process.env.TREASURY_VIEM_ADDRESS;
+      if (takeRateBps > 0 && senderoRecipient) {
+        // amount × bps / 10_000, rounded to 6 decimals.
+        const grossMicro = BigInt(Math.round(Number(args.amountUsdc) * 1_000_000));
+        const feeMicro = (grossMicro * BigInt(takeRateBps)) / 10_000n;
+        const feeUsdc = (Number(feeMicro) / 1_000_000).toFixed(6);
+        customFee = { value: feeUsdc, recipientAddress: senderoRecipient };
+        console.log('[book_flight] take-rate split', {
+          tenantId: args.tenantId,
+          tier: tenant.billingTier,
+          takeRateBps,
+          gross: args.amountUsdc,
+          customFee: feeUsdc,
+          senderoRecipient,
+        });
+      }
+    }
+  } catch (err) {
+    // Don't let billing-config issues break the settle path. Worst
+    // case: tenant gets 100% (current pre-split behavior), Sendero
+    // logs the gap.
+    console.warn('[book_flight] take-rate resolution failed (settling without split)', {
+      tenantId: args.tenantId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Pick the EVM source chain — Gateway lets you spread allocations
   // across chains automatically when `from.allocations` is omitted,
   // so we just need the destination + recipient. Source-account picked
@@ -839,6 +891,7 @@ async function settleTravelerUsdcToTreasury(args: {
     toChainKey: 'Arc_Testnet',
     recipient: tenantSigner.address,
     amount: args.amountUsdc,
+    ...(customFee ? { customFee } : {}),
   });
 
   return {
