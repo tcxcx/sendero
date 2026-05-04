@@ -39,6 +39,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { type Prisma, prisma } from '@sendero/database';
 import { decrypt, encrypt } from '@sendero/encryption';
+import { env } from '@sendero/env';
 import { invalidateUserGatewaySignerCache } from '@sendero/circle/gateway-signer';
 import { isTokenExpired } from '@sendero/whatsapp';
 
