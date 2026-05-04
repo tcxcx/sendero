@@ -15,7 +15,7 @@
 
 import { prisma } from '@sendero/database';
 
-import { GATEWAY_CHAINS, isEvmChain } from './gateway';
+import { GATEWAY_CHAINS } from './gateway';
 import {
   circleWalletsPrincipal,
   deposit as unifiedDeposit,
@@ -66,13 +66,11 @@ export async function depositTravelerToGateway(
   if (!chain) {
     return { status: 'failed', depositLogId: '', error: `Unknown Gateway chain: ${chainKey}` };
   }
-  if (!isEvmChain(chain)) {
-    return {
-      status: 'failed',
-      depositLogId: '',
-      error: `depositTravelerToGateway: ${chainKey} is a Solana chain — Solana traveler deposits go through gateway-sweep's Solana path.`,
-    };
-  }
+  // EVM and Solana both flow through the same single-step
+  // `unifiedGateway.deposit` — the Circle Wallets adapter handles both
+  // ecosystems. Solana inbounds used to be dropped here with a "flow
+  // through their own path" stub that never existed, so they silently
+  // died.
 
   if (webhookEventId) {
     const existing = await prisma.gatewayDepositLog.findUnique({

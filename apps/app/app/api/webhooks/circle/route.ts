@@ -357,10 +357,18 @@ async function dispatchTravelerGatewayDeposit(event: CircleNotification): Promis
     });
     return;
   }
-  if (!GATEWAY_CHAINS[chainKey] || GATEWAY_CHAINS[chainKey].kind !== 'evm') {
-    // Solana traveler deposits flow through their own path; skip here.
+  if (!GATEWAY_CHAINS[chainKey]) {
+    console.log('[webhooks/circle] chainKey not in GATEWAY_CHAINS — skipping traveler deposit', {
+      chainKey,
+      walletId,
+    });
     return;
   }
+  // Solana traveler inbounds run the same single-step
+  // `unifiedGateway.deposit` path as EVM — the Circle Wallets adapter
+  // supports both ecosystems. Previously this branch dropped Solana
+  // with a "flow through their own path" comment, but no other
+  // dispatcher picked them up — Solana inbounds silently died.
 
   const userMeta = (travelerWallet.user.metadata ?? {}) as Record<string, unknown>;
   const tenantId = typeof userMeta.primaryTenantId === 'string' ? userMeta.primaryTenantId : null;
