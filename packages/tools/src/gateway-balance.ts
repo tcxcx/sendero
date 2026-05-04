@@ -5,10 +5,11 @@ import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 import type { ToolContext, ToolDef } from './types';
 
-/** Sendero stores Solana DCWs with this synthetic chainId (Circle Gateway's Solana domain id). */
+/**
+ * Sendero stores Solana DCWs with this synthetic chainId (Circle Gateway's
+ * Solana domain id). Used to disambiguate the EVM DCW lookup below.
+ */
 const SOL_DEVNET_CHAIN_ID = 5;
-/** Arc Testnet chain id used by `ensureTravelerWallet` for the EVM DCW row. */
-const ARC_TESTNET_CHAIN_ID = 5042002;
 
 /**
  * `treasury_balance` — operator-only Gateway unified balance for the
@@ -77,9 +78,22 @@ export const travelerBalanceTool: ToolDef = {
     // / EIP-712 transfer signatures (chainId-bound EIP-712 domain
     // pitfall on Circle DCW, see gateway-signer.ts header comment).
     // For balance reads, the DCW is the source of truth.
+    // Circle DCWs are address-identical across every EVM chain (same
+    // deterministic counterfactual SCA), so the FIRST EVM DCW Wallet
+    // row gives us the canonical EVM address — regardless of which
+    // chain we happen to have a row for. Sendero today persists one
+    // EVM Wallet per traveler (Arc Testnet, chainId 5042002), but
+    // MoonPay doesn't support Arc — it deposits on Base Sepolia /
+    // Polygon Amoy / OP Sepolia / etc. The address still routes
+    // correctly because EVM DCW addresses don't vary by chain.
     const [evmDcw, solanaWallet, signer] = await Promise.all([
       prisma.wallet.findFirst({
-        where: { userId, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
+        where: {
+          userId,
+          provisioner: 'dcw',
+          NOT: { chainId: SOL_DEVNET_CHAIN_ID },
+        },
+        orderBy: { createdAt: 'asc' },
         select: { address: true },
       }),
       prisma.wallet.findFirst({
@@ -100,7 +114,7 @@ export const travelerBalanceTool: ToolDef = {
       };
     }
     const balance = await queryUnifiedBalance({
-      evm: (evmDcw?.address as Address | undefined),
+      evm: evmDcw?.address as Address | undefined,
       solana: solanaWallet?.address ?? undefined,
     });
     // Surface the EVM + Solana addresses on the response so the agent

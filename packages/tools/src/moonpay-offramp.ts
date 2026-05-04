@@ -116,12 +116,13 @@ export const moonpayOfframpTool: ToolDef<Input> = {
       // Architecture flip (2026-05-04): refund destination is the
       // Circle DCW EVM address — same Circle-watched destination MoonPay
       // funds land in. Cancelled-flow refunds bounce back into a wallet
-      // we already track, so a re-deposit triggers the inbound webhook
-      // and auto-pushes back into Gateway. UserGatewaySigner is no
-      // longer the deposit target.
-      const ARC_TESTNET_CHAIN_ID = 5042002;
+      // we already track. Same address works across all EVM chains
+      // (deterministic Circle DCW) regardless of which chain we
+      // happen to persist a Wallet row for.
+      const SOL_DEVNET_CHAIN_ID = 5;
       const dcw = await prisma.wallet.findFirst({
-        where: { userId, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
+        where: { userId, provisioner: 'dcw', NOT: { chainId: SOL_DEVNET_CHAIN_ID } },
+        orderBy: { createdAt: 'asc' },
         select: { address: true },
       });
       if (!dcw?.address) {

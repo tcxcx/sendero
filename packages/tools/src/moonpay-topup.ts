@@ -131,9 +131,18 @@ export const moonpayTopupTool: ToolDef<Input> = {
       }
       walletAddress = sol.address;
     } else {
-      const ARC_TESTNET_CHAIN_ID = 5042002;
+      // Circle DCW EVM addresses are deterministic + identical across
+      // every EVM chain. MoonPay doesn't support Arc Testnet (verified
+      // via `mp chain list` 2026-05-04 — supported testnets are
+      // base-sepolia, polygon-amoy, optimism-sepolia, arbitrum-sepolia,
+      // ethereum-sepolia, bnb-testnet, tempo-moderato), so the
+      // currencyCode default `usdc_base` lands on Base Sepolia. The
+      // address comes from whichever EVM Wallet row we happen to
+      // persist; today that's Arc, but the same address works on Base.
+      const SOL_DEVNET_CHAIN_ID = 5;
       const dcw = await prisma.wallet.findFirst({
-        where: { userId, provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
+        where: { userId, provisioner: 'dcw', NOT: { chainId: SOL_DEVNET_CHAIN_ID } },
+        orderBy: { createdAt: 'asc' },
         select: { address: true },
       });
       if (!dcw?.address) {
