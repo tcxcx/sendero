@@ -11,11 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-import {
-  runGetTripBrief,
-  type GetTripBriefDeps,
-  type GetTripBriefInput,
-} from './get-trip-brief';
+import { runGetTripBrief, type GetTripBriefDeps, type GetTripBriefInput } from './get-trip-brief';
 
 const realSecret = process.env.INVOICE_SIGNING_SECRET;
 const realBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -165,10 +161,14 @@ function makeDeps(args: {
       // Explicit `shareUrl: null` MUST pass through (covers
       // "secret not configured" branch); only fall back to default
       // when the key is unset entirely.
-      return 'shareUrl' in args ? args.shareUrl ?? null : 'https://app.sendero.travel/trip/SIGNED';
+      return 'shareUrl' in args
+        ? (args.shareUrl ?? null)
+        : 'https://app.sendero.travel/trip/SIGNED';
     },
     async buildEsimInstallUrl() {
-      return 'installUrl' in args ? args.installUrl ?? null : 'https://app.sendero.travel/install/esim/SIGNED';
+      return 'installUrl' in args
+        ? (args.installUrl ?? null)
+        : 'https://app.sendero.travel/install/esim/SIGNED';
     },
   };
 }
@@ -219,11 +219,23 @@ describe('get_trip_brief — sections', () => {
     let bookingsCalls = 0;
     let esimsCalls = 0;
     const deps: GetTripBriefDeps = {
-      async loadTrip() { return tripFixture() as never; },
-      async loadBookings() { bookingsCalls += 1; return [flightBooking() as never]; },
-      async loadEsims() { esimsCalls += 1; return []; },
-      async buildShareUrl() { return null; },
-      async buildEsimInstallUrl() { return null; },
+      async loadTrip() {
+        return tripFixture() as never;
+      },
+      async loadBookings() {
+        bookingsCalls += 1;
+        return [flightBooking() as never];
+      },
+      async loadEsims() {
+        esimsCalls += 1;
+        return [];
+      },
+      async buildShareUrl() {
+        return null;
+      },
+      async buildEsimInstallUrl() {
+        return null;
+      },
     };
     const out = await runGetTripBrief({ tripId: 'trp_1', sections: ['flights'] }, deps);
     if (out.status !== 'ok') throw new Error('expected ok');
@@ -464,10 +476,7 @@ describe('get_trip_brief — alerts', () => {
 
 describe('get_trip_brief — shareUrl', () => {
   test('null when builder returns null (no signing secret)', async () => {
-    const out = await runGetTripBrief(
-      baseInput,
-      makeDeps({ trip: tripFixture(), shareUrl: null })
-    );
+    const out = await runGetTripBrief(baseInput, makeDeps({ trip: tripFixture(), shareUrl: null }));
     if (out.status !== 'ok') throw new Error('expected ok');
     expect(out.shareUrl).toBeNull();
   });

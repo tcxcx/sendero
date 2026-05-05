@@ -96,9 +96,9 @@ describe('trip-brief secret handling', () => {
 
   test('weak secret (< 16 chars) throws on sign', async () => {
     process.env.INVOICE_SIGNING_SECRET = 'tiny';
-    await expect(
-      signTripBriefToken({ tripId: 'trp_1', tenantId: 'org_1' })
-    ).rejects.toThrow(/at least 16/);
+    await expect(signTripBriefToken({ tripId: 'trp_1', tenantId: 'org_1' })).rejects.toThrow(
+      /at least 16/
+    );
   });
 });
 
