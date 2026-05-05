@@ -551,10 +551,12 @@ function projectOfferSegments(offer: DuffelOfferWireMinimal): {
       const marketing = (seg.marketing_carrier ?? {}) as Record<string, unknown>;
       const carrierName = strOr(marketing.name, operating.name);
       const carrierIata = strOr(marketing.iata_code, operating.iata_code);
-      const flightNumberSuffix = strOr(seg.marketing_carrier_flight_number, seg.operating_carrier_flight_number);
-      const flightNumber = carrierIata && flightNumberSuffix
-        ? `${carrierIata}${flightNumberSuffix}`
-        : null;
+      const flightNumberSuffix = strOr(
+        seg.marketing_carrier_flight_number,
+        seg.operating_carrier_flight_number
+      );
+      const flightNumber =
+        carrierIata && flightNumberSuffix ? `${carrierIata}${flightNumberSuffix}` : null;
       const passengers = Array.isArray(seg.passengers)
         ? (seg.passengers as Array<Record<string, unknown>>)
         : [];
@@ -712,6 +714,105 @@ export async function getOrderDocuments(orderId: string): Promise<DuffelOrderDoc
 export async function getOrderEticket(orderId: string): Promise<DuffelOrderDocument | null> {
   const docs = await getOrderDocuments(orderId);
   return docs.find(d => d.type === 'electronic_ticket') ?? null;
+}
+
+/**
+ * Per-leg online check-in link as exposed by the airline. Duffel surfaces
+ * this on `order.slices[].segments[].online_check_in_link` once the
+ * carrier has made web check-in available — typically T-24h before
+ * departure, sometimes T-48h. Sandbox carriers + code-share legs return
+ * `null`. Sendero's T-24h cron falls back to a carrier-specific lookup
+ * map when the field is absent.
+ */
+export interface OnlineCheckInLink {
+  segmentId: string;
+  carrierIata: string;
+  carrierName: string;
+  url: string | null;
+  departingAt: string | null;
+  originIata: string | null;
+  destinationIata: string | null;
+}
+
+/**
+ * Fallback check-in deep links for carriers Sendero books most often.
+ * Used when Duffel hasn't (yet) populated `online_check_in_link` on the
+ * segment — sandbox carriers + carriers that haven't onboarded the
+ * field. Traveler enters PNR + last name on the airline's page.
+ */
+const CARRIER_CHECKIN_FALLBACK: Record<string, string> = {
+  LA: 'https://www.latamairlines.com/check-in',
+  AR: 'https://www.aerolineas.com.ar/checkin',
+  AV: 'https://www.avianca.com/check-in',
+  CM: 'https://www.copaair.com/web-checkin',
+  AM: 'https://aeromexico.com/check-in',
+  G3: 'https://www.voegol.com.br/check-in',
+  AD: 'https://www.voeazul.com.br/check-in',
+  AA: 'https://www.aa.com/checkin',
+  DL: 'https://www.delta.com/check-in',
+  UA: 'https://www.united.com/checkin',
+  IB: 'https://www.iberia.com/check-in/',
+  AF: 'https://www.airfrance.com/check-in',
+  BA: 'https://www.britishairways.com/travel/managebooking/public/en_gb',
+  LH: 'https://www.lufthansa.com/check-in',
+  // Duffel sandbox — no real check-in URL. Empty string flags it as
+  // sandbox so the renderer can show a hint instead of a broken link.
+  ZZ: '',
+};
+
+/**
+ * Fetch per-leg online check-in links for a Duffel order. Reads the
+ * segment-level `online_check_in_link` when Duffel has populated it,
+ * else falls back to the carrier deep link from
+ * `CARRIER_CHECKIN_FALLBACK`. Returns `[]` for orders Duffel hasn't
+ * resolved yet (rare; the cron retries hourly).
+ *
+ * Reference: Duffel order schema → slices[].segments[].online_check_in_link
+ */
+export async function getOrderOnlineCheckInLinks(
+  orderId: string
+): Promise<OnlineCheckInLink[]> {
+  const duffel = getDuffel();
+  const order = await duffel.orders.get(orderId);
+  const data = order.data as unknown as {
+    slices?: Array<{
+      segments?: Array<{
+        id?: string;
+        online_check_in_link?: string | null;
+        marketing_carrier?: { iata_code?: string; name?: string };
+        operating_carrier?: { iata_code?: string; name?: string };
+        departing_at?: string;
+        origin?: { iata_code?: string };
+        destination?: { iata_code?: string };
+      }>;
+    }>;
+  };
+  const links: OnlineCheckInLink[] = [];
+  for (const slice of data.slices ?? []) {
+    for (const seg of slice.segments ?? []) {
+      const carrierIata =
+        seg.marketing_carrier?.iata_code ?? seg.operating_carrier?.iata_code ?? '';
+      const carrierName =
+        seg.marketing_carrier?.name ?? seg.operating_carrier?.name ?? carrierIata;
+      const fallback = CARRIER_CHECKIN_FALLBACK[carrierIata.toUpperCase()];
+      const url =
+        typeof seg.online_check_in_link === 'string' && seg.online_check_in_link.length > 0
+          ? seg.online_check_in_link
+          : fallback && fallback.length > 0
+            ? fallback
+            : null;
+      links.push({
+        segmentId: seg.id ?? '',
+        carrierIata,
+        carrierName,
+        url,
+        departingAt: seg.departing_at ?? null,
+        originIata: seg.origin?.iata_code ?? null,
+        destinationIata: seg.destination?.iata_code ?? null,
+      });
+    }
+  }
+  return links;
 }
 
 // ============================================================================
