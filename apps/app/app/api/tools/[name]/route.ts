@@ -246,9 +246,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
     const result = await def.handler(parsedInput, ctx);
     return NextResponse.json({ result });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('[api/tools] handler threw', { tool: name, error: message });
-    return NextResponse.json({ error: 'tool_failed', tool: name, message }, { status: 500 });
+    const errName = err instanceof Error ? err.name : typeof err;
+    const baseMessage = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack?.split('\n').slice(0, 6).join('\n') : null;
+    const code = (err as { code?: string } | null)?.code ?? null;
+    // Duffel SDK errors arrive with `.errors[]` and an empty `.message`.
+    // Serialize the errors array so the trace shows what Duffel said
+    // instead of the empty string surface.
+    const duffelErrors = (err as { errors?: unknown } | null)?.errors;
+    const message =
+      baseMessage ||
+      (Array.isArray(duffelErrors)
+        ? duffelErrors
+            .map(e => {
+              const ee = e as { code?: string; message?: string; title?: string };
+              return ee.code || ee.title
+                ? `${ee.code ?? ee.title}: ${ee.message ?? ''}`
+                : JSON.stringify(e);
+            })
+            .join(' | ')
+        : '') ||
+      'unknown error';
+    console.error('[api/tools] handler threw', {
+      tool: name,
+      errName,
+      code,
+      message,
+      duffelErrors,
+      stack,
+    });
+    return NextResponse.json(
+      { error: 'tool_failed', tool: name, errName, code, message },
+      { status: 500 }
+    );
   }
 }
 

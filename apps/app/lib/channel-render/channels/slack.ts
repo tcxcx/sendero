@@ -35,9 +35,16 @@ import type {
   ChannelMessageCard,
   ChannelMessageEsimActivation,
   ChannelMessageSeatPicker,
+  ChannelMessageStayBookingConfirmation,
+  ChannelMessageStayQuoteReview,
+  ChannelMessageStayRatePicker,
   ChannelMessageToolResult,
   ChannelMessageTripBrief,
   ChannelRenderer,
+  ChannelStayBilling,
+  ChannelStayBusinessDetails,
+  ChannelStayCondition,
+  ChannelStayCancellationEntry,
   RenderedForChannel,
 } from '../types';
 
@@ -86,6 +93,12 @@ export const renderForSlack: ChannelRenderer<SlackPayload> = async (
       return renderAncillaryPicker(msg);
     case 'trip_brief':
       return renderTripBrief(msg);
+    case 'stay_rate_picker':
+      return renderStayRatePicker(msg);
+    case 'stay_quote_review':
+      return renderStayQuoteReview(msg);
+    case 'stay_booking_confirmation':
+      return renderStayBookingConfirmation(msg);
     default:
       return exhaustive(msg);
   }
@@ -766,6 +779,385 @@ function escapeMrkdwn(text: string): string {
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max - 3)}...`;
+}
+
+// ── Stays renderers ──────────────────────────────────────────────────
+//
+// Slack Block Kit can't replicate the rich card 1:1, but Duffel's review
+// criteria are about *information* not pixel parity: every required field
+// (billing breakdown separated, cancellation timeline verbatim, conditions
+// verbatim, key collection always-visible, business details) ships in
+// the rendered blocks below.
+
+function fmtMoneyStay(amount: string, currency: string): string {
+  if (!amount) return '—';
+  const n = Number(amount);
+  if (Number.isNaN(n)) return `${amount} ${currency}`;
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(n);
+  } catch {
+    return `${amount} ${currency}`;
+  }
+}
+
+function billingLines(b: ChannelStayBilling): string[] {
+  return [
+    `*Room*    \`${fmtMoneyStay(b.baseAmount ?? b.totalAmount, b.baseCurrency ?? b.totalCurrency)}\``,
+    `*Taxes*   \`${fmtMoneyStay(b.taxAmount, b.taxCurrency)}\``,
+    `*Fees*    \`${fmtMoneyStay(b.feeAmount, b.feeCurrency)}\``,
+    `*Total*   \`${fmtMoneyStay(b.totalAmount, b.totalCurrency)}\``,
+    `*Due at property*  \`${fmtMoneyStay(b.dueAtAccommodationAmount, b.dueAtAccommodationCurrency)}\``,
+  ];
+}
+
+function cancellationLines(entries: ChannelStayCancellationEntry[], totalAmount: string): string[] {
+  if (!entries.length) return ['_Non-refundable — no refund after booking._'];
+  const lines: string[] = [];
+  for (const t of entries) {
+    const isFull = Number(t.refundAmount) >= Number(totalAmount);
+    lines.push(
+      `${isFull ? ':white_check_mark: Full refund' : ':warning: Partial refund'} until ${t.before.slice(0, 10)} — \`${fmtMoneyStay(t.refundAmount, t.currency)}\``
+    );
+  }
+  lines.push(`:x: No refund after ${entries[entries.length - 1]!.before.slice(0, 10)}`);
+  return lines;
+}
+
+function conditionsBlocks(conditions: ChannelStayCondition[]): unknown[] {
+  if (!conditions.length) return [];
+  const blocks: unknown[] = [{ type: 'divider' }];
+  blocks.push({
+    type: 'section',
+    text: { type: 'mrkdwn', text: '*Hotel policy & rate conditions*' },
+  });
+  for (const c of conditions) {
+    const text = `*${escapeMrkdwn(c.title)}*\n${truncate(toSlackMrkdwn(c.description ?? ''), MAX_SECTION_TEXT - 4)}`;
+    blocks.push({ type: 'section', text: { type: 'mrkdwn', text } });
+  }
+  return blocks;
+}
+
+function businessFooter(b: ChannelStayBusinessDetails): unknown {
+  const links = [
+    `<mailto:${b.supportEmail}|${b.supportEmail}>`,
+    b.supportPhone,
+    `<${b.termsUrl}|Booking conditions & T&C>`,
+    b.bookingComTermsUrl ? `<${b.bookingComTermsUrl}|Booking.com terms>` : null,
+  ]
+    .filter(Boolean)
+    .join('  ·  ');
+  return {
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: `_Sold by *${escapeMrkdwn(b.name)}* · ${escapeMrkdwn(b.address)}_\n${links}`,
+      },
+    ],
+  };
+}
+
+function keyCollectionBlock(instructions: string | null): unknown {
+  const text =
+    instructions ?? 'Ask at the property on arrival — Duffel returned no key-collection note.';
+  return {
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `*:key: Key collection*\n${truncate(toSlackMrkdwn(text), MAX_SECTION_TEXT - 4)}`,
+    },
+  };
+}
+
+function renderStayRatePicker(msg: ChannelMessageStayRatePicker): RenderedForChannel<SlackPayload> {
+  const blocks: unknown[] = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `🏨 ${truncate(msg.accommodation.name, 140)}`,
+        emoji: true,
+      },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `${msg.rooms} room${msg.rooms === 1 ? '' : 's'} · ${msg.guests} guest${msg.guests === 1 ? '' : 's'}${msg.checkInDate && msg.checkOutDate ? ` · ${msg.checkInDate} → ${msg.checkOutDate}` : ''}${msg.accommodation.address ? `\n${escapeMrkdwn(msg.accommodation.address)}` : ''}`,
+        },
+      ],
+    },
+  ];
+
+  const grouped = new Map<string, typeof msg.rates>();
+  for (const r of msg.rates) {
+    const key = r.roomName ?? '—';
+    const list = grouped.get(key);
+    if (list) list.push(r);
+    else grouped.set(key, [r]);
+  }
+  for (const [roomName, rates] of grouped) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*${escapeMrkdwn(roomName)}*` },
+    });
+    for (const r of rates) {
+      const refundLabel = r.refundable ? '✅ refundable' : '❌ non-refundable';
+      const methods = r.availablePaymentMethods.length ? r.availablePaymentMethods.join(', ') : '—';
+      const paymentType = r.paymentType ? r.paymentType.replace(/_/g, ' ') : '—';
+      const description =
+        `${fmtMoneyStay(r.billing.totalAmount, r.billing.totalCurrency)} total\n` +
+        `Tax \`${fmtMoneyStay(r.billing.taxAmount, r.billing.taxCurrency)}\` · ` +
+        `Fee \`${fmtMoneyStay(r.billing.feeAmount, r.billing.feeCurrency)}\` · ` +
+        `Due at property \`${fmtMoneyStay(r.billing.dueAtAccommodationAmount, r.billing.dueAtAccommodationCurrency)}\`\n` +
+        `${refundLabel} · payment ${paymentType} (${methods})`;
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: description },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Pick this rate', emoji: true },
+          action_id: 'select_stay_rate',
+          value: r.rateId,
+        },
+      });
+    }
+  }
+  blocks.push(businessFooter(msg.business));
+
+  return {
+    channel: 'slack',
+    payload: {
+      channel: '',
+      thread_ts: undefined,
+      text: `Hotel rates: ${msg.accommodation.name}`,
+      blocks,
+    },
+  };
+}
+
+function renderStayQuoteReview(
+  msg: ChannelMessageStayQuoteReview
+): RenderedForChannel<SlackPayload> {
+  const blocks: unknown[] = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `🏨 ${truncate(msg.accommodation.name, 140)}`,
+        emoji: true,
+      },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text:
+            `${msg.rooms} room${msg.rooms === 1 ? '' : 's'} · ${msg.guests} guest${msg.guests === 1 ? '' : 's'} · ${msg.nights} night${msg.nights === 1 ? '' : 's'}` +
+            (msg.accommodation.address ? `\n${escapeMrkdwn(msg.accommodation.address)}` : ''),
+        },
+      ],
+    },
+    {
+      type: 'section',
+      fields: [
+        {
+          type: 'mrkdwn',
+          text: `*Check in*\n${msg.checkInDate}${msg.accommodation.checkInAfter ? `\n_from ${msg.accommodation.checkInAfter}_` : ''}`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*Check out*\n${msg.checkOutDate}${msg.accommodation.checkOutBefore ? `\n_until ${msg.accommodation.checkOutBefore}_` : ''}`,
+        },
+      ],
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: ['*Billing summary*', ...billingLines(msg.billing)].join('\n'),
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: [
+          '*Cancellation policy*',
+          ...cancellationLines(msg.cancellationTimeline, msg.billing.totalAmount),
+        ].join('\n'),
+      },
+    },
+    ...conditionsBlocks(msg.conditions),
+    keyCollectionBlock(msg.accommodation.keyCollection),
+    buildStayQuoteActions(msg),
+    businessFooter(msg.business),
+  ];
+
+  return {
+    channel: 'slack',
+    payload: {
+      channel: '',
+      thread_ts: undefined,
+      text: `Hotel quote ${fmtMoneyStay(msg.billing.totalAmount, msg.billing.totalCurrency)} — ${msg.accommodation.name}`,
+      blocks,
+    },
+  };
+}
+
+/**
+ * Build the confirm/cancel actions block. When `travelerContact` is
+ * present, the button value carries the minimum JSON needed for the
+ * Slack interaction handler to actually run `book_stay` server-side.
+ * When absent, we degrade to a "View on web" link so the user goes
+ * back to the chat surface where the traveler IS authenticated.
+ *
+ * Action-id convention mirrors sendero_approval:
+ *   confirm_stay_booking  → run book_stay
+ *   cancel_stay_booking   → flip card to "Canceled" state, no API call
+ *     (Duffel quotes expire on their own; no explicit cancel endpoint)
+ */
+function buildStayQuoteActions(msg: ChannelMessageStayQuoteReview): unknown {
+  if (!msg.travelerContact || !msg.tenantId) {
+    return {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Open in Sendero', emoji: true },
+          action_id: 'open_link',
+          // The chat surface stays the source of truth when the operator
+          // taps from Slack without the traveler context attached.
+          value: msg.quoteId,
+        },
+      ],
+    };
+  }
+
+  // Pack {q,t,tr,e,g,f} into the button value JSON. Slack's `value`
+  // field accepts up to 2000 chars; this payload is ~200 worst case.
+  const c = msg.travelerContact;
+  const value = JSON.stringify({
+    q: msg.quoteId,
+    t: msg.tenantId,
+    ...(msg.tripId ? { tr: msg.tripId } : {}),
+    e: c.email,
+    g: c.givenName,
+    f: c.familyName,
+  });
+  return {
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        style: 'primary',
+        text: { type: 'plain_text', text: 'Confirm booking', emoji: true },
+        action_id: 'confirm_stay_booking',
+        value,
+      },
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Cancel', emoji: true },
+        action_id: 'cancel_stay_booking',
+        value,
+      },
+    ],
+  };
+}
+
+function renderStayBookingConfirmation(
+  msg: ChannelMessageStayBookingConfirmation
+): RenderedForChannel<SlackPayload> {
+  const blocks: unknown[] = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: '✅ Booking confirmed', emoji: true },
+    },
+    {
+      type: 'section',
+      fields: [
+        {
+          type: 'mrkdwn',
+          text: `*Booking reference*\n\`${escapeMrkdwn(msg.reference)}\``,
+        },
+        {
+          type: 'mrkdwn',
+          text: msg.confirmedAt
+            ? `*Confirmed at*\n${msg.confirmedAt.slice(0, 19).replace('T', ' ')}`
+            : `*Status*\n${escapeMrkdwn(msg.status)}`,
+        },
+      ],
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${escapeMrkdwn(msg.accommodation.name)}*${
+          msg.accommodation.address ? `\n${escapeMrkdwn(msg.accommodation.address)}` : ''
+        }\n${msg.rooms} room${msg.rooms === 1 ? '' : 's'} · ${msg.guests} guest${msg.guests === 1 ? '' : 's'} · ${msg.nights} night${msg.nights === 1 ? '' : 's'}${msg.roomName ? ` · ${escapeMrkdwn(msg.roomName)}` : ''}`,
+      },
+    },
+    {
+      type: 'section',
+      fields: [
+        {
+          type: 'mrkdwn',
+          text: `*Check in*\n${msg.checkInDate}${msg.accommodation.checkInAfter ? `\n_from ${msg.accommodation.checkInAfter}_` : ''}`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*Check out*\n${msg.checkOutDate}${msg.accommodation.checkOutBefore ? `\n_until ${msg.accommodation.checkOutBefore}_` : ''}`,
+        },
+      ],
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: ['*Billing summary*', ...billingLines(msg.billing)].join('\n'),
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: [
+          '*Cancellation policy*',
+          ...cancellationLines(msg.cancellationTimeline, msg.billing.totalAmount),
+        ].join('\n'),
+      },
+    },
+    ...conditionsBlocks(msg.conditions),
+    keyCollectionBlock(msg.accommodation.keyCollection),
+  ];
+
+  if (msg.tripUrl) {
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'View trip', emoji: true },
+          url: msg.tripUrl,
+          action_id: 'open_link',
+        },
+      ],
+    });
+  }
+  blocks.push(businessFooter(msg.business));
+
+  return {
+    channel: 'slack',
+    payload: {
+      channel: '',
+      thread_ts: undefined,
+      text: `Booking confirmed · ${msg.reference} · ${msg.accommodation.name}`,
+      blocks,
+    },
+  };
 }
 
 function exhaustive(_: never): never {

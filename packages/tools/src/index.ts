@@ -72,6 +72,7 @@ import {
   sendInteractiveButtonsTool,
   sendInteractiveListTool,
 } from './whatsapp-interactive';
+import { listStayRatesTool } from './list-stay-rates';
 import { manageStaysNegotiatedRateTool } from './manage-stays-negotiated-rate';
 import { quoteStayTool } from './quote-stay';
 import { gatewayTransferTool } from './gateway-transfer';
@@ -134,6 +135,13 @@ export {
   airQualityBriefTool,
 } from './air-quality-brief';
 export { cancelBookingTool } from './cancel-booking';
+export {
+  bookStay,
+  type BookStayInput,
+  type BookStayResult,
+  type StayBookingConfirmationPayload,
+} from './book-stay';
+export { bookStayTool };
 export {
   confirmBookingTool,
   runConfirmBooking,
@@ -476,6 +484,7 @@ export const toolList: ToolDef[] = [
   // Advanced flight flows (air + stays + credits + conditions + places)
   findAirportsNearbyTool,
   displayOfferConditionsTool,
+  listStayRatesTool,
   quoteStayTool,
   bookStayTool,
   // Travel ancillaries (eSIM, future: card issuance) — share the same

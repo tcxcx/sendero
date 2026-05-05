@@ -35,7 +35,12 @@ import {
 } from '@sendero/slack';
 import { handleTripNoteSubmission, TRIP_NOTE_CALLBACK_ID } from '@/lib/slack-views/trip-note';
 import { routeFanoutCtaTap, routeSlackAncillaryTap } from '@/lib/ancillary-tap-router';
-import { toolList } from '@sendero/tools';
+import {
+  buildStayResolvedBlocks,
+  parseStayBookingAction,
+  type StayResolvedSubject,
+} from '@/lib/slack-stay-actions';
+import { toolList, bookStay } from '@sendero/tools';
 import { findWorkflow, resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
 
 export const runtime = 'nodejs';
@@ -190,6 +195,13 @@ async function handleInteraction(
         // JSON-encoded staging payload in `selected_option.value`
         // (overflow menu — seats) or `action.value` (button — bags).
         await handleAncillaryPickerTap(payload, action, install);
+        return;
+      }
+      if (
+        action.action_id === 'confirm_stay_booking' ||
+        action.action_id === 'cancel_stay_booking'
+      ) {
+        await handleStayBookingAction(payload, action, install);
         return;
       }
     }
@@ -453,6 +465,166 @@ async function handleApprovalAction(
     });
   } catch (err) {
     console.error('[slack/interactions] workflow resume failed:', err);
+  }
+}
+
+// ─── Stay booking action ──────────────────────────────────────────────
+//
+// `confirm_stay_booking` runs `book_stay` server-side using the traveler
+// contact embedded in the button value, then swaps the original
+// quote-review card to a "Booked · <reference>" resolved state.
+//
+// `cancel_stay_booking` is a one-way no-op against Duffel (quotes expire
+// on their own; there's no explicit cancel endpoint). We just flip the
+// card to "Canceled" so the operator sees the decision is locked in.
+//
+// Tenant-bind: parsed.tenantId is double-checked against `install.tenantId`
+// before any action — defense against forged button payloads from a
+// hostile actor with chat access. Same gate as `handleApprovalAction`.
+
+async function handleStayBookingAction(
+  payload: BlockActionsPayload,
+  action: BlockActionsPayload['actions'][number],
+  install: SlackInstallRow
+): Promise<void> {
+  const parsed = parseStayBookingAction(action);
+  if (!parsed) return;
+
+  if (install.tenantId !== parsed.tenantId) {
+    await respondToInteraction(payload.response_url, {
+      text: 'This booking is not linked to your Sendero workspace.',
+      response_type: 'ephemeral',
+      replace_original: false,
+    });
+    return;
+  }
+
+  if (parsed.decision === 'cancel') {
+    if (payload.channel && payload.message) {
+      const subject: StayResolvedSubject = { hotelName: 'Hotel quote' };
+      const client = createSlackClient(install.botToken);
+      await updateMessage(client, {
+        channel: payload.channel.id,
+        ts: payload.message.ts,
+        blocks: buildStayResolvedBlocks(subject, 'canceled', payload.user.id),
+      });
+    }
+    return;
+  }
+
+  // Resolve the Slack user → Sendero userId via SlackUserBinding so
+  // ensureFlightCustomer can link this booking's Duffel customer record
+  // to the right Sendero user (loyalty, support assistant, post-booking
+  // events all key off it). Same lookup `handleFanoutButtonTap` uses.
+  //
+  // Fail closed: an unbound Slack user clicking Confirm shouldn't move
+  // money — flip the card to a "not authorized" failed state and bail.
+  // Operators get a SlackUserBinding the first time they're @-mentioned
+  // by the agent (auto-provisioned in `slack-user-mapping.ts`); a
+  // missing binding usually means the org admin hasn't been onboarded
+  // yet, not that the booking should silently proceed.
+  const binding = await prisma.slackUserBinding.findFirst({
+    where: {
+      tenantId: install.tenantId,
+      slackTeamId: install.teamId,
+      slackUserId: payload.user.id,
+    },
+    select: { senderoUserId: true },
+  });
+  if (!binding) {
+    console.warn('[slack/interactions] no SlackUserBinding for stay confirm', {
+      slackUserId: payload.user.id,
+      tenantId: install.tenantId,
+    });
+    if (payload.channel && payload.message) {
+      const client = createSlackClient(install.botToken);
+      await updateMessage(client, {
+        channel: payload.channel.id,
+        ts: payload.message.ts,
+        blocks: buildStayResolvedBlocks(
+          { hotelName: 'Hotel quote' },
+          'failed',
+          payload.user.id,
+          'Your Slack account is not linked to a Sendero user yet. Sign in to Sendero first and try again.'
+        ),
+      });
+    }
+    try {
+      await respondToInteraction(payload.response_url, {
+        text: 'Your Slack account is not linked to a Sendero user yet. Sign in to Sendero first.',
+        response_type: 'ephemeral',
+        replace_original: false,
+      });
+    } catch {
+      // already logged above
+    }
+    return;
+  }
+
+  // confirm — actually run book_stay.
+  try {
+    const result = await bookStay(
+      {
+        quoteId: parsed.quoteId,
+        email: parsed.travelerEmail,
+        guests: [{ givenName: parsed.travelerGivenName, familyName: parsed.travelerFamilyName }],
+        ...(parsed.tripId ? { tripId: parsed.tripId } : {}),
+      },
+      {
+        // Slack tapper resolved via SlackUserBinding — `ensureFlightCustomer`
+        // links the Duffel customer record to this Sendero user, payer
+        // resolution attributes spend correctly, and the post-booking
+        // email lookup keys off the same id.
+        traveler: {
+          tenantId: parsed.tenantId,
+          userId: binding.senderoUserId,
+          isPlaceholder: false,
+        },
+      }
+    );
+    const c = result.stayBookingConfirmation;
+
+    if (payload.channel && payload.message) {
+      const subject: StayResolvedSubject = {
+        hotelName: c.accommodation.name,
+        reference: result.reference,
+        checkInDate: result.checkInDate,
+        checkOutDate: result.checkOutDate,
+        totalAmount: result.totalAmount,
+        totalCurrency: result.totalCurrency,
+      };
+      const client = createSlackClient(install.botToken);
+      await updateMessage(client, {
+        channel: payload.channel.id,
+        ts: payload.message.ts,
+        blocks: buildStayResolvedBlocks(subject, 'confirmed', payload.user.id),
+      });
+    }
+  } catch (err) {
+    console.error('[slack/interactions] stay booking failed:', err);
+    if (payload.channel && payload.message) {
+      const subject: StayResolvedSubject = { hotelName: 'Hotel quote' };
+      const client = createSlackClient(install.botToken);
+      await updateMessage(client, {
+        channel: payload.channel.id,
+        ts: payload.message.ts,
+        blocks: buildStayResolvedBlocks(
+          subject,
+          'failed',
+          payload.user.id,
+          err instanceof Error ? err.message : String(err)
+        ),
+      });
+    }
+    try {
+      await respondToInteraction(payload.response_url, {
+        text: 'Booking failed. The quote may have expired — re-quote and try again.',
+        response_type: 'ephemeral',
+        replace_original: false,
+      });
+    } catch {
+      // already logged on the chat.update above
+    }
   }
 }
 

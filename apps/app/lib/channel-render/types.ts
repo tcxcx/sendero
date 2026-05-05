@@ -68,7 +68,11 @@ export interface ChannelCta {
     | 'tool_invoke'
     | 'reply'
     | 'select_seat'
-    | 'add_bag';
+    | 'add_bag'
+    // Stays funnel: search → list_stay_rates (rate picker) → quote_stay (review) → book_stay
+    | 'select_stay_rate'
+    | 'confirm_stay_booking'
+    | 'cancel_stay_booking';
   /** Free-form value the receiving handler reads (offer id, url, etc.). */
   value?: string;
   /** When the CTA is a link, the destination. */
@@ -314,6 +318,195 @@ export interface ChannelMessageAncillaryPicker {
 }
 
 /**
+ * Shared accommodation block that every Stays-side ChannelMessage echoes.
+ * Mirrors the fields Duffel's Go-Live review demands. Every renderer is
+ * required to surface name + address + check-in/out times + key_collection
+ * (the last shown even when null — fall back to `Ask at the property` per
+ * Duffel guidance).
+ */
+export interface ChannelStayAccommodation {
+  name: string;
+  /** ISO-2 country, used for flag chips on web/operator. */
+  country: string | null;
+  city: string | null;
+  /** Free-form one-line address (line_one + region + postal_code joined). */
+  address: string | null;
+  /** "14:30" / "11:30". Renderers display verbatim. */
+  checkInAfter: string | null;
+  checkOutBefore: string | null;
+  /** Always rendered. When null, renderers print a "ask at property" fallback. */
+  keyCollection: string | null;
+}
+
+/**
+ * Per-rate billing summary. Duffel mandates that taxes and fees are
+ * surfaced separately (even when zero) and that the total renders as
+ * returned by the API — never re-summed by us.
+ */
+export interface ChannelStayBilling {
+  baseAmount: string | null;
+  baseCurrency: string | null;
+  taxAmount: string;
+  taxCurrency: string;
+  feeAmount: string;
+  feeCurrency: string;
+  totalAmount: string;
+  totalCurrency: string;
+  dueAtAccommodationAmount: string;
+  dueAtAccommodationCurrency: string;
+}
+
+/**
+ * Verbatim cancellation policy entry. Renderers MUST NOT paraphrase the
+ * `description` field — Duffel reviews the rendered output against the
+ * raw API string. Pass it through unchanged.
+ */
+export interface ChannelStayCancellationEntry {
+  before: string;
+  refundAmount: string;
+  currency: string;
+}
+
+/**
+ * Verbatim rate condition. Renderers MUST display `description` in full
+ * (no truncation, no expand-to-read action). `title` is the heading.
+ */
+export interface ChannelStayCondition {
+  title: string;
+  description: string;
+}
+
+/**
+ * Sendero business details (your-business-info per Duffel Go-Live).
+ * Required pre- AND post-booking. Tenant-resolved so a Sendero-on-Sendero
+ * white-label tenant can override. Falls back to Sendero defaults.
+ */
+export interface ChannelStayBusinessDetails {
+  name: string;
+  address: string;
+  supportEmail: string;
+  supportPhone: string;
+  termsUrl: string;
+  /** Booking.com terms URL when Duffel attributes inventory there. */
+  bookingComTermsUrl?: string;
+}
+
+/**
+ * Rate picker — emitted by `list_stay_rates`. Each rate is a tap target
+ * that invokes `quote_stay`. Grouped by `roomName` on the operator side
+ * for readability; channels collapse to flat list + interactive primitive.
+ */
+export interface ChannelMessageStayRatePicker {
+  kind: 'stay_rate_picker';
+  id: string;
+  author: ChannelAuthor;
+  /** Duffel search-result id this rate set belongs to. */
+  searchResultId: string;
+  accommodation: ChannelStayAccommodation;
+  /** Stay window — used to compute nights. */
+  checkInDate: string;
+  checkOutDate: string;
+  /** Rooms count + guests count from the original search. Required pre-booking display. */
+  rooms: number;
+  guests: number;
+  rates: Array<{
+    rateId: string;
+    roomName: string | null;
+    /** "pay_now" | "deposit" | "guarantee" — Duffel may omit. */
+    paymentType: string | null;
+    /** "balance" / "card" — informs the agent which top-up flow the traveler needs. */
+    availablePaymentMethods: string[];
+    refundable: boolean;
+    billing: ChannelStayBilling;
+    cancellationTimeline: ChannelStayCancellationEntry[];
+    boardType?: string | null;
+  }>;
+  business: ChannelStayBusinessDetails;
+  createdAt: string;
+}
+
+/**
+ * Pre-booking review card — emitted by `quote_stay`. This is the canonical
+ * "before you book" screen Duffel mandates: every billing field separated,
+ * cancellation policy verbatim, conditions verbatim and visible by default,
+ * key collection always shown, business details visible.
+ */
+export interface ChannelMessageStayQuoteReview {
+  kind: 'stay_quote_review';
+  id: string;
+  author: ChannelAuthor;
+  quoteId: string;
+  /** Sendero Trip.id — confirm CTA needs this. */
+  tripId?: string;
+  /** Sendero Tenant.id — confirm CTA needs this for tenant-bind. */
+  tenantId?: string;
+  /**
+   * Optional traveler contact that the Slack `confirm_stay_booking`
+   * button needs to actually run `book_stay` from a Slack tap. Populated
+   * by the agent layer when the quote is destined for a Slack thread
+   * where the operator (not the traveler) is hitting the confirm button.
+   * Web/WhatsApp don't need this — the traveler is already authenticated.
+   */
+  travelerContact?: {
+    email: string;
+    givenName: string;
+    familyName: string;
+  };
+  accommodation: ChannelStayAccommodation;
+  checkInDate: string;
+  checkOutDate: string;
+  /** Computed nights = (checkOut - checkIn). Renderers may also compute. */
+  nights: number;
+  rooms: number;
+  guests: number;
+  /** Selected room from the list_stay_rates picker. */
+  roomName: string | null;
+  paymentType: string | null;
+  /** Resolved payer for the booking; informs the "Paid by" footer. */
+  payer?: 'tenant' | 'traveler' | null;
+  billing: ChannelStayBilling;
+  cancellationTimeline: ChannelStayCancellationEntry[];
+  conditions: ChannelStayCondition[];
+  supportedLoyaltyProgrammeName?: string | null;
+  business: ChannelStayBusinessDetails;
+  createdAt: string;
+}
+
+/**
+ * Post-booking confirmation — emitted by `book_stay` after Duffel returns
+ * a confirmed booking. Carries `reference` (the API-returned booking ref,
+ * not Sendero's id) + `confirmedAt` + every pre-booking field.
+ */
+export interface ChannelMessageStayBookingConfirmation {
+  kind: 'stay_booking_confirmation';
+  id: string;
+  author: ChannelAuthor;
+  bookingId: string;
+  /** Duffel-returned booking reference (e.g. "AFE33SE2"). Renderers MUST
+   *  surface this verbatim — it's the field guests show at reception. */
+  reference: string;
+  status: string;
+  /** ISO timestamp from Duffel (`confirmed_at`). Renderers format per locale. */
+  confirmedAt: string | null;
+  accommodation: ChannelStayAccommodation;
+  checkInDate: string;
+  checkOutDate: string;
+  nights: number;
+  rooms: number;
+  guests: number;
+  roomName: string | null;
+  payer?: 'tenant' | 'traveler' | null;
+  billing: ChannelStayBilling;
+  cancellationTimeline: ChannelStayCancellationEntry[];
+  conditions: ChannelStayCondition[];
+  supportedLoyaltyProgrammeName?: string | null;
+  /** Public Sendero trip-brief share URL when available. */
+  tripUrl?: string | null;
+  business: ChannelStayBusinessDetails;
+  createdAt: string;
+}
+
+/**
  * Trip brief — single-call recap of an entire trip. Surfaces the trip
  * header, flights, stays, eSIM connectivity, alerts, and a public
  * share URL the traveler can forward. Each channel renders its own
@@ -403,6 +596,9 @@ export type ChannelMessage =
   | ChannelMessageEsimActivation
   | ChannelMessageSeatPicker
   | ChannelMessageAncillaryPicker
+  | ChannelMessageStayRatePicker
+  | ChannelMessageStayQuoteReview
+  | ChannelMessageStayBookingConfirmation
   | ChannelMessageTripBrief;
 
 /**

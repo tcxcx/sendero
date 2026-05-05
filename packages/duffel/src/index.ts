@@ -1000,6 +1000,37 @@ export interface HotelOfferSummary {
 }
 
 /**
+ * Derive a coarse cancellation label for a single hotel offer summary.
+ *
+ * Per-rate cancellation timelines only appear when the caller fetched
+ * the search result with `searchResults.fetchAllRates` — the Duffel
+ * list-search response carries `cheapest_rate_*` summaries only and
+ * leaves `accommodation.rooms[].rates` empty. The bug this replaces
+ * walked `r.rates` (always empty), so every offer was incorrectly
+ * tagged 'unknown' or 'partial'. Now: walk the right path; report
+ * 'unknown' when the data isn't there.
+ */
+export function deriveStayCancellation(
+  rooms: Array<{
+    rates?: Array<{
+      total_amount: string;
+      cancellation_timeline?: Array<{ refund_amount: string }>;
+    }>;
+  }>
+): HotelOfferSummary['cancellation'] {
+  const flatRates = rooms.flatMap(rm => rm.rates ?? []);
+  if (!flatRates.length) return 'unknown';
+  const hasFullRefund = flatRates.some(rate =>
+    rate.cancellation_timeline?.some(
+      c => parseFloat(c.refund_amount) >= parseFloat(rate.total_amount)
+    )
+  );
+  if (hasFullRefund) return 'free';
+  const hasAnyTimeline = flatRates.some(rate => (rate.cancellation_timeline?.length ?? 0) > 0);
+  return hasAnyTimeline ? 'partial' : 'non_refundable';
+}
+
+/**
  * Search hotels via Duffel Stays API.
  * Returns the top 6 accommodations ranked by Duffel's default ordering,
  * each with real photos + the cheapest available rate.
@@ -1010,23 +1041,27 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOffe
   const radiusKm = params.radiusKm ?? 5;
 
   /**
-   * `StaysSearchResult` from the SDK omits `rates` (returned only when fetching
-   * individual search results, not in the list response). We extend it locally
-   * for the cancellation-policy check. `distance_meters` is also not on the SDK
-   * `StaysLocation` but may appear in the raw API response.
-   * TODO(duffel-types): upstream to @duffel/api once SDK catches up.
+   * The list-search response only carries `cheapest_rate_*` summary fields —
+   * full per-rate detail (cancellation_timeline, payment_type, room name) lives
+   * under `accommodation.rooms[].rates[]` only when the caller fetches by id
+   * via `searchResults.fetchAllRates`. The SDK types omit `rooms` on the
+   * accommodation; we widen here for the cancellation derivation.
    */
-  type StaysSearchResultExtended = StaysSearchResult & {
-    rates?: Array<{
-      total_amount: string;
-      cancellation_timeline?: Array<{ refund_amount: string }>;
-    }>;
-  };
-
   type StaysLocationExtended = {
     address?: { city_name?: string; country_code?: string };
     /** Not in SDK StaysLocation but present in raw API for some search results. */
     distance_meters?: number | null;
+  };
+  type StaysSearchResultExtended = StaysSearchResult & {
+    accommodation: StaysSearchResult['accommodation'] & {
+      rooms?: Array<{
+        name?: string;
+        rates?: Array<{
+          total_amount: string;
+          cancellation_timeline?: Array<{ refund_amount: string }>;
+        }>;
+      }>;
+    };
   };
 
   let response: Awaited<ReturnType<typeof duffel.stays.search>>;
@@ -1092,15 +1127,7 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOffe
       .filter(Boolean)
       .slice(0, 3);
     const loc = acc.location as StaysLocationExtended;
-    const cancellation: HotelOfferSummary['cancellation'] = (r.rates ?? []).some(rate =>
-      rate.cancellation_timeline?.some(
-        c => parseFloat(c.refund_amount) >= parseFloat(rate.total_amount)
-      )
-    )
-      ? 'free'
-      : (r.rates ?? []).some(rate => parseFloat(rate.total_amount) > 0)
-        ? 'partial'
-        : 'unknown';
+    const cancellation = deriveStayCancellation(acc.rooms ?? []);
 
     return {
       id: r.id,
@@ -1120,6 +1147,130 @@ export async function searchHotels(params: HotelSearchParams): Promise<HotelOffe
         .slice(0, 5),
     };
   });
+}
+
+export interface StayRateSummary {
+  /** Rate id (`rat_…`) — pass to `createStayQuote`. */
+  rateId: string;
+  roomName: string | null;
+  /** Full billing breakdown, separated. Duffel Go-Live mandates rendering
+   *  base / tax / fee / due-at-property without summing on our side. */
+  baseAmount: string | null;
+  baseCurrency: string | null;
+  taxAmount: string;
+  taxCurrency: string;
+  feeAmount: string;
+  feeCurrency: string;
+  totalAmount: string;
+  totalCurrency: string;
+  /** Always set; "0" when Duffel returns null. */
+  dueAtAccommodationAmount: string;
+  dueAtAccommodationCurrency: string;
+  /** `pay_now` | `deposit` | `guarantee`, when supplied by Duffel. */
+  paymentType: string | null;
+  /** Card / balance methods Duffel will accept on this rate. */
+  availablePaymentMethods: string[];
+  /** True iff cancellation_timeline has at least one entry. */
+  refundable: boolean;
+  /** Inline cancellation timeline, when present. */
+  cancellationTimeline: Array<{ before: string; refund_amount: string; currency: string }>;
+  /** "room_only" | "breakfast" | "half_board" | "full_board" | "all_inclusive". */
+  boardType: string | null;
+}
+
+export interface StayRatesResult {
+  /** Search-result id passed in. */
+  searchResultId: string;
+  hotelName: string;
+  /** ISO-2 country code from Duffel. */
+  country: string | null;
+  city: string | null;
+  /** Earliest check-in time the property accepts (e.g. "14:30"). */
+  checkInAfter: string | null;
+  checkOutBefore: string | null;
+  /** Free-form key-collection instructions. Duffel mandates we surface this. */
+  keyCollection: string | null;
+  rates: StayRateSummary[];
+}
+
+/**
+ * Fetch the full rate matrix (rooms × rates) for a Duffel Stays search
+ * result. The list search only returns `cheapest_rate_*` summaries, so
+ * the agent must call this before quoting — only this endpoint hands
+ * back rate ids and per-rate cancellation timelines.
+ *
+ * https://duffel.com/docs/api/v2/stays-search-results/get-stays-search-result-rates
+ */
+export async function listStayRates(searchResultId: string): Promise<StayRatesResult> {
+  const duffel = getDuffel();
+  const stays = duffel.stays as unknown as {
+    searchResults: {
+      fetchAllRates: (id: string) => Promise<{ data: unknown }>;
+    };
+  };
+  const r = await stays.searchResults.fetchAllRates(searchResultId);
+  type Room = {
+    name?: string;
+    rates?: Array<{
+      id: string;
+      total_amount: string;
+      total_currency: string;
+      base_amount?: string | null;
+      base_currency?: string | null;
+      tax_amount?: string | null;
+      tax_currency?: string | null;
+      fee_amount?: string | null;
+      fee_currency?: string | null;
+      due_at_accommodation_amount?: string | null;
+      due_at_accommodation_currency?: string | null;
+      payment_type?: string;
+      available_payment_methods?: string[];
+      cancellation_timeline?: Array<{ before: string; refund_amount: string; currency: string }>;
+      board_type?: string;
+    }>;
+  };
+  type AccommodationLite = {
+    name?: string;
+    location?: { address?: { city_name?: string; country_code?: string } };
+    check_in_information?: { check_in_after_time?: string; check_out_before_time?: string };
+    key_collection?: { instructions?: string };
+    rooms?: Room[];
+  };
+  type Result = { id: string; accommodation: AccommodationLite };
+  const result = r.data as Result;
+  const acc = result.accommodation;
+  const rooms = acc.rooms ?? [];
+  const rates: StayRateSummary[] = rooms.flatMap(rm =>
+    (rm.rates ?? []).map(rt => ({
+      rateId: rt.id,
+      roomName: rm.name ?? null,
+      baseAmount: rt.base_amount ?? null,
+      baseCurrency: rt.base_currency ?? rt.total_currency,
+      taxAmount: rt.tax_amount ?? '0',
+      taxCurrency: rt.tax_currency ?? rt.total_currency,
+      feeAmount: rt.fee_amount ?? '0',
+      feeCurrency: rt.fee_currency ?? rt.total_currency,
+      totalAmount: rt.total_amount,
+      totalCurrency: rt.total_currency,
+      dueAtAccommodationAmount: rt.due_at_accommodation_amount ?? '0',
+      dueAtAccommodationCurrency: rt.due_at_accommodation_currency ?? rt.total_currency,
+      paymentType: rt.payment_type ?? null,
+      availablePaymentMethods: rt.available_payment_methods ?? [],
+      refundable: (rt.cancellation_timeline?.length ?? 0) > 0,
+      cancellationTimeline: rt.cancellation_timeline ?? [],
+      boardType: rt.board_type ?? null,
+    }))
+  );
+  return {
+    searchResultId: result.id,
+    hotelName: acc.name ?? 'Unknown property',
+    country: acc.location?.address?.country_code ?? null,
+    city: acc.location?.address?.city_name ?? null,
+    checkInAfter: acc.check_in_information?.check_in_after_time ?? null,
+    checkOutBefore: acc.check_in_information?.check_out_before_time ?? null,
+    keyCollection: acc.key_collection?.instructions ?? null,
+    rates,
+  };
 }
 
 // ============================================================================

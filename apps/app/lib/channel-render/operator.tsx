@@ -30,6 +30,10 @@ import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai
 // of Confirmation, and the `tool_invocation` case below for why Task is
 // held until the canonical shape exposes a multi-step orchestration kind.
 
+import { StayRatePickerCard } from '@/components/ai-elements/stay-rate-picker-card';
+import { StayQuoteReviewCard } from '@/components/ai-elements/stay-quote-card';
+import { StayBookingConfirmationCard } from '@/components/ai-elements/stay-booking-confirmation-card';
+
 import { DEVICE_ORDER, INSTALL_INSTRUCTIONS } from './install-instructions';
 import type {
   ChannelMessage,
@@ -37,6 +41,9 @@ import type {
   ChannelMessageEsimActivation,
   ChannelMessageSeatPicker,
   ChannelMessageAncillaryPicker,
+  ChannelMessageStayRatePicker,
+  ChannelMessageStayQuoteReview,
+  ChannelMessageStayBookingConfirmation,
   ChannelMessageTripBrief,
 } from './types';
 
@@ -212,9 +219,103 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
         </MessageContent>
       );
 
+    case 'stay_rate_picker':
+      return (
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
+          <StayRatePickerView msg={msg} />
+        </MessageContent>
+      );
+
+    case 'stay_quote_review':
+      return (
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
+          <StayQuoteReviewView msg={msg} />
+        </MessageContent>
+      );
+
+    case 'stay_booking_confirmation':
+      return (
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
+          <StayBookingConfirmationView msg={msg} />
+        </MessageContent>
+      );
+
     default:
       return exhaustive(msg);
   }
+}
+
+function StayRatePickerView({ msg }: { msg: ChannelMessageStayRatePicker }) {
+  return (
+    <StayRatePickerCard
+      data={{
+        searchResultId: msg.searchResultId,
+        accommodation: msg.accommodation,
+        checkInDate: msg.checkInDate,
+        checkOutDate: msg.checkOutDate,
+        rooms: msg.rooms,
+        guests: msg.guests,
+        rates: msg.rates.map(r => ({
+          rateId: r.rateId,
+          roomName: r.roomName,
+          paymentType: r.paymentType,
+          availablePaymentMethods: r.availablePaymentMethods,
+          refundable: r.refundable,
+          boardType: r.boardType ?? null,
+          billing: r.billing,
+        })),
+        business: msg.business,
+      }}
+    />
+  );
+}
+
+function StayQuoteReviewView({ msg }: { msg: ChannelMessageStayQuoteReview }) {
+  return (
+    <StayQuoteReviewCard
+      data={{
+        quoteId: msg.quoteId,
+        accommodation: msg.accommodation,
+        checkInDate: msg.checkInDate,
+        checkOutDate: msg.checkOutDate,
+        nights: msg.nights,
+        rooms: msg.rooms,
+        guests: msg.guests,
+        roomName: msg.roomName,
+        paymentType: msg.paymentType,
+        billing: msg.billing,
+        cancellationTimeline: msg.cancellationTimeline,
+        conditions: msg.conditions,
+        supportedLoyaltyProgrammeName: msg.supportedLoyaltyProgrammeName,
+        business: msg.business,
+      }}
+    />
+  );
+}
+
+function StayBookingConfirmationView({ msg }: { msg: ChannelMessageStayBookingConfirmation }) {
+  return (
+    <StayBookingConfirmationCard
+      data={{
+        bookingId: msg.bookingId,
+        reference: msg.reference,
+        confirmedAt: msg.confirmedAt,
+        accommodation: msg.accommodation,
+        checkInDate: msg.checkInDate,
+        checkOutDate: msg.checkOutDate,
+        nights: msg.nights,
+        rooms: msg.rooms,
+        guests: msg.guests,
+        roomName: msg.roomName,
+        paymentType: null,
+        billing: msg.billing,
+        cancellationTimeline: msg.cancellationTimeline,
+        conditions: msg.conditions,
+        supportedLoyaltyProgrammeName: msg.supportedLoyaltyProgrammeName,
+        business: msg.business,
+      }}
+    />
+  );
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────

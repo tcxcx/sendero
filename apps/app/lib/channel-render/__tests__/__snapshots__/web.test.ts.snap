@@ -360,3 +360,242 @@ exports[`renderForWeb trip_brief bubble carries all sections + alerts + share UR
   },
 }
 `;
+
+exports[`renderForWeb stay_rate_picker bubble carries the full rate matrix + business details 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "stay_rate_picker",
+    "content": {
+      "accommodation": {
+        "address": "Henderson Island, GB",
+        "checkInAfter": "14:30",
+        "checkOutBefore": "11:30",
+        "city": "Henderson Island",
+        "country": "GB",
+        "keyCollection": "Collect from reception.",
+        "name": "Duffel Test Hotel",
+      },
+      "business": {
+        "address": "548 Market St #38322, San Francisco, CA 94104, USA",
+        "bookingComTermsUrl": "https://www.booking.com/content/terms.html",
+        "name": "Sendero Travel",
+        "supportEmail": "hello@sendero.travel",
+        "supportPhone": "+1 (415) 813-1131",
+        "termsUrl": "https://sendero.travel/legal/terms",
+      },
+      "checkInDate": "2026-06-04",
+      "checkOutDate": "2026-06-07",
+      "guests": 1,
+      "rates": [
+        {
+          "availablePaymentMethods": [
+            "balance",
+            "card",
+          ],
+          "billing": {
+            "baseAmount": "1219.70",
+            "baseCurrency": "USD",
+            "dueAtAccommodationAmount": "39.95",
+            "dueAtAccommodationCurrency": "USD",
+            "feeAmount": "39.95",
+            "feeCurrency": "USD",
+            "taxAmount": "95.73",
+            "taxCurrency": "USD",
+            "totalAmount": "1355.38",
+            "totalCurrency": "USD",
+          },
+          "boardType": "breakfast",
+          "cancellationTimeline": [
+            {
+              "before": "2026-06-01T00:00:00Z",
+              "currency": "USD",
+              "refundAmount": "1355.38",
+            },
+            {
+              "before": "2026-06-03T00:00:00Z",
+              "currency": "USD",
+              "refundAmount": "600.00",
+            },
+          ],
+          "paymentType": "pay_now",
+          "rateId": "rat_0000B5zdBpSS9xnoU7J48B",
+          "refundable": true,
+          "roomName": "Successful Booking",
+        },
+      ],
+      "rooms": 1,
+      "searchResultId": "ssr_0000B5zd9zXpgcMvBmwkgG",
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;
+
+exports[`renderForWeb stay_quote_review bubble exposes confirm/cancel CTAs + key collection + business 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "stay_quote_review",
+    "content": {
+      "accommodation": {
+        "address": "Henderson Island, GB",
+        "checkInAfter": "14:30",
+        "checkOutBefore": "11:30",
+        "city": "Henderson Island",
+        "country": "GB",
+        "keyCollection": "Collect from reception.",
+        "name": "Duffel Test Hotel",
+      },
+      "billing": {
+        "baseAmount": "1219.70",
+        "baseCurrency": "USD",
+        "dueAtAccommodationAmount": "39.95",
+        "dueAtAccommodationCurrency": "USD",
+        "feeAmount": "39.95",
+        "feeCurrency": "USD",
+        "taxAmount": "95.73",
+        "taxCurrency": "USD",
+        "totalAmount": "1355.38",
+        "totalCurrency": "USD",
+      },
+      "business": {
+        "address": "548 Market St #38322, San Francisco, CA 94104, USA",
+        "bookingComTermsUrl": "https://www.booking.com/content/terms.html",
+        "name": "Sendero Travel",
+        "supportEmail": "hello@sendero.travel",
+        "supportPhone": "+1 (415) 813-1131",
+        "termsUrl": "https://sendero.travel/legal/terms",
+      },
+      "cancellationTimeline": [
+        {
+          "before": "2026-06-01T00:00:00Z",
+          "currency": "USD",
+          "refundAmount": "1355.38",
+        },
+        {
+          "before": "2026-06-03T00:00:00Z",
+          "currency": "USD",
+          "refundAmount": "600.00",
+        },
+      ],
+      "checkInDate": "2026-06-04",
+      "checkOutDate": "2026-06-07",
+      "conditions": [
+        {
+          "description": "No smoking allowed in any room. Smoking on the property carries a $250 cleaning fee.",
+          "title": "Smoking",
+        },
+        {
+          "description": "Pets are not allowed.",
+          "title": "Pets",
+        },
+      ],
+      "guests": 1,
+      "nights": 3,
+      "paymentType": "pay_now",
+      "primaryCta": {
+        "kind": "confirm_stay_booking",
+        "label": "Confirm booking",
+        "value": "quo_0000B5zdBvh42oRqcoI4BO",
+      },
+      "quoteId": "quo_0000B5zdBvh42oRqcoI4BO",
+      "roomName": "Successful Booking",
+      "rooms": 1,
+      "secondaryCta": {
+        "kind": "cancel_stay_booking",
+        "label": "Cancel",
+        "value": "quo_0000B5zdBvh42oRqcoI4BO",
+      },
+      "supportedLoyaltyProgrammeName": null,
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;
+
+exports[`renderForWeb stay_booking_confirmation bubble surfaces reference + confirmedAt + tripUrl 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "stay_booking_confirmation",
+    "content": {
+      "accommodation": {
+        "address": "Henderson Island, GB",
+        "checkInAfter": "14:30",
+        "checkOutBefore": "11:30",
+        "city": "Henderson Island",
+        "country": "GB",
+        "keyCollection": "Collect from reception.",
+        "name": "Duffel Test Hotel",
+      },
+      "billing": {
+        "baseAmount": "1219.70",
+        "baseCurrency": "USD",
+        "dueAtAccommodationAmount": "39.95",
+        "dueAtAccommodationCurrency": "USD",
+        "feeAmount": "39.95",
+        "feeCurrency": "USD",
+        "taxAmount": "95.73",
+        "taxCurrency": "USD",
+        "totalAmount": "1355.38",
+        "totalCurrency": "USD",
+      },
+      "bookingId": "sta_0000B5zdEAAAAAA",
+      "business": {
+        "address": "548 Market St #38322, San Francisco, CA 94104, USA",
+        "bookingComTermsUrl": "https://www.booking.com/content/terms.html",
+        "name": "Sendero Travel",
+        "supportEmail": "hello@sendero.travel",
+        "supportPhone": "+1 (415) 813-1131",
+        "termsUrl": "https://sendero.travel/legal/terms",
+      },
+      "cancellationTimeline": [
+        {
+          "before": "2026-06-01T00:00:00Z",
+          "currency": "USD",
+          "refundAmount": "1355.38",
+        },
+        {
+          "before": "2026-06-03T00:00:00Z",
+          "currency": "USD",
+          "refundAmount": "600.00",
+        },
+      ],
+      "checkInDate": "2026-06-04",
+      "checkOutDate": "2026-06-07",
+      "conditions": [
+        {
+          "description": "No smoking allowed in any room. Smoking on the property carries a $250 cleaning fee.",
+          "title": "Smoking",
+        },
+      ],
+      "confirmedAt": "2026-04-25T10:05:00Z",
+      "guests": 1,
+      "nights": 3,
+      "reference": "AFE33SE2",
+      "roomName": "Successful Booking",
+      "rooms": 1,
+      "status": "confirmed",
+      "supportedLoyaltyProgrammeName": null,
+      "tripUrl": "https://app.sendero.travel/trip/abc.def",
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;

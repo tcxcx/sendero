@@ -586,3 +586,392 @@ exports[`renderForSlack trip_brief renders header + context + per-section blocks
   },
 }
 `;
+
+exports[`renderForSlack stay_rate_picker emits one button per rate with select_stay_rate action_id 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "🏨 Duffel Test Hotel",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "elements": [
+          {
+            "text": 
+"1 room · 1 guest · 2026-06-04 → 2026-06-07
+Henderson Island, GB"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+      {
+        "type": "divider",
+      },
+      {
+        "text": {
+          "text": "*Successful Booking*",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "accessory": {
+          "action_id": "select_stay_rate",
+          "text": {
+            "emoji": true,
+            "text": "Pick this rate",
+            "type": "plain_text",
+          },
+          "type": "button",
+          "value": "rat_0000B5zdBpSS9xnoU7J48B",
+        },
+        "text": {
+          "text": 
+"$1,355.38 total
+Tax \`$95.73\` · Fee \`$39.95\` · Due at property \`$39.95\`
+✅ refundable · payment pay now (balance, card)"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "text": 
+"_Sold by *Sendero Travel* · 548 Market St #38322, San Francisco, CA 94104, USA_
+<mailto:hello@sendero.travel|hello@sendero.travel>  ·  +1 (415) 813-1131  ·  <https://sendero.travel/legal/terms|Booking conditions & T&C>  ·  <https://www.booking.com/content/terms.html|Booking.com terms>"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+    ],
+    "channel": "",
+    "text": "Hotel rates: Duffel Test Hotel",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack stay_quote_review surfaces every Duffel-mandated field + confirm/cancel actions 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "🏨 Duffel Test Hotel",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "elements": [
+          {
+            "text": 
+"1 room · 1 guest · 3 nights
+Henderson Island, GB"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+      {
+        "fields": [
+          {
+            "text": 
+"*Check in*
+2026-06-04
+_from 14:30_"
+,
+            "type": "mrkdwn",
+          },
+          {
+            "text": 
+"*Check out*
+2026-06-07
+_until 11:30_"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Billing summary*
+*Room*    \`$1,219.70\`
+*Taxes*   \`$95.73\`
+*Fees*    \`$39.95\`
+*Total*   \`$1,355.38\`
+*Due at property*  \`$39.95\`"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Cancellation policy*
+:white_check_mark: Full refund until 2026-06-01 — \`$1,355.38\`
+:warning: Partial refund until 2026-06-03 — \`$600.00\`
+:x: No refund after 2026-06-03"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "type": "divider",
+      },
+      {
+        "text": {
+          "text": "*Hotel policy & rate conditions*",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Smoking*
+No smoking allowed in any room. Smoking on the property carries a $250 cleaning fee."
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Pets*
+Pets are not allowed."
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*:key: Key collection*
+Collect from reception."
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "confirm_stay_booking",
+            "style": "primary",
+            "text": {
+              "emoji": true,
+              "text": "Confirm booking",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "{"q":"quo_0000B5zdBvh42oRqcoI4BO","t":"ten_test_123","tr":"trip_abc123","e":"casey@example.com","g":"Casey","f":"Traveler"}",
+          },
+          {
+            "action_id": "cancel_stay_booking",
+            "text": {
+              "emoji": true,
+              "text": "Cancel",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "{"q":"quo_0000B5zdBvh42oRqcoI4BO","t":"ten_test_123","tr":"trip_abc123","e":"casey@example.com","g":"Casey","f":"Traveler"}",
+          },
+        ],
+        "type": "actions",
+      },
+      {
+        "elements": [
+          {
+            "text": 
+"_Sold by *Sendero Travel* · 548 Market St #38322, San Francisco, CA 94104, USA_
+<mailto:hello@sendero.travel|hello@sendero.travel>  ·  +1 (415) 813-1131  ·  <https://sendero.travel/legal/terms|Booking conditions & T&C>  ·  <https://www.booking.com/content/terms.html|Booking.com terms>"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+    ],
+    "channel": "",
+    "text": "Hotel quote $1,355.38 — Duffel Test Hotel",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack stay_booking_confirmation surfaces reference + confirmedAt + key collection always-visible 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "✅ Booking confirmed",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "fields": [
+          {
+            "text": 
+"*Booking reference*
+\`AFE33SE2\`"
+,
+            "type": "mrkdwn",
+          },
+          {
+            "text": 
+"*Confirmed at*
+2026-04-25 10:05:00"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Duffel Test Hotel*
+Henderson Island, GB
+1 room · 1 guest · 3 nights · Successful Booking"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "fields": [
+          {
+            "text": 
+"*Check in*
+2026-06-04
+_from 14:30_"
+,
+            "type": "mrkdwn",
+          },
+          {
+            "text": 
+"*Check out*
+2026-06-07
+_until 11:30_"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Billing summary*
+*Room*    \`$1,219.70\`
+*Taxes*   \`$95.73\`
+*Fees*    \`$39.95\`
+*Total*   \`$1,355.38\`
+*Due at property*  \`$39.95\`"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Cancellation policy*
+:white_check_mark: Full refund until 2026-06-01 — \`$1,355.38\`
+:warning: Partial refund until 2026-06-03 — \`$600.00\`
+:x: No refund after 2026-06-03"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "type": "divider",
+      },
+      {
+        "text": {
+          "text": "*Hotel policy & rate conditions*",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Smoking*
+No smoking allowed in any room. Smoking on the property carries a $250 cleaning fee."
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*:key: Key collection*
+Collect from reception."
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "open_link",
+            "text": {
+              "emoji": true,
+              "text": "View trip",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "url": "https://app.sendero.travel/trip/abc.def",
+          },
+        ],
+        "type": "actions",
+      },
+      {
+        "elements": [
+          {
+            "text": 
+"_Sold by *Sendero Travel* · 548 Market St #38322, San Francisco, CA 94104, USA_
+<mailto:hello@sendero.travel|hello@sendero.travel>  ·  +1 (415) 813-1131  ·  <https://sendero.travel/legal/terms|Booking conditions & T&C>  ·  <https://www.booking.com/content/terms.html|Booking.com terms>"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+    ],
+    "channel": "",
+    "text": "Booking confirmed · AFE33SE2 · Duffel Test Hotel",
+    "thread_ts": undefined,
+  },
+}
+`;

@@ -203,4 +203,44 @@ describe('renderForWhatsApp', () => {
     const body = out?.payload.interactive?.body.text ?? out?.payload.text?.body ?? '';
     expect(body).toContain('No bookings yet');
   });
+
+  test('stay_rate_picker emits an interactive list with a row per rate keyed by rateId', async () => {
+    const out = await renderForWhatsApp(fixtures.stayRatePicker());
+    expect(out?.payload.type).toBe('interactive');
+    expect(out?.payload.interactive?.type).toBe('list');
+    const rows = out?.payload.interactive?.action.sections?.[0]?.rows ?? [];
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.id).toContain('rat_0000B5zdBpSS9xnoU7J48B');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_quote_review interactive button surfaces every Duffel-mandated field', async () => {
+    const out = await renderForWhatsApp(fixtures.stayQuoteReview());
+    expect(out?.payload.type).toBe('interactive');
+    expect(out?.payload.interactive?.type).toBe('button');
+    const body = out?.payload.interactive?.body.text ?? '';
+    expect(body).toContain('Room');
+    expect(body).toContain('Taxes');
+    expect(body).toContain('Fees');
+    expect(body).toContain('Total');
+    expect(body).toContain('Due at property');
+    expect(body).toContain('Full refund');
+    expect(body).toContain('No smoking allowed');
+    expect(body).toContain('Key collection');
+    expect(body).toContain('Sold by Sendero Travel');
+    const buttons = out?.payload.interactive?.action?.buttons ?? [];
+    expect(buttons[0]?.reply.id).toContain('confirm_stay_booking');
+    expect(buttons[1]?.reply.id).toContain('cancel_stay_booking');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_booking_confirmation with tripUrl renders cta_url; without falls back to text', async () => {
+    const withUrl = await renderForWhatsApp(fixtures.stayBookingConfirmation());
+    expect(withUrl?.payload.interactive?.type).toBe('cta_url');
+    expect(withUrl?.payload.interactive?.body.text).toContain('AFE33SE2');
+
+    const withoutUrl = await renderForWhatsApp(fixtures.stayBookingConfirmation({ tripUrl: null }));
+    expect(withoutUrl?.payload.type).toBe('text');
+    expect(withoutUrl?.payload.text?.body).toContain('AFE33SE2');
+  });
 });

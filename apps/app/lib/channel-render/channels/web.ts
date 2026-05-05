@@ -24,6 +24,9 @@ import type {
   ChannelMessageEsimActivation,
   ChannelMessageSeatPicker,
   ChannelMessageSources,
+  ChannelMessageStayBookingConfirmation,
+  ChannelMessageStayQuoteReview,
+  ChannelMessageStayRatePicker,
   ChannelMessageText,
   ChannelMessageToolResult,
   ChannelMessageTripBrief,
@@ -46,6 +49,9 @@ export interface WebTravelerPayload {
     | 'esim_activation'
     | 'seat_picker'
     | 'ancillary_picker'
+    | 'stay_rate_picker'
+    | 'stay_quote_review'
+    | 'stay_booking_confirmation'
     | 'trip_brief';
   /** Author metadata for the bubble header. */
   author: {
@@ -347,7 +353,105 @@ export const renderForWeb: ChannelRenderer<WebTravelerPayload> = async (
       return renderAncillaryPicker(msg, author);
     case 'trip_brief':
       return renderTripBrief(msg, author);
+    case 'stay_rate_picker':
+      return renderStayRatePicker(msg, author);
+    case 'stay_quote_review':
+      return renderStayQuoteReview(msg, author);
+    case 'stay_booking_confirmation':
+      return renderStayBookingConfirmation(msg, author);
     default:
       return exhaustive(msg);
   }
 };
+
+function renderStayRatePicker(
+  msg: ChannelMessageStayRatePicker,
+  author: WebTravelerPayload['author'] | null
+): RenderedForChannel<WebTravelerPayload> | null {
+  if (!author) return null;
+  return {
+    channel: 'web',
+    payload: {
+      bubble: 'stay_rate_picker',
+      author,
+      content: {
+        searchResultId: msg.searchResultId,
+        accommodation: msg.accommodation,
+        checkInDate: msg.checkInDate,
+        checkOutDate: msg.checkOutDate,
+        rooms: msg.rooms,
+        guests: msg.guests,
+        rates: msg.rates,
+        business: msg.business,
+      },
+      createdAt: msg.createdAt,
+    },
+  };
+}
+
+function renderStayQuoteReview(
+  msg: ChannelMessageStayQuoteReview,
+  author: WebTravelerPayload['author'] | null
+): RenderedForChannel<WebTravelerPayload> | null {
+  if (!author) return null;
+  return {
+    channel: 'web',
+    payload: {
+      bubble: 'stay_quote_review',
+      author,
+      content: {
+        quoteId: msg.quoteId,
+        accommodation: msg.accommodation,
+        checkInDate: msg.checkInDate,
+        checkOutDate: msg.checkOutDate,
+        nights: msg.nights,
+        rooms: msg.rooms,
+        guests: msg.guests,
+        roomName: msg.roomName,
+        paymentType: msg.paymentType,
+        billing: msg.billing,
+        cancellationTimeline: msg.cancellationTimeline,
+        conditions: msg.conditions,
+        supportedLoyaltyProgrammeName: msg.supportedLoyaltyProgrammeName,
+        business: msg.business,
+        primaryCta: { kind: 'confirm_stay_booking', label: 'Confirm booking', value: msg.quoteId },
+        secondaryCta: { kind: 'cancel_stay_booking', label: 'Cancel', value: msg.quoteId },
+      },
+      createdAt: msg.createdAt,
+    },
+  };
+}
+
+function renderStayBookingConfirmation(
+  msg: ChannelMessageStayBookingConfirmation,
+  author: WebTravelerPayload['author'] | null
+): RenderedForChannel<WebTravelerPayload> | null {
+  if (!author) return null;
+  return {
+    channel: 'web',
+    payload: {
+      bubble: 'stay_booking_confirmation',
+      author,
+      content: {
+        bookingId: msg.bookingId,
+        reference: msg.reference,
+        status: msg.status,
+        confirmedAt: msg.confirmedAt,
+        accommodation: msg.accommodation,
+        checkInDate: msg.checkInDate,
+        checkOutDate: msg.checkOutDate,
+        nights: msg.nights,
+        rooms: msg.rooms,
+        guests: msg.guests,
+        roomName: msg.roomName,
+        billing: msg.billing,
+        cancellationTimeline: msg.cancellationTimeline,
+        conditions: msg.conditions,
+        supportedLoyaltyProgrammeName: msg.supportedLoyaltyProgrammeName,
+        tripUrl: msg.tripUrl ?? null,
+        business: msg.business,
+      },
+      createdAt: msg.createdAt,
+    },
+  };
+}

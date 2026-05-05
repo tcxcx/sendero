@@ -170,7 +170,7 @@ interface BookingForEmail {
   } | null;
 }
 
-async function emailBookingConfirmed(args: {
+export async function emailBookingConfirmed(args: {
   bookingId: string;
   tenantId: string;
   duffelOrderId: string;

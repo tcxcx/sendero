@@ -208,4 +208,104 @@ describe('renderForSlack', () => {
     expect(firstSection?.text?.text).toContain('🔴');
     expect(firstSection?.text?.text).toContain('canceled');
   });
+
+  test('stay_rate_picker emits one button per rate with select_stay_rate action_id', async () => {
+    const out = await renderForSlack(fixtures.stayRatePicker());
+    const blocks = (out?.payload.blocks ?? []) as Array<{
+      type: string;
+      accessory?: { type?: string; action_id?: string; value?: string };
+    }>;
+    expect(blocks[0]?.type).toBe('header');
+    const ratesWithButtons = blocks.filter(b => b.accessory?.type === 'button');
+    expect(ratesWithButtons.length).toBe(1);
+    expect(ratesWithButtons[0]?.accessory?.action_id).toBe('select_stay_rate');
+    expect(ratesWithButtons[0]?.accessory?.value).toBe('rat_0000B5zdBpSS9xnoU7J48B');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_quote_review without travelerContact degrades to a single Open in Sendero link', async () => {
+    const out = await renderForSlack(
+      fixtures.stayQuoteReview({ travelerContact: undefined, tenantId: undefined })
+    );
+    const blocks = (out?.payload.blocks ?? []) as Array<{
+      type: string;
+      elements?: Array<{ action_id?: string; value?: string }>;
+    }>;
+    const actions = blocks.find(b => b.type === 'actions');
+    expect(actions?.elements).toHaveLength(1);
+    expect(actions?.elements?.[0]?.action_id).toBe('open_link');
+    // No confirm/cancel buttons → no risk of forged taps booking blind.
+    expect(blocks.some(b => b.elements?.some(e => e.action_id === 'confirm_stay_booking'))).toBe(
+      false
+    );
+  });
+
+  test('stay_quote_review surfaces every Duffel-mandated field + confirm/cancel actions', async () => {
+    const out = await renderForSlack(fixtures.stayQuoteReview());
+    const blocks = (out?.payload.blocks ?? []) as Array<{
+      type: string;
+      text?: { text?: string };
+      elements?: Array<{ action_id?: string; value?: string }>;
+    }>;
+    const allText = blocks.map(b => b.text?.text ?? '').join('\n');
+    // Billing summary separated rows + due-at-property always rendered.
+    expect(allText).toContain('Room');
+    expect(allText).toContain('Taxes');
+    expect(allText).toContain('Fees');
+    expect(allText).toContain('Total');
+    expect(allText).toContain('Due at property');
+    // Cancellation policy verbatim entries.
+    expect(allText).toContain('Full refund');
+    // Conditions verbatim — full description text lands in a section.
+    expect(allText).toContain('No smoking allowed in any room');
+    // Key collection always-visible.
+    expect(allText).toContain('Key collection');
+    expect(allText).toContain('Collect from reception.');
+    // Confirm/cancel actions present, JSON value carries the booking
+    // context the interactions handler needs to actually run book_stay.
+    const actions = blocks.find(b => b.type === 'actions');
+    expect(actions?.elements?.[0]?.action_id).toBe('confirm_stay_booking');
+    const confirmValue = JSON.parse(actions?.elements?.[0]?.value ?? '{}');
+    expect(confirmValue).toEqual({
+      q: 'quo_0000B5zdBvh42oRqcoI4BO',
+      t: 'ten_test_123',
+      tr: 'trip_abc123',
+      e: 'casey@example.com',
+      g: 'Casey',
+      f: 'Traveler',
+    });
+    expect(actions?.elements?.[1]?.action_id).toBe('cancel_stay_booking');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_booking_confirmation surfaces reference + confirmedAt + key collection always-visible', async () => {
+    const out = await renderForSlack(fixtures.stayBookingConfirmation());
+    const blocks = (out?.payload.blocks ?? []) as Array<{
+      type: string;
+      text?: { text?: string };
+      fields?: Array<{ text?: string }>;
+    }>;
+    const allText = blocks
+      .map(b => (b.text?.text ?? '') + (b.fields?.map(f => f.text).join(' ') ?? ''))
+      .join('\n');
+    expect(allText).toContain('Booking reference');
+    expect(allText).toContain('AFE33SE2');
+    expect(allText).toContain('Confirmed at');
+    expect(allText).toContain('Collect from reception.');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_booking_confirmation falls back to a generic key-collection note when null', async () => {
+    const out = await renderForSlack(
+      fixtures.stayBookingConfirmation({
+        accommodation: {
+          ...fixtures.stayBookingConfirmation().accommodation,
+          keyCollection: null,
+        },
+      })
+    );
+    const blocks = (out?.payload.blocks ?? []) as Array<{ text?: { text?: string } }>;
+    const allText = blocks.map(b => b.text?.text ?? '').join('\n');
+    expect(allText).toContain('Ask at the property on arrival');
+  });
 });

@@ -425,7 +425,22 @@ export const bookFlightTool: ToolDef = {
           customerUserIds: customerUserIds.length ? customerUserIds : undefined,
         });
       } catch (err) {
-        const errors = (err as { errors?: Array<{ code?: string }> })?.errors ?? [];
+        const errors = (err as { errors?: Array<{ code?: string; title?: string }> })?.errors ?? [];
+        // Offer expired or never existed — Duffel returns this when the
+        // offerId is older than the offer TTL or is from a different
+        // sandbox/account. Translate to a structured response so the
+        // agent re-searches instead of bouncing into 500/escalation.
+        const offerExpired = errors.some(
+          e => e.code === 'not_found' || e.title === 'Resource not found'
+        );
+        if (offerExpired) {
+          return {
+            status: 'offer_expired' as const,
+            message:
+              'This offer is no longer bookable (expired or removed). Please search again to get fresh prices.',
+            offerId: input.offerId,
+          };
+        }
         const alreadyAssociated = errors.some(
           e => e.code === 'user_already_associated_with_passenger'
         );
