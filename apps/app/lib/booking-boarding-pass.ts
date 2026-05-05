@@ -1,20 +1,22 @@
 /**
- * Boarding-pass image dispatcher.
+ * Boarding-pass image dispatcher (Phase G — channel-agnostic).
  *
  * Renders a signed `/api/og/boarding-pass` URL from the Booking row +
- * Trip metadata, then sends it to the traveler's WhatsApp via the
- * existing WhatsAppClient. Runs alongside `notifyWhatsAppOnBooking`
- * (BOOKING_CONFIRMED template) — different surfaces:
- *   - Template = branded HSM card with "Track your trip" CTA
- *   - Image = Satori-rendered boarding pass with PNR + USDC tx hash
+ * Trip metadata, then dispatches a canonical `ChannelMessage` (kind:
+ * 'card' with `imageUrl`) to the traveler's PRIMARY channel via
+ * `dispatchToTraveler`. WhatsApp travelers get the Satori image as
+ * `send_image_message`; Slack travelers get the same image inside a
+ * Block Kit card. The renderers do the per-channel translation.
  *
- * Both fire fail-soft: if either fails, the other still ships.
+ * Runs alongside `notifyWhatsAppOnBooking` (BOOKING_CONFIRMED HSM
+ * template — WhatsApp-only by design) and the e-ticket PDF dispatch.
  */
 
-import { prisma } from '@sendero/database';
-import { env } from '@sendero/env';
-import { WhatsAppClient } from '@sendero/whatsapp';
+import { randomUUID } from 'node:crypto';
 
+import { prisma } from '@sendero/database';
+
+import { dispatchToTraveler } from '@/lib/channel-dispatch';
 import {
   buildBoardingPassImageUrl,
 } from '@/lib/og/boarding-pass-url';
@@ -28,19 +30,26 @@ interface SendBoardingPassArgs {
   duffelOrderId: string;
 }
 
+export interface FanoutSurfaceResult {
+  ok: boolean;
+  reason?: string;
+  detail?: unknown;
+}
+
 export async function sendBoardingPassImageToTraveler(
   args: SendBoardingPassArgs
-): Promise<void> {
+): Promise<FanoutSurfaceResult> {
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: args.bookingId },
       select: {
         pnr: true,
+        tripId: true,
         currency: true,
         totalUsd: true,
         segments: true,
         metadata: true,
-        bookedAt: true,
+        createdAt: true,
         trip: {
           select: {
             travelerId: true,
@@ -51,33 +60,8 @@ export async function sendBoardingPassImageToTraveler(
     });
     if (!booking?.trip?.travelerId) {
       console.warn('[boarding-pass] no traveler on booking', { bookingId: args.bookingId });
-      return;
+      return { ok: false, reason: 'no_traveler_on_booking' };
     }
-
-    // WhatsApp identity required (we only send via WhatsApp for now).
-    const identity = await prisma.channelIdentity.findFirst({
-      where: {
-        tenantId: args.tenantId,
-        userId: booking.trip.travelerId,
-        kind: 'whatsapp',
-      },
-      select: { externalUserId: true },
-    });
-    if (!identity?.externalUserId) {
-      console.warn('[boarding-pass] no whatsapp identity for traveler', {
-        bookingId: args.bookingId,
-      });
-      return;
-    }
-
-    const install = await prisma.whatsAppInstall.findUnique({
-      where: { tenantId: args.tenantId },
-      select: { phoneNumberId: true, status: true },
-    });
-    if (!install?.phoneNumberId || install.status === 'disabled') return;
-
-    const accessToken = env.whatsappAccessToken() ?? env.kapsoApiKey();
-    if (!accessToken) return;
 
     const segments = Array.isArray(booking.segments)
       ? (booking.segments as Array<Record<string, unknown>>)
@@ -136,10 +120,10 @@ export async function sendBoardingPassImageToTraveler(
         : null;
 
     const totalUsdc = booking.totalUsd ? booking.totalUsd.toString() : '—';
-    const departureDate = booking.bookedAt
-      ? formatDate(booking.bookedAt)
-      : departAt
-        ? formatDate(new Date(departAt))
+    const departureDate = departAt
+      ? formatDate(new Date(departAt))
+      : booking.createdAt
+        ? formatDate(booking.createdAt)
         : 'Soon';
     const departureTime = departAt ? formatTime(departAt) : '';
     const arrivalTime = arriveAt ? formatTime(arriveAt) : undefined;
@@ -163,36 +147,56 @@ export async function sendBoardingPassImageToTraveler(
     const imageUrl = await buildBoardingPassImageUrl(payload);
     if (!imageUrl) {
       console.warn('[boarding-pass] OG_SHARE_SIGNING_SECRET not set — skipping image card');
-      return;
+      return { ok: false, reason: 'og_signing_secret_unset' };
     }
 
-    const apiBaseUrl =
-      env.whatsappApiBaseUrl() ??
-      (env.kapsoApiKey() ? `${env.kapsoApiBaseUrl()}/meta/whatsapp/v24.0` : undefined);
-    const client = new WhatsAppClient({
-      phoneNumberId: install.phoneNumberId,
-      accessToken,
-      apiBaseUrl,
-    });
+    const settlementLink = usdcSettlement?.settlementTxHash
+      ? `${ARC_TX_EXPLORER}/${usdcSettlement.settlementTxHash}`
+      : null;
 
-    const caption =
-      `🎫 Tu boarding pass · *${payload.pnr}*` +
-      (usdcSettlement?.settlementTxHash
-        ? `\n🔗 ${ARC_TX_EXPLORER}/${usdcSettlement.settlementTxHash}`
-        : '');
-
-    await client.send({
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: identity.externalUserId,
-      type: 'image',
-      image: { link: imageUrl, caption },
+    const result = await dispatchToTraveler({
+      tripId: booking.tripId,
+      tenantId: args.tenantId,
+      travelerUserId: booking.trip.travelerId,
+      message: {
+        kind: 'card',
+        id: randomUUID(),
+        author: { role: 'agent', name: 'Sendero' },
+        title: `🎫 Boarding pass · ${payload.pnr}`,
+        body: `${payload.origin} → ${payload.destination} · ${payload.departureDate} ${payload.departureTime}${settlementLink ? `\n🔗 ${settlementLink}` : ''}`,
+        imageUrl,
+        bullets: settlementLink ? [settlementLink] : undefined,
+        ...(settlementLink
+          ? {
+              ctas: [
+                {
+                  label: 'View on Arcscan',
+                  kind: 'open_link',
+                  href: settlementLink,
+                  emphasis: 'secondary',
+                },
+              ],
+            }
+          : {}),
+        createdAt: new Date().toISOString(),
+      },
     });
+    if (result.sent === false) {
+      console.warn('[boarding-pass] dispatch skipped', {
+        bookingId: args.bookingId,
+        reason: result.reason,
+        channel: result.channel,
+      });
+      return { ok: false, reason: `dispatch_${result.reason}`, detail: result.detail };
+    }
+    return { ok: true, detail: { channel: result.channel } };
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.warn('[boarding-pass] send failed (non-fatal)', {
       bookingId: args.bookingId,
-      error: err instanceof Error ? err.message : String(err),
+      error: msg,
     });
+    return { ok: false, reason: 'threw', detail: msg };
   }
 }
 

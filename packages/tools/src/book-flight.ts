@@ -4,8 +4,10 @@ import { z } from 'zod';
 import {
   createHoldOrder,
   getAirlineCredit,
+  getOrder,
   payFromBalance,
   payOrder,
+  projectFlightSegmentsFromPayload,
   type DuffelAirlineCreditId,
   type DuffelPaymentInput,
 } from '@sendero/duffel';
@@ -25,6 +27,17 @@ const serviceSchema = z.object({
 
 const inputSchema = z.object({
   offerId: z.string(),
+  /**
+   * Phase B re-pay path: when the prior `book_flight` call returned
+   * `insufficient_funds`, the Duffel hold was created but unpaid. The
+   * agent stashed the returned `orderId` and passes it back here as
+   * `holdOrderId` after the traveler topped up. Setting this skips
+   * the `createHoldOrder` step entirely and jumps straight to the
+   * USDC funds check + `payOrder`. Without this, a re-call would mint
+   * a fresh hold and waste the prior offer (Duffel auto-expires the
+   * unpaid hold in ~30min, but the second hold also locks fare).
+   */
+  holdOrderId: z.string().optional(),
   /**
    * Optional ancillary services (bags, seats, CFAR) to attach at order
    * creation time. Get these from `list_flight_ancillaries`.
@@ -69,6 +82,11 @@ export const bookFlightTool: ToolDef = {
     required: ['offerId'],
     properties: {
       offerId: { type: 'string' },
+      holdOrderId: {
+        type: 'string',
+        description:
+          'Re-pay path after insufficient_funds + top-up. Pass the `orderId` returned by the prior insufficient_funds response so book_flight skips creating a new hold and pays the existing one.',
+      },
       services: {
         type: 'array',
         description: 'Ancillary service ids + quantities from list_flight_ancillaries.',
@@ -166,9 +184,61 @@ export const bookFlightTool: ToolDef = {
       provisionedBy = resolved;
     }
 
-    const travelerName = ctx?.traveler?.name || 'Traveler';
-    const travelerEmail = ctx?.traveler?.email || 'traveler@sendero.demo';
-    const travelerPhone = ctx?.traveler?.phone || undefined;
+    // Phase A.4 contact gate — refuse to ticket without a real email +
+    // phone. The airline's reservation system emails the passenger
+    // directly; placeholder contact details strand the traveler from
+    // every carrier-side IROPS / schedule-change comm. Resolution
+    // precedence:
+    //   1. ctx.traveler (resolved by dispatch from API key + travelerPhone)
+    //   2. User row in Postgres (when ctx didn't carry full profile)
+    //   3. ChannelIdentity.externalUserId (WhatsApp E.164) for phone
+    let travelerName = ctx?.traveler?.name || null;
+    let travelerEmail = ctx?.traveler?.email || null;
+    let travelerPhone = ctx?.traveler?.phone || null;
+    if ((!travelerName || !travelerEmail || !travelerPhone) && travelerUserId) {
+      try {
+        const profile = await prisma.user.findUnique({
+          where: { id: travelerUserId },
+          select: {
+            displayName: true,
+            email: true,
+            channelIdentities: {
+              where: { kind: 'whatsapp' },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { externalUserId: true },
+            },
+          },
+        });
+        if (!travelerName) travelerName = profile?.displayName ?? null;
+        if (!travelerEmail) travelerEmail = profile?.email ?? null;
+        if (!travelerPhone) travelerPhone = profile?.channelIdentities[0]?.externalUserId ?? null;
+      } catch (err) {
+        console.warn('[book_flight] traveler profile lookup failed (non-fatal)', err);
+      }
+    }
+    // Reject placeholder email so the carrier doesn't email a fake
+    // address. The agent's persona surface prompts the user to send a
+    // real email when this fires; the next inbound retries.
+    const isPlaceholderEmail =
+      !travelerEmail ||
+      travelerEmail.toLowerCase().endsWith('@sendero.demo') ||
+      travelerEmail.toLowerCase().endsWith('@whatsapp-provisional.sendero.travel');
+    if (isPlaceholderEmail) {
+      return {
+        status: 'email_required',
+        message:
+          'Before I can ticket this, I need a real email address — the airline emails the e-ticket and any schedule-change updates directly to that address. Reply with your email and I will continue the booking.',
+      };
+    }
+    if (!travelerPhone) {
+      return {
+        status: 'traveler_required',
+        message:
+          'Cannot book — no real phone number on file. Pass `travelerPhone` (E.164) on `call_sendero` so the airline can SMS check-in / disruption notices.',
+      };
+    }
+    if (!travelerName) travelerName = 'Traveler';
 
     const customerUserIds: string[] = [];
     let travelerUserRowId: string | null = null;
@@ -194,6 +264,54 @@ export const bookFlightTool: ToolDef = {
       id: s.id,
       quantity: s.quantity ?? 1,
     }));
+    // Phase B re-pay path: when the agent passes `holdOrderId` (from a
+    // prior insufficient_funds response), skip createHoldOrder and
+    // re-use the existing Duffel hold. Pull the order to recover its
+    // amount + currency + reference for the payment + persist steps.
+    let hold:
+      | { orderId: string; bookingReference: string; totalAmount: string; totalCurrency: string; paymentRequiredBy: string; services: Array<{ id: string; quantity: number }>; segments: Awaited<ReturnType<typeof createHoldOrder>>['segments']; originIata: string | null; destinationIata: string | null; destinationIso2: string[]; startDate: string | null; endDate: string | null; rawDuffel: Record<string, unknown> | null };
+    if (input.holdOrderId) {
+      try {
+        const existing = await getOrder(input.holdOrderId);
+        const raw = existing as unknown as {
+          id: string;
+          booking_reference: string;
+          total_amount: string;
+          total_currency: string;
+          payment_status?: { payment_required_by?: string };
+        };
+        // Re-project segments from the order payload. Duffel orders
+        // carry `slices[*].segments[*]` with full origin/destination/
+        // carrier/dates so downstream surfaces (boarding-pass image,
+        // eSIM offer, get_active_trip) see real itinerary data on the
+        // re-pay branch instead of the empty-array footgun the previous
+        // implementation shipped.
+        const projection = projectFlightSegmentsFromPayload(
+          existing as unknown as Record<string, unknown>
+        );
+        hold = {
+          orderId: raw.id,
+          bookingReference: raw.booking_reference,
+          totalAmount: raw.total_amount,
+          totalCurrency: raw.total_currency,
+          paymentRequiredBy: raw.payment_status?.payment_required_by ?? '',
+          services: services ?? [],
+          segments: projection.segments,
+          originIata: projection.originIata,
+          destinationIata: projection.destinationIata,
+          destinationIso2: projection.destinationIso2,
+          startDate: projection.startDate,
+          endDate: projection.endDate,
+          rawDuffel: existing as unknown as Record<string, unknown>,
+        };
+      } catch (err) {
+        return {
+          status: 'provider_error',
+          message: `Could not re-pay hold ${input.holdOrderId} — Duffel returned an error fetching the order. Try search_flights again with the same route + date to re-quote.`,
+          error: err instanceof Error ? err.message : String(err),
+        } as never;
+      }
+    } else {
     // Hold-order creation, with a one-shot retry that drops
     // `customerUserIds` when Duffel rejects them as
     // `user_already_associated_with_passenger`. The customer-user link
@@ -210,7 +328,6 @@ export const bookFlightTool: ToolDef = {
       idempotencyKey: `sendero-${input.offerId}-${Date.now()}`,
       services,
     } as const;
-    let hold;
     try {
       hold = await createHoldOrder({
         ...baseHoldArgs,
@@ -230,6 +347,7 @@ export const bookFlightTool: ToolDef = {
         ...baseHoldArgs,
         idempotencyKey: `sendero-${input.offerId}-${Date.now()}-retry`,
       });
+    }
     }
 
     // USDC payment gate — testnet treats 1 USD = 1 USDC. Verify the
@@ -464,6 +582,18 @@ export const bookFlightTool: ToolDef = {
           paymentStatus,
           usdcSettlement,
           provisionedBy,
+          // Phase A.4: pull itinerary projection out of the hold so
+          // Trip.intent + Booking.segments + Booking.rawDuffel have the
+          // real destination + dates. Without this `get_active_trip`
+          // and downstream prompts (book_esim trigger, NFT mint art)
+          // see empty fields and the agent has to re-ask the user.
+          segments: hold.segments,
+          originIata: hold.originIata,
+          destinationIata: hold.destinationIata,
+          destinationIso2: hold.destinationIso2,
+          startDate: hold.startDate,
+          endDate: hold.endDate,
+          rawDuffel: hold.rawDuffel,
         });
         persistedBookingId = persisted.bookingId;
         persistedTripId = persisted.tripId;
@@ -535,6 +665,23 @@ export const bookFlightTool: ToolDef = {
           error: err instanceof Error ? err.message : String(err),
         });
       }
+
+      // Phase C — auto-complete an open_journey trip when this booking
+      // is the going-home leg. Fire-and-forget call to complete_trip:
+      // flips Trip.status='completed' + kicks off the TripPassport NFT
+      // workflow. The traveler gets the capstone NFT card via WhatsApp
+      // ~30-60s later (same notify-mint path as BoardingPass).
+      void maybeAutoCompleteJourney({
+        tripId: persistedTripId,
+        tenantId: ctx.traveler.tenantId,
+        travelerUserId: travelerUserRowId,
+        destinationIata: hold.destinationIata,
+      }).catch(err => {
+        console.warn('[book_flight] auto-complete journey check failed (non-fatal)', {
+          tripId: persistedTripId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
     }
 
     // Recurring-traveler hint — present when the resolved User has at
@@ -603,6 +750,18 @@ async function persistBookingAndTrip(args: {
   paymentStatus: string;
   usdcSettlement: { settlementTxHash: string; explorerUrl: string } | null;
   provisionedBy: MeterPayerType;
+  // Phase A.4 itinerary projection — the persistence layer's job is to
+  // land these on Trip.intent + Booking.segments + Booking.rawDuffel
+  // so downstream tools (`get_active_trip`, NFT prompts, eSIM trigger)
+  // can read real destination + carrier + dates without round-tripping
+  // back to Duffel.
+  segments: import('@sendero/duffel').NormalizedFlightSegment[];
+  originIata: string | null;
+  destinationIata: string | null;
+  destinationIso2: string[];
+  startDate: string | null;
+  endDate: string | null;
+  rawDuffel: Record<string, unknown> | null;
 }): Promise<{ bookingId: string; tripId: string }> {
   const existing = await prisma.booking.findUnique({
     where: { duffelOrderId: args.duffelOrderId },
@@ -624,6 +783,16 @@ async function persistBookingAndTrip(args: {
     select: { id: true },
   });
 
+  const tripIntent: Record<string, unknown> = {
+    source: 'book_flight',
+    duffelOrderId: args.duffelOrderId,
+  };
+  if (args.originIata) tripIntent.origin = args.originIata;
+  if (args.destinationIata) tripIntent.destination = args.destinationIata;
+  if (args.destinationIso2.length > 0) tripIntent.destinationIso2 = args.destinationIso2;
+  if (args.startDate) tripIntent.startDate = args.startDate;
+  if (args.endDate) tripIntent.endDate = args.endDate;
+
   const tripId =
     existingTrip?.id ??
     (
@@ -631,7 +800,7 @@ async function persistBookingAndTrip(args: {
         data: {
           tenantId: args.tenantId,
           travelerId: args.travelerUserId,
-          intent: { source: 'book_flight', duffelOrderId: args.duffelOrderId },
+          intent: tripIntent as Prisma.InputJsonObject,
           status: 'booked',
           // Pin trip-level payer mode so re-resolution downstream
           // (confirm_booking, settlement, refund) sees the same value
@@ -641,6 +810,51 @@ async function persistBookingAndTrip(args: {
         select: { id: true },
       })
     ).id;
+
+  // If we found an existing trip but it pre-dates the Phase A.4 fix
+  // (so its intent is missing destination data), backfill it now from
+  // this booking's projection so the next agent turn that calls
+  // `get_active_trip` resolves the destination cleanly.
+  if (existingTrip?.id && (args.originIata || args.destinationIata || args.destinationIso2.length > 0)) {
+    try {
+      await prisma.$executeRaw`
+        UPDATE "trips"
+        SET intent = COALESCE(intent, '{}'::jsonb) || ${JSON.stringify(tripIntent)}::jsonb,
+            "updatedAt" = NOW()
+        WHERE id = ${existingTrip.id}
+          AND "tenantId" = ${args.tenantId}
+      `;
+    } catch (err) {
+      console.warn('[book_flight] trip intent backfill failed (non-fatal)', {
+        tripId: existingTrip.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Phase A.4: fetch the airline-issued e-ticket PDF so the post-
+  // ticketing fan-out can attach it to email + ship via WhatsApp
+  // `send_document_message`. Best-effort — sandbox carriers sometimes
+  // don't issue documents, in which case we leave the columns null
+  // and continue. The supplier-side fanout still ships the Satori
+  // boarding pass.
+  let eTicketUrl: string | null = null;
+  try {
+    const { getOrderEticket } = await import('@sendero/duffel');
+    const eticket = await getOrderEticket(args.duffelOrderId);
+    if (eticket?.url) {
+      eTicketUrl = eticket.url;
+    } else {
+      console.warn('[book_flight] no electronic_ticket document on Duffel order', {
+        orderId: args.duffelOrderId,
+      });
+    }
+  } catch (err) {
+    console.warn('[book_flight] e-ticket fetch failed (non-fatal)', {
+      orderId: args.duffelOrderId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   const booking = await prisma.booking.create({
     data: {
@@ -654,6 +868,16 @@ async function persistBookingAndTrip(args: {
       currency: args.currency,
       bookedAt: new Date(),
       provisionedBy: args.provisionedBy,
+      ...(eTicketUrl
+        ? { eTicketDocumentUrl: eTicketUrl, eTicketIssuedAt: new Date() }
+        : {}),
+      // Normalized itinerary projection. `get_active_trip` and the
+      // post-mint stamp prompts read this; rawDuffel is kept as
+      // audit + fallback parsing surface.
+      segments: args.segments as unknown as Prisma.InputJsonValue,
+      ...(args.rawDuffel
+        ? { rawDuffel: args.rawDuffel as unknown as Prisma.InputJsonValue }
+        : {}),
       metadata: {
         paymentStatus: args.paymentStatus,
         ...(args.usdcSettlement ? { usdcSettlement: args.usdcSettlement } : {}),
@@ -677,6 +901,85 @@ async function persistBookingAndTrip(args: {
  * follow up later or a separate cron can backfill missing
  * BOOKING_CONFIRMED sends.
  */
+/**
+ * Phase C — auto-complete an `open_journey` trip when the just-booked
+ * leg is the going-home flight (destination IATA matches
+ * `User.homeIata`). Fires `complete_trip` over the internal HTTP
+ * surface so the standard lifecycle (Trip.status flip → TripPassport
+ * NFT mint workflow → WhatsApp notify-mint card) runs without the
+ * agent having to remember.
+ *
+ * Skips silently when:
+ *   - Trip kind isn't `open_journey` (one_way / round_trip auto-end
+ *     after their last booked leg via existing logic — and we don't
+ *     want to fire TripPassport mid-round-trip).
+ *   - User.homeIata isn't set (traveler hasn't declared a home).
+ *   - This booking's destination doesn't match home.
+ *
+ * Best-effort: a complete_trip failure leaves the trip in
+ * `in_progress`. Agent can still close it manually if the user
+ * follows up with "trip is over".
+ */
+async function maybeAutoCompleteJourney(args: {
+  tripId: string;
+  tenantId: string;
+  travelerUserId: string;
+  destinationIata: string | null;
+}): Promise<void> {
+  if (!args.destinationIata) return;
+
+  const trip = await prisma.trip.findUnique({
+    where: { id: args.tripId },
+    select: { kind: true, status: true },
+  });
+  if (!trip) return;
+  if (trip.kind !== 'open_journey') return;
+  if (trip.status === 'completed' || trip.status === 'canceled' || trip.status === 'failed') return;
+
+  const user = await prisma.user.findUnique({
+    where: { id: args.travelerUserId },
+    select: { homeIata: true, channelIdentities: { where: { kind: 'whatsapp' }, select: { externalUserId: true }, take: 1 } },
+  });
+  const homeIata = user?.homeIata;
+  if (!homeIata) return;
+  if (homeIata.toUpperCase() !== args.destinationIata.toUpperCase()) return;
+
+  // Going-home leg confirmed. Hit the internal complete_trip surface
+  // via the same shared-secret path the post-ticket fanout uses.
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  if (!secret) {
+    console.warn('[book_flight] auto-complete skipped — no dispatch secret');
+    return;
+  }
+  const phone = user.channelIdentities[0]?.externalUserId;
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/complete_trip`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-sendero-dispatch-secret': secret,
+      },
+      body: JSON.stringify({
+        tenantId: args.tenantId,
+        ...(phone ? { travelerPhone: phone } : {}),
+        input: { tripId: args.tripId },
+      }),
+    });
+    if (!res.ok) {
+      console.warn('[book_flight] auto-complete returned non-OK', {
+        tripId: args.tripId,
+        status: res.status,
+      });
+    }
+  } catch (err) {
+    console.warn('[book_flight] auto-complete fetch failed (non-fatal)', {
+      tripId: args.tripId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 async function firePostTicketingFanout(args: {
   bookingId: string;
   tripId: string;
@@ -712,6 +1015,60 @@ async function firePostTicketingFanout(args: {
   } catch (err) {
     console.warn('[book_flight] booking-fanout fetch failed (non-fatal)', {
       bookingId: args.bookingId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Phase F — kick off the `watch-trip-completion` WDK workflow. The
+  // watcher sleeps until the trip's last segment lands + 24h, sends
+  // the wrap-up prompt, then silent-closes after 7 more days if the
+  // traveler doesn't respond. The watcher self-skips when the trip
+  // is `open_journey` (those auto-complete via going-home detection)
+  // or already terminal — fire-and-forget here is fine.
+  void kickOffTripCompletionWatcher({
+    tripId: args.tripId,
+    tenantId: args.tenantId,
+  }).catch(err => {
+    console.warn('[book_flight] trip-completion watcher kickoff failed (non-fatal)', {
+      tripId: args.tripId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+}
+
+/**
+ * Kick off the `watch-trip-completion` WDK workflow over the
+ * `/api/workflows/lifecycle/TripCompletion` HTTP surface (mirrors
+ * `kickOffBoardingPassStamp`'s pattern).
+ */
+async function kickOffTripCompletionWatcher(args: {
+  tripId: string;
+  tenantId: string;
+}): Promise<void> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  if (!secret) return;
+  try {
+    const res = await fetch(
+      `${baseUrl.replace(/\/$/, '')}/api/workflows/lifecycle/TripCompletion`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-sendero-dispatch-secret': secret,
+        },
+        body: JSON.stringify({ tripId: args.tripId, tenantId: args.tenantId }),
+      }
+    );
+    if (!res.ok) {
+      console.warn('[book_flight] watcher kickoff non-OK', {
+        status: res.status,
+        tripId: args.tripId,
+      });
+    }
+  } catch (err) {
+    console.warn('[book_flight] watcher kickoff fetch failed', {
+      tripId: args.tripId,
       error: err instanceof Error ? err.message : String(err),
     });
   }

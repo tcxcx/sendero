@@ -30,6 +30,13 @@ import { getTenantNotificationEmail } from './tenant-notification-email';
 
 const ARC_TX_EXPLORER_PREFIX = 'https://testnet.arcscan.app/tx';
 
+/**
+ * Mirrors the Solana DCW chainId stored on `Wallet` rows. Same constant
+ * as `traveler_balance` uses; Solana DCWs aren't EVM, so we tag them
+ * with Circle Gateway's Solana domain id (5) as a synthetic chainId.
+ */
+const SOL_DEVNET_CHAIN_ID = 5;
+
 interface NotifyArgs {
   tenantId: string;
   amount: string;
@@ -73,7 +80,17 @@ export async function notifyTravelerOfDeposit(args: NotifyTravelerArgs): Promise
     const accessToken = env.whatsappAccessToken() ?? env.kapsoApiKey();
     if (!accessToken) return;
 
-    const newTotal = await safeUnifiedTotal({ evm: args.dcwAddress as Address });
+    // Resolve the user's Solana DCW too so the unified balance reflects
+    // every chain Sendero tracks — without this the message reports the
+    // EVM-only slice and undercounts a traveler holding USDC on Solana.
+    const solanaWallet = await prisma.wallet.findFirst({
+      where: { userId: args.userId, provisioner: 'dcw', chainId: SOL_DEVNET_CHAIN_ID },
+      select: { address: true },
+    });
+    const newTotal = await safeUnifiedTotal({
+      evm: args.dcwAddress as Address,
+      solana: solanaWallet?.address ?? undefined,
+    });
     const chainLabel = GATEWAY_CHAINS[args.chainKey]?.label ?? args.chainKey;
 
     const text = formatTravelerMessage({
