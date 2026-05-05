@@ -172,9 +172,9 @@ export const scanPassportInlineTool: ToolDef = {
     // (so an attacker who somehow obtains a vault row can't do a
     // birthday-attack on which traveler uploaded which image). Bytes
     // discarded after this line.
-    const imageSha256 = createHash('sha256').update(Buffer.from(bytes.base64, 'base64')).digest(
-      'hex'
-    );
+    const imageSha256 = createHash('sha256')
+      .update(Buffer.from(bytes.base64, 'base64'))
+      .digest('hex');
 
     // Re-validate via mrz-fast for the ICAO 9303 checksum proof. When
     // the OCR returned MRZ lines that pass, we trust the extraction —
@@ -278,7 +278,24 @@ export const scanPassportInlineTool: ToolDef = {
 
 async function fetchDocument(url: string): Promise<{ base64: string; mediaType: string }> {
   assertFetchableUrl(url);
-  const response = await fetch(url, { redirect: 'manual' });
+  // Kapso `active_storage/blobs/redirect/…` URLs are signed, but the
+  // signed redirect requires Bearer auth — anonymous fetches return
+  // 404. When the URL is on app.kapso.ai, attach our project API key
+  // so the agent can pass us inbound-media URLs without us having to
+  // base64-roundtrip through the prompt.
+  const headers: Record<string, string> = {};
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === 'app.kapso.ai' || host.endsWith('.kapso.ai')) {
+      const kapsoKey = process.env.KAPSO_API_KEY;
+      if (kapsoKey) {
+        headers['X-API-Key'] = kapsoKey;
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  const response = await fetch(url, { redirect: 'manual', headers });
   if (response.status >= 300 && response.status < 400) {
     const next = response.headers.get('location');
     if (!next) throw new Error('passport image fetch: redirect without location header');
@@ -311,7 +328,12 @@ function assertFetchableUrl(raw: string): void {
     throw new Error(`only https:// URLs allowed (got ${parsed.protocol})`);
   }
   const host = parsed.hostname.toLowerCase();
-  if (host === '::1' || host.startsWith('[::1]') || host.startsWith('fc') || host.startsWith('fd')) {
+  if (
+    host === '::1' ||
+    host.startsWith('[::1]') ||
+    host.startsWith('fc') ||
+    host.startsWith('fd')
+  ) {
     throw new Error('private-range URL refused');
   }
   if (/^127\./.test(host)) throw new Error('loopback URL refused');
