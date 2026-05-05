@@ -13,7 +13,13 @@
 import { createHash } from 'node:crypto';
 
 import type { EsimProvider } from '../client';
-import { EsimProviderError, type EsimPlan, type OrderArgs, type OrderResult, type QuoteArgs } from '../types';
+import {
+  EsimProviderError,
+  type EsimPlan,
+  type OrderArgs,
+  type OrderResult,
+  type QuoteArgs,
+} from '../types';
 
 const DOLLAR = 1_000_000n;
 
@@ -84,7 +90,11 @@ export function makeMockEsimProvider(): EsimProvider {
       // `esim:<tenantId>` prefix, so country/days/GB never reached the
       // seed and Peru / Japan / France all produced the same row. The
       // upsert in book_esim then dropped every subsequent destination.
-      const seed = createHash('sha256').update(args.idempotencyKey).digest('hex').slice(0, 16).toUpperCase();
+      const seed = createHash('sha256')
+        .update(args.idempotencyKey)
+        .digest('hex')
+        .slice(0, 16)
+        .toUpperCase();
       const padded = (seed + '0000000000000000').slice(0, 16);
       const iccid = `8910${padded}`.slice(0, 20);
       const activationCode = `MOCK-${padded}`;

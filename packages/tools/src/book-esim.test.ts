@@ -163,10 +163,7 @@ describe('book_esim — error paths', () => {
     // but the underlying `bookEsim` function still handles the case
     // gracefully when the provider returns null (defense-in-depth for
     // future providers that may return null on legitimate misses).
-    const out = await bookEsim(
-      { destinationIso2: [], days: 7, dataGb: 5 } as never,
-      baseCtx
-    );
+    const out = await bookEsim({ destinationIso2: [], days: 7, dataGb: 5 } as never, baseCtx);
     expect(out.status).toBe('no_plan_found');
   });
 });

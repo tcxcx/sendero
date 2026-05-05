@@ -23,7 +23,11 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@sendero/database';
 import { verifyQrToken } from '@sendero/esim';
 
-import { detectDeviceFromUA, INSTALL_INSTRUCTIONS, DEVICE_ORDER } from '@/lib/channel-render/install-instructions';
+import {
+  detectDeviceFromUA,
+  INSTALL_INSTRUCTIONS,
+  DEVICE_ORDER,
+} from '@/lib/channel-render/install-instructions';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,9 +58,7 @@ export default async function EsimInstallPage({ params }: PageProps) {
   });
   if (!esim) notFound();
   if (esim.status === 'expired') {
-    return (
-      <ExpiredScreen />
-    );
+    return <ExpiredScreen />;
   }
 
   const headerList = await headers();

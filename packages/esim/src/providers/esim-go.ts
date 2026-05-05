@@ -23,7 +23,13 @@
  */
 
 import type { EsimProvider } from '../client';
-import { EsimProviderError, type EsimPlan, type OrderArgs, type OrderResult, type QuoteArgs } from '../types';
+import {
+  EsimProviderError,
+  type EsimPlan,
+  type OrderArgs,
+  type OrderResult,
+  type QuoteArgs,
+} from '../types';
 
 interface EsimGoOpts {
   apiKey: string;
@@ -75,49 +81,49 @@ export function makeEsimGoProvider(opts: EsimGoOpts): EsimProvider {
   }
 
   async function listPlans(args: QuoteArgs & { limit?: number }): Promise<EsimPlan[]> {
-      // GET /catalogue?countries=JP&validity=7&page=1&perPage=20
-      // eSIM Go's catalogue orders by price ascending. We DON'T pass a
-      // strict `data=` filter — the catalogue ignores it on most queries
-      // and we want the full ladder (1GB / 5GB / unlimited / etc.) so
-      // the agent can curate. Server-side filtering happens after.
-      const countries = args.countries.join(',');
-      const validity = String(Math.max(1, Math.ceil(args.days)));
-      const limit = Math.max(1, Math.min(args.limit ?? 20, 50));
-      const params = new URLSearchParams({
-        countries,
-        validity,
-        page: '1',
-        perPage: String(limit),
-      });
-      type CatalogueResp = {
-        bundles?: Array<{
-          name: string;
-          description?: string;
-          countries?: Array<{ iso: string }>;
-          dataAmount?: number; // MB
-          duration?: number; // days
-          price?: number; // USD float
-          unlimited?: boolean;
-        }>;
+    // GET /catalogue?countries=JP&validity=7&page=1&perPage=20
+    // eSIM Go's catalogue orders by price ascending. We DON'T pass a
+    // strict `data=` filter — the catalogue ignores it on most queries
+    // and we want the full ladder (1GB / 5GB / unlimited / etc.) so
+    // the agent can curate. Server-side filtering happens after.
+    const countries = args.countries.join(',');
+    const validity = String(Math.max(1, Math.ceil(args.days)));
+    const limit = Math.max(1, Math.min(args.limit ?? 20, 50));
+    const params = new URLSearchParams({
+      countries,
+      validity,
+      page: '1',
+      perPage: String(limit),
+    });
+    type CatalogueResp = {
+      bundles?: Array<{
+        name: string;
+        description?: string;
+        countries?: Array<{ iso: string }>;
+        dataAmount?: number; // MB
+        duration?: number; // days
+        price?: number; // USD float
+        unlimited?: boolean;
+      }>;
+    };
+    const resp = await call<CatalogueResp>(`/catalogue?${params.toString()}`);
+    const bundles = resp.bundles ?? [];
+    return bundles.map(bundle => {
+      const dataMb = bundle.unlimited
+        ? 1_000_000 // unlimited sentinel — large MB so callers don't trip "<= dataGb" checks
+        : (bundle.dataAmount ?? 0);
+      const wholesaleMicroUsdc = BigInt(Math.round((bundle.price ?? 0) * 1_000_000));
+      return {
+        planId: bundle.name,
+        provider: 'esim-go',
+        label: bundle.description ?? bundle.name,
+        countries: (bundle.countries ?? []).map(c => c.iso),
+        dataMb,
+        validityDays: bundle.duration ?? args.days,
+        wholesaleMicroUsdc,
       };
-      const resp = await call<CatalogueResp>(`/catalogue?${params.toString()}`);
-      const bundles = resp.bundles ?? [];
-      return bundles.map(bundle => {
-        const dataMb = bundle.unlimited
-          ? 1_000_000 // unlimited sentinel — large MB so callers don't trip "<= dataGb" checks
-          : (bundle.dataAmount ?? 0);
-        const wholesaleMicroUsdc = BigInt(Math.round((bundle.price ?? 0) * 1_000_000));
-        return {
-          planId: bundle.name,
-          provider: 'esim-go',
-          label: bundle.description ?? bundle.name,
-          countries: (bundle.countries ?? []).map(c => c.iso),
-          dataMb,
-          validityDays: bundle.duration ?? args.days,
-          wholesaleMicroUsdc,
-        };
-      });
-    }
+    });
+  }
 
   return {
     slug: 'esim-go',
@@ -198,9 +204,13 @@ export function makeEsimGoProvider(opts: EsimGoOpts): EsimProvider {
         // Mint a deterministic synthetic LPA so the renderer + install
         // page still paint an end-to-end card. The synthetic prefix
         // tells the install page this isn't a real provisioned eSIM.
-        const seed = args.idempotencyKey.replace(/[^a-z0-9]/gi, '').slice(0, 16).toUpperCase();
+        const seed = args.idempotencyKey
+          .replace(/[^a-z0-9]/gi, '')
+          .slice(0, 16)
+          .toUpperCase();
         const activationCode = `VAL-${seed.padEnd(16, '0')}`;
-        const orderRef = (resp as { orderReference?: string }).orderReference ?? `ord_validate_${seed}`;
+        const orderRef =
+          (resp as { orderReference?: string }).orderReference ?? `ord_validate_${seed}`;
         return {
           providerOrderId: orderRef,
           iccid: null, // No real ICCID is minted in validate mode.

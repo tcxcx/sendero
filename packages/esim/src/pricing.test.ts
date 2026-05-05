@@ -69,11 +69,11 @@ describe('resolveEsimGoMode — validate vs transaction default', () => {
     // Validate mode tolerates eSIM Go `valid:false` (often = "balance < subTotal")
     // and mints synthetic LPAs. Allowing it in production would silently fake
     // real orders. Resolver must force `transaction` regardless.
-    expect(
-      resolveEsimGoMode({ VERCEL_ENV: 'production', ESIM_GO_MODE: 'validate' })
-    ).toBe('transaction');
-    expect(
-      resolveEsimGoMode({ NODE_ENV: 'production', ESIM_GO_MODE: 'validate' })
-    ).toBe('transaction');
+    expect(resolveEsimGoMode({ VERCEL_ENV: 'production', ESIM_GO_MODE: 'validate' })).toBe(
+      'transaction'
+    );
+    expect(resolveEsimGoMode({ NODE_ENV: 'production', ESIM_GO_MODE: 'validate' })).toBe(
+      'transaction'
+    );
   });
 });
