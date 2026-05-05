@@ -118,6 +118,7 @@ export function toolToScope(toolName: string): KeyScope {
     toolName === 'validate_travel_address' ||
     toolName === 'currency_convert' ||
     toolName === 'tipping_etiquette' ||
+    toolName === 'local_color_brief' ||
     toolName === 'get_trip_brief'
   ) {
     return 'trip_assistance';

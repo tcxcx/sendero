@@ -58,8 +58,44 @@ function emptyVars(status, note) {
       active_trip_current_location: '',
       active_trip_home_iata: '',
       active_trip_status: status,
+      // Concierge-magic — traveler profile vars (empty when no profile
+      // row exists yet). Spec: docs/architecture/concierge-magic.md §3.2.
+      traveler_profile_total_trips: '0',
+      traveler_profile_last_trip_at: '',
+      traveler_profile_visited_cities: '',
+      traveler_profile_dietary: '',
+      traveler_profile_allergies: '',
+      traveler_profile_pace: '',
+      traveler_profile_voice_preferred: 'false',
+      traveler_profile_preferred_cabin: '',
+      traveler_profile_preferred_lang: '',
+      // Recurring-traveler hints — agent reads these for greeting + skip-passport.
+      recurring_traveler_display_name: '',
+      recurring_traveler_has_saved_passport: 'false',
+      recurring_traveler_prior_trip_count: '0',
+      recurring_traveler_returning_to_destination: 'false',
       ...(note ? { active_trip_note: note } : {}),
     },
+  };
+}
+
+function mergeProfileVars(result) {
+  const profile = result?.profile ?? {};
+  const recurring = result?.recurringTraveler ?? {};
+  return {
+    traveler_profile_total_trips: String(profile.totalTrips ?? 0),
+    traveler_profile_last_trip_at: profile.lastTripAt ?? '',
+    traveler_profile_visited_cities: profile.visitedCities ?? '',
+    traveler_profile_dietary: profile.dietary ?? '',
+    traveler_profile_allergies: profile.allergies ?? '',
+    traveler_profile_pace: profile.pace ?? '',
+    traveler_profile_voice_preferred: profile.voicePreferred ? 'true' : 'false',
+    traveler_profile_preferred_cabin: profile.preferredCabin ?? '',
+    traveler_profile_preferred_lang: profile.preferredLang ?? '',
+    recurring_traveler_display_name: recurring.displayName ?? '',
+    recurring_traveler_has_saved_passport: recurring.hasSavedPassport ? 'true' : 'false',
+    recurring_traveler_prior_trip_count: String(recurring.priorTripCount ?? 0),
+    recurring_traveler_returning_to_destination: recurring.returningToDestination ? 'true' : 'false',
   };
 }
 
@@ -148,7 +184,10 @@ async function handler(request, env) {
   }
 
   if (result.status === 'no_active_trip') {
-    return jsonResponse(emptyVars('no_active_trip'));
+    // Profile vars are still populated even on no-trip — the recurring-
+    // traveler greeting reads them on first-touch. Spec §3.2.
+    const base = emptyVars('no_active_trip');
+    return jsonResponse({ vars: { ...base.vars, ...mergeProfileVars(result) } });
   }
   if (result.status === 'no_traveler') {
     return jsonResponse(emptyVars('no_traveler'));
@@ -177,6 +216,8 @@ async function handler(request, env) {
       active_trip_current_location: trip.currentLocation ?? '',
       active_trip_home_iata: trip.homeIata ?? '',
       active_trip_status: 'ok',
+      // Concierge-magic — profile + recurring-traveler vars.
+      ...mergeProfileVars(result),
     },
   });
 }

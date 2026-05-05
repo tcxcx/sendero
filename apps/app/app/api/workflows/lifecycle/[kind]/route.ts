@@ -22,13 +22,14 @@ import { auth } from '@clerk/nextjs/server';
 
 import { prisma } from '@sendero/database';
 
+import { conciergeTouchback } from '@/workflows/lifecycle/concierge-touchback';
 import { watchTripCompletion } from '@/workflows/lifecycle/watch-trip-completion';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const KINDS = ['TripCompletion'] as const;
+const KINDS = ['TripCompletion', 'ConciergeTouchback'] as const;
 type Kind = (typeof KINDS)[number];
 
 const BodySchema = z.object({
@@ -77,6 +78,8 @@ async function dispatch(kind: Kind, body: z.infer<typeof BodySchema>) {
   switch (kind) {
     case 'TripCompletion':
       return start(watchTripCompletion, [{ tripId: body.tripId, tenantId: body.tenantId }]);
+    case 'ConciergeTouchback':
+      return start(conciergeTouchback, [{ tripId: body.tripId, tenantId: body.tenantId }]);
   }
 }
 

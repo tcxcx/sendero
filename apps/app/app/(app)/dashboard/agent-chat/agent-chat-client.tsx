@@ -400,6 +400,7 @@ function pushToolMessages(args: {
     const stayRatePicker = readStayRatePicker(part.output);
     const stayQuoteReview = readStayQuoteReview(part.output);
     const stayBookingConfirmation = readStayBookingConfirmation(part.output);
+    const silent = readSilentMeta(part.output) || isSilentToolName(toolName);
     out.push({
       kind: 'tool_invocation',
       id: `${partId}-inv`,
@@ -408,6 +409,7 @@ function pushToolMessages(args: {
       input,
       status: 'done',
       result: part.output ?? null,
+      ...(silent ? { silent: true } : {}),
       createdAt: baseTime,
     });
     if (activation) {
@@ -467,6 +469,7 @@ function pushToolMessages(args: {
     return;
   }
   if (state === 'output-error') {
+    const silentErr = isSilentToolName(toolName);
     out.push({
       kind: 'tool_invocation',
       id: `${partId}-inv`,
@@ -475,6 +478,7 @@ function pushToolMessages(args: {
       input,
       status: 'error',
       errorMessage: part.errorText ?? 'tool error',
+      ...(silentErr ? { silent: true } : {}),
       createdAt: baseTime,
     });
     return;
@@ -482,6 +486,7 @@ function pushToolMessages(args: {
   // input-streaming, input-available, approval-requested,
   // approval-responded, output-denied — all surface as a pending
   // invocation so the operator sees activity until terminal state.
+  const silentPending = isSilentToolName(toolName);
   out.push({
     kind: 'tool_invocation',
     id: `${partId}-inv`,
@@ -489,8 +494,40 @@ function pushToolMessages(args: {
     toolName,
     input,
     status: state === 'input-available' ? 'streaming' : 'pending',
+    ...(silentPending ? { silent: true } : {}),
     createdAt: baseTime,
   });
+}
+
+/**
+ * Tools that should always render as a silent debug-line in the
+ * operator preview rather than a full Tool block. Context-loading +
+ * profile-reading paths only — never user-facing tools.
+ *
+ * Spec: docs/architecture/concierge-magic.md §3.4.
+ */
+const SILENT_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'get_active_trip',
+  'get_whatsapp_context',
+  'get_traveler_profile',
+  'get_recurring_traveler_context',
+]);
+
+function isSilentToolName(name: string): boolean {
+  return SILENT_TOOL_NAMES.has(name);
+}
+
+/**
+ * Tools can also opt into silent rendering at runtime by returning
+ * `_meta: { silent: true }` on their output. Useful when a normally-
+ * visible tool wants to hide a particular invocation (e.g. a write
+ * fired during context warm-up).
+ */
+function readSilentMeta(output: unknown): boolean {
+  if (!output || typeof output !== 'object') return false;
+  const meta = (output as { _meta?: unknown })._meta;
+  if (!meta || typeof meta !== 'object') return false;
+  return Boolean((meta as { silent?: unknown }).silent);
 }
 
 /**

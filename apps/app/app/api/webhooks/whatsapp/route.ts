@@ -244,6 +244,24 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      // Concierge-magic — voice-preference signal (fire-and-forget).
+      // First time the traveler sends an audio message, flip their
+      // TravelerProfile.voicePreferred = true so future agent turns
+      // bias copy toward voice prompts. One-way flag.
+      // Spec: docs/architecture/concierge-magic.md §4.
+      if (kind === 'audio' && identity.userId) {
+        void import('@sendero/tools/lib/traveler-profile').then(m =>
+          m.onVoiceReceived({
+            userId: identity.userId!,
+            tenantId: identity.tenantId,
+          })
+        ).catch(err => {
+          console.warn('[whatsapp/inbound] voice profile flag failed (non-fatal)', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      }
+
       // Server-side tap routing — interactive list/button reply whose
       // id encodes either:
       //   - ancillary picker payload (`select_seat:<tripId>:<offerId>:…`)

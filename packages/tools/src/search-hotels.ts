@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { searchHotels } from '@sendero/duffel';
 import type { HotelOfferSummary } from '@sendero/duffel';
 
+import { resolveStayLocation, LocationNotResolvedError } from './lib/resolve-stay-location';
 import { senderoBusinessDetails, type SenderoBusinessDetails } from './lib/sendero-business';
 import type { ToolDef } from './types';
 

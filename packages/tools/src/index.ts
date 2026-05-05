@@ -125,6 +125,12 @@ import { tripDelayReplannerTool } from './trip-delay-replanner';
 import { tripWeatherBriefTool } from './trip-weather-brief';
 import { currencyConvertTool } from './currency-convert';
 import { tippingEtiquetteTool } from './tipping-etiquette';
+import { localColorBriefTool } from './local-color-brief';
+export {
+  localColorBrief,
+  type LocalColorBriefInput,
+  type LocalColorBriefResult,
+} from './local-color-brief';
 import type { ToolDef } from './types';
 import { validateTravelAddressTool } from './validate-travel-address';
 
@@ -467,6 +473,7 @@ export const toolList: ToolDef[] = [
   recommendRestaurantsTool,
   exportRouteMapTool,
   // Composed concierge + ops artifacts
+  localColorBriefTool,
   restaurantRouteCardTool,
   airportTransferCoordinatorTool,
   airportArrivalPlaybookTool,

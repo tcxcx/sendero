@@ -38,9 +38,51 @@ const inputSchema = z
 
 export type GetActiveTripInput = z.infer<typeof inputSchema>;
 
+/**
+ * Cross-trip memory accumulated from prior turns. Read once per turn
+ * during prefetch_trip and stamped onto vars so the agent never has to
+ * re-fetch. Empty fields when the traveler has no `TravelerProfile`
+ * row yet (first-trip case). Spec: docs/architecture/concierge-magic.md §3.2.
+ */
+export interface ProfileSnapshot {
+  totalTrips: number;
+  lastTripAt: string | null;
+  /** Comma-joined "iso2:slug" list (most-recent-first), e.g. "PE:lima,AR:buenos-aires". */
+  visitedCities: string;
+  dietary: string;
+  allergies: string;
+  pace: string;
+  voicePreferred: boolean;
+  preferredCabin: string;
+  preferredLang: string;
+}
+
+/**
+ * Recurring-traveler context — minimal greeting/skip-passport hints.
+ * `displayName` lets the agent open with "Tomas" instead of generic
+ * onboarding; `hasSavedPassport` lets it skip the passport intake on
+ * international corridors when one is on file.
+ */
+export interface RecurringTravelerSnapshot {
+  displayName: string;
+  /** True iff a non-expired PassportVault row exists. */
+  hasSavedPassport: boolean;
+  priorTripCount: number;
+  /** True iff this trip's destinationIso2 appears in visitedCities. */
+  returningToDestination: boolean;
+}
+
 export interface GetActiveTripResult {
   status: 'ok' | 'no_traveler' | 'no_active_trip';
   message?: string;
+  /**
+   * Always populated when the resolved User row exists (even on
+   * 'no_active_trip'). Lets prefetch_trip stamp the profile vars even
+   * when the traveler has no in-flight trip — the agent's first-touch
+   * greeting still reads them.
+   */
+  profile?: ProfileSnapshot;
+  recurringTraveler?: RecurringTravelerSnapshot;
   trip?: {
     tripId: string;
     /** Trip lifecycle status. */
@@ -124,37 +166,88 @@ export async function getActiveTrip(
     ? { id: input.tripId, tenantId, travelerId: userId }
     : { tenantId, travelerId: userId, status: { in: [...ACTIVE_STATES] } };
 
-  const trip = await prisma.trip.findFirst({
-    where,
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      status: true,
-      intent: true,
-      paymentMode: true,
-      kind: true,
-      bookings: {
-        // Oldest first so the agent reads "A → B → C" in journey order.
-        orderBy: { createdAt: 'asc' },
-        take: 20,
-        select: {
-          id: true,
-          kind: true,
-          status: true,
-          pnr: true,
-          bookedAt: true,
-          rawDuffel: true,
-          segments: true,
+  // Bulk read — every signal the agent needs in one round-trip. The
+  // four queries fan out in parallel so prefetch_trip's tail latency
+  // is dominated by the slowest single query, not the sum. Spec §3.1.
+  const [trip, homeRow, profile, savedPassport] = await Promise.all([
+    prisma.trip.findFirst({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        intent: true,
+        paymentMode: true,
+        kind: true,
+        bookings: {
+          // Oldest first so the agent reads "A → B → C" in journey order.
+          orderBy: { createdAt: 'asc' },
+          take: 20,
+          select: {
+            id: true,
+            kind: true,
+            status: true,
+            pnr: true,
+            bookedAt: true,
+            rawDuffel: true,
+            segments: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { homeIata: true, displayName: true },
+    }),
+    prisma.travelerProfile.findUnique({
+      where: { userId },
+      select: {
+        totalTrips: true,
+        lastTripAt: true,
+        visitedCities: true,
+        dietary: true,
+        allergies: true,
+        pace: true,
+        voicePreferred: true,
+        preferredCabin: true,
+        preferredLang: true,
+      },
+    }),
+    // PassportVault lookup — bias towards "non-expired" so the
+    // recurring-traveler hint only flips true when the saved passport
+    // is actually usable for the next international corridor. Cheap
+    // existence check; full vault decrypt happens in scan_passport_inline.
+    prisma.passportVault.findFirst({
+      where: {
+        tenantId,
+        userId,
+        expiresOn: { gte: new Date() },
+      },
+      select: { id: true },
+    }),
+  ]);
 
-  // Phase B.2 — pull the traveler's home anchor for `take_me_home`.
-  const homeRow = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { homeIata: true },
-  });
+  // Snapshot the profile once so both 'no_active_trip' and 'ok' branches
+  // can return it. Empty defaults when the row doesn't exist yet
+  // (first-trip travelers).
+  const profileSnapshot: ProfileSnapshot = {
+    totalTrips: profile?.totalTrips ?? 0,
+    lastTripAt: profile?.lastTripAt ? profile.lastTripAt.toISOString() : null,
+    visitedCities: visitedCitiesToString(profile?.visitedCities),
+    dietary: (profile?.dietary ?? []).join(','),
+    allergies: (profile?.allergies ?? []).join(','),
+    pace: profile?.pace ?? '',
+    voicePreferred: profile?.voicePreferred ?? false,
+    preferredCabin: profile?.preferredCabin ?? '',
+    preferredLang: profile?.preferredLang ?? '',
+  };
+  const recurringSnapshot: RecurringTravelerSnapshot = {
+    displayName: homeRow?.displayName ?? '',
+    hasSavedPassport: Boolean(savedPassport),
+    priorTripCount: profile?.totalTrips ?? 0,
+    // returningToDestination: filled in below once we know the trip's iso2.
+    returningToDestination: false,
+  };
 
   if (!trip) {
     return {
@@ -162,6 +255,8 @@ export async function getActiveTrip(
       message: input.tripId
         ? `No trip found with id=${input.tripId} for this traveler.`
         : 'No active trip on file. Ask the traveler where they are headed and for how many days.',
+      profile: profileSnapshot,
+      recurringTraveler: recurringSnapshot,
     };
   }
 
@@ -211,8 +306,31 @@ export async function getActiveTrip(
     };
   });
 
+  // Now that we know the destination iso2 set, flip the
+  // returningToDestination flag if any of those countries appear in
+  // the visitedCities memory. This is the "you've been here before"
+  // signal the agent uses for warmer copy ("welcome back to Lima").
+  if (profile?.visitedCities && Array.isArray(profile.visitedCities)) {
+    const visitedIso2 = new Set(
+      profile.visitedCities
+        .filter(
+          (c): c is { iso2: string; citySlug: string; lastVisitedAt: string } =>
+            !!c &&
+            typeof c === 'object' &&
+            !Array.isArray(c) &&
+            typeof (c as { iso2?: unknown }).iso2 === 'string'
+        )
+        .map(c => c.iso2.toUpperCase())
+    );
+    recurringSnapshot.returningToDestination = destinationCountriesIso2.some(c =>
+      visitedIso2.has(c.toUpperCase())
+    );
+  }
+
   return {
     status: 'ok',
+    profile: profileSnapshot,
+    recurringTraveler: recurringSnapshot,
     trip: {
       tripId: trip.id,
       state: trip.status,
@@ -241,6 +359,19 @@ export async function getActiveTrip(
         : null,
     },
   };
+}
+
+function visitedCitiesToString(raw: unknown): string {
+  if (!Array.isArray(raw)) return '';
+  const tokens: string[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const r = entry as Record<string, unknown>;
+    if (typeof r.iso2 === 'string' && typeof r.citySlug === 'string') {
+      tokens.push(`${r.iso2}:${r.citySlug}`);
+    }
+  }
+  return tokens.join(',');
 }
 
 function stringOrNull(...vals: unknown[]): string | null {

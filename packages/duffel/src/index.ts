@@ -913,7 +913,13 @@ export async function getOrderOnlineCheckInLinks(orderId: string): Promise<Onlin
 // ============================================================================
 
 export interface HotelSearchParams {
-  /** City or neighborhood name — we geocode internally. Also accepts lat,lng. */
+  /**
+   * Raw `lat,lng` string — Duffel Stays only accepts coordinates. The
+   * tool layer is responsible for geocoding free-form input upstream
+   * (see `@sendero/tools/lib/resolve-stay-location`). Passing a city
+   * name here throws — we used to silently fall back to London, which
+   * mis-located every Lima / Cusco / São Paulo / Bogotá / Quito query.
+   */
   location: string;
   checkInDate: string;
   checkOutDate: string;
@@ -923,60 +929,24 @@ export interface HotelSearchParams {
   radiusKm?: number;
 }
 
-/**
- * Minimal hackathon-grade city-to-coords map. Case-insensitive prefix match.
- * Also accepts raw "lat,lng" strings.
- */
-const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
-  london: { lat: 51.5074, lng: -0.1278 },
-  paris: { lat: 48.8566, lng: 2.3522 },
-  'new york': { lat: 40.7128, lng: -74.006 },
-  nyc: { lat: 40.7128, lng: -74.006 },
-  'san francisco': { lat: 37.7749, lng: -122.4194 },
-  sfo: { lat: 37.7749, lng: -122.4194 },
-  boston: { lat: 42.3601, lng: -71.0589 },
-  chicago: { lat: 41.8781, lng: -87.6298 },
-  berlin: { lat: 52.52, lng: 13.405 },
-  barcelona: { lat: 41.3851, lng: 2.1734 },
-  madrid: { lat: 40.4168, lng: -3.7038 },
-  lisbon: { lat: 38.7223, lng: -9.1393 },
-  rome: { lat: 41.9028, lng: 12.4964 },
-  amsterdam: { lat: 52.3676, lng: 4.9041 },
-  dublin: { lat: 53.3498, lng: -6.2603 },
-  dubai: { lat: 25.2048, lng: 55.2708 },
-  singapore: { lat: 1.3521, lng: 103.8198 },
-  tokyo: { lat: 35.6762, lng: 139.6503 },
-  'buenos aires': { lat: -34.6037, lng: -58.3816 },
-  'são paulo': { lat: -23.5505, lng: -46.6333 },
-  'sao paulo': { lat: -23.5505, lng: -46.6333 },
-  'mexico city': { lat: 19.4326, lng: -99.1332 },
-  'los angeles': { lat: 34.0522, lng: -118.2437 },
-  miami: { lat: 25.7617, lng: -80.1918 },
-  austin: { lat: 30.2672, lng: -97.7431 },
-  seattle: { lat: 47.6062, lng: -122.3321 },
-};
+const COORDS_RE = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
 
-function resolveCoords(loc: string): { lat: number; lng: number; name: string } {
-  const trimmed = loc.trim().toLowerCase();
-
-  // Raw "lat,lng"
-  const numMatch = trimmed.match(/^(-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)$/);
-  if (numMatch) {
-    return { lat: Number(numMatch[1]), lng: Number(numMatch[3]), name: loc };
+function parseCoords(loc: string): { lat: number; lng: number } {
+  const m = loc.match(COORDS_RE);
+  if (!m) {
+    throw new Error(
+      `searchHotels expects "lat,lng" — got "${loc}". Geocode upstream via @sendero/tools/lib/resolve-stay-location before calling this wrapper. The hand-rolled city dictionary + London fallback was removed because it mis-located every city not in the (small) hardcoded list.`
+    );
   }
-
-  // Exact or prefix match on city name
-  if (CITY_COORDS[trimmed]) {
-    return { ...CITY_COORDS[trimmed], name: loc };
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if (!Number.isFinite(lat) || Math.abs(lat) > 90) {
+    throw new Error(`searchHotels: latitude out of range (got ${lat}).`);
   }
-  for (const key of Object.keys(CITY_COORDS)) {
-    if (trimmed.startsWith(key) || key.startsWith(trimmed)) {
-      return { ...CITY_COORDS[key], name: loc };
-    }
+  if (!Number.isFinite(lng) || Math.abs(lng) > 180) {
+    throw new Error(`searchHotels: longitude out of range (got ${lng}).`);
   }
-
-  // Fallback: London (so demo always returns something)
-  return { ...CITY_COORDS.london, name: `${loc} (fallback: London)` };
+  return { lat, lng };
 }
 
 export interface HotelOfferSummary {
@@ -1037,7 +1007,7 @@ export function deriveStayCancellation(
  */
 export async function searchHotels(params: HotelSearchParams): Promise<HotelOfferSummary[]> {
   const duffel = getDuffel();
-  const coords = resolveCoords(params.location);
+  const coords = parseCoords(params.location);
   const radiusKm = params.radiusKm ?? 5;
 
   /**

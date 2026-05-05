@@ -666,6 +666,16 @@
         "typescript": "^5.8.3",
       },
     },
+    "packages/location": {
+      "name": "@sendero/location",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "next": "^16.0.0",
+      },
+    },
     "packages/multisig": {
       "name": "@sendero/multisig",
       "version": "0.1.0",
@@ -767,6 +777,7 @@
         "@sendero/invoicing": "*",
         "@sendero/kapso": "*",
         "@sendero/langfuse": "*",
+        "@sendero/location": "*",
         "@sendero/nanopayments": "*",
         "@sendero/notifications": "*",
         "@sendero/ocr": "*",
@@ -1939,6 +1950,8 @@
     "@sendero/llms": ["@sendero/llms@workspace:packages/llms"],
 
     "@sendero/locale": ["@sendero/locale@workspace:packages/locale"],
+
+    "@sendero/location": ["@sendero/location@workspace:packages/location"],
 
     "@sendero/marketing": ["@sendero/marketing@workspace:apps/marketing"],
 

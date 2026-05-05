@@ -26,7 +26,8 @@
     "./read-validation": "./src/read-validation.ts",
     "./lib/resolve-payer": "./src/lib/resolve-payer.ts",
     "./lib/payer-copy": "./src/lib/payer-copy.ts",
-    "./lib/trip-brief-token": "./src/lib/trip-brief-token.ts"
+    "./lib/trip-brief-token": "./src/lib/trip-brief-token.ts",
+    "./lib/traveler-profile": "./src/lib/traveler-profile.ts"
   },
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",
@@ -46,6 +47,7 @@
     "@sendero/invoicing": "*",
     "@sendero/kapso": "*",
     "@sendero/langfuse": "*",
+    "@sendero/location": "*",
     "@sendero/nanopayments": "*",
     "@sendero/notifications": "*",
     "@sendero/ocr": "*",

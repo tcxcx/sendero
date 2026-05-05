@@ -1,0 +1,32 @@
+{
+  "name": "@sendero/location",
+  "version": "0.1.0",
+  "main": "src/index.ts",
+  "private": true,
+  "sideEffects": false,
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules",
+    "lint": "biome check .",
+    "format": "biome --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./countries": "./src/countries.ts",
+    "./countries-intl": "./src/countries-intl.ts",
+    "./currencies": "./src/currencies.ts",
+    "./country-flags": "./src/country-flags.ts",
+    "./excluded": "./src/excluded.ts",
+    "./supported-locales": "./src/supported-locales.ts",
+    "./greetings": "./src/greetings.ts",
+    "./iso": "./src/iso.ts"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

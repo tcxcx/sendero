@@ -287,6 +287,27 @@ export async function bookStay(input: BookStayInput, ctx?: ToolContext): Promise
     });
   });
 
+  // Concierge-magic — profile write hook (fire-and-forget).
+  // Appends destination city to visitedCities. book_flight already
+  // bumped totalTrips + lastTripAt; the stay completes the memory
+  // (we have both iso2 + city name from the Duffel response).
+  // Spec: docs/architecture/concierge-magic.md §4.
+  if (ctx?.traveler?.userId && ctx.traveler.tenantId) {
+    void import('./lib/traveler-profile').then(m =>
+      m.onStayBooked({
+        userId: ctx.traveler!.userId!,
+        tenantId: ctx.traveler!.tenantId!,
+        destinationIso2: confirmation.accommodation.country,
+        destinationCity: confirmation.accommodation.city,
+      })
+    ).catch(err => {
+      console.warn('[book_stay] traveler profile write failed (non-fatal)', {
+        userId: ctx.traveler?.userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   return {
     bookingId: booking.id,
     reference: booking.reference,
