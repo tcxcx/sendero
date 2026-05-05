@@ -2,8 +2,17 @@ import { activatePricingPolicyTool } from './activate-pricing-policy';
 import { airQualityBriefTool } from './air-quality-brief';
 import { airportArrivalPlaybookTool } from './airport-arrival-playbook';
 import { airportTransferCoordinatorTool } from './airport-transfer-coordinator';
+import { bookEsimTool } from './book-esim';
+import { getActiveTripTool } from './get-active-trip';
+import { setHomeIataTool } from './set-home-iata';
+import { setTripKindTool } from './set-trip-kind';
+import { sweepDcwToGatewayTool } from './sweep-dcw-to-gateway';
+import { takeMeHomeTool } from './take-me-home';
 import { bookFlightTool } from './book-flight';
+import { selectSeatTool } from './select-seat';
+import { addBaggageTool } from './add-baggage';
 import { bookStayTool } from './book-stay';
+import { searchEsimTool } from './search-esim';
 import { bridgeToArcTool } from './bridge-to-arc';
 import { cancelBookingTool } from './cancel-booking';
 import { cancelOrderQuoteTool, confirmCancelOrderTool } from './cancel-order-quote';
@@ -84,6 +93,9 @@ import { restaurantRouteCardTool } from './restaurant-route-card';
 import { checkTravelEligibilityTool } from './check-travel-eligibility';
 import { scanDocumentTool } from './scan-document';
 import { scanDocumentAutoTool } from './scan-document-auto';
+import { scanPassportInlineTool } from './scan-passport-inline';
+import { checkVisaRequirementsTool } from './check-visa-requirements';
+import { recommendVisaApplicationPathTool } from './recommend-visa-application-path';
 import { searchFlightsTool } from './search-flights';
 import { searchHotelsTool } from './search-hotels';
 import { sendPayLinkTool } from './send-pay-link';
@@ -107,6 +119,8 @@ import { travelSafetyAidTool } from './travel-safety-aid';
 import { tripCheckinReminderTool } from './trip-checkin-reminder';
 import { tripDelayReplannerTool } from './trip-delay-replanner';
 import { tripWeatherBriefTool } from './trip-weather-brief';
+import { currencyConvertTool } from './currency-convert';
+import { tippingEtiquetteTool } from './tipping-etiquette';
 import type { ToolDef } from './types';
 import { validateTravelAddressTool } from './validate-travel-address';
 
@@ -190,6 +204,15 @@ export { buildOpenApiDoc } from './openapi';
 export { checkTreasuryTool } from './check-treasury';
 export { scanDocumentTool } from './scan-document';
 export { scanDocumentAutoTool } from './scan-document-auto';
+export { scanPassportInlineTool } from './scan-passport-inline';
+export { checkVisaRequirementsTool } from './check-visa-requirements';
+export {
+  type RecommendVisaApplicationPathInput,
+  type RecommendVisaApplicationPathResult,
+  type ConsularOption,
+  recommendVisaApplicationPath,
+  recommendVisaApplicationPathTool,
+} from './recommend-visa-application-path';
 export type { KeyScope } from './scopes';
 export {
   DEFAULT_PROD_SCOPES,
@@ -270,6 +293,22 @@ export {
   listFlightAncillaries,
   listFlightAncillariesTool,
 } from './list-flight-ancillaries';
+export {
+  type SelectSeatInput,
+  type SelectSeatResult,
+  type SelectSeatDeps,
+  TripNotFoundError as SelectSeatTripNotFoundError,
+  runSelectSeat,
+  selectSeatTool,
+} from './select-seat';
+export {
+  type AddBaggageInput,
+  type AddBaggageResult,
+  type AddBaggageDeps,
+  TripNotFoundError as AddBaggageTripNotFoundError,
+  runAddBaggage,
+  addBaggageTool,
+} from './add-baggage';
 export { sendPayLinkTool } from './send-pay-link';
 export { settleBookingTool } from './settle-booking';
 export {
@@ -287,9 +326,31 @@ export {
 export {
   type TripWeatherBriefInput,
   type TripWeatherBriefResult,
+  type TripWeatherForecastDay,
   tripWeatherBrief,
   tripWeatherBriefTool,
 } from './trip-weather-brief';
+export {
+  type CurrencyConvertInput,
+  type CurrencyConvertResult,
+  currencyConvert,
+  currencyConvertTool,
+} from './currency-convert';
+export {
+  type TippingEtiquetteInput,
+  type TippingEtiquetteResult,
+  type TippingScenario,
+  TIPPING_SCENARIOS,
+  TippingCountryUnknownError,
+  tippingEtiquette,
+  tippingEtiquetteTool,
+} from './tipping-etiquette';
+export {
+  type GetActiveTripInput,
+  type GetActiveTripResult,
+  getActiveTrip,
+  getActiveTripTool,
+} from './get-active-trip';
 export type { JsonSchemaObject, ToolContext, ToolDef } from './types';
 export {
   type ValidateTravelAddressInput,
@@ -359,6 +420,9 @@ export const toolList: ToolDef[] = [
   timezoneBriefTool,
   elevationRiskBriefTool,
   travelSafetyAidTool,
+  // Free-API utilities — no partner contracts, no auth.
+  currencyConvertTool,
+  tippingEtiquetteTool,
   recommendRestaurantsTool,
   exportRouteMapTool,
   // Composed concierge + ops artifacts
@@ -370,11 +434,42 @@ export const toolList: ToolDef[] = [
   // Supplier identity + ancillaries (trip-lifecycle extras)
   ensureFlightCustomerTool,
   listFlightAncillariesTool,
+  // Pre-booking ancillary staging — `select_seat` and `add_baggage`
+  // stash selections in `Trip.metadata.pendingAncillaries` for
+  // `book_flight` to forward to Duffel as services[]. Post-confirmation
+  // changes use the order_change flow (P2).
+  selectSeatTool,
+  addBaggageTool,
   // Advanced flight flows (air + stays + credits + conditions + places)
   findAirportsNearbyTool,
   displayOfferConditionsTool,
   quoteStayTool,
   bookStayTool,
+  // Travel ancillaries (eSIM, future: card issuance) — share the same
+  // TenantPricingPolicy + senderoTake legs as bookings.
+  searchEsimTool,
+  bookEsimTool,
+  // Trip context resolver — agents call this at thread-start so
+  // downstream tools (book_esim, complete_trip, weather, etc.) always
+  // have the right tripId / destination ISO-2 / dates regardless of
+  // how many interactive cards have scrolled past in the WhatsApp
+  // conversation history.
+  getActiveTripTool,
+  // Phase B.2 — "trip buddy" digital-nomad concierge. `take_me_home`
+  // resolves the cheapest return flight from the traveler's current
+  // location to their declared home; `set_home_iata` persists the
+  // home anchor so subsequent journeys resolve without re-asking.
+  takeMeHomeTool,
+  setHomeIataTool,
+  // Phase F — `set_trip_kind` flips a trip's kind enum. Used by the
+  // wrap-up prompt's "Still traveling" button to upgrade a trip to
+  // open_journey (digital-nomad mode) without re-creating it.
+  setTripKindTool,
+  // Manual DCW → Gateway sweep — recovery path for funds that landed
+  // at the traveler's DCW on a chain where Sendero never registered
+  // the Wallet row with Circle (e.g. MoonPay sandbox forces Sepolia
+  // and we don't pre-provision DCWs on every Gateway EVM chain yet).
+  sweepDcwToGatewayTool,
   cancelOrderQuoteTool,
   confirmCancelOrderTool,
   requestOrderChangeTool,
@@ -400,6 +495,12 @@ export const toolList: ToolDef[] = [
   // Multimodal OCR / document extraction
   scanDocumentTool,
   scanDocumentAutoTool,
+  scanPassportInlineTool,
+  checkVisaRequirementsTool,
+  // Sendero intelligence layer on top of check_visa_requirements —
+  // routed consulate recommendations + curated corridor notes for the
+  // hard cases sherpa° doesn't auto-process (UK / US / Schengen consular).
+  recommendVisaApplicationPathTool,
   checkTravelEligibilityTool,
   // Channel-provisioning (WhatsApp via Kapso, Slack OAuth + routing)
   kapsoListNumbersTool,

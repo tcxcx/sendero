@@ -1,5 +1,21 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
+exports[`renderForWhatsApp text uses type:text and rewrites markdown to WhatsApp mrkdwn 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "text": {
+      "body": "Booked _AA 100_ to LHR",
+      "preview_url": false,
+    },
+    "to": "",
+    "type": "text",
+  },
+}
+`;
+
 exports[`renderForWhatsApp card with <=3 ctas renders interactive button payload 1`] = `
 {
   "channel": "whatsapp",
@@ -165,18 +181,130 @@ exports[`renderForWhatsApp sources renders text with numbered links 1`] = `
 }
 `;
 
-exports[`renderForWhatsApp text uses type:text and rewrites markdown to WhatsApp mrkdwn 1`] = `
+exports[`renderForWhatsApp esim_activation uses cta_url interactive with QR header + install URL 1`] = `
 {
   "channel": "whatsapp",
   "payload": {
+    "interactive": {
+      "action": {
+        "name": "cta_url",
+        "parameters": {
+          "display_text": "📱 Install eSIM",
+          "url": "https://app.sendero.travel/install/esim/abc.def",
+        },
+      },
+      "body": {
+        "text": 
+"*Trip eSIM ready*
+*5 GB · 30 days · Japan + Korea*
+5.0 GB · 30 days · JP, KR
+$3.00 · charged to your wallet
+iPhone (iOS 17.4 or newer) — tap below for one-tap install.
+Android — tap below, scan the QR shown on the page."
+,
+      },
+      "footer": {
+        "text": "Scan QR or tap to install",
+      },
+      "header": {
+        "image": {
+          "link": "https://app.sendero.travel/api/esim/qr/abc.def.png",
+        },
+        "type": "image",
+      },
+      "type": "cta_url",
+    },
     "messaging_product": "whatsapp",
     "recipient_type": "individual",
-    "text": {
-      "body": "Booked _AA 100_ to LHR",
-      "preview_url": false,
-    },
     "to": "",
-    "type": "text",
+    "type": "interactive",
+  },
+}
+`;
+
+exports[`renderForWhatsApp seat_picker uses an interactive list with select_seat row ids 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "interactive": {
+      "action": {
+        "button": "Pick seat",
+        "sections": [
+          {
+            "rows": [
+              {
+                "description": "24.00 USD · economy",
+                "id": "select_seat:trp_test_001:off_test_abc:pas_test_001:sea_001:12A",
+                "title": "12A",
+              },
+              {
+                "description": "18.00 USD · economy",
+                "id": "select_seat:trp_test_001:off_test_abc:pas_test_001:sea_002:14C",
+                "title": "14C",
+              },
+            ],
+            "title": "Seats",
+          },
+        ],
+      },
+      "body": {
+        "text": 
+"*Seat for Casey Traveler*
+Pick one — fare adjusts at booking."
+,
+      },
+      "type": "list",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
+  },
+}
+`;
+
+exports[`renderForWhatsApp ancillary_picker collapses bags + cfar into one interactive list 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "interactive": {
+      "action": {
+        "button": "View options",
+        "sections": [
+          {
+            "rows": [
+              {
+                "description": "0.00 USD · 7kg · 55×40×20",
+                "id": "add_bag:trp_test_001:off_test_abc:pas_test_001:bag_001:Carry-on bag",
+                "title": "Carry-on bag",
+              },
+              {
+                "description": "45.00 USD · 23kg",
+                "id": "add_bag:trp_test_001:off_test_abc:pas_test_001:bag_002:Checked bag",
+                "title": "Checked bag",
+              },
+              {
+                "description": "32.00 USD · Refund up to 75% for any reason.",
+                "id": "cfar:off_test_abc:cfar_001",
+                "title": "Cancel anytime",
+              },
+            ],
+            "title": "Extras",
+          },
+        ],
+      },
+      "body": {
+        "text": 
+"*Bags + extras for Casey Traveler*
+Tap to add — fare adjusts at booking."
+,
+      },
+      "type": "list",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
   },
 }
 `;

@@ -44,6 +44,7 @@ import {
   reconcileOutboundStatus,
 } from '@/lib/whatsapp-audit';
 import { claimWhatsAppMessage, isWithinReplayWindow } from '@/lib/whatsapp-dedup';
+import { recordInboundForTyping } from '@/lib/typing-heartbeat';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -214,6 +215,22 @@ export async function POST(req: NextRequest) {
       // Fire-and-forget — failures here must never block dispatch.
       void markReadAndTyping(msg);
 
+      // Stamp the most recent inbound wamid for this (tenant, traveler)
+      // into Redis so Sendero-initiated outbound flows (post-ticket
+      // fanout, NFT mint workflow) can re-tick the typing indicator
+      // every 20s via `withTypingHeartbeat`. Kapso owns its own typing
+      // for inbound→outbound on the agent path; this wiring covers
+      // the gap where Sendero sends without Kapso in the loop.
+      const externalUserIdForTyping =
+        msg.identity.phone ?? msg.identity.phoneRaw ?? null;
+      if (externalUserIdForTyping) {
+        void recordInboundForTyping({
+          tenantId: identity.tenantId,
+          externalUserId: externalUserIdForTyping,
+          messageId: msg.messageId,
+        });
+      }
+
       // First-touch greeting — when we just provisioned the User row
       // for this traveler AND they opened with a greeting, send a
       // deterministic localized welcome instead of burning a turn.
@@ -225,6 +242,33 @@ export async function POST(req: NextRequest) {
         void sendWhatsAppReply(msg, greetingFor(identity.locale));
         dispatched++;
         continue;
+      }
+
+      // Pre-booking ancillary picker tap — interactive list reply
+      // whose row id encodes
+      // `select_seat:<tripId>:<offerId>:<passengerId>:<svcId>:<designator>`
+      // or `add_bag:<tripId>:<offerId>:<passengerId>:<svcId>:<label>`.
+      // Route directly to the matching Sendero tool over the internal
+      // surface so the agent doesn't burn tokens routing taps. Same
+      // pattern as the Slack `sendero_select_seat` / `sendero_add_bag`
+      // handler. Falls through to normal agent dispatch when row id
+      // doesn't match (e.g. a quick-reply the agent should consume).
+      if (kind === 'interactive') {
+        const interactive = msg.message.interactive;
+        const rowId = interactive?.list_reply?.id ?? interactive?.button_reply?.id ?? '';
+        if (rowId.startsWith('select_seat:') || rowId.startsWith('add_bag:')) {
+          const handled = await routeAncillaryRowId({
+            rowId,
+            tenantId: identity.tenantId,
+            travelerPhone: msg.identity.phone ?? msg.identity.phoneRaw ?? null,
+          });
+          if (handled) {
+            dispatched++;
+            continue;
+          }
+          // Fall through if parse failed — agent gets a chance to
+          // handle the tap as free-form text.
+        }
       }
 
       // Resolve an active trip for this traveler so the dispatch route
@@ -1135,4 +1179,78 @@ async function findByIdentity(
   }
 
   return null;
+}
+
+/**
+ * Pre-booking ancillary picker tap routing — WhatsApp interactive list
+ * reply whose row id encodes seat or bag staging payload. Decodes the
+ * id, POSTs to `/api/tools/select_seat` or `/api/tools/add_baggage`
+ * with `travelerPhone` so the tools route resolves the Sendero User
+ * via the existing phone-based path. Returns true when the tap was
+ * routed (caller skips agent dispatch); false when the row id was
+ * unrecognized or malformed (caller falls through to the agent).
+ */
+async function routeAncillaryRowId(args: {
+  rowId: string;
+  tenantId: string;
+  travelerPhone: string | null;
+}): Promise<boolean> {
+  const parts = args.rowId.split(':');
+  if (parts.length < 5) return false;
+  const [kind, tripId, offerId, passengerId, serviceId, ...rest] = parts;
+  if (!tripId || !offerId || !passengerId || !serviceId) return false;
+  // Final segment(s) carry the human-readable label/designator. WhatsApp
+  // row ids don't contain colons themselves, but we joined with `:` so
+  // splice back in case the label contained one.
+  const label = rest.join(':');
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  if (!secret) return false;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-sendero-dispatch-secret': secret,
+  };
+
+  if (kind === 'select_seat') {
+    await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/select_seat`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        tenantId: args.tenantId,
+        ...(args.travelerPhone ? { travelerPhone: args.travelerPhone } : {}),
+        input: {
+          tripId,
+          offerId,
+          passengerId,
+          seatServiceId: serviceId,
+          ...(label ? { designator: label } : {}),
+        },
+      }),
+    }).catch(err => console.warn('[wa/webhook] select_seat tap failed', err));
+    return true;
+  }
+
+  if (kind === 'add_bag') {
+    await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/add_baggage`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        tenantId: args.tenantId,
+        ...(args.travelerPhone ? { travelerPhone: args.travelerPhone } : {}),
+        input: {
+          tripId,
+          offerId,
+          passengerId,
+          bagServiceId: serviceId,
+          quantity: 1,
+          ...(label ? { label } : {}),
+        },
+      }),
+    }).catch(err => console.warn('[wa/webhook] add_baggage tap failed', err));
+    return true;
+  }
+
+  return false;
 }

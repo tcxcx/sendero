@@ -294,6 +294,30 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
   });
 }
 
+/**
+ * Identity-document attached to a Duffel passenger. Phase D — fills
+ * the airline + IATA reservation systems with the traveler's real
+ * passport so the carrier can check-in at the gate without a
+ * "passport not on record" stop. Sendero's vault is the source.
+ *
+ * Field shapes mirror Duffel's `OrderPassengerIdentityDocument`:
+ * `issuing_country_code` + `nationality` are ISO 3166-1 **alpha-2**
+ * (Sendero's vault stores alpha-3; convert before passing).
+ */
+export interface DuffelPassengerIdentityDocument {
+  type: 'passport';
+  /** Document number as printed on the passport. */
+  uniqueIdentifier: string;
+  /** Two-letter issuing country code (alpha-2). */
+  issuingCountryCode: string;
+  /** Two-letter nationality code (alpha-2). */
+  nationality?: string;
+  /** YYYY-MM-DD expiry date. */
+  expiresOn: string;
+  /** YYYY-MM-DD issue date (optional). */
+  issuedOn?: string;
+}
+
 export interface HoldOrderParams {
   offerId: string;
   passengerName: string;
@@ -301,6 +325,14 @@ export interface HoldOrderParams {
   passengerPhone?: string;
   passengerDob?: string;
   passengerGender?: 'male' | 'female';
+  /**
+   * Phase D — passport / national-id document attached to the
+   * passenger. When present, Duffel forwards it to the airline +
+   * IATA reservation systems so the gate-side check-in resolves
+   * cleanly. When absent, Duffel falls back to PNR-only retrieval
+   * which some carriers reject.
+   */
+  identityDocument?: DuffelPassengerIdentityDocument;
   idempotencyKey: string;
   /**
    * Optional Duffel Customer Users to attach to the order. The first
@@ -433,6 +465,25 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
 
   const primaryCustomerUserId = params.customerUserIds?.[0] as DuffelCustomerUserId | undefined;
 
+  // Phase D — attach identity document when the traveler's PassportVault
+  // has been populated. The agent-side flow runs `scan_passport_inline`
+  // before book_flight when the corridor is international + the vault
+  // is empty; book_flight reads + decrypts on the fly + passes here.
+  const identityDocuments = params.identityDocument
+    ? [
+        {
+          type: params.identityDocument.type,
+          unique_identifier: params.identityDocument.uniqueIdentifier,
+          issuing_country_code: params.identityDocument.issuingCountryCode,
+          ...(params.identityDocument.nationality
+            ? { nationality: params.identityDocument.nationality }
+            : {}),
+          expires_on: params.identityDocument.expiresOn,
+          ...(params.identityDocument.issuedOn ? { issued_on: params.identityDocument.issuedOn } : {}),
+        },
+      ]
+    : undefined;
+
   const order: DuffelCreateOrderWire = {
     selected_offers: [params.offerId as DuffelCreateOrderWire['selected_offers'][number]],
     type: 'hold',
@@ -448,6 +499,7 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
         title: 'mr',
         type: 'adult',
         ...(primaryCustomerUserId ? { user_id: primaryCustomerUserId } : {}),
+        ...(identityDocuments ? { identity_documents: identityDocuments } : {}),
       },
     ],
     metadata: { idempotency_key: params.idempotencyKey },
@@ -504,6 +556,46 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
  * (origin/destination/dates/ISO-2). Defensive against missing fields
  * in sandbox responses.
  */
+/**
+ * Phase D — peek at an offer's origin + destination ISO-2 country
+ * codes WITHOUT creating a hold. `book_flight` calls this before
+ * `createHoldOrder` so it can short-circuit on international trips
+ * with a missing passport and never burn the Duffel hold quota.
+ */
+export async function getOfferOriginDestinationIso2(offerId: string): Promise<{
+  originCountryAlpha2: string | null;
+  destinationCountryAlpha2: string | null;
+  isInternational: boolean;
+}> {
+  const duffel = getDuffel();
+  const offerResp = await duffel.offers.get(offerId);
+  const offer = offerResp.data as unknown as DuffelOfferWireMinimal;
+  const projected = projectOfferSegments(offer);
+  const first = projected.segments[0];
+  const last = projected.segments[projected.segments.length - 1];
+  // For round-trip (origin→A→origin), `last.destinationCountry` equals
+  // origin. The "international" check is: any segment whose destination
+  // differs from the origin country.
+  const originCountry = first?.originCountry ?? null;
+  const outboundDestCountry =
+    projected.segments.find(
+      s =>
+        s.destinationCountry &&
+        originCountry &&
+        s.destinationCountry.toUpperCase() !== originCountry.toUpperCase()
+    )?.destinationCountry ?? last?.destinationCountry ?? null;
+  const isInternational = Boolean(
+    originCountry &&
+      outboundDestCountry &&
+      originCountry.toUpperCase() !== outboundDestCountry.toUpperCase()
+  );
+  return {
+    originCountryAlpha2: originCountry,
+    destinationCountryAlpha2: outboundDestCountry,
+    isInternational,
+  };
+}
+
 /**
  * Project a Duffel offer OR order payload's `slices[*].segments[*]`
  * into Sendero's normalized shape. Exported so callers that bypass
@@ -769,9 +861,7 @@ const CARRIER_CHECKIN_FALLBACK: Record<string, string> = {
  *
  * Reference: Duffel order schema → slices[].segments[].online_check_in_link
  */
-export async function getOrderOnlineCheckInLinks(
-  orderId: string
-): Promise<OnlineCheckInLink[]> {
+export async function getOrderOnlineCheckInLinks(orderId: string): Promise<OnlineCheckInLink[]> {
   const duffel = getDuffel();
   const order = await duffel.orders.get(orderId);
   const data = order.data as unknown as {
@@ -792,8 +882,7 @@ export async function getOrderOnlineCheckInLinks(
     for (const seg of slice.segments ?? []) {
       const carrierIata =
         seg.marketing_carrier?.iata_code ?? seg.operating_carrier?.iata_code ?? '';
-      const carrierName =
-        seg.marketing_carrier?.name ?? seg.operating_carrier?.name ?? carrierIata;
+      const carrierName = seg.marketing_carrier?.name ?? seg.operating_carrier?.name ?? carrierIata;
       const fallback = CARRIER_CHECKIN_FALLBACK[carrierIata.toUpperCase()];
       const url =
         typeof seg.online_check_in_link === 'string' && seg.online_check_in_link.length > 0

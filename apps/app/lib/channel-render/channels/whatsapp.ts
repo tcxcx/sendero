@@ -19,10 +19,14 @@
  */
 
 import { buildShareImageUrl } from '@/lib/og/share-url';
+import { INSTALL_INSTRUCTIONS } from '../install-instructions';
 import type {
   ChannelCta,
   ChannelMessage,
+  ChannelMessageAncillaryPicker,
   ChannelMessageCard,
+  ChannelMessageEsimActivation,
+  ChannelMessageSeatPicker,
   ChannelMessageSources,
   ChannelMessageText,
   ChannelMessageToolResult,
@@ -338,6 +342,209 @@ async function renderToolResult(
   });
 }
 
+/**
+ * eSIM activation on WhatsApp — `cta_url` interactive with the QR PNG
+ * as the image header and the universal install URL as the button.
+ *
+ * Why not embed the LPA: scheme directly in the button: WhatsApp's
+ * Cloud API rejects non-HTTP/HTTPS URLs in `cta_url.action.parameters.url`
+ * with `131009 Parameter value is not valid`. The install page on
+ * sendero.travel is HTTPS, UA-detects iOS, and `window.location.href =
+ * 'LPA:...'` from there — that's the canonical iOS-tap-to-install path.
+ *
+ * Android / desktop users tapping the button see the QR + per-device
+ * tabs on the same install page, so one button serves every device.
+ */
+/**
+ * Seat picker → WhatsApp interactive list (max 10 rows). When the offer
+ * has more than 10 seats, we cut the cheapest 10 and tell the traveler
+ * to ask for a row range. Description carries the price; tap routes to
+ * `select_seat:<serviceId>` which the inbound handler decodes.
+ */
+function renderSeatPicker(
+  msg: ChannelMessageSeatPicker
+): RenderedForChannel<WhatsAppPayload> {
+  const passenger = msg.passengerName ?? msg.passengerId;
+  const truncated = msg.options.length > WA_LIST_ROWS_MAX;
+  const options = msg.options.slice(0, WA_LIST_ROWS_MAX);
+
+  if (options.length === 0) {
+    return {
+      channel: 'whatsapp',
+      payload: envelope({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: '',
+        type: 'text',
+        text: { body: `No seats available for ${passenger} on this segment.`, preview_url: false },
+      }),
+    };
+  }
+
+  const bodyLines = [`*Seat for ${passenger}*`, 'Pick one — fare adjusts at booking.'];
+  if (truncated) {
+    bodyLines.push(`(Cheapest ${WA_LIST_ROWS_MAX} of ${msg.options.length} shown.)`);
+  }
+
+  const rows = options.map(o => ({
+    // ID is opaque to WhatsApp; route via
+    // `select_seat:<tripId>:<offerId>:<passengerId>:<svcId>:<designator>`
+    // so the inbound handler can stage without a re-lookup. WhatsApp
+    // caps row IDs at 200 chars; offer/passenger/svc Duffel ids are
+    // ~30 each so this fits comfortably.
+    id: clip(
+      `select_seat:${msg.tripId}:${msg.offerId}:${msg.passengerId}:${o.serviceId}:${o.designator}`,
+      200
+    ),
+    title: clip(o.designator, WA_BUTTON_TITLE_MAX),
+    description: clip(
+      `${o.price} ${o.currency}${o.cabinClass ? ` · ${o.cabinClass}` : ''}`,
+      72
+    ),
+  }));
+
+  return {
+    channel: 'whatsapp',
+    payload: envelope({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '',
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: clipBody(bodyLines.join('\n'), WA_BODY_MAX) },
+        action: {
+          button: clip('Pick seat', WA_LIST_BUTTON_MAX),
+          sections: [{ title: clip('Seats', 24), rows }],
+        },
+      },
+    }),
+  };
+}
+
+/**
+ * Ancillary picker → WhatsApp interactive list. Bags + CFAR collapsed
+ * into one list. Tap routes to `add_bag:<offer>:<svcId>` (cfar surfaces
+ * as a non-interactive row with `cfar:<svcId>` id).
+ */
+function renderAncillaryPicker(
+  msg: ChannelMessageAncillaryPicker
+): RenderedForChannel<WhatsAppPayload> {
+  const passenger = msg.passengerName ?? msg.passengerId;
+  const allRows: Array<{ id: string; title: string; description?: string }> = [];
+
+  for (const bag of msg.bags) {
+    const meta = [bag.weightKg ? `${bag.weightKg}kg` : null, bag.dimensions]
+      .filter(Boolean)
+      .join(' · ');
+    allRows.push({
+      // `add_bag:<tripId>:<offerId>:<passengerId>:<svcId>:<label>` —
+      // same encoding pattern as seat picker. Inbound handler stages
+      // via add_baggage tool without re-fetching the offer.
+      id: clip(
+        `add_bag:${msg.tripId}:${msg.offerId}:${msg.passengerId}:${bag.serviceId}:${bag.label}`,
+        200
+      ),
+      title: clip(bag.label, WA_BUTTON_TITLE_MAX),
+      description: clip(
+        `${bag.price} ${bag.currency}${meta ? ` · ${meta}` : ''}`,
+        72
+      ),
+    });
+  }
+  for (const cfar of msg.cancelForAnyReason ?? []) {
+    allRows.push({
+      id: clip(`cfar:${msg.offerId}:${cfar.serviceId}`, 200),
+      title: clip('Cancel anytime', WA_BUTTON_TITLE_MAX),
+      description: clip(`${cfar.price} ${cfar.currency} · ${cfar.summary}`, 72),
+    });
+  }
+
+  if (allRows.length === 0) {
+    return {
+      channel: 'whatsapp',
+      payload: envelope({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: '',
+        type: 'text',
+        text: { body: `No optional extras for this offer.`, preview_url: false },
+      }),
+    };
+  }
+
+  const rows = allRows.slice(0, WA_LIST_ROWS_MAX);
+  const bodyText = clipBody(
+    [`*Bags + extras for ${passenger}*`, 'Tap to add — fare adjusts at booking.'].join('\n'),
+    WA_BODY_MAX
+  );
+
+  return {
+    channel: 'whatsapp',
+    payload: envelope({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '',
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: bodyText },
+        action: {
+          button: clip('View options', WA_LIST_BUTTON_MAX),
+          sections: [{ title: clip('Extras', 24), rows }],
+        },
+      },
+    }),
+  };
+}
+
+function renderEsimActivation(
+  msg: ChannelMessageEsimActivation
+): RenderedForChannel<WhatsAppPayload> {
+  const ios = INSTALL_INSTRUCTIONS.ios;
+  const sizeLine = `${(msg.dataMb / 1024).toFixed(1)} GB · ${msg.validityDays} days · ${msg.countries.join(', ')}`;
+  const body = clipBody(
+    [
+      `*Trip eSIM ready*`,
+      `*${msg.planLabel}*`,
+      sizeLine,
+      msg.priceLine ?? '',
+      '',
+      `iPhone (${ios.subLabel ?? 'iOS 17.4+'}) — tap below for one-tap install.`,
+      `Android — tap below, scan the QR shown on the page.`,
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    WA_BODY_MAX
+  );
+
+  return {
+    channel: 'whatsapp',
+    payload: envelope({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '',
+      type: 'interactive',
+      interactive: {
+        type: 'cta_url',
+        // QR PNG as the visual header — eSIM Go's image is publicly
+        // fetchable via the Sendero proxy allowlist (`/api/esim/qr/*`),
+        // so WhatsApp's media fetcher can pull it for the preview.
+        header: { type: 'image', image: { link: msg.qrUrl } },
+        body: { text: body },
+        footer: { text: 'Scan QR or tap to install' },
+        action: {
+          name: 'cta_url',
+          parameters: {
+            display_text: clip('📱 Install eSIM', WA_BUTTON_TITLE_MAX),
+            url: msg.installUrl,
+          },
+        },
+      },
+    }),
+  };
+}
+
 function renderSources(msg: ChannelMessageSources): RenderedForChannel<WhatsAppPayload> | null {
   if (!msg.items || msg.items.length === 0) return null;
   const lines = msg.items
@@ -379,6 +586,12 @@ export const renderForWhatsApp: ChannelRenderer<WhatsAppPayload> = async (
       return null;
     case 'sources':
       return renderSources(msg);
+    case 'esim_activation':
+      return renderEsimActivation(msg);
+    case 'seat_picker':
+      return renderSeatPicker(msg);
+    case 'ancillary_picker':
+      return renderAncillaryPicker(msg);
     default:
       return exhaustive(msg);
   }
