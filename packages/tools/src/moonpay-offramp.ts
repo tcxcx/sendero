@@ -22,7 +22,7 @@ import { prisma } from '@sendero/database';
 import type { ToolContext, ToolDef } from './types';
 
 const SUPPORTED_CURRENCIES = [
-  'usdc',          // USDC ERC-20 on Ethereum (mainnet) / Sepolia (sandbox, substituted by MoonPayToken)
+  'usdc', // USDC ERC-20 on Ethereum (mainnet) / Sepolia (sandbox, substituted by MoonPayToken)
   'usdc_base',
   'usdc_sol',
   'usdc_polygon',
@@ -47,9 +47,7 @@ const SUPPORTED_CURRENCIES = [
  * `refundWalletAddress` doesn't change — only the wire-level
  * `baseCurrencyCode` MoonPay sees on its widget.
  */
-const SANDBOX_SAFE_CURRENCIES = new Set<(typeof SUPPORTED_CURRENCIES)[number]>([
-  'usdc',
-]);
+const SANDBOX_SAFE_CURRENCIES = new Set<(typeof SUPPORTED_CURRENCIES)[number]>(['usdc']);
 
 function isSandboxApiKey(apiKey: string | undefined): boolean {
   return typeof apiKey === 'string' && apiKey.startsWith('pk_test_');

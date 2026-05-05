@@ -29,11 +29,7 @@
 import { z } from 'zod';
 
 import { prisma } from '@sendero/database';
-import {
-  depositTravelerToGateway,
-  GATEWAY_CHAINS,
-  type GatewayChainKey,
-} from '@sendero/circle';
+import { depositTravelerToGateway, GATEWAY_CHAINS, type GatewayChainKey } from '@sendero/circle';
 
 import { ensureTravelerWallet } from './ensure-traveler-wallet';
 import type { ToolContext, ToolDef } from './types';
@@ -197,7 +193,8 @@ export const sweepDcwToGatewayTool: ToolDef<SweepDcwToGatewayInput, SweepDcwToGa
       },
       amount: {
         type: 'string',
-        description: 'Human-readable USDC amount (e.g. "21.43"). Caller reads from MoonPay confirmation.',
+        description:
+          'Human-readable USDC amount (e.g. "21.43"). Caller reads from MoonPay confirmation.',
       },
     },
   },

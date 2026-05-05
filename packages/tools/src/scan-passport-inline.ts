@@ -266,9 +266,10 @@ export const scanPassportInlineTool: ToolDef = {
         },
       };
     } catch (err) {
+      const kekDiag = `kek_set=${Boolean(process.env.PASSPORT_VAULT_KEK)}, kek_len=${process.env.PASSPORT_VAULT_KEK?.length ?? 0}`;
       return {
         status: 'unsupported',
-        message: `vault upsert failed: ${err instanceof Error ? err.message : String(err)}`,
+        message: `vault upsert failed [${kekDiag}]: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   },

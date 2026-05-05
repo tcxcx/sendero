@@ -321,7 +321,7 @@ export const AGENT_WORKFLOW_CATALOG: LlmsItem[] = [
   {
     label: 'sendero.trip_esim_provisioning',
     description:
-      'Travel data provisioning: detect destinations + trip dates from the booked itinerary, call book_esim with the right bundle, and surface the activation card across the traveler\'s channels. Slack/WhatsApp/web receive a native esim_activation message — QR + tap-to-install on iOS 17.4+ via the universal /install/esim/<token> page; Android scans the QR. Payer attribution follows Trip.paymentMode without re-prompting.',
+      "Travel data provisioning: detect destinations + trip dates from the booked itinerary, call book_esim with the right bundle, and surface the activation card across the traveler's channels. Slack/WhatsApp/web receive a native esim_activation message — QR + tap-to-install on iOS 17.4+ via the universal /install/esim/<token> page; Android scans the QR. Payer attribution follows Trip.paymentMode without re-prompting.",
   },
 ];
 
