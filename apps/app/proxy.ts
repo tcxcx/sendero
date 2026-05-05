@@ -54,6 +54,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/tools/(.*)', // single-tool HTTP surface for Kapso agent runtime — auth via X-API-Key OR x-sendero-dispatch-secret in-route
   '/api/internal/support/tools', // Kapso support tools — protected by x-sendero-support-secret in-route
   '/api/internal/booking-fanout', // book_flight post-ticketing fan-out — protected by AGENT_DISPATCH_SECRET in-route
+  '/api/internal/debug-env', // temp KEK runtime probe — protected by x-debug-secret in-route
   '/api/pay-link/(.*)', // pay-link dispatch — protected by AGENT_DISPATCH_SECRET in-route
   '/api/workflows/stamps/(.*)', // stamp WDK fan-in — same secret/session auth as dispatch, in-route
   '/api/workflows/reputation/(.*)', // reputation WDK fan-in — same secret/session auth, in-route
