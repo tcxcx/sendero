@@ -224,3 +224,64 @@ export const PhoneNumberCreatedEvent = z.object({
   }),
 });
 export type PhoneNumberCreatedEvent = z.infer<typeof PhoneNumberCreatedEvent>;
+
+/**
+ * `workflow.execution.handoff` — fired when an agent calls Kapso's
+ * built-in `handoff_to_human` default tool (NOT Sendero's
+ * `request_human_handoff`, which fires Liveblocks + Slack directly
+ * from the tool handler). This webhook is the only signal Sendero
+ * gets that the agent escalated via Kapso's path. We catch it here
+ * to mirror the same operator notifications a Sendero-tool handoff
+ * triggers — so the operator dashboard and Slack channel always see
+ * an escalation regardless of which path the agent took.
+ *
+ * Payload shape per Kapso docs (subset Sendero needs):
+ *   - data.workflow_id
+ *   - data.execution_id
+ *   - data.phone_number_id (when triggered by inbound_message)
+ *   - data.customer_phone (the traveler's E.164)
+ *   - data.context_summary / data.reason / data.summary (free-form)
+ */
+export const WorkflowHandoffEvent = z.object({
+  type: z.literal('workflow.execution.handoff'),
+  data: z
+    .object({
+      workflow_id: z.string().optional(),
+      workflow_execution_id: z.string().optional(),
+      execution_id: z.string().optional(),
+      phone_number_id: z.string().optional(),
+      customer_phone: z.string().optional(),
+      customer_phone_number: z.string().optional(),
+      conversation_id: z.string().optional(),
+      reason: z.string().optional(),
+      context_summary: z.string().optional(),
+      summary: z.string().optional(),
+    })
+    .passthrough(),
+});
+export type WorkflowHandoffEvent = z.infer<typeof WorkflowHandoffEvent>;
+
+/**
+ * `workflow.execution.failed` — fired when a workflow execution
+ * terminates in error (uncaught exception, tool failure that
+ * propagates, schema validation, etc). Sendero records these for ops
+ * visibility but doesn't auto-escalate (they're internal failures,
+ * not customer-facing); operator dashboard surfaces a digest.
+ */
+export const WorkflowFailedEvent = z.object({
+  type: z.literal('workflow.execution.failed'),
+  data: z
+    .object({
+      workflow_id: z.string().optional(),
+      workflow_execution_id: z.string().optional(),
+      execution_id: z.string().optional(),
+      phone_number_id: z.string().optional(),
+      customer_phone: z.string().optional(),
+      customer_phone_number: z.string().optional(),
+      conversation_id: z.string().optional(),
+      error_message: z.string().optional(),
+      error_code: z.string().optional(),
+    })
+    .passthrough(),
+});
+export type WorkflowFailedEvent = z.infer<typeof WorkflowFailedEvent>;
