@@ -396,6 +396,9 @@ function pushToolMessages(args: {
     // The plain Tool block still surfaces alongside for the operator's
     // input/output forensics.
     const activation = readActivation(part.output);
+    const stayRatePicker = readStayRatePicker(part.output);
+    const stayQuoteReview = readStayQuoteReview(part.output);
+    const stayBookingConfirmation = readStayBookingConfirmation(part.output);
     out.push({
       kind: 'tool_invocation',
       id: `${partId}-inv`,
@@ -421,6 +424,33 @@ function pushToolMessages(args: {
         installUrl: activation.installUrl,
         ...(activation.priceLine ? { priceLine: activation.priceLine } : {}),
         ...(activation.expiresAt ? { expiresAt: activation.expiresAt } : {}),
+        createdAt: baseTime,
+      });
+    }
+    if (stayRatePicker) {
+      out.push({
+        kind: 'stay_rate_picker',
+        id: `${partId}-stay-rate-picker`,
+        author,
+        ...stayRatePicker,
+        createdAt: baseTime,
+      });
+    }
+    if (stayQuoteReview) {
+      out.push({
+        kind: 'stay_quote_review',
+        id: `${partId}-stay-quote-review`,
+        author,
+        ...stayQuoteReview,
+        createdAt: baseTime,
+      });
+    }
+    if (stayBookingConfirmation) {
+      out.push({
+        kind: 'stay_booking_confirmation',
+        id: `${partId}-stay-booking`,
+        author,
+        ...stayBookingConfirmation,
         createdAt: baseTime,
       });
     }
@@ -496,6 +526,64 @@ function readActivation(output: unknown): {
     ...(typeof r.expiresAt === 'string' ? { expiresAt: r.expiresAt } : {}),
   };
 }
+
+/**
+ * Extractors for the three Stays-side structured payloads. The tool
+ * layer (`list_stay_rates` / `quote_stay` / `book_stay`) attaches a typed
+ * blob alongside the raw Duffel response; if the blob isn't well-formed,
+ * we fall through to the plain Tool block rather than rendering a broken
+ * card. Mirrors `readActivation` for `book_esim`.
+ */
+function readStayRatePicker(output: unknown): StayRatePickerPayload | null {
+  if (!output || typeof output !== 'object') return null;
+  const r = (output as { stayRatePicker?: unknown }).stayRatePicker;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  const x = r as Record<string, unknown>;
+  if (typeof x.searchResultId !== 'string') return null;
+  if (!x.accommodation || typeof x.accommodation !== 'object') return null;
+  if (!Array.isArray(x.rates)) return null;
+  if (!x.business || typeof x.business !== 'object') return null;
+  return x as unknown as StayRatePickerPayload;
+}
+
+function readStayQuoteReview(output: unknown): StayQuoteReviewPayload | null {
+  if (!output || typeof output !== 'object') return null;
+  const r = (output as { stayQuoteReview?: unknown }).stayQuoteReview;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  const x = r as Record<string, unknown>;
+  if (typeof x.quoteId !== 'string') return null;
+  if (!x.accommodation || typeof x.accommodation !== 'object') return null;
+  if (!x.billing || typeof x.billing !== 'object') return null;
+  if (!Array.isArray(x.cancellationTimeline)) return null;
+  if (!Array.isArray(x.conditions)) return null;
+  if (!x.business || typeof x.business !== 'object') return null;
+  return x as unknown as StayQuoteReviewPayload;
+}
+
+function readStayBookingConfirmation(output: unknown): StayBookingConfirmationPayload | null {
+  if (!output || typeof output !== 'object') return null;
+  const r = (output as { stayBookingConfirmation?: unknown }).stayBookingConfirmation;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  const x = r as Record<string, unknown>;
+  if (typeof x.bookingId !== 'string') return null;
+  if (typeof x.reference !== 'string') return null;
+  if (!x.accommodation || typeof x.accommodation !== 'object') return null;
+  if (!x.billing || typeof x.billing !== 'object') return null;
+  return x as unknown as StayBookingConfirmationPayload;
+}
+
+type StayRatePickerPayload = Omit<
+  Extract<ChannelMessage, { kind: 'stay_rate_picker' }>,
+  'kind' | 'id' | 'author' | 'createdAt'
+>;
+type StayQuoteReviewPayload = Omit<
+  Extract<ChannelMessage, { kind: 'stay_quote_review' }>,
+  'kind' | 'id' | 'author' | 'createdAt'
+>;
+type StayBookingConfirmationPayload = Omit<
+  Extract<ChannelMessage, { kind: 'stay_booking_confirmation' }>,
+  'kind' | 'id' | 'author' | 'createdAt'
+>;
 
 /**
  * Tiny human-readable status under the persona avatar. Matches the

@@ -49,6 +49,9 @@ export const SANDBOX_SCOPES: KeyScope[] = ['*'];
  */
 export function toolToScope(toolName: string): KeyScope {
   if (toolName.startsWith('search_') || toolName.startsWith('find_')) return 'search';
+  // Read-only stays funnel step between search and quote — no money moves,
+  // no PII surfaced. Same scope as the search itself.
+  if (toolName === 'list_stay_rates') return 'search';
   if (toolName.startsWith('book_') || toolName.startsWith('hold_')) return 'bookings';
   // Pre-booking ancillary staging — same scope as the bookings they
   // attach to. A read-mostly key shouldn't be able to stage paid extras

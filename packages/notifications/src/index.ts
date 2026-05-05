@@ -18,6 +18,10 @@ import { renderGuestInvite, type GuestInviteContent } from './templates';
 import { renderInvoiceEmail, type InvoiceEmailContent } from './invoice-email';
 import { renderFromShare, type ShareEmailContent } from './share-template';
 import {
+  renderStayBookingConfirmed,
+  type StayBookingConfirmedContent,
+} from './stay-confirmation-template';
+import {
   renderBookingConfirmed,
   renderHoldApproval,
   renderHoldConfirmed,
@@ -33,6 +37,15 @@ export { renderInvoiceEmail } from './invoice-email';
 export type { InvoiceEmailContent } from './invoice-email';
 export { renderFromShare } from './share-template';
 export type { ShareEmailContent } from './share-template';
+export { renderStayBookingConfirmed } from './stay-confirmation-template';
+export type {
+  StayBookingConfirmedContent,
+  StayConfirmationAccommodation,
+  StayConfirmationBilling,
+  StayConfirmationBusiness,
+  StayConfirmationCancellationEntry,
+  StayConfirmationCondition,
+} from './stay-confirmation-template';
 export {
   renderBookingConfirmed,
   renderHoldApproval,
@@ -163,6 +176,14 @@ export interface Notifier {
     to: string,
     content: Omit<PayLinkEmailContent, 'supportEmail'> & { supportEmail?: string }
   ): Promise<SendResult>;
+  /**
+   * Hotel-booking post-booking confirmation per Duffel Stays Go-Live
+   * review criteria. Surfaces every required field — booking reference,
+   * confirmed_at, billing breakdown (room/tax/fee/total separated),
+   * cancellation timeline verbatim, conditions verbatim, key collection
+   * always-visible, business details footer.
+   */
+  sendStayBookingConfirmed(to: string, content: StayBookingConfirmedContent): Promise<SendResult>;
 }
 
 /**
@@ -203,6 +224,9 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
         return skipped;
       },
       async sendPayLink() {
+        return skipped;
+      },
+      async sendStayBookingConfirmed() {
         return skipped;
       },
     };
@@ -386,6 +410,26 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
           html: rendered.html,
           text: rendered.text,
           tags: [{ name: 'surface', value: 'pay_link' }],
+        });
+        if (result.error) {
+          return { ok: false, error: result.error.message ?? String(result.error) };
+        }
+        return { ok: true, id: result.data?.id };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+    async sendStayBookingConfirmed(to, content) {
+      const rendered = renderStayBookingConfirmed(content);
+      try {
+        const result = await client.emails.send({
+          from,
+          to: [to],
+          replyTo: replyTo ? [replyTo] : undefined,
+          subject: rendered.subject,
+          html: rendered.html,
+          text: rendered.text,
+          tags: [{ name: 'surface', value: 'stay_booking_confirmed' }],
         });
         if (result.error) {
           return { ok: false, error: result.error.message ?? String(result.error) };

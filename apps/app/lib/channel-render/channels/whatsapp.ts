@@ -28,10 +28,17 @@ import type {
   ChannelMessageEsimActivation,
   ChannelMessageSeatPicker,
   ChannelMessageSources,
+  ChannelMessageStayBookingConfirmation,
+  ChannelMessageStayQuoteReview,
+  ChannelMessageStayRatePicker,
   ChannelMessageText,
   ChannelMessageToolResult,
   ChannelMessageTripBrief,
   ChannelRenderer,
+  ChannelStayBilling,
+  ChannelStayBusinessDetails,
+  ChannelStayCancellationEntry,
+  ChannelStayCondition,
   RenderedForChannel,
 } from '../types';
 
@@ -695,7 +702,252 @@ export const renderForWhatsApp: ChannelRenderer<WhatsAppPayload> = async (
       return renderAncillaryPicker(msg);
     case 'trip_brief':
       return renderTripBrief(msg);
+    case 'stay_rate_picker':
+      return renderStayRatePicker(msg);
+    case 'stay_quote_review':
+      return renderStayQuoteReview(msg);
+    case 'stay_booking_confirmation':
+      return renderStayBookingConfirmation(msg);
     default:
       return exhaustive(msg);
   }
 };
+
+// ── Stays renderers ───────────────────────────────────────────────────
+//
+// WhatsApp Cloud API doesn't have native rich cards, so the strategy is:
+//   • text block carries the verbatim Duffel info (billing rows, timeline,
+//     conditions, key collection, business details)
+//   • interactive button or list adds the action affordance
+//
+// Per Duffel Go-Live we surface every required field even when the
+// channel is text-heavy — the spec is about information, not pixels.
+
+function fmtMoneyStay(amount: string, currency: string): string {
+  if (!amount) return '—';
+  const n = Number(amount);
+  if (Number.isNaN(n)) return `${amount} ${currency}`;
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(n);
+  } catch {
+    return `${amount} ${currency}`;
+  }
+}
+
+function billingBlock(b: ChannelStayBilling): string {
+  return [
+    `Room    ${fmtMoneyStay(b.baseAmount ?? b.totalAmount, b.baseCurrency ?? b.totalCurrency)}`,
+    `Taxes   ${fmtMoneyStay(b.taxAmount, b.taxCurrency)}`,
+    `Fees    ${fmtMoneyStay(b.feeAmount, b.feeCurrency)}`,
+    `Total   ${fmtMoneyStay(b.totalAmount, b.totalCurrency)}`,
+    `Due at property ${fmtMoneyStay(b.dueAtAccommodationAmount, b.dueAtAccommodationCurrency)}`,
+  ].join('\n');
+}
+
+function cancellationBlock(entries: ChannelStayCancellationEntry[], totalAmount: string): string {
+  if (!entries.length) return 'Non-refundable — no refund after booking.';
+  const lines: string[] = [];
+  for (const t of entries) {
+    const isFull = Number(t.refundAmount) >= Number(totalAmount);
+    lines.push(
+      `${isFull ? '✓ Full refund' : '⚠ Partial refund'} until ${t.before.slice(0, 10)} — ${fmtMoneyStay(t.refundAmount, t.currency)}`
+    );
+  }
+  lines.push(`✗ No refund after ${entries[entries.length - 1]!.before.slice(0, 10)}`);
+  return lines.join('\n');
+}
+
+function conditionsBlock(conditions: ChannelStayCondition[]): string {
+  if (!conditions.length) return '';
+  return conditions
+    .map(c => `*${c.title}*${c.description ? `\n${c.description}` : ''}`)
+    .join('\n\n');
+}
+
+function businessFooterBlock(b: ChannelStayBusinessDetails): string {
+  return [
+    `_Sold by ${b.name}_`,
+    b.address,
+    `${b.supportEmail} · ${b.supportPhone}`,
+    `Booking conditions & T&C: ${b.termsUrl}`,
+    b.bookingComTermsUrl ? `Booking.com terms: ${b.bookingComTermsUrl}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function keyCollectionLine(instructions: string | null): string {
+  return `*Key collection*\n${instructions ?? 'Ask at the property on arrival — Duffel returned no key-collection note.'}`;
+}
+
+function renderStayRatePicker(
+  msg: ChannelMessageStayRatePicker
+): RenderedForChannel<WhatsAppPayload> {
+  const headerLines: string[] = [
+    `*${msg.accommodation.name}*`,
+    msg.accommodation.address ??
+      [msg.accommodation.city, msg.accommodation.country].filter(Boolean).join(' · '),
+    `${msg.rooms} room${msg.rooms === 1 ? '' : 's'} · ${msg.guests} guest${msg.guests === 1 ? '' : 's'}${msg.checkInDate && msg.checkOutDate ? ` · ${msg.checkInDate} → ${msg.checkOutDate}` : ''}`,
+  ].filter(Boolean);
+  const text = headerLines.join('\n');
+
+  const truncated = msg.rates.length > WA_LIST_ROWS_MAX;
+  const top = msg.rates.slice(0, WA_LIST_ROWS_MAX);
+  const rows = top.map(r => ({
+    id: clip(`select_stay_rate:${r.rateId}`, 200),
+    title: clip(
+      `${fmtMoneyStay(r.billing.totalAmount, r.billing.totalCurrency)} ${r.refundable ? '✓' : '✗'}`,
+      WA_BUTTON_TITLE_MAX
+    ),
+    description: clip(
+      `${r.roomName ?? '—'} · ${r.paymentType ?? 'pay_now'} · methods: ${r.availablePaymentMethods.join(',') || 'balance'}`,
+      72
+    ),
+  }));
+
+  const trailer = truncated
+    ? `\n\n_(Showing top ${WA_LIST_ROWS_MAX} of ${msg.rates.length} rates.)_`
+    : '';
+  const footer = `\n\n${businessFooterBlock(msg.business)}`;
+
+  return {
+    channel: 'whatsapp',
+    payload: envelope({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '',
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: { type: 'text', text: clip('Hotel rates', 60) },
+        body: { text: clipBody(text + trailer + footer, WA_BODY_MAX) },
+        action: {
+          button: clip('Pick a rate', WA_BUTTON_TITLE_MAX),
+          sections: [{ title: clip('Rates', 24), rows }],
+        },
+      },
+    }),
+    degraded: truncated,
+  };
+}
+
+function renderStayQuoteReview(
+  msg: ChannelMessageStayQuoteReview
+): RenderedForChannel<WhatsAppPayload> {
+  const sections: string[] = [
+    `*${msg.accommodation.name}*`,
+    msg.accommodation.address ?? '',
+    `${msg.rooms} room${msg.rooms === 1 ? '' : 's'} · ${msg.guests} guest${msg.guests === 1 ? '' : 's'} · ${msg.nights} night${msg.nights === 1 ? '' : 's'}`,
+    `Check in ${msg.checkInDate}${msg.accommodation.checkInAfter ? ` from ${msg.accommodation.checkInAfter}` : ''}`,
+    `Check out ${msg.checkOutDate}${msg.accommodation.checkOutBefore ? ` until ${msg.accommodation.checkOutBefore}` : ''}`,
+    '',
+    '*Billing*',
+    billingBlock(msg.billing),
+    '',
+    '*Cancellation policy*',
+    cancellationBlock(msg.cancellationTimeline, msg.billing.totalAmount),
+  ];
+  const cond = conditionsBlock(msg.conditions);
+  if (cond) {
+    sections.push('', '*Hotel policy & rate conditions*', cond);
+  }
+  sections.push('', keyCollectionLine(msg.accommodation.keyCollection));
+  sections.push('', businessFooterBlock(msg.business));
+  const body = clipBody(sections.filter(s => s !== undefined).join('\n'), WA_BODY_MAX);
+
+  return {
+    channel: 'whatsapp',
+    payload: envelope({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '',
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        body: { text: body },
+        action: {
+          buttons: [
+            {
+              type: 'reply',
+              reply: {
+                id: clip(`confirm_stay_booking:${msg.quoteId}`, 200),
+                title: clip('Confirm booking', WA_BUTTON_TITLE_MAX),
+              },
+            },
+            {
+              type: 'reply',
+              reply: {
+                id: clip(`cancel_stay_booking:${msg.quoteId}`, 200),
+                title: clip('Cancel', WA_BUTTON_TITLE_MAX),
+              },
+            },
+          ],
+        },
+      },
+    }),
+  };
+}
+
+function renderStayBookingConfirmation(
+  msg: ChannelMessageStayBookingConfirmation
+): RenderedForChannel<WhatsAppPayload> {
+  const sections: string[] = [
+    '*Booking confirmed ✓*',
+    `Reference: ${msg.reference}`,
+    msg.confirmedAt ? `Confirmed at ${msg.confirmedAt.slice(0, 19).replace('T', ' ')}` : '',
+    '',
+    `*${msg.accommodation.name}*`,
+    msg.accommodation.address ?? '',
+    `${msg.rooms} room${msg.rooms === 1 ? '' : 's'} · ${msg.guests} guest${msg.guests === 1 ? '' : 's'} · ${msg.nights} night${msg.nights === 1 ? '' : 's'}${msg.roomName ? ` · ${msg.roomName}` : ''}`,
+    `Check in ${msg.checkInDate}${msg.accommodation.checkInAfter ? ` from ${msg.accommodation.checkInAfter}` : ''}`,
+    `Check out ${msg.checkOutDate}${msg.accommodation.checkOutBefore ? ` until ${msg.accommodation.checkOutBefore}` : ''}`,
+    '',
+    '*Billing*',
+    billingBlock(msg.billing),
+    '',
+    '*Cancellation policy*',
+    cancellationBlock(msg.cancellationTimeline, msg.billing.totalAmount),
+  ];
+  const cond = conditionsBlock(msg.conditions);
+  if (cond) sections.push('', '*Hotel policy & rate conditions*', cond);
+  sections.push('', keyCollectionLine(msg.accommodation.keyCollection));
+  sections.push('', businessFooterBlock(msg.business));
+
+  const body = clipBody(
+    sections
+      .filter(s => s !== undefined && s !== '')
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n'),
+    WA_BODY_MAX
+  );
+
+  if (msg.tripUrl) {
+    return {
+      channel: 'whatsapp',
+      payload: envelope({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: '',
+        type: 'interactive',
+        interactive: {
+          type: 'cta_url',
+          body: { text: body },
+          action: {
+            name: 'cta_url',
+            parameters: { display_text: clip('View trip', WA_BUTTON_TITLE_MAX), url: msg.tripUrl },
+          },
+        },
+      }),
+    };
+  }
+  return {
+    channel: 'whatsapp',
+    payload: envelope({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '',
+      type: 'text',
+      text: { body, preview_url: false },
+    }),
+  };
+}

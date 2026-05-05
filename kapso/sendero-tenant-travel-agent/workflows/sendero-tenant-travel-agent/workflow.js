@@ -213,6 +213,7 @@ Every customer-facing answer must end with \`complete_task\` (or \`enter_waiting
                   'search_flights',
                   'book_flight',
                   'search_hotels',
+                  'list_stay_rates',
                   'quote_stay',
                   'book_stay',
                   'book_esim',
@@ -587,7 +588,7 @@ Flow:
 
 ## When to use which tool
 - Flights → \`search_flights({ origin, destination, departureDate, returnDate?, cabinClass?, passengers? })\`. Confirm O/D/date first. ROUND-TRIP DETECTION: if the user says "round trip", "return", "ida y vuelta", "both ways", "and back", or volunteers a return date — collect \`returnDate\` (YYYY-MM-DD) and pass it. The Duffel offer-request builds 2 slices automatically; offers come back with \`slices: [outbound, return]\` + \`isRoundTrip: true\`. If the user only gives a one-way intent, omit \`returnDate\` and the search returns single-slice offers (\`isRoundTrip: false\`).
-- Hotels → \`search_hotels\` then \`quote_stay\`.
+- Hotels → \`search_hotels\` → tap a hotel → \`list_stay_rates({ searchResultId, checkInDate, checkOutDate, rooms?, guests? })\` → tap a rate → \`quote_stay\` → confirm card → \`book_stay\`. **\`search_hotels\` does NOT return rate ids.** \`list_stay_rates\` is required between search and quote — it returns the room × rate matrix with refundable / non-refundable variants, payment methods (balance vs card), and the \`rateId\` you hand to \`quote_stay\`. Skipping it will fail.
 - Booking → \`book_flight\` / \`book_stay\` after confirm.
 - *Travel data plan / eSIM / SIM / international roaming / "data abroad"* → \`book_esim\`. Triggers on "esim", "sim", "chip", "data plan", "data abroad", "plan de datos", "chip internacional", "roaming", "internet en <country>", "data when I land". REQUIRED inputs: \`destinationIso2\` (array of ISO-3166-1 alpha-2, e.g. \`["JP"]\`) + \`days\` (integer, trip duration). Optional: \`dataGb\` (default 5), \`tripId\`. If the traveler hasn't given destination/duration, ask once in one short sentence ("¿Para dónde y cuántos días?"); don't refuse. The tool returns \`{ status:'ok', share, activation, qrTokenUrl, installUrl, lpaCode }\` — see Story 5 below for the WhatsApp render. **NEVER** say "eSIMs are outside Sendero's services" — they're not, you have the tool. **NEVER** recommend Airalo / Holafly / outside providers — \`book_esim\` is the path.
 - Cancel → \`cancel_order_quote\` then \`confirm_cancel_order\`.
@@ -845,7 +846,7 @@ When traveler is back home ("ya estoy de vuelta", "trip is over"):
 5. \`complete_task\`.
 
 ## Hotel + restaurant + transfer flows
-- Hotel: \`search_hotels\` → list \`id:'hotel:abc'\` → tap → \`quote_stay\` → confirm card → \`book_stay\`.
+- Hotel: \`search_hotels\` → list \`id:'hotel:<searchResultId>'\` → tap → \`list_stay_rates({ searchResultId, checkInDate, checkOutDate, rooms, guests })\` → list \`id:'rate:<rateId>'\` (refundable / non-refundable variants surface here, plus pay-now vs pay-at-property) → tap → \`quote_stay({ rateId })\` → \`stayQuoteReview\` payload (full Duffel pre-booking review: guests, rooms, nights, address, check-in/out times, billing breakdown with separated tax/fee/due-at-property, cancellation timeline, conditions verbatim, key collection) → confirm card → \`book_stay({ quoteId, email, guests:[{givenName, familyName}] })\`. The \`stayBookingConfirmation\` reply carries the API-returned \`reference\` — surface it verbatim ("Reservado · ref AFE33SE2") plus the cancellation timeline + key collection so the traveler has them in-thread before they arrive at the property.
 - Restaurant: \`recommend_restaurants\` → list → tap → \`restaurant_route_card\` + \`send_image_message\` (route map).
 - Transfer: \`request_location\` → user shares pin → \`airport_transfer_coordinator\` → list of providers.
 
@@ -912,6 +913,7 @@ Works: EZE↔LIM, EZE↔SCL, EZE↔GIG, GRU↔SCL, GRU↔EZE, MIA↔BCN, JFK↔L
                   'search_flights',
                   'book_flight',
                   'search_hotels',
+                  'list_stay_rates',
                   'quote_stay',
                   'book_stay',
                   'book_esim',

@@ -342,4 +342,46 @@ describe('renderForOperator', () => {
     expect(props.alerts).toHaveLength(1);
     expect(props.shareUrl).toBe('https://app.sendero.travel/trip/abc.def');
   });
+
+  test('stay_rate_picker renders inside MessageContent with the rate matrix forwarded', () => {
+    const tree = renderForOperator(fixtures.stayRatePicker());
+    expect(tree.type).toBe(MessageContent);
+    const child = (tree.props as { children?: ReactElement }).children;
+    expect(child && isValidElement(child)).toBe(true);
+    const props = (child as ReactElement).props as {
+      msg: { rates: unknown[]; searchResultId: string };
+    };
+    expect(props.msg.searchResultId).toBe('ssr_0000B5zd9zXpgcMvBmwkgG');
+    expect(props.msg.rates).toHaveLength(1);
+  });
+
+  test('stay_quote_review renders inside MessageContent with the quote payload forwarded', () => {
+    const tree = renderForOperator(fixtures.stayQuoteReview());
+    expect(tree.type).toBe(MessageContent);
+    const child = (tree.props as { children?: ReactElement }).children;
+    expect(child && isValidElement(child)).toBe(true);
+    const props = (child as ReactElement).props as {
+      msg: {
+        quoteId: string;
+        billing: { totalAmount: string; taxAmount: string; feeAmount: string };
+        conditions: Array<{ description: string }>;
+      };
+    };
+    expect(props.msg.quoteId).toBe('quo_0000B5zdBvh42oRqcoI4BO');
+    expect(props.msg.billing.taxAmount).toBe('95.73');
+    expect(props.msg.billing.feeAmount).toBe('39.95');
+    expect(props.msg.conditions[0]?.description).toContain('No smoking allowed');
+  });
+
+  test('stay_booking_confirmation renders inside MessageContent with reference + confirmedAt', () => {
+    const tree = renderForOperator(fixtures.stayBookingConfirmation());
+    expect(tree.type).toBe(MessageContent);
+    const child = (tree.props as { children?: ReactElement }).children;
+    expect(child && isValidElement(child)).toBe(true);
+    const props = (child as ReactElement).props as {
+      msg: { reference: string; confirmedAt: string | null };
+    };
+    expect(props.msg.reference).toBe('AFE33SE2');
+    expect(props.msg.confirmedAt).toBe('2026-04-25T10:05:00Z');
+  });
 });

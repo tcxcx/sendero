@@ -543,9 +543,19 @@ export interface DuffelStaysRateWire {
   id: DuffelStaysRateId;
   total_amount: string;
   total_currency: DuffelCurrencyCode;
+  /** Pre-tax base amount returned alongside total. Required for Duffel Go-Live billing summary. */
+  base_amount?: string | null;
+  base_currency?: DuffelCurrencyCode | null;
+  /** Tax component, separated. Duffel mandates we surface even when 0. */
+  tax_amount?: string | null;
+  tax_currency?: DuffelCurrencyCode | null;
+  /** Fee component, separated. Duffel mandates we surface even when 0. */
+  fee_amount?: string | null;
+  fee_currency?: DuffelCurrencyCode | null;
   due_at_accommodation_amount?: string | null;
   due_at_accommodation_currency?: DuffelCurrencyCode | null;
   payment_type?: DuffelStaysPaymentType;
+  available_payment_methods?: Array<'balance' | 'card' | (string & {})>;
   cancellation_timeline?: DuffelStaysCancellationTimelineEntryWire[];
   supported_loyalty_programme?: DuffelStaysSupportedLoyaltyProgrammeWire | null;
   rate_code?: string | null;
@@ -561,6 +571,32 @@ export interface DuffelStaysRateWire {
   available_rooms?: number;
 }
 
+/** Subset of `StaysAccommodation` that the quote/booking responses echo back. */
+export interface DuffelStaysAccommodationLiteWire {
+  id?: DuffelStaysAccommodationId;
+  name: string;
+  rating?: number | null;
+  /** Free-form key-collection instructions. Duffel mandates we always surface this even when null. */
+  key_collection?: { instructions?: string | null } | null;
+  check_in_information?: {
+    check_in_after_time?: string | null;
+    check_out_before_time?: string | null;
+  } | null;
+  location?: {
+    address?: {
+      line_one?: string;
+      city_name?: string;
+      country_code?: string;
+      postal_code?: string;
+      region?: string;
+    } | null;
+  } | null;
+  rooms?: Array<{
+    name?: string;
+    rates?: DuffelStaysRateWire[];
+  }>;
+}
+
 export interface DuffelStaysQuotePayloadWire {
   rate_id: DuffelStaysRateId;
 }
@@ -569,15 +605,28 @@ export interface DuffelStaysQuoteWire {
   id: DuffelStaysQuoteId;
   total_amount: string;
   total_currency: DuffelCurrencyCode;
+  /** Pre-tax base; surfaced for the Duffel Go-Live billing summary. */
+  base_amount?: string | null;
+  base_currency?: DuffelCurrencyCode | null;
+  /** Tax + fee — Duffel mandates separated display, even when 0. */
+  tax_amount?: string | null;
+  tax_currency?: DuffelCurrencyCode | null;
+  fee_amount?: string | null;
+  fee_currency?: DuffelCurrencyCode | null;
   due_at_accommodation_amount?: string | null;
   due_at_accommodation_currency?: DuffelCurrencyCode | null;
   check_in_date: string;
   check_out_date: string;
   expires_at?: string;
+  /** Number of guests + rooms — required pre-booking display. */
+  guests?: Array<{ type: 'adult' | 'child'; age?: number | null }>;
+  rooms?: number;
   cancellation_timeline?: DuffelStaysCancellationTimelineEntryWire[];
   payment_type?: DuffelStaysPaymentType;
   supported_loyalty_programme?: DuffelStaysSupportedLoyaltyProgrammeWire | null;
   conditions?: DuffelStaysRateConditionWire[];
+  /** Echoed back by Duffel — required for guest/room/nights/address surfacing. */
+  accommodation?: DuffelStaysAccommodationLiteWire;
 }
 
 export interface DuffelStaysGuestPayloadWire {
@@ -603,25 +652,37 @@ export interface DuffelStaysBookingPayloadWire {
 
 export interface DuffelStaysBookingWire {
   id: DuffelStaysBookingId;
+  /** External-facing booking reference — surfaced post-confirmation per Duffel Go-Live. */
   reference: string;
   status: 'confirmed' | 'cancelled' | 'failed' | (string & {});
   total_amount: string;
   total_currency: DuffelCurrencyCode;
+  /** Tax / fee / base — separated, even when 0, per Duffel Go-Live billing schema. */
+  base_amount?: string | null;
+  base_currency?: DuffelCurrencyCode | null;
+  tax_amount?: string | null;
+  tax_currency?: DuffelCurrencyCode | null;
+  fee_amount?: string | null;
+  fee_currency?: DuffelCurrencyCode | null;
+  due_at_accommodation_amount?: string | null;
+  due_at_accommodation_currency?: DuffelCurrencyCode | null;
   check_in_date: string;
   check_out_date: string;
+  /** Number of guests + rooms — required pre-/post-booking display. */
+  guests?: Array<{
+    type: 'adult' | 'child';
+    given_name?: string;
+    family_name?: string;
+    age?: number | null;
+  }>;
+  rooms?: number;
   cancellation_timeline?: DuffelStaysCancellationTimelineEntryWire[];
+  conditions?: DuffelStaysRateConditionWire[];
+  /** Confirmation timestamp from Duffel; required post-booking field. */
+  confirmed_at?: string;
   created_at: string;
-  accommodation?: {
-    id: DuffelStaysAccommodationId;
-    name: string;
-    rating?: number | null;
-    address?: {
-      city_name?: string;
-      country_code?: string;
-      line_one?: string;
-      postal_code?: string;
-    };
-  };
+  /** Reuses the lite shape (key_collection + check_in_information + address). */
+  accommodation?: DuffelStaysAccommodationLiteWire;
   supported_loyalty_programme?: DuffelStaysSupportedLoyaltyProgrammeWire | null;
 }
 

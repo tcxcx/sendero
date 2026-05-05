@@ -17,16 +17,31 @@ import type {
   ChannelMessageReasoning,
   ChannelMessageSeatPicker,
   ChannelMessageSources,
+  ChannelMessageStayBookingConfirmation,
+  ChannelMessageStayQuoteReview,
+  ChannelMessageStayRatePicker,
   ChannelMessageText,
   ChannelMessageToolInvocation,
   ChannelMessageToolResult,
   ChannelMessageTripBrief,
+  ChannelStayBusinessDetails,
 } from '../../types';
 
 const FROZEN_AT = '2026-04-25T10:00:00.000Z';
 
 const AGENT_AUTHOR = { role: 'agent' as const, name: 'Sendero AI' };
 const TRAVELER_AUTHOR = { role: 'traveler' as const, name: 'Casey Traveler' };
+
+function senderoBusinessFixture(): ChannelStayBusinessDetails {
+  return {
+    name: 'Sendero Travel',
+    address: '548 Market St #38322, San Francisco, CA 94104, USA',
+    supportEmail: 'hello@sendero.travel',
+    supportPhone: '+1 (415) 813-1131',
+    termsUrl: 'https://sendero.travel/legal/terms',
+    bookingComTermsUrl: 'https://www.booking.com/content/terms.html',
+  };
+}
 
 export const fixtures = {
   text(overrides: Partial<ChannelMessageText> = {}): ChannelMessageText {
@@ -283,6 +298,183 @@ export const fixtures = {
     };
   },
 
+  stayRatePicker(
+    overrides: Partial<ChannelMessageStayRatePicker> = {}
+  ): ChannelMessageStayRatePicker {
+    return {
+      kind: 'stay_rate_picker',
+      id: 'msg-stay-rate-picker-1',
+      author: AGENT_AUTHOR,
+      searchResultId: 'ssr_0000B5zd9zXpgcMvBmwkgG',
+      accommodation: {
+        name: 'Duffel Test Hotel',
+        country: 'GB',
+        city: 'Henderson Island',
+        address: 'Henderson Island, GB',
+        checkInAfter: '14:30',
+        checkOutBefore: '11:30',
+        keyCollection: 'Collect from reception.',
+      },
+      checkInDate: '2026-06-04',
+      checkOutDate: '2026-06-07',
+      rooms: 1,
+      guests: 1,
+      rates: [
+        {
+          rateId: 'rat_0000B5zdBpSS9xnoU7J48B',
+          roomName: 'Successful Booking',
+          paymentType: 'pay_now',
+          availablePaymentMethods: ['balance', 'card'],
+          refundable: true,
+          billing: {
+            baseAmount: '1219.70',
+            baseCurrency: 'USD',
+            taxAmount: '95.73',
+            taxCurrency: 'USD',
+            feeAmount: '39.95',
+            feeCurrency: 'USD',
+            totalAmount: '1355.38',
+            totalCurrency: 'USD',
+            dueAtAccommodationAmount: '39.95',
+            dueAtAccommodationCurrency: 'USD',
+          },
+          cancellationTimeline: [
+            { before: '2026-06-01T00:00:00Z', refundAmount: '1355.38', currency: 'USD' },
+            { before: '2026-06-03T00:00:00Z', refundAmount: '600.00', currency: 'USD' },
+          ],
+          boardType: 'breakfast',
+        },
+      ],
+      business: senderoBusinessFixture(),
+      createdAt: FROZEN_AT,
+      ...overrides,
+    };
+  },
+
+  stayQuoteReview(
+    overrides: Partial<ChannelMessageStayQuoteReview> = {}
+  ): ChannelMessageStayQuoteReview {
+    return {
+      kind: 'stay_quote_review',
+      id: 'msg-stay-quote-review-1',
+      author: AGENT_AUTHOR,
+      quoteId: 'quo_0000B5zdBvh42oRqcoI4BO',
+      tripId: 'trip_abc123',
+      tenantId: 'ten_test_123',
+      travelerContact: {
+        email: 'casey@example.com',
+        givenName: 'Casey',
+        familyName: 'Traveler',
+      },
+      accommodation: {
+        name: 'Duffel Test Hotel',
+        country: 'GB',
+        city: 'Henderson Island',
+        address: 'Henderson Island, GB',
+        checkInAfter: '14:30',
+        checkOutBefore: '11:30',
+        keyCollection: 'Collect from reception.',
+      },
+      checkInDate: '2026-06-04',
+      checkOutDate: '2026-06-07',
+      nights: 3,
+      rooms: 1,
+      guests: 1,
+      roomName: 'Successful Booking',
+      paymentType: 'pay_now',
+      payer: 'tenant',
+      billing: {
+        baseAmount: '1219.70',
+        baseCurrency: 'USD',
+        taxAmount: '95.73',
+        taxCurrency: 'USD',
+        feeAmount: '39.95',
+        feeCurrency: 'USD',
+        totalAmount: '1355.38',
+        totalCurrency: 'USD',
+        dueAtAccommodationAmount: '39.95',
+        dueAtAccommodationCurrency: 'USD',
+      },
+      cancellationTimeline: [
+        { before: '2026-06-01T00:00:00Z', refundAmount: '1355.38', currency: 'USD' },
+        { before: '2026-06-03T00:00:00Z', refundAmount: '600.00', currency: 'USD' },
+      ],
+      conditions: [
+        {
+          title: 'Smoking',
+          description:
+            'No smoking allowed in any room. Smoking on the property carries a $250 cleaning fee.',
+        },
+        {
+          title: 'Pets',
+          description: 'Pets are not allowed.',
+        },
+      ],
+      supportedLoyaltyProgrammeName: null,
+      business: senderoBusinessFixture(),
+      createdAt: FROZEN_AT,
+      ...overrides,
+    };
+  },
+
+  stayBookingConfirmation(
+    overrides: Partial<ChannelMessageStayBookingConfirmation> = {}
+  ): ChannelMessageStayBookingConfirmation {
+    return {
+      kind: 'stay_booking_confirmation',
+      id: 'msg-stay-booking-1',
+      author: AGENT_AUTHOR,
+      bookingId: 'sta_0000B5zdEAAAAAA',
+      reference: 'AFE33SE2',
+      status: 'confirmed',
+      confirmedAt: '2026-04-25T10:05:00Z',
+      accommodation: {
+        name: 'Duffel Test Hotel',
+        country: 'GB',
+        city: 'Henderson Island',
+        address: 'Henderson Island, GB',
+        checkInAfter: '14:30',
+        checkOutBefore: '11:30',
+        keyCollection: 'Collect from reception.',
+      },
+      checkInDate: '2026-06-04',
+      checkOutDate: '2026-06-07',
+      nights: 3,
+      rooms: 1,
+      guests: 1,
+      roomName: 'Successful Booking',
+      payer: 'tenant',
+      billing: {
+        baseAmount: '1219.70',
+        baseCurrency: 'USD',
+        taxAmount: '95.73',
+        taxCurrency: 'USD',
+        feeAmount: '39.95',
+        feeCurrency: 'USD',
+        totalAmount: '1355.38',
+        totalCurrency: 'USD',
+        dueAtAccommodationAmount: '39.95',
+        dueAtAccommodationCurrency: 'USD',
+      },
+      cancellationTimeline: [
+        { before: '2026-06-01T00:00:00Z', refundAmount: '1355.38', currency: 'USD' },
+        { before: '2026-06-03T00:00:00Z', refundAmount: '600.00', currency: 'USD' },
+      ],
+      conditions: [
+        {
+          title: 'Smoking',
+          description:
+            'No smoking allowed in any room. Smoking on the property carries a $250 cleaning fee.',
+        },
+      ],
+      supportedLoyaltyProgrammeName: null,
+      tripUrl: 'https://app.sendero.travel/trip/abc.def',
+      business: senderoBusinessFixture(),
+      createdAt: FROZEN_AT,
+      ...overrides,
+    };
+  },
+
   sources(overrides: Partial<ChannelMessageSources> = {}): ChannelMessageSources {
     return {
       kind: 'sources',
@@ -314,5 +506,8 @@ export function allFixtures(): ChannelMessage[] {
     fixtures.seatPicker(),
     fixtures.ancillaryPicker(),
     fixtures.tripBrief(),
+    fixtures.stayRatePicker(),
+    fixtures.stayQuoteReview(),
+    fixtures.stayBookingConfirmation(),
   ];
 }

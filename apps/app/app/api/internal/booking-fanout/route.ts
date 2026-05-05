@@ -21,7 +21,11 @@ import { timingSafeEqual } from 'node:crypto';
 
 import { prisma } from '@sendero/database';
 
-import { kickOffBoardingPassStamp, notifyWhatsAppOnBooking } from '@/lib/duffel-dispatcher';
+import {
+  emailBookingConfirmed,
+  kickOffBoardingPassStamp,
+  notifyWhatsAppOnBooking,
+} from '@/lib/duffel-dispatcher';
 import {
   type FanoutSurfaceResult,
   sendBoardingPassImageToTraveler,
@@ -111,8 +115,9 @@ export async function POST(req: NextRequest) {
     boardingPassImage: FanoutSurfaceResult;
     eticketPdf: FanoutSurfaceResult;
     esimOffer: FanoutSurfaceResult;
+    email: FanoutSurfaceResult;
   }> => {
-    const [whatsAppTemplate, boardingPassStamp, boardingPassImage, eticketPdf, esimOffer] =
+    const [whatsAppTemplate, boardingPassStamp, boardingPassImage, eticketPdf, esimOffer, email] =
       await Promise.all([
         wrapVoidHelper('whatsapp-template', body.bookingId!, () =>
           notifyWhatsAppOnBooking({
@@ -146,6 +151,17 @@ export async function POST(req: NextRequest) {
           bookingId: body.bookingId!,
           tenantId: body.tenantId!,
         }),
+        // Leg 6 — Resend booking confirmation email with the airline-
+        // issued e-ticket PDF attached. Recipient = traveler email +
+        // tenant admin (cc). Skips silently when neither is on file or
+        // when RESEND_API_KEY / SENDERO_EMAIL_FROM are unconfigured.
+        wrapVoidHelper('booking-email', body.bookingId!, () =>
+          emailBookingConfirmed({
+            bookingId: body.bookingId!,
+            tenantId: body.tenantId!,
+            duffelOrderId: body.duffelOrderId!,
+          })
+        ),
       ]);
     return {
       whatsAppTemplate,
@@ -153,6 +169,7 @@ export async function POST(req: NextRequest) {
       boardingPassImage,
       eticketPdf,
       esimOffer,
+      email,
     };
   };
 

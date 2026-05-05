@@ -149,4 +149,57 @@ describe('renderForWeb', () => {
     expect(content.shareUrl).toBe('https://app.sendero.travel/trip/abc.def');
     expect(out).toMatchSnapshot();
   });
+
+  test('stay_rate_picker bubble carries the full rate matrix + business details', async () => {
+    const out = await renderForWeb(fixtures.stayRatePicker());
+    expect(out?.payload.bubble).toBe('stay_rate_picker');
+    const content = out?.payload.content as {
+      searchResultId: string;
+      rates: Array<{ rateId: string; refundable: boolean }>;
+      business: { name: string };
+    };
+    expect(content.searchResultId).toBe('ssr_0000B5zd9zXpgcMvBmwkgG');
+    expect(content.rates[0]?.rateId).toBe('rat_0000B5zdBpSS9xnoU7J48B');
+    expect(content.business.name).toBe('Sendero Travel');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_quote_review bubble exposes confirm/cancel CTAs + key collection + business', async () => {
+    const out = await renderForWeb(fixtures.stayQuoteReview());
+    expect(out?.payload.bubble).toBe('stay_quote_review');
+    const content = out?.payload.content as {
+      quoteId: string;
+      accommodation: { keyCollection: string | null };
+      conditions: Array<{ description: string }>;
+      primaryCta: { kind: string; value: string };
+      secondaryCta: { kind: string; value: string };
+    };
+    expect(content.quoteId).toBe('quo_0000B5zdBvh42oRqcoI4BO');
+    expect(content.accommodation.keyCollection).toBe('Collect from reception.');
+    // Conditions verbatim — full description text rides through unchanged.
+    expect(content.conditions[0]?.description).toContain('No smoking allowed');
+    expect(content.primaryCta.kind).toBe('confirm_stay_booking');
+    expect(content.primaryCta.value).toBe('quo_0000B5zdBvh42oRqcoI4BO');
+    expect(content.secondaryCta.kind).toBe('cancel_stay_booking');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_booking_confirmation bubble surfaces reference + confirmedAt + tripUrl', async () => {
+    const out = await renderForWeb(fixtures.stayBookingConfirmation());
+    expect(out?.payload.bubble).toBe('stay_booking_confirmation');
+    const content = out?.payload.content as {
+      reference: string;
+      confirmedAt: string | null;
+      tripUrl: string | null;
+    };
+    expect(content.reference).toBe('AFE33SE2');
+    expect(content.confirmedAt).toBe('2026-04-25T10:05:00Z');
+    expect(content.tripUrl).toBe('https://app.sendero.travel/trip/abc.def');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('traveler-authored stay messages return null (web does not echo own messages)', async () => {
+    const out = await renderForWeb(fixtures.stayQuoteReview({ author: travelerAuthor }));
+    expect(out).toBeNull();
+  });
 });

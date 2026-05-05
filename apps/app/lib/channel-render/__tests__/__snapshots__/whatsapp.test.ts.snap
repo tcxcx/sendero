@@ -351,3 +351,121 @@ Status: in_progress
   },
 }
 `;
+
+exports[`renderForWhatsApp stay_rate_picker emits an interactive list with a row per rate keyed by rateId 1`] = `
+{
+  "channel": "whatsapp",
+  "degraded": false,
+  "payload": {
+    "interactive": {
+      "action": {
+        "button": "Pick a rate",
+        "sections": [
+          {
+            "rows": [
+              {
+                "description": "Successful Booking · pay_now · methods: balance,card",
+                "id": "select_stay_rate:rat_0000B5zdBpSS9xnoU7J48B",
+                "title": "$1,355.38 ✓",
+              },
+            ],
+            "title": "Rates",
+          },
+        ],
+      },
+      "body": {
+        "text": 
+"*Duffel Test Hotel*
+Henderson Island, GB
+1 room · 1 guest · 2026-06-04 → 2026-06-07
+
+_Sold by Sendero Travel_
+548 Market St #38322, San Francisco, CA 94104, USA
+hello@sendero.travel · +1 (415) 813-1131
+Booking conditions & T&C: https://sendero.travel/legal/terms
+Booking.com terms: https://www.booking.com/content/terms.html"
+,
+      },
+      "header": {
+        "text": "Hotel rates",
+        "type": "text",
+      },
+      "type": "list",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
+  },
+}
+`;
+
+exports[`renderForWhatsApp stay_quote_review interactive button surfaces every Duffel-mandated field 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "interactive": {
+      "action": {
+        "buttons": [
+          {
+            "reply": {
+              "id": "confirm_stay_booking:quo_0000B5zdBvh42oRqcoI4BO",
+              "title": "Confirm booking",
+            },
+            "type": "reply",
+          },
+          {
+            "reply": {
+              "id": "cancel_stay_booking:quo_0000B5zdBvh42oRqcoI4BO",
+              "title": "Cancel",
+            },
+            "type": "reply",
+          },
+        ],
+      },
+      "body": {
+        "text": 
+"*Duffel Test Hotel*
+Henderson Island, GB
+1 room · 1 guest · 3 nights
+Check in 2026-06-04 from 14:30
+Check out 2026-06-07 until 11:30
+
+*Billing*
+Room    $1,219.70
+Taxes   $95.73
+Fees    $39.95
+Total   $1,355.38
+Due at property $39.95
+
+*Cancellation policy*
+✓ Full refund until 2026-06-01 — $1,355.38
+⚠ Partial refund until 2026-06-03 — $600.00
+✗ No refund after 2026-06-03
+
+*Hotel policy & rate conditions*
+*Smoking*
+No smoking allowed in any room. Smoking on the property carries a $250 cleaning fee.
+
+*Pets*
+Pets are not allowed.
+
+*Key collection*
+Collect from reception.
+
+_Sold by Sendero Travel_
+548 Market St #38322, San Francisco, CA 94104, USA
+hello@sendero.travel · +1 (415) 813-1131
+Booking conditions & T&C: https://sendero.travel/legal/terms
+Booking.com terms: https://www.booking.com/content/terms.html"
+,
+      },
+      "type": "button",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
+  },
+}
+`;
