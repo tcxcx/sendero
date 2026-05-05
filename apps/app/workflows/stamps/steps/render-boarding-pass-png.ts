@@ -55,7 +55,7 @@ function formatTime(iso: string | null | undefined): string | undefined {
  * traveler-identifying must be redacted or omitted.
  */
 function buildRedactedProps(ctx: StampContext): BoardingPassCardProps {
-  const intent = (ctx.trip as unknown as Record<string, unknown>);
+  const intent = ctx.trip as unknown as Record<string, unknown>;
   // Trip-level destination/origin fall through to booking when intent is sparse
   const originCode = ctx.trip.origin ?? '✈️';
   const destinationCode = ctx.trip.destination ?? '—';
@@ -110,9 +110,7 @@ function buildRedactedProps(ctx: StampContext): BoardingPassCardProps {
  * signed token containing the redacted props. The endpoint always
  * returns `image/png` so we read the bytes and base64-encode.
  */
-export const renderBoardingPassPng = async (args: {
-  ctx: StampContext;
-}): Promise<string> => {
+export const renderBoardingPassPng = async (args: { ctx: StampContext }): Promise<string> => {
   'use step';
 
   const secret = process.env.OG_SHARE_SIGNING_SECRET;
@@ -123,9 +121,7 @@ export const renderBoardingPassPng = async (args: {
   }
 
   const baseUrl =
-    process.env.OG_INTERNAL_BASE_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    'http://localhost:3010';
+    process.env.OG_INTERNAL_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
 
   const props = buildRedactedProps(args.ctx);
   const token = await signBoardingPassPayload(props, secret);

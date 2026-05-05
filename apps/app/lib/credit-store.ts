@@ -222,7 +222,9 @@ async function findPriorRows(
  * passed a value — null wins over `undefined` when explicitly passed,
  * but absence leaves the column NULL (legacy/unattributed).
  */
-function payerFields(args: Pick<DeductAndRecordArgs, 'payerType' | 'payerWalletId' | 'payerUserId'>) {
+function payerFields(
+  args: Pick<DeductAndRecordArgs, 'payerType' | 'payerWalletId' | 'payerUserId'>
+) {
   return {
     ...(args.payerType ? { payerType: args.payerType } : {}),
     ...(args.payerWalletId ? { payerWalletId: args.payerWalletId } : {}),

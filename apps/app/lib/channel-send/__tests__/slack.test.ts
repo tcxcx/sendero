@@ -249,13 +249,7 @@ describe('sendChannelMessageSlack', () => {
     expect(call.text).toBe('Trip eSIM ready: 5 GB · 30 days · Japan + Korea');
 
     const blocks = call.blocks as Array<{ type: string }>;
-    expect(blocks.map(b => b.type)).toEqual([
-      'header',
-      'section',
-      'image',
-      'actions',
-      'context',
-    ]);
+    expect(blocks.map(b => b.type)).toEqual(['header', 'section', 'image', 'actions', 'context']);
 
     // Image block carries the signed QR URL.
     const image = blocks[2] as unknown as { image_url: string };

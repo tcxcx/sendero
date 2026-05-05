@@ -30,11 +30,7 @@ export const closeIfStillOpen = async (args: {
   });
   if (!trip) return;
   if (trip.tenantId !== args.tenantId) return;
-  if (
-    trip.status === 'completed' ||
-    trip.status === 'canceled' ||
-    trip.status === 'failed'
-  ) {
+  if (trip.status === 'completed' || trip.status === 'canceled' || trip.status === 'failed') {
     return;
   }
   if (!trip.travelerId) return;

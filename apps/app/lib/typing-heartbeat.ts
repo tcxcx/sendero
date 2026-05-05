@@ -50,11 +50,9 @@ export async function recordInboundForTyping(args: {
   const redis = getRedis();
   if (!redis) return;
   try {
-    await redis.set(
-      lastInboundKey(args.tenantId, args.externalUserId),
-      args.messageId,
-      { ex: LAST_INBOUND_TTL_SECONDS }
-    );
+    await redis.set(lastInboundKey(args.tenantId, args.externalUserId), args.messageId, {
+      ex: LAST_INBOUND_TTL_SECONDS,
+    });
   } catch (err) {
     console.warn('[typing-heartbeat] record failed (non-fatal)', {
       tenantId: args.tenantId,
@@ -67,10 +65,7 @@ export async function recordInboundForTyping(args: {
  * Look up the most recent inbound wamid we've cached for this
  * (tenant, traveler). Null when the key isn't set or Redis is down.
  */
-async function lookupLastInbound(
-  tenantId: string,
-  externalUserId: string
-): Promise<string | null> {
+async function lookupLastInbound(tenantId: string, externalUserId: string): Promise<string | null> {
   const redis = getRedis();
   if (!redis) return null;
   try {
