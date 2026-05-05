@@ -975,3 +975,109 @@ Collect from reception."
   },
 }
 `;
+
+exports[`renderForSlack stay_search_results emits one section + actions per hotel with select_stay_hotel button 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "🏨 2 hotels · 2026-06-04 → 2026-06-07",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "elements": [
+          {
+            "text": "1 room · 1 guest",
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+      {
+        "type": "divider",
+      },
+      {
+        "accessory": {
+          "alt_text": "Duffel Test Hotel",
+          "image_url": "https://assets.duffel.com/img/duffel-hotel-group/luxury-1.png",
+          "type": "image",
+        },
+        "text": {
+          "text": 
+"*Duffel Test Hotel* · ★★★★ · 8.8/10
+Henderson Island · GB
+$1,219.70 · ✅ free cancellation
+_parking · wifi · pool_"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "select_stay_hotel",
+            "style": "primary",
+            "text": {
+              "emoji": true,
+              "text": "View rates",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "ssr_0000B5zd9zXpgcMvBmwkgG",
+          },
+        ],
+        "type": "actions",
+      },
+      {
+        "text": {
+          "text": 
+"*Coastal Inn* · ★★★ · 7.2/10
+Henderson Island · GB
+$650.00 · ⚠ partial refund
+_wifi_"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "select_stay_hotel",
+            "style": "primary",
+            "text": {
+              "emoji": true,
+              "text": "View rates",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "value": "ssr_0000B5zd9zXpgcMvBmwkgH",
+          },
+        ],
+        "type": "actions",
+      },
+      {
+        "elements": [
+          {
+            "text": 
+"_Sold by *Sendero Travel* · 548 Market St #38322, San Francisco, CA 94104, USA_
+<mailto:hello@sendero.travel|hello@sendero.travel>  ·  +1 (415) 813-1131  ·  <https://sendero.travel/legal/terms|Booking conditions & T&C>  ·  <https://www.booking.com/content/terms.html|Booking.com terms>"
+,
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+    ],
+    "channel": "",
+    "text": "2 hotels · 2026-06-04 → 2026-06-07",
+    "thread_ts": undefined,
+  },
+}
+`;

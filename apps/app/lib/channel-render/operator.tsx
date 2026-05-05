@@ -30,6 +30,7 @@ import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai
 // of Confirmation, and the `tool_invocation` case below for why Task is
 // held until the canonical shape exposes a multi-step orchestration kind.
 
+import { HotelResultsCard } from '@/components/ai-elements/hotel-results-card';
 import { StayRatePickerCard } from '@/components/ai-elements/stay-rate-picker-card';
 import { StayQuoteReviewCard } from '@/components/ai-elements/stay-quote-card';
 import { StayBookingConfirmationCard } from '@/components/ai-elements/stay-booking-confirmation-card';
@@ -41,6 +42,7 @@ import type {
   ChannelMessageEsimActivation,
   ChannelMessageSeatPicker,
   ChannelMessageAncillaryPicker,
+  ChannelMessageStaySearchResults,
   ChannelMessageStayRatePicker,
   ChannelMessageStayQuoteReview,
   ChannelMessageStayBookingConfirmation,
@@ -219,6 +221,13 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
         </MessageContent>
       );
 
+    case 'stay_search_results':
+      return (
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
+          <StaySearchResultsView msg={msg} />
+        </MessageContent>
+      );
+
     case 'stay_rate_picker':
       return (
         <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
@@ -243,6 +252,21 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
     default:
       return exhaustive(msg);
   }
+}
+
+function StaySearchResultsView({ msg }: { msg: ChannelMessageStaySearchResults }) {
+  return (
+    <HotelResultsCard
+      data={{
+        checkInDate: msg.checkInDate,
+        checkOutDate: msg.checkOutDate,
+        rooms: msg.rooms,
+        guests: msg.guests,
+        hotels: msg.hotels,
+        business: msg.business,
+      }}
+    />
+  );
 }
 
 function StayRatePickerView({ msg }: { msg: ChannelMessageStayRatePicker }) {

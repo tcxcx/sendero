@@ -343,6 +343,18 @@ describe('renderForOperator', () => {
     expect(props.shareUrl).toBe('https://app.sendero.travel/trip/abc.def');
   });
 
+  test('stay_search_results renders inside MessageContent with the hotel list forwarded', () => {
+    const tree = renderForOperator(fixtures.staySearchResults());
+    expect(tree.type).toBe(MessageContent);
+    const child = (tree.props as { children?: ReactElement }).children;
+    expect(child && isValidElement(child)).toBe(true);
+    const props = (child as ReactElement).props as {
+      msg: { hotels: Array<{ searchResultId: string }>; rooms: number };
+    };
+    expect(props.msg.hotels).toHaveLength(2);
+    expect(props.msg.hotels[0]?.searchResultId).toBe('ssr_0000B5zd9zXpgcMvBmwkgG');
+  });
+
   test('stay_rate_picker renders inside MessageContent with the rate matrix forwarded', () => {
     const tree = renderForOperator(fixtures.stayRatePicker());
     expect(tree.type).toBe(MessageContent);

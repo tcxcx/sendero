@@ -599,3 +599,70 @@ exports[`renderForWeb stay_booking_confirmation bubble surfaces reference + conf
   },
 }
 `;
+
+exports[`renderForWeb stay_search_results bubble carries the hotel list + booking window + business 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "stay_search_results",
+    "content": {
+      "business": {
+        "address": "548 Market St #38322, San Francisco, CA 94104, USA",
+        "bookingComTermsUrl": "https://www.booking.com/content/terms.html",
+        "name": "Sendero Travel",
+        "supportEmail": "hello@sendero.travel",
+        "supportPhone": "+1 (415) 813-1131",
+        "termsUrl": "https://sendero.travel/legal/terms",
+      },
+      "checkInDate": "2026-06-04",
+      "checkOutDate": "2026-06-07",
+      "guests": 1,
+      "hotels": [
+        {
+          "amenities": [
+            "parking",
+            "wifi",
+            "pool",
+          ],
+          "cancellation": "free",
+          "cheapestCurrency": "USD",
+          "cheapestPrice": "1219.70",
+          "city": "Henderson Island",
+          "country": "GB",
+          "distanceMeters": 1200,
+          "name": "Duffel Test Hotel",
+          "photos": [
+            "https://assets.duffel.com/img/duffel-hotel-group/luxury-1.png",
+          ],
+          "reviewScore": 8.8,
+          "searchResultId": "ssr_0000B5zd9zXpgcMvBmwkgG",
+          "stars": 4,
+        },
+        {
+          "amenities": [
+            "wifi",
+          ],
+          "cancellation": "partial",
+          "cheapestCurrency": "USD",
+          "cheapestPrice": "650.00",
+          "city": "Henderson Island",
+          "country": "GB",
+          "distanceMeters": null,
+          "name": "Coastal Inn",
+          "photos": [],
+          "reviewScore": 7.2,
+          "searchResultId": "ssr_0000B5zd9zXpgcMvBmwkgH",
+          "stars": 3,
+        },
+      ],
+      "rooms": 1,
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;

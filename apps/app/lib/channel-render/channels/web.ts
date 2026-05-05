@@ -27,6 +27,7 @@ import type {
   ChannelMessageStayBookingConfirmation,
   ChannelMessageStayQuoteReview,
   ChannelMessageStayRatePicker,
+  ChannelMessageStaySearchResults,
   ChannelMessageText,
   ChannelMessageToolResult,
   ChannelMessageTripBrief,
@@ -49,6 +50,7 @@ export interface WebTravelerPayload {
     | 'esim_activation'
     | 'seat_picker'
     | 'ancillary_picker'
+    | 'stay_search_results'
     | 'stay_rate_picker'
     | 'stay_quote_review'
     | 'stay_booking_confirmation'
@@ -353,6 +355,8 @@ export const renderForWeb: ChannelRenderer<WebTravelerPayload> = async (
       return renderAncillaryPicker(msg, author);
     case 'trip_brief':
       return renderTripBrief(msg, author);
+    case 'stay_search_results':
+      return renderStaySearchResults(msg, author);
     case 'stay_rate_picker':
       return renderStayRatePicker(msg, author);
     case 'stay_quote_review':
@@ -363,6 +367,29 @@ export const renderForWeb: ChannelRenderer<WebTravelerPayload> = async (
       return exhaustive(msg);
   }
 };
+
+function renderStaySearchResults(
+  msg: ChannelMessageStaySearchResults,
+  author: WebTravelerPayload['author'] | null
+): RenderedForChannel<WebTravelerPayload> | null {
+  if (!author) return null;
+  return {
+    channel: 'web',
+    payload: {
+      bubble: 'stay_search_results',
+      author,
+      content: {
+        checkInDate: msg.checkInDate,
+        checkOutDate: msg.checkOutDate,
+        rooms: msg.rooms,
+        guests: msg.guests,
+        hotels: msg.hotels,
+        business: msg.business,
+      },
+      createdAt: msg.createdAt,
+    },
+  };
+}
 
 function renderStayRatePicker(
   msg: ChannelMessageStayRatePicker,

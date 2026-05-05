@@ -73,9 +73,7 @@
               "function_name": "sendero-tool-call",
               "input_schema": {
                 "type": "object",
-                "required": [
-                  "toolName"
-                ],
+                "required": ["toolName"],
                 "properties": {
                   "input": {
                     "type": "object",
@@ -259,9 +257,7 @@
               "function_name": "sendero-tool-call",
               "input_schema": {
                 "type": "object",
-                "required": [
-                  "toolName"
-                ],
+                "required": ["toolName"],
                 "properties": {
                   "input": {
                     "type": "object",

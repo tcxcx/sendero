@@ -150,6 +150,21 @@ describe('renderForWeb', () => {
     expect(out).toMatchSnapshot();
   });
 
+  test('stay_search_results bubble carries the hotel list + booking window + business', async () => {
+    const out = await renderForWeb(fixtures.staySearchResults());
+    expect(out?.payload.bubble).toBe('stay_search_results');
+    const content = out?.payload.content as {
+      hotels: Array<{ searchResultId: string; cancellation: string }>;
+      checkInDate: string;
+      checkOutDate: string;
+    };
+    expect(content.hotels).toHaveLength(2);
+    expect(content.hotels[0]?.searchResultId).toBe('ssr_0000B5zd9zXpgcMvBmwkgG');
+    expect(content.hotels[0]?.cancellation).toBe('free');
+    expect(content.checkInDate).toBe('2026-06-04');
+    expect(out).toMatchSnapshot();
+  });
+
   test('stay_rate_picker bubble carries the full rate matrix + business details', async () => {
     const out = await renderForWeb(fixtures.stayRatePicker());
     expect(out?.payload.bubble).toBe('stay_rate_picker');

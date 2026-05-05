@@ -204,6 +204,22 @@ describe('renderForWhatsApp', () => {
     expect(body).toContain('No bookings yet');
   });
 
+  test('stay_search_results emits an interactive list keyed by searchResultId', async () => {
+    const out = await renderForWhatsApp(fixtures.staySearchResults());
+    expect(out?.payload.type).toBe('interactive');
+    expect(out?.payload.interactive?.type).toBe('list');
+    const rows = out?.payload.interactive?.action.sections?.[0]?.rows ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.id).toContain('select_stay_hotel:ssr_0000B5zd9zXpgcMvBmwkgG');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_search_results with no hotels falls back to plain text', async () => {
+    const out = await renderForWhatsApp(fixtures.staySearchResults({ hotels: [] }));
+    expect(out?.payload.type).toBe('text');
+    expect(out?.payload.text?.body).toContain('No matching hotels');
+  });
+
   test('stay_rate_picker emits an interactive list with a row per rate keyed by rateId', async () => {
     const out = await renderForWhatsApp(fixtures.stayRatePicker());
     expect(out?.payload.type).toBe('interactive');
