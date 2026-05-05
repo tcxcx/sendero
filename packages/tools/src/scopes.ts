@@ -119,6 +119,13 @@ export function toolToScope(toolName: string): KeyScope {
   ) {
     return 'trip_assistance';
   }
+  // Dev/sandbox observability tools. Scoped to `utilities` because
+  // they're not part of the customer-facing capability set; the
+  // production-key gate lives at the handler layer (see
+  // `report-knowledge-gap.ts::isCallerAllowed`), not here.
+  if (toolName === 'report_knowledge_gap' || toolName === 'list_available_tools') {
+    return 'utilities';
+  }
   return 'utilities';
 }
 

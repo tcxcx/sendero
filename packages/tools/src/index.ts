@@ -5,6 +5,8 @@ import { airportTransferCoordinatorTool } from './airport-transfer-coordinator';
 import { bookEsimTool } from './book-esim';
 import { getActiveTripTool } from './get-active-trip';
 import { getTripBriefTool } from './get-trip-brief';
+import { reportKnowledgeGapTool } from './report-knowledge-gap';
+import { listAvailableToolsTool } from './list-available-tools';
 import { setHomeIataTool } from './set-home-iata';
 import { setTripKindTool } from './set-trip-kind';
 import { sweepDcwToGatewayTool } from './sweep-dcw-to-gateway';
@@ -366,6 +368,22 @@ export {
   dbDependencies as getTripBriefDbDependencies,
   getTripBriefTool,
 } from './get-trip-brief';
+export {
+  type ReportKnowledgeGapInput,
+  type ReportKnowledgeGapResult,
+  type ReportKnowledgeGapDeps,
+  runReportKnowledgeGap,
+  dbDependencies as reportKnowledgeGapDbDependencies,
+  reportKnowledgeGapTool,
+} from './report-knowledge-gap';
+export {
+  type ListAvailableToolsInput,
+  type ListAvailableToolsResult,
+  type ListAvailableToolsDeps,
+  type ListedTool,
+  runListAvailableTools,
+  listAvailableToolsTool,
+} from './list-available-tools';
 export type { JsonSchemaObject, ToolContext, ToolDef } from './types';
 export {
   type ValidateTravelAddressInput,
@@ -474,6 +492,15 @@ export const toolList: ToolDef[] = [
   // eSIMs + alerts + a public share URL. Replaces the agent stitching
   // get_active_trip + list_flight_ancillaries + esim status by hand.
   getTripBriefTool,
+  // Demand-driven observability — the agent's own bug tracker.
+  // Both tools are dev/sandbox-only at the handler level (production
+  // prod-keys get a refusal). `report_knowledge_gap` self-reports
+  // missing tools/instructions/env; `list_available_tools` lets the
+  // agent introspect the catalog when uncertain. See
+  // packages/tools/src/report-knowledge-gap.ts and
+  // scripts/scan-knowledge-gaps.ts (`bun gaps:scan`).
+  reportKnowledgeGapTool,
+  listAvailableToolsTool,
   // Phase B.2 — "trip buddy" digital-nomad concierge. `take_me_home`
   // resolves the cheapest return flight from the traveler's current
   // location to their declared home; `set_home_iata` persists the
