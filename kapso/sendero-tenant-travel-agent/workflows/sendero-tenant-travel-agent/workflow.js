@@ -1,57 +1,65 @@
 import { START, Workflow } from '@kapso/workflows';
 
-const workflow = new Workflow("sendero-tenant-travel-agent", {
-  name: "Sendero Tenant Travel Agent",
-  status: "active",
+const workflow = new Workflow('sendero-tenant-travel-agent', {
+  name: 'Sendero Tenant Travel Agent',
+  status: 'active',
 });
 
 workflow.addNode(START, {
-  "position": {
-    "x": 120,
-    "y": 140
-  }
+  position: {
+    x: 120,
+    y: 140,
+  },
 });
 
 workflow.addTrigger({
-  "active": true,
-  "type": "inbound_message",
-  "phoneNumberId": "597907523413541"
+  active: true,
+  type: 'inbound_message',
+  phoneNumberId: '597907523413541',
 });
 
-workflow.addNode("router", {
-  "config": {
-    "decision_type": "ai",
-    "conditions": [
-      {
-        "id": "63db23a6-2aad-480c-a988-ca31ef4bdf48",
-        "label": "money",
-        "description": "User's last message is about wallet view (ver mi wallet, my balance, cuánto tengo, mi wallet), top-up (top up, agregar saldo, cargar wallet, depositar, recargar, add funds, buy USDC), or off-ramp (retirar plata, cash out, withdraw, sacar, pasar a dólares, convertir a fiat). Also: button taps with id starting topup_moonpay_, topup_custom, or check_balance."
-      },
-      {
-        "id": "c887c1f8-2e97-4e9f-a893-d160dc91294e",
-        "label": "default",
-        "description": "Anything else: flight search, hotel search, booking confirmation, restaurant recommendations, airport transfers, post-trip wrap, NFT stamps, complaints, refund requests, group trips, prefund claims, file uploads, free-form questions, greetings, gratitude."
-      }
-    ],
-    "llm_configuration": {},
-    "provider_model_id": "94b06839-2a0c-4ad2-a17f-fd242c8a56f4",
-    "provider_model_name": "gpt-4o-mini-2024-07-18",
-    "llm_temperature": "0.7",
-    "llm_max_tokens": null
+workflow.addNode(
+  'router',
+  {
+    config: {
+      decision_type: 'ai',
+      conditions: [
+        {
+          id: '63db23a6-2aad-480c-a988-ca31ef4bdf48',
+          label: 'money',
+          description:
+            "User's last message is about wallet view (ver mi wallet, my balance, cuánto tengo, mi wallet), top-up (top up, agregar saldo, cargar wallet, depositar, recargar, add funds, buy USDC), or off-ramp (retirar plata, cash out, withdraw, sacar, pasar a dólares, convertir a fiat). Also: button taps with id starting topup_moonpay_, topup_custom, or check_balance.",
+        },
+        {
+          id: 'c887c1f8-2e97-4e9f-a893-d160dc91294e',
+          label: 'default',
+          description:
+            'Anything else: flight search, hotel search, booking confirmation, restaurant recommendations, airport transfers, post-trip wrap, NFT stamps, complaints, refund requests, group trips, prefund claims, file uploads, free-form questions, greetings, gratitude.',
+        },
+      ],
+      llm_configuration: {},
+      provider_model_id: '94b06839-2a0c-4ad2-a17f-fd242c8a56f4',
+      provider_model_name: 'gpt-4o-mini-2024-07-18',
+      llm_temperature: '0.7',
+      llm_max_tokens: null,
+    },
+    nodeType: 'decide',
+    type: 'raw',
   },
-  "nodeType": "decide",
-  "type": "raw"
-}, {
-  "position": {
-    "x": 240,
-    "y": 420
-  },
-  "displayName": "Decision: AI-powered"
-});
+  {
+    position: {
+      x: 240,
+      y: 420,
+    },
+    displayName: 'Decision: AI-powered',
+  }
+);
 
-workflow.addNode("money_agent", {
-  "config": {
-    "system_prompt": `You are Sendero's WALLET specialist agent on WhatsApp. Your ONLY job is wallet view, top-up, and off-ramp.
+workflow.addNode(
+  'money_agent',
+  {
+    config: {
+      system_prompt: `You are Sendero's WALLET specialist agent on WhatsApp. Your ONLY job is wallet view, top-up, and off-ramp.
 
 ## ⛔⛔⛔ ZERO-NARRATION PROTOCOL (HARDEST RULE)
 **Your FIRST output token in EVERY turn must be a TOOL CALL, never a sentence.**
@@ -161,179 +169,188 @@ If a tool returns \`{error}\`: relay the user-actionable part only. Don't fabric
 ## Closing
 Every customer-facing answer must end with \`complete_task\` (or \`enter_waiting\` when expecting follow-up).
 `,
-    "provider_model_id": "0d5c3a20-5343-4f41-81fc-a06ab71bf5b3",
-    "provider_model_name": "claude-sonnet-4-6",
-    "temperature": "0.2",
-    "max_iterations": 40,
-    "max_tokens": 8192,
-    "reasoning_effort": null,
-    "observer_prompt_mode": "analysis_only",
-    "enabled_default_tools": [
-      "send_notification_to_user",
-      "send_media",
-      "get_execution_metadata",
-      "get_whatsapp_context",
-      "get_current_datetime",
-      "save_variable",
-      "get_variable",
-      "ask_about_file",
-      "enter_waiting",
-      "complete_task",
-      "handoff_to_human"
-    ],
-    "sandbox_enabled": false,
-    "sandbox_network_mode": "allow_all",
-    "sandbox_allowed_outbound_hosts": [],
-    "flow_agent_function_tools": [
-      {
-        "name": "call_sendero",
-        "description": "Call any Sendero tool by name. Use this for every action that touches Sendero state — flight/hotel search, bookings, cancellations, holds, treasury, document scan, escalation, template sends. Pick the right `toolName` from the enum and pass the matching `input` object. Returns `{ result }` on success or `{ error, message }` on failure — relay errors verbatim instead of inventing them.",
-        "function_name": "sendero-tool-call",
-        "input_schema": {
-          "type": "object",
-          "required": [
-            "toolName"
-          ],
-          "properties": {
-            "input": {
-              "type": "object",
-              "description": "Tool-specific input. Each tool validates its own shape — see Sendero's /api/tools/{name} schema for required fields.",
-              "additionalProperties": true
+      provider_model_id: '0d5c3a20-5343-4f41-81fc-a06ab71bf5b3',
+      provider_model_name: 'claude-sonnet-4-6',
+      temperature: '0.2',
+      max_iterations: 40,
+      max_tokens: 8192,
+      reasoning_effort: null,
+      observer_prompt_mode: 'analysis_only',
+      enabled_default_tools: [
+        'send_notification_to_user',
+        'send_media',
+        'get_execution_metadata',
+        'get_whatsapp_context',
+        'get_current_datetime',
+        'save_variable',
+        'get_variable',
+        'ask_about_file',
+        'enter_waiting',
+        'complete_task',
+        'handoff_to_human',
+      ],
+      sandbox_enabled: false,
+      sandbox_network_mode: 'allow_all',
+      sandbox_allowed_outbound_hosts: [],
+      flow_agent_function_tools: [
+        {
+          name: 'call_sendero',
+          description:
+            'Call any Sendero tool by name. Use this for every action that touches Sendero state — flight/hotel search, bookings, cancellations, holds, treasury, document scan, escalation, template sends. Pick the right `toolName` from the enum and pass the matching `input` object. Returns `{ result }` on success or `{ error, message }` on failure — relay errors verbatim instead of inventing them.',
+          function_name: 'sendero-tool-call',
+          input_schema: {
+            type: 'object',
+            required: ['toolName'],
+            properties: {
+              input: {
+                type: 'object',
+                description:
+                  "Tool-specific input. Each tool validates its own shape — see Sendero's /api/tools/{name} schema for required fields.",
+                additionalProperties: true,
+              },
+              toolName: {
+                enum: [
+                  'search_flights',
+                  'book_flight',
+                  'search_hotels',
+                  'quote_stay',
+                  'book_stay',
+                  'book_esim',
+                  'cancel_order_quote',
+                  'confirm_cancel_order',
+                  'request_order_change',
+                  'select_order_change_offer',
+                  'confirm_order_change',
+                  'display_offer_conditions',
+                  'list_flight_ancillaries',
+                  'list_airline_credits',
+                  'find_airports_nearby',
+                  'check_treasury',
+                  'traveler_balance',
+                  'faucet_drip',
+                  'prepare_traveler_signin',
+                  'scan_document',
+                  'scan_document_auto',
+                  'scan_passport_inline',
+                  'check_visa_requirements',
+                  'recommend_visa_application_path',
+                  'check_travel_eligibility',
+                  'select_seat',
+                  'add_baggage',
+                  'search_esim',
+                  'complete_trip',
+                  'cancel_booking',
+                  'moonpay_topup',
+                  'get_moonpay_topup_status',
+                  'moonpay_offramp',
+                  'get_moonpay_offramp_status',
+                  'send_cta_url_message',
+                  'currency_convert',
+                  'tipping_etiquette',
+                  'swap_tokens',
+                  'bridge_to_arc',
+                  'send_tokens',
+                  'create_passenger',
+                  'request_human_handoff',
+                  'send_whatsapp_template',
+                  'send_flow_message',
+                  'send_interactive_buttons',
+                  'send_interactive_list',
+                  'send_image_message',
+                  'send_document_message',
+                  'request_location',
+                  'request_phone_number',
+                  'start_workflow',
+                  'create_trip',
+                  'check_policy',
+                  'give_feedback',
+                  'read_reputation',
+                  'request_validation',
+                  'submit_validation_response',
+                  'create_group_trip',
+                  'add_passenger_to_group_trip',
+                  'claim_group_seat',
+                  'prefund_trip',
+                  'guest_claim_link',
+                  'send_pay_link',
+                  'generate_booking_invoice',
+                  'trip_weather_brief',
+                  'air_quality_brief',
+                  'timezone_brief',
+                  'elevation_risk_brief',
+                  'travel_safety_aid',
+                  'validate_travel_address',
+                  'geocode_trip_stop',
+                  'recommend_restaurants',
+                  'restaurant_route_card',
+                  'export_route_map',
+                  'airport_transfer_coordinator',
+                  'airport_arrival_playbook',
+                  'trip_checkin_reminder',
+                  'trip_delay_replanner',
+                  'get_active_trip',
+                  'take_me_home',
+                  'set_home_iata',
+                  'sweep_dcw_to_gateway',
+                  'set_trip_kind',
+                ],
+                type: 'string',
+                description: "Sendero tool slug. Pick the one that matches the traveler's intent.",
+              },
+              travelerPhone: {
+                type: 'string',
+                description:
+                  "Traveler's E.164 phone (with leading +). REQUIRED on every call when known — Sendero auto-provisions a wallet + identity + balance on first sight, and stamps the right userId on bookings, holds, settlements, and reputation writes. Pull from get_whatsapp_context once per conversation; reuse for every subsequent call_sendero call. Without this Sendero sees the call as a service-account caller and can't attribute the result to a real traveler.",
+              },
             },
-            "toolName": {
-              "enum": [
-                "search_flights",
-                "book_flight",
-                "search_hotels",
-                "quote_stay",
-                "book_stay",
-                "book_esim",
-                "cancel_order_quote",
-                "confirm_cancel_order",
-                "request_order_change",
-                "select_order_change_offer",
-                "confirm_order_change",
-                "display_offer_conditions",
-                "list_flight_ancillaries",
-                "list_airline_credits",
-                "find_airports_nearby",
-                "check_treasury",
-                "traveler_balance",
-                "faucet_drip",
-                "prepare_traveler_signin",
-                "scan_document",
-                "scan_document_auto",
-                "scan_passport_inline",
-                "check_visa_requirements",
-                "recommend_visa_application_path",
-                "check_travel_eligibility",
-                "select_seat",
-                "add_baggage",
-                "search_esim",
-                "complete_trip",
-                "cancel_booking",
-                "moonpay_topup",
-                "get_moonpay_topup_status",
-                "moonpay_offramp",
-                "get_moonpay_offramp_status",
-                "send_cta_url_message",
-                "currency_convert",
-                "tipping_etiquette",
-                "swap_tokens",
-                "bridge_to_arc",
-                "send_tokens",
-                "create_passenger",
-                "request_human_handoff",
-                "send_whatsapp_template",
-                "send_flow_message",
-                "send_interactive_buttons",
-                "send_interactive_list",
-                "send_image_message",
-                "send_document_message",
-                "request_location",
-                "request_phone_number",
-                "start_workflow",
-                "create_trip",
-                "check_policy",
-                "give_feedback",
-                "read_reputation",
-                "request_validation",
-                "submit_validation_response",
-                "create_group_trip",
-                "add_passenger_to_group_trip",
-                "claim_group_seat",
-                "prefund_trip",
-                "guest_claim_link",
-                "send_pay_link",
-                "generate_booking_invoice",
-                "trip_weather_brief",
-                "air_quality_brief",
-                "timezone_brief",
-                "elevation_risk_brief",
-                "travel_safety_aid",
-                "validate_travel_address",
-                "geocode_trip_stop",
-                "recommend_restaurants",
-                "restaurant_route_card",
-                "export_route_map",
-                "airport_transfer_coordinator",
-                "airport_arrival_playbook",
-                "trip_checkin_reminder",
-                "trip_delay_replanner",
-                "get_active_trip",
-                "take_me_home",
-                "set_home_iata",
-                "sweep_dcw_to_gateway",
-                "set_trip_kind"
-              ],
-              "type": "string",
-              "description": "Sendero tool slug. Pick the one that matches the traveler's intent."
-            },
-            "travelerPhone": {
-              "type": "string",
-              "description": "Traveler's E.164 phone (with leading +). REQUIRED on every call when known — Sendero auto-provisions a wallet + identity + balance on first sight, and stamps the right userId on bookings, holds, settlements, and reputation writes. Pull from get_whatsapp_context once per conversation; reuse for every subsequent call_sendero call. Without this Sendero sees the call as a service-account caller and can't attribute the result to a real traveler."
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-tool-call',
         },
-        "function_slug": "sendero-tool-call"
-      }
-    ],
-    "flow_agent_app_integration_tools": [],
-    "flow_agent_webhooks": [],
-    "flow_agent_knowledge_bases": [],
-    "flow_agent_mcp_servers": [],
-    "flow_agent_resources": []
+      ],
+      flow_agent_app_integration_tools: [],
+      flow_agent_webhooks: [],
+      flow_agent_knowledge_bases: [],
+      flow_agent_mcp_servers: [],
+      flow_agent_resources: [],
+    },
+    nodeType: 'agent',
+    type: 'raw',
   },
-  "nodeType": "agent",
-  "type": "raw"
-}, {
-  "position": {
-    "x": 0,
-    "y": 720
-  },
-  "displayName": "AI Agent"
-});
+  {
+    position: {
+      x: 0,
+      y: 720,
+    },
+    displayName: 'AI Agent',
+  }
+);
 
-workflow.addNode("prefetch_trip", {
-  "config": {
-    "function_name": "sendero-prefetch-trip",
-    "save_response_to": "prefetch_response",
-    "function_slug": "sendero-prefetch-trip"
+workflow.addNode(
+  'prefetch_trip',
+  {
+    config: {
+      function_name: 'sendero-prefetch-trip',
+      save_response_to: 'prefetch_response',
+      function_slug: 'sendero-prefetch-trip',
+    },
+    nodeType: 'function',
+    type: 'raw',
   },
-  "nodeType": "function",
-  "type": "raw"
-}, {
-  "position": {
-    "x": 120,
-    "y": 280
-  },
-  "displayName": "Function: sendero-prefetch-trip"
-});
+  {
+    position: {
+      x: 120,
+      y: 280,
+    },
+    displayName: 'Function: sendero-prefetch-trip',
+  }
+);
 
-workflow.addNode("tenant_travel_agent", {
-  "config": {
-    "system_prompt": `You are Sendero — a precise, locally fluent AI travel agent on WhatsApp.
+workflow.addNode(
+  'tenant_travel_agent',
+  {
+    config: {
+      system_prompt: `You are Sendero — a precise, locally fluent AI travel agent on WhatsApp.
 
 ## ⛔⛔⛔ ZERO-NARRATION PROTOCOL (HARDEST RULE — overrides all others)
 **Your FIRST output token in EVERY turn must be a TOOL CALL, never a sentence.**
@@ -851,170 +868,173 @@ Works: EZE↔LIM, EZE↔SCL, EZE↔GIG, GRU↔SCL, GRU↔EZE, MIA↔BCN, JFK↔L
 - NEVER fabricate technical reasons. If unsure, retry the tool or move on.
 - If tool returns \`{ error }\`, relay the user-actionable part. Bad: "search_flights returned 400". Good: "Esa ruta no tiene vuelos el 4 mayo — probamos el 5 o un aeropuerto cercano?"
 `,
-    "provider_model_id": "0d5c3a20-5343-4f41-81fc-a06ab71bf5b3",
-    "provider_model_name": "claude-sonnet-4-6",
-    "temperature": "0.2",
-    "max_iterations": 40,
-    "max_tokens": 8192,
-    "reasoning_effort": null,
-    "observer_prompt_mode": "analysis_only",
-    "enabled_default_tools": [
-      "send_notification_to_user",
-      "send_media",
-      "get_execution_metadata",
-      "get_whatsapp_context",
-      "get_current_datetime",
-      "save_variable",
-      "get_variable",
-      "ask_about_file",
-      "enter_waiting",
-      "complete_task",
-      "handoff_to_human"
-    ],
-    "sandbox_enabled": false,
-    "sandbox_network_mode": "allow_all",
-    "sandbox_allowed_outbound_hosts": [],
-    "flow_agent_function_tools": [
-      {
-        "name": "call_sendero",
-        "description": "Call any Sendero tool by name. Use this for every action that touches Sendero state — flight/hotel search, bookings, cancellations, holds, treasury, document scan, escalation, template sends. Pick the right `toolName` from the enum and pass the matching `input` object. Returns `{ result }` on success or `{ error, message }` on failure — relay errors verbatim instead of inventing them.",
-        "function_name": "sendero-tool-call",
-        "input_schema": {
-          "type": "object",
-          "required": [
-            "toolName"
-          ],
-          "properties": {
-            "input": {
-              "type": "object",
-              "description": "Tool-specific input. Each tool validates its own shape — see Sendero's /api/tools/{name} schema for required fields.",
-              "additionalProperties": true
+      provider_model_id: '0d5c3a20-5343-4f41-81fc-a06ab71bf5b3',
+      provider_model_name: 'claude-sonnet-4-6',
+      temperature: '0.2',
+      max_iterations: 40,
+      max_tokens: 8192,
+      reasoning_effort: null,
+      observer_prompt_mode: 'analysis_only',
+      enabled_default_tools: [
+        'send_notification_to_user',
+        'send_media',
+        'get_execution_metadata',
+        'get_whatsapp_context',
+        'get_current_datetime',
+        'save_variable',
+        'get_variable',
+        'ask_about_file',
+        'enter_waiting',
+        'complete_task',
+        'handoff_to_human',
+      ],
+      sandbox_enabled: false,
+      sandbox_network_mode: 'allow_all',
+      sandbox_allowed_outbound_hosts: [],
+      flow_agent_function_tools: [
+        {
+          name: 'call_sendero',
+          description:
+            'Call any Sendero tool by name. Use this for every action that touches Sendero state — flight/hotel search, bookings, cancellations, holds, treasury, document scan, escalation, template sends. Pick the right `toolName` from the enum and pass the matching `input` object. Returns `{ result }` on success or `{ error, message }` on failure — relay errors verbatim instead of inventing them.',
+          function_name: 'sendero-tool-call',
+          input_schema: {
+            type: 'object',
+            required: ['toolName'],
+            properties: {
+              input: {
+                type: 'object',
+                description:
+                  "Tool-specific input. Each tool validates its own shape — see Sendero's /api/tools/{name} schema for required fields.",
+                additionalProperties: true,
+              },
+              toolName: {
+                enum: [
+                  'search_flights',
+                  'book_flight',
+                  'search_hotels',
+                  'quote_stay',
+                  'book_stay',
+                  'book_esim',
+                  'cancel_order_quote',
+                  'confirm_cancel_order',
+                  'request_order_change',
+                  'select_order_change_offer',
+                  'confirm_order_change',
+                  'display_offer_conditions',
+                  'list_flight_ancillaries',
+                  'list_airline_credits',
+                  'find_airports_nearby',
+                  'check_treasury',
+                  'traveler_balance',
+                  'faucet_drip',
+                  'prepare_traveler_signin',
+                  'scan_document',
+                  'scan_document_auto',
+                  'scan_passport_inline',
+                  'check_visa_requirements',
+                  'recommend_visa_application_path',
+                  'check_travel_eligibility',
+                  'select_seat',
+                  'add_baggage',
+                  'search_esim',
+                  'complete_trip',
+                  'cancel_booking',
+                  'moonpay_topup',
+                  'get_moonpay_topup_status',
+                  'moonpay_offramp',
+                  'get_moonpay_offramp_status',
+                  'send_cta_url_message',
+                  'currency_convert',
+                  'tipping_etiquette',
+                  'swap_tokens',
+                  'bridge_to_arc',
+                  'send_tokens',
+                  'create_passenger',
+                  'request_human_handoff',
+                  'send_whatsapp_template',
+                  'send_flow_message',
+                  'send_interactive_buttons',
+                  'send_interactive_list',
+                  'send_image_message',
+                  'send_document_message',
+                  'request_location',
+                  'request_phone_number',
+                  'start_workflow',
+                  'create_trip',
+                  'check_policy',
+                  'give_feedback',
+                  'read_reputation',
+                  'request_validation',
+                  'submit_validation_response',
+                  'create_group_trip',
+                  'add_passenger_to_group_trip',
+                  'claim_group_seat',
+                  'prefund_trip',
+                  'guest_claim_link',
+                  'send_pay_link',
+                  'generate_booking_invoice',
+                  'trip_weather_brief',
+                  'air_quality_brief',
+                  'timezone_brief',
+                  'elevation_risk_brief',
+                  'travel_safety_aid',
+                  'validate_travel_address',
+                  'geocode_trip_stop',
+                  'recommend_restaurants',
+                  'restaurant_route_card',
+                  'export_route_map',
+                  'airport_transfer_coordinator',
+                  'airport_arrival_playbook',
+                  'trip_checkin_reminder',
+                  'trip_delay_replanner',
+                  'get_active_trip',
+                  'take_me_home',
+                  'set_home_iata',
+                  'sweep_dcw_to_gateway',
+                  'set_trip_kind',
+                ],
+                type: 'string',
+                description: "Sendero tool slug. Pick the one that matches the traveler's intent.",
+              },
+              travelerPhone: {
+                type: 'string',
+                description:
+                  "Traveler's E.164 phone (with leading +). REQUIRED on every call when known — Sendero auto-provisions a wallet + identity + balance on first sight, and stamps the right userId on bookings, holds, settlements, and reputation writes. Pull from get_whatsapp_context once per conversation; reuse for every subsequent call_sendero call. Without this Sendero sees the call as a service-account caller and can't attribute the result to a real traveler.",
+              },
             },
-            "toolName": {
-              "enum": [
-                "search_flights",
-                "book_flight",
-                "search_hotels",
-                "quote_stay",
-                "book_stay",
-                "book_esim",
-                "cancel_order_quote",
-                "confirm_cancel_order",
-                "request_order_change",
-                "select_order_change_offer",
-                "confirm_order_change",
-                "display_offer_conditions",
-                "list_flight_ancillaries",
-                "list_airline_credits",
-                "find_airports_nearby",
-                "check_treasury",
-                "traveler_balance",
-                "faucet_drip",
-                "prepare_traveler_signin",
-                "scan_document",
-                "scan_document_auto",
-                "scan_passport_inline",
-                "check_visa_requirements",
-                "recommend_visa_application_path",
-                "check_travel_eligibility",
-                "select_seat",
-                "add_baggage",
-                "search_esim",
-                "complete_trip",
-                "cancel_booking",
-                "moonpay_topup",
-                "get_moonpay_topup_status",
-                "moonpay_offramp",
-                "get_moonpay_offramp_status",
-                "send_cta_url_message",
-                "currency_convert",
-                "tipping_etiquette",
-                "swap_tokens",
-                "bridge_to_arc",
-                "send_tokens",
-                "create_passenger",
-                "request_human_handoff",
-                "send_whatsapp_template",
-                "send_flow_message",
-                "send_interactive_buttons",
-                "send_interactive_list",
-                "send_image_message",
-                "send_document_message",
-                "request_location",
-                "request_phone_number",
-                "start_workflow",
-                "create_trip",
-                "check_policy",
-                "give_feedback",
-                "read_reputation",
-                "request_validation",
-                "submit_validation_response",
-                "create_group_trip",
-                "add_passenger_to_group_trip",
-                "claim_group_seat",
-                "prefund_trip",
-                "guest_claim_link",
-                "send_pay_link",
-                "generate_booking_invoice",
-                "trip_weather_brief",
-                "air_quality_brief",
-                "timezone_brief",
-                "elevation_risk_brief",
-                "travel_safety_aid",
-                "validate_travel_address",
-                "geocode_trip_stop",
-                "recommend_restaurants",
-                "restaurant_route_card",
-                "export_route_map",
-                "airport_transfer_coordinator",
-                "airport_arrival_playbook",
-                "trip_checkin_reminder",
-                "trip_delay_replanner",
-                "get_active_trip",
-                "take_me_home",
-                "set_home_iata",
-                "sweep_dcw_to_gateway",
-                "set_trip_kind"
-              ],
-              "type": "string",
-              "description": "Sendero tool slug. Pick the one that matches the traveler's intent."
-            },
-            "travelerPhone": {
-              "type": "string",
-              "description": "Traveler's E.164 phone (with leading +). REQUIRED on every call when known — Sendero auto-provisions a wallet + identity + balance on first sight, and stamps the right userId on bookings, holds, settlements, and reputation writes. Pull from get_whatsapp_context once per conversation; reuse for every subsequent call_sendero call. Without this Sendero sees the call as a service-account caller and can't attribute the result to a real traveler."
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-tool-call',
         },
-        "function_slug": "sendero-tool-call"
-      }
-    ],
-    "flow_agent_app_integration_tools": [],
-    "flow_agent_webhooks": [],
-    "flow_agent_knowledge_bases": [],
-    "flow_agent_mcp_servers": [],
-    "flow_agent_resources": []
+      ],
+      flow_agent_app_integration_tools: [],
+      flow_agent_webhooks: [],
+      flow_agent_knowledge_bases: [],
+      flow_agent_mcp_servers: [],
+      flow_agent_resources: [],
+    },
+    nodeType: 'agent',
+    type: 'raw',
   },
-  "nodeType": "agent",
-  "type": "raw"
-}, {
-  "position": {
-    "x": 480,
-    "y": 720
-  },
-  "displayName": "AI Agent"
+  {
+    position: {
+      x: 480,
+      y: 720,
+    },
+    displayName: 'AI Agent',
+  }
+);
+
+workflow.addEdge('router', 'money_agent', {
+  label: 'money',
 });
 
-workflow.addEdge("router", "money_agent", {
-  "label": "money"
+workflow.addEdge('router', 'tenant_travel_agent', {
+  label: 'default',
 });
 
-workflow.addEdge("router", "tenant_travel_agent", {
-  "label": "default"
-});
+workflow.addEdge('prefetch_trip', 'router');
 
-workflow.addEdge("prefetch_trip", "router");
-
-workflow.addEdge(START, "prefetch_trip");
+workflow.addEdge(START, 'prefetch_trip');
 
 export default workflow;
