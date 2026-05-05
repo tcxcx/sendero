@@ -507,3 +507,29 @@ Until flip: install snippets must say "clone + run locally" or "load via `--plug
 **`apps/edge/wrangler.toml` says `name = "arc-edge"`** — that name only governs `wrangler dev` locally. CF Builds overrides via dashboard project name (`sendero-arc-edge`). Don't "fix" the wrangler name to match without also re-pointing CF Builds — you'll fork the deploy.
 
 Anything probing/linking the worker (health probe, canary, preview-comment, marketing) MUST use `sendero-arc-edge.*`. The `arc-edge.*` hostname returns CF 404 — historical health-probe outage came from this mismatch silently spamming failures every 5 min for days. Canonical default lives in `.github/workflows/edge-health.yml::HEALTH_URL` and `scripts/edge-health-check.sh`.
+
+## Demand-driven context (Raj's pattern, dev-only)
+
+The agent's own bug tracker. Implements Raj Kapadia's demand-driven context approach (workshop video: https://www.youtube.com/watch?v=_QAVExf_1uw) — push-strategy retrieval caps at ~30% accuracy on real institutional knowledge; flip to pull and let the agent tell you what it needs.
+
+Three artifacts:
+
+- **`report_knowledge_gap`** (`packages/tools/src/report-knowledge-gap.ts`) — agent self-reports missing tools, wrong field names, dead instructions, or missing env. Persisted to `KnowledgeGap` Postgres table, deduped by `sha256(kind|toolName|normalize(hypothesis))`.
+- **`list_available_tools`** (`packages/tools/src/list-available-tools.ts`) — agent introspects the canonical catalog when uncertain. Filters by caller scopes; hides `internal: true` tools so customer-facing channels never surface ops surfaces.
+- **`bun gaps:scan`** (`scripts/scan-knowledge-gaps.ts`) — aggregates open gaps into `docs/agent-gaps/board.md` kanban. Repeat-offender promotion: blocking + `occurrenceCount ≥ 3` escalates to `high` regardless of column severity. `--resolve-stale-days N` auto-archives non-blocking dormant rows.
+
+**STRICT DEV-ONLY.** Three independent gates at the handler — ALL must pass:
+
+1. **Env.** `NODE_ENV !== 'production'` OR `VERCEL_ENV ∈ {undefined, 'development'}`. Production + preview deploys are dead-zone.
+2. **Caller key.** `caller.effectiveKeyType !== 'production'`. Leaked prod-keys are refused regardless of env (capability-leak protection).
+3. **Tenant context.** No orphan rows — refused if `ctx.traveler.tenantId` is missing.
+
+Production agents fall back to `request_human_handoff` (Sendero-native, fully wired through Liveblocks `$handoffRequired` notification + Slack default-channel + `/dashboard/handoffs` + trip-ledger event). Override `SENDERO_GAPS_ALLOW_NONDEV=1` exists for the operator dashboard's manual "file gap" surface — **never** wire that into the agent runtime; gate #2 still rejects production prod-keys even with the override.
+
+**Source of truth + replication playbook:** `/raj-demand-driven-context` skill at `~/.claude/skills/raj-demand-driven-context/`. Run `/raj-demand-driven-context` to invoke it. The skill includes:
+- `references/wiring-new-vertical.md` — step-by-step playbook for forking the pattern into a new vertical AI agent template (real-estate, legal, healthcare, etc.). Sendero is the first vertical; future templates inherit by copying the schema + tools + scanner verbatim.
+- `references/integration-vercel-langfuse-cloudflare.md` — end-to-end debugging chain combining `/mcp` (`langfuse`, `cloudflare-workers`) and `/skills` (`vercel:vercel-cli`, `langfuse`, `automate-whatsapp`, `observe-whatsapp`).
+
+**Debugging chain:** gap board → Langfuse trace (via `traceId` on the gap row) → Vercel logs (`vercel logs <deployment>`) → Cloudflare worker logs (when `kind: 'runtime_constraint'`). Total ~5 min from gap surfacing to root cause; ask Claude one question and it walks all four sources in parallel.
+
+**Pre-push gate:** if you're tempted to expose either gap-tool to a production caller, the answer is `request_human_handoff` instead. The handler-level gate is load-bearing — don't soften it.
