@@ -54,8 +54,8 @@ describe('mock eSIM provider — order', () => {
 
   test('rejects non-mock plan ids (catches provider mismatches)', async () => {
     const p = makeMockEsimProvider();
-    await expect(
-      p.order({ planId: 'esim_go_BUNDLE_JP_5GB', idempotencyKey: 'k' })
-    ).rejects.toThrow('mock provider cannot order');
+    await expect(p.order({ planId: 'esim_go_BUNDLE_JP_5GB', idempotencyKey: 'k' })).rejects.toThrow(
+      'mock provider cannot order'
+    );
   });
 });

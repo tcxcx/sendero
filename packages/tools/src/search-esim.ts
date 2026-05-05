@@ -92,9 +92,9 @@ interface Bucket {
 }
 
 const BUCKETS: Bucket[] = [
-  { label: 'Básico', minMb: 0 },        // ≤2 GB
-  { label: 'Light', minMb: 2_500 },     // ≥2.5 GB, <10 GB
-  { label: 'Heavy', minMb: 10_000 },    // ≥10 GB, <100 GB
+  { label: 'Básico', minMb: 0 }, // ≤2 GB
+  { label: 'Light', minMb: 2_500 }, // ≥2.5 GB, <10 GB
+  { label: 'Heavy', minMb: 10_000 }, // ≥10 GB, <100 GB
   { label: 'Unlimited', minMb: 100_000 }, // unlimited sentinel (1_000_000)
 ];
 

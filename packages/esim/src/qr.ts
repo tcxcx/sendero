@@ -20,7 +20,10 @@ function b64url(input: string): string {
 }
 
 function fromB64url(input: string): string {
-  const padded = input.replace(/-/g, '+').replace(/_/g, '/').padEnd(input.length + ((4 - (input.length % 4)) % 4), '=');
+  const padded = input
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(input.length + ((4 - (input.length % 4)) % 4), '=');
   return Buffer.from(padded, 'base64').toString('utf8');
 }
 

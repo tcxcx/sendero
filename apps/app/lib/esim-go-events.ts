@@ -85,8 +85,7 @@ export function normalizeEsimGoEvent(
   if (!iccid) return null;
   const bundle = p.bundle as Record<string, unknown> | undefined;
   if (!bundle) return null;
-  const initialBytes =
-    typeof bundle.initialQuantity === 'number' ? bundle.initialQuantity : null;
+  const initialBytes = typeof bundle.initialQuantity === 'number' ? bundle.initialQuantity : null;
   const remainingBytes =
     typeof bundle.remainingQuantity === 'number' ? bundle.remainingQuantity : null;
   const endTimeStr = typeof bundle.endTime === 'string' ? bundle.endTime : null;

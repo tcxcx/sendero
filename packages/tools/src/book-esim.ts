@@ -25,12 +25,7 @@
 import { z } from 'zod';
 
 import { type Prisma, prisma, type MeterPayerType } from '@sendero/database';
-import {
-  resolveEsimProvider,
-  signQrToken,
-  EsimProviderError,
-  type EsimPlan,
-} from '@sendero/esim';
+import { resolveEsimProvider, signQrToken, EsimProviderError, type EsimPlan } from '@sendero/esim';
 import {
   type BookingPolicySnapshot,
   computeMarkupBreakdown,
@@ -181,7 +176,10 @@ export async function bookEsim(input: BookEsimInput, ctx?: ToolContext): Promise
   // of truth — read it here as a fallback.
   let resolvedDestinationIso2 = input.destinationIso2;
   let resolvedDays = input.days;
-  if ((!resolvedDestinationIso2 || resolvedDestinationIso2.length === 0) && (input.tripId || ctx?.traveler?.userId)) {
+  if (
+    (!resolvedDestinationIso2 || resolvedDestinationIso2.length === 0) &&
+    (input.tripId || ctx?.traveler?.userId)
+  ) {
     try {
       const trip = await prisma.trip.findFirst({
         where: input.tripId
@@ -201,11 +199,18 @@ export async function bookEsim(input: BookEsimInput, ctx?: ToolContext): Promise
               (c): c is string => typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)
             )
           : [];
-        if (fromIntent.length > 0 && (!resolvedDestinationIso2 || resolvedDestinationIso2.length === 0)) {
+        if (
+          fromIntent.length > 0 &&
+          (!resolvedDestinationIso2 || resolvedDestinationIso2.length === 0)
+        ) {
           resolvedDestinationIso2 = fromIntent;
         }
         // Days fallback: derive from intent.startDate / endDate if both set.
-        if (!resolvedDays && typeof intent.startDate === 'string' && typeof intent.endDate === 'string') {
+        if (
+          !resolvedDays &&
+          typeof intent.startDate === 'string' &&
+          typeof intent.endDate === 'string'
+        ) {
           const start = Date.parse(intent.startDate);
           const end = Date.parse(intent.endDate);
           if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
@@ -652,21 +657,14 @@ async function sendEsimEmail(args: {
   if (!profile?.email) return;
   // Skip placeholder emails — same gate book_flight uses.
   const lower = profile.email.toLowerCase();
-  if (
-    lower.endsWith('@sendero.demo') ||
-    lower.endsWith('@whatsapp-provisional.sendero.travel')
-  ) {
+  if (lower.endsWith('@sendero.demo') || lower.endsWith('@whatsapp-provisional.sendero.travel')) {
     return;
   }
 
   const dataLabel =
-    args.dataMb >= 1024
-      ? `${(args.dataMb / 1024).toFixed(1)} GB`
-      : `${args.dataMb} MB`;
+    args.dataMb >= 1024 ? `${(args.dataMb / 1024).toFixed(1)} GB` : `${args.dataMb} MB`;
   const region =
-    args.countries.length === 1
-      ? args.countries[0]
-      : `${args.countries.length} countries`;
+    args.countries.length === 1 ? args.countries[0] : `${args.countries.length} countries`;
 
   const notifier = createNotifier();
   await notifier.sendShareCard(profile.email, {
@@ -676,7 +674,9 @@ async function sendEsimEmail(args: {
       `${dataLabel} · ${args.validityDays} days`,
       args.priceLine,
       ...(args.expiresAt
-        ? [`Activate by ${new Date(args.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`]
+        ? [
+            `Activate by ${new Date(args.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+          ]
         : []),
     ],
     primaryCta: { label: 'Install eSIM', href: args.installUrl },

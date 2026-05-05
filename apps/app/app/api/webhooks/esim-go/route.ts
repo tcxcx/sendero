@@ -60,10 +60,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const rawBody = await req.text();
   const sig = verifyEsimGoSignature(rawBody, readSignatureHeader(req), apiKey);
   if (!sig.signatureValid) {
-    return NextResponse.json(
-      { error: 'invalid_signature', reason: sig.reason },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: 'invalid_signature', reason: sig.reason }, { status: 401 });
   }
 
   let payload: unknown;
