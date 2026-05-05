@@ -110,7 +110,10 @@ describe('writePendingAncillaries', () => {
         unrelated: 'keep',
         pendingAncillaries: {
           flight: {
-            off_other: { seats: [], bags: [{ passengerId: 'p', serviceId: 'b', quantity: 1, stagedAt: 'x' }] },
+            off_other: {
+              seats: [],
+              bags: [{ passengerId: 'p', serviceId: 'b', quantity: 1, stagedAt: 'x' }],
+            },
           },
         },
       } as never,

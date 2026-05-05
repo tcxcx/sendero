@@ -303,13 +303,18 @@ export async function routeFanoutCtaTap(args: {
   let input: Record<string, unknown>;
 
   if (value.startsWith('trip_wrap:')) {
+    const tripId = value.slice('trip_wrap:'.length);
+    if (!tripId) return { ok: false, reason: 'parse_failed' };
     toolName = 'complete_trip';
-    input = { tripId: value.slice('trip_wrap:'.length) };
+    input = { tripId };
   } else if (value.startsWith('trip_extend:')) {
+    const tripId = value.slice('trip_extend:'.length);
+    if (!tripId) return { ok: false, reason: 'parse_failed' };
     toolName = 'set_trip_kind';
-    input = { tripId: value.slice('trip_extend:'.length), kind: 'open_journey' };
+    input = { tripId, kind: 'open_journey' };
   } else if (value.startsWith('esim_offer:')) {
     const [, iso, daysRaw] = value.split(':');
+    if (!iso) return { ok: false, reason: 'parse_failed' };
     const days = Number.parseInt(daysRaw ?? '7', 10) || 7;
     toolName = 'search_esim';
     input = { destinationIso2: [iso], days };
