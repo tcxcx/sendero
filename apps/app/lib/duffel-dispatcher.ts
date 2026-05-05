@@ -11,14 +11,17 @@
  * route treats that as 200 so Duffel stops retrying.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { prisma } from '@sendero/database';
 import { bookFlightWorkflow, guestPrefundWorkflow } from '@sendero/workflows/catalog';
 import { resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
 import type { DuffelAirlineCreditWire, DuffelWebhookEvent } from '@sendero/duffel';
-import { getAirlineCredit } from '@sendero/duffel';
+import { getAirlineCredit, getOrder } from '@sendero/duffel';
 import { notifier } from '@sendero/notifications';
 import { env } from '@sendero/env';
 
+import { dispatchToTraveler } from './channel-dispatch';
 import { upsertAirlineCredit } from './airline-credits-sync';
 import { makeToolRegistry } from './tool-registry';
 import { persistPausedRun, readPausedRun } from './workflow-pause';
@@ -139,6 +142,19 @@ export async function dispatchDuffelEvent(args: {
     });
   }
 
+  // Phase F — airline-initiated schedule change. Push a server-side
+  // card to the traveler with old vs new times + a re-route CTA so
+  // they don't find out at the gate. Fail-soft: the workflow resume
+  // (above) already completed; this is the user-facing surface.
+  if (resolutionStatus === 'schedule_changed') {
+    void notifyTravelerOfScheduleChange({
+      bookingId: booking.id,
+      tenantId: booking.tenantId,
+      tripId: booking.tripId,
+      duffelOrderId: args.event.orderId,
+    });
+  }
+
   return { matched: true, runId: paused.runId, run: resumed };
 }
 
@@ -167,6 +183,7 @@ async function emailBookingConfirmed(args: {
         totalUsd: true,
         currency: true,
         segments: true,
+        eTicketDocumentUrl: true,
         trip: {
           select: {
             id: true,
@@ -175,7 +192,7 @@ async function emailBookingConfirmed(args: {
           },
         },
       },
-    })) as BookingForEmail | null;
+    })) as (BookingForEmail & { eTicketDocumentUrl: string | null }) | null;
     if (!row || !row.trip) return;
 
     const travelerEmail = row.trip.traveler?.email ?? null;
@@ -196,6 +213,21 @@ async function emailBookingConfirmed(args: {
     const adminEmail = await getTenantNotificationEmail(args.tenantId);
     if (adminEmail && adminEmail !== travelerEmail) recipients.add(adminEmail);
     if (recipients.size === 0) return;
+
+    // Phase A.4 — attach the airline-issued e-ticket PDF when present.
+    // Resend supports remote URLs via `path`, so we hand it the Duffel-
+    // hosted URL directly (no buffer fetch needed). When the supplier
+    // didn't issue a document the column is null and we skip the
+    // attachment block entirely.
+    const attachments = row.eTicketDocumentUrl
+      ? [
+          {
+            filename: `eticket-${row.pnr ?? args.duffelOrderId}.pdf`,
+            path: row.eTicketDocumentUrl,
+            contentType: 'application/pdf',
+          },
+        ]
+      : undefined;
 
     const n = notifier();
     for (const to of recipients) {
@@ -221,6 +253,7 @@ async function emailBookingConfirmed(args: {
             cabin: s.cabin ? String(s.cabin) : undefined,
           })),
           tripUrl,
+          ...(attachments ? { attachments } : {}),
         })
         .catch(err => console.warn('[duffel-dispatcher] sendBookingConfirmed failed', to, err));
     }
@@ -375,4 +408,136 @@ export async function kickOffBoardingPassStamp(args: {
       error: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+/**
+ * Phase F — schedule-change traveler notify.
+ *
+ * Triggered from `dispatchDuffelEvent` when a Duffel webhook arrives
+ * with `order.airline_initiated_change.detected`. Re-fetches the live
+ * order, finds segments whose `departing_at` differs from what we
+ * have on `Booking.segments`, and pushes a card to the traveler over
+ * their primary channel — old time → new time, plus a CTA to talk to
+ * Sendero (where the agent can run `request_order_change` to pick a
+ * replacement offer if needed).
+ *
+ * Fail-soft on every branch (no traveler resolved, Duffel unreachable,
+ * dispatcher returns false). The webhook handler already returned 200
+ * to Duffel by the time this runs.
+ */
+async function notifyTravelerOfScheduleChange(args: {
+  bookingId: string;
+  tenantId: string;
+  tripId: string;
+  duffelOrderId: string;
+}): Promise<void> {
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: args.bookingId },
+      select: {
+        pnr: true,
+        segments: true,
+        trip: { select: { travelerId: true } },
+      },
+    });
+    if (!booking?.trip?.travelerId) {
+      console.warn('[duffel-dispatcher] schedule-change skip: no traveler', {
+        bookingId: args.bookingId,
+      });
+      return;
+    }
+
+    const liveOrder = (await getOrder(args.duffelOrderId)) as unknown as {
+      slices?: Array<{
+        segments?: Array<{
+          id?: string;
+          departing_at?: string;
+          arriving_at?: string;
+          origin?: { iata_code?: string };
+          destination?: { iata_code?: string };
+          marketing_carrier?: { name?: string; iata_code?: string };
+        }>;
+      }>;
+    };
+    const liveSegments = (liveOrder.slices ?? []).flatMap(s => s.segments ?? []);
+    const persistedSegs = Array.isArray(booking.segments)
+      ? (booking.segments as Array<Record<string, unknown>>)
+      : [];
+
+    // Compare per-position: cheapest correct match; multi-leg trips
+    // typically share segment count between persistence and the live
+    // order. When counts diverge (rare — major re-route by the
+    // airline) we surface the live state without delta annotation.
+    const changes: Array<{ route: string; was: string | null; now: string | null }> = [];
+    for (let i = 0; i < liveSegments.length; i++) {
+      const live = liveSegments[i];
+      const before = persistedSegs[i];
+      const wasIso = typeof before?.departureAt === 'string' ? before.departureAt : null;
+      const nowIso = typeof live?.departing_at === 'string' ? live.departing_at : null;
+      if (!nowIso) continue;
+      if (wasIso && wasIso === nowIso) continue;
+      const origin = live.origin?.iata_code ?? '?';
+      const dest = live.destination?.iata_code ?? '?';
+      changes.push({
+        route: `${origin}→${dest}`,
+        was: wasIso ? formatIso(wasIso) : null,
+        now: formatIso(nowIso),
+      });
+    }
+
+    const lines = [
+      `*La aerolínea movió tu vuelo.* PNR \`${booking.pnr ?? args.duffelOrderId.slice(-6)}\`.`,
+    ];
+    if (changes.length > 0) {
+      for (const c of changes) {
+        lines.push(
+          c.was
+            ? `${c.route}: ${c.was} → *${c.now}*`
+            : `${c.route}: ahora *${c.now}*`
+        );
+      }
+    } else {
+      lines.push('Detalles actualizados en tu reserva — confirmá con tu PNR.');
+    }
+    lines.push('Reply *change flight* if you need Sendero to find a different time.');
+
+    await dispatchToTraveler({
+      tripId: args.tripId,
+      tenantId: args.tenantId,
+      travelerUserId: booking.trip.travelerId,
+      message: {
+        kind: 'card',
+        id: randomUUID(),
+        author: { role: 'agent', name: 'Sendero' },
+        title: '⚠️ Schedule change',
+        body: lines.join('\n'),
+        ctas: [
+          {
+            label: 'Change flight',
+            kind: 'reply',
+            value: 'change flight',
+            emphasis: 'primary',
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.warn('[duffel-dispatcher] schedule-change notify failed (non-fatal)', {
+      bookingId: args.bookingId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+function formatIso(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
