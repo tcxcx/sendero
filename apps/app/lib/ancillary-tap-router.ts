@@ -49,12 +49,7 @@ export interface AncillaryTapResult {
    * normal agent dispatch on most reasons; logs a warn on `no_secret`
    * (env misconfig) and `parse_failed` (renderer/handler drift).
    */
-  reason?:
-    | 'parse_failed'
-    | 'missing_fields'
-    | 'no_secret'
-    | 'unknown_kind'
-    | 'unknown_user';
+  reason?: 'parse_failed' | 'missing_fields' | 'no_secret' | 'unknown_kind' | 'unknown_user';
   toolName?: AncillaryToolName;
   /** URL the router posted to (or would have posted to). */
   url?: string;
@@ -121,7 +116,7 @@ function buildToolInput(
 }
 
 interface PostArgs {
-  toolName: AncillaryToolName;
+  toolName: AncillaryToolName | FanoutCtaToolName;
   body: Record<string, unknown>;
   deps?: AncillaryTapDeps;
 }
@@ -236,11 +231,7 @@ export async function routeWhatsAppAncillaryTap(
   const label = rest.join(':'); // restore any colons inside the label
 
   const toolName: AncillaryToolName | null =
-    kind === 'select_seat'
-      ? 'select_seat'
-      : kind === 'add_bag'
-        ? 'add_baggage'
-        : null;
+    kind === 'select_seat' ? 'select_seat' : kind === 'add_bag' ? 'add_baggage' : null;
   if (!toolName) return { ok: false, reason: 'unknown_kind' };
 
   const staging: AncillaryStagingPayload =
@@ -269,4 +260,70 @@ export async function routeWhatsAppAncillaryTap(
 
   const { status, url } = await postToTool({ toolName, body, deps });
   return { ok: true, toolName, url, body, status };
+}
+
+// ── Fanout CTA tap routing ────────────────────────────────────────────
+//
+// Phase G fanout cards (eSIM offer, wrap-up prompt, etc.) render as
+// `interactive.button_reply` on WhatsApp + as
+// `sendero_tool_invoke.<value>` action ids on Slack. The CTA values
+// are short slugs like `trip_wrap:<tripId>` / `esim_offer:<iso>:<days>`
+// — different shape from the per-leg ancillary pickers. Routing them
+// server-side closes the loop without burning agent tokens on
+// classification.
+
+export type FanoutCtaToolName = 'complete_trip' | 'set_trip_kind' | 'search_esim';
+
+export interface FanoutCtaResult {
+  ok: boolean;
+  toolName?: FanoutCtaToolName;
+  reason?: 'parse_failed' | 'unknown_kind' | 'no_secret';
+  url?: string;
+  status?: number;
+}
+
+export async function routeFanoutCtaTap(args: {
+  /** The CTA value, e.g. `trip_wrap:trp_abc`. */
+  value: string;
+  tenantId: string;
+  /** E.164 traveler phone — Sendero User resolution. */
+  travelerPhone?: string | null;
+  /**
+   * Slack-binding shortcut — pass the resolved senderoUserId so the
+   * tool route stamps `ctx.traveler.userId` without phone resolution.
+   */
+  slackSenderoUserId?: string | null;
+  deps?: AncillaryTapDeps;
+}): Promise<FanoutCtaResult> {
+  if (!resolveSecret(args.deps)) return { ok: false, reason: 'no_secret' };
+  const value = args.value.trim();
+  if (!value) return { ok: false, reason: 'parse_failed' };
+
+  let toolName: FanoutCtaToolName;
+  let input: Record<string, unknown>;
+
+  if (value.startsWith('trip_wrap:')) {
+    toolName = 'complete_trip';
+    input = { tripId: value.slice('trip_wrap:'.length) };
+  } else if (value.startsWith('trip_extend:')) {
+    toolName = 'set_trip_kind';
+    input = { tripId: value.slice('trip_extend:'.length), kind: 'open_journey' };
+  } else if (value.startsWith('esim_offer:')) {
+    const [, iso, daysRaw] = value.split(':');
+    const days = Number.parseInt(daysRaw ?? '7', 10) || 7;
+    toolName = 'search_esim';
+    input = { destinationIso2: [iso], days };
+  } else {
+    return { ok: false, reason: 'unknown_kind' };
+  }
+
+  const body: Record<string, unknown> = {
+    tenantId: args.tenantId,
+    ...(args.travelerPhone ? { travelerPhone: args.travelerPhone } : {}),
+    ...(args.slackSenderoUserId ? { _slackSenderoUserId: args.slackSenderoUserId } : {}),
+    input,
+  };
+
+  const { status, url } = await postToTool({ toolName, body, deps: args.deps });
+  return { ok: true, toolName, url, status };
 }

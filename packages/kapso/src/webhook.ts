@@ -10,7 +10,12 @@
  */
 
 import crypto from 'node:crypto';
-import { PhoneNumberCreatedEvent, type KapsoWhatsAppPhoneNumber } from './types';
+import {
+  PhoneNumberCreatedEvent,
+  WorkflowFailedEvent,
+  WorkflowHandoffEvent,
+  type KapsoWhatsAppPhoneNumber,
+} from './types';
 
 export function verifyKapsoSignature(
   rawBody: string,
@@ -42,28 +47,88 @@ export interface ParsedConnectionEvent {
 }
 
 /**
- * Parse a Kapso project-scope event payload into the connection events
- * Sendero cares about. Returns `null` for unrecognised event types so
- * callers can ignore cleanly without throwing.
+ * Phase H — Kapso default `handoff_to_human` tool fired. Sendero
+ * mirrors operator notifications (Liveblocks + Slack + dashboard
+ * row) regardless of which escalation path the agent used.
  */
-export function parseProjectEvent(payload: unknown): ParsedConnectionEvent | null {
-  const parsed = PhoneNumberCreatedEvent.safeParse(payload);
-  if (!parsed.success) return null;
-  const { data } = parsed.data;
-  return {
-    kind: 'phone_number.created',
-    customerId: data.customer_id,
-    phoneNumberId: data.phone_number_id,
-    businessAccountId: data.business_account_id,
-    displayPhoneNumber: data.display_phone_number,
-    verifiedName: data.verified_name,
-  };
+export interface ParsedWorkflowHandoffEvent {
+  kind: 'workflow.execution.handoff';
+  workflowId: string | null;
+  executionId: string | null;
+  phoneNumberId: string | null;
+  customerPhone: string | null;
+  reason: string | null;
+  summary: string | null;
+}
+
+export interface ParsedWorkflowFailedEvent {
+  kind: 'workflow.execution.failed';
+  workflowId: string | null;
+  executionId: string | null;
+  phoneNumberId: string | null;
+  customerPhone: string | null;
+  errorMessage: string | null;
+  errorCode: string | null;
+}
+
+export type ParsedKapsoProjectEvent =
+  | ParsedConnectionEvent
+  | ParsedWorkflowHandoffEvent
+  | ParsedWorkflowFailedEvent;
+
+/**
+ * Parse a Kapso project-scope event payload into the events Sendero
+ * cares about. Returns `null` for unrecognised event types so callers
+ * can ignore cleanly without throwing.
+ */
+export function parseProjectEvent(payload: unknown): ParsedKapsoProjectEvent | null {
+  const phoneCreated = PhoneNumberCreatedEvent.safeParse(payload);
+  if (phoneCreated.success) {
+    const { data } = phoneCreated.data;
+    return {
+      kind: 'phone_number.created',
+      customerId: data.customer_id,
+      phoneNumberId: data.phone_number_id,
+      businessAccountId: data.business_account_id,
+      displayPhoneNumber: data.display_phone_number,
+      verifiedName: data.verified_name,
+    };
+  }
+  const handoff = WorkflowHandoffEvent.safeParse(payload);
+  if (handoff.success) {
+    const { data } = handoff.data;
+    return {
+      kind: 'workflow.execution.handoff',
+      workflowId: data.workflow_id ?? null,
+      executionId: data.workflow_execution_id ?? data.execution_id ?? null,
+      phoneNumberId: data.phone_number_id ?? null,
+      customerPhone: data.customer_phone ?? data.customer_phone_number ?? null,
+      reason: data.reason ?? null,
+      summary: data.context_summary ?? data.summary ?? null,
+    };
+  }
+  const failed = WorkflowFailedEvent.safeParse(payload);
+  if (failed.success) {
+    const { data } = failed.data;
+    return {
+      kind: 'workflow.execution.failed',
+      workflowId: data.workflow_id ?? null,
+      executionId: data.workflow_execution_id ?? data.execution_id ?? null,
+      phoneNumberId: data.phone_number_id ?? null,
+      customerPhone: data.customer_phone ?? data.customer_phone_number ?? null,
+      errorMessage: data.error_message ?? null,
+      errorCode: data.error_code ?? null,
+    };
+  }
+  return null;
 }
 
 /**
  * Convenience: project the parsed event onto the fields Sendero persists
  * on `WhatsAppInstall`. The caller combines this with the Kapso customer
  * id (already recorded at onboarding time) to resolve the tenantId.
+ *
+ * Only meaningful for `phone_number.created` events.
  */
 export function installFieldsFromEvent(
   event: ParsedConnectionEvent

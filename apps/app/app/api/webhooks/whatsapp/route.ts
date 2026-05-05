@@ -44,7 +44,7 @@ import {
   reconcileOutboundStatus,
 } from '@/lib/whatsapp-audit';
 import { claimWhatsAppMessage, isWithinReplayWindow } from '@/lib/whatsapp-dedup';
-import { routeWhatsAppAncillaryTap } from '@/lib/ancillary-tap-router';
+import { routeFanoutCtaTap, routeWhatsAppAncillaryTap } from '@/lib/ancillary-tap-router';
 import { recordInboundForTyping } from '@/lib/typing-heartbeat';
 
 export const runtime = 'nodejs';
@@ -244,15 +244,14 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Pre-booking ancillary picker tap — interactive list reply
-      // whose row id encodes
-      // `select_seat:<tripId>:<offerId>:<passengerId>:<svcId>:<designator>`
-      // or `add_bag:<tripId>:<offerId>:<passengerId>:<svcId>:<label>`.
-      // Route directly to the matching Sendero tool over the internal
-      // surface so the agent doesn't burn tokens routing taps. Same
-      // pattern as the Slack `sendero_select_seat` / `sendero_add_bag`
-      // handler. Falls through to normal agent dispatch when row id
-      // doesn't match (e.g. a quick-reply the agent should consume).
+      // Server-side tap routing — interactive list/button reply whose
+      // id encodes either:
+      //   - ancillary picker payload (`select_seat:<tripId>:<offerId>:…`)
+      //   - fanout CTA slug (`trip_wrap:<tripId>` / `trip_extend:<tripId>`
+      //     / `esim_offer:<iso>:<days>` / `esim_skip`)
+      // Routes directly to the matching Sendero tool so the agent
+      // doesn't burn tokens classifying taps. Falls through to normal
+      // agent dispatch when no parser matches.
       if (kind === 'interactive') {
         const interactive = msg.message.interactive;
         const rowId = interactive?.list_reply?.id ?? interactive?.button_reply?.id ?? '';
@@ -266,8 +265,27 @@ export async function POST(req: NextRequest) {
             dispatched++;
             continue;
           }
-          // Fall through if parse failed — agent gets a chance to
-          // handle the tap as free-form text.
+        } else if (
+          rowId.startsWith('trip_wrap:') ||
+          rowId.startsWith('trip_extend:') ||
+          rowId.startsWith('esim_offer:') ||
+          rowId === 'esim_skip'
+        ) {
+          const result = await routeFanoutCtaTap({
+            value: rowId,
+            tenantId: identity.tenantId,
+            travelerPhone: msg.identity.phone ?? msg.identity.phoneRaw ?? null,
+          });
+          if (result.ok) {
+            dispatched++;
+            continue;
+          }
+          // unknown_kind (esim_skip) — silent skip, no agent dispatch
+          if (result.reason === 'unknown_kind') {
+            dispatched++;
+            continue;
+          }
+          // parse_failed / no_secret → fall through to agent
         }
       }
 

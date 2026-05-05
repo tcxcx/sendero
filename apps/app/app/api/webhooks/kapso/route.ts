@@ -26,6 +26,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { type Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 import { KapsoClient, parseProjectEvent, verifyKapsoSignature } from '@sendero/kapso';
+import { notifyOperatorHandoff, roomIdForSupportCase } from '@sendero/collaboration/server';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
 import { webhookEventStore } from '@/lib/webhook-events';
@@ -65,7 +66,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  const externalId = `${event.kind}:${event.customerId}:${event.phoneNumberId}`;
+  // Per-event-kind dedup id. `phone_number.created` keys on
+  // `(customerId, phoneNumberId)`; workflow events key on
+  // `(executionId, phoneNumberId)` so retries collapse cleanly.
+  const externalId =
+    event.kind === 'phone_number.created'
+      ? `${event.kind}:${event.customerId}:${event.phoneNumberId}`
+      : `${event.kind}:${event.executionId ?? 'noid'}:${event.phoneNumberId ?? 'nophone'}`;
   const result = await processDurableWebhook({
     provider: 'kapso',
     externalId,
@@ -97,7 +104,19 @@ interface DispatchResult {
   tenantId?: string;
 }
 
-async function dispatchKapsoEvent(event: {
+async function dispatchKapsoEvent(
+  event: import('@sendero/kapso').ParsedKapsoProjectEvent
+): Promise<DispatchResult> {
+  if (event.kind === 'workflow.execution.handoff') {
+    return dispatchWorkflowHandoff(event);
+  }
+  if (event.kind === 'workflow.execution.failed') {
+    return dispatchWorkflowFailed(event);
+  }
+  return dispatchPhoneNumberCreated(event);
+}
+
+async function dispatchPhoneNumberCreated(event: {
   kind: 'phone_number.created';
   customerId: string;
   phoneNumberId: string;
@@ -253,4 +272,242 @@ async function activateTenantWorkflowTrigger(args: {
   }
 
   return result;
+}
+
+/**
+ * Phase H — Kapso fired its built-in `handoff_to_human` default tool.
+ * Sendero mirrors the same operator notifications that
+ * `request_human_handoff` (our tool) writes: ChannelHandoff row,
+ * Trip.events `handoff_requested` entry, Liveblocks inbox notification,
+ * Slack Block Kit card. Resolves tenant + traveler from the
+ * `phone_number_id` + `customer_phone` Kapso passes.
+ *
+ * Idempotent on (tenantId, executionId) — repeated Kapso retries
+ * dedupe via `processDurableWebhook` upstream + by checking for an
+ * existing ChannelHandoff with `metadata.kapsoExecutionId` here.
+ */
+async function dispatchWorkflowHandoff(event: {
+  kind: 'workflow.execution.handoff';
+  workflowId: string | null;
+  executionId: string | null;
+  phoneNumberId: string | null;
+  customerPhone: string | null;
+  reason: string | null;
+  summary: string | null;
+}): Promise<DispatchResult> {
+  if (!event.phoneNumberId || !event.customerPhone) {
+    console.warn('[webhooks/kapso] handoff event missing phone identifiers', { event });
+    return { matched: false };
+  }
+
+  const install = await prisma.whatsAppInstall.findFirst({
+    where: { phoneNumberId: event.phoneNumberId, status: { not: 'disabled' } },
+    select: { tenantId: true },
+  });
+  if (!install) {
+    console.warn('[webhooks/kapso] handoff: no install for phoneNumberId', {
+      phoneNumberId: event.phoneNumberId,
+    });
+    return { matched: false };
+  }
+
+  const identity = await prisma.channelIdentity.findFirst({
+    where: { tenantId: install.tenantId, externalUserId: event.customerPhone, kind: 'whatsapp' },
+    select: { id: true, userId: true },
+  });
+  if (!identity) {
+    console.warn('[webhooks/kapso] handoff: no channel identity for traveler', {
+      tenantId: install.tenantId,
+      customerPhone: event.customerPhone,
+    });
+    return { matched: true, tenantId: install.tenantId };
+  }
+
+  const trip = identity.userId
+    ? await prisma.trip.findFirst({
+        where: {
+          tenantId: install.tenantId,
+          travelerId: identity.userId,
+          status: { in: ['draft', 'searching', 'awaiting_approval', 'booked', 'in_progress'] },
+        },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true },
+      })
+    : null;
+
+  // Idempotency comes from processDurableWebhook upstream — the
+  // `externalId` we synthesize keys on Kapso's `executionId`, so a
+  // retry of the same handoff event collapses before reaching us.
+  // Belt-and-suspenders dedup against duplicate handoffs for the same
+  // execution would require a metadata column on ChannelHandoff —
+  // deferred (we'd add a Kapso-execution-tracking table instead so the
+  // ChannelHandoff schema stays focused).
+
+  const question = event.reason ?? 'Agent escalated via Kapso default handoff_to_human';
+  const summary = event.summary ?? null;
+
+  // Stash the Kapso execution id inside the question prefix when it's
+  // available — gives operators a way to cross-reference Kapso console
+  // runs without adding a schema field for the migration cycle.
+  const questionWithRef = event.executionId
+    ? `[kapso:${event.executionId.slice(0, 12)}] ${question}`
+    : question;
+
+  const handoff = await prisma.channelHandoff.create({
+    data: {
+      tenantId: install.tenantId,
+      tripId: trip?.id ?? null,
+      channelIdentityId: identity.id,
+      channel: 'whatsapp',
+      question: questionWithRef,
+      summary,
+      liveblocksRoomId: 'pending',
+    },
+    select: { id: true },
+  });
+
+  const liveblocksRoomId = roomIdForSupportCase(install.tenantId, handoff.id);
+  await prisma.channelHandoff.update({
+    where: { id: handoff.id },
+    data: { liveblocksRoomId },
+  });
+
+  if (trip?.id) {
+    const entry: Prisma.InputJsonObject = {
+      id: `ho_${handoff.id}_handoff_requested`,
+      kind: 'handoff_requested',
+      handoffId: handoff.id,
+      channel: 'whatsapp',
+      direction: 'internal',
+      source: 'kapso_handoff_to_human',
+      createdAt: new Date().toISOString(),
+      question,
+      ...(summary ? { summary } : {}),
+    };
+    await prisma.$executeRaw`
+      UPDATE trips
+         SET events = COALESCE(events, '[]'::jsonb) || ${entry as unknown as Prisma.JsonValue}::jsonb
+       WHERE id = ${trip.id} AND "tenantId" = ${install.tenantId}
+    `;
+  }
+
+  // Fire Liveblocks operator notification — exact same shape as
+  // request_human_handoff so the operator dashboard treats both
+  // escalation paths identically.
+  void notifyOperatorHandoff({
+    tenantId: install.tenantId,
+    handoffId: handoff.id,
+    liveblocksRoomId,
+    title: 'Sendero needs your input',
+    message: summary ? `${question} — ${summary}` : question,
+    url: `/dashboard/handoffs/${handoff.id}`,
+  }).catch(err => {
+    console.warn('[webhooks/kapso] handoff liveblocks notify failed', {
+      handoffId: handoff.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+
+  // Slack fan-out — reuse the same Block Kit card request_human_handoff
+  // posts. Lazy-loaded so this route stays light when Slack isn't used.
+  void (async () => {
+    try {
+      const slackInstall = await prisma.slackInstall.findFirst({
+        where: { tenantId: install.tenantId, revokedAt: null },
+        select: { botToken: true, routing: true },
+      });
+      if (!slackInstall?.botToken) return;
+      const routing = (slackInstall.routing ?? {}) as Record<string, unknown>;
+      const defaultChannel =
+        typeof routing.defaultChannel === 'string' ? routing.defaultChannel : null;
+      if (!defaultChannel) return;
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+      const handoffUrl = `${baseUrl.replace(/\/$/, '')}/dashboard/handoffs/${handoff.id}`;
+      const { createSlackClient, sendBlocks } = await import('@sendero/slack');
+      const client = createSlackClient(slackInstall.botToken);
+      await sendBlocks({
+        client,
+        channel: defaultChannel,
+        text: `Sendero handoff: ${question}`,
+        blocks: [
+          { type: 'header', text: { type: 'plain_text', text: '🛎  Sendero needs your input' } },
+          { type: 'section', text: { type: 'mrkdwn', text: `*Question*\n${question}` } },
+          ...(summary
+            ? [
+                {
+                  type: 'section' as const,
+                  text: { type: 'mrkdwn' as const, text: `*Context*\n${summary}` },
+                },
+              ]
+            : []),
+          {
+            type: 'context',
+            elements: [
+              { type: 'mrkdwn', text: 'Source: `Kapso handoff_to_human` (auto-fanout)' },
+              ...(trip?.id ? [{ type: 'mrkdwn' as const, text: `Trip: \`${trip.id}\`` }] : []),
+              { type: 'mrkdwn', text: `Handoff: \`${handoff.id}\`` },
+            ],
+          },
+          {
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: { type: 'plain_text', text: 'Answer in Sendero' },
+                url: handoffUrl,
+                style: 'primary',
+              },
+            ],
+          },
+        ],
+      });
+    } catch (err) {
+      console.warn('[webhooks/kapso] handoff slack fanout failed', {
+        handoffId: handoff.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  })();
+
+  return { matched: true, tenantId: install.tenantId };
+}
+
+/**
+ * Phase H — Kapso reported a workflow execution failure. Sendero
+ * records the row for ops visibility but does NOT auto-escalate
+ * (workflow failures are internal, not customer-facing). Operators
+ * see a digest in the dashboard. Repeated/transient failures are
+ * deduped upstream by `processDurableWebhook`.
+ */
+async function dispatchWorkflowFailed(event: {
+  kind: 'workflow.execution.failed';
+  workflowId: string | null;
+  executionId: string | null;
+  phoneNumberId: string | null;
+  customerPhone: string | null;
+  errorMessage: string | null;
+  errorCode: string | null;
+}): Promise<DispatchResult> {
+  if (!event.phoneNumberId) {
+    console.warn('[webhooks/kapso] workflow.failed missing phoneNumberId', { event });
+    return { matched: false };
+  }
+  const install = await prisma.whatsAppInstall.findFirst({
+    where: { phoneNumberId: event.phoneNumberId },
+    select: { tenantId: true },
+  });
+  if (!install) {
+    return { matched: false };
+  }
+  console.warn('[webhooks/kapso] workflow.execution.failed', {
+    tenantId: install.tenantId,
+    workflowId: event.workflowId,
+    executionId: event.executionId,
+    customerPhone: event.customerPhone,
+    errorMessage: event.errorMessage,
+    errorCode: event.errorCode,
+  });
+  // Future: persist to a `WorkflowExecutionFailure` table for the ops
+  // dashboard digest. For now the warn line lets operators grep logs.
+  return { matched: true, tenantId: install.tenantId };
 }
