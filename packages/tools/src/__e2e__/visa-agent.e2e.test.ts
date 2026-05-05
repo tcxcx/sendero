@@ -132,10 +132,7 @@ async function runAgentTurn(args: {
 }): Promise<AgentTurnResult> {
   const restorePlaces = installPlacesShortcircuit();
   const tools = buildVisaToolset();
-  const messages = [
-    ...(args.history ?? []),
-    { role: 'user' as const, content: args.userMessage },
-  ];
+  const messages = [...(args.history ?? []), { role: 'user' as const, content: args.userMessage }];
 
   try {
     const result = await generateText({
@@ -258,7 +255,7 @@ describe('AI-driven E2E — visa flow', () => {
         ],
         mustNot: [
           'Recommends scheduling a consulate interview.',
-          'Promises to book the ESTA on the user\'s behalf.',
+          "Promises to book the ESTA on the user's behalf.",
           'Invents a fee amount or specific embassy address.',
         ],
       });
@@ -276,7 +273,7 @@ describe('AI-driven E2E — visa flow', () => {
     async () => {
       const turn = await runAgentTurn({
         userMessage:
-          "Soy ecuatoriano, vivo en Quito y quiero viajar a España para una conferencia el próximo mes. ¿Necesito visa y cómo la consigo?",
+          'Soy ecuatoriano, vivo en Quito y quiero viajar a España para una conferencia el próximo mes. ¿Necesito visa y cómo la consigo?',
       });
 
       const toolNames = turn.toolCalls.map(c => c.toolName);
@@ -291,17 +288,14 @@ describe('AI-driven E2E — visa flow', () => {
 
       // When the path advisor IS called, it must be called for the
       // right corridor. (Skipped when only check_visa_requirements ran.)
-      const recCall = turn.toolCalls.find(
-        c => c.toolName === 'recommend_visa_application_path'
-      );
+      const recCall = turn.toolCalls.find(c => c.toolName === 'recommend_visa_application_path');
       if (recCall) {
         expect(recCall.input.destinationIso3).toBe('ESP');
         expect(recCall.input.nationalityIso3).toBe('ECU');
       }
 
       const judge = await judgeResponse({
-        userMessage:
-          'Soy ecuatoriano en Quito, quiero ir a España, ¿necesito visa y cómo la saco?',
+        userMessage: 'Soy ecuatoriano en Quito, quiero ir a España, ¿necesito visa y cómo la saco?',
         agentReply: turn.text,
         must: [
           'Mentions BLS (the Spain visa operator in Ecuador) by name OR links to the BLS Spain Ecuador site.',
@@ -343,9 +337,7 @@ describe('AI-driven E2E — visa flow', () => {
       // the viable third-country post. Log a warning when the agent
       // takes a thinner path — the LLM judge below still gates on the
       // substantive outcome (must mention BA + bond + long wait).
-      const recCall = turn.toolCalls.find(
-        c => c.toolName === 'recommend_visa_application_path'
-      );
+      const recCall = turn.toolCalls.find(c => c.toolName === 'recommend_visa_application_path');
       if (!recCall) {
         console.warn(
           '[VEN→USA via BA] agent skipped recommend_visa_application_path — substance gate is the LLM judge'
@@ -419,8 +411,7 @@ describe('AI-driven E2E — visa flow', () => {
     'Multi-turn — traveler narrows from "do I need a visa" to "how do I apply"',
     async () => {
       const first = await runAgentTurn({
-        userMessage:
-          'I have a Brazilian passport, do I need a visa for the United States?',
+        userMessage: 'I have a Brazilian passport, do I need a visa for the United States?',
       });
 
       // Turn 1 should at minimum check requirements; recommending the
@@ -429,21 +420,20 @@ describe('AI-driven E2E — visa flow', () => {
       expect(first.toolCalls.map(c => c.toolName)).toContain('check_visa_requirements');
 
       const second = await runAgentTurn({
-        userMessage: "Ok, how do I actually get one? I live in São Paulo.",
+        userMessage: 'Ok, how do I actually get one? I live in São Paulo.',
         history: [
-          { role: 'user', content: 'I have a Brazilian passport, do I need a visa for the United States?' },
+          {
+            role: 'user',
+            content: 'I have a Brazilian passport, do I need a visa for the United States?',
+          },
           { role: 'assistant', content: first.text },
         ],
       });
 
       // Turn 2 MUST call the path advisor — that's why the user asked
       // "how do I get one".
-      expect(second.toolCalls.map(c => c.toolName)).toContain(
-        'recommend_visa_application_path'
-      );
-      const recCall = second.toolCalls.find(
-        c => c.toolName === 'recommend_visa_application_path'
-      );
+      expect(second.toolCalls.map(c => c.toolName)).toContain('recommend_visa_application_path');
+      const recCall = second.toolCalls.find(c => c.toolName === 'recommend_visa_application_path');
       // applicantCountryIso2='BR' is the IDEAL extraction (from "I live
       // in São Paulo") but smaller models sometimes omit it across
       // turns. Log a warning when omitted but don't fail — the LLM
@@ -469,13 +459,16 @@ describe('AI-driven E2E — visa flow', () => {
         ],
         mustNot: [
           "Claims a specific processing time like '3 weeks' that wasn't in the tool's response.",
-          "Quotes a specific visa fee in dollars.",
+          'Quotes a specific visa fee in dollars.',
           'Promises to book the consulate appointment.',
           "Invents a specific consulate street address that wasn't returned by a tool.",
         ],
       });
       if (!judge.pass) {
-        console.error('[BRA→USA multi-turn] Judge verdicts:', JSON.stringify(judge.verdicts, null, 2));
+        console.error(
+          '[BRA→USA multi-turn] Judge verdicts:',
+          JSON.stringify(judge.verdicts, null, 2)
+        );
         console.error('[BRA→USA multi-turn] Reply:', second.text);
       }
       expect(judge.pass).toBe(true);

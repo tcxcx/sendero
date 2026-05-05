@@ -289,12 +289,30 @@ describe('E2E — Composability: nationality fallback from ctx.traveler', () => 
 
 describe('E2E — Result discriminator type-safety (compile-time + runtime)', () => {
   test('exhaustive switch on application_method — every branch reachable, no string drift', async () => {
-    const cases: Array<{ args: Parameters<typeof recommendVisaApplicationPath>[0]; expected: RecommendVisaApplicationPathResult['application_method'] }> = [
-      { args: { destinationIso3: 'ESP', nationalityIso3: 'ARG', skipConsulateSearch: true }, expected: 'visa_free' },
-      { args: { destinationIso3: 'USA', nationalityIso3: 'ARG', skipConsulateSearch: true }, expected: 'eta' },
-      { args: { destinationIso3: 'IND', nationalityIso3: 'USA', skipConsulateSearch: true }, expected: 'evisa' },
-      { args: { destinationIso3: 'ESP', nationalityIso3: 'ECU', skipConsulateSearch: true }, expected: 'consular' },
-      { args: { destinationIso3: 'CHN', nationalityIso3: 'COL', skipConsulateSearch: true }, expected: 'unknown' },
+    const cases: Array<{
+      args: Parameters<typeof recommendVisaApplicationPath>[0];
+      expected: RecommendVisaApplicationPathResult['application_method'];
+    }> = [
+      {
+        args: { destinationIso3: 'ESP', nationalityIso3: 'ARG', skipConsulateSearch: true },
+        expected: 'visa_free',
+      },
+      {
+        args: { destinationIso3: 'USA', nationalityIso3: 'ARG', skipConsulateSearch: true },
+        expected: 'eta',
+      },
+      {
+        args: { destinationIso3: 'IND', nationalityIso3: 'USA', skipConsulateSearch: true },
+        expected: 'evisa',
+      },
+      {
+        args: { destinationIso3: 'ESP', nationalityIso3: 'ECU', skipConsulateSearch: true },
+        expected: 'consular',
+      },
+      {
+        args: { destinationIso3: 'CHN', nationalityIso3: 'COL', skipConsulateSearch: true },
+        expected: 'unknown',
+      },
     ];
 
     for (const c of cases) {
