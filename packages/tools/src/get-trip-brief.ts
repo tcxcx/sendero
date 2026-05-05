@@ -33,13 +33,7 @@
 
 import { z } from 'zod';
 
-import {
-  prisma,
-  type Booking,
-  type BookingKind,
-  type Esim,
-  type Trip,
-} from '@sendero/database';
+import { prisma, type Booking, type BookingKind, type Esim, type Trip } from '@sendero/database';
 
 import { buildTripBriefShareUrl } from './lib/trip-brief-token';
 import type { ToolDef } from './types';
@@ -91,7 +85,13 @@ export interface EsimSummary {
 }
 
 export interface TripBriefAlert {
-  kind: 'esim_expiring' | 'esim_near_zero' | 'flight_change' | 'flight_canceled' | 'no_bookings' | 'trip_canceled';
+  kind:
+    | 'esim_expiring'
+    | 'esim_near_zero'
+    | 'flight_change'
+    | 'flight_canceled'
+    | 'no_bookings'
+    | 'trip_canceled';
   severity: 'info' | 'warn' | 'critical';
   message: string;
 }
@@ -339,14 +339,10 @@ export async function runGetTripBrief(
   if (includeFlights || includeStays) {
     const bookings = await deps.loadBookings(input.tripId);
     if (includeFlights) {
-      flights = bookings
-        .filter(b => (b.kind as BookingKind) === 'flight')
-        .map(summarizeFlight);
+      flights = bookings.filter(b => (b.kind as BookingKind) === 'flight').map(summarizeFlight);
     }
     if (includeStays) {
-      stays = bookings
-        .filter(b => (b.kind as BookingKind) === 'hotel')
-        .map(summarizeStay);
+      stays = bookings.filter(b => (b.kind as BookingKind) === 'hotel').map(summarizeStay);
     }
   }
 
@@ -370,7 +366,9 @@ export async function runGetTripBrief(
     endDate?: string;
   };
   const destinationCountriesIso2 = Array.isArray(intent.destinationIso2)
-    ? intent.destinationIso2.filter((c): c is string => typeof c === 'string').map(c => c.toLowerCase())
+    ? intent.destinationIso2
+        .filter((c): c is string => typeof c === 'string')
+        .map(c => c.toLowerCase())
     : typeof intent.destinationIso2 === 'string'
       ? [intent.destinationIso2.toLowerCase()]
       : [];

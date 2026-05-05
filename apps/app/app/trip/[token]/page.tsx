@@ -108,9 +108,7 @@ export default async function TripBriefPage({ params }: PageProps) {
                     </span>
                   ) : null}
                   {f.pnr ? (
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      PNR {f.pnr}
-                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground">PNR {f.pnr}</span>
                   ) : null}
                 </div>
                 <span className="font-mono text-xs text-muted-foreground">${f.totalUsd}</span>
@@ -133,9 +131,7 @@ export default async function TripBriefPage({ params }: PageProps) {
               >
                 <div className="flex flex-col">
                   <span className="font-medium">{s.property ?? 'Hotel'}</span>
-                  {s.city ? (
-                    <span className="text-xs text-muted-foreground">{s.city}</span>
-                  ) : null}
+                  {s.city ? <span className="text-xs text-muted-foreground">{s.city}</span> : null}
                   {s.checkInDate && s.checkOutDate ? (
                     <span className="font-mono text-[10px] text-muted-foreground">
                       {s.checkInDate} → {s.checkOutDate}
@@ -178,9 +174,7 @@ export default async function TripBriefPage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {brief.flights.length === 0 &&
-      brief.stays.length === 0 &&
-      brief.esims.length === 0 ? (
+      {brief.flights.length === 0 && brief.stays.length === 0 && brief.esims.length === 0 ? (
         <section className="rounded-md border border-dashed border-border bg-card px-3 py-4 text-center text-sm text-muted-foreground">
           No bookings yet on this trip.
         </section>
