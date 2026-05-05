@@ -34,7 +34,7 @@ import {
   type ViewSubmissionPayload,
 } from '@sendero/slack';
 import { handleTripNoteSubmission, TRIP_NOTE_CALLBACK_ID } from '@/lib/slack-views/trip-note';
-import { routeSlackAncillaryTap } from '@/lib/ancillary-tap-router';
+import { routeFanoutCtaTap, routeSlackAncillaryTap } from '@/lib/ancillary-tap-router';
 import { toolList } from '@sendero/tools';
 import { findWorkflow, resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
 
@@ -237,7 +237,6 @@ async function handleFanoutButtonTap(
 
   const slackUserId = payload.user.id;
   // Resolve sendero user id via SlackUserBinding.
-  const { prisma } = await import('@sendero/database');
   const binding = await prisma.slackUserBinding.findFirst({
     where: {
       tenantId: install.tenantId,
@@ -254,67 +253,16 @@ async function handleFanoutButtonTap(
     return;
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
-  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
-  if (!secret) return;
-
-  const sharedHeaders = {
-    'Content-Type': 'application/json',
-    'x-sendero-dispatch-secret': secret,
-  };
-
-  // Trip wrap-up.
-  if (value.startsWith('trip_wrap:')) {
-    const tripId = value.slice('trip_wrap:'.length);
-    await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/complete_trip`, {
-      method: 'POST',
-      headers: sharedHeaders,
-      body: JSON.stringify({
-        tenantId: install.tenantId,
-        // No travelerPhone — pass userId via fallback path inside
-        // tools route (resolveTravelerByPhone is the canonical
-        // resolver; for Slack travelers we'd need a similar path).
-        // Today complete_trip checks `ctx.traveler.userId` and we
-        // route via shared secret without a userId stamp. Workaround:
-        // include `_userId` in body so the tools route can stamp it.
-        _slackSenderoUserId: binding.senderoUserId,
-        input: { tripId },
-      }),
-    }).catch(err => console.warn('[slack/interactions] complete_trip failed', err));
-    return;
-  }
-
-  // Upgrade to open journey.
-  if (value.startsWith('trip_extend:')) {
-    const tripId = value.slice('trip_extend:'.length);
-    await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/set_trip_kind`, {
-      method: 'POST',
-      headers: sharedHeaders,
-      body: JSON.stringify({
-        tenantId: install.tenantId,
-        _slackSenderoUserId: binding.senderoUserId,
-        input: { tripId, kind: 'open_journey' },
-      }),
-    }).catch(err => console.warn('[slack/interactions] set_trip_kind failed', err));
-    return;
-  }
-
-  // eSIM auto-attach — kick off search_esim. The picker rendering
-  // back to Slack lives in a follow-up post (TODO Phase G.4 — for now
-  // we just trigger the tool and let the user re-engage via chat).
-  if (value.startsWith('esim_offer:')) {
-    const [, iso, daysRaw] = value.split(':');
-    const days = Number.parseInt(daysRaw ?? '7', 10) || 7;
-    await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/search_esim`, {
-      method: 'POST',
-      headers: sharedHeaders,
-      body: JSON.stringify({
-        tenantId: install.tenantId,
-        _slackSenderoUserId: binding.senderoUserId,
-        input: { destinationIso2: [iso], days },
-      }),
-    }).catch(err => console.warn('[slack/interactions] search_esim failed', err));
-    return;
+  const result = await routeFanoutCtaTap({
+    value,
+    tenantId: install.tenantId,
+    slackSenderoUserId: binding.senderoUserId,
+  });
+  if (!result.ok && result.reason && result.reason !== 'unknown_kind') {
+    console.warn('[slack/interactions] fanout cta route skipped', {
+      reason: result.reason,
+      value,
+    });
   }
 }
 
