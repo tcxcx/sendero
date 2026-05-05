@@ -124,9 +124,7 @@ async function fetchForecast(
     days: String(input.forecastDays),
   });
 
-  const response = await fetch(
-    `https://weather.googleapis.com/v1/forecast/days:lookup?${params}`
-  );
+  const response = await fetch(`https://weather.googleapis.com/v1/forecast/days:lookup?${params}`);
   const data = (await parseJsonOrThrow(
     response,
     'Google Weather forecast API'

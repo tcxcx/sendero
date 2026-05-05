@@ -7,11 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
-import {
-  _resetCurrencyCache,
-  currencyConvert,
-  currencyConvertTool,
-} from './currency-convert';
+import { _resetCurrencyCache, currencyConvert, currencyConvertTool } from './currency-convert';
 
 const realFetch = globalThis.fetch;
 
@@ -123,19 +119,17 @@ describe('currency_convert', () => {
   test('throws on non-200 from Frankfurter', async () => {
     mockFetch(async () => new Response('boom', { status: 502, statusText: 'Bad Gateway' }));
 
-    await expect(
-      currencyConvert({ amount: 10, from: 'USD', to: 'EUR' })
-    ).rejects.toThrow(/Frankfurter API 502/);
+    await expect(currencyConvert({ amount: 10, from: 'USD', to: 'EUR' })).rejects.toThrow(
+      /Frankfurter API 502/
+    );
   });
 
   test('throws when target currency missing from response', async () => {
-    mockFetch(async () =>
-      jsonResponse({ amount: 1, base: 'USD', date: '2026-05-04', rates: {} })
-    );
+    mockFetch(async () => jsonResponse({ amount: 1, base: 'USD', date: '2026-05-04', rates: {} }));
 
-    await expect(
-      currencyConvert({ amount: 10, from: 'USD', to: 'XYZ' })
-    ).rejects.toThrow(/no rate returned/);
+    await expect(currencyConvert({ amount: 10, from: 'USD', to: 'XYZ' })).rejects.toThrow(
+      /no rate returned/
+    );
   });
 
   test('zod schema rejects malformed currency code', () => {
