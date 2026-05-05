@@ -19,6 +19,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
 import {
+  routeFanoutCtaTap,
   routeSlackAncillaryTap,
   routeWhatsAppAncillaryTap,
   type AncillaryTapDeps,
@@ -31,7 +32,11 @@ interface CapturedCall {
   body?: Record<string, unknown>;
 }
 
-function makeDeps(): { deps: AncillaryTapDeps; calls: CapturedCall[]; respond(status?: number): void } {
+function makeDeps(): {
+  deps: AncillaryTapDeps;
+  calls: CapturedCall[];
+  respond(status?: number): void;
+} {
   const calls: CapturedCall[] = [];
   let nextStatus = 200;
   const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -479,6 +484,113 @@ describe('Round-trip: WhatsApp renderer output → router → tools route', () =
       seatServiceId: 'sea_001',
       designator: '12A',
     });
+  });
+});
+
+// ── Phase G/H fanout CTA routing ──────────────────────────────────────
+
+describe('routeFanoutCtaTap — Phase G/H fanout button taps', () => {
+  test('trip_wrap:<tripId> routes to complete_trip', async () => {
+    const { deps, calls } = makeDeps();
+    const result = await routeFanoutCtaTap({
+      value: 'trip_wrap:trp_abc',
+      tenantId: 'org_test',
+      travelerPhone: '+15551234',
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.toolName).toBe('complete_trip');
+    expect(calls[0]?.url).toMatch(/\/api\/tools\/complete_trip$/);
+    const body = calls[0]?.body as { input: Record<string, unknown> };
+    expect(body.input).toEqual({ tripId: 'trp_abc' });
+  });
+
+  test('trip_extend:<tripId> routes to set_trip_kind(open_journey)', async () => {
+    const { deps, calls } = makeDeps();
+    const result = await routeFanoutCtaTap({
+      value: 'trip_extend:trp_xyz',
+      tenantId: 'org_test',
+      travelerPhone: '+15551234',
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.toolName).toBe('set_trip_kind');
+    const body = calls[0]?.body as { input: Record<string, unknown> };
+    expect(body.input).toEqual({ tripId: 'trp_xyz', kind: 'open_journey' });
+  });
+
+  test('esim_offer:<iso>:<days> routes to search_esim with parsed days', async () => {
+    const { deps, calls } = makeDeps();
+    const result = await routeFanoutCtaTap({
+      value: 'esim_offer:PE:14',
+      tenantId: 'org_test',
+      travelerPhone: '+15551234',
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.toolName).toBe('search_esim');
+    const body = calls[0]?.body as { input: Record<string, unknown> };
+    expect(body.input).toEqual({ destinationIso2: ['PE'], days: 14 });
+  });
+
+  test('esim_offer with malformed days defaults to 7', async () => {
+    const { deps, calls } = makeDeps();
+    const result = await routeFanoutCtaTap({
+      value: 'esim_offer:JP:notanumber',
+      tenantId: 'org_test',
+      travelerPhone: '+15551234',
+      deps,
+    });
+    expect(result.ok).toBe(true);
+    const body = calls[0]?.body as { input: Record<string, unknown> };
+    expect(body.input).toEqual({ destinationIso2: ['JP'], days: 7 });
+  });
+
+  test('esim_skip is recognized as no-op (unknown_kind, no fetch)', async () => {
+    const { deps, calls } = makeDeps();
+    const result = await routeFanoutCtaTap({
+      value: 'esim_skip',
+      tenantId: 'org_test',
+      travelerPhone: '+15551234',
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('unknown_kind');
+    expect(calls.length).toBe(0);
+  });
+
+  test('Slack-binding shortcut: _slackSenderoUserId in body when slackSenderoUserId passed', async () => {
+    const { deps, calls } = makeDeps();
+    await routeFanoutCtaTap({
+      value: 'trip_wrap:trp_abc',
+      tenantId: 'org_test',
+      slackSenderoUserId: 'usr_slack_42',
+      deps,
+    });
+    const body = calls[0]?.body as { _slackSenderoUserId: string };
+    expect(body._slackSenderoUserId).toBe('usr_slack_42');
+  });
+
+  test('parse_failed on empty value', async () => {
+    const { deps } = makeDeps();
+    const result = await routeFanoutCtaTap({
+      value: '   ',
+      tenantId: 'org_test',
+      deps,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('parse_failed');
+  });
+
+  test('no_secret when dispatch secret env unset', async () => {
+    const { deps } = makeDeps();
+    const result = await routeFanoutCtaTap({
+      value: 'trip_wrap:trp_abc',
+      tenantId: 'org_test',
+      deps: { ...deps, secret: '' },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('no_secret');
   });
 });
 
