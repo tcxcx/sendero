@@ -153,6 +153,30 @@ export interface FlightOfferSummary {
    * returns this on holdable offers under `payment_requirements.payment_required_by`.
    */
   paymentRequiredBy: string | null;
+  /**
+   * Phase B.1 — multi-slice projection. Round-trip offers carry two
+   * slices (outbound + return); open-jaw / multi-city carry N. The
+   * agent's WhatsApp list / confirm-card / receipt all need each leg's
+   * date + route + duration to render. The first-segment / last-segment
+   * fields above stay populated for back-compat (one-way callers
+   * unchanged); `slices` is the canonical multi-leg surface.
+   */
+  slices: Array<{
+    originCode: string;
+    originCity: string | null;
+    destinationCode: string;
+    destinationCity: string | null;
+    /** RFC3339 — first segment's departing_at on this slice. */
+    departure: string;
+    /** RFC3339 — last segment's arriving_at on this slice. */
+    arrival: string;
+    /** ISO 8601 duration (Duffel-supplied), e.g. `PT4H47M`. */
+    duration: string;
+    /** Number of intermediate stops on this slice. 0 = direct. */
+    stops: number;
+  }>;
+  /** True when `slices.length >= 2` — convenience flag for the agent prompt. */
+  isRoundTrip: boolean;
 }
 
 export async function searchFlights(params: FlightSearchParams): Promise<FlightOfferSummary[]> {
@@ -217,6 +241,22 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
     const lastSegment = o.slices?.[0]?.segments?.[o.slices[0].segments.length - 1];
     const owner = o.owner;
     const iata = owner?.iata_code || '';
+    // Phase B.1 — project every slice. Round-trip = 2 slices, open-jaw / multi-city N.
+    const projectedSlices = (o.slices ?? []).map(slice => {
+      const segs = slice.segments ?? [];
+      const first = segs[0];
+      const last = segs[segs.length - 1];
+      return {
+        originCode: first?.origin?.iata_code ?? '',
+        originCity: first?.origin?.city_name ?? null,
+        destinationCode: last?.destination?.iata_code ?? '',
+        destinationCity: last?.destination?.city_name ?? null,
+        departure: first?.departing_at ?? '',
+        arrival: last?.arriving_at ?? '',
+        duration: slice.duration ?? '',
+        stops: Math.max(0, segs.length - 1),
+      };
+    });
     return {
       id: o.id,
       airline: owner?.name || 'Unknown',
@@ -248,6 +288,8 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
       expiresAt: o.expires_at,
       holdable: o.payment_requirements?.requires_instant_payment === false,
       paymentRequiredBy: o.payment_requirements?.payment_required_by ?? null,
+      slices: projectedSlices,
+      isRoundTrip: projectedSlices.length >= 2,
     };
   });
 }
@@ -278,6 +320,29 @@ export interface HoldOrderParams {
   services?: Array<{ id: string; quantity: number }>;
 }
 
+/**
+ * Normalized segment projection for downstream persistence (Booking.segments)
+ * and downstream tools (`get_active_trip`, NFT stamp prompts, eSIM trigger).
+ * Extracted from the Duffel offer at hold-creation time so consumers don't
+ * have to round-trip back to Duffel for itinerary metadata.
+ */
+export interface NormalizedFlightSegment {
+  originIata: string;
+  destinationIata: string;
+  originCity: string | null;
+  destinationCity: string | null;
+  /** ISO-3166-1 alpha-2 country codes — destination of this segment. */
+  originCountry: string | null;
+  destinationCountry: string | null;
+  carrier: string | null;
+  carrierName: string | null;
+  flightNumber: string | null;
+  cabin: string | null;
+  departureAt: string | null;
+  arrivalAt: string | null;
+  durationMinutes: number | null;
+}
+
 export interface HoldOrderResult {
   orderId: string;
   bookingReference: string;
@@ -286,10 +351,77 @@ export interface HoldOrderResult {
   paymentRequiredBy: string;
   /** Snapshot of the services that were attached at creation time. */
   services: Array<{ id: string; quantity: number }>;
+  /**
+   * Normalized itinerary projection — first slice's segments. Empty
+   * when the Duffel offer didn't carry slice data (rare; defensive).
+   * Persistence layer writes this into `Booking.segments` so
+   * `get_active_trip` and the post-mint stamp prompts have real
+   * destination + carrier + dates without re-fetching Duffel.
+   */
+  segments: NormalizedFlightSegment[];
+  /** Origin IATA of the trip (first segment's origin). */
+  originIata: string | null;
+  /** Final destination IATA (last segment's destination). */
+  destinationIata: string | null;
+  /** ISO-3166-1 alpha-2 codes covered by all segments, deduped. */
+  destinationIso2: string[];
+  /** First-segment departure date (`YYYY-MM-DD`). */
+  startDate: string | null;
+  /** Last-segment arrival date (`YYYY-MM-DD`) when known. */
+  endDate: string | null;
+  /** Raw Duffel order payload — persisted on Booking.rawDuffel for audit + fallback parsing. */
+  rawDuffel: Record<string, unknown> | null;
+}
+
+/**
+ * Phase A.4 boundary: reject placeholder contact details before they
+ * reach Duffel. Without this gate, the airline's reservation system
+ * emails / SMSs a fake address and the carrier-side IROPS / schedule-
+ * change comms never reach the traveler. Failing closed forces the
+ * upstream tool (`book_flight`) to collect a real email + phone first.
+ */
+const PLACEHOLDER_EMAIL_DOMAINS = ['sendero.demo', 'whatsapp-provisional.sendero.travel'];
+const PLACEHOLDER_PHONE_NUMBERS = ['+447123456789', '447123456789'];
+
+export class DuffelContactPlaceholderError extends Error {
+  constructor(
+    public readonly field: 'email' | 'phone_number',
+    public readonly value: string
+  ) {
+    super(
+      `Placeholder ${field} '${value}' is not allowed at the Duffel boundary. ` +
+        'The airline emails this address directly — collect a real value before booking.'
+    );
+    this.name = 'DuffelContactPlaceholderError';
+  }
+}
+
+function assertRealEmail(email: string): void {
+  const lower = email.toLowerCase().trim();
+  if (!lower) throw new DuffelContactPlaceholderError('email', email);
+  for (const domain of PLACEHOLDER_EMAIL_DOMAINS) {
+    if (lower.endsWith(`@${domain}`)) {
+      throw new DuffelContactPlaceholderError('email', email);
+    }
+  }
+}
+
+function assertRealPhone(phone: string | null | undefined): string {
+  const trimmed = (phone ?? '').trim();
+  if (!trimmed) throw new DuffelContactPlaceholderError('phone_number', '');
+  for (const placeholder of PLACEHOLDER_PHONE_NUMBERS) {
+    if (trimmed === placeholder) {
+      throw new DuffelContactPlaceholderError('phone_number', trimmed);
+    }
+  }
+  return trimmed;
 }
 
 export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrderResult> {
   const duffel = getDuffel();
+
+  assertRealEmail(params.passengerEmail);
+  const passengerPhone = assertRealPhone(params.passengerPhone);
 
   // Duffel requires a passenger ID that matches the offer's passenger ID.
   const offerResp = await duffel.offers.get(params.offerId);
@@ -310,7 +442,7 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
         given_name: givenName || 'Guest',
         family_name: familyName,
         email: params.passengerEmail,
-        phone_number: params.passengerPhone || '+447123456789',
+        phone_number: passengerPhone,
         born_on: params.passengerDob || '1990-01-01',
         gender: params.passengerGender === 'female' ? 'f' : 'm',
         title: 'mr',
@@ -341,6 +473,14 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
     payment_status?: { payment_required_by?: string };
   };
 
+  // Project the offer's slices into Sendero's normalized segment shape.
+  // We use the offer (not the order response) because Duffel orders in
+  // sandbox don't always echo back slice metadata, but the offer always
+  // carries it. The order's raw payload is still kept for audit on
+  // `Booking.rawDuffel`.
+  const segmentProjection = projectOfferSegments(offer);
+  const orderRaw = response.data as unknown as Record<string, unknown>;
+
   return {
     orderId: orderData.id,
     bookingReference: orderData.booking_reference,
@@ -348,7 +488,137 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
     totalCurrency: orderData.total_currency,
     paymentRequiredBy: orderData.payment_status?.payment_required_by || '',
     services: params.services ?? [],
+    segments: segmentProjection.segments,
+    originIata: segmentProjection.originIata,
+    destinationIata: segmentProjection.destinationIata,
+    destinationIso2: segmentProjection.destinationIso2,
+    startDate: segmentProjection.startDate,
+    endDate: segmentProjection.endDate,
+    rawDuffel: orderRaw,
   };
+}
+
+/**
+ * Project a Duffel offer's `slices[].segments[]` into Sendero's
+ * normalized `NormalizedFlightSegment[]` plus trip-level fields
+ * (origin/destination/dates/ISO-2). Defensive against missing fields
+ * in sandbox responses.
+ */
+/**
+ * Project a Duffel offer OR order payload's `slices[*].segments[*]`
+ * into Sendero's normalized shape. Exported so callers that bypass
+ * `createHoldOrder` (the re-pay path in `book_flight` after an
+ * insufficient_funds top-up) can backfill `Booking.segments` from the
+ * already-fetched order payload without round-tripping to the offer.
+ */
+export function projectFlightSegmentsFromPayload(
+  payload: Record<string, unknown> | DuffelOfferWireMinimal
+): {
+  segments: NormalizedFlightSegment[];
+  originIata: string | null;
+  destinationIata: string | null;
+  destinationIso2: string[];
+  startDate: string | null;
+  endDate: string | null;
+} {
+  return projectOfferSegments(payload as DuffelOfferWireMinimal);
+}
+
+function projectOfferSegments(offer: DuffelOfferWireMinimal): {
+  segments: NormalizedFlightSegment[];
+  originIata: string | null;
+  destinationIata: string | null;
+  destinationIso2: string[];
+  startDate: string | null;
+  endDate: string | null;
+} {
+  const slicesRaw = (offer as unknown as { slices?: unknown }).slices;
+  const slices: Array<Record<string, unknown>> = Array.isArray(slicesRaw)
+    ? (slicesRaw as Array<Record<string, unknown>>)
+    : [];
+
+  const segments: NormalizedFlightSegment[] = [];
+  const iso2Set = new Set<string>();
+
+  for (const slice of slices) {
+    const segs = Array.isArray(slice.segments)
+      ? (slice.segments as Array<Record<string, unknown>>)
+      : [];
+    for (const seg of segs) {
+      const origin = (seg.origin ?? {}) as Record<string, unknown>;
+      const destination = (seg.destination ?? {}) as Record<string, unknown>;
+      const operating = (seg.operating_carrier ?? {}) as Record<string, unknown>;
+      const marketing = (seg.marketing_carrier ?? {}) as Record<string, unknown>;
+      const carrierName = strOr(marketing.name, operating.name);
+      const carrierIata = strOr(marketing.iata_code, operating.iata_code);
+      const flightNumberSuffix = strOr(seg.marketing_carrier_flight_number, seg.operating_carrier_flight_number);
+      const flightNumber = carrierIata && flightNumberSuffix
+        ? `${carrierIata}${flightNumberSuffix}`
+        : null;
+      const passengers = Array.isArray(seg.passengers)
+        ? (seg.passengers as Array<Record<string, unknown>>)
+        : [];
+      const cabin = strOr(passengers[0]?.cabin_class, slice.fare_brand_name) ?? null;
+
+      const originIata = strOr(origin.iata_code) ?? '';
+      const destinationIata = strOr(destination.iata_code) ?? '';
+      const originCountry = strOr(origin.iata_country_code, origin.country_code);
+      const destinationCountry = strOr(destination.iata_country_code, destination.country_code);
+      if (destinationCountry && /^[A-Za-z]{2}$/.test(destinationCountry)) {
+        iso2Set.add(destinationCountry.toUpperCase());
+      }
+
+      const durationStr = strOr(seg.duration);
+      const durationMinutes = durationStr ? parseIso8601DurationMinutes(durationStr) : null;
+
+      segments.push({
+        originIata,
+        destinationIata,
+        originCity: strOr(origin.city_name, origin.name),
+        destinationCity: strOr(destination.city_name, destination.name),
+        originCountry,
+        destinationCountry,
+        carrier: carrierIata,
+        carrierName,
+        flightNumber,
+        cabin,
+        departureAt: strOr(seg.departing_at),
+        arrivalAt: strOr(seg.arriving_at),
+        durationMinutes,
+      });
+    }
+  }
+
+  const first = segments[0];
+  const last = segments[segments.length - 1];
+  const startDate = first?.departureAt ? first.departureAt.slice(0, 10) : null;
+  const endDate = last?.arrivalAt ? last.arrivalAt.slice(0, 10) : null;
+
+  return {
+    segments,
+    originIata: first?.originIata ?? null,
+    destinationIata: last?.destinationIata ?? null,
+    destinationIso2: [...iso2Set],
+    startDate,
+    endDate,
+  };
+}
+
+function strOr(...vals: unknown[]): string | null {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim().length > 0) return v;
+  }
+  return null;
+}
+
+/** Parse ISO 8601 durations like `PT4H47M` → minutes. Returns null on garbage input. */
+function parseIso8601DurationMinutes(d: string): number | null {
+  const match = d.match(/^PT(?:(\d+)H)?(?:(\d+)M)?$/);
+  if (!match) return null;
+  const hours = match[1] ? Number.parseInt(match[1], 10) : 0;
+  const mins = match[2] ? Number.parseInt(match[2], 10) : 0;
+  if (Number.isNaN(hours) || Number.isNaN(mins)) return null;
+  return hours * 60 + mins;
 }
 
 export interface PayFromBalanceResult {
@@ -390,6 +660,58 @@ export async function getOrder(orderId: string) {
   const duffel = getDuffel();
   const r = await duffel.orders.get(orderId);
   return r.data;
+}
+
+/**
+ * Carrier-issued e-ticket document. Returned by Duffel's
+ * `GET /air/orders/{orderId}/documents` after fulfilment. The
+ * `electronic_ticket` type is the airline-issued e-ticket that the
+ * post-ticketing fan-out attaches to email + ships via WhatsApp
+ * `send_document_message`. Other document types (`itinerary_receipt`,
+ * `electronic_miscellaneous_document_associated`,
+ * `electronic_miscellaneous_document_standalone`) appear in passport
+ * checks and ancillaries; we surface them all so callers can pick.
+ */
+export interface DuffelOrderDocument {
+  type: string;
+  /** Public PDF URL — Duffel hosts this. */
+  url: string;
+  unique_identifier: string;
+}
+
+/**
+ * Fetch the airline-issued documents for a ticketed Duffel order.
+ * Returns an empty array when the supplier hasn't issued any (sandbox
+ * carriers often skip e-ticket emission for instant-pay flows). The
+ * caller is responsible for picking `type === 'electronic_ticket'`
+ * for the canonical e-ticket PDF.
+ *
+ * Reference: https://duffel.com/docs/api/orders/get-order-documents
+ */
+export async function getOrderDocuments(orderId: string): Promise<DuffelOrderDocument[]> {
+  const duffel = getDuffel();
+  // The Duffel SDK doesn't (yet) expose a typed `orders.documents.list`.
+  // The HTTP client is reachable via `duffel.client` — fall back to
+  // `duffel.orders.get(orderId)` and read the `documents` array off the
+  // order payload, which is where Duffel returns them inline as of API
+  // version `v2`. This avoids a second round-trip + a custom client
+  // call when most callers fetched the order anyway.
+  const order = await duffel.orders.get(orderId);
+  const data = order.data as unknown as { documents?: DuffelOrderDocument[] };
+  if (!Array.isArray(data.documents)) return [];
+  return data.documents.filter(
+    d => d && typeof d === 'object' && typeof d.url === 'string' && typeof d.type === 'string'
+  );
+}
+
+/**
+ * Convenience: pick the airline-issued electronic_ticket document
+ * from a Duffel order. Returns null when no `electronic_ticket` type
+ * is present (sandbox + some code-share supplier paths).
+ */
+export async function getOrderEticket(orderId: string): Promise<DuffelOrderDocument | null> {
+  const docs = await getOrderDocuments(orderId);
+  return docs.find(d => d.type === 'electronic_ticket') ?? null;
 }
 
 // ============================================================================
