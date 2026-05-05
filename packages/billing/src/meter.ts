@@ -13,7 +13,7 @@
  * `@sendero/billing/batch`.
  */
 
-import type { MeterStatus } from '@sendero/database';
+import type { MeterPayerType, MeterStatus } from '@sendero/database';
 import type { CapEvaluation, CapStore } from './caps';
 import { evaluateCap } from './caps';
 import { priceFor, gmvMicroCharge, type BillingSegment, type PricedAction } from './pricing';
@@ -28,6 +28,17 @@ export interface MeterEventInput {
   settlementRef?: string | null;
   note?: string | null;
   metadata?: Record<string, unknown> | null;
+  /// Concrete payer attribution (`tenant` | `traveler`). Distinct from
+  /// `userId` (which can be the operator running the turn). Optional —
+  /// undefined leaves the column NULL for legacy/unattributed rows.
+  payerType?: MeterPayerType;
+  /// CircleWallet.id (tenant treasury) or Wallet.id (traveler) of the
+  /// debited wallet. Optional — Gateway-unified balances span chains
+  /// without a single Wallet row, so traveler flows often leave it null.
+  payerWalletId?: string | null;
+  /// User.id of the wallet-bearing payer. Distinct from the operator
+  /// running the turn (which goes on `userId`).
+  payerUserId?: string | null;
 }
 
 export interface MeterStore {

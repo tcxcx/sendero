@@ -111,18 +111,49 @@ export const PerKindMarkupSchema = z.discriminatedUnion('strategy', [
 ]);
 
 /**
+ * Canonical BookingKind list — single source of truth. Mirrors the
+ * Postgres `BookingKind` enum (see `packages/database/prisma/schema.prisma`).
+ * Consumers (MarkupConfigSchema, UI surfaces, get_pricing_policy tool)
+ * import this rather than redeclaring the union, so adding a kind is a
+ * one-place change. Migration `20260504150000_extend_booking_kind`
+ * added `esim` + `card` so eSIM and card-issuance surfaces inherit the
+ * existing `TenantPricingPolicy` machinery.
+ */
+export const BOOKING_KINDS = [
+  'flight',
+  'hotel',
+  'rail',
+  'car',
+  'esim',
+  'card',
+  'insurance',
+  'other',
+] as const;
+
+/**
+ * Kinds that gate a policy from `'partial'` → `'active'`. Excludes
+ * `esim` + `card` deliberately: existing tenants pre-date those surfaces
+ * and would flip to `'partial'` overnight if we required them. Tenants
+ * who actually sell eSIMs/cards opt in by adding markup config; until
+ * they do, the eSIM tool path falls back to Sendero take only (no
+ * agency markup).
+ *
+ * Add a kind here when activating its surface for ALL tenants.
+ */
+export const CORE_BOOKING_KINDS = ['flight', 'hotel', 'rail', 'car', 'other'] as const;
+
+export const BookingKindSchema = z.enum(BOOKING_KINDS);
+
+/**
  * Top-level markupConfig — keyed by BookingKind. Activation requires every
  * kind the tenant intends to support; the Quote API rejects with
  * POLICY_PARTIAL_FOR_KIND when a kind is missing at confirm time.
  */
-export const MarkupConfigSchema = z.record(
-  z.enum(['flight', 'hotel', 'rail', 'car', 'other']),
-  PerKindMarkupSchema
-);
+export const MarkupConfigSchema = z.record(BookingKindSchema, PerKindMarkupSchema);
 
 export type MarkupConfig = z.infer<typeof MarkupConfigSchema>;
 export type PerKindMarkup = z.infer<typeof PerKindMarkupSchema>;
-export type BookingKind = 'flight' | 'hotel' | 'rail' | 'car' | 'other';
+export type BookingKind = (typeof BOOKING_KINDS)[number];
 
 /**
  * Snapshot stored on `Booking.metadata.policySnapshot` at quote-draft
@@ -135,7 +166,7 @@ export type BookingKind = 'flight' | 'hotel' | 'rail' | 'car' | 'other';
  */
 export const BookingPolicySnapshotSchema = z.object({
   policyVersion: z.number().int(),
-  kind: z.enum(['flight', 'hotel', 'rail', 'car', 'other']),
+  kind: BookingKindSchema,
   markup: PerKindMarkupSchema,
   floorMicroUsdc: z.string(),
   ceilingMicroUsdc: z.string().nullable(),

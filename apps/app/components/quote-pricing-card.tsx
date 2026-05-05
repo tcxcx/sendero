@@ -44,10 +44,13 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { Switch } from '@/components/ui/switch';
 
 // ─── Citation bands (display-only; mirrors the activation wizard) ────
+//
+// Partial — eSIM + card surfaces don't have a published industry band
+// yet. CitationTooltip falls back to a generic "no published band" copy
+// when missing rather than crashing.
 
-const KIND_BANDS: Record<
-  BookingKind,
-  { label: string; lowBps: number; highBps: number; citation: string }
+const KIND_BANDS: Partial<
+  Record<BookingKind, { label: string; lowBps: number; highBps: number; citation: string }>
 > = {
   flight: {
     label: 'Flights',
@@ -75,6 +78,22 @@ const KIND_BANDS: Record<
     citation: 'DMC + experiences; varies widely.',
   },
 };
+
+function bandFor(kind: BookingKind): {
+  label: string;
+  lowBps: number;
+  highBps: number;
+  citation: string;
+} {
+  return (
+    KIND_BANDS[kind] ?? {
+      label: kind === 'esim' ? 'eSIM' : kind === 'card' ? 'Card issuance' : 'Other',
+      lowBps: 0,
+      highBps: 0,
+      citation: 'No published industry band — set markup based on tenant policy.',
+    }
+  );
+}
 
 const SOFT_WARN_BPS = 2500;
 const HARD_BLOCK_BPS = 10_000;
@@ -243,7 +262,7 @@ export function QuotePricingCard(props: QuotePricingCardProps) {
     );
   }
 
-  const band = KIND_BANDS[bookingKind];
+  const band = bandFor(bookingKind);
   const customerTotal = breakdown.ok ? breakdown.value.customerTotalMicroUsdc : 0n;
   const tenantTake = breakdown.ok ? breakdown.value.tenantTakeMicroUsdc : 0n;
 
@@ -624,7 +643,7 @@ function ReceiptAmount({
 }
 
 function CitationTooltip({ kind }: { kind: BookingKind }) {
-  const band = KIND_BANDS[kind];
+  const band = bandFor(kind);
   return (
     <HoverCard openDelay={150}>
       <HoverCardTrigger asChild>

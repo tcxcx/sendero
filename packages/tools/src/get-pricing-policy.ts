@@ -27,6 +27,7 @@
 
 import { z } from 'zod';
 
+import { CORE_BOOKING_KINDS } from '@sendero/billing/markup';
 import type { ToolDef } from './types';
 
 // ─── Errors ───────────────────────────────────────────────────────────
@@ -54,7 +55,9 @@ export class TenantContextMissingError extends GetPricingPolicyError {
 
 // ─── Status derivation (mirrors apps/app CRUD route) ──────────────────
 
-const ALL_KINDS = ['flight', 'hotel', 'rail', 'car', 'other'] as const;
+// Activation requires every CORE kind, not every known kind. eSIM + card
+// are opt-in (see CORE_BOOKING_KINDS rationale in @sendero/billing/markup).
+const ALL_KINDS = CORE_BOOKING_KINDS;
 
 export type PolicyStatus = 'active' | 'inactive' | 'partial' | 'sandbox_seed' | 'not_initialized';
 

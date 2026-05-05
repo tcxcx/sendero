@@ -66,6 +66,22 @@ export interface ToolContext {
      */
     effectiveKeyType?: 'sandbox' | 'production';
   };
+  /**
+   * Resolved payer for this turn. Populated by the dispatch route via
+   * `resolvePayer()` from `Trip.paymentMode` / `Tenant.defaultPaymentMode`.
+   * Tools that record meter/booking attribution read from here to avoid
+   * re-resolving (and to avoid the DB hit in test fixtures that don't
+   * inject Trip/Tenant rows). Per-tool `provisionedBy` input still
+   * overrides — the dispatch resolution is the floor, not the ceiling.
+   *
+   * Absent on operator chat turns and service-account dispatches that
+   * don't carry traveler context.
+   */
+  payer?: {
+    type: 'tenant' | 'traveler';
+    /** User.id of the traveler-side wallet bearer when type='traveler'. */
+    travelerUserId?: string;
+  };
 }
 
 export interface ToolDef<I = any, O = any> {

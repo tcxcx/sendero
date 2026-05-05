@@ -170,6 +170,11 @@ export function makeMeterStore(opts?: { forceStatus?: 'sandbox' }): MeterStore {
           note: input.note ?? null,
           metadata: (input.metadata as object | undefined) ?? undefined,
           idempotencyKey,
+          // Payer attribution — passed by tools that resolved via
+          // resolvePayer; left NULL for legacy/unattributed callers.
+          ...(input.payerType ? { payerType: input.payerType } : {}),
+          ...(input.payerWalletId ? { payerWalletId: input.payerWalletId } : {}),
+          ...(input.payerUserId ? { payerUserId: input.payerUserId } : {}),
         },
         select: { id: true },
       });

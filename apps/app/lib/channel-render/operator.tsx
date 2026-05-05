@@ -30,7 +30,15 @@ import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai
 // of Confirmation, and the `tool_invocation` case below for why Task is
 // held until the canonical shape exposes a multi-step orchestration kind.
 
-import type { ChannelMessage, ChannelCta } from './types';
+import { DEVICE_ORDER, INSTALL_INSTRUCTIONS } from './install-instructions';
+import type {
+  ChannelMessage,
+  ChannelCta,
+  ChannelMessageEsimActivation,
+  ChannelMessageSeatPicker,
+  ChannelMessageAncillaryPicker,
+  ChannelMessageTripBrief,
+} from './types';
 
 function exhaustive(_: never): never {
   throw new Error('non-exhaustive ChannelMessage kind');
@@ -176,6 +184,34 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
         </MessageContent>
       );
 
+    case 'esim_activation':
+      return (
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
+          <EsimActivationCard {...msg} />
+        </MessageContent>
+      );
+
+    case 'seat_picker':
+      return (
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
+          <SeatPickerCard {...msg} />
+        </MessageContent>
+      );
+
+    case 'ancillary_picker':
+      return (
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
+          <AncillaryPickerCard {...msg} />
+        </MessageContent>
+      );
+
+    case 'trip_brief':
+      return (
+        <MessageContent className={BUBBLE_CLASSNAME} style={BUBBLE_STYLE}>
+          <TripBriefCard {...msg} />
+        </MessageContent>
+      );
+
     default:
       return exhaustive(msg);
   }
@@ -243,6 +279,344 @@ function CtaButton({ cta }: { cta: ChannelCta }) {
     <button type="button" className={cls} data-cta-kind={cta.kind} data-cta-value={cta.value ?? ''}>
       {cta.label}
     </button>
+  );
+}
+
+/**
+ * Operator-side eSIM activation card. The whole content stack lives in
+ * one bubble so the operator preview matches what the traveler sees on
+ * Slack/web/WhatsApp:
+ *   QR image (left) + plan + LPA install URL + per-device steps.
+ *
+ * The QR is the source-of-truth artifact — any device can scan it.
+ * The "Install on iPhone" anchor uses the install URL (not the LPA:
+ * scheme) so the operator can click and preview the install page in
+ * a regular browser; iOS travelers tapping in WhatsApp/web get the
+ * auto-redirect inside the install page.
+ */
+function EsimActivationCard(props: ChannelMessageEsimActivation) {
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border bg-card p-3">
+      <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+        Trip eSIM ready
+      </div>
+      <div className="flex gap-3">
+        <img
+          src={props.qrUrl}
+          alt={`Install QR for ${props.planLabel}`}
+          width={160}
+          height={160}
+          className="h-40 w-40 shrink-0 rounded-sm border border-border bg-white object-contain p-1"
+        />
+        <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+          <div className="font-medium text-foreground">{props.planLabel}</div>
+          <div className="text-xs text-muted-foreground">
+            {(props.dataMb / 1024).toFixed(1)} GB · {props.validityDays} days ·{' '}
+            {props.countries.join(', ')}
+          </div>
+          {props.priceLine ? (
+            <div className="font-mono text-[11px] text-muted-foreground">{props.priceLine}</div>
+          ) : null}
+          <div className="mt-1 flex flex-wrap gap-2">
+            <a
+              href={props.installUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-sm border border-[color:var(--ink)] bg-[color:var(--ink)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] transition-opacity hover:opacity-90"
+            >
+              📱 Install on iPhone
+            </a>
+            <a
+              href={`${props.installUrl}#instructions`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-sm border border-border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:border-[color:var(--ink)] hover:text-foreground"
+            >
+              Other devices
+            </a>
+          </div>
+        </div>
+      </div>
+      <details className="rounded-sm border border-border bg-background/50 p-2">
+        <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+          Install instructions per device
+        </summary>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          {DEVICE_ORDER.map(device => {
+            const instr = INSTALL_INSTRUCTIONS[device];
+            return (
+              <div key={device} className="text-xs">
+                <div className="font-medium text-foreground">
+                  {instr.label}
+                  {instr.subLabel ? (
+                    <span className="ml-1 text-muted-foreground">· {instr.subLabel}</span>
+                  ) : null}
+                </div>
+                <ol className="ml-4 mt-1 list-decimal text-muted-foreground">
+                  {instr.steps.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ol>
+              </div>
+            );
+          })}
+        </div>
+      </details>
+      <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+        LPA · <span className="select-all break-all">{props.lpaCode}</span>
+      </div>
+    </div>
+  );
+}
+
+function SeatPickerCard(props: ChannelMessageSeatPicker) {
+  const passenger = props.passengerName ?? props.passengerId;
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3">
+      <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+        Seat for {passenger}
+      </div>
+      {props.options.length === 0 ? (
+        <div className="text-xs text-muted-foreground">No seats available for this segment.</div>
+      ) : (
+        <ul className="flex flex-col gap-1.5">
+          {props.options.map(opt => {
+            const selected = opt.designator === props.selectedDesignator;
+            return (
+              <li
+                key={opt.serviceId}
+                className="flex items-center justify-between gap-3 rounded-sm border border-border px-2 py-1.5"
+              >
+                <div className="flex flex-col">
+                  <span className="font-mono text-xs text-foreground">
+                    {opt.designator}
+                    {opt.cabinClass ? (
+                      <span className="ml-2 text-muted-foreground">{opt.cabinClass}</span>
+                    ) : null}
+                  </span>
+                  {opt.disclosures && opt.disclosures.length > 0 ? (
+                    <span className="text-[10px] text-muted-foreground">
+                      {opt.disclosures.join(' · ')}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {opt.price} {opt.currency}
+                  </span>
+                  <CtaButton
+                    cta={{
+                      kind: 'select_seat',
+                      label: selected ? '✓ Selected' : 'Pick',
+                      value: JSON.stringify({
+                        tripId: props.tripId,
+                        offerId: props.offerId,
+                        passengerId: props.passengerId,
+                        seatServiceId: opt.serviceId,
+                        designator: opt.designator,
+                        price: opt.price,
+                        currency: opt.currency,
+                      }),
+                      emphasis: selected ? 'secondary' : 'primary',
+                    }}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function AncillaryPickerCard(props: ChannelMessageAncillaryPicker) {
+  const passenger = props.passengerName ?? props.passengerId;
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-3">
+      <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+        Bags + extras for {passenger}
+      </div>
+      {props.bags.length === 0 && (props.cancelForAnyReason?.length ?? 0) === 0 ? (
+        <div className="text-xs text-muted-foreground">No optional extras for this offer.</div>
+      ) : null}
+      {props.bags.map(bag => (
+        <div
+          key={bag.serviceId}
+          className="flex items-center justify-between gap-3 rounded-sm border border-border px-2 py-1.5"
+        >
+          <div className="flex flex-col">
+            <span className="text-xs text-foreground">{bag.label}</span>
+            {bag.weightKg || bag.dimensions ? (
+              <span className="text-[10px] text-muted-foreground">
+                {[bag.weightKg ? `${bag.weightKg}kg` : null, bag.dimensions]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {bag.price} {bag.currency}
+            </span>
+            <CtaButton
+              cta={{
+                kind: 'add_bag',
+                label: bag.quantitySelected ? `× ${bag.quantitySelected}` : 'Add',
+                value: JSON.stringify({
+                  tripId: props.tripId,
+                  offerId: props.offerId,
+                  passengerId: props.passengerId,
+                  bagServiceId: bag.serviceId,
+                  quantity: 1,
+                  label: bag.label,
+                  price: bag.price,
+                  currency: bag.currency,
+                }),
+                emphasis: 'primary',
+              }}
+            />
+          </div>
+        </div>
+      ))}
+      {props.cancelForAnyReason?.map(cfar => (
+        <div
+          key={cfar.serviceId}
+          className="flex items-center justify-between gap-3 rounded-sm border border-border px-2 py-1.5"
+        >
+          <div className="flex flex-col">
+            <span className="text-xs text-foreground">Cancel for any reason</span>
+            <span className="text-[10px] text-muted-foreground">{cfar.summary}</span>
+          </div>
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {cfar.price} {cfar.currency}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TripBriefCard(props: ChannelMessageTripBrief) {
+  const tripLabel = [props.trip.origin, props.trip.destination].filter(Boolean).join(' → ');
+  const dateLabel =
+    props.trip.startDate && props.trip.endDate
+      ? `${props.trip.startDate} → ${props.trip.endDate}`
+      : props.trip.startDate ?? props.trip.endDate ?? '';
+  const sevColor = (sev: ChannelMessageTripBrief['alerts'][number]['severity']) =>
+    sev === 'critical'
+      ? 'border-red-500/40 bg-red-500/5 text-red-700 dark:text-red-400'
+      : sev === 'warn'
+        ? 'border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-400'
+        : 'border-border bg-card text-muted-foreground';
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-border bg-card p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          Trip · {props.trip.status}
+        </div>
+        {dateLabel ? (
+          <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            {dateLabel}
+          </div>
+        ) : null}
+      </div>
+      <div className="text-sm font-medium text-foreground">
+        {props.trip.name ?? tripLabel ?? props.trip.tripId}
+        {props.trip.name && tripLabel ? (
+          <span className="ml-2 text-muted-foreground">· {tripLabel}</span>
+        ) : null}
+      </div>
+
+      {props.alerts.length > 0 ? (
+        <ul className="flex flex-col gap-1.5">
+          {props.alerts.map((a, i) => (
+            <li key={i} className={`rounded-sm border px-2 py-1.5 text-xs ${sevColor(a.severity)}`}>
+              {a.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {props.flights.length > 0 ? (
+        <section className="flex flex-col gap-1">
+          <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            Flights
+          </div>
+          <ul className="ml-1 flex flex-col gap-1 text-xs">
+            {props.flights.map(f => (
+              <li key={f.bookingId} className="flex justify-between gap-2 text-foreground">
+                <span>
+                  {f.origin ?? '?'} → {f.destination ?? '?'}
+                  {f.pnr ? <span className="ml-2 text-muted-foreground">{f.pnr}</span> : null}
+                  {f.segmentCount > 1 ? (
+                    <span className="ml-1 text-muted-foreground">· {f.segmentCount}-stop</span>
+                  ) : null}
+                </span>
+                <span className="font-mono text-muted-foreground">${f.totalUsd}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {props.stays.length > 0 ? (
+        <section className="flex flex-col gap-1">
+          <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            Stays
+          </div>
+          <ul className="ml-1 flex flex-col gap-1 text-xs">
+            {props.stays.map(s => (
+              <li key={s.bookingId} className="flex justify-between gap-2 text-foreground">
+                <span>
+                  {s.property ?? 'Hotel'}
+                  {s.city ? <span className="ml-1 text-muted-foreground">· {s.city}</span> : null}
+                  {s.nights ? (
+                    <span className="ml-1 text-muted-foreground">
+                      · {s.nights}n
+                    </span>
+                  ) : null}
+                </span>
+                <span className="font-mono text-muted-foreground">${s.totalUsd}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {props.esims.length > 0 ? (
+        <section className="flex flex-col gap-1">
+          <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            Connectivity
+          </div>
+          <ul className="ml-1 flex flex-col gap-1 text-xs">
+            {props.esims.map(e => (
+              <li key={e.esimId} className="flex justify-between gap-2 text-foreground">
+                <span>
+                  {(e.dataMb / 1024).toFixed(1)} GB · {e.validityDays}d ·{' '}
+                  {e.countries.join('/') || '—'}
+                </span>
+                <span className="font-mono text-muted-foreground">{e.status}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {props.shareUrl ? (
+        <div className="mt-1">
+          <a
+            href={props.shareUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-sm border border-[color:var(--ink)] bg-[color:var(--ink)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--bg-elev)] transition-opacity hover:opacity-90"
+          >
+            🔗 Share trip
+          </a>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

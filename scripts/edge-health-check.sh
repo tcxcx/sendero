@@ -19,7 +19,7 @@ set -u
 # Don't `set -e` — we want to handle curl/jq failures explicitly so we
 # can still emit a JSONL line and a structured exit.
 
-HEALTH_URL="${HEALTH_URL:-https://arc-edge.tomas-cordero-esp.workers.dev/health}"
+HEALTH_URL="${HEALTH_URL:-https://sendero-arc-edge.tomas-cordero-esp.workers.dev/health}"
 LABEL="edge-health-incident"
 ISSUE_TITLE="🚨 Edge worker health probe failure"
 

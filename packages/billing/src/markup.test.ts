@@ -356,4 +356,28 @@ describe('MarkupConfigSchema', () => {
     });
     expect(bad.success).toBe(false);
   });
+
+  test('accepts esim — extends to the new surface from day 1', () => {
+    const ok = MarkupConfigSchema.safeParse({
+      esim: { strategy: 'static', bps: 8_000 },
+    });
+    expect(ok.success).toBe(true);
+  });
+
+  test('accepts card — covers card-issuance fees', () => {
+    const ok = MarkupConfigSchema.safeParse({
+      card: { strategy: 'static', bps: 2_500 },
+    });
+    expect(ok.success).toBe(true);
+  });
+
+  test('accepts a mix of core + new kinds in one config', () => {
+    const ok = MarkupConfigSchema.safeParse({
+      flight: { strategy: 'static', bps: 500 },
+      hotel: { strategy: 'static', bps: 1100 },
+      esim: { strategy: 'static', bps: 8_000 },
+      card: { strategy: 'static', bps: 2_500 },
+    });
+    expect(ok.success).toBe(true);
+  });
 });

@@ -44,6 +44,7 @@ import {
   reconcileOutboundStatus,
 } from '@/lib/whatsapp-audit';
 import { claimWhatsAppMessage, isWithinReplayWindow } from '@/lib/whatsapp-dedup';
+import { routeWhatsAppAncillaryTap } from '@/lib/ancillary-tap-router';
 import { recordInboundForTyping } from '@/lib/typing-heartbeat';
 
 export const runtime = 'nodejs';
@@ -221,8 +222,7 @@ export async function POST(req: NextRequest) {
       // every 20s via `withTypingHeartbeat`. Kapso owns its own typing
       // for inbound→outbound on the agent path; this wiring covers
       // the gap where Sendero sends without Kapso in the loop.
-      const externalUserIdForTyping =
-        msg.identity.phone ?? msg.identity.phoneRaw ?? null;
+      const externalUserIdForTyping = msg.identity.phone ?? msg.identity.phoneRaw ?? null;
       if (externalUserIdForTyping) {
         void recordInboundForTyping({
           tenantId: identity.tenantId,
@@ -1183,10 +1183,9 @@ async function findByIdentity(
 
 /**
  * Pre-booking ancillary picker tap routing — WhatsApp interactive list
- * reply whose row id encodes seat or bag staging payload. Decodes the
- * id, POSTs to `/api/tools/select_seat` or `/api/tools/add_baggage`
- * with `travelerPhone` so the tools route resolves the Sendero User
- * via the existing phone-based path. Returns true when the tap was
+ * reply whose row id encodes seat or bag staging payload. Thin wrapper
+ * around the shared router so the parsing + HTTP envelope stays in
+ * lockstep with the Slack handler. Returns true when the tap was
  * routed (caller skips agent dispatch); false when the row id was
  * unrecognized or malformed (caller falls through to the agent).
  */
@@ -1195,62 +1194,18 @@ async function routeAncillaryRowId(args: {
   tenantId: string;
   travelerPhone: string | null;
 }): Promise<boolean> {
-  const parts = args.rowId.split(':');
-  if (parts.length < 5) return false;
-  const [kind, tripId, offerId, passengerId, serviceId, ...rest] = parts;
-  if (!tripId || !offerId || !passengerId || !serviceId) return false;
-  // Final segment(s) carry the human-readable label/designator. WhatsApp
-  // row ids don't contain colons themselves, but we joined with `:` so
-  // splice back in case the label contained one.
-  const label = rest.join(':');
-
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
-  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
-  if (!secret) return false;
-
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-sendero-dispatch-secret': secret,
-  };
-
-  if (kind === 'select_seat') {
-    await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/select_seat`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        tenantId: args.tenantId,
-        ...(args.travelerPhone ? { travelerPhone: args.travelerPhone } : {}),
-        input: {
-          tripId,
-          offerId,
-          passengerId,
-          seatServiceId: serviceId,
-          ...(label ? { designator: label } : {}),
-        },
-      }),
-    }).catch(err => console.warn('[wa/webhook] select_seat tap failed', err));
-    return true;
+  const result = await routeWhatsAppAncillaryTap(args).catch(err => {
+    console.warn('[wa/webhook] ancillary tap router threw', err);
+    return { ok: false, reason: 'parse_failed' as const };
+  });
+  if (!result.ok) {
+    if (result.reason === 'no_secret' || result.reason === 'parse_failed') {
+      console.warn('[wa/webhook] ancillary tap not routed', {
+        rowId: args.rowId,
+        reason: result.reason,
+      });
+    }
+    return false;
   }
-
-  if (kind === 'add_bag') {
-    await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/add_baggage`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        tenantId: args.tenantId,
-        ...(args.travelerPhone ? { travelerPhone: args.travelerPhone } : {}),
-        input: {
-          tripId,
-          offerId,
-          passengerId,
-          bagServiceId: serviceId,
-          quantity: 1,
-          ...(label ? { label } : {}),
-        },
-      }),
-    }).catch(err => console.warn('[wa/webhook] add_baggage tap failed', err));
-    return true;
-  }
-
-  return false;
+  return true;
 }

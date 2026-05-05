@@ -283,10 +283,7 @@ export const bookFlightTool: ToolDef = {
           where: { id: input.tripId },
           select: { metadata: true },
         });
-        stagedAncillaries = readPendingAncillaries(
-          tripRow?.metadata ?? null,
-          input.offerId
-        );
+        stagedAncillaries = readPendingAncillaries(tripRow?.metadata ?? null, input.offerId);
       } catch (err) {
         // Don't fail the booking if we can't read staged ancillaries —
         // log and proceed with explicit services only.
@@ -860,13 +857,47 @@ export const bookFlightTool: ToolDef = {
  * gap (still better than passing a bad code).
  */
 const ISO3_TO_ISO2: Record<string, string> = {
-  ARG: 'AR', BRA: 'BR', CHL: 'CL', URY: 'UY', PER: 'PE', COL: 'CO', MEX: 'MX',
-  USA: 'US', CAN: 'CA', GBR: 'GB', IRL: 'IE',
-  FRA: 'FR', DEU: 'DE', ESP: 'ES', ITA: 'IT', PRT: 'PT', NLD: 'NL', BEL: 'BE',
-  CHE: 'CH', AUT: 'AT', SWE: 'SE', NOR: 'NO', DNK: 'DK', FIN: 'FI',
-  JPN: 'JP', KOR: 'KR', CHN: 'CN', IND: 'IN', SGP: 'SG', THA: 'TH', IDN: 'ID',
-  VNM: 'VN', PHL: 'PH', MYS: 'MY', AUS: 'AU', NZL: 'NZ', RUS: 'RU', TUR: 'TR',
-  ZAF: 'ZA', EGY: 'EG', MAR: 'MA',
+  ARG: 'AR',
+  BRA: 'BR',
+  CHL: 'CL',
+  URY: 'UY',
+  PER: 'PE',
+  COL: 'CO',
+  MEX: 'MX',
+  USA: 'US',
+  CAN: 'CA',
+  GBR: 'GB',
+  IRL: 'IE',
+  FRA: 'FR',
+  DEU: 'DE',
+  ESP: 'ES',
+  ITA: 'IT',
+  PRT: 'PT',
+  NLD: 'NL',
+  BEL: 'BE',
+  CHE: 'CH',
+  AUT: 'AT',
+  SWE: 'SE',
+  NOR: 'NO',
+  DNK: 'DK',
+  FIN: 'FI',
+  JPN: 'JP',
+  KOR: 'KR',
+  CHN: 'CN',
+  IND: 'IN',
+  SGP: 'SG',
+  THA: 'TH',
+  IDN: 'ID',
+  VNM: 'VN',
+  PHL: 'PH',
+  MYS: 'MY',
+  AUS: 'AU',
+  NZL: 'NZ',
+  RUS: 'RU',
+  TUR: 'TR',
+  ZAF: 'ZA',
+  EGY: 'EG',
+  MAR: 'MA',
 };
 function iso3to2(iso3: string | null): string | null {
   if (!iso3) return null;
@@ -898,9 +929,7 @@ async function loadIdentityDocumentFromVault(args: {
   // 6-month-after-trip rule. Many destinations require passport
   // validity beyond the trip's last day. Use a conservative buffer.
   if (row.expiresOn) {
-    const tripEnd = args.bookingTripEndDate
-      ? new Date(args.bookingTripEndDate)
-      : new Date();
+    const tripEnd = args.bookingTripEndDate ? new Date(args.bookingTripEndDate) : new Date();
     const sixMonthsAfter = new Date(tripEnd);
     sixMonthsAfter.setMonth(sixMonthsAfter.getMonth() + 6);
     if (row.expiresOn < sixMonthsAfter) {
@@ -935,9 +964,7 @@ async function loadIdentityDocumentFromVault(args: {
     issuingCountryCode: issuingCountryAlpha2,
     nationality: iso3to2(extraction.nationality ?? null) ?? issuingCountryAlpha2,
     expiresOn: extraction.date_of_expiry.slice(0, 10),
-    ...(extraction.date_of_issue
-      ? { issuedOn: extraction.date_of_issue.slice(0, 10) }
-      : {}),
+    ...(extraction.date_of_issue ? { issuedOn: extraction.date_of_issue.slice(0, 10) } : {}),
   };
 }
 

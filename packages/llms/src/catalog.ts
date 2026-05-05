@@ -145,6 +145,11 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
       'Book a Duffel Stays quote. Supports loyalty_programme_account_number + Customer User linkage to unlock Travel Support Assistant for the guest.',
   },
   {
+    label: 'book_esim',
+    description:
+      'Provision a travel eSIM (data plan) for a traveler. Picks the cheapest provider bundle covering the destinations + duration + data, applies tenant agency markup (TenantPricingPolicy.markupConfig.esim) + Sendero take, and returns a signed QR + LPA install string + universal install URL ready to drop into Slack / WhatsApp / web. Channel renderers paint a native esim_activation card with one-tap install on iOS 17.4+. Payer follows Trip.paymentMode (tenant treasury vs traveler wallet).',
+  },
+  {
     label: 'cancel_order_quote',
     description:
       'Create an unconfirmed Duffel order cancellation quote. Returns refund destination (original form of payment / airline_credits / voucher) + any credits to be issued.',
@@ -312,6 +317,11 @@ export const AGENT_WORKFLOW_CATALOG: LlmsItem[] = [
     label: 'sendero.cancel_order_with_credits',
     description:
       'Flight cancellation: quote → pause for approval (operator sees refund destination + credits) → confirm within expiry.',
+  },
+  {
+    label: 'sendero.trip_esim_provisioning',
+    description:
+      'Travel data provisioning: detect destinations + trip dates from the booked itinerary, call book_esim with the right bundle, and surface the activation card across the traveler\'s channels. Slack/WhatsApp/web receive a native esim_activation message — QR + tap-to-install on iOS 17.4+ via the universal /install/esim/<token> page; Android scans the QR. Payer attribution follows Trip.paymentMode without re-prompting.',
   },
 ];
 

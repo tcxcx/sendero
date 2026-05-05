@@ -64,6 +64,13 @@ export interface DeductAndRecordArgs {
   payerAddress?: string | null;
   metadata?: Record<string, unknown> | null;
   note?: string | null;
+  // Payer attribution — resolved once per turn by the dispatch route.
+  // Stamped on every MeterEvent row this call writes (sandbox, paid,
+  // credit, overage). Optional — left NULL on legacy callers and
+  // service-account tenant=null flows.
+  payerType?: 'tenant' | 'traveler';
+  payerWalletId?: string | null;
+  payerUserId?: string | null;
 }
 
 export interface DeductAndRecordResult {
@@ -209,6 +216,20 @@ async function findPriorRows(
   return rows.length === 0 ? null : rows;
 }
 
+/**
+ * Build the optional payer-attribution fields for a `meterEvent.create`
+ * data object. Spreading guarantees we only set a column when the caller
+ * passed a value — null wins over `undefined` when explicitly passed,
+ * but absence leaves the column NULL (legacy/unattributed).
+ */
+function payerFields(args: Pick<DeductAndRecordArgs, 'payerType' | 'payerWalletId' | 'payerUserId'>) {
+  return {
+    ...(args.payerType ? { payerType: args.payerType } : {}),
+    ...(args.payerWalletId ? { payerWalletId: args.payerWalletId } : {}),
+    ...(args.payerUserId ? { payerUserId: args.payerUserId } : {}),
+  };
+}
+
 export async function deductAndRecord(args: DeductAndRecordArgs): Promise<DeductAndRecordResult> {
   return prisma.$transaction(async tx => {
     // 1. Idempotent replay — caller invoked us a second time with the
@@ -249,6 +270,7 @@ export async function deductAndRecord(args: DeductAndRecordArgs): Promise<Deduct
           note: args.note ?? null,
           metadata: (args.metadata as object | undefined) ?? undefined,
           idempotencyKey: args.idempotencyKey,
+          ...payerFields(args),
         },
         select: { id: true },
       });
@@ -287,6 +309,7 @@ export async function deductAndRecord(args: DeductAndRecordArgs): Promise<Deduct
           note: args.note ?? null,
           metadata: (args.metadata as object | undefined) ?? undefined,
           idempotencyKey: args.idempotencyKey,
+          ...payerFields(args),
         },
         select: { id: true },
       });
@@ -332,6 +355,7 @@ export async function deductAndRecord(args: DeductAndRecordArgs): Promise<Deduct
           note: args.note ?? null,
           metadata: (args.metadata as object | undefined) ?? undefined,
           idempotencyKey: args.idempotencyKey,
+          ...payerFields(args),
         },
         select: { id: true },
       });
@@ -362,6 +386,7 @@ export async function deductAndRecord(args: DeductAndRecordArgs): Promise<Deduct
           // the original key — so retry semantics match exactly.
           idempotencyKey:
             split.creditMicro > 0n ? `${args.idempotencyKey}:overage` : args.idempotencyKey,
+          ...payerFields(args),
         },
         select: { id: true },
       });
@@ -407,6 +432,17 @@ export interface MakeCreditAwareMeterStoreOpts {
   /** Sandbox key on this dispatch — skip deduction, write status='sandbox'. */
   sandbox: boolean;
   segment: BillingSegment;
+  /**
+   * Payer attribution defaults resolved once per turn by the dispatch
+   * route. Applied to every MeterEvent the store writes. Per-event
+   * input fields (e.g. tool-driven `recordMeter` calls from
+   * `confirm_booking`) override these defaults.
+   */
+  defaults?: {
+    payerType?: 'tenant' | 'traveler';
+    payerWalletId?: string | null;
+    payerUserId?: string | null;
+  };
 }
 
 /**
@@ -424,8 +460,19 @@ export interface MakeCreditAwareMeterStoreOpts {
  * to keep legacy callers working during rollout.
  */
 export function makeCreditAwareMeterStore(opts: MakeCreditAwareMeterStoreOpts): MeterStore {
+  // Per-event input wins over turn-level defaults. Tools that resolve
+  // their own payer (e.g. confirm_booking) pass it on the event; the
+  // dispatch turn's resolved payer is the fallback for everything else.
+  const merge = (input: MeterEventInput) => ({
+    payerType: input.payerType ?? opts.defaults?.payerType,
+    payerWalletId: input.payerWalletId ?? opts.defaults?.payerWalletId ?? null,
+    payerUserId: input.payerUserId ?? opts.defaults?.payerUserId ?? null,
+  });
+
   return {
     create: async (input: MeterEventInput) => {
+      const merged = merge(input);
+
       // No tenant — system event, cron job, etc. Fall through to a
       // plain insert. Credits don't apply.
       if (!input.tenantId) {
@@ -441,6 +488,9 @@ export function makeCreditAwareMeterStore(opts: MakeCreditAwareMeterStoreOpts): 
             note: input.note ?? null,
             metadata: (input.metadata as object | undefined) ?? undefined,
             idempotencyKey: null,
+            ...(merged.payerType ? { payerType: merged.payerType } : {}),
+            ...(merged.payerWalletId ? { payerWalletId: merged.payerWalletId } : {}),
+            ...(merged.payerUserId ? { payerUserId: merged.payerUserId } : {}),
           },
           select: { id: true },
         });
@@ -467,6 +517,9 @@ export function makeCreditAwareMeterStore(opts: MakeCreditAwareMeterStoreOpts): 
         payerAddress: input.payerAddress ?? null,
         metadata: (input.metadata as Record<string, unknown> | undefined) ?? null,
         note: input.note ?? null,
+        ...(merged.payerType ? { payerType: merged.payerType } : {}),
+        ...(merged.payerWalletId ? { payerWalletId: merged.payerWalletId } : {}),
+        ...(merged.payerUserId ? { payerUserId: merged.payerUserId } : {}),
       });
 
       // Return the first written row's id — the credit row when one

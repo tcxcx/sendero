@@ -33,12 +33,25 @@ import { prisma } from '@sendero/database';
 import type { ToolContext, ToolDef } from './types';
 
 const SUPPORTED_CURRENCIES = [
+  'usdc',          // ERC-20 on Ethereum (mainnet) / Sepolia (sandbox MoonPayToken substitute)
   'usdc_base',
   'usdc_sol',
   'usdc_polygon',
   'usdc_arbitrum',
   'usdc_optimism',
 ] as const;
+
+/** See moonpay-offramp.ts for the rationale — MoonPay sandbox only
+ *  accepts plain `usdc`. Production unlocks the chain-suffixed
+ *  variants. The unified Gateway balance routes the actual USDC; the
+ *  wire-level `currencyCode` just picks the chain MoonPay accepts. */
+const SANDBOX_SAFE_CURRENCIES = new Set<(typeof SUPPORTED_CURRENCIES)[number]>([
+  'usdc',
+]);
+
+function isSandboxApiKey(apiKey: string | undefined): boolean {
+  return typeof apiKey === 'string' && apiKey.startsWith('pk_test_');
+}
 
 const inputSchema = z.object({
   amountUsd: z
@@ -49,9 +62,9 @@ const inputSchema = z.object({
     .describe('USD amount the traveler wants to add. MoonPay min ~$20, max varies by KYC tier.'),
   currencyCode: z
     .enum(SUPPORTED_CURRENCIES)
-    .default('usdc_sol')
+    .default('usdc_base')
     .describe(
-      "Crypto currency to receive. Default 'usdc_sol' (USDC on Solana Devnet) — Circle Gateway aggregates the balance regardless of the receiving chain. Fallback to 'usdc_base' if MoonPay rejects the destination on a gas / chain error."
+      "Crypto currency to receive. Default 'usdc_base' — sandbox-safe (auto-coerced to plain `usdc`) AND production-supported. The unified Gateway balance routes from the receiving chain to wherever Sendero needs it; the wire-level code just picks MoonPay's accepted chain. Use 'usdc_sol' / 'usdc_polygon' etc. only with production keys."
     ),
   note: z
     .string()
@@ -106,6 +119,16 @@ export const moonpayTopupTool: ToolDef<Input> = {
       };
     }
 
+    // Sandbox guard — coerce non-`usdc` currencies to `usdc` when the
+    // MoonPay key is `pk_test_*`. Mirrors moonpay-offramp.ts.
+    let resolvedCurrency: (typeof SUPPORTED_CURRENCIES)[number] = input.currencyCode;
+    if (isSandboxApiKey(apiKey) && !SANDBOX_SAFE_CURRENCIES.has(resolvedCurrency)) {
+      console.warn('[moonpay_topup] sandbox env — coercing currency to usdc', {
+        requested: resolvedCurrency,
+      });
+      resolvedCurrency = 'usdc';
+    }
+
     // Architecture flip (2026-05-04): the deposit destination is the
     // traveler's Circle DCW EVM address (chainId 5042002, Arc), NOT
     // the locally-generated UserGatewaySigner. Reason: Circle's
@@ -113,7 +136,7 @@ export const moonpayTopupTool: ToolDef<Input> = {
     // /api/webhooks/circle can auto-deposit MoonPay funds into Gateway
     // without a manual sweep. UserGatewaySigner remains for outbound
     // EIP-712 burn signatures only.
-    const isSolana = input.currencyCode === 'usdc_sol';
+    const isSolana = resolvedCurrency === 'usdc_sol';
 
     let walletAddress: string;
     if (isSolana) {
@@ -169,7 +192,7 @@ export const moonpayTopupTool: ToolDef<Input> = {
     // before HMAC; URLSearchParams handles that consistently.
     const params = new URLSearchParams();
     params.set('apiKey', apiKey);
-    params.set('currencyCode', input.currencyCode);
+    params.set('currencyCode', resolvedCurrency);
     params.set('baseCurrencyCode', 'usd');
     params.set('baseCurrencyAmount', String(input.amountUsd));
     params.set('walletAddress', walletAddress);
@@ -197,7 +220,7 @@ export const moonpayTopupTool: ToolDef<Input> = {
       title: `Top up · $${input.amountUsd} USD`,
       body: `Pay with a card via MoonPay — funds land in your Sendero wallet in seconds.`,
       bullets: [
-        `Receiving on ${input.currencyCode.replace('_', ' ').toUpperCase()}`,
+        `Receiving on ${resolvedCurrency.replace('_', ' ').toUpperCase()}`,
         `Wallet ${walletAddress.slice(0, 8)}…${walletAddress.slice(-6)}`,
         `Settles via Circle Gateway across every chain`,
       ],
@@ -223,14 +246,14 @@ export const moonpayTopupTool: ToolDef<Input> = {
       imageUrl: cardImageUrl ?? qrImageUrl,
       meWalletUrl,
       amountUsd: input.amountUsd,
-      currencyCode: input.currencyCode,
+      currencyCode: resolvedCurrency,
       walletAddress,
       environment: isTest ? 'sandbox' : 'production',
       note: input.note ?? null,
       message:
         `Top up *${input.amountUsd} USD* with MoonPay (sandbox).\n\n` +
         `Checkout: ${checkoutUrl}\n\n` +
-        `Funds land as ${input.currencyCode.toUpperCase()} on \`${walletAddress.slice(0, 10)}…${walletAddress.slice(-6)}\`. Sendero's unified balance picks them up across every supported chain.`,
+        `Funds land as ${resolvedCurrency.toUpperCase()} on \`${walletAddress.slice(0, 10)}…${walletAddress.slice(-6)}\`. Sendero's unified balance picks them up across every supported chain.`,
     };
   },
 };

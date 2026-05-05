@@ -35,8 +35,10 @@ import type { StampKind, StampManifest, StampWorkflowResult } from './shared/typ
 import { generateStampCaption } from './steps/generate-caption';
 import { generateStampImage } from './steps/generate-image';
 import { execMintExtend, execMintFirst } from './steps/exec-mint';
+import { notifyStampMint } from './steps/notify-mint';
 import { persistStampMetadata } from './steps/persist-stamp-row';
 import { pinStampImageToIpfs, pinStampManifestToIpfs } from './steps/pin-to-ipfs';
+import { renderBoardingPassPng } from './steps/render-boarding-pass-png';
 import { closeStampProgress, writeStampProgress } from './steps/stream-progress';
 
 /**
@@ -87,8 +89,18 @@ export const generateStamp = async (args: {
       imagePromptForKind(ctx),
       captionPromptForKind(ctx),
     ]);
+    // BoardingPass NFT art is a redacted Satori boarding pass (factual
+    // depiction of the actual flight, no PII). Other kinds still use
+    // the Gemini image-gen path. The Satori path drops `passengerName`
+    // → "Sendero traveler", redacts `pnr` to first/last 2 chars, and
+    // omits `settlementTxHash` so the public IPFS image doesn't link
+    // an individual traveler to their on-chain settlement.
+    const imagePromise =
+      ctx.kind === 'BoardingPass'
+        ? renderBoardingPassPng({ ctx })
+        : generateStampImage(imagePrompt, imageReferencesForKind(ctx));
     const [imageDataUrl, caption] = await Promise.all([
-      generateStampImage(imagePrompt, imageReferencesForKind(ctx)),
+      imagePromise,
       generateStampCaption(captionPrompt),
     ]);
 
@@ -172,6 +184,19 @@ export const generateStamp = async (args: {
     // with the on-chain URI placeholder during pending → minted; this
     // updates the off-chain mirror to match).
     await persistStampMetadata({ ctx, blobUrl: gatewayUrl, manifestCid, caption });
+
+    // Push the IPFS-pinned NFT art to the traveler's WhatsApp. The
+    // boarding-pass *image* (Satori PNG) is already shipped by the
+    // synchronous fanout from book_flight; this is the NFT-mint
+    // claim — distinct surface, distinct caption (tokenId, contract,
+    // mint tx). Fail-soft inside the step.
+    await notifyStampMint({
+      ctx,
+      tokenId: firstMint.tokenId,
+      txHash: firstMint.txHash,
+      contract: firstMint.contract,
+      gatewayUrl,
+    });
 
     return {
       kind: ctx.kind,

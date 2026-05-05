@@ -65,8 +65,7 @@ function readOutboundDestinationCountry(segments: unknown): string | null {
   }
   // Domestic trip — fall back to the last segment's destination country.
   const last = arr[arr.length - 1];
-  const code =
-    typeof last?.destinationCountry === 'string' ? last.destinationCountry : null;
+  const code = typeof last?.destinationCountry === 'string' ? last.destinationCountry : null;
   return code && /^[A-Za-z]{2}$/.test(code) ? code.toUpperCase() : null;
 }
 

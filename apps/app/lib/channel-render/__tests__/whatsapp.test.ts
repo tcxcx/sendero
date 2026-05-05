@@ -1,3 +1,8 @@
+// Snapshot pre-conditions — pin the env so test runs are independent
+// of which `.env.local` bun resolves at test-discovery time.
+process.env.OG_SHARE_SIGNING_SECRET = '';
+process.env.NEXT_PUBLIC_APP_URL = '';
+
 /**
  * WhatsApp channel renderer snapshot coverage.
  *
@@ -112,5 +117,90 @@ describe('renderForWhatsApp', () => {
   test('sources with empty items returns null', async () => {
     const out = await renderForWhatsApp(fixtures.sources({ items: [] }));
     expect(out).toBeNull();
+  });
+
+  test('esim_activation uses cta_url interactive with QR header + install URL', async () => {
+    const out = await renderForWhatsApp(fixtures.esimActivation());
+    expect(out?.payload.type).toBe('interactive');
+    expect(out?.payload.interactive?.type).toBe('cta_url');
+    // Image header carries the QR PNG.
+    expect(out?.payload.interactive?.header).toEqual({
+      type: 'image',
+      image: { link: 'https://app.sendero.travel/api/esim/qr/abc.def.png' },
+    });
+    // CTA button URL is the universal install page (HTTPS — Cloud API
+    // rejects LPA: directly).
+    const action = (out?.payload.interactive?.action ?? {}) as {
+      parameters?: { url?: string; display_text?: string };
+    };
+    expect(action.parameters?.url).toBe('https://app.sendero.travel/install/esim/abc.def');
+    expect(action.parameters?.display_text).toContain('Install');
+    // Body carries plan label + payer attribution + per-device hint.
+    expect(out?.payload.interactive?.body.text).toContain('5 GB · 30 days · Japan + Korea');
+    expect(out?.payload.interactive?.body.text).toContain('charged to your wallet');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('esim_activation cta button title caps at 20 chars', async () => {
+    const out = await renderForWhatsApp(fixtures.esimActivation());
+    const action = (out?.payload.interactive?.action ?? {}) as {
+      parameters?: { display_text?: string };
+    };
+    expect((action.parameters?.display_text ?? '').length).toBeLessThanOrEqual(20);
+  });
+
+  test('seat_picker uses an interactive list with select_seat row ids', async () => {
+    const out = await renderForWhatsApp(fixtures.seatPicker());
+    expect(out?.payload.interactive?.type).toBe('list');
+    const action = (out?.payload.interactive?.action ?? {}) as {
+      sections?: Array<{ rows?: Array<{ id: string; title: string }> }>;
+    };
+    const rows = action.sections?.[0]?.rows ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.id.startsWith('select_seat:')).toBe(true);
+    expect(rows[0]?.id).toContain('sea_001');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('ancillary_picker collapses bags + cfar into one interactive list', async () => {
+    const out = await renderForWhatsApp(fixtures.ancillaryPicker());
+    expect(out?.payload.interactive?.type).toBe('list');
+    const action = (out?.payload.interactive?.action ?? {}) as {
+      sections?: Array<{ rows?: Array<{ id: string }> }>;
+    };
+    const ids = action.sections?.[0]?.rows?.map(r => r.id) ?? [];
+    expect(ids.some(i => i.startsWith('add_bag:'))).toBe(true);
+    expect(ids.some(i => i.startsWith('cfar:'))).toBe(true);
+    expect(out).toMatchSnapshot();
+  });
+
+  test('trip_brief uses cta_url when shareUrl present (single-tap to public page)', async () => {
+    const out = await renderForWhatsApp(fixtures.tripBrief());
+    expect(out?.payload.interactive?.type).toBe('cta_url');
+    const action = (out?.payload.interactive?.action ?? {}) as {
+      parameters?: { url?: string; display_text?: string };
+    };
+    expect(action.parameters?.url).toBe('https://app.sendero.travel/trip/abc.def');
+    // Body must summarize the bookings — the public page is the deep
+    // surface, the WA bubble is the elevator pitch.
+    expect(out?.payload.interactive?.body.text).toContain('NYC week');
+    expect(out?.payload.interactive?.body.text).toContain('JFK');
+    expect(out?.payload.interactive?.body.text).toContain('Mercer');
+    expect(out).toMatchSnapshot();
+  });
+
+  test('trip_brief without shareUrl falls back to plain text', async () => {
+    const out = await renderForWhatsApp(fixtures.tripBrief({ shareUrl: null }));
+    expect(out?.payload.type).toBe('text');
+    // Recap content still present
+    expect(out?.payload.text?.body).toContain('JFK');
+  });
+
+  test('trip_brief with no bookings + no important alerts says so explicitly', async () => {
+    const out = await renderForWhatsApp(
+      fixtures.tripBrief({ flights: [], stays: [], esims: [], alerts: [] })
+    );
+    const body = out?.payload.interactive?.body.text ?? out?.payload.text?.body ?? '';
+    expect(body).toContain('No bookings yet');
   });
 });

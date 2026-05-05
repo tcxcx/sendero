@@ -1,0 +1,20 @@
+{
+  "name": "@sendero/esim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — travel eSIM provisioning via wholesale aggregators (eSIM Go primary, Airalo fallback). Provider-agnostic interface so book_esim swaps providers via env config.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./client": "./src/client.ts",
+    "./mock": "./src/providers/mock.ts",
+    "./esim-go": "./src/providers/esim-go.ts",
+    "./pricing": "./src/pricing.ts",
+    "./qr": "./src/qr.ts"
+  },
+  "dependencies": {
+    "zod": "*"
+  }
+}

@@ -97,7 +97,8 @@ export async function sendEticketPdfToTraveler(
     });
 
     const filename = `eticket-${booking.pnr ?? args.bookingId}.pdf`;
-    const caption = `📄 Tu e-ticket · *${booking.pnr ?? ''}*\nGuardalo o presentalo en el counter del aeropuerto.`.trim();
+    const caption =
+      `📄 Tu e-ticket · *${booking.pnr ?? ''}*\nGuardalo o presentalo en el counter del aeropuerto.`.trim();
 
     const response = await withTypingHeartbeat(
       { tenantId: args.tenantId, externalUserId: identity.externalUserId },

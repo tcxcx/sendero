@@ -5,4 +5,3 @@ name: Verify WhatsApp OTP
 public_endpoint: false
 runtime_config: {}
 slug: sendero-tenant-travel-verify-whatsapp-otp
-description: Verify a WhatsApp authentication OTP and mark the current channel session verified.

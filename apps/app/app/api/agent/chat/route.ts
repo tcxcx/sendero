@@ -76,6 +76,8 @@ import {
   resolveTenantPlan,
 } from '@/lib/agent-auth';
 import { makeCreditAwareMeterStore } from '@/lib/credit-store';
+import { resolvePayer, PayerResolutionError } from '@sendero/tools/lib/resolve-payer';
+import type { MeterPayerType } from '@sendero/database';
 import { detectAttachmentsHint } from '@/lib/agent-attachments-hint';
 import {
   chatPricingBreakdown,
@@ -376,6 +378,31 @@ export async function POST(req: NextRequest) {
   const grantedScopes = apiKey?.scopes ?? (['*'] as const);
   const publicTools = filterPublicTools(toolList);
   const scopedTools = filterToolsByScopes(publicTools, grantedScopes);
+
+  // Resolve the per-turn payer once. Same shape as dispatch — fail-soft
+  // when no traveler context is bound (operator agent-chat turns hit this
+  // path for testing and don't carry trip context).
+  let turnPayer: MeterPayerType | undefined;
+  let turnPayerUserId: string | undefined;
+  try {
+    const resolved = await resolvePayer({
+      tenantId,
+      tripId: body.tripId ?? undefined,
+      travelerUserId: userId,
+    });
+    turnPayer = resolved.type;
+    turnPayerUserId = resolved.travelerUserId ?? undefined;
+  } catch (err) {
+    if (
+      err instanceof PayerResolutionError &&
+      (err.code === 'traveler_required' || err.code === 'split_unsupported')
+    ) {
+      turnPayer = undefined;
+    } else {
+      throw err;
+    }
+  }
+
   const tools = buildAiSdkTools(scopedTools, {
     traveler: { userId, tenantId },
     ...(apiKey
@@ -384,6 +411,14 @@ export async function POST(req: NextRequest) {
             scopes: apiKey.scopes,
             keyType: apiKey.keyType,
             effectiveKeyType: apiKey.effectiveKeyType,
+          },
+        }
+      : {}),
+    ...(turnPayer
+      ? {
+          payer: {
+            type: turnPayer,
+            ...(turnPayerUserId ? { travelerUserId: turnPayerUserId } : {}),
           },
         }
       : {}),
@@ -504,6 +539,10 @@ export async function POST(req: NextRequest) {
     // their cap and free-tier users can demo without us settling.
     sandbox: apiKey?.effectiveKeyType === 'sandbox' || playgroundMode,
     segment,
+    defaults: {
+      ...(turnPayer ? { payerType: turnPayer } : {}),
+      ...(turnPayerUserId ? { payerUserId: turnPayerUserId } : {}),
+    },
   });
   const sessionStore = makeSessionStore();
 

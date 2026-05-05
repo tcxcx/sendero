@@ -46,6 +46,9 @@ const isPublicRoute = createRouteMatcher([
   '/api/agent/identity', // public agent identity and reputation metadata
   '/api/og/share', // canonical Satori share-image generator — needs to be publicly fetchable so Slack/WhatsApp/email unfurl bots can render the image. Token signature gates payload integrity.
   '/api/og/boarding-pass', // post-ticketing boarding-pass card — same trust model as /api/og/share (signed token, fallback card on verify fail).
+  '/api/esim/qr/(.*)', // travel eSIM activation QR PNG — same trust model (HMAC-signed token gates lookup, image is public to unfurl bots).
+  '/install/esim/(.*)', // travel eSIM install page — opened from WhatsApp/Slack CTA buttons; HMAC token in path gates the lookup so no Clerk session needed.
+  '/trip/(.*)', // public read-only trip brief — opened from WhatsApp/Slack share buttons; HMAC token gates trip lookup, no PII surfaced.
   '/api/webhooks/(.*)', // Duffel, Clerk, etc. — signature-verified per route
   '/api/agent/dispatch', // internal fan-in — protected by AGENT_DISPATCH_SECRET / CRON_SECRET in-route
   '/api/tools/(.*)', // single-tool HTTP surface for Kapso agent runtime — auth via X-API-Key OR x-sendero-dispatch-secret in-route
@@ -54,6 +57,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/pay-link/(.*)', // pay-link dispatch — protected by AGENT_DISPATCH_SECRET in-route
   '/api/workflows/stamps/(.*)', // stamp WDK fan-in — same secret/session auth as dispatch, in-route
   '/api/workflows/reputation/(.*)', // reputation WDK fan-in — same secret/session auth, in-route
+  '/api/workflows/lifecycle/(.*)', // Phase F lifecycle WDK fan-in (TripCompletion watcher) — same secret/session auth, in-route
   '/api/cron/(.*)', // CRON_SECRET Bearer auth
   '/api/health',
   '/api/auth/whoami', // Bearer-keyed CLI introspection — auth happens via API key, not Clerk session
@@ -61,6 +65,7 @@ const isPublicRoute = createRouteMatcher([
   '/downloads/(.*)', // public artifact downloads (e.g. sendero.mcpb for Claude Desktop)
   '/api/guest/claimed', // guest submits post-claim; no session yet
   '/api/waitlist/precheck', // email lookup for waitlist toast + redirect (no session)
+  '/.well-known/workflow/(.*)', // WDK worker invocation surface — local queue (`@workflow/world-local`) and Vercel queue both POST signed payloads here. Clerk redirect kept enqueued runs stuck at `pending` because the worker handler was never reachable. Auth happens inside the handler via WDK signature checks.
 ]);
 
 const isOnboardingRoute = createRouteMatcher(['/onboarding(.*)', '/tasks(.*)']);

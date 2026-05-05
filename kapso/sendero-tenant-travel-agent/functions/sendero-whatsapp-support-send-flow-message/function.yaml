@@ -1,0 +1,7 @@
+entrypoint: index.js
+function_type: cloudflare_worker
+invoke_response_mode: passthrough
+name: Send WhatsApp Flow Message
+public_endpoint: false
+runtime_config: {}
+slug: sendero-whatsapp-support-send-flow-message

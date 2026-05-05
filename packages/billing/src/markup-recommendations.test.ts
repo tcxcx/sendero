@@ -22,12 +22,11 @@ describe('markup-recommendations module surface', () => {
   });
 
   test('RecommendedKind enum mirrors MarkupConfigSchema kinds', () => {
-    // Type-level assertion — if a new kind is added to MarkupConfigSchema
-    // (in markup.ts) without being added to RecommendedKind here, the
-    // matview will silently exclude bookings of the new kind from the
-    // median computation. Surface that as a compile error by structurally
-    // restating the union.
-    type ExpectedKinds = 'flight' | 'hotel' | 'rail' | 'car' | 'other';
+    // Type-level assertion — RecommendedKind is now an alias for the
+    // canonical BookingKind union (single source of truth in markup.ts),
+    // so adding a kind in BOOKING_KINDS automatically widens this type.
+    // The structural check below confirms the alias didn't drift.
+    type ExpectedKinds = 'flight' | 'hotel' | 'rail' | 'car' | 'esim' | 'card' | 'other';
     const _check: ExpectedKinds extends RecommendedKind
       ? RecommendedKind extends ExpectedKinds
         ? true

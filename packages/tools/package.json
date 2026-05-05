@@ -23,7 +23,10 @@
     "./read-reputation": "./src/read-reputation.ts",
     "./request-validation": "./src/request-validation.ts",
     "./submit-validation-response": "./src/submit-validation-response.ts",
-    "./read-validation": "./src/read-validation.ts"
+    "./read-validation": "./src/read-validation.ts",
+    "./lib/resolve-payer": "./src/lib/resolve-payer.ts",
+    "./lib/payer-copy": "./src/lib/payer-copy.ts",
+    "./lib/trip-brief-token": "./src/lib/trip-brief-token.ts"
   },
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",
@@ -37,6 +40,8 @@
     "@sendero/database": "*",
     "@sendero/duffel": "*",
     "@sendero/env": "*",
+    "@sendero/esim": "*",
+    "@sendero/insurance": "*",
     "@sendero/guest": "*",
     "@sendero/invoicing": "*",
     "@sendero/kapso": "*",

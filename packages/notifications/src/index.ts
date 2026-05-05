@@ -125,10 +125,18 @@ export interface Notifier {
    * Sent to the traveler (and typically cc'd to an org admin) when
    * ticketing succeeds (status reaches `ticketed` / `confirmed` end
    * state). Includes full itinerary + invoice link.
+   *
+   * Phase A.4: optional `attachments` carries the airline-issued
+   * e-ticket PDF when Sendero successfully fetched it from Duffel
+   * `GET /air/orders/{id}/documents`. The post-ticketing fan-out
+   * passes `{ filename, contentType: 'application/pdf', content: <Buffer | url> }`.
    */
   sendBookingConfirmed(
     to: string,
-    content: Omit<BookingConfirmedContent, 'supportEmail'> & { supportEmail?: string }
+    content: Omit<BookingConfirmedContent, 'supportEmail'> & {
+      supportEmail?: string;
+      attachments?: Array<{ filename: string; content?: Buffer; path?: string; contentType?: string }>;
+    }
   ): Promise<SendResult>;
   /**
    * Generic share-card email. Same canonical shape every channel uses
@@ -303,6 +311,20 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
         ...content,
         supportEmail: content.supportEmail ?? supportEmail,
       });
+      // Resend's `attachments` accepts either a Buffer (`content`) or a
+      // remote URL (`path`). The post-ticketing fan-out fetches the
+      // PDF buffer once and reuses it for both email and WhatsApp, so
+      // we forward whatever the caller hands us without re-fetching.
+      const attachments = Array.isArray(content.attachments)
+        ? content.attachments
+            .filter(a => a && (a.content || a.path))
+            .map(a => ({
+              filename: a.filename,
+              ...(a.content ? { content: a.content } : {}),
+              ...(a.path ? { path: a.path } : {}),
+              ...(a.contentType ? { contentType: a.contentType } : {}),
+            }))
+        : undefined;
       try {
         const result = await client.emails.send({
           from,
@@ -311,6 +333,7 @@ export function createNotifier(config: NotificationsConfig = {}): Notifier {
           subject: rendered.subject,
           html: rendered.html,
           text: rendered.text,
+          ...(attachments && attachments.length > 0 ? { attachments } : {}),
           tags: [{ name: 'surface', value: 'booking_confirmed' }],
         });
         if (result.error) {

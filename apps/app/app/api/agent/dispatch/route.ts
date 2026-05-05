@@ -44,6 +44,8 @@ import {
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { makeCreditAwareMeterStore } from '@/lib/credit-store';
 import { resolvePlan } from '@sendero/billing/plans';
+import { resolvePayer, PayerResolutionError } from '@sendero/tools/lib/resolve-payer';
+import type { MeterPayerType } from '@sendero/database';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
@@ -307,29 +309,10 @@ export async function POST(req: NextRequest) {
         ]
       : surfacedTools;
   const scopedTools = filterToolsByScopes(channelToolList, grantedScopes);
-  const tools = buildAiSdkTools(scopedTools, {
-    traveler: {
-      userId: body.userId,
-      tenantId: body.tenantId,
-      ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
-    },
-    ...(body.channelIdentityId ? { channelIdentityId: body.channelIdentityId } : {}),
-    // Caller identity flows from the API key resolver into every tool
-    // handler via ctx.caller. Tools that gate on scope or key type
-    // (e.g., confirm_booking's markup-override gate) read from here so
-    // the LLM cannot spoof either field via tool input.
-    ...(apiKey
-      ? {
-          caller: {
-            scopes: apiKey.scopes,
-            keyType: apiKey.keyType,
-            effectiveKeyType: apiKey.effectiveKeyType,
-          },
-        }
-      : {}),
-  });
 
   // Narrow the zod-inferred shape to the AgentMediaAttachment contract —
+  // (toolCtx assembly + buildAiSdkTools call moved below the payer
+  // resolution so ctx.payer can be populated from the turn-level resolve).
   // the superRefine above already guarantees every entry has kind + mediaType
   // and at least one of (url, data). Casting keeps the compiler honest at
   // the call site without a second round of explicit if/else pruning.
@@ -415,6 +398,40 @@ export async function POST(req: NextRequest) {
 
   const planTier = await resolveTenantPlan(body.tenantId);
   const pricingOverrides = buildPlanOverrides(planTier);
+
+  // Resolve the per-turn payer once. Single source of truth — all
+  // MeterEvent rows written this turn (chat replies, search, settle,
+  // etc.) inherit this attribution; tools that resolve their own
+  // payer (confirm_booking) override per-event. Service-account
+  // dispatches (apiKey present, no real traveler bound) and tenants
+  // configured for traveler-pay-but-no-traveler-on-this-turn fail-soft
+  // to undefined → MeterEvent rows go in unattributed.
+  let turnPayer: MeterPayerType | undefined;
+  let turnPayerUserId: string | undefined;
+  if (!isServiceAccount) {
+    try {
+      const resolved = await resolvePayer({
+        tenantId: body.tenantId,
+        tripId: body.tripId ?? undefined,
+        travelerUserId: body.userId,
+      });
+      turnPayer = resolved.type;
+      turnPayerUserId = resolved.travelerUserId ?? undefined;
+    } catch (err) {
+      if (
+        err instanceof PayerResolutionError &&
+        (err.code === 'traveler_required' || err.code === 'split_unsupported')
+      ) {
+        // Surfaces in analytics as `payerType IS NULL`. Don't block
+        // dispatch — most legacy / pre-trip turns lack a real wallet
+        // payer because they're exploratory chat, not paid actions.
+        turnPayer = undefined;
+      } else {
+        throw err;
+      }
+    }
+  }
+
   // Credit-aware meter store — routes every metered action through
   // `deductAndRecord()` so SaaS-included credits decrement off
   // `Subscription.meterBalanceMicro`. Sandbox keys still skip the
@@ -425,6 +442,46 @@ export async function POST(req: NextRequest) {
     plan: resolvePlan(planTier),
     sandbox: apiKey?.effectiveKeyType === 'sandbox',
     segment: dispatchSegment,
+    defaults: {
+      ...(turnPayer ? { payerType: turnPayer } : {}),
+      ...(turnPayerUserId ? { payerUserId: turnPayerUserId } : {}),
+    },
+  });
+
+  // Tool ctx — built here (after payer resolution) so `ctx.payer` is
+  // populated for tools that read attribution without re-resolving.
+  // Per-tool `provisionedBy` input still wins; this is the floor.
+  const tools = buildAiSdkTools(scopedTools, {
+    traveler: {
+      userId: body.userId,
+      tenantId: body.tenantId,
+      ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
+    },
+    ...(body.channelIdentityId ? { channelIdentityId: body.channelIdentityId } : {}),
+    // Caller identity flows from the API key resolver into every tool
+    // handler via ctx.caller. Tools that gate on scope or key type
+    // (e.g., confirm_booking's markup-override gate) read from here so
+    // the LLM cannot spoof either field via tool input.
+    ...(apiKey
+      ? {
+          caller: {
+            scopes: apiKey.scopes,
+            keyType: apiKey.keyType,
+            effectiveKeyType: apiKey.effectiveKeyType,
+          },
+        }
+      : {}),
+    // Resolved payer for this turn — single source of truth for
+    // attribution. Tools call resolvePayer themselves only when they
+    // need to honor a per-call override; otherwise they read ctx.payer.
+    ...(turnPayer
+      ? {
+          payer: {
+            type: turnPayer,
+            ...(turnPayerUserId ? { travelerUserId: turnPayerUserId } : {}),
+          },
+        }
+      : {}),
   });
 
   // Resolve persona once — covers both the gateway attempt and any direct

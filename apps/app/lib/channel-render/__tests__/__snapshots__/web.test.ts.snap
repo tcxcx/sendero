@@ -115,3 +115,248 @@ exports[`renderForWeb sources bubble surfaces every item 1`] = `
   },
 }
 `;
+
+exports[`renderForWeb esim_activation bubble carries QR + LPA + per-device tabs 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "esim_activation",
+    "content": {
+      "countries": [
+        "JP",
+        "KR",
+      ],
+      "dataMb": 5120,
+      "esimId": "esim_test_001",
+      "expiresAt": "2026-05-25T10:00:00.000Z",
+      "installUrl": "https://app.sendero.travel/install/esim/abc.def",
+      "instructions": [
+        {
+          "device": "ios",
+          "label": "iPhone",
+          "oneTap": true,
+          "steps": [
+            "Tap "Install on iPhone" on the iPhone you'll travel with — not another device.",
+            "iOS opens Cellular settings — tap "Add eSIM".",
+            "Label the line "Trip eSIM" and confirm.",
+            "Toggle "Trip eSIM" on for data when you land.",
+          ],
+          "subLabel": "iOS 17.4 or newer",
+        },
+        {
+          "device": "androidPixel",
+          "label": "Pixel",
+          "oneTap": false,
+          "steps": [
+            "Settings → Network & Internet → SIMs.",
+            "Tap "Download a SIM instead".",
+            "Scan the QR with your laptop or another phone showing this screen.",
+            "Confirm "Trip eSIM" and toggle it on.",
+          ],
+          "subLabel": "Android 13 or newer",
+        },
+        {
+          "device": "androidSamsung",
+          "label": "Samsung",
+          "oneTap": false,
+          "steps": [
+            "Settings → Connections → SIM manager.",
+            "Tap "Add eSIM" → "Scan QR code".",
+            "Scan from another device showing this screen.",
+            "Label "Trip eSIM" and toggle on.",
+          ],
+          "subLabel": "One UI 5 or newer",
+        },
+        {
+          "device": "other",
+          "label": "Other / manual",
+          "oneTap": false,
+          "showLpaCode": true,
+          "steps": [
+            "Open eSIM settings on your device.",
+            "Choose "Scan QR code".",
+            "Scan the QR shown on this screen.",
+            "If QR fails, paste the activation code manually.",
+          ],
+        },
+      ],
+      "lpaCode": "LPA:1$smdp.example.com$ACTIVATION_TEST",
+      "planLabel": "5 GB · 30 days · Japan + Korea",
+      "priceLine": "$3.00 · charged to your wallet",
+      "qrUrl": "https://app.sendero.travel/api/esim/qr/abc.def.png",
+      "validityDays": 30,
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;
+
+exports[`renderForWeb seat_picker bubble carries options + tripId for client tap routing 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "seat_picker",
+    "content": {
+      "offerId": "off_test_abc",
+      "options": [
+        {
+          "cabinClass": "economy",
+          "currency": "USD",
+          "designator": "12A",
+          "disclosures": [
+            "Window",
+          ],
+          "price": "24.00",
+          "serviceId": "sea_001",
+        },
+        {
+          "cabinClass": "economy",
+          "currency": "USD",
+          "designator": "14C",
+          "disclosures": [
+            "Aisle",
+          ],
+          "price": "18.00",
+          "serviceId": "sea_002",
+        },
+      ],
+      "passengerId": "pas_test_001",
+      "passengerName": "Casey Traveler",
+      "tripId": "trp_test_001",
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;
+
+exports[`renderForWeb ancillary_picker bubble surfaces bags + cfar arrays 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "ancillary_picker",
+    "content": {
+      "bags": [
+        {
+          "currency": "USD",
+          "dimensions": "55×40×20",
+          "label": "Carry-on bag",
+          "price": "0.00",
+          "serviceId": "bag_001",
+          "weightKg": 7,
+        },
+        {
+          "currency": "USD",
+          "label": "Checked bag",
+          "price": "45.00",
+          "serviceId": "bag_002",
+          "weightKg": 23,
+        },
+      ],
+      "cancelForAnyReason": [
+        {
+          "currency": "USD",
+          "price": "32.00",
+          "serviceId": "cfar_001",
+          "summary": "Refund up to 75% for any reason.",
+        },
+      ],
+      "offerId": "off_test_abc",
+      "passengerId": "pas_test_001",
+      "passengerName": "Casey Traveler",
+      "tripId": "trp_test_001",
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;
+
+exports[`renderForWeb trip_brief bubble carries all sections + alerts + share URL 1`] = `
+{
+  "channel": "web",
+  "payload": {
+    "author": {
+      "avatarUrl": undefined,
+      "name": "Sendero AI",
+      "role": "agent",
+    },
+    "bubble": "trip_brief",
+    "content": {
+      "alerts": [
+        {
+          "kind": "flight_canceled",
+          "message": "Outbound flight rebooked — confirm with traveler.",
+          "severity": "warn",
+        },
+      ],
+      "esims": [
+        {
+          "countries": [
+            "US",
+          ],
+          "dataMb": 5120,
+          "esimId": "esim_test_001",
+          "expiresAt": "2026-06-30T00:00:00Z",
+          "installUrl": "https://app.sendero.travel/install/esim/abc.def",
+          "status": "active",
+          "validityDays": 30,
+        },
+      ],
+      "flights": [
+        {
+          "arrivalAt": "2026-06-02T08:30:00Z",
+          "bookingId": "bkg_flight_1",
+          "departureAt": "2026-06-01T22:00:00Z",
+          "destination": "JFK",
+          "origin": "EZE",
+          "pnr": "XYZ123",
+          "segmentCount": 1,
+          "status": "ticketed",
+          "totalUsd": "850.00",
+        },
+      ],
+      "shareUrl": "https://app.sendero.travel/trip/abc.def",
+      "stays": [
+        {
+          "bookingId": "bkg_stay_1",
+          "checkInDate": "2026-06-02",
+          "checkOutDate": "2026-06-08",
+          "city": "New York",
+          "nights": 6,
+          "property": "The Mercer Hotel",
+          "status": "confirmed",
+          "totalUsd": "1200.00",
+        },
+      ],
+      "trip": {
+        "destination": "JFK",
+        "destinationCountriesIso2": [
+          "us",
+        ],
+        "endDate": "2026-06-08",
+        "kind": "round_trip",
+        "name": "NYC week",
+        "origin": "EZE",
+        "startDate": "2026-06-01",
+        "status": "in_progress",
+        "tripId": "trp_test_001",
+      },
+    },
+    "createdAt": "2026-04-25T10:00:00.000Z",
+  },
+}
+`;

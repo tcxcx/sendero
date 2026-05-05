@@ -25,9 +25,12 @@ import type { Prisma } from '@sendero/database';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
+import { BOOKING_KINDS } from '@sendero/billing';
+
 export const dynamic = 'force-dynamic';
 
-const ALL_KINDS = ['flight', 'hotel', 'rail', 'car', 'other'] as const;
+// GMV dashboard shows every kind ever booked, including eSIM + card.
+const ALL_KINDS = BOOKING_KINDS;
 type Kind = (typeof ALL_KINDS)[number];
 
 const DAY_MS = 24 * 60 * 60 * 1000;

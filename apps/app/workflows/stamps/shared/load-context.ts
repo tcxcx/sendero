@@ -115,6 +115,7 @@ export async function loadStampContext(args: {
 
   const brandColors = (trip.tenant.brandColors ?? {}) as Record<string, unknown>;
   const tenant: StampTenantBrand = {
+    tenantId: trip.tenantId,
     slug: trip.tenant.slug,
     displayName: trip.tenant.displayName,
     primary: stringOr(brandColors.primary) ?? undefined,

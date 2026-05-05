@@ -17,9 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '@sendero/database';
 
 import { dispatchToTraveler } from '@/lib/channel-dispatch';
-import {
-  buildBoardingPassImageUrl,
-} from '@/lib/og/boarding-pass-url';
+import { buildBoardingPassImageUrl } from '@/lib/og/boarding-pass-url';
 import type { BoardingPassCardProps } from '@/lib/og/boarding-pass-card';
 
 const ARC_TX_EXPLORER = 'https://testnet.arcscan.app/tx';
@@ -80,8 +78,7 @@ export async function sendBoardingPassImageToTraveler(
         : typeof firstSegment?.destination === 'string'
           ? firstSegment.destination
           : '—';
-    const originCity =
-      typeof firstSegment?.originCity === 'string' ? firstSegment.originCity : '';
+    const originCity = typeof firstSegment?.originCity === 'string' ? firstSegment.originCity : '';
     const destinationCity =
       typeof firstSegment?.destinationCity === 'string' ? firstSegment.destinationCity : '';
 
@@ -134,7 +131,8 @@ export async function sendBoardingPassImageToTraveler(
       departureDate,
       departureTime,
       ...(arrivalTime ? { arrivalTime } : {}),
-      passengerName: booking.trip.traveler?.displayName ?? booking.trip.traveler?.email ?? 'Traveler',
+      passengerName:
+        booking.trip.traveler?.displayName ?? booking.trip.traveler?.email ?? 'Traveler',
       pnr: booking.pnr ?? args.duffelOrderId.slice(-6).toUpperCase(),
       cabin: typeof firstSegment?.cabin === 'string' ? firstSegment.cabin : 'Economy',
       totalUsdc,

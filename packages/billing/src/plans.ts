@@ -343,3 +343,21 @@ export function previewCatalog(plan: PlanTier | PlanConfig, segment: PlanPriceAr
     cell: planPriceFor({ action, segment, plan: p }),
   }));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pricing model — three-leg, independent of `provisionedBy`.
+//
+//   supplier cost (wholesale)
+//     + tenant agency markup    ← TenantPricingPolicy.markupConfig (per-kind)
+//     + Sendero take            ← senderoTakeMicro() (50bps + floor, tier-scaled)
+//     = customer total
+//
+// `provisionedBy` (tenant vs traveler) decides ONLY which wallet debits at
+// swipe time. The price is the same either way: Sendero is the wholesaler,
+// the tenant is the agency, and the agency configures their own markup
+// for *their* travelers via TenantPricingPolicy. New surfaces (eSIM, card)
+// extend BookingKind so they automatically inherit the same machinery —
+// they don't get a parallel pricing config.
+//
+// See `packages/billing/src/markup.ts` for the canonical primitives.
+// ─────────────────────────────────────────────────────────────────────────────

@@ -302,3 +302,287 @@ exports[`renderForSlack sources 1`] = `
   },
 }
 `;
+
+exports[`renderForSlack esim_activation renders header + plan section + QR image + actions 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "📱 Trip eSIM ready",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "text": {
+          "text": 
+"*5 GB · 30 days · Japan + Korea*
+5.0 GB · 30 days · JP, KR
+_$3.00 · charged to your wallet_"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "alt_text": "Install QR for 5 GB · 30 days · Japan + Korea",
+        "image_url": "https://app.sendero.travel/api/esim/qr/abc.def.png",
+        "title": {
+          "emoji": true,
+          "text": "Scan to install",
+          "type": "plain_text",
+        },
+        "type": "image",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "sendero_open_link",
+            "style": "primary",
+            "text": {
+              "emoji": true,
+              "text": "📱 Install on iPhone",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "url": "https://app.sendero.travel/install/esim/abc.def",
+          },
+          {
+            "action_id": "sendero_open_link.instructions",
+            "text": {
+              "emoji": true,
+              "text": "Other devices",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "url": "https://app.sendero.travel/install/esim/abc.def#instructions",
+          },
+        ],
+        "type": "actions",
+      },
+      {
+        "elements": [
+          {
+            "text": "iOS one-tap: iOS 17.4 or newer. Android scans the QR — tap "Other devices" for steps.",
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+    ],
+    "channel": "",
+    "text": "Trip eSIM ready: 5 GB · 30 days · Japan + Korea",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack seat_picker renders header + section with overflow accessory routing to sendero_select_seat 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "🪑 Seat for Casey Traveler",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "accessory": {
+          "action_id": "sendero_select_seat",
+          "options": [
+            {
+              "text": {
+                "emoji": true,
+                "text": "12A · 24.00 USD",
+                "type": "plain_text",
+              },
+              "value": "{"tripId":"trp_test_001","offerId":"off_test_abc","passengerId":"pas_test_001","seatServiceId":"sea_001","designator":"12A","price":"24.00","currency":"USD"}",
+            },
+            {
+              "text": {
+                "emoji": true,
+                "text": "14C · 18.00 USD",
+                "type": "plain_text",
+              },
+              "value": "{"tripId":"trp_test_001","offerId":"off_test_abc","passengerId":"pas_test_001","seatServiceId":"sea_002","designator":"14C","price":"18.00","currency":"USD"}",
+            },
+          ],
+          "type": "overflow",
+        },
+        "text": {
+          "text": "Pick a seat — fare adjusts at booking.",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+    ],
+    "channel": "",
+    "text": "Seat picker for Casey Traveler",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack ancillary_picker renders one section per bag + cfar with sendero_add_bag buttons 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "🧳 Bags + extras for Casey Traveler",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "accessory": {
+          "action_id": "sendero_add_bag",
+          "text": {
+            "emoji": true,
+            "text": "Add",
+            "type": "plain_text",
+          },
+          "type": "button",
+          "value": "{"tripId":"trp_test_001","offerId":"off_test_abc","passengerId":"pas_test_001","bagServiceId":"bag_001","quantity":1,"label":"Carry-on bag","price":"0.00","currency":"USD"}",
+        },
+        "text": {
+          "text": 
+"*Carry-on bag*
+_7kg · 55×40×20_
+0.00 USD"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "accessory": {
+          "action_id": "sendero_add_bag",
+          "text": {
+            "emoji": true,
+            "text": "Add",
+            "type": "plain_text",
+          },
+          "type": "button",
+          "value": "{"tripId":"trp_test_001","offerId":"off_test_abc","passengerId":"pas_test_001","bagServiceId":"bag_002","quantity":1,"label":"Checked bag","price":"45.00","currency":"USD"}",
+        },
+        "text": {
+          "text": 
+"*Checked bag*
+_23kg_
+45.00 USD"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*Cancel for any reason*
+_Refund up to 75% for any reason._
+32.00 USD"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+    ],
+    "channel": "",
+    "text": "Bags + extras for Casey Traveler",
+    "thread_ts": undefined,
+  },
+}
+`;
+
+exports[`renderForSlack trip_brief renders header + context + per-section blocks + share button 1`] = `
+{
+  "channel": "slack",
+  "payload": {
+    "blocks": [
+      {
+        "text": {
+          "emoji": true,
+          "text": "🧭 NYC week",
+          "type": "plain_text",
+        },
+        "type": "header",
+      },
+      {
+        "elements": [
+          {
+            "text": "*Status:* in_progress · *Dates:* 2026-06-01 → 2026-06-08 · *Route:* EZE → JFK",
+            "type": "mrkdwn",
+          },
+        ],
+        "type": "context",
+      },
+      {
+        "text": {
+          "text": "🟡 Outbound flight rebooked — confirm with traveler.",
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*✈️ Flights*
+• EZE → JFK · \`XYZ123\` · $850.00"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*🏨 Stays*
+• The Mercer Hotel · New York · 6n · $1200.00"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "text": {
+          "text": 
+"*📱 Connectivity*
+• 5.0 GB · 30d · US · active"
+,
+          "type": "mrkdwn",
+        },
+        "type": "section",
+      },
+      {
+        "elements": [
+          {
+            "action_id": "sendero_open_link.trip_share",
+            "style": "primary",
+            "text": {
+              "emoji": true,
+              "text": "🔗 Share trip",
+              "type": "plain_text",
+            },
+            "type": "button",
+            "url": "https://app.sendero.travel/trip/abc.def",
+          },
+        ],
+        "type": "actions",
+      },
+    ],
+    "channel": "",
+    "text": "Trip trp_test_001: EZE → JFK",
+    "thread_ts": undefined,
+  },
+}
+`;

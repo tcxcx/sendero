@@ -331,10 +331,7 @@ export async function notifyWhatsAppOnBooking(args: {
       : 'Trip';
     const departAt = firstSegment
       ? String(
-          firstSegment.departureAt ??
-            firstSegment.departure_at ??
-            firstSegment.departAt ??
-            ''
+          firstSegment.departureAt ?? firstSegment.departure_at ?? firstSegment.departAt ?? ''
         ).slice(0, 16)
       : '';
 
@@ -383,7 +380,9 @@ export async function kickOffBoardingPassStamp(args: {
 }): Promise<void> {
   if (!args.tripId) return;
   const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ?? process.env.KAPSO_WEBHOOK_BASE_URL ?? 'http://localhost:3010';
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.KAPSO_WEBHOOK_BASE_URL ??
+    'http://localhost:3010';
   const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
   if (!secret) return;
 
@@ -490,11 +489,7 @@ async function notifyTravelerOfScheduleChange(args: {
     ];
     if (changes.length > 0) {
       for (const c of changes) {
-        lines.push(
-          c.was
-            ? `${c.route}: ${c.was} → *${c.now}*`
-            : `${c.route}: ahora *${c.now}*`
-        );
+        lines.push(c.was ? `${c.route}: ${c.was} → *${c.now}*` : `${c.route}: ahora *${c.now}*`);
       }
     } else {
       lines.push('Detalles actualizados en tu reserva — confirmá con tu PNR.');

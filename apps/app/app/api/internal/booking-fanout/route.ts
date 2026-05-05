@@ -21,10 +21,7 @@ import { timingSafeEqual } from 'node:crypto';
 
 import { prisma } from '@sendero/database';
 
-import {
-  kickOffBoardingPassStamp,
-  notifyWhatsAppOnBooking,
-} from '@/lib/duffel-dispatcher';
+import { kickOffBoardingPassStamp, notifyWhatsAppOnBooking } from '@/lib/duffel-dispatcher';
 import {
   type FanoutSurfaceResult,
   sendBoardingPassImageToTraveler,
@@ -115,46 +112,41 @@ export async function POST(req: NextRequest) {
     eticketPdf: FanoutSurfaceResult;
     esimOffer: FanoutSurfaceResult;
   }> => {
-    const [
-      whatsAppTemplate,
-      boardingPassStamp,
-      boardingPassImage,
-      eticketPdf,
-      esimOffer,
-    ] = await Promise.all([
-      wrapVoidHelper('whatsapp-template', body.bookingId!, () =>
-        notifyWhatsAppOnBooking({
+    const [whatsAppTemplate, boardingPassStamp, boardingPassImage, eticketPdf, esimOffer] =
+      await Promise.all([
+        wrapVoidHelper('whatsapp-template', body.bookingId!, () =>
+          notifyWhatsAppOnBooking({
+            bookingId: body.bookingId!,
+            tenantId: body.tenantId!,
+            duffelOrderId: body.duffelOrderId!,
+          })
+        ),
+        wrapVoidHelper('boarding-pass-stamp', body.bookingId!, () =>
+          kickOffBoardingPassStamp({
+            bookingId: body.bookingId!,
+            tripId: body.tripId ?? null,
+          })
+        ),
+        sendBoardingPassImageToTraveler({
           bookingId: body.bookingId!,
           tenantId: body.tenantId!,
           duffelOrderId: body.duffelOrderId!,
-        })
-      ),
-      wrapVoidHelper('boarding-pass-stamp', body.bookingId!, () =>
-        kickOffBoardingPassStamp({
+        }),
+        // Phase A.4 — airline-issued e-ticket PDF. Skips when
+        // `Booking.eTicketDocumentUrl` is null (sandbox carriers, code-
+        // share suppliers that don't issue documents).
+        sendEticketPdfToTraveler({
           bookingId: body.bookingId!,
-          tripId: body.tripId ?? null,
-        })
-      ),
-      sendBoardingPassImageToTraveler({
-        bookingId: body.bookingId!,
-        tenantId: body.tenantId!,
-        duffelOrderId: body.duffelOrderId!,
-      }),
-      // Phase A.4 — airline-issued e-ticket PDF. Skips when
-      // `Booking.eTicketDocumentUrl` is null (sandbox carriers, code-
-      // share suppliers that don't issue documents).
-      sendEticketPdfToTraveler({
-        bookingId: body.bookingId!,
-        tenantId: body.tenantId!,
-      }),
-      // Phase C.5 — interactive button card offering an eSIM for the
-      // booked destination. Skips when traveler is flying home or
-      // destination ISO-2 is unknown.
-      sendEsimOfferToTraveler({
-        bookingId: body.bookingId!,
-        tenantId: body.tenantId!,
-      }),
-    ]);
+          tenantId: body.tenantId!,
+        }),
+        // Phase C.5 — interactive button card offering an eSIM for the
+        // booked destination. Skips when traveler is flying home or
+        // destination ISO-2 is unknown.
+        sendEsimOfferToTraveler({
+          bookingId: body.bookingId!,
+          tenantId: body.tenantId!,
+        }),
+      ]);
     return {
       whatsAppTemplate,
       boardingPassStamp,

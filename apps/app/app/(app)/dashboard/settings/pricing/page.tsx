@@ -26,11 +26,16 @@ import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
+import { CORE_BOOKING_KINDS } from '@sendero/billing';
+
 import { PricingPolicyWizard, type ExistingPolicy } from './wizard';
 
 export const dynamic = 'force-dynamic';
 
-const ALL_KINDS = ['flight', 'hotel', 'rail', 'car', 'other'] as const;
+// Settings UI shows core kinds only. eSIM + card markup configuration
+// will get a dedicated section once the surfaces ship (so tenants don't
+// see an empty config slot for products they don't sell yet).
+const ALL_KINDS = CORE_BOOKING_KINDS;
 type Kind = (typeof ALL_KINDS)[number];
 
 const MIN_SAMPLE_FOR_RECO = 20;

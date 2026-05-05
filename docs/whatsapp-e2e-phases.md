@@ -68,6 +68,58 @@ WhatsApp → "EZE to LIM May 7 1 pax economy"
 
 ---
 
+## Phase A.4 — Real airline notification (PDF e-ticket + airline-direct comms)
+
+**Goal:** The airline emails/SMS the traveler directly with their own confirmation, AND the traveler receives a Duffel-issued PDF e-ticket via Sendero email + WhatsApp. No more placeholder contact details flowing to the carrier; no more "PNR-only" travelers stranded at check-in counters that don't support PNR retrieval.
+
+**Why:** Today `book_flight` falls back to `traveler@sendero.demo` (`packages/tools/src/book-flight.ts:170`) and `+447123456789` (`packages/duffel/src/index.ts:313`) when contact details are missing. Duffel forwards those placeholders to the airline's reservation system, so the airline emails a fake address and the carrier-side IROPS / schedule-change comms never reach the actual passenger. We also never fetch `GET /air/orders/{id}/documents`, so the airline-issued PDF e-ticket is invisible to Sendero — even though it's already minted in Duffel post-fulfilment.
+
+### Gates (block before booking)
+
+- [ ] **Email gate** — if `User.email` is null/placeholder/empty when `book_flight` runs, agent must collect a real email before calling Duffel. Use `send_flow_message` (Meta Flow) with a single-field intake or an inline interactive prompt. Persist on `User.email` so subsequent bookings inherit.
+- [ ] **Phone gate** — relax: traveler phone IS already known from WhatsApp identity (`ChannelIdentity.externalUserId`). Use that as `passenger.phone_number` to Duffel. Drop the `+447…` literal fallback.
+- [ ] **Hard validation** — reject placeholder values (`@sendero.demo`, `+447123456789`) at the Duffel-create boundary so a future regression can't slip junk data through. Add a unit test in `packages/duffel/src/__tests__/`.
+
+### Post-ticket dispatch
+
+- [ ] **Fetch PDF e-ticket** — after `payOrder` returns `ticketed`, call `GET /air/orders/{orderId}/documents` (Duffel REST). Returns `{ documents: [{ unique_identifier, type: 'electronic_ticket', ... }] }`. Type `electronic_ticket` is the airline-issued e-ticket; persist its identifier + retrieve the PDF (Duffel returns it as a separate fetch on the document URL).
+- [ ] **Persist on Booking** — add `eTicketDocumentUrl: String?` and `eTicketIssuedAt: DateTime?` columns to `Booking`. Migration in `packages/database/prisma/migrations/`.
+- [ ] **Email dispatch via Resend** — `@sendero/notifications` already has the wiring; extend the existing `emailBookingConfirmed` (`apps/app/lib/duffel-dispatcher.ts:157`) to attach the PDF (or link out when attachment size is awkward). Subject: `[Carrier] e-ticket · PNR <ref>`. Localized via `@sendero/locale`.
+- [ ] **WhatsApp dispatch** — new helper `apps/app/lib/booking-eticket-pdf.ts` mirroring `booking-boarding-pass.ts`: looks up channel identity + WhatsApp install, calls `client.send({ type: 'document', document: { link, filename, caption } })`. Attach to `firePostTicketingFanout` so it lands alongside the Satori boarding pass and the BOOKING_CONFIRMED template.
+
+### Carrier-side flow (no Sendero code; verify it works)
+
+- [ ] After ticketing, the airline's own systems (Aerolíneas Argentinas, LATAM, etc.) email the passenger at the now-real email address with their reservation confirmation. Sandbox carriers in Duffel don't send these; real carriers do. Verify in production smoke after the gates ship.
+- [ ] Schedule-change / IROPS / check-in reminders flow through the same channel (carrier → passenger email/SMS). Sendero never sees these; the gate ensures the passenger does.
+
+### Dogfood script
+
+```
+Sign up new traveler with NO email on file
+  → search & confirm flight
+  → expect agent to ask for email before book_flight (Meta Flow or inline)
+  → reply with real email
+  → expect User.email persists, book_flight proceeds
+  → expect ticketed status
+  → within ~15s expect THREE inbound channels:
+     1. WhatsApp BOOKING_CONFIRMED template
+     2. WhatsApp send_image_message (Satori boarding-pass card)
+     3. WhatsApp send_document_message (airline-issued PDF e-ticket)
+  → expect Resend email with PDF attachment to the address you just gave
+  → check inbox of that email — airline's own confirmation arrives separately (1-15 min depending on carrier)
+```
+
+### Success criteria
+
+- [ ] `User.email` is populated for every booked traveler before `book_flight` is invoked
+- [ ] No `traveler@sendero.demo` or `+447123456789` value reaches Duffel (validated at boundary)
+- [ ] `Booking.eTicketDocumentUrl` populated within 30s of `status='ticketed'`
+- [ ] WhatsApp document message lands with the PDF
+- [ ] Resend email lands with PDF attachment
+- [ ] (Real carrier only) Airline's own confirmation email arrives at the real address within 15 min
+
+---
+
 ## Phase B — Insufficient funds → top-up → re-book
 
 **Goal:** Empty wallet doesn't dead-end. MoonPay top-up triggered, balance verified, same offer re-booked.

@@ -3,6 +3,7 @@ import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import type {
   ChannelMessageApprovalRequest,
   ChannelMessageCard,
+  ChannelMessageEsimActivation,
   ChannelMessageReasoning,
   ChannelMessageText,
   ChannelMessageToolInvocation,
@@ -63,6 +64,22 @@ const toolInvocationMessage: ChannelMessageToolInvocation = {
   toolName: 'search_offers',
   input: { origin: 'JFK', destination: 'LHR' },
   status: 'streaming',
+  createdAt: FROZEN_AT,
+};
+
+const esimActivationMessage: ChannelMessageEsimActivation = {
+  kind: 'esim_activation',
+  id: 'msg-esim-1',
+  author: AGENT_AUTHOR,
+  esimId: 'esim_test_001',
+  planLabel: '5 GB · 30 days · Japan + Korea',
+  countries: ['JP', 'KR'],
+  dataMb: 5120,
+  validityDays: 30,
+  qrUrl: 'https://app.sendero.travel/api/esim/qr/abc.def.png',
+  lpaCode: 'LPA:1$smdp.example.com$ACTIVATION_TEST',
+  installUrl: 'https://app.sendero.travel/install/esim/abc.def',
+  priceLine: '$3.00 · charged to your wallet',
   createdAt: FROZEN_AT,
 };
 
@@ -221,5 +238,49 @@ describe('sendChannelMessageWhatsApp', () => {
     } finally {
       process.env.WHATSAPP_ACCESS_TOKEN = previous;
     }
+  });
+
+  test('esim_activation routes through to client.send as cta_url interactive with QR header', async () => {
+    process.env.WHATSAPP_ACCESS_TOKEN = 'EAAG-test';
+    const result = await sendChannelMessageWhatsApp({
+      install: whatsAppInstallFixture(),
+      recipient: '+15551230099',
+      message: esimActivationMessage,
+    });
+    if (!result.sent) throw new Error(`expected sent, got ${result.reason}`);
+
+    expect(sendCalls.length).toBe(1);
+    const payload = sendCalls[0] as {
+      to: string;
+      type: string;
+      interactive?: {
+        type: string;
+        header?: { type: string; image?: { link: string } };
+        body?: { text: string };
+        action?: { name?: string; parameters?: { url?: string; display_text?: string } };
+      };
+    };
+
+    // Recipient stamped by the orchestrator (renderer leaves `to` empty).
+    expect(payload.to).toBe('+15551230099');
+    expect(payload.type).toBe('interactive');
+    expect(payload.interactive?.type).toBe('cta_url');
+
+    // QR PNG as image header.
+    expect(payload.interactive?.header).toEqual({
+      type: 'image',
+      image: { link: 'https://app.sendero.travel/api/esim/qr/abc.def.png' },
+    });
+
+    // CTA button URL = HTTPS install page (Cloud API rejects LPA: in cta_url;
+    // the install page handles the iOS deep-link redirect server-side).
+    expect(payload.interactive?.action?.parameters?.url).toBe(
+      'https://app.sendero.travel/install/esim/abc.def'
+    );
+    expect(payload.interactive?.action?.parameters?.display_text).toContain('Install');
+
+    // Body carries plan label + payer line for the traveler preview.
+    expect(payload.interactive?.body?.text).toContain('5 GB · 30 days · Japan + Korea');
+    expect(payload.interactive?.body?.text).toContain('charged to your wallet');
   });
 });

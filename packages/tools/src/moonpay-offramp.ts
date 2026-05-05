@@ -22,12 +22,38 @@ import { prisma } from '@sendero/database';
 import type { ToolContext, ToolDef } from './types';
 
 const SUPPORTED_CURRENCIES = [
+  'usdc',          // USDC ERC-20 on Ethereum (mainnet) / Sepolia (sandbox, substituted by MoonPayToken)
   'usdc_base',
   'usdc_sol',
   'usdc_polygon',
   'usdc_arbitrum',
   'usdc_optimism',
 ] as const;
+
+/**
+ * MoonPay sandbox supports a tiny set of off-ramp currencies (per
+ * https://dev.moonpay.com/docs/faq-sandbox-testing): primarily ETH on
+ * Sepolia + BTC testnet + plain `usdc` (ERC-20 substituted by their
+ * test-only MoonPayToken). The chain-suffixed variants (`usdc_base`,
+ * `usdc_sol`, `usdc_polygon`, …) ALL 4xx in sandbox with "Currency
+ * not supported in test mode".
+ *
+ * Production unlocks the full list (per
+ * https://www.moonpay.com/business/ramps): SOL, USDC, USDC_Polygon,
+ * USDC_Base, ETH_Arbitrum, etc.
+ *
+ * Auto-coercion below routes any sandbox request to plain `usdc`.
+ * The Circle DCW EVM address is deterministic across EVM chains, so
+ * `refundWalletAddress` doesn't change — only the wire-level
+ * `baseCurrencyCode` MoonPay sees on its widget.
+ */
+const SANDBOX_SAFE_CURRENCIES = new Set<(typeof SUPPORTED_CURRENCIES)[number]>([
+  'usdc',
+]);
+
+function isSandboxApiKey(apiKey: string | undefined): boolean {
+  return typeof apiKey === 'string' && apiKey.startsWith('pk_test_');
+}
 
 const inputSchema = z.object({
   amountUsdc: z
@@ -38,9 +64,9 @@ const inputSchema = z.object({
     .describe('USDC amount the traveler wants to sell. MoonPay min ~$20.'),
   currencyCode: z
     .enum(SUPPORTED_CURRENCIES)
-    .default('usdc_sol')
+    .default('usdc_base')
     .describe(
-      "Crypto being sold. Default 'usdc_sol' (USDC on Solana Devnet). Fallback to 'usdc_base' on a gas / chain error."
+      "Crypto being sold. Default 'usdc_base' — sandbox-safe AND production-supported. The unified Gateway balance routes the actual USDC from any chain to wherever MoonPay needs it; the wire-level `currencyCode` just picks the chain MoonPay accepts. Use 'usdc_sol' / 'usdc_polygon' etc. only when running against production keys (sandbox 4xx's them)."
     ),
   note: z
     .string()
@@ -95,7 +121,19 @@ export const moonpayOfframpTool: ToolDef<Input> = {
       };
     }
 
-    const isSolana = input.currencyCode === 'usdc_sol';
+    // Sandbox guard — MoonPay test mode rejects any non-`usdc_base`
+    // off-ramp currency with a 4xx. Auto-route to the sandbox-safe code
+    // when we detect a test key. Real travelers in prod still get their
+    // requested chain (usdc_sol / usdc_polygon / etc.).
+    let resolvedCurrency: (typeof SUPPORTED_CURRENCIES)[number] = input.currencyCode;
+    if (isSandboxApiKey(apiKey) && !SANDBOX_SAFE_CURRENCIES.has(resolvedCurrency)) {
+      console.warn('[moonpay_offramp] sandbox env — coercing currency to usdc_base', {
+        requested: resolvedCurrency,
+      });
+      resolvedCurrency = 'usdc_base';
+    }
+
+    const isSolana = resolvedCurrency === 'usdc_sol';
 
     let refundWalletAddress: string;
     if (isSolana) {
@@ -150,7 +188,7 @@ export const moonpayOfframpTool: ToolDef<Input> = {
     //   refundWalletAddress = where to send funds back if cancelled
     const params = new URLSearchParams();
     params.set('apiKey', apiKey);
-    params.set('baseCurrencyCode', input.currencyCode);
+    params.set('baseCurrencyCode', resolvedCurrency);
     params.set('baseCurrencyAmount', String(input.amountUsdc));
     params.set('quoteCurrencyCode', 'usd');
     params.set('refundWalletAddress', refundWalletAddress);
@@ -173,7 +211,7 @@ export const moonpayOfframpTool: ToolDef<Input> = {
       title: `Cash out · ${input.amountUsdc} USDC`,
       body: `Sell USDC for fiat via MoonPay — funds land in your bank in 1-2 business days.`,
       bullets: [
-        `Selling from ${input.currencyCode.replace('_', ' ').toUpperCase()}`,
+        `Selling from ${resolvedCurrency.replace('_', ' ').toUpperCase()}`,
         `Refund to ${refundWalletAddress.slice(0, 8)}…${refundWalletAddress.slice(-6)} if cancelled`,
         `Powered by Circle Gateway unified balance`,
       ],
@@ -197,12 +235,12 @@ export const moonpayOfframpTool: ToolDef<Input> = {
       imageUrl: cardImageUrl ?? qrImageUrl,
       meWalletUrl,
       amountUsdc: input.amountUsdc,
-      currencyCode: input.currencyCode,
+      currencyCode: resolvedCurrency,
       refundWalletAddress,
       environment: isTest ? 'sandbox' : 'production',
       note: input.note ?? null,
       message:
-        `Cash out *${input.amountUsdc} ${input.currencyCode.toUpperCase()}* to fiat with MoonPay (sandbox).\n\n` +
+        `Cash out *${input.amountUsdc} ${resolvedCurrency.toUpperCase()}* to fiat with MoonPay (sandbox).\n\n` +
         `Sell widget: ${checkoutUrl}\n\n` +
         `If you cancel mid-flow, funds return to \`${refundWalletAddress.slice(0, 10)}…${refundWalletAddress.slice(-6)}\`.`,
     };

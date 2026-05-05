@@ -308,3 +308,46 @@ Tap to add — fare adjusts at booking."
   },
 }
 `;
+
+exports[`renderForWhatsApp trip_brief uses cta_url when shareUrl present (single-tap to public page) 1`] = `
+{
+  "channel": "whatsapp",
+  "payload": {
+    "interactive": {
+      "action": {
+        "name": "cta_url",
+        "parameters": {
+          "display_text": "🔗 Open trip",
+          "url": "https://app.sendero.travel/trip/abc.def",
+        },
+      },
+      "body": {
+        "text": 
+"*NYC week*
+_2026-06-01 → 2026-06-08_
+Status: in_progress
+
+🟡 Outbound flight rebooked — confirm with traveler.
+
+*✈️ Flights*
+• EZE → JFK (XYZ123) · $850.00
+
+*🏨 Stays*
+• The Mercer Hotel · New York · 6n · $1200.00
+
+*📱 Connectivity*
+• 5.0 GB · 30d · US · active"
+,
+      },
+      "footer": {
+        "text": "Tap to share or save the full trip view",
+      },
+      "type": "cta_url",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
+  },
+}
+`;

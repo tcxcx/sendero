@@ -22,7 +22,7 @@
  * the next booking for the same user, or at first pay attempt.
  */
 
-import { getCircle } from '@sendero/circle';
+import { getCircle, GATEWAY_CHAINS, type GatewayChainKey } from '@sendero/circle';
 import { getOrCreateUserGatewaySigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
@@ -41,6 +41,32 @@ const SOL_DEVNET_CHAIN_ID = 5;
  */
 const ARC_BLOCKCHAIN = 'ARC-TESTNET' as const;
 const SOL_BLOCKCHAIN = 'SOL-DEVNET' as const;
+
+/**
+ * Phase B.2 follow-up — register the traveler's DCW with Circle on
+ * every Gateway-supported EVM chain so off-ramp flows that land on
+ * Sepolia / Base / etc. trigger the auto-deposit webhook the same
+ * way Arc inbounds do. Without this, MoonPay sandbox (which forces
+ * Sepolia) drops USDC at the same `0x...` address but Circle's
+ * webhook system never fires because no Wallet row was registered.
+ *
+ * We keep Arc as the canonical settlement chain (existing fast-path
+ * stays — cache-hit reads on Arc bypass the loop entirely). After
+ * the Arc DCW is provisioned the first time, the additional EVM
+ * chains are registered in a fan-out (fail-soft per chain).
+ */
+function listEvmGatewayChains(): Array<{ key: GatewayChainKey; circleId: string; chainId: number }> {
+  const out: Array<{ key: GatewayChainKey; circleId: string; chainId: number }> = [];
+  for (const [key, def] of Object.entries(GATEWAY_CHAINS) as Array<
+    [GatewayChainKey, (typeof GATEWAY_CHAINS)[GatewayChainKey]]
+  >) {
+    if (def.kind !== 'evm') continue;
+    const viemChain = (def as { viemChain?: { id: number } }).viemChain;
+    if (!viemChain) continue;
+    out.push({ key, circleId: def.circleId, chainId: viemChain.id });
+  }
+  return out;
+}
 
 export interface EnsuredWallet {
   walletId: string;
@@ -80,6 +106,15 @@ export async function ensureTravelerWallet(args: {
     });
     // Backfill Gateway signer for users that pre-date T4. Idempotent.
     void ensureUserGatewaySigner({ userId: args.userId });
+    // Phase B.2 follow-up — backfill cross-chain EVM Wallet rows for
+    // users provisioned before this expansion. Idempotent (the helper
+    // skips chains that already have a row) and fire-and-forget.
+    void ensureTravelerEvmGatewayWallets({ userId: args.userId }).catch(err => {
+      console.warn(
+        '[ensureTravelerWallet] cross-chain EVM backfill failed (non-fatal)',
+        err instanceof Error ? err.message : err
+      );
+    });
     return {
       walletId: existing.id,
       rowId: existing.id,
@@ -143,6 +178,22 @@ export async function ensureTravelerWallet(args: {
 
     await ensureTravelerSolanaWallet({ userId: args.userId, walletSetId, circle });
 
+    // Phase B.2 follow-up — register the DCW with Circle on every
+    // other Gateway EVM chain so off-ramp inbounds land on a tracked
+    // wallet. Fire-and-forget; the Arc-only fast path above continues
+    // to satisfy the canonical settlement requirement even if a
+    // cross-chain registration races.
+    void ensureTravelerEvmGatewayWallets({
+      userId: args.userId,
+      walletSetId,
+      circle,
+    }).catch(err => {
+      console.warn(
+        '[ensureTravelerWallet] cross-chain EVM Gateway provisioning failed (non-fatal)',
+        err instanceof Error ? err.message : err
+      );
+    });
+
     // Provision the traveler's Gateway depositor EOA. Same pattern as
     // tenants — a self-custody viem EOA whose address is recorded as
     // the Circle Gateway depositor. The DCW above remains for native
@@ -195,6 +246,91 @@ export async function ensureTravelerWallet(args: {
       err instanceof Error ? err.message : err
     );
     return null;
+  }
+}
+
+/**
+ * Provision (or backfill) DCW Wallet rows for every Gateway-supported
+ * EVM chain other than Arc. Idempotent per chain — skips chains that
+ * already have a row. Each Circle createWallets call uses a
+ * deterministic idempotency key per (userId, chain) so concurrent
+ * invocations land on the same wallet.
+ *
+ * Fail-soft per chain: a failure on one chain (Sepolia 5xx, Polygon
+ * Amoy throttle) doesn't stop the others. Logs each outcome for ops.
+ */
+async function ensureTravelerEvmGatewayWallets(args: {
+  userId: string;
+  walletSetId?: string;
+  circle?: ReturnType<typeof getCircle>;
+}): Promise<void> {
+  const walletSetId = args.walletSetId ?? env.senderoWalletSetId();
+  if (!walletSetId) return;
+
+  let circle = args.circle;
+  if (!circle) {
+    try {
+      circle = getCircle();
+    } catch {
+      return;
+    }
+  }
+
+  const chains = listEvmGatewayChains().filter(c => c.chainId !== ARC_TESTNET_CHAIN_ID);
+  if (chains.length === 0) return;
+
+  // Existing rows for this user → skip those chains.
+  const existing = await prisma.wallet.findMany({
+    where: { userId: args.userId, provisioner: 'dcw' },
+    select: { chainId: true },
+  });
+  const existingChainIds = new Set(existing.map(w => w.chainId));
+
+  for (const chain of chains) {
+    if (existingChainIds.has(chain.chainId)) continue;
+    try {
+      const idempotencyKey = uuidv4FromSeed(`sendero:wallet:dcw:${args.userId}:${chain.circleId}`);
+      const response = await circle.createWallets({
+        walletSetId,
+        blockchains: [chain.circleId],
+        accountType: 'EOA',
+        count: 1,
+        idempotencyKey,
+      } as never);
+      const wallet = (response.data as { wallets?: Array<{ id: string; address: string }> })
+        ?.wallets?.[0];
+      if (!wallet?.id || !wallet.address) {
+        console.warn('[ensureTravelerWallet] Circle response missing wallet shape', {
+          userId: args.userId,
+          circleId: chain.circleId,
+        });
+        continue;
+      }
+      await prisma.wallet.create({
+        data: {
+          userId: args.userId,
+          provisioner: 'dcw',
+          circleWalletId: wallet.id,
+          circleWalletSetId: walletSetId,
+          accountType: 'EOA',
+          address: wallet.address,
+          chainId: chain.chainId,
+          metadata: { circleChain: chain.circleId, chainKey: chain.key },
+        },
+      });
+      console.log('[ensureTravelerWallet] cross-chain DCW provisioned', {
+        userId: args.userId,
+        chainKey: chain.key,
+        chainId: chain.chainId,
+        address: wallet.address,
+      });
+    } catch (err) {
+      console.warn('[ensureTravelerWallet] cross-chain provisioning failed (non-fatal)', {
+        userId: args.userId,
+        chainKey: chain.key,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }
 

@@ -73,6 +73,20 @@ enum TripStatus {
   failed
 }
 
+/// Phase B.2 — distinguishes a Trip's lifecycle expectation. The agent
+/// + lifecycle crons branch on this:
+///   - `one_way` / `round_trip`: auto-complete after the last booked
+///     leg lands. Conventional pre-planned travel.
+///   - `open_journey`: traveler is a digital nomad / backpacker
+///     adding legs on the fly. Stays `in_progress` until the traveler
+///     explicitly says "take me home" — at which point Sendero books
+///     the return to `User.homeIata` and marks the Trip completed.
+enum TripKind {
+  one_way
+  round_trip
+  open_journey
+}
+
 enum BookingStatus {
   pending
   confirmed
@@ -87,6 +101,17 @@ enum BookingKind {
   hotel
   rail
   car
+  /// Travel eSIM data plan. Tenants configure agency markup per
+  /// TenantPricingPolicy.markupConfig.esim.
+  esim
+  /// Card-issuance event (one-time fee for spinning up a Sendero-branded
+  /// stablecoin card via Reap / Bridge / MoonCard partner). Distinct from
+  /// per-transaction card spend, which is not a Booking.
+  card
+  /// Travel insurance policy (Faye / Mondial / World Nomads partner).
+  /// Tenants configure agency markup per
+  /// TenantPricingPolicy.markupConfig.insurance.
+  insurance
   other
 }
 
@@ -353,6 +378,12 @@ model User {
   phone                String?
   /// Duffel CustomerUser id (`icu_…`) — unlocks Travel Support Assistant.
   duffelCustomerUserId String?    @unique
+  /// Phase B.2 — canonical "home" airport IATA code (e.g. `EZE`,
+  /// `MEX`, `MIA`). The anchor `take_me_home` resolves to. Asked at
+  /// onboarding, or backfilled by the agent the first time a traveler
+  /// says "take me home" without it set. Null on legacy rows + on
+  /// travelers who haven't declared a home yet.
+  homeIata             String?
   /// Provenance of this row. See UserSource enum for values.
   source               UserSource @default(native)
   /// Free-form user metadata (preferred language, locale, etc.).
@@ -528,6 +559,10 @@ model Trip {
   createdById           String? // booking agent
   intent                Json // parsed intent: {origin,dest,dates,pax,purpose}
   status                TripStatus       @default(draft)
+  /// Phase B.2 — see TripKind enum doc. Default `one_way` keeps
+  /// existing pre-Phase-B.2 trips backwards-compatible without a
+  /// data migration.
+  kind                  TripKind         @default(one_way)
   /// Append-only event log (agent turns, tool calls, approvals).
   events                Json             @default("[]")
   settlementRef         String? // convenience pointer to latest Settlement
@@ -726,6 +761,14 @@ model Booking {
   provisionedBy        MeterPayerType?
   /// CircleWallet.id of the wallet that funded this booking.
   payerWalletId        String?
+  /// Airline-issued e-ticket PDF URL — pulled from Duffel
+  /// `GET /air/orders/{id}/documents` after `status: 'ticketed'`.
+  /// Persisted so the post-ticketing fan-out can attach it to the
+  /// BOOKING_CONFIRMED email and ship it via WhatsApp
+  /// `send_document_message`. Null on legacy rows + on bookings whose
+  /// supplier didn't return a document (rare; logged for ops).
+  eTicketDocumentUrl   String?
+  eTicketIssuedAt      DateTime?       @db.Timestamptz(6)
   createdAt            DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime        @updatedAt @db.Timestamptz(6)
 
@@ -2515,6 +2558,87 @@ model NftStamp {
   @@index([tripId])
   @@index([status])
   @@map("nft_stamps")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ESIM (travel data plan provisioning)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Travel eSIM data plan ordered through `book_esim`. One row per
+/// purchased eSIM. `iccid` is the unique SIM identifier from the
+/// provider; `lpaCode` is the SM-DP+ activation string (`LPA:1$smdp$AC`)
+/// that the traveler scans/taps to install. Pricing breakdown follows
+/// the same legs as `Booking` (cost / markup / sendero take) so the
+/// invoice surface stays consistent across products.
+///
+/// Status transitions: ordered → ready → installed → active → expiring →
+/// expired. Webhooks from the provider (eSIM Go / Airalo) drive the
+/// transitions; the agent surfaces "you've used 2.3 of 5 GB" by reading
+/// `usageMb` between turns.
+model Esim {
+  id String @id @default(cuid())
+
+  tenantId   String
+  travelerId String?
+  tripId     String?
+
+  /// Provider slug — `'esim-go'` (primary) or `'airalo'` (fallback).
+  provider        String
+  /// Provider's order id. UNIQUE per provider so retries dedupe.
+  providerOrderId String
+
+  /// SIM identifier — globally unique once issued. Null until the
+  /// provider returns it (sandbox/test mode may delay).
+  iccid          String? @unique
+  /// SM-DP+ activation code (the matching id, NOT the full LPA string).
+  /// Treated as sensitive — render via signed QR endpoint, never log.
+  activationCode String
+  /// Full LPA: install string. Stored for the QR + tap-to-install link.
+  /// Format: `LPA:1$smdp.example.com$ACTIVATIONCODE`.
+  lpaCode        String
+  /// HMAC-signed token used by `/api/esim/qr/<token>` to render the QR
+  /// image without exposing `lpaCode` directly.
+  qrTokenHash    String?
+
+  /// ISO-3166-1 alpha-2 destination codes covered by the plan.
+  destinationCountries Json
+  dataMb               Int
+  validityDays         Int
+
+  /// Provider's wholesale price in micro-USDC (what Sendero pays).
+  wholesaleMicroUsdc   BigInt
+  /// Tenant agency markup leg — what the tenant captures.
+  markupMicroUsdc      BigInt @default(0)
+  /// Sendero take leg — flat 50bps + tier-scaled floor.
+  senderoTakeMicroUsdc BigInt @default(0)
+  /// Customer total (denormalized) = wholesale + markup + senderoTake.
+  retailMicroUsdc      BigInt
+
+  /// Concrete payer attribution. Mirrors `Booking.provisionedBy`.
+  provisionedBy MeterPayerType?
+  /// Wallet that funded the purchase.
+  payerWalletId String?
+  /// User who paid (when traveler-funded). Null on tenant-paid rows.
+  payerUserId   String?
+
+  status      String    @default("ordered")
+  installedAt DateTime? @db.Timestamptz(6)
+  activatedAt DateTime? @db.Timestamptz(6)
+  expiresAt   DateTime? @db.Timestamptz(6)
+  usageMb     Int       @default(0)
+
+  /// Free-form provider response + lifecycle metadata.
+  metadata  Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([provider, providerOrderId])
+  @@index([tenantId, createdAt])
+  @@index([tripId])
+  @@index([travelerId])
+  @@index([status])
+  @@index([provisionedBy])
+  @@map("esims")
 }
 
 /// Per-(stamp, owner) balance rollup driven by Circle Event Monitor
