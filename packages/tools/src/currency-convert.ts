@@ -81,9 +81,7 @@ function writeCache(key: string, result: CacheEntry['result']): void {
   cache.set(key, { result, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
-export async function currencyConvert(
-  input: CurrencyConvertInput
-): Promise<CurrencyConvertResult> {
+export async function currencyConvert(input: CurrencyConvertInput): Promise<CurrencyConvertResult> {
   const fetchedAt = new Date().toISOString();
   const { amount, from, to, asOf } = input;
 
@@ -119,9 +117,7 @@ export async function currencyConvert(
   const url = `https://api.frankfurter.dev/v1/${path}?base=${encodeURIComponent(from)}&symbols=${encodeURIComponent(to)}`;
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(
-      `currency_convert: Frankfurter API ${response.status} ${response.statusText}`
-    );
+    throw new Error(`currency_convert: Frankfurter API ${response.status} ${response.statusText}`);
   }
   const data = (await response.json()) as FrankfurterResponse;
   const rate = data.rates?.[to];
