@@ -58,6 +58,16 @@ interface ToolBody {
    * the key resolves to its own tenant.
    */
   tenantId?: string;
+  /**
+   * Phase G — Slack-binding shortcut. When the caller is the Slack
+   * interactions handler reacting to a button tap (no phone available
+   * but a verified `SlackUserBinding` exists), it stamps the
+   * `senderoUserId` directly so the tool's `ctx.traveler.userId` lands
+   * without going through `resolveTravelerByPhone`. The handler is
+   * already auth-gated by the shared dispatch secret so the binding
+   * was authoritative before this hop.
+   */
+  _slackSenderoUserId?: string;
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ name: string }> }) {
@@ -157,6 +167,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
   //    on (tenantId, phone). Tools that need a real userId for
   //    settlement / handoff / meter attribution see one here instead
   //    of the `svc:<keyId>` placeholder. See plan D1.
+  //
+  //    Slack-binding shortcut (Phase G): when the caller is the Slack
+  //    interactions handler reacting to a button tap, no phone is
+  //    available but the binding row already authoritatively maps the
+  //    Slack user to a Sendero User. Stamp directly. The shared-secret
+  //    auth on this route already gated the caller, so the binding
+  //    can be trusted as-is.
   let resolvedUserId: string | null = null;
   let resolvedChannelIdentityId: string | null = body.channelIdentityId ?? null;
   let resolvedIsPlaceholder: boolean | undefined;
@@ -176,6 +193,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  } else if (body._slackSenderoUserId) {
+    resolvedUserId = body._slackSenderoUserId;
   }
 
   // 6. build context — same shape `/api/agent/dispatch` uses so the
@@ -187,9 +206,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
       // service-account placeholder otherwise.
       userId: resolvedUserId ?? `svc:${keyId}`,
       ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
-      ...(resolvedIsPlaceholder !== undefined
-        ? { isPlaceholder: resolvedIsPlaceholder }
-        : {}),
+      ...(resolvedIsPlaceholder !== undefined ? { isPlaceholder: resolvedIsPlaceholder } : {}),
     },
     ...(resolvedChannelIdentityId ? { channelIdentityId: resolvedChannelIdentityId } : {}),
     caller: {
@@ -215,9 +232,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
         tool: name,
         message:
           issues.length > 0
-            ? issues
-                .map(i => `${i.path.join('.') || '(root)'}: ${i.message}`)
-                .join('; ')
+            ? issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')
             : 'Input failed schema validation.',
       },
       { status: 400 }

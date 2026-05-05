@@ -57,6 +57,7 @@ import { useChatModel } from '@/hooks/use-chat-model';
 
 import { asChannelKey, type ChannelKey } from './channels';
 import { DemoConversation, type DemoMessage, runDemoTripScript } from './demo-trip';
+import { InjectCardDialog } from './inject-card-dialog';
 import { type ComposerMode, MetaInbox, type UnifiedMessage } from './meta-inbox';
 import type { TripRowData } from './trip-rail';
 
@@ -262,6 +263,35 @@ export function MetaInboxLive({
   // ── scoped (channel) mode ─────────────────────────────────────────
   const [optimistic, setOptimistic] = useState<UnifiedMessage[]>([]);
   const [posting, setPosting] = useState(false);
+
+  // Phase G.5 — subscribe to /api/inbox/[tripId]/events/stream so
+  // dispatched messages (operator inbox reply, rich-card inject,
+  // dispatcher fanout from book_flight, etc.) show up in the
+  // conversation column without a manual refresh. EventSource
+  // reconnects automatically after the 4-min stream deadline.
+  useEffect(() => {
+    if (!scopedTripId) return;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/inbox/${encodeURIComponent(scopedTripId)}/events/stream`);
+    } catch (err) {
+      console.warn('[meta-inbox-live] EventSource open failed', err);
+      return;
+    }
+    es.addEventListener('trip_event', () => {
+      router.refresh();
+    });
+    es.addEventListener('error', () => {
+      // EventSource auto-reconnects; surface only persistent failure
+      // beyond the runtime's retry policy via the connection state.
+      if (es && es.readyState === EventSource.CLOSED) {
+        console.warn('[meta-inbox-live] trip events stream closed — relying on manual refresh');
+      }
+    });
+    return () => {
+      es?.close();
+    };
+  }, [scopedTripId, router]);
   const focusHandoff = useTripPresenceFocus({
     section: 'handoff',
     label: 'support handoff',
@@ -548,6 +578,11 @@ export function MetaInboxLive({
         onComposerModeChange={setComposerMode}
         onSubmit={handleSubmit}
         disabled={posting || isStreaming}
+        composerExtras={
+          scopedTripId ? (
+            <InjectCardDialog tripId={scopedTripId} onInjected={() => router.refresh()} />
+          ) : null
+        }
       />
     </>
   );

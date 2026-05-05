@@ -94,6 +94,12 @@ interface MetaInboxProps {
   onSubmit?: (text: string) => void | Promise<void>;
   /** When true, the composer is disabled (turn in flight). */
   disabled?: boolean;
+  /**
+   * Optional render slot rendered above the composer (channel mode).
+   * Used by MetaInboxLive to mount the rich-card inject affordance
+   * — Phase G.4. Hidden in unscoped (no tripId) state.
+   */
+  composerExtras?: React.ReactNode;
 }
 
 export function MetaInbox({
@@ -109,6 +115,7 @@ export function MetaInbox({
   onComposerModeChange,
   onSubmit,
   disabled,
+  composerExtras,
 }: MetaInboxProps) {
   const [customerPanelOpen, setCustomerPanelOpen] = useState(false);
   const showWorkflow = useSendero(s => s.showWorkflow);
@@ -280,6 +287,19 @@ export function MetaInbox({
                 />
               )}
             </div>
+
+            {composerExtras && isTrip && effectiveMode === 'channel' ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 4,
+                }}
+              >
+                {composerExtras}
+              </div>
+            ) : null}
 
             <ConsoleComposer
               ref={composerRef}
