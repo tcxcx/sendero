@@ -199,9 +199,7 @@ describe('renderForSlack', () => {
   test('trip_brief surfaces critical alerts above bookings', async () => {
     const out = await renderForSlack(
       fixtures.tripBrief({
-        alerts: [
-          { kind: 'trip_canceled', severity: 'critical', message: 'Trip canceled.' },
-        ],
+        alerts: [{ kind: 'trip_canceled', severity: 'critical', message: 'Trip canceled.' }],
       })
     );
     const blocks = (out?.payload.blocks ?? []) as Array<{ type: string; text?: { text?: string } }>;

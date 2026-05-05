@@ -331,9 +331,7 @@ function renderSources(
   };
 }
 
-function renderEsimActivation(
-  msg: ChannelMessageEsimActivation
-): RenderedForChannel<SlackPayload> {
+function renderEsimActivation(msg: ChannelMessageEsimActivation): RenderedForChannel<SlackPayload> {
   // Slack delivery: header + plan section + QR image + actions block
   // (primary = install URL, secondary = jump to instructions). The
   // image block is the canonical artifact; tapping the button lands on
@@ -419,9 +417,7 @@ function renderEsimActivation(
 const MAX_SLACK_SEAT_OPTIONS = 25;
 const MAX_SLACK_BAG_OPTIONS = 5;
 
-function renderSeatPicker(
-  msg: ChannelMessageSeatPicker
-): RenderedForChannel<SlackPayload> {
+function renderSeatPicker(msg: ChannelMessageSeatPicker): RenderedForChannel<SlackPayload> {
   const passenger = msg.passengerName ?? msg.passengerId;
   const truncated = msg.options.length > MAX_SLACK_SEAT_OPTIONS;
   const options = msg.options.slice(0, MAX_SLACK_SEAT_OPTIONS);
@@ -570,9 +566,7 @@ function renderAncillaryPicker(
  * deliberately mirrors the operator card so reading the same trip in
  * Slack vs. /dashboard/agent-chat gives the same visual rhythm.
  */
-function renderTripBrief(
-  msg: ChannelMessageTripBrief
-): RenderedForChannel<SlackPayload> {
+function renderTripBrief(msg: ChannelMessageTripBrief): RenderedForChannel<SlackPayload> {
   const tripLabel = [msg.trip.origin, msg.trip.destination].filter(Boolean).join(' → ');
   const dateLabel =
     msg.trip.startDate && msg.trip.endDate
@@ -580,9 +574,7 @@ function renderTripBrief(
       : (msg.trip.startDate ?? msg.trip.endDate ?? '');
 
   const headerText =
-    msg.trip.name || tripLabel
-      ? `🧭 ${msg.trip.name ?? tripLabel}`
-      : `🧭 Trip ${msg.trip.tripId}`;
+    msg.trip.name || tripLabel ? `🧭 ${msg.trip.name ?? tripLabel}` : `🧭 Trip ${msg.trip.tripId}`;
   const blocks: unknown[] = [
     {
       type: 'header',

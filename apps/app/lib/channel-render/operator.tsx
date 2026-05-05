@@ -502,7 +502,7 @@ function TripBriefCard(props: ChannelMessageTripBrief) {
   const dateLabel =
     props.trip.startDate && props.trip.endDate
       ? `${props.trip.startDate} → ${props.trip.endDate}`
-      : props.trip.startDate ?? props.trip.endDate ?? '';
+      : (props.trip.startDate ?? props.trip.endDate ?? '');
   const sevColor = (sev: ChannelMessageTripBrief['alerts'][number]['severity']) =>
     sev === 'critical'
       ? 'border-red-500/40 bg-red-500/5 text-red-700 dark:text-red-400'
@@ -573,9 +573,7 @@ function TripBriefCard(props: ChannelMessageTripBrief) {
                   {s.property ?? 'Hotel'}
                   {s.city ? <span className="ml-1 text-muted-foreground">· {s.city}</span> : null}
                   {s.nights ? (
-                    <span className="ml-1 text-muted-foreground">
-                      · {s.nights}n
-                    </span>
+                    <span className="ml-1 text-muted-foreground">· {s.nights}n</span>
                   ) : null}
                 </span>
                 <span className="font-mono text-muted-foreground">${s.totalUsd}</span>
