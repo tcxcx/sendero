@@ -91,7 +91,9 @@ export function makeFayeProvider(opts: FayeOpts): InsuranceProvider {
     }>;
   };
 
-  function coverageFromFaye(c: NonNullable<FayeQuoteResp['plans']>[number]['coverage']): CoverageLimits {
+  function coverageFromFaye(
+    c: NonNullable<FayeQuoteResp['plans']>[number]['coverage']
+  ): CoverageLimits {
     const u = (n: number | undefined) =>
       typeof n === 'number' ? BigInt(Math.round(n * 1_000_000)) : null;
     return {
