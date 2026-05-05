@@ -209,6 +209,33 @@ describe('renderForSlack', () => {
     expect(firstSection?.text?.text).toContain('canceled');
   });
 
+  test('stay_search_results emits one section + actions per hotel with select_stay_hotel button', async () => {
+    const out = await renderForSlack(fixtures.staySearchResults());
+    const blocks = (out?.payload.blocks ?? []) as Array<{
+      type: string;
+      accessory?: { type?: string };
+      elements?: Array<{ action_id?: string; value?: string; style?: string }>;
+    }>;
+    expect(blocks[0]?.type).toBe('header');
+    const hotelButtons = blocks
+      .flatMap(b => b.elements ?? [])
+      .filter(e => e.action_id === 'select_stay_hotel');
+    expect(hotelButtons).toHaveLength(2);
+    expect(hotelButtons[0]?.value).toBe('ssr_0000B5zd9zXpgcMvBmwkgG');
+    expect(hotelButtons[0]?.style).toBe('primary');
+    // First hotel has a photo → image accessory present.
+    const firstHotelSection = blocks.find(b => b.accessory?.type === 'image');
+    expect(firstHotelSection).toBeDefined();
+    expect(out).toMatchSnapshot();
+  });
+
+  test('stay_search_results without hotels falls back to a "no results" section', async () => {
+    const out = await renderForSlack(fixtures.staySearchResults({ hotels: [] }));
+    const blocks = (out?.payload.blocks ?? []) as Array<{ text?: { text?: string } }>;
+    const allText = blocks.map(b => b.text?.text ?? '').join('\n');
+    expect(allText).toContain('No matching hotels');
+  });
+
   test('stay_rate_picker emits one button per rate with select_stay_rate action_id', async () => {
     const out = await renderForSlack(fixtures.stayRatePicker());
     const blocks = (out?.payload.blocks ?? []) as Array<{

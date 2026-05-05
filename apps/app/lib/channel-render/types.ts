@@ -70,6 +70,7 @@ export interface ChannelCta {
     | 'select_seat'
     | 'add_bag'
     // Stays funnel: search → list_stay_rates (rate picker) → quote_stay (review) → book_stay
+    | 'select_stay_hotel'
     | 'select_stay_rate'
     | 'confirm_stay_booking'
     | 'cancel_stay_booking';
@@ -392,6 +393,54 @@ export interface ChannelStayBusinessDetails {
 }
 
 /**
+ * Hotel search results — emitted by `search_hotels`. Each hotel is a
+ * tap target that invokes `list_stay_rates` with the search-result id.
+ *
+ * The first card the traveler sees in the stays funnel. Slack / WhatsApp
+ * surface this as an interactive list (one row per hotel); web + operator
+ * render a richer grid with photo + rating + cheapest-rate + cancellation
+ * badge per hotel. Skipping straight to `quote_stay` would not work —
+ * `search_hotels` does not return rate ids.
+ */
+export interface ChannelMessageStaySearchResults {
+  kind: 'stay_search_results';
+  id: string;
+  author: ChannelAuthor;
+  /** Search context — used to compute nights + render the booking window. */
+  checkInDate: string;
+  checkOutDate: string;
+  rooms: number;
+  guests: number;
+  hotels: Array<{
+    /** Duffel `StaysSearchResult.id` (`ssr_…`) — pass to `list_stay_rates`. */
+    searchResultId: string;
+    name: string;
+    /** ISO-2 country, used for flag chips. */
+    country: string | null;
+    city: string | null;
+    /** AAA / star rating (1-5) when supplied. */
+    stars: number | null;
+    /** 0-10 user review score from Duffel. */
+    reviewScore: number | null;
+    /** Up to 3 photo URLs; the first is the primary image on rich surfaces. */
+    photos: string[];
+    /** Cheapest rate total + currency from the search response. */
+    cheapestPrice: string;
+    cheapestCurrency: string;
+    /** 'free' = at least one rate fully refundable; 'partial' = timeline
+     *  exists but never reaches full; 'non_refundable' = empty timeline;
+     *  'unknown' = list-search response (rates not fetched). */
+    cancellation: 'free' | 'partial' | 'non_refundable' | 'unknown';
+    /** Distance from the search anchor in meters, when supplied. */
+    distanceMeters: number | null;
+    /** Top 5 amenity tags ('wifi', 'parking', etc.). */
+    amenities: string[];
+  }>;
+  business: ChannelStayBusinessDetails;
+  createdAt: string;
+}
+
+/**
  * Rate picker — emitted by `list_stay_rates`. Each rate is a tap target
  * that invokes `quote_stay`. Grouped by `roomName` on the operator side
  * for readability; channels collapse to flat list + interactive primitive.
@@ -596,6 +645,7 @@ export type ChannelMessage =
   | ChannelMessageEsimActivation
   | ChannelMessageSeatPicker
   | ChannelMessageAncillaryPicker
+  | ChannelMessageStaySearchResults
   | ChannelMessageStayRatePicker
   | ChannelMessageStayQuoteReview
   | ChannelMessageStayBookingConfirmation

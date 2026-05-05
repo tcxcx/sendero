@@ -20,6 +20,7 @@ import type {
   ChannelMessageStayBookingConfirmation,
   ChannelMessageStayQuoteReview,
   ChannelMessageStayRatePicker,
+  ChannelMessageStaySearchResults,
   ChannelMessageText,
   ChannelMessageToolInvocation,
   ChannelMessageToolResult,
@@ -298,6 +299,53 @@ export const fixtures = {
     };
   },
 
+  staySearchResults(
+    overrides: Partial<ChannelMessageStaySearchResults> = {}
+  ): ChannelMessageStaySearchResults {
+    return {
+      kind: 'stay_search_results',
+      id: 'msg-stay-search-results-1',
+      author: AGENT_AUTHOR,
+      checkInDate: '2026-06-04',
+      checkOutDate: '2026-06-07',
+      rooms: 1,
+      guests: 1,
+      hotels: [
+        {
+          searchResultId: 'ssr_0000B5zd9zXpgcMvBmwkgG',
+          name: 'Duffel Test Hotel',
+          country: 'GB',
+          city: 'Henderson Island',
+          stars: 4,
+          reviewScore: 8.8,
+          photos: ['https://assets.duffel.com/img/duffel-hotel-group/luxury-1.png'],
+          cheapestPrice: '1219.70',
+          cheapestCurrency: 'USD',
+          cancellation: 'free',
+          distanceMeters: 1200,
+          amenities: ['parking', 'wifi', 'pool'],
+        },
+        {
+          searchResultId: 'ssr_0000B5zd9zXpgcMvBmwkgH',
+          name: 'Coastal Inn',
+          country: 'GB',
+          city: 'Henderson Island',
+          stars: 3,
+          reviewScore: 7.2,
+          photos: [],
+          cheapestPrice: '650.00',
+          cheapestCurrency: 'USD',
+          cancellation: 'partial',
+          distanceMeters: null,
+          amenities: ['wifi'],
+        },
+      ],
+      business: senderoBusinessFixture(),
+      createdAt: FROZEN_AT,
+      ...overrides,
+    };
+  },
+
   stayRatePicker(
     overrides: Partial<ChannelMessageStayRatePicker> = {}
   ): ChannelMessageStayRatePicker {
@@ -506,6 +554,7 @@ export function allFixtures(): ChannelMessage[] {
     fixtures.seatPicker(),
     fixtures.ancillaryPicker(),
     fixtures.tripBrief(),
+    fixtures.staySearchResults(),
     fixtures.stayRatePicker(),
     fixtures.stayQuoteReview(),
     fixtures.stayBookingConfirmation(),

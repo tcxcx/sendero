@@ -31,6 +31,7 @@ import type {
   ChannelMessageStayBookingConfirmation,
   ChannelMessageStayQuoteReview,
   ChannelMessageStayRatePicker,
+  ChannelMessageStaySearchResults,
   ChannelMessageText,
   ChannelMessageToolResult,
   ChannelMessageTripBrief,
@@ -702,6 +703,8 @@ export const renderForWhatsApp: ChannelRenderer<WhatsAppPayload> = async (
       return renderAncillaryPicker(msg);
     case 'trip_brief':
       return renderTripBrief(msg);
+    case 'stay_search_results':
+      return renderStaySearchResults(msg);
     case 'stay_rate_picker':
       return renderStayRatePicker(msg);
     case 'stay_quote_review':
@@ -778,6 +781,80 @@ function businessFooterBlock(b: ChannelStayBusinessDetails): string {
 
 function keyCollectionLine(instructions: string | null): string {
   return `*Key collection*\n${instructions ?? 'Ask at the property on arrival — Duffel returned no key-collection note.'}`;
+}
+
+function renderStaySearchResults(
+  msg: ChannelMessageStaySearchResults
+): RenderedForChannel<WhatsAppPayload> {
+  const headerLines = [
+    `*🏨 ${msg.hotels.length} hotel${msg.hotels.length === 1 ? '' : 's'}*`,
+    `${msg.checkInDate} → ${msg.checkOutDate}`,
+    `${msg.rooms} room${msg.rooms === 1 ? '' : 's'} · ${msg.guests} guest${msg.guests === 1 ? '' : 's'}`,
+  ];
+
+  if (msg.hotels.length === 0) {
+    return {
+      channel: 'whatsapp',
+      payload: envelope({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: '',
+        type: 'text',
+        text: {
+          body: clipBody(
+            [...headerLines, '', 'No matching hotels for this window.'].join('\n'),
+            WA_BODY_MAX
+          ),
+          preview_url: false,
+        },
+      }),
+    };
+  }
+
+  const truncated = msg.hotels.length > WA_LIST_ROWS_MAX;
+  const top = msg.hotels.slice(0, WA_LIST_ROWS_MAX);
+  const rows = top.map(h => {
+    const refundChip =
+      h.cancellation === 'free' ? '✓' : h.cancellation === 'non_refundable' ? '✗' : '~';
+    const stars = h.stars ? `${'★'.repeat(Math.min(5, Math.round(h.stars)))} ` : '';
+    return {
+      id: clip(`select_stay_hotel:${h.searchResultId}`, 200),
+      title: clip(
+        `${stars}${fmtMoneyStay(h.cheapestPrice, h.cheapestCurrency)} ${refundChip}`,
+        WA_BUTTON_TITLE_MAX
+      ),
+      description: clip(
+        `${h.name}${h.city ? ` · ${h.city}` : ''}${h.reviewScore !== null ? ` · ${h.reviewScore.toFixed(1)}/10` : ''}`,
+        72
+      ),
+    };
+  });
+
+  const trailer = truncated
+    ? `\n\n_(Showing top ${WA_LIST_ROWS_MAX} of ${msg.hotels.length} hotels.)_`
+    : '';
+  const footer = `\n\n${businessFooterBlock(msg.business)}`;
+  const body = clipBody(headerLines.join('\n') + trailer + footer, WA_BODY_MAX);
+
+  return {
+    channel: 'whatsapp',
+    payload: envelope({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '',
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        header: { type: 'text', text: clip('Hotels', 60) },
+        body: { text: body },
+        action: {
+          button: clip('Pick a hotel', WA_BUTTON_TITLE_MAX),
+          sections: [{ title: clip('Hotels', 24), rows }],
+        },
+      },
+    }),
+    degraded: truncated,
+  };
 }
 
 function renderStayRatePicker(

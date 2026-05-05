@@ -469,3 +469,56 @@ Booking.com terms: https://www.booking.com/content/terms.html"
   },
 }
 `;
+
+exports[`renderForWhatsApp stay_search_results emits an interactive list keyed by searchResultId 1`] = `
+{
+  "channel": "whatsapp",
+  "degraded": false,
+  "payload": {
+    "interactive": {
+      "action": {
+        "button": "Pick a hotel",
+        "sections": [
+          {
+            "rows": [
+              {
+                "description": "Duffel Test Hotel · Henderson Island · 8.8/10",
+                "id": "select_stay_hotel:ssr_0000B5zd9zXpgcMvBmwkgG",
+                "title": "★★★★ $1,219.70 ✓",
+              },
+              {
+                "description": "Coastal Inn · Henderson Island · 7.2/10",
+                "id": "select_stay_hotel:ssr_0000B5zd9zXpgcMvBmwkgH",
+                "title": "★★★ $650.00 ~",
+              },
+            ],
+            "title": "Hotels",
+          },
+        ],
+      },
+      "body": {
+        "text": 
+"*🏨 2 hotels*
+2026-06-04 → 2026-06-07
+1 room · 1 guest
+
+_Sold by Sendero Travel_
+548 Market St #38322, San Francisco, CA 94104, USA
+hello@sendero.travel · +1 (415) 813-1131
+Booking conditions & T&C: https://sendero.travel/legal/terms
+Booking.com terms: https://www.booking.com/content/terms.html"
+,
+      },
+      "header": {
+        "text": "Hotels",
+        "type": "text",
+      },
+      "type": "list",
+    },
+    "messaging_product": "whatsapp",
+    "recipient_type": "individual",
+    "to": "",
+    "type": "interactive",
+  },
+}
+`;

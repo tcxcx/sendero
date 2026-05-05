@@ -396,6 +396,7 @@ function pushToolMessages(args: {
     // The plain Tool block still surfaces alongside for the operator's
     // input/output forensics.
     const activation = readActivation(part.output);
+    const staySearchResults = readStaySearchResults(part.output);
     const stayRatePicker = readStayRatePicker(part.output);
     const stayQuoteReview = readStayQuoteReview(part.output);
     const stayBookingConfirmation = readStayBookingConfirmation(part.output);
@@ -424,6 +425,15 @@ function pushToolMessages(args: {
         installUrl: activation.installUrl,
         ...(activation.priceLine ? { priceLine: activation.priceLine } : {}),
         ...(activation.expiresAt ? { expiresAt: activation.expiresAt } : {}),
+        createdAt: baseTime,
+      });
+    }
+    if (staySearchResults) {
+      out.push({
+        kind: 'stay_search_results',
+        id: `${partId}-stay-search-results`,
+        author,
+        ...staySearchResults,
         createdAt: baseTime,
       });
     }
@@ -534,6 +544,17 @@ function readActivation(output: unknown): {
  * we fall through to the plain Tool block rather than rendering a broken
  * card. Mirrors `readActivation` for `book_esim`.
  */
+function readStaySearchResults(output: unknown): StaySearchResultsPayload | null {
+  if (!output || typeof output !== 'object') return null;
+  const r = (output as { staySearchResults?: unknown }).staySearchResults;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  const x = r as Record<string, unknown>;
+  if (typeof x.checkInDate !== 'string' || typeof x.checkOutDate !== 'string') return null;
+  if (!Array.isArray(x.hotels)) return null;
+  if (!x.business || typeof x.business !== 'object') return null;
+  return x as unknown as StaySearchResultsPayload;
+}
+
 function readStayRatePicker(output: unknown): StayRatePickerPayload | null {
   if (!output || typeof output !== 'object') return null;
   const r = (output as { stayRatePicker?: unknown }).stayRatePicker;
@@ -572,6 +593,10 @@ function readStayBookingConfirmation(output: unknown): StayBookingConfirmationPa
   return x as unknown as StayBookingConfirmationPayload;
 }
 
+type StaySearchResultsPayload = Omit<
+  Extract<ChannelMessage, { kind: 'stay_search_results' }>,
+  'kind' | 'id' | 'author' | 'createdAt'
+>;
 type StayRatePickerPayload = Omit<
   Extract<ChannelMessage, { kind: 'stay_rate_picker' }>,
   'kind' | 'id' | 'author' | 'createdAt'

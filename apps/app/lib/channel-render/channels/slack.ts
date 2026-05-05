@@ -38,6 +38,7 @@ import type {
   ChannelMessageStayBookingConfirmation,
   ChannelMessageStayQuoteReview,
   ChannelMessageStayRatePicker,
+  ChannelMessageStaySearchResults,
   ChannelMessageToolResult,
   ChannelMessageTripBrief,
   ChannelRenderer,
@@ -93,6 +94,8 @@ export const renderForSlack: ChannelRenderer<SlackPayload> = async (
       return renderAncillaryPicker(msg);
     case 'trip_brief':
       return renderTripBrief(msg);
+    case 'stay_search_results':
+      return renderStaySearchResults(msg);
     case 'stay_rate_picker':
       return renderStayRatePicker(msg);
     case 'stay_quote_review':
@@ -865,6 +868,87 @@ function keyCollectionBlock(instructions: string | null): unknown {
     text: {
       type: 'mrkdwn',
       text: `*:key: Key collection*\n${truncate(toSlackMrkdwn(text), MAX_SECTION_TEXT - 4)}`,
+    },
+  };
+}
+
+function renderStaySearchResults(
+  msg: ChannelMessageStaySearchResults
+): RenderedForChannel<SlackPayload> {
+  const blocks: unknown[] = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `🏨 ${msg.hotels.length} hotel${msg.hotels.length === 1 ? '' : 's'} · ${msg.checkInDate} → ${msg.checkOutDate}`,
+        emoji: true,
+      },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `${msg.rooms} room${msg.rooms === 1 ? '' : 's'} · ${msg.guests} guest${msg.guests === 1 ? '' : 's'}`,
+        },
+      ],
+    },
+  ];
+
+  if (msg.hotels.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '_No matching hotels for this window._' },
+    });
+  } else {
+    blocks.push({ type: 'divider' });
+    for (const h of msg.hotels) {
+      const stars = h.stars ? ` · ${'★'.repeat(Math.min(5, Math.round(h.stars)))}` : '';
+      const review = h.reviewScore !== null ? ` · ${h.reviewScore.toFixed(1)}/10` : '';
+      const where = [h.city, h.country].filter(Boolean).join(' · ');
+      const refundLabel =
+        h.cancellation === 'free'
+          ? '✅ free cancellation'
+          : h.cancellation === 'partial'
+            ? '⚠ partial refund'
+            : h.cancellation === 'non_refundable'
+              ? '❌ non-refundable'
+              : '… refund TBC';
+      const text =
+        `*${escapeMrkdwn(h.name)}*${stars}${review}\n` +
+        (where ? `${escapeMrkdwn(where)}\n` : '') +
+        `${fmtMoneyStay(h.cheapestPrice, h.cheapestCurrency)} · ${refundLabel}` +
+        (h.amenities.length ? `\n_${escapeMrkdwn(h.amenities.slice(0, 4).join(' · '))}_` : '');
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: truncate(text, MAX_SECTION_TEXT) },
+        ...(h.photos[0]
+          ? { accessory: { type: 'image', image_url: h.photos[0], alt_text: h.name } }
+          : {}),
+      });
+      blocks.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            style: 'primary',
+            text: { type: 'plain_text', text: 'View rates', emoji: true },
+            action_id: 'select_stay_hotel',
+            value: h.searchResultId,
+          },
+        ],
+      });
+    }
+  }
+
+  blocks.push(businessFooter(msg.business));
+  return {
+    channel: 'slack',
+    payload: {
+      channel: '',
+      thread_ts: undefined,
+      text: `${msg.hotels.length} hotels · ${msg.checkInDate} → ${msg.checkOutDate}`,
+      blocks,
     },
   };
 }
