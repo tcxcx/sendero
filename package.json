@@ -94,7 +94,8 @@
     "langfuse:prompts:pull": "bun run scripts/langfuse-prompts-pull.ts",
     "langfuse:prompts:diff": "bun run scripts/langfuse-prompts-diff.ts",
     "langfuse:dataset:seed": "bun run scripts/seed-langfuse-dataset.ts",
-    "langfuse:regression": "bun run scripts/langfuse-run-regression.ts"
+    "langfuse:regression": "bun run scripts/langfuse-run-regression.ts",
+    "gaps:scan": "bun run scripts/scan-knowledge-gaps.ts"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^3.0.53",
