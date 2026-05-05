@@ -91,9 +91,7 @@ export async function resolvePrimaryTravelerChannel(args: {
       select: { channelBindings: true, tenantId: true },
     });
     if (trip?.tenantId === args.tenantId) {
-      const bindings = (trip.channelBindings ?? null) as
-        | { primary?: TravelerChannelKind }
-        | null;
+      const bindings = (trip.channelBindings ?? null) as { primary?: TravelerChannelKind } | null;
       if (bindings?.primary === 'whatsapp' || bindings?.primary === 'slack') {
         return bindings.primary;
       }
@@ -141,9 +139,7 @@ export async function dispatchToTraveler(
   return { sent: false, reason: 'unknown_channel' };
 }
 
-async function dispatchWhatsApp(
-  args: DispatchToTravelerArgs
-): Promise<DispatchToTravelerResult> {
+async function dispatchWhatsApp(args: DispatchToTravelerArgs): Promise<DispatchToTravelerResult> {
   const identity = await prisma.channelIdentity.findFirst({
     where: { tenantId: args.tenantId, userId: args.travelerUserId, kind: 'whatsapp' },
     select: { externalUserId: true },
@@ -176,7 +172,8 @@ async function dispatchWhatsApp(
       const reason = result.reason;
       return {
         sent: false,
-        reason: reason === 'access-token-unavailable' ? 'whatsapp_install_missing' : 'unsupported_kind',
+        reason:
+          reason === 'access-token-unavailable' ? 'whatsapp_install_missing' : 'unsupported_kind',
         channel: 'whatsapp',
         detail: reason,
       };
@@ -197,9 +194,7 @@ async function dispatchWhatsApp(
   }
 }
 
-async function dispatchSlack(
-  args: DispatchToTravelerArgs
-): Promise<DispatchToTravelerResult> {
+async function dispatchSlack(args: DispatchToTravelerArgs): Promise<DispatchToTravelerResult> {
   // Resolve the traveler's Slack DM target via SlackUserBinding
   // (tenantId + senderoUserId → slackTeamId + slackUserId). The bot
   // token comes from the matching SlackInstall row.

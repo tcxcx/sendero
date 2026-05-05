@@ -45,7 +45,10 @@ export const loadCompletionContext = async (args: {
   if (trip.tenantId !== args.tenantId) return null;
   if (!trip.travelerId) return null;
 
-  const base: Omit<CompletionContext, 'skipReason' | 'lastArrivalAt' | 'destinationLabel' | 'destinationIata'> = {
+  const base: Omit<
+    CompletionContext,
+    'skipReason' | 'lastArrivalAt' | 'destinationLabel' | 'destinationIata'
+  > = {
     tripId: trip.id,
     tenantId: trip.tenantId,
     travelerId: trip.travelerId,
@@ -95,9 +98,7 @@ export const loadCompletionContext = async (args: {
         ? (lastSeg.destination as string)
         : null;
   const destinationCity =
-    typeof lastSeg?.destinationCity === 'string'
-      ? (lastSeg.destinationCity as string)
-      : null;
+    typeof lastSeg?.destinationCity === 'string' ? (lastSeg.destinationCity as string) : null;
 
   if (!arrivalAt) {
     return {
