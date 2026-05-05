@@ -91,7 +91,6 @@ export function buildWorkflow(): Workflow {
         'ask_about_file',
         'enter_waiting',
         'complete_task',
-        'handoff_to_human',
       ],
       functionTools: [
         {

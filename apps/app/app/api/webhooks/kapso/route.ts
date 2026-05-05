@@ -21,6 +21,7 @@
  * what Kapso actually delivered.
  */
 
+import { after } from 'next/server';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { type Prisma, prisma } from '@sendero/database';
@@ -393,24 +394,28 @@ async function dispatchWorkflowHandoff(event: {
 
   // Fire Liveblocks operator notification — exact same shape as
   // request_human_handoff so the operator dashboard treats both
-  // escalation paths identically.
-  void notifyOperatorHandoff({
-    tenantId: install.tenantId,
-    handoffId: handoff.id,
-    liveblocksRoomId,
-    title: 'Sendero needs your input',
-    message: summary ? `${question} — ${summary}` : question,
-    url: `/dashboard/handoffs/${handoff.id}`,
-  }).catch(err => {
-    console.warn('[webhooks/kapso] handoff liveblocks notify failed', {
+  // escalation paths identically. `after()` keeps the work tied to the
+  // function lifecycle on Vercel Fluid Compute; bare `void` risks the
+  // promise being killed when the function suspends post-response.
+  after(
+    notifyOperatorHandoff({
+      tenantId: install.tenantId,
       handoffId: handoff.id,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  });
+      liveblocksRoomId,
+      title: 'Sendero needs your input',
+      message: summary ? `${question} — ${summary}` : question,
+      url: `/dashboard/handoffs/${handoff.id}`,
+    }).catch(err => {
+      console.warn('[webhooks/kapso] handoff liveblocks notify failed', {
+        handoffId: handoff.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    })
+  );
 
   // Slack fan-out — reuse the same Block Kit card request_human_handoff
   // posts. Lazy-loaded so this route stays light when Slack isn't used.
-  void (async () => {
+  after((async () => {
     try {
       const slackInstall = await prisma.slackInstall.findFirst({
         where: { tenantId: install.tenantId, revokedAt: null },
@@ -467,7 +472,7 @@ async function dispatchWorkflowHandoff(event: {
         error: err instanceof Error ? err.message : String(err),
       });
     }
-  })();
+  })());
 
   return { matched: true, tenantId: install.tenantId };
 }
