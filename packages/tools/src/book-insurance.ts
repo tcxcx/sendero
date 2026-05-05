@@ -158,7 +158,8 @@ export async function bookInsurance(
             (c): c is string => typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)
           );
         }
-        if (typeof intent.startDate === 'string' && !departureDate) departureDate = intent.startDate;
+        if (typeof intent.startDate === 'string' && !departureDate)
+          departureDate = intent.startDate;
         if (typeof intent.endDate === 'string' && !returnDate) returnDate = intent.endDate;
         if (!totalTripUsd && trip.totalUsdc) totalTripUsd = Number(trip.totalUsdc);
       }
@@ -309,8 +310,11 @@ export async function bookInsurance(
   const dollars = (Number(retailMicroUsdc) / 1_000_000).toFixed(2);
   const priceLine = `$${dollars}`;
   const payerLine = provisionedBy
-    ? payerCopy({ payer: provisionedBy, amount: priceLine, tenantName: ctx?.traveler?.tenantId ?? null })
-        .lineItem
+    ? payerCopy({
+        payer: provisionedBy,
+        amount: priceLine,
+        tenantName: ctx?.traveler?.tenantId ?? null,
+      }).lineItem
     : priceLine;
 
   return {

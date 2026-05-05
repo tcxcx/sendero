@@ -88,7 +88,10 @@ export async function searchInsurance(
 ): Promise<SearchInsuranceResult> {
   const tenantId = ctx?.traveler?.tenantId;
   if (!tenantId) {
-    return { status: 'provider_error', message: 'search_insurance requires a tenant-bound caller.' };
+    return {
+      status: 'provider_error',
+      message: 'search_insurance requires a tenant-bound caller.',
+    };
   }
 
   let originIso2 = input.originIso2;
@@ -115,7 +118,8 @@ export async function searchInsurance(
             (c): c is string => typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)
           );
         }
-        if (typeof intent.startDate === 'string' && !departureDate) departureDate = intent.startDate;
+        if (typeof intent.startDate === 'string' && !departureDate)
+          departureDate = intent.startDate;
         if (typeof intent.endDate === 'string' && !returnDate) returnDate = intent.endDate;
         if (!totalTripUsd && trip.totalUsdc) totalTripUsd = Number(trip.totalUsdc);
       }
