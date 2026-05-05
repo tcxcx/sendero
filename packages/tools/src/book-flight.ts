@@ -4,20 +4,28 @@ import { z } from 'zod';
 import {
   createHoldOrder,
   getAirlineCredit,
+  getOfferOriginDestinationIso2,
   getOrder,
   payFromBalance,
   payOrder,
   projectFlightSegmentsFromPayload,
   type DuffelAirlineCreditId,
   type DuffelPaymentInput,
+  type DuffelPassengerIdentityDocument,
 } from '@sendero/duffel';
 import type { ToolDef, ToolContext } from './types';
 import { ensureFlightCustomer } from './ensure-flight-customer';
 import { ensureTravelerWallet } from './ensure-traveler-wallet';
 import { type Prisma, prisma, type MeterPayerType } from '@sendero/database';
+import { decryptVaultPayload } from '@sendero/vault';
 import { queryUnifiedBalance } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner, getUserGatewaySigner } from '@sendero/circle/gateway-signer';
 import { resolvePayer } from './lib/resolve-payer';
+import {
+  mergeServices,
+  readPendingAncillaries,
+  type PendingFlightAncillaries,
+} from './lib/trip-ancillaries';
 import type { Address } from 'viem';
 
 const serviceSchema = z.object({
@@ -260,16 +268,101 @@ export const bookFlightTool: ToolDef = {
       }
     }
 
-    const services = input.services?.map(s => ({
+    const explicitServices = input.services?.map(s => ({
       id: s.id,
       quantity: s.quantity ?? 1,
     }));
+    // Merge in any ancillaries staged by `select_seat` / `add_baggage`
+    // for this offer. Explicit `services` from the LLM override on
+    // conflict; staged ones fill in. No-op when tripId is absent or
+    // nothing was staged for this offer.
+    let stagedAncillaries: PendingFlightAncillaries = { seats: [], bags: [] };
+    if (input.tripId) {
+      try {
+        const tripRow = await prisma.trip.findUnique({
+          where: { id: input.tripId },
+          select: { metadata: true },
+        });
+        stagedAncillaries = readPendingAncillaries(
+          tripRow?.metadata ?? null,
+          input.offerId
+        );
+      } catch (err) {
+        // Don't fail the booking if we can't read staged ancillaries —
+        // log and proceed with explicit services only.
+        console.warn('[book_flight] failed to read staged ancillaries', {
+          tripId: input.tripId,
+          offerId: input.offerId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    const merged = mergeServices(explicitServices, stagedAncillaries);
+    const services = merged.length ? merged : undefined;
+
+    // Phase D — international booking gate. Pre-check the offer's
+    // origin/destination countries WITHOUT creating a hold. When the
+    // corridor is international and the traveler's PassportVault is
+    // empty (or expiring before the trip + 6mo), bail out with a
+    // structured response so the agent prompts a passport scan via
+    // `scan_passport_inline` before retrying. Domestic flights skip
+    // this check entirely. Re-pay path (input.holdOrderId set) skips
+    // it too — the prior call did the gate; the second call is just
+    // payment-completion.
+    let identityDocument: DuffelPassengerIdentityDocument | null = null;
+    if (!input.holdOrderId && travelerUserRowId && ctx?.traveler?.tenantId) {
+      try {
+        const corridor = await getOfferOriginDestinationIso2(input.offerId);
+        if (corridor.isInternational) {
+          identityDocument = await loadIdentityDocumentFromVault({
+            tenantId: ctx.traveler.tenantId,
+            userId: travelerUserRowId,
+            bookingTripEndDate: null, // unknown at this stage; vault uses today + 6mo
+          });
+          if (!identityDocument) {
+            return {
+              status: 'traveler_data_required',
+              missing: ['passport'],
+              message:
+                "Send me a photo of your passport to book this international flight. I'll read the MRZ to fill the airline reservation, then drop the image. Saved once, never asked again.",
+              corridor: {
+                originCountryAlpha2: corridor.originCountryAlpha2,
+                destinationCountryAlpha2: corridor.destinationCountryAlpha2,
+              },
+            } as const;
+          }
+        }
+      } catch (err) {
+        // Pre-check is advisory — never block booking on a Duffel
+        // offer-fetch transient. Log and proceed; the worst case is
+        // Duffel rejects the order at create time with a clear error
+        // message.
+        console.warn('[book_flight] international pre-check failed (non-fatal)', {
+          offerId: input.offerId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     // Phase B re-pay path: when the agent passes `holdOrderId` (from a
     // prior insufficient_funds response), skip createHoldOrder and
     // re-use the existing Duffel hold. Pull the order to recover its
     // amount + currency + reference for the payment + persist steps.
-    let hold:
-      | { orderId: string; bookingReference: string; totalAmount: string; totalCurrency: string; paymentRequiredBy: string; services: Array<{ id: string; quantity: number }>; segments: Awaited<ReturnType<typeof createHoldOrder>>['segments']; originIata: string | null; destinationIata: string | null; destinationIso2: string[]; startDate: string | null; endDate: string | null; rawDuffel: Record<string, unknown> | null };
+    let hold: {
+      orderId: string;
+      bookingReference: string;
+      totalAmount: string;
+      totalCurrency: string;
+      paymentRequiredBy: string;
+      services: Array<{ id: string; quantity: number }>;
+      segments: Awaited<ReturnType<typeof createHoldOrder>>['segments'];
+      originIata: string | null;
+      destinationIata: string | null;
+      destinationIso2: string[];
+      startDate: string | null;
+      endDate: string | null;
+      rawDuffel: Record<string, unknown> | null;
+    };
     if (input.holdOrderId) {
       try {
         const existing = await getOrder(input.holdOrderId);
@@ -312,42 +405,43 @@ export const bookFlightTool: ToolDef = {
         } as never;
       }
     } else {
-    // Hold-order creation, with a one-shot retry that drops
-    // `customerUserIds` when Duffel rejects them as
-    // `user_already_associated_with_passenger`. The customer-user link
-    // is a nice-to-have (Travel Support Assistant access) — never a
-    // reason to fail the actual booking. The user can be relinked
-    // later via Duffel's relationship API. See
-    // https://duffel.com/docs/api/overview/response-handling for the
-    // error shape.
-    const baseHoldArgs = {
-      offerId: input.offerId,
-      passengerName: travelerName,
-      passengerEmail: travelerEmail,
-      passengerPhone: travelerPhone,
-      idempotencyKey: `sendero-${input.offerId}-${Date.now()}`,
-      services,
-    } as const;
-    try {
-      hold = await createHoldOrder({
-        ...baseHoldArgs,
-        customerUserIds: customerUserIds.length ? customerUserIds : undefined,
-      });
-    } catch (err) {
-      const errors = (err as { errors?: Array<{ code?: string }> })?.errors ?? [];
-      const alreadyAssociated = errors.some(
-        e => e.code === 'user_already_associated_with_passenger'
-      );
-      if (!alreadyAssociated || customerUserIds.length === 0) throw err;
-      console.warn(
-        '[book_flight] customerUserIds rejected as already-associated — retrying without link',
-        { customerUserIds, offerId: input.offerId }
-      );
-      hold = await createHoldOrder({
-        ...baseHoldArgs,
-        idempotencyKey: `sendero-${input.offerId}-${Date.now()}-retry`,
-      });
-    }
+      // Hold-order creation, with a one-shot retry that drops
+      // `customerUserIds` when Duffel rejects them as
+      // `user_already_associated_with_passenger`. The customer-user link
+      // is a nice-to-have (Travel Support Assistant access) — never a
+      // reason to fail the actual booking. The user can be relinked
+      // later via Duffel's relationship API. See
+      // https://duffel.com/docs/api/overview/response-handling for the
+      // error shape.
+      const baseHoldArgs = {
+        offerId: input.offerId,
+        passengerName: travelerName,
+        passengerEmail: travelerEmail,
+        passengerPhone: travelerPhone,
+        idempotencyKey: `sendero-${input.offerId}-${Date.now()}`,
+        services,
+        ...(identityDocument ? { identityDocument } : {}),
+      } as const;
+      try {
+        hold = await createHoldOrder({
+          ...baseHoldArgs,
+          customerUserIds: customerUserIds.length ? customerUserIds : undefined,
+        });
+      } catch (err) {
+        const errors = (err as { errors?: Array<{ code?: string }> })?.errors ?? [];
+        const alreadyAssociated = errors.some(
+          e => e.code === 'user_already_associated_with_passenger'
+        );
+        if (!alreadyAssociated || customerUserIds.length === 0) throw err;
+        console.warn(
+          '[book_flight] customerUserIds rejected as already-associated — retrying without link',
+          { customerUserIds, offerId: input.offerId }
+        );
+        hold = await createHoldOrder({
+          ...baseHoldArgs,
+          idempotencyKey: `sendero-${input.offerId}-${Date.now()}-retry`,
+        });
+      }
     }
 
     // USDC payment gate — testnet treats 1 USD = 1 USDC. Verify the
@@ -740,6 +834,129 @@ export const bookFlightTool: ToolDef = {
  * constraint). Re-running for the same Duffel order returns the
  * existing rows instead of double-creating.
  */
+/**
+ * Pick the outbound destination IATA from a normalized segment list.
+ *
+ * For one-way and multi-stop itineraries this is the last segment's
+ * destination (which the projector already returns). For round-trip
+ * itineraries the projector's value is the RETURN airport — equal to
+ * origin — which would render every round-trip as "EZE → EZE" on the
+ * NFT card and confuse `get_active_trip`. Walk the segments and return
+ * the first one whose destinationCountry differs from the origin
+ * country; that's where the traveler actually goes.
+ *
+ * Falls back to the projector's `destinationIata` when:
+ *   - segments is empty (defensive — fresh path always populates it),
+ *   - the trip never leaves the origin country (domestic round-trip;
+ *     the airport-level return is fine in that case).
+ */
+/**
+ * ISO 3166-1 alpha-3 → alpha-2 conversion. Sendero's PassportVault
+ * stores nationality as alpha-3 (matches the visa-rules table); Duffel
+ * expects alpha-2 on `identity_documents.issuing_country_code`. We
+ * cover the corridors the visa-rules table actually serves — falls
+ * through to `null` for everything else, in which case the agent
+ * should drop the identity document and let the airline deal with the
+ * gap (still better than passing a bad code).
+ */
+const ISO3_TO_ISO2: Record<string, string> = {
+  ARG: 'AR', BRA: 'BR', CHL: 'CL', URY: 'UY', PER: 'PE', COL: 'CO', MEX: 'MX',
+  USA: 'US', CAN: 'CA', GBR: 'GB', IRL: 'IE',
+  FRA: 'FR', DEU: 'DE', ESP: 'ES', ITA: 'IT', PRT: 'PT', NLD: 'NL', BEL: 'BE',
+  CHE: 'CH', AUT: 'AT', SWE: 'SE', NOR: 'NO', DNK: 'DK', FIN: 'FI',
+  JPN: 'JP', KOR: 'KR', CHN: 'CN', IND: 'IN', SGP: 'SG', THA: 'TH', IDN: 'ID',
+  VNM: 'VN', PHL: 'PH', MYS: 'MY', AUS: 'AU', NZL: 'NZ', RUS: 'RU', TUR: 'TR',
+  ZAF: 'ZA', EGY: 'EG', MAR: 'MA',
+};
+function iso3to2(iso3: string | null): string | null {
+  if (!iso3) return null;
+  return ISO3_TO_ISO2[iso3.toUpperCase()] ?? null;
+}
+
+/**
+ * Phase D — pull the traveler's encrypted passport + decrypt to a
+ * Duffel-shaped identity document. Returns `null` when the vault is
+ * empty, expired, or revoked. Caller is `book_flight` and decides
+ * whether absence means "ask the traveler to scan" or "proceed without
+ * docs" (domestic flight).
+ */
+async function loadIdentityDocumentFromVault(args: {
+  tenantId: string;
+  userId: string;
+  bookingTripEndDate: string | null;
+}): Promise<DuffelPassengerIdentityDocument | null> {
+  const row = await prisma.passportVault.findFirst({
+    where: {
+      tenantId: args.tenantId,
+      userId: args.userId,
+      documentVariant: 'passport',
+      revokedAt: null,
+    },
+    select: { id: true, expiresOn: true, mrzChecksumValid: true },
+  });
+  if (!row || !row.mrzChecksumValid) return null;
+  // 6-month-after-trip rule. Many destinations require passport
+  // validity beyond the trip's last day. Use a conservative buffer.
+  if (row.expiresOn) {
+    const tripEnd = args.bookingTripEndDate
+      ? new Date(args.bookingTripEndDate)
+      : new Date();
+    const sixMonthsAfter = new Date(tripEnd);
+    sixMonthsAfter.setMonth(sixMonthsAfter.getMonth() + 6);
+    if (row.expiresOn < sixMonthsAfter) {
+      // Expiring too soon — caller treats this as "missing" so the
+      // agent prompts a re-scan.
+      return null;
+    }
+  }
+  const payload = await decryptVaultPayload(prisma, {
+    vaultId: row.id,
+    tenantId: args.tenantId,
+    actor: {
+      actorRef: `tool:book_flight:${args.userId}`,
+      source: 'tool/book_flight',
+    },
+  });
+  if (!payload) return null;
+  const extraction = (payload.extraction ?? {}) as {
+    document_number?: string;
+    nationality?: string;
+    issuing_country?: string;
+    date_of_expiry?: string;
+    date_of_issue?: string;
+  };
+  if (!extraction.document_number || !extraction.date_of_expiry) return null;
+  const issuingCountryAlpha2 =
+    iso3to2(extraction.issuing_country ?? null) ?? iso3to2(extraction.nationality ?? null);
+  if (!issuingCountryAlpha2) return null;
+  return {
+    type: 'passport',
+    uniqueIdentifier: extraction.document_number,
+    issuingCountryCode: issuingCountryAlpha2,
+    nationality: iso3to2(extraction.nationality ?? null) ?? issuingCountryAlpha2,
+    expiresOn: extraction.date_of_expiry.slice(0, 10),
+    ...(extraction.date_of_issue
+      ? { issuedOn: extraction.date_of_issue.slice(0, 10) }
+      : {}),
+  };
+}
+
+function pickOutboundDestinationIata(
+  segments: import('@sendero/duffel').NormalizedFlightSegment[],
+  originIata: string | null,
+  fallback: string | null
+): string | null {
+  if (!Array.isArray(segments) || segments.length === 0) return fallback;
+  const homeCountry = segments[0]?.originCountry ?? null;
+  for (const seg of segments) {
+    const destCountry = seg.destinationCountry;
+    if (destCountry && homeCountry && destCountry.toUpperCase() !== homeCountry.toUpperCase()) {
+      if (seg.destinationIata) return seg.destinationIata;
+    }
+  }
+  return fallback ?? null;
+}
+
 async function persistBookingAndTrip(args: {
   tenantId: string;
   travelerUserId: string;
@@ -783,12 +1000,24 @@ async function persistBookingAndTrip(args: {
     select: { id: true },
   });
 
+  // For round-trip itineraries the projector's `destinationIata` is the
+  // LAST segment's destination — i.e. the return airport, which equals
+  // origin for round-trip and is misleading for the trip's actual
+  // destination. Pick the FIRST segment whose destinationCountry differs
+  // from origin's country: that's where the traveler actually spends
+  // time. Falls back to the projector's value for one-way + domestic.
+  const outboundDestinationIata = pickOutboundDestinationIata(
+    args.segments,
+    args.originIata,
+    args.destinationIata
+  );
+
   const tripIntent: Record<string, unknown> = {
     source: 'book_flight',
     duffelOrderId: args.duffelOrderId,
   };
   if (args.originIata) tripIntent.origin = args.originIata;
-  if (args.destinationIata) tripIntent.destination = args.destinationIata;
+  if (outboundDestinationIata) tripIntent.destination = outboundDestinationIata;
   if (args.destinationIso2.length > 0) tripIntent.destinationIso2 = args.destinationIso2;
   if (args.startDate) tripIntent.startDate = args.startDate;
   if (args.endDate) tripIntent.endDate = args.endDate;
@@ -815,7 +1044,10 @@ async function persistBookingAndTrip(args: {
   // (so its intent is missing destination data), backfill it now from
   // this booking's projection so the next agent turn that calls
   // `get_active_trip` resolves the destination cleanly.
-  if (existingTrip?.id && (args.originIata || args.destinationIata || args.destinationIso2.length > 0)) {
+  if (
+    existingTrip?.id &&
+    (args.originIata || args.destinationIata || args.destinationIso2.length > 0)
+  ) {
     try {
       await prisma.$executeRaw`
         UPDATE "trips"
@@ -868,16 +1100,12 @@ async function persistBookingAndTrip(args: {
       currency: args.currency,
       bookedAt: new Date(),
       provisionedBy: args.provisionedBy,
-      ...(eTicketUrl
-        ? { eTicketDocumentUrl: eTicketUrl, eTicketIssuedAt: new Date() }
-        : {}),
+      ...(eTicketUrl ? { eTicketDocumentUrl: eTicketUrl, eTicketIssuedAt: new Date() } : {}),
       // Normalized itinerary projection. `get_active_trip` and the
       // post-mint stamp prompts read this; rawDuffel is kept as
       // audit + fallback parsing surface.
       segments: args.segments as unknown as Prisma.InputJsonValue,
-      ...(args.rawDuffel
-        ? { rawDuffel: args.rawDuffel as unknown as Prisma.InputJsonValue }
-        : {}),
+      ...(args.rawDuffel ? { rawDuffel: args.rawDuffel as unknown as Prisma.InputJsonValue } : {}),
       metadata: {
         paymentStatus: args.paymentStatus,
         ...(args.usdcSettlement ? { usdcSettlement: args.usdcSettlement } : {}),
@@ -938,7 +1166,10 @@ async function maybeAutoCompleteJourney(args: {
 
   const user = await prisma.user.findUnique({
     where: { id: args.travelerUserId },
-    select: { homeIata: true, channelIdentities: { where: { kind: 'whatsapp' }, select: { externalUserId: true }, take: 1 } },
+    select: {
+      homeIata: true,
+      channelIdentities: { where: { kind: 'whatsapp' }, select: { externalUserId: true }, take: 1 },
+    },
   });
   const homeIata = user?.homeIata;
   if (!homeIata) return;
@@ -1204,7 +1435,9 @@ async function settleTravelerUsdcToTreasury(args: {
 
   const senderoRecipient = process.env.TREASURY_VIEM_ADDRESS;
   if (!senderoRecipient) {
-    console.warn('[book_flight] TREASURY_VIEM_ADDRESS unset — refusing to settle (would lose money)');
+    console.warn(
+      '[book_flight] TREASURY_VIEM_ADDRESS unset — refusing to settle (would lose money)'
+    );
     return null;
   }
 
