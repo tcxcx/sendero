@@ -180,6 +180,18 @@ describe('renderForOperator', () => {
     expect(findByType(tree, ToolInput)).not.toBeNull();
   });
 
+  test('tool_invocation with silent:true renders the debug-line, not a Tool block', () => {
+    const tree = renderForOperator(
+      fixtures.toolInvocation({ status: 'done', silent: true, toolName: 'get_active_trip' })
+    );
+    expect(tree.type).not.toBe(Tool);
+    // Debug-line is a plain div (no Tool/ToolHeader/ToolContent).
+    expect(findByType(tree, ToolHeader)).toBeNull();
+    expect(findByType(tree, ToolContent)).toBeNull();
+    // Tool name should be visible in the line for triage.
+    expect(collectText(tree)).toContain('get_active_trip');
+  });
+
   test('tool_invocation error renders Tool with state output-error and an errorText', () => {
     const tree = renderForOperator(
       fixtures.toolInvocation({ status: 'error', errorMessage: 'rate limited' })

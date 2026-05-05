@@ -143,6 +143,22 @@ export interface ChannelMessageToolInvocation {
   result?: unknown;
   /** Latency in ms once status flips to done/error. */
   latencyMs?: number;
+  /**
+   * When true, the operator preview collapses this invocation into a
+   * one-line debug-drawer entry instead of a full `<Tool>` block.
+   * Traveler-facing channels (Slack/WhatsApp/web/email) already drop
+   * `tool_invocation` by design; this flag governs the OPERATOR
+   * surface only.
+   *
+   * Set by the agent runtime when the tool returns `_meta: { silent: true }`,
+   * OR when the tool descriptor itself was tagged silent. Used by
+   * context-loading tools (get_active_trip, get_whatsapp_context,
+   * traveler-profile reads) so the operator chat shows clean
+   * user-facing turns and the silent ops live in a debug drawer.
+   *
+   * Spec: docs/architecture/concierge-magic.md §3.4.
+   */
+  silent?: boolean;
   createdAt: string;
 }
 

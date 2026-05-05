@@ -17,6 +17,7 @@ import type { ToolDef, ToolContext } from './types';
 import { ensureFlightCustomer } from './ensure-flight-customer';
 import { ensureTravelerWallet } from './ensure-traveler-wallet';
 import { type Prisma, prisma, type MeterPayerType } from '@sendero/database';
+import { iso3to2 as locationIso3to2 } from '@sendero/location/iso';
 import { decryptVaultPayload } from '@sendero/vault';
 import { queryUnifiedBalance } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner, getUserGatewaySigner } from '@sendero/circle/gateway-signer';
@@ -772,6 +773,32 @@ export const bookFlightTool: ToolDef = {
         });
       }
 
+      // Concierge-magic — profile write hook (fire-and-forget).
+      // Increments totalTrips + stamps lastTripAt so the recurring-
+      // traveler greeting on the next trip carries memory. visitedCities
+      // stays empty here — we have IATA, not city. book_stay finishes
+      // the memory when the funnel reaches it (city present in input).
+      // The final ISO-2 of a multi-leg itinerary is the relevant
+      // destination for "visited"; intermediate stops aren't.
+      // Spec: docs/architecture/concierge-magic.md §4.
+      if (travelerUserRowId) {
+        const finalIso2 = hold.destinationIso2?.[hold.destinationIso2.length - 1] ?? null;
+        void import('./lib/traveler-profile').then(m =>
+          m.onFlightBooked({
+            userId: travelerUserRowId!,
+            tenantId: ctx.traveler!.tenantId!,
+            destinationIso2: finalIso2,
+            destinationCity: null, // IATA only at this layer
+            preferredCabin: null, // not on book_flight input — cabin is locked on the offer
+          })
+        ).catch(err => {
+          console.warn('[book_flight] traveler profile write failed (non-fatal)', {
+            userId: travelerUserRowId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      }
+
       // Phase C — auto-complete an open_journey trip when this booking
       // is the going-home leg. Fire-and-forget call to complete_trip:
       // flips Trip.status='completed' + kicks off the TripPassport NFT
@@ -872,12 +899,30 @@ export const bookFlightTool: ToolDef = {
  * gap (still better than passing a bad code).
  */
 const ISO3_TO_ISO2: Record<string, string> = {
+  // NOTE: legacy hand-maintained table preserved for back-compat —
+  // book-flight now resolves via @sendero/location/iso (250-country
+  // source of truth). Keep this in sync if you add tools that don't
+  // pull the package yet.
   ARG: 'AR',
   BRA: 'BR',
   CHL: 'CL',
   URY: 'UY',
   PER: 'PE',
   COL: 'CO',
+  ECU: 'EC',
+  VEN: 'VE',
+  PRY: 'PY',
+  BOL: 'BO',
+  CRI: 'CR',
+  PAN: 'PA',
+  GTM: 'GT',
+  HND: 'HN',
+  NIC: 'NI',
+  SLV: 'SV',
+  DOM: 'DO',
+  CUB: 'CU',
+  JAM: 'JM',
+  HTI: 'HT',
   MEX: 'MX',
   USA: 'US',
   CAN: 'CA',
@@ -916,6 +961,12 @@ const ISO3_TO_ISO2: Record<string, string> = {
 };
 function iso3to2(iso3: string | null): string | null {
   if (!iso3) return null;
+  // Prefer the canonical 250-country lookup (@sendero/location). The
+  // local ISO3_TO_ISO2 map remains as a fallback for the rare iso3
+  // codes the package doesn't carry (none expected — this is belt-and-
+  // braces for build-time tree-shake edge cases).
+  const fromPkg = locationIso3to2(iso3);
+  if (fromPkg) return fromPkg;
   return ISO3_TO_ISO2[iso3.toUpperCase()] ?? null;
 }
 
@@ -1307,6 +1358,22 @@ async function firePostTicketingFanout(args: {
       error: err instanceof Error ? err.message : String(err),
     });
   });
+
+  // Concierge-magic — kick off the T-48h Touch-1 watcher. Sleeps
+  // until 48h before first segment, then sends the local-color brief
+  // + ancillary checklist. Idempotent on touchBackSentAt; duplicate
+  // kickoffs (round-trip = 1 booking; multi-leg open_journey = N)
+  // converge before the dispatch step. Spec: docs/architecture/
+  // concierge-magic.md §6.2.
+  void kickOffConciergeTouchback({
+    tripId: args.tripId,
+    tenantId: args.tenantId,
+  }).catch(err => {
+    console.warn('[book_flight] concierge-touchback kickoff failed (non-fatal)', {
+      tripId: args.tripId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 }
 
 /**
@@ -1341,6 +1408,46 @@ async function kickOffTripCompletionWatcher(args: {
     }
   } catch (err) {
     console.warn('[book_flight] watcher kickoff fetch failed', {
+      tripId: args.tripId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Kick off the `concierge-touchback` WDK workflow over the
+ * `/api/workflows/lifecycle/ConciergeTouchback` HTTP surface. Same
+ * shape as `kickOffTripCompletionWatcher`. The workflow sleeps until
+ * 48h before the trip's first segment, then sends Touch-1 (local
+ * color + ancillary checklist).
+ */
+async function kickOffConciergeTouchback(args: {
+  tripId: string;
+  tenantId: string;
+}): Promise<void> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
+  if (!secret) return;
+  try {
+    const res = await fetch(
+      `${baseUrl.replace(/\/$/, '')}/api/workflows/lifecycle/ConciergeTouchback`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-sendero-dispatch-secret': secret,
+        },
+        body: JSON.stringify({ tripId: args.tripId, tenantId: args.tenantId }),
+      }
+    );
+    if (!res.ok) {
+      console.warn('[book_flight] concierge-touchback kickoff non-OK', {
+        status: res.status,
+        tripId: args.tripId,
+      });
+    }
+  } catch (err) {
+    console.warn('[book_flight] concierge-touchback kickoff fetch failed', {
       tripId: args.tripId,
       error: err instanceof Error ? err.message : String(err),
     });

@@ -94,6 +94,15 @@ export function renderForOperator(msg: ChannelMessage): JSX.Element {
       );
 
     case 'tool_invocation':
+      // Silent invocations collapse to a one-line debug-drawer entry —
+      // context-loading tools (get_active_trip / get_whatsapp_context /
+      // traveler-profile reads) tag themselves silent so the operator
+      // preview shows clean user-facing turns. The data still flows
+      // through the agent runtime; only the visual presentation changes.
+      // Spec: docs/architecture/concierge-magic.md §3.4.
+      if (msg.silent) {
+        return <SilentToolLine name={msg.toolName} status={msg.status} />;
+      }
       // Single Tool block per call — input + output (or error) collapsed
       // inside the same ToolContent. Output renders only when status is
       // 'done' AND the converter passed a `result`. Tools that want a
@@ -343,6 +352,36 @@ function StayBookingConfirmationView({ msg }: { msg: ChannelMessageStayBookingCo
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────
+
+/**
+ * One-line debug-drawer marker for silent tool invocations. Visible to
+ * the operator (so context loads aren't completely invisible during
+ * triage) but doesn't break the visual rhythm of user-facing turns.
+ *
+ * Spec: docs/architecture/concierge-magic.md §3.4.
+ */
+function SilentToolLine({
+  name,
+  status,
+}: {
+  name: string;
+  status: 'pending' | 'streaming' | 'done' | 'error';
+}): JSX.Element {
+  const dot =
+    status === 'pending' || status === 'streaming'
+      ? '⋯'
+      : status === 'error'
+        ? '✗'
+        : '·';
+  return (
+    <div
+      className="px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-dim)]"
+      title={`silent · ${name} · ${status}`}
+    >
+      <span aria-hidden="true">{dot}</span> <span>{name}</span>
+    </div>
+  );
+}
 
 function stringify(v: unknown): string {
   try {
