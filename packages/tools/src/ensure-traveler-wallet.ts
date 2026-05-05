@@ -55,7 +55,11 @@ const SOL_BLOCKCHAIN = 'SOL-DEVNET' as const;
  * the Arc DCW is provisioned the first time, the additional EVM
  * chains are registered in a fan-out (fail-soft per chain).
  */
-function listEvmGatewayChains(): Array<{ key: GatewayChainKey; circleId: string; chainId: number }> {
+function listEvmGatewayChains(): Array<{
+  key: GatewayChainKey;
+  circleId: string;
+  chainId: number;
+}> {
   const out: Array<{ key: GatewayChainKey; circleId: string; chainId: number }> = [];
   for (const [key, def] of Object.entries(GATEWAY_CHAINS) as Array<
     [GatewayChainKey, (typeof GATEWAY_CHAINS)[GatewayChainKey]]
@@ -451,10 +455,10 @@ async function ensureUserGatewaySigner(args: { userId: string }): Promise<void> 
       caller: { surface: 'tool', userId: args.userId, context: 'ensure-traveler-wallet' },
     });
   } catch (err) {
-    console.warn(
-      '[ensureTravelerWallet] user gateway signer provisioning failed (non-fatal)',
-      { userId: args.userId, error: err instanceof Error ? err.message : String(err) }
-    );
+    console.warn('[ensureTravelerWallet] user gateway signer provisioning failed (non-fatal)', {
+      userId: args.userId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 

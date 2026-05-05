@@ -51,11 +51,7 @@ export async function setTripKind(
   if (!trip || trip.travelerId !== userId) {
     return { status: 'not_found', message: 'Trip not found.' };
   }
-  if (
-    trip.status === 'completed' ||
-    trip.status === 'canceled' ||
-    trip.status === 'failed'
-  ) {
+  if (trip.status === 'completed' || trip.status === 'canceled' || trip.status === 'failed') {
     return {
       status: 'already_terminal',
       message: `Trip already ${trip.status} — kind can't change.`,

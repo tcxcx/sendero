@@ -194,8 +194,8 @@ export async function getActiveTrip(
   const lastTicketed =
     ticketedBookings.length > 0 ? ticketedBookings[ticketedBookings.length - 1] : null;
   const currentLocation = lastTicketed
-    ? summarizeBookingSegments(lastTicketed.segments)?.destination ?? null
-    : segmentSummary?.destination ?? null;
+    ? (summarizeBookingSegments(lastTicketed.segments)?.destination ?? null)
+    : (segmentSummary?.destination ?? null);
 
   // Project all bookings for the journey-recap surface.
   const projectedBookings = trip.bookings.map(b => {

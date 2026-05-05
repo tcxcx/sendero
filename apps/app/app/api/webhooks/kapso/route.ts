@@ -415,64 +415,66 @@ async function dispatchWorkflowHandoff(event: {
 
   // Slack fan-out — reuse the same Block Kit card request_human_handoff
   // posts. Lazy-loaded so this route stays light when Slack isn't used.
-  after((async () => {
-    try {
-      const slackInstall = await prisma.slackInstall.findFirst({
-        where: { tenantId: install.tenantId, revokedAt: null },
-        select: { botToken: true, routing: true },
-      });
-      if (!slackInstall?.botToken) return;
-      const routing = (slackInstall.routing ?? {}) as Record<string, unknown>;
-      const defaultChannel =
-        typeof routing.defaultChannel === 'string' ? routing.defaultChannel : null;
-      if (!defaultChannel) return;
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
-      const handoffUrl = `${baseUrl.replace(/\/$/, '')}/dashboard/handoffs/${handoff.id}`;
-      const { createSlackClient, sendBlocks } = await import('@sendero/slack');
-      const client = createSlackClient(slackInstall.botToken);
-      await sendBlocks({
-        client,
-        channel: defaultChannel,
-        text: `Sendero handoff: ${question}`,
-        blocks: [
-          { type: 'header', text: { type: 'plain_text', text: '🛎  Sendero needs your input' } },
-          { type: 'section', text: { type: 'mrkdwn', text: `*Question*\n${question}` } },
-          ...(summary
-            ? [
+  after(
+    (async () => {
+      try {
+        const slackInstall = await prisma.slackInstall.findFirst({
+          where: { tenantId: install.tenantId, revokedAt: null },
+          select: { botToken: true, routing: true },
+        });
+        if (!slackInstall?.botToken) return;
+        const routing = (slackInstall.routing ?? {}) as Record<string, unknown>;
+        const defaultChannel =
+          typeof routing.defaultChannel === 'string' ? routing.defaultChannel : null;
+        if (!defaultChannel) return;
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
+        const handoffUrl = `${baseUrl.replace(/\/$/, '')}/dashboard/handoffs/${handoff.id}`;
+        const { createSlackClient, sendBlocks } = await import('@sendero/slack');
+        const client = createSlackClient(slackInstall.botToken);
+        await sendBlocks({
+          client,
+          channel: defaultChannel,
+          text: `Sendero handoff: ${question}`,
+          blocks: [
+            { type: 'header', text: { type: 'plain_text', text: '🛎  Sendero needs your input' } },
+            { type: 'section', text: { type: 'mrkdwn', text: `*Question*\n${question}` } },
+            ...(summary
+              ? [
+                  {
+                    type: 'section' as const,
+                    text: { type: 'mrkdwn' as const, text: `*Context*\n${summary}` },
+                  },
+                ]
+              : []),
+            {
+              type: 'context',
+              elements: [
+                { type: 'mrkdwn', text: 'Source: `Kapso handoff_to_human` (auto-fanout)' },
+                ...(trip?.id ? [{ type: 'mrkdwn' as const, text: `Trip: \`${trip.id}\`` }] : []),
+                { type: 'mrkdwn', text: `Handoff: \`${handoff.id}\`` },
+              ],
+            },
+            {
+              type: 'actions',
+              elements: [
                 {
-                  type: 'section' as const,
-                  text: { type: 'mrkdwn' as const, text: `*Context*\n${summary}` },
+                  type: 'button',
+                  text: { type: 'plain_text', text: 'Answer in Sendero' },
+                  url: handoffUrl,
+                  style: 'primary',
                 },
-              ]
-            : []),
-          {
-            type: 'context',
-            elements: [
-              { type: 'mrkdwn', text: 'Source: `Kapso handoff_to_human` (auto-fanout)' },
-              ...(trip?.id ? [{ type: 'mrkdwn' as const, text: `Trip: \`${trip.id}\`` }] : []),
-              { type: 'mrkdwn', text: `Handoff: \`${handoff.id}\`` },
-            ],
-          },
-          {
-            type: 'actions',
-            elements: [
-              {
-                type: 'button',
-                text: { type: 'plain_text', text: 'Answer in Sendero' },
-                url: handoffUrl,
-                style: 'primary',
-              },
-            ],
-          },
-        ],
-      });
-    } catch (err) {
-      console.warn('[webhooks/kapso] handoff slack fanout failed', {
-        handoffId: handoff.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  })());
+              ],
+            },
+          ],
+        });
+      } catch (err) {
+        console.warn('[webhooks/kapso] handoff slack fanout failed', {
+          handoffId: handoff.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    })()
+  );
 
   return { matched: true, tenantId: install.tenantId };
 }

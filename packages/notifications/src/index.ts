@@ -135,7 +135,12 @@ export interface Notifier {
     to: string,
     content: Omit<BookingConfirmedContent, 'supportEmail'> & {
       supportEmail?: string;
-      attachments?: Array<{ filename: string; content?: Buffer; path?: string; contentType?: string }>;
+      attachments?: Array<{
+        filename: string;
+        content?: Buffer;
+        path?: string;
+        contentType?: string;
+      }>;
     }
   ): Promise<SendResult>;
   /**

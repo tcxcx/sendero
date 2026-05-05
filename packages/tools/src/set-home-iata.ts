@@ -44,8 +44,7 @@ export async function setHomeIata(
   if (!userId || userId.startsWith('svc:')) {
     return {
       status: 'no_traveler',
-      message:
-        'Pass `travelerPhone` on `call_sendero` so I know whose home to update.',
+      message: 'Pass `travelerPhone` on `call_sendero` so I know whose home to update.',
     };
   }
 
