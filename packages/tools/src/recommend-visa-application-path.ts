@@ -50,7 +50,7 @@ const inputSchema = z.object({
     .length(2)
     .optional()
     .describe(
-      "Country the traveler is applying FROM (where they live now). Drives consulate-search and alternate-post logic. Defaults to home country = nationality (the common case)."
+      'Country the traveler is applying FROM (where they live now). Drives consulate-search and alternate-post logic. Defaults to home country = nationality (the common case).'
     ),
   applicantCity: z
     .string()
@@ -174,7 +174,10 @@ function corridorKey(nationalityIso3: string, destinationIso3: string): string {
   return `${nationalityIso3.toUpperCase()}-${destinationIso3.toUpperCase()}`;
 }
 
-const ETA_PROGRAMS: Record<string, { programName: string; applyUrl: string; leadTimeDays: number }> = {
+const ETA_PROGRAMS: Record<
+  string,
+  { programName: string; applyUrl: string; leadTimeDays: number }
+> = {
   USA: { programName: 'ESTA', applyUrl: 'https://esta.cbp.dhs.gov', leadTimeDays: 3 },
   CAN: {
     programName: 'eTA',
@@ -200,23 +203,75 @@ const ETA_PROGRAMS: Record<string, { programName: string; applyUrl: string; lead
   },
 };
 
-const EVISA_PROGRAMS: Record<string, { programName: string; applyUrl: string; leadTimeDays: number }> = {
-  IND: { programName: 'e-Visa India', applyUrl: 'https://indianvisaonline.gov.in/evisa', leadTimeDays: 4 },
+const EVISA_PROGRAMS: Record<
+  string,
+  { programName: string; applyUrl: string; leadTimeDays: number }
+> = {
+  IND: {
+    programName: 'e-Visa India',
+    applyUrl: 'https://indianvisaonline.gov.in/evisa',
+    leadTimeDays: 4,
+  },
   TUR: { programName: 'e-Visa Türkiye', applyUrl: 'https://www.evisa.gov.tr', leadTimeDays: 1 },
   KEN: { programName: 'eVisa Kenya', applyUrl: 'https://evisa.go.ke/evisa.html', leadTimeDays: 7 },
   EGY: { programName: 'e-Visa Egypt', applyUrl: 'https://visa2egypt.gov.eg/', leadTimeDays: 7 },
-  SAU: { programName: 'eVisa Saudi Arabia', applyUrl: 'https://visa.visitsaudi.com/', leadTimeDays: 1 },
+  SAU: {
+    programName: 'eVisa Saudi Arabia',
+    applyUrl: 'https://visa.visitsaudi.com/',
+    leadTimeDays: 1,
+  },
 };
 
 // Country ISO-2 → ISO-3 for the small subset we recognize. Avoids
 // pulling a 40KB country table for one lookup.
 const ISO2_TO_ISO3: Record<string, string> = {
-  AR: 'ARG', BO: 'BOL', BR: 'BRA', CL: 'CHL', CO: 'COL', EC: 'ECU', GY: 'GUY', PE: 'PER',
-  PY: 'PRY', SR: 'SUR', UY: 'URY', VE: 'VEN', US: 'USA', CA: 'CAN', MX: 'MEX', GB: 'GBR',
-  ES: 'ESP', FR: 'FRA', DE: 'DEU', IT: 'ITA', PT: 'PRT', NL: 'NLD', BE: 'BEL', GR: 'GRC',
-  IE: 'IRL', AT: 'AUT', CH: 'CHE', JP: 'JPN', KR: 'KOR', CN: 'CHN', HK: 'HKG', SG: 'SGP',
-  TH: 'THA', VN: 'VNM', ID: 'IDN', PH: 'PHL', MY: 'MYS', IN: 'IND', AE: 'ARE', SA: 'SAU',
-  IL: 'ISR', TR: 'TUR', EG: 'EGY', MA: 'MAR', ZA: 'ZAF', AU: 'AUS', NZ: 'NZL',
+  AR: 'ARG',
+  BO: 'BOL',
+  BR: 'BRA',
+  CL: 'CHL',
+  CO: 'COL',
+  EC: 'ECU',
+  GY: 'GUY',
+  PE: 'PER',
+  PY: 'PRY',
+  SR: 'SUR',
+  UY: 'URY',
+  VE: 'VEN',
+  US: 'USA',
+  CA: 'CAN',
+  MX: 'MEX',
+  GB: 'GBR',
+  ES: 'ESP',
+  FR: 'FRA',
+  DE: 'DEU',
+  IT: 'ITA',
+  PT: 'PRT',
+  NL: 'NLD',
+  BE: 'BEL',
+  GR: 'GRC',
+  IE: 'IRL',
+  AT: 'AUT',
+  CH: 'CHE',
+  JP: 'JPN',
+  KR: 'KOR',
+  CN: 'CHN',
+  HK: 'HKG',
+  SG: 'SGP',
+  TH: 'THA',
+  VN: 'VNM',
+  ID: 'IDN',
+  PH: 'PHL',
+  MY: 'MYS',
+  IN: 'IND',
+  AE: 'ARE',
+  SA: 'SAU',
+  IL: 'ISR',
+  TR: 'TUR',
+  EG: 'EGY',
+  MA: 'MAR',
+  ZA: 'ZAF',
+  AU: 'AUS',
+  NZ: 'NZL',
 };
 
 const ISO3_TO_ISO2: Record<string, string> = Object.fromEntries(
@@ -227,15 +282,44 @@ function iso3ToCountryName(iso3: string): string {
   // Curated subset; Places copes with full English country names better
   // than ISO codes in text-search queries.
   const NAMES: Record<string, string> = {
-    USA: 'United States', GBR: 'United Kingdom', ESP: 'Spain', FRA: 'France',
-    DEU: 'Germany', ITA: 'Italy', PRT: 'Portugal', NLD: 'Netherlands', BEL: 'Belgium',
-    GRC: 'Greece', IRL: 'Ireland', AUT: 'Austria', CHE: 'Switzerland',
-    JPN: 'Japan', KOR: 'South Korea', CHN: 'China', SGP: 'Singapore',
-    AUS: 'Australia', NZL: 'New Zealand', CAN: 'Canada', MEX: 'Mexico',
-    BRA: 'Brazil', ARG: 'Argentina', CHL: 'Chile', COL: 'Colombia',
-    PER: 'Peru', URY: 'Uruguay', VEN: 'Venezuela', ECU: 'Ecuador', BOL: 'Bolivia',
-    IND: 'India', ARE: 'United Arab Emirates', TUR: 'Türkiye', EGY: 'Egypt',
-    SAU: 'Saudi Arabia', ZAF: 'South Africa', ISR: 'Israel', MAR: 'Morocco',
+    USA: 'United States',
+    GBR: 'United Kingdom',
+    ESP: 'Spain',
+    FRA: 'France',
+    DEU: 'Germany',
+    ITA: 'Italy',
+    PRT: 'Portugal',
+    NLD: 'Netherlands',
+    BEL: 'Belgium',
+    GRC: 'Greece',
+    IRL: 'Ireland',
+    AUT: 'Austria',
+    CHE: 'Switzerland',
+    JPN: 'Japan',
+    KOR: 'South Korea',
+    CHN: 'China',
+    SGP: 'Singapore',
+    AUS: 'Australia',
+    NZL: 'New Zealand',
+    CAN: 'Canada',
+    MEX: 'Mexico',
+    BRA: 'Brazil',
+    ARG: 'Argentina',
+    CHL: 'Chile',
+    COL: 'Colombia',
+    PER: 'Peru',
+    URY: 'Uruguay',
+    VEN: 'Venezuela',
+    ECU: 'Ecuador',
+    BOL: 'Bolivia',
+    IND: 'India',
+    ARE: 'United Arab Emirates',
+    TUR: 'Türkiye',
+    EGY: 'Egypt',
+    SAU: 'Saudi Arabia',
+    ZAF: 'South Africa',
+    ISR: 'Israel',
+    MAR: 'Morocco',
   };
   return NAMES[iso3] ?? iso3;
 }
@@ -341,12 +425,15 @@ export async function recommendVisaApplicationPath(
   // vault and stuffed it onto traveler — extension point).
   const effectiveNationality =
     nationalityIso3 ||
-    ((ctx as { traveler?: { nationalityIso3?: string } })?.traveler?.nationalityIso3 ?? '').toUpperCase();
+    (
+      (ctx as { traveler?: { nationalityIso3?: string } })?.traveler?.nationalityIso3 ?? ''
+    ).toUpperCase();
 
   if (!effectiveNationality) {
     return {
       application_method: 'unknown',
-      reason: 'Traveler nationality unknown — pass nationalityIso3 explicitly or scan their passport first via scan_passport_inline.',
+      reason:
+        'Traveler nationality unknown — pass nationalityIso3 explicitly or scan their passport first via scan_passport_inline.',
       destinationIso3,
       nationalityIso3: '',
     };
@@ -362,8 +449,7 @@ export async function recommendVisaApplicationPath(
     TYPED_CATALOGUE.corridors,
     corridorKey(effectiveNationality, destinationIso3)
   );
-  const status: VisaStatus =
-    rawStatus === 'unknown' && corridorKnown ? 'visa_required' : rawStatus;
+  const status: VisaStatus = rawStatus === 'unknown' && corridorKnown ? 'visa_required' : rawStatus;
 
   switch (status) {
     case 'visa_free':
@@ -379,7 +465,8 @@ export async function recommendVisaApplicationPath(
         leadTimeDays: 0,
         destinationIso3,
         nationalityIso3: effectiveNationality,
-        notes: 'Visa issued at arrival immigration. Bring fee in USD cash + return ticket + accommodation proof.',
+        notes:
+          'Visa issued at arrival immigration. Bring fee in USD cash + return ticket + accommodation proof.',
       };
 
     case 'eta_required': {
@@ -426,8 +513,7 @@ export async function recommendVisaApplicationPath(
       const key = corridorKey(effectiveNationality, destinationIso3);
       const entry = TYPED_CATALOGUE.corridors[key];
 
-      const applicantCountry =
-        applicantCountryIso2 || (ISO3_TO_ISO2[effectiveNationality] ?? '');
+      const applicantCountry = applicantCountryIso2 || (ISO3_TO_ISO2[effectiveNationality] ?? '');
 
       const [liveOptions] = await Promise.all([
         applicantCountry && !input.skipConsulateSearch
