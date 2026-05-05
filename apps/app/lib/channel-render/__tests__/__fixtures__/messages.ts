@@ -145,9 +145,7 @@ export const fixtures = {
     };
   },
 
-  seatPicker(
-    overrides: Partial<ChannelMessageSeatPicker> = {}
-  ): ChannelMessageSeatPicker {
+  seatPicker(overrides: Partial<ChannelMessageSeatPicker> = {}): ChannelMessageSeatPicker {
     return {
       kind: 'seat_picker',
       id: 'msg-seat-1',
