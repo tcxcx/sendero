@@ -293,19 +293,21 @@ export async function bookStay(input: BookStayInput, ctx?: ToolContext): Promise
   // (we have both iso2 + city name from the Duffel response).
   // Spec: docs/architecture/concierge-magic.md §4.
   if (ctx?.traveler?.userId && ctx.traveler.tenantId) {
-    void import('./lib/traveler-profile').then(m =>
-      m.onStayBooked({
-        userId: ctx.traveler!.userId!,
-        tenantId: ctx.traveler!.tenantId!,
-        destinationIso2: confirmation.accommodation.country,
-        destinationCity: confirmation.accommodation.city,
-      })
-    ).catch(err => {
-      console.warn('[book_stay] traveler profile write failed (non-fatal)', {
-        userId: ctx.traveler?.userId,
-        error: err instanceof Error ? err.message : String(err),
+    void import('./lib/traveler-profile')
+      .then(m =>
+        m.onStayBooked({
+          userId: ctx.traveler!.userId!,
+          tenantId: ctx.traveler!.tenantId!,
+          destinationIso2: confirmation.accommodation.country,
+          destinationCity: confirmation.accommodation.city,
+        })
+      )
+      .catch(err => {
+        console.warn('[book_stay] traveler profile write failed (non-fatal)', {
+          userId: ctx.traveler?.userId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    });
   }
 
   return {

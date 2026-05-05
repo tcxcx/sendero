@@ -39,9 +39,7 @@ const inputSchema = z.object({
     to: z.string().describe('YYYY-MM-DD'),
   }),
   /** When set, the trending-venues query centers on the lodging. */
-  lodgingCoords: z
-    .object({ lat: z.number(), lng: z.number() })
-    .optional(),
+  lodgingCoords: z.object({ lat: z.number(), lng: z.number() }).optional(),
   /** BCP-47. Defaults to 'en'. Bullet copy is locale-aware. */
   lang: z.string().default('en'),
 });
@@ -157,7 +155,9 @@ async function placesTrendingNear(args: {
 
   if (!response.ok) return { topNames: [], openNowName: null };
   const data = (await response.json()) as RawPlacesResponse;
-  const all = (data.places ?? []).filter(p => (p.rating ?? 0) >= 4.3 && (p.userRatingCount ?? 0) >= 100);
+  const all = (data.places ?? []).filter(
+    p => (p.rating ?? 0) >= 4.3 && (p.userRatingCount ?? 0) >= 100
+  );
 
   const topNames = all
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
@@ -165,8 +165,7 @@ async function placesTrendingNear(args: {
     .map(p => p.displayName?.text ?? '')
     .filter(Boolean);
 
-  const openNowName =
-    all.find(p => p.currentOpeningHours?.openNow)?.displayName?.text ?? null;
+  const openNowName = all.find(p => p.currentOpeningHours?.openNow)?.displayName?.text ?? null;
 
   return { topNames, openNowName };
 }
@@ -179,11 +178,13 @@ interface WeatherSummary {
   rainExpected: boolean;
 }
 
-function summarizeWeather(forecast: Array<{
-  maxTemperature?: { degrees?: number };
-  minTemperature?: { degrees?: number };
-  precipitationChancePct?: number;
-}>): WeatherSummary {
+function summarizeWeather(
+  forecast: Array<{
+    maxTemperature?: { degrees?: number };
+    minTemperature?: { degrees?: number };
+    precipitationChancePct?: number;
+  }>
+): WeatherSummary {
   if (!forecast.length) {
     return { highC: null, lowC: null, rainExpected: false };
   }
@@ -236,9 +237,7 @@ function approximateSunsetLocal(localTimeIso: string, lat: number): string | nul
 
 // ── Composer ─────────────────────────────────────────────────────────
 
-export async function localColorBrief(
-  input: LocalColorBriefInput
-): Promise<LocalColorBriefResult> {
+export async function localColorBrief(input: LocalColorBriefInput): Promise<LocalColorBriefResult> {
   const composedFrom: LocalColorBriefResult['composedFrom'] = [];
   let partial = false;
 
@@ -272,9 +271,7 @@ export async function localColorBrief(
       const bullets: string[] = [];
       if (tipping) {
         composedFrom.push('tipping');
-        bullets.push(
-          localized(input.lang, 'tipping', { note: tippingNote(tipping) })
-        );
+        bullets.push(localized(input.lang, 'tipping', { note: tippingNote(tipping) }));
       }
       return {
         bullets,

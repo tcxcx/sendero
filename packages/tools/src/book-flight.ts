@@ -783,20 +783,22 @@ export const bookFlightTool: ToolDef = {
       // Spec: docs/architecture/concierge-magic.md §4.
       if (travelerUserRowId) {
         const finalIso2 = hold.destinationIso2?.[hold.destinationIso2.length - 1] ?? null;
-        void import('./lib/traveler-profile').then(m =>
-          m.onFlightBooked({
-            userId: travelerUserRowId!,
-            tenantId: ctx.traveler!.tenantId!,
-            destinationIso2: finalIso2,
-            destinationCity: null, // IATA only at this layer
-            preferredCabin: null, // not on book_flight input — cabin is locked on the offer
-          })
-        ).catch(err => {
-          console.warn('[book_flight] traveler profile write failed (non-fatal)', {
-            userId: travelerUserRowId,
-            error: err instanceof Error ? err.message : String(err),
+        void import('./lib/traveler-profile')
+          .then(m =>
+            m.onFlightBooked({
+              userId: travelerUserRowId!,
+              tenantId: ctx.traveler!.tenantId!,
+              destinationIso2: finalIso2,
+              destinationCity: null, // IATA only at this layer
+              preferredCabin: null, // not on book_flight input — cabin is locked on the offer
+            })
+          )
+          .catch(err => {
+            console.warn('[book_flight] traveler profile write failed (non-fatal)', {
+              userId: travelerUserRowId,
+              error: err instanceof Error ? err.message : String(err),
+            });
           });
-        });
       }
 
       // Phase C — auto-complete an open_journey trip when this booking
