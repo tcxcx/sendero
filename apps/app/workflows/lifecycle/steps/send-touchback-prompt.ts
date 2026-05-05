@@ -101,8 +101,7 @@ export const sendTouchbackPrompt = async (args: {
       (typeof firstSeg?.departureAt === 'string' && firstSeg.departureAt.slice(0, 10)) ||
       (typeof intent.startDate === 'string' && intent.startDate) ||
       null;
-    const returnDate =
-      (typeof intent.endDate === 'string' && intent.endDate) || departureDate;
+    const returnDate = (typeof intent.endDate === 'string' && intent.endDate) || departureDate;
 
     // Lang from User profile when set, else Spanish (LatAm primary market).
     const profile = await prisma.travelerProfile.findUnique({
@@ -153,9 +152,7 @@ export const sendTouchbackPrompt = async (args: {
       isEs ? (ITEM_LABELS[k]?.es ?? k) : (ITEM_LABELS[k]?.en ?? k)
     );
 
-    const title = isEs
-      ? `🧳 ${destinationCity} en 2 días`
-      : `🧳 ${destinationCity} in 2 days`;
+    const title = isEs ? `🧳 ${destinationCity} en 2 días` : `🧳 ${destinationCity} in 2 days`;
     const headerLine = isEs
       ? `Te ayudo con todo lo que falta. *${pendingKeys.length} de 7 ✓*`
       : `Let me help you wrap up the rest. *${pendingKeys.length} of 7 ✓*`;

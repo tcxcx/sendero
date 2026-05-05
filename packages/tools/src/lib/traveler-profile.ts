@@ -139,11 +139,7 @@ export async function onStayBooked(args: StayBookedHookArgs): Promise<void> {
     where: { userId },
     select: { visitedCities: true },
   });
-  const visitedCities = mergeVisitedCity(
-    existing?.visitedCities,
-    destinationIso2,
-    destinationCity
-  );
+  const visitedCities = mergeVisitedCity(existing?.visitedCities, destinationIso2, destinationCity);
 
   await prisma.travelerProfile.upsert({
     where: { userId },

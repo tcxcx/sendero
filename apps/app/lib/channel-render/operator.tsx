@@ -367,12 +367,7 @@ function SilentToolLine({
   name: string;
   status: 'pending' | 'streaming' | 'done' | 'error';
 }): JSX.Element {
-  const dot =
-    status === 'pending' || status === 'streaming'
-      ? '⋯'
-      : status === 'error'
-        ? '✗'
-        : '·';
+  const dot = status === 'pending' || status === 'streaming' ? '⋯' : status === 'error' ? '✗' : '·';
   return (
     <div
       className="px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-dim)]"

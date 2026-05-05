@@ -21,11 +21,7 @@ export interface TouchbackContext {
   destinationIso2: string | null;
   /** ISO-8601 — first ticketed segment's departureAt. */
   firstSegmentDepartureAt: string | null;
-  skipReason?:
-    | 'already_terminal'
-    | 'no_departure_data'
-    | 'already_sent'
-    | 'no_traveler';
+  skipReason?: 'already_terminal' | 'no_departure_data' | 'already_sent' | 'no_traveler';
 }
 
 export const loadTouchbackContext = async (args: {
@@ -118,9 +114,7 @@ export const loadTouchbackContext = async (args: {
         ? (firstSeg.destination as string)
         : null;
   const destinationCity =
-    typeof firstSeg?.destinationCity === 'string'
-      ? (firstSeg.destinationCity as string)
-      : null;
+    typeof firstSeg?.destinationCity === 'string' ? (firstSeg.destinationCity as string) : null;
   const destinationIso2 =
     typeof firstSeg?.destinationIso2 === 'string'
       ? (firstSeg.destinationIso2 as string)

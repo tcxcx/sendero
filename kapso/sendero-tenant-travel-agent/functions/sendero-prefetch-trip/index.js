@@ -95,7 +95,9 @@ function mergeProfileVars(result) {
     recurring_traveler_display_name: recurring.displayName ?? '',
     recurring_traveler_has_saved_passport: recurring.hasSavedPassport ? 'true' : 'false',
     recurring_traveler_prior_trip_count: String(recurring.priorTripCount ?? 0),
-    recurring_traveler_returning_to_destination: recurring.returningToDestination ? 'true' : 'false',
+    recurring_traveler_returning_to_destination: recurring.returningToDestination
+      ? 'true'
+      : 'false',
   };
 }
 
