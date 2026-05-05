@@ -3101,3 +3101,103 @@ model ShortLink {
   @@index([expiresAt])
   @@map("short_links")
 }
+
+/// Demand-driven observability for vertical AI agents — the agent's
+/// own bug tracker. When a tool fails, a schema doesn't match, an
+/// instruction is missing, or the runtime rejects a call, the agent
+/// (in dev/sandbox mode only) self-reports via `report_knowledge_gap`.
+/// The gap-scanner CLI (`bun gaps:scan`) aggregates these into a kanban
+/// at `docs/agent-gaps/board.md`. See packages/tools/src/report-knowledge-gap.ts.
+///
+/// Dedup: same `dedupKey` (sha256 of `kind|toolName|hypothesisNorm`)
+/// across multiple turns increments `occurrenceCount` on a single row
+/// rather than creating duplicates. The `firstSeenAt` / `lastSeenAt`
+/// columns let the scanner compute "how long has this been broken?"
+/// and "is it still happening?" without scanning every row.
+model KnowledgeGap {
+  id   String @id @default(cuid())
+
+  tenantId String  @map("tenant_id")
+  /// Optional Langfuse trace id for round-trip into the trace tree.
+  traceId  String? @map("trace_id")
+
+  /// Classification of what's missing. See KnowledgeGapKind.
+  kind     KnowledgeGapKind
+  severity KnowledgeGapSeverity @default(medium)
+  status   KnowledgeGapStatus   @default(open)
+
+  /// What broke.
+  toolName       String? @map("tool_name")
+  errorMessage   String  @map("error_message")
+  attemptedInput Json?   @map("attempted_input")
+
+  /// The agent's self-diagnosis. `hypothesis` is REQUIRED — the whole
+  /// point is the agent saying "here's what I think was missing."
+  hypothesis       String  @map("hypothesis")
+  suggestedFix     String? @map("suggested_fix")
+  blockingTraveler Boolean @default(false) @map("blocking_traveler")
+
+  /// Context.
+  channelKind      String?  @map("channel_kind")
+  surface          String?
+  reportedByUserId String?  @map("reported_by_user_id")
+
+  /// Resolution.
+  resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolutionNote  String?   @map("resolution_note")
+  resolutionPrUrl String?   @map("resolution_pr_url")
+
+  /// Frequency tracking. `dedupKey` is sha256(kind|toolName|hypothesisNorm).
+  /// Same key across turns increments `occurrenceCount`.
+  dedupKey        String   @map("dedup_key")
+  occurrenceCount Int      @default(1) @map("occurrence_count")
+  firstSeenAt     DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt      DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, dedupKey])
+  @@index([tenantId, status, severity, lastSeenAt(sort: Desc)])
+  @@index([tenantId, kind, status])
+  @@index([toolName, status])
+  @@index([traceId])
+  @@map("knowledge_gaps")
+}
+
+/// Classification of an agent-reported gap. The scanner buckets by
+/// these to surface the right fix path:
+///   - tool_input_mismatch  → likely a prompt slab field-name typo
+///   - tool_not_found       → tool not registered in Kapso/MCP catalog
+///   - tool_error_unrecoverable → tool returns 4xx/5xx the agent can't retry
+///   - instruction_missing  → no slab tells the agent how to handle this case
+///   - env_missing          → infrastructure (KEK, secrets, redeploy needed)
+///   - schema_drift         → tool description ≠ tool inputSchema
+///   - runtime_constraint   → platform foot-gun (e.g. handoff_to_human)
+///   - other                → catch-all; scanner sub-classifies via LLM
+enum KnowledgeGapKind {
+  tool_input_mismatch
+  tool_not_found
+  tool_error_unrecoverable
+  instruction_missing
+  env_missing
+  schema_drift
+  runtime_constraint
+  other
+}
+
+enum KnowledgeGapSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum KnowledgeGapStatus {
+  open
+  triaged
+  in_progress
+  resolved
+  duplicate
+  wontfix
+}
