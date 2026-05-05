@@ -30,6 +30,7 @@ import type {
   ChannelMessageSources,
   ChannelMessageText,
   ChannelMessageToolResult,
+  ChannelMessageTripBrief,
   ChannelRenderer,
   RenderedForChannel,
 } from '../types';
@@ -361,9 +362,7 @@ async function renderToolResult(
  * to ask for a row range. Description carries the price; tap routes to
  * `select_seat:<serviceId>` which the inbound handler decodes.
  */
-function renderSeatPicker(
-  msg: ChannelMessageSeatPicker
-): RenderedForChannel<WhatsAppPayload> {
+function renderSeatPicker(msg: ChannelMessageSeatPicker): RenderedForChannel<WhatsAppPayload> {
   const passenger = msg.passengerName ?? msg.passengerId;
   const truncated = msg.options.length > WA_LIST_ROWS_MAX;
   const options = msg.options.slice(0, WA_LIST_ROWS_MAX);
@@ -397,10 +396,7 @@ function renderSeatPicker(
       200
     ),
     title: clip(o.designator, WA_BUTTON_TITLE_MAX),
-    description: clip(
-      `${o.price} ${o.currency}${o.cabinClass ? ` · ${o.cabinClass}` : ''}`,
-      72
-    ),
+    description: clip(`${o.price} ${o.currency}${o.cabinClass ? ` · ${o.cabinClass}` : ''}`, 72),
   }));
 
   return {
@@ -446,10 +442,7 @@ function renderAncillaryPicker(
         200
       ),
       title: clip(bag.label, WA_BUTTON_TITLE_MAX),
-      description: clip(
-        `${bag.price} ${bag.currency}${meta ? ` · ${meta}` : ''}`,
-        72
-      ),
+      description: clip(`${bag.price} ${bag.currency}${meta ? ` · ${meta}` : ''}`, 72),
     });
   }
   for (const cfar of msg.cancelForAnyReason ?? []) {
@@ -494,6 +487,114 @@ function renderAncillaryPicker(
           sections: [{ title: clip('Extras', 24), rows }],
         },
       },
+    }),
+  };
+}
+
+/**
+ * Trip brief → WhatsApp. When a share URL is present and there's
+ * material to summarize, we use a `cta_url` interactive (single tap
+ * opens the public /trip/[token] page where the rich layout lives).
+ * The body is a markdown-lite recap that fits inside WA's 1024-char
+ * cap. Without a share URL, falls back to a text bubble.
+ */
+function renderTripBrief(msg: ChannelMessageTripBrief): RenderedForChannel<WhatsAppPayload> {
+  const tripLabel = [msg.trip.origin, msg.trip.destination].filter(Boolean).join(' → ');
+  const dateLabel =
+    msg.trip.startDate && msg.trip.endDate
+      ? `${msg.trip.startDate} → ${msg.trip.endDate}`
+      : (msg.trip.startDate ?? msg.trip.endDate ?? '');
+
+  const lines: string[] = [];
+  lines.push(`*${msg.trip.name ?? tripLabel ?? `Trip ${msg.trip.tripId}`}*`);
+  if (dateLabel) lines.push(`_${dateLabel}_`);
+  if (msg.trip.status) lines.push(`Status: ${msg.trip.status}`);
+
+  // Surface critical/warn alerts inline; WA users can't scroll modals
+  // the way Slack threads can.
+  const importantAlerts = msg.alerts.filter(a => a.severity !== 'info');
+  if (importantAlerts.length > 0) {
+    lines.push('');
+    for (const a of importantAlerts) {
+      const icon = a.severity === 'critical' ? '🔴' : '🟡';
+      lines.push(`${icon} ${a.message}`);
+    }
+  }
+
+  if (msg.flights.length > 0) {
+    lines.push('');
+    lines.push('*✈️ Flights*');
+    for (const f of msg.flights) {
+      const route = `${f.origin ?? '?'} → ${f.destination ?? '?'}`;
+      const stops = f.segmentCount > 1 ? ` · ${f.segmentCount}-stop` : '';
+      const pnr = f.pnr ? ` (${f.pnr})` : '';
+      lines.push(`• ${route}${stops}${pnr} · $${f.totalUsd}`);
+    }
+  }
+  if (msg.stays.length > 0) {
+    lines.push('');
+    lines.push('*🏨 Stays*');
+    for (const s of msg.stays) {
+      const where = s.city ? `${s.property ?? 'Hotel'} · ${s.city}` : (s.property ?? 'Hotel');
+      const nights = s.nights ? ` · ${s.nights}n` : '';
+      lines.push(`• ${where}${nights} · $${s.totalUsd}`);
+    }
+  }
+  if (msg.esims.length > 0) {
+    lines.push('');
+    lines.push('*📱 Connectivity*');
+    for (const e of msg.esims) {
+      const gb = (e.dataMb / 1024).toFixed(1);
+      const where = e.countries.join('/') || '—';
+      lines.push(`• ${gb} GB · ${e.validityDays}d · ${where} · ${e.status}`);
+    }
+  }
+
+  // Fall through case: no bookings + no warnings → just say so.
+  if (
+    msg.flights.length === 0 &&
+    msg.stays.length === 0 &&
+    msg.esims.length === 0 &&
+    importantAlerts.length === 0
+  ) {
+    lines.push('');
+    lines.push('No bookings yet — what should we plan first?');
+  }
+
+  const body = clipBody(lines.join('\n'), WA_BODY_MAX);
+
+  if (msg.shareUrl) {
+    return {
+      channel: 'whatsapp',
+      payload: envelope({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: '',
+        type: 'interactive',
+        interactive: {
+          type: 'cta_url',
+          body: { text: body },
+          footer: { text: 'Tap to share or save the full trip view' },
+          action: {
+            name: 'cta_url',
+            parameters: {
+              display_text: clip('🔗 Open trip', WA_BUTTON_TITLE_MAX),
+              url: msg.shareUrl,
+            },
+          },
+        },
+      }),
+    };
+  }
+
+  return {
+    channel: 'whatsapp',
+    payload: envelope({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '',
+      type: 'text',
+      text: { body, preview_url: false },
     }),
   };
 }
@@ -592,6 +693,8 @@ export const renderForWhatsApp: ChannelRenderer<WhatsAppPayload> = async (
       return renderSeatPicker(msg);
     case 'ancillary_picker':
       return renderAncillaryPicker(msg);
+    case 'trip_brief':
+      return renderTripBrief(msg);
     default:
       return exhaustive(msg);
   }

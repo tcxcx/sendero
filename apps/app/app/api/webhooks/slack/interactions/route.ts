@@ -34,6 +34,7 @@ import {
   type ViewSubmissionPayload,
 } from '@sendero/slack';
 import { handleTripNoteSubmission, TRIP_NOTE_CALLBACK_ID } from '@/lib/slack-views/trip-note';
+import { routeSlackAncillaryTap } from '@/lib/ancillary-tap-router';
 import { toolList } from '@sendero/tools';
 import { findWorkflow, resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
 
@@ -319,29 +320,16 @@ async function handleFanoutButtonTap(
 
 /**
  * Pre-booking ancillary picker tap (Slack overflow menu / button).
- * Decodes the JSON value the renderer stuffed into `selected_option`
- * (seats) or `action.value` (bags) and routes to the matching Sendero
- * tool over the internal HTTP surface. The tools stage into
- * `Trip.metadata.pendingAncillaries`; `book_flight` reads + merges
- * with explicit services on the next call.
+ * Resolves the SlackUserBinding so the tools route can attribute the
+ * stage to the right Sendero User, then defers all parsing + HTTP
+ * envelope work to the shared router. Drift between Slack and
+ * WhatsApp body shapes is the failure mode the shared module
+ * eliminates.
  *
  * Action ids:
  *   `sendero_select_seat` — overflow option carries seat staging payload
  *   `sendero_add_bag`     — button value carries bag staging payload
  */
-interface AncillaryStagingPayload {
-  tripId?: string;
-  offerId?: string;
-  passengerId?: string;
-  seatServiceId?: string;
-  bagServiceId?: string;
-  designator?: string;
-  price?: string;
-  currency?: string;
-  quantity?: number;
-  label?: string;
-}
-
 async function handleAncillaryPickerTap(
   payload: BlockActionsPayload,
   action: { action_id: string; value?: string; selected_option?: { value: string } },
@@ -349,18 +337,6 @@ async function handleAncillaryPickerTap(
 ): Promise<void> {
   const raw = action.selected_option?.value ?? action.value ?? '';
   if (!raw) return;
-  let staging: AncillaryStagingPayload;
-  try {
-    staging = JSON.parse(raw) as AncillaryStagingPayload;
-  } catch (err) {
-    console.warn('[slack/interactions] ancillary tap value parse failed', err);
-    return;
-  }
-  if (!staging.tripId || !staging.offerId || !staging.passengerId) return;
-
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
-  const secret = process.env.AGENT_DISPATCH_SECRET ?? process.env.CRON_SECRET ?? '';
-  if (!secret) return;
 
   const { prisma } = await import('@sendero/database');
   const binding = await prisma.slackUserBinding.findFirst({
@@ -379,43 +355,24 @@ async function handleAncillaryPickerTap(
     return;
   }
 
-  const toolName =
-    action.action_id === 'sendero_select_seat' ? 'select_seat' : 'add_baggage';
+  const result = await routeSlackAncillaryTap({
+    actionId: action.action_id,
+    rawValue: raw,
+    tenantId: install.tenantId,
+    senderoUserId: binding.senderoUserId,
+  }).catch(err => {
+    console.warn('[slack/interactions] ancillary tap router threw', err);
+    return { ok: false, reason: 'parse_failed' as const };
+  });
 
-  const input =
-    toolName === 'select_seat'
-      ? {
-          tripId: staging.tripId,
-          offerId: staging.offerId,
-          passengerId: staging.passengerId,
-          seatServiceId: staging.seatServiceId,
-          ...(staging.designator ? { designator: staging.designator } : {}),
-          ...(staging.price ? { price: staging.price } : {}),
-          ...(staging.currency ? { currency: staging.currency } : {}),
-        }
-      : {
-          tripId: staging.tripId,
-          offerId: staging.offerId,
-          passengerId: staging.passengerId,
-          bagServiceId: staging.bagServiceId,
-          quantity: staging.quantity ?? 1,
-          ...(staging.label ? { label: staging.label } : {}),
-          ...(staging.price ? { price: staging.price } : {}),
-          ...(staging.currency ? { currency: staging.currency } : {}),
-        };
-
-  await fetch(`${baseUrl.replace(/\/$/, '')}/api/tools/${toolName}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-sendero-dispatch-secret': secret,
-    },
-    body: JSON.stringify({
-      tenantId: install.tenantId,
-      _slackSenderoUserId: binding.senderoUserId,
-      input,
-    }),
-  }).catch(err => console.warn(`[slack/interactions] ${toolName} failed`, err));
+  if (!result.ok) {
+    if (result.reason === 'parse_failed' || result.reason === 'no_secret') {
+      console.warn('[slack/interactions] ancillary tap not routed', {
+        actionId: action.action_id,
+        reason: result.reason,
+      });
+    }
+  }
 }
 
 async function handleApprovalAction(

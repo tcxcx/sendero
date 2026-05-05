@@ -15,12 +15,13 @@
  */
 
 import { prisma } from '@sendero/database';
+import type { BookingKind } from './markup';
 
 /** Minimum bookings of a given kind before a recommendation surfaces. */
 export const MIN_SAMPLE_COUNT = 100;
 
 /** Booking kinds we recommend on. Mirrors `MarkupConfigSchema`. */
-export type RecommendedKind = 'flight' | 'hotel' | 'rail' | 'car' | 'other';
+export type RecommendedKind = BookingKind;
 
 export interface MarkupRecommendation {
   kind: RecommendedKind;

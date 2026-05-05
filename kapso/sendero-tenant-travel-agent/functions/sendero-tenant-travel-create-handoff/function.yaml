@@ -1,4 +1,7 @@
-slug: sendero-tenant-travel-create-handoff
-name: Sendero tenant travel create handoff
-function_type: cloudflare_worker
 entrypoint: index.js
+function_type: cloudflare_worker
+invoke_response_mode: passthrough
+name: Sendero tenant travel create handoff
+public_endpoint: false
+runtime_config: {}
+slug: sendero-tenant-travel-create-handoff

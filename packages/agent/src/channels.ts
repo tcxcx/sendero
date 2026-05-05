@@ -106,6 +106,28 @@ export interface AgentOutput {
       secondaryCtas?: Array<{ label: string; kind: string }>;
       imageUrl?: string;
     };
+    /**
+     * Optional first-class `esim_activation` payload — present when a
+     * tool emits a structured activation card (QR + LPA + install URL +
+     * per-device steps) instead of (or in addition to) the generic
+     * `share` block. Channel orchestrators see this and render a
+     * dedicated `esim_activation` `ChannelMessage` rather than the
+     * generic `tool_result.share` flow. Today only `book_esim`
+     * populates it; future activation-shaped tools (card issuance,
+     * boarding-pass installs) reuse the same shape.
+     */
+    activation?: {
+      esimId: string;
+      planLabel: string;
+      countries: string[];
+      dataMb: number;
+      validityDays: number;
+      qrUrl: string;
+      lpaCode: string;
+      installUrl: string;
+      priceLine?: string;
+      expiresAt?: string;
+    };
   }>;
   /** Tool-call trail for analytics + admin display. */
   trail: Array<{

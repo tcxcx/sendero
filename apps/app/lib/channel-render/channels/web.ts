@@ -14,14 +14,19 @@
  */
 
 import { buildShareImageUrl } from '@/lib/og/share-url';
+import { DEVICE_ORDER, INSTALL_INSTRUCTIONS } from '../install-instructions';
 import type {
   ChannelAuthor,
   ChannelCta,
   ChannelMessage,
+  ChannelMessageAncillaryPicker,
   ChannelMessageCard,
+  ChannelMessageEsimActivation,
+  ChannelMessageSeatPicker,
   ChannelMessageSources,
   ChannelMessageText,
   ChannelMessageToolResult,
+  ChannelMessageTripBrief,
   ChannelRenderer,
   RenderedForChannel,
 } from '../types';
@@ -32,7 +37,16 @@ import type {
  * of any external API.
  */
 export interface WebTravelerPayload {
-  bubble: 'text' | 'card' | 'image' | 'actions' | 'sources';
+  bubble:
+    | 'text'
+    | 'card'
+    | 'image'
+    | 'actions'
+    | 'sources'
+    | 'esim_activation'
+    | 'seat_picker'
+    | 'ancillary_picker'
+    | 'trip_brief';
   /** Author metadata for the bubble header. */
   author: {
     role: 'agent' | 'operator' | 'system';
@@ -153,6 +167,145 @@ async function renderToolResult(
   };
 }
 
+interface WebEsimActivationContent {
+  esimId: string;
+  planLabel: string;
+  countries: string[];
+  dataMb: number;
+  validityDays: number;
+  qrUrl: string;
+  lpaCode: string;
+  installUrl: string;
+  priceLine?: string;
+  expiresAt?: string;
+  /// Resolved per-device steps so the bubble UI can render tabs without
+  /// re-importing the install-instructions module on the client.
+  instructions: Array<{
+    device: (typeof DEVICE_ORDER)[number];
+    label: string;
+    subLabel?: string;
+    oneTap: boolean;
+    steps: string[];
+    showLpaCode?: boolean;
+  }>;
+}
+
+function renderEsimActivation(
+  msg: ChannelMessageEsimActivation,
+  author: WebTravelerPayload['author']
+): RenderedForChannel<WebTravelerPayload> {
+  const content: WebEsimActivationContent = {
+    esimId: msg.esimId,
+    planLabel: msg.planLabel,
+    countries: msg.countries,
+    dataMb: msg.dataMb,
+    validityDays: msg.validityDays,
+    qrUrl: msg.qrUrl,
+    lpaCode: msg.lpaCode,
+    installUrl: msg.installUrl,
+    ...(msg.priceLine ? { priceLine: msg.priceLine } : {}),
+    ...(msg.expiresAt ? { expiresAt: msg.expiresAt } : {}),
+    instructions: DEVICE_ORDER.map(device => {
+      const i = INSTALL_INSTRUCTIONS[device];
+      return {
+        device,
+        label: i.label,
+        ...(i.subLabel ? { subLabel: i.subLabel } : {}),
+        oneTap: i.oneTap,
+        steps: i.steps,
+        ...(i.showLpaCode ? { showLpaCode: i.showLpaCode } : {}),
+      };
+    }),
+  };
+  return {
+    channel: 'web',
+    payload: { bubble: 'esim_activation', author, content, createdAt: msg.createdAt },
+  };
+}
+
+interface WebSeatPickerContent {
+  tripId: string;
+  offerId: string;
+  passengerId: string;
+  passengerName?: string;
+  selectedDesignator?: string;
+  options: ChannelMessageSeatPicker['options'];
+}
+
+interface WebAncillaryPickerContent {
+  tripId: string;
+  offerId: string;
+  passengerId: string;
+  passengerName?: string;
+  bags: ChannelMessageAncillaryPicker['bags'];
+  cancelForAnyReason?: ChannelMessageAncillaryPicker['cancelForAnyReason'];
+}
+
+function renderSeatPicker(
+  msg: ChannelMessageSeatPicker,
+  author: WebTravelerPayload['author']
+): RenderedForChannel<WebTravelerPayload> {
+  const content: WebSeatPickerContent = {
+    tripId: msg.tripId,
+    offerId: msg.offerId,
+    passengerId: msg.passengerId,
+    ...(msg.passengerName ? { passengerName: msg.passengerName } : {}),
+    ...(msg.selectedDesignator ? { selectedDesignator: msg.selectedDesignator } : {}),
+    options: msg.options,
+  };
+  return {
+    channel: 'web',
+    payload: { bubble: 'seat_picker', author, content, createdAt: msg.createdAt },
+  };
+}
+
+function renderAncillaryPicker(
+  msg: ChannelMessageAncillaryPicker,
+  author: WebTravelerPayload['author']
+): RenderedForChannel<WebTravelerPayload> {
+  const content: WebAncillaryPickerContent = {
+    tripId: msg.tripId,
+    offerId: msg.offerId,
+    passengerId: msg.passengerId,
+    ...(msg.passengerName ? { passengerName: msg.passengerName } : {}),
+    bags: msg.bags,
+    ...(msg.cancelForAnyReason && msg.cancelForAnyReason.length > 0
+      ? { cancelForAnyReason: msg.cancelForAnyReason }
+      : {}),
+  };
+  return {
+    channel: 'web',
+    payload: { bubble: 'ancillary_picker', author, content, createdAt: msg.createdAt },
+  };
+}
+
+interface WebTripBriefContent {
+  trip: ChannelMessageTripBrief['trip'];
+  flights: ChannelMessageTripBrief['flights'];
+  stays: ChannelMessageTripBrief['stays'];
+  esims: ChannelMessageTripBrief['esims'];
+  alerts: ChannelMessageTripBrief['alerts'];
+  shareUrl: string | null;
+}
+
+function renderTripBrief(
+  msg: ChannelMessageTripBrief,
+  author: WebTravelerPayload['author']
+): RenderedForChannel<WebTravelerPayload> {
+  const content: WebTripBriefContent = {
+    trip: msg.trip,
+    flights: msg.flights,
+    stays: msg.stays,
+    esims: msg.esims,
+    alerts: msg.alerts,
+    shareUrl: msg.shareUrl,
+  };
+  return {
+    channel: 'web',
+    payload: { bubble: 'trip_brief', author, content, createdAt: msg.createdAt },
+  };
+}
+
 function renderSources(
   msg: ChannelMessageSources,
   author: WebTravelerPayload['author']
@@ -186,6 +339,14 @@ export const renderForWeb: ChannelRenderer<WebTravelerPayload> = async (
       return null;
     case 'sources':
       return renderSources(msg, author);
+    case 'esim_activation':
+      return renderEsimActivation(msg, author);
+    case 'seat_picker':
+      return renderSeatPicker(msg, author);
+    case 'ancillary_picker':
+      return renderAncillaryPicker(msg, author);
+    case 'trip_brief':
+      return renderTripBrief(msg, author);
     default:
       return exhaustive(msg);
   }

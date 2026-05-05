@@ -1,0 +1,421 @@
+{
+  "_meta": {
+    "version": 1,
+    "lastReviewed": "2026-05-04",
+    "source": "sendero-curated",
+    "scenarios": ["restaurant", "taxi", "hotel_housekeeping", "hotel_porter", "tour_guide", "spa"],
+    "notes": "Curated from common-practice references. Tipping is fluid — treat values as guidance, not policy. Service-charge already included on the bill is called out per row."
+  },
+  "countries": {
+    "US": {
+      "name": "United States",
+      "currency": "USD",
+      "restaurant": { "pct": 18, "range": [15, 22], "notes": "Standard 18-20%; 22%+ for excellent service. Service charge usually NOT included." },
+      "taxi": { "pct": 15, "range": [10, 20], "notes": "Round up to nearest dollar; 15-20% for ride-share + cab." },
+      "hotel_housekeeping": { "flat": { "amount": 3, "currency": "USD" }, "unit": "per_night", "notes": "$2-5/night, leave daily (housekeepers rotate)." },
+      "hotel_porter": { "flat": { "amount": 2, "currency": "USD" }, "unit": "per_bag", "notes": "$1-2/bag." },
+      "tour_guide": { "pct": 15, "range": [10, 20], "notes": "10-20% of tour cost; flat $5-10/person for short walking tours." },
+      "spa": { "pct": 18, "range": [15, 20], "notes": "Check if gratuity already added (often is at resort spas)." }
+    },
+    "CA": {
+      "name": "Canada",
+      "currency": "CAD",
+      "restaurant": { "pct": 18, "range": [15, 20], "notes": "15-18% standard; 20% for excellent. Quebec sometimes adds 'service' — still tip on top customarily." },
+      "taxi": { "pct": 15, "range": [10, 15] },
+      "hotel_housekeeping": { "flat": { "amount": 3, "currency": "CAD" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 2, "currency": "CAD" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 15, "range": [10, 20] },
+      "spa": { "pct": 15, "range": [15, 20] }
+    },
+    "MX": {
+      "name": "Mexico",
+      "currency": "MXN",
+      "restaurant": { "pct": 12, "range": [10, 15], "notes": "10-15% standard. 'Propina' sometimes added — check before tipping again." },
+      "taxi": { "pct": 0, "notes": "Round up; not strictly required for street cabs. 5-10% for ride-share is appreciated." },
+      "hotel_housekeeping": { "flat": { "amount": 30, "currency": "MXN" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 20, "currency": "MXN" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10, "range": [10, 15] },
+      "spa": { "pct": 15, "range": [10, 15] }
+    },
+    "AR": {
+      "name": "Argentina",
+      "currency": "ARS",
+      "restaurant": { "pct": 10, "range": [10, 15], "notes": "'Cubierto' (cover charge) is separate; tip is on top, 10% standard." },
+      "taxi": { "pct": 0, "notes": "Round up; not expected." },
+      "hotel_housekeeping": { "flat": { "amount": 1, "currency": "USD" }, "unit": "per_night", "notes": "USD or local equivalent — strong inflation makes flat ARS amounts go stale fast." },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "USD" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10, "range": [10, 15] },
+      "spa": { "pct": 10 }
+    },
+    "BR": {
+      "name": "Brazil",
+      "currency": "BRL",
+      "restaurant": { "pct": 0, "notes": "10% service charge (taxa de serviço) usually added — optional but customary. Extra tip not expected." },
+      "taxi": { "pct": 0, "notes": "Round up; not expected." },
+      "hotel_housekeeping": { "flat": { "amount": 5, "currency": "BRL" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 5, "currency": "BRL" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10 }
+    },
+    "CL": {
+      "name": "Chile",
+      "currency": "CLP",
+      "restaurant": { "pct": 10, "notes": "10% sugerido (suggested) usually printed on the bill — optional." },
+      "taxi": { "pct": 0, "notes": "Round up; not expected." },
+      "hotel_housekeeping": { "flat": { "amount": 1500, "currency": "CLP" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1500, "currency": "CLP" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10 }
+    },
+    "CO": {
+      "name": "Colombia",
+      "currency": "COP",
+      "restaurant": { "pct": 10, "notes": "Server may ask 'desea incluir el servicio?' — say sí to add 10%." },
+      "taxi": { "pct": 0, "notes": "Round up; not expected." },
+      "hotel_housekeeping": { "flat": { "amount": 5000, "currency": "COP" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 3000, "currency": "COP" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10 }
+    },
+    "PE": {
+      "name": "Peru",
+      "currency": "PEN",
+      "restaurant": { "pct": 10, "notes": "10% common; sometimes service included — check." },
+      "taxi": { "pct": 0 },
+      "hotel_housekeeping": { "flat": { "amount": 5, "currency": "PEN" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 3, "currency": "PEN" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10, "range": [10, 15] },
+      "spa": { "pct": 10 }
+    },
+    "UY": {
+      "name": "Uruguay",
+      "currency": "UYU",
+      "restaurant": { "pct": 10 },
+      "taxi": { "pct": 0, "notes": "Round up; not expected." },
+      "hotel_housekeeping": { "flat": { "amount": 50, "currency": "UYU" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 50, "currency": "UYU" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10 }
+    },
+    "GB": {
+      "name": "United Kingdom",
+      "currency": "GBP",
+      "restaurant": { "pct": 12, "range": [10, 15], "notes": "12.5% 'discretionary service charge' often added at sit-down — check before tipping again. Pubs: don't tip for drinks at the bar." },
+      "taxi": { "pct": 10, "notes": "Round up; black-cab drivers don't expect more than 10%." },
+      "hotel_housekeeping": { "flat": { "amount": 2, "currency": "GBP" }, "unit": "per_night", "notes": "Optional; less common than US." },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "GBP" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10, "notes": "£5-10 for half-day; £10-20 for full-day." },
+      "spa": { "pct": 10 }
+    },
+    "IE": {
+      "name": "Ireland",
+      "currency": "EUR",
+      "restaurant": { "pct": 10, "range": [10, 15], "notes": "10-12% standard. Pubs: not for drinks at the bar." },
+      "taxi": { "pct": 10, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 2, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10 }
+    },
+    "FR": {
+      "name": "France",
+      "currency": "EUR",
+      "restaurant": { "pct": 0, "notes": "Service compris by law — leave 5-10% extra only for excellent service. Round up at cafés." },
+      "taxi": { "pct": 0, "notes": "Round up; 5-10% for great service." },
+      "hotel_housekeeping": { "flat": { "amount": 2, "currency": "EUR" }, "unit": "per_night", "notes": "Optional." },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10, "notes": "€5-10/person for guided tours." },
+      "spa": { "pct": 5, "range": [0, 10], "notes": "Service usually included." }
+    },
+    "DE": {
+      "name": "Germany",
+      "currency": "EUR",
+      "restaurant": { "pct": 10, "notes": "Round up to nearest 5-10% — say total when paying ('25, bitte' rounds €23 to €25)." },
+      "taxi": { "pct": 10, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 2, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 5, "notes": "Service usually included." }
+    },
+    "IT": {
+      "name": "Italy",
+      "currency": "EUR",
+      "restaurant": { "pct": 0, "notes": "'Coperto' (cover charge) on bill is NOT a tip — tip is optional, leave €1-2 or round up. 'Servizio incluso' = no extra needed." },
+      "taxi": { "pct": 0, "notes": "Round up; not expected." },
+      "hotel_housekeeping": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 5 }
+    },
+    "ES": {
+      "name": "Spain",
+      "currency": "EUR",
+      "restaurant": { "pct": 5, "range": [0, 10], "notes": "Round up at bars; 5-10% at sit-down for good service. Not expected." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 5 }
+    },
+    "PT": {
+      "name": "Portugal",
+      "currency": "EUR",
+      "restaurant": { "pct": 5, "range": [5, 10], "notes": "5-10% for sit-down; round up at cafés." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 5 }
+    },
+    "NL": {
+      "name": "Netherlands",
+      "currency": "EUR",
+      "restaurant": { "pct": 5, "range": [0, 10], "notes": "Service included; round up or 5-10% for good service." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 5 }
+    },
+    "BE": {
+      "name": "Belgium",
+      "currency": "EUR",
+      "restaurant": { "pct": 0, "notes": "Service included; round up only." },
+      "taxi": { "pct": 0, "notes": "Service included; round up." },
+      "hotel_housekeeping": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 5 }
+    },
+    "CH": {
+      "name": "Switzerland",
+      "currency": "CHF",
+      "restaurant": { "pct": 0, "notes": "Service included; round up to nearest 5-10 CHF for great service." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 2, "currency": "CHF" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 2, "currency": "CHF" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 5 }
+    },
+    "AT": {
+      "name": "Austria",
+      "currency": "EUR",
+      "restaurant": { "pct": 10, "notes": "Round up 5-10% — state total when paying." },
+      "taxi": { "pct": 10 },
+      "hotel_housekeeping": { "flat": { "amount": 2, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 5 }
+    },
+    "GR": {
+      "name": "Greece",
+      "currency": "EUR",
+      "restaurant": { "pct": 10, "notes": "10% in tavernas; round up at cafés." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 2, "currency": "EUR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 1, "currency": "EUR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10 }
+    },
+    "JP": {
+      "name": "Japan",
+      "currency": "JPY",
+      "restaurant": { "pct": 0, "notes": "Tipping is NOT customary and may cause confusion or be politely refused. Service is built into pricing." },
+      "taxi": { "pct": 0, "notes": "Do not tip. Pay exact fare or change." },
+      "hotel_housekeeping": { "pct": 0, "notes": "Do not tip. Ryokans may include 'kokorozuke' tradition — small envelope on arrival, hand to nakai-san; not required at hotels." },
+      "hotel_porter": { "pct": 0, "notes": "Do not tip." },
+      "tour_guide": { "flat": { "amount": 1000, "currency": "JPY" }, "notes": "Private guides may accept ¥1000-3000/person in an envelope at end; group tours don't tip." },
+      "spa": { "pct": 0, "notes": "Do not tip." }
+    },
+    "KR": {
+      "name": "South Korea",
+      "currency": "KRW",
+      "restaurant": { "pct": 0, "notes": "Tipping not customary; may be refused." },
+      "taxi": { "pct": 0, "notes": "Round up only." },
+      "hotel_housekeeping": { "pct": 0 },
+      "hotel_porter": { "flat": { "amount": 1000, "currency": "KRW" }, "unit": "per_bag", "notes": "Optional at high-end hotels." },
+      "tour_guide": { "flat": { "amount": 10000, "currency": "KRW" }, "notes": "Optional — guides for foreigners increasingly accept tips." },
+      "spa": { "pct": 0 }
+    },
+    "CN": {
+      "name": "China",
+      "currency": "CNY",
+      "restaurant": { "pct": 0, "notes": "Not customary in mainland China outside high-end international hotels." },
+      "taxi": { "pct": 0, "notes": "Do not tip." },
+      "hotel_housekeeping": { "pct": 0 },
+      "hotel_porter": { "flat": { "amount": 10, "currency": "CNY" }, "unit": "per_bag", "notes": "Only at international-brand hotels." },
+      "tour_guide": { "flat": { "amount": 100, "currency": "CNY" }, "notes": "¥50-100/day for private guide is appreciated." },
+      "spa": { "pct": 0 }
+    },
+    "HK": {
+      "name": "Hong Kong",
+      "currency": "HKD",
+      "restaurant": { "pct": 0, "notes": "10% service charge usually included; small extra HKD 10-20 for excellent service." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 20, "currency": "HKD" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 20, "currency": "HKD" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10, "notes": "Often included." }
+    },
+    "SG": {
+      "name": "Singapore",
+      "currency": "SGD",
+      "restaurant": { "pct": 0, "notes": "10% service charge + 9% GST usually added — no extra tip expected. Government discourages tipping at airport/taxi." },
+      "taxi": { "pct": 0, "notes": "Not expected." },
+      "hotel_housekeeping": { "flat": { "amount": 2, "currency": "SGD" }, "unit": "per_night", "notes": "Optional." },
+      "hotel_porter": { "flat": { "amount": 2, "currency": "SGD" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 0, "notes": "Service charge included." }
+    },
+    "TH": {
+      "name": "Thailand",
+      "currency": "THB",
+      "restaurant": { "pct": 10, "notes": "Round up at street food; 10% at sit-down. Service charge often included at hotels." },
+      "taxi": { "pct": 0, "notes": "Round up; insist on the meter." },
+      "hotel_housekeeping": { "flat": { "amount": 50, "currency": "THB" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 50, "currency": "THB" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 300, "currency": "THB" }, "notes": "฿200-500/person/day for private guide." },
+      "spa": { "pct": 10, "notes": "10-15% common; check if included." }
+    },
+    "VN": {
+      "name": "Vietnam",
+      "currency": "VND",
+      "restaurant": { "pct": 5, "notes": "5-10% appreciated; not expected at street food." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 20000, "currency": "VND" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 20000, "currency": "VND" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 200000, "currency": "VND" }, "notes": "₫100-200K/person/day." },
+      "spa": { "pct": 10 }
+    },
+    "ID": {
+      "name": "Indonesia",
+      "currency": "IDR",
+      "restaurant": { "pct": 5, "notes": "10% service + 11% PB1 usually included — small extra appreciated. Bali resorts often include." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 20000, "currency": "IDR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 10000, "currency": "IDR" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 100000, "currency": "IDR" } },
+      "spa": { "pct": 10 }
+    },
+    "PH": {
+      "name": "Philippines",
+      "currency": "PHP",
+      "restaurant": { "pct": 10, "notes": "10% service often included; extra PHP 50-100 for great service." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 50, "currency": "PHP" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 50, "currency": "PHP" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10 }
+    },
+    "MY": {
+      "name": "Malaysia",
+      "currency": "MYR",
+      "restaurant": { "pct": 0, "notes": "10% service often added at hotels/upscale — no extra. Hawker stalls: no tip." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 5, "currency": "MYR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 5, "currency": "MYR" }, "unit": "per_bag" },
+      "tour_guide": { "pct": 10 },
+      "spa": { "pct": 10 }
+    },
+    "IN": {
+      "name": "India",
+      "currency": "INR",
+      "restaurant": { "pct": 10, "notes": "10% if no service charge. Service charge (often 5-10%) is on top of GST." },
+      "taxi": { "pct": 0, "notes": "Round up; ride-share built-in tipping option." },
+      "hotel_housekeeping": { "flat": { "amount": 100, "currency": "INR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 50, "currency": "INR" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 500, "currency": "INR" }, "notes": "₹300-1000/half-day depending on city." },
+      "spa": { "pct": 10 }
+    },
+    "AE": {
+      "name": "United Arab Emirates",
+      "currency": "AED",
+      "restaurant": { "pct": 10, "notes": "10% service often added at upscale; extra 5-10% for excellent." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 10, "currency": "AED" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 10, "currency": "AED" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 50, "currency": "AED" }, "notes": "AED 50-100/half-day." },
+      "spa": { "pct": 10 }
+    },
+    "SA": {
+      "name": "Saudi Arabia",
+      "currency": "SAR",
+      "restaurant": { "pct": 10, "notes": "Service often included; small extra appreciated." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 10, "currency": "SAR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 10, "currency": "SAR" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 50, "currency": "SAR" } },
+      "spa": { "pct": 10 }
+    },
+    "IL": {
+      "name": "Israel",
+      "currency": "ILS",
+      "restaurant": { "pct": 12, "range": [10, 15], "notes": "Service NOT typically included; 12-15% standard. Tip cash if possible — card tips taxed differently." },
+      "taxi": { "pct": 0, "notes": "Not expected." },
+      "hotel_housekeeping": { "flat": { "amount": 10, "currency": "ILS" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 5, "currency": "ILS" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 200, "currency": "ILS" }, "notes": "₪150-250/person/day for private; ₪50-100 for half-day." },
+      "spa": { "pct": 10 }
+    },
+    "TR": {
+      "name": "Turkey",
+      "currency": "TRY",
+      "restaurant": { "pct": 10, "notes": "10% standard; 'bahşiş' culturally important." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "flat": { "amount": 50, "currency": "TRY" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 30, "currency": "TRY" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 200, "currency": "TRY" } },
+      "spa": { "pct": 10, "notes": "Hammam staff: 10-15%." }
+    },
+    "EG": {
+      "name": "Egypt",
+      "currency": "EGP",
+      "restaurant": { "pct": 10, "notes": "Service charge often added; small extra 'baksheesh' for staff appreciated." },
+      "taxi": { "pct": 0, "notes": "Round up; agree fare beforehand." },
+      "hotel_housekeeping": { "flat": { "amount": 50, "currency": "EGP" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 30, "currency": "EGP" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 200, "currency": "EGP" }, "notes": "Baksheesh culture — small tips for many small services add up; carry small notes." },
+      "spa": { "pct": 10 }
+    },
+    "MA": {
+      "name": "Morocco",
+      "currency": "MAD",
+      "restaurant": { "pct": 10, "notes": "10% if no service charge; small extra for cafés." },
+      "taxi": { "pct": 0, "notes": "Round up; agree fare or insist on meter." },
+      "hotel_housekeeping": { "flat": { "amount": 20, "currency": "MAD" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 10, "currency": "MAD" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 100, "currency": "MAD" } },
+      "spa": { "pct": 10, "notes": "Hammam: 20-50 MAD per person to attendant." }
+    },
+    "ZA": {
+      "name": "South Africa",
+      "currency": "ZAR",
+      "restaurant": { "pct": 10, "range": [10, 15], "notes": "10% standard; 15% for excellent. Service NOT typically included." },
+      "taxi": { "pct": 10, "notes": "10% for ride-share + metered cabs." },
+      "hotel_housekeeping": { "flat": { "amount": 20, "currency": "ZAR" }, "unit": "per_night" },
+      "hotel_porter": { "flat": { "amount": 10, "currency": "ZAR" }, "unit": "per_bag" },
+      "tour_guide": { "flat": { "amount": 200, "currency": "ZAR" }, "notes": "Game-drive guides + trackers: R100-200 each per drive." },
+      "spa": { "pct": 10 }
+    },
+    "AU": {
+      "name": "Australia",
+      "currency": "AUD",
+      "restaurant": { "pct": 0, "notes": "Tipping NOT expected — staff paid living wage. 10% for excellent at upscale; round up at cafés." },
+      "taxi": { "pct": 0, "notes": "Round up." },
+      "hotel_housekeeping": { "pct": 0, "notes": "Optional; not expected." },
+      "hotel_porter": { "flat": { "amount": 2, "currency": "AUD" }, "unit": "per_bag", "notes": "Optional at high-end." },
+      "tour_guide": { "pct": 10, "notes": "Optional; growing for guided tours." },
+      "spa": { "pct": 0 }
+    },
+    "NZ": {
+      "name": "New Zealand",
+      "currency": "NZD",
+      "restaurant": { "pct": 0, "notes": "Tipping NOT expected; round up for excellent service." },
+      "taxi": { "pct": 0 },
+      "hotel_housekeeping": { "pct": 0 },
+      "hotel_porter": { "pct": 0 },
+      "tour_guide": { "pct": 10, "notes": "Optional for guided experiences." },
+      "spa": { "pct": 0 }
+    }
+  }
+}

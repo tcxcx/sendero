@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { searchFlights, type FlightSearchParams } from '@sendero/duffel';
+import { prisma } from '@sendero/database';
 import type { ToolDef, ToolContext } from './types';
 import { ensureFlightCustomer } from './ensure-flight-customer';
 
@@ -24,7 +25,15 @@ const loyaltyAccountSchema = z.object({
 });
 
 const inputSchema = z.object({
-  origin: z.string().length(3),
+  /**
+   * Phase B.2 — `origin` is OPTIONAL. When omitted on a turn that has
+   * an active open_journey trip, the handler self-heals by reading
+   * the traveler's current location (last ticketed booking's
+   * destination) and uses that. Lets a digital nomad just say "find
+   * me a flight to Bangkok next week" without restating where they
+   * are right now.
+   */
+  origin: z.string().length(3).optional(),
   destination: z.string().length(3),
   departureDate: z.string(),
   returnDate: z.string().optional(),
@@ -158,9 +167,55 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
         accountNumber: r.accountNumber ?? '',
       }))
     );
+
+    // Phase B.2 — when `origin` is omitted on a turn with an active
+    // open_journey trip, default to the traveler's current physical
+    // location (last ticketed booking's destination). Lets a digital
+    // nomad say "find me a flight to Bangkok" without restating
+    // "from Lima". Falls through to the missing-origin error path
+    // when no journey context exists.
+    let resolvedOrigin = input.origin;
+    if (!resolvedOrigin && ctx?.traveler?.userId && ctx?.traveler?.tenantId) {
+      try {
+        const lastTicketed = await prisma.booking.findFirst({
+          where: {
+            tenantId: ctx.traveler.tenantId,
+            status: 'ticketed',
+            trip: { travelerId: ctx.traveler.userId },
+          },
+          orderBy: { bookedAt: 'desc' },
+          select: { segments: true },
+        });
+        if (lastTicketed) {
+          const segs = Array.isArray(lastTicketed.segments)
+            ? (lastTicketed.segments as Array<Record<string, unknown>>)
+            : [];
+          const last = segs[segs.length - 1];
+          const dest =
+            typeof last?.destinationIata === 'string'
+              ? last.destinationIata
+              : typeof last?.destination === 'string'
+                ? last.destination
+                : null;
+          if (dest && /^[A-Za-z]{3}$/.test(dest)) {
+            resolvedOrigin = dest.toUpperCase();
+          }
+        }
+      } catch (err) {
+        console.warn('[search_flights] origin self-heal failed (non-fatal)', err);
+      }
+    }
+    if (!resolvedOrigin) {
+      return {
+        offers: [],
+        share: undefined,
+        error:
+          'origin_required: pass `origin` (3-letter IATA) or first call `book_flight` so the journey has a current location to default from.',
+      };
+    }
     try {
       const offers = await searchFlights({
-        origin: input.origin,
+        origin: resolvedOrigin,
         destination: input.destination,
         departureDate: input.departureDate,
         returnDate: input.returnDate,
@@ -174,7 +229,7 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
       });
       const top = offers.slice(0, 3);
       const share = buildSearchFlightsShare({
-        origin: input.origin,
+        origin: resolvedOrigin,
         destination: input.destination,
         departureDate: input.departureDate,
         offers: top,

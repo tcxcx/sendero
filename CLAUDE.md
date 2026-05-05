@@ -499,3 +499,11 @@ Claude Code plugin, skills, MCP server, `@sendero/cli` are **built and committed
 5. **Documentation freeze:** `cli.mdx`, `skills.mdx`, `installer.mdx` authored + merged together.
 
 Until flip: install snippets must say "clone + run locally" or "load via `--plugin-dir`". NEVER `npx @sendero/cli@latest` or `/plugin install sendero@sendero` in user-facing docs. Marketing copy can promise the npm/marketplace flow (it's the public roadmap).
+
+## Edge worker — deployed name vs wrangler name
+
+**Deployed hostname:** `sendero-arc-edge.tomas-cordero-esp.workers.dev` (via CF Workers Builds, dashboard-configured). GH Actions deploy retired.
+
+**`apps/edge/wrangler.toml` says `name = "arc-edge"`** — that name only governs `wrangler dev` locally. CF Builds overrides via dashboard project name (`sendero-arc-edge`). Don't "fix" the wrangler name to match without also re-pointing CF Builds — you'll fork the deploy.
+
+Anything probing/linking the worker (health probe, canary, preview-comment, marketing) MUST use `sendero-arc-edge.*`. The `arc-edge.*` hostname returns CF 404 — historical health-probe outage came from this mismatch silently spamming failures every 5 min for days. Canonical default lives in `.github/workflows/edge-health.yml::HEALTH_URL` and `scripts/edge-health-check.sh`.

@@ -1,0 +1,216 @@
+{
+  "_meta": {
+    "version": 1,
+    "lastReviewed": "2026-05-04",
+    "source": "sendero-curated",
+    "notes": "Hard-corridor consular intelligence. The patterns here are public knowledge (consulate websites, traveler forums, agency lore) but rarely codified in one place. Drift fast — review quarterly. NEVER auto-book against these portals; surface them so the traveler clicks through themselves."
+  },
+  "corridors": {
+    "ECU-ESP": {
+      "label": "Ecuadorian → Spain (Schengen)",
+      "visaClass": "Schengen Type C",
+      "primaryPortal": {
+        "name": "BLS Spain Ecuador",
+        "url": "https://blsspainvisa.com/ecuador/",
+        "operator": "BLS International"
+      },
+      "alternatePosts": [
+        { "country": "PER", "city": "Lima", "note": "If Quito slots scarce — Spanish consulate Lima processes Ecuadorian residents with proof of legal status." }
+      ],
+      "processingTimeDays": [10, 15],
+      "appointmentPattern": "Slots drop in batches Tuesdays + Thursdays around 23:55 ART/ECT. Gone within 2 minutes. Refresh starting 23:50.",
+      "documentChecklist": [
+        "Passport (valid 3+ months past trip)",
+        "Round-trip flight reservation (no need to ticket)",
+        "Hotel reservation for full stay",
+        "Travel insurance €30,000+ medical, valid Schengen-wide",
+        "Bank statements last 3 months",
+        "Employment letter or business registration",
+        "Police clearance (recent, apostilled)",
+        "Visa fee €80 cash",
+        "Two passport-size photos (35×45mm, white background)"
+      ],
+      "interviewExpected": false,
+      "feeUsd": 90,
+      "warnings": [
+        "Ecuadorian residents pay no Schengen fee for children under 6.",
+        "BLS adds a service fee on top of the consular fee."
+      ]
+    },
+    "VEN-USA": {
+      "label": "Venezuelan → United States",
+      "visaClass": "B1/B2 visitor",
+      "primaryPortal": {
+        "name": "US Visa Information Service",
+        "url": "https://ais.usvisa-info.com/",
+        "operator": "CGI Federal"
+      },
+      "alternatePosts": [
+        { "country": "COL", "city": "Bogotá", "note": "US Embassy Caracas closed; Bogotá is the assigned post but has 18+ month wait." },
+        { "country": "MEX", "city": "Mexico City / Tijuana", "note": "Some Venezuelans schedule here as third-country applicant — case-by-case acceptance." },
+        { "country": "ARG", "city": "Buenos Aires", "note": "US Embassy BA processes Venezuelan residents of Argentina; new $15,000 visitor bond may apply." }
+      ],
+      "processingTimeDays": [180, 540],
+      "appointmentPattern": "No fixed batch pattern; check daily. CGI portal aggressive against scrapers — log in via traveler's own browser.",
+      "documentChecklist": [
+        "Passport (valid 6+ months past trip)",
+        "DS-160 confirmation page (printed)",
+        "Visa fee receipt ($185)",
+        "Photo (2×2 inches, white background)",
+        "Proof of strong ties to home country (employment, property, family)",
+        "Bank statements last 6 months",
+        "Travel itinerary (no need to ticket)",
+        "$15,000 visitor bond receipt (Venezuela-specific, post-2026 rule — verify current state)"
+      ],
+      "interviewExpected": true,
+      "feeUsd": 185,
+      "warnings": [
+        "$15K bond is refundable on timely return but liquid only. Check state.gov for current bond requirement before applying.",
+        "Caracas embassy still closed — DO NOT travel there expecting to apply.",
+        "Third-country applications carry higher refusal rates than home-country applications."
+      ]
+    },
+    "IND-USA": {
+      "label": "Indian → United States",
+      "visaClass": "B1/B2 visitor",
+      "primaryPortal": {
+        "name": "US Visa Information Service India",
+        "url": "https://ais.usvisa-info.com/en-IN/niv",
+        "operator": "CGI Federal"
+      },
+      "alternatePosts": [
+        { "country": "AUS", "city": "Sydney/Melbourne", "note": "Some Indians on H1B in third countries apply locally — accepted." },
+        { "country": "ARE", "city": "Dubai/Abu Dhabi", "note": "Lower wait times; common for Indians working in Gulf." }
+      ],
+      "processingTimeDays": [60, 540],
+      "appointmentPattern": "Wait times vary 60d–540d by post (Mumbai longest, Hyderabad shortest historically). Drop-in tracker websites unreliable.",
+      "documentChecklist": [
+        "Passport (valid 6+ months past trip)",
+        "DS-160 confirmation page (printed)",
+        "Visa fee receipt ($185)",
+        "Photo (2×2 inches, white background, recent)",
+        "Bank statements + ITR last 3 years",
+        "Employment letter or business registration + GST returns",
+        "Property documents (if applicable)",
+        "Sponsor letter + I-134 (if invited)",
+        "Travel itinerary"
+      ],
+      "interviewExpected": true,
+      "feeUsd": 185,
+      "warnings": [
+        "Drop-box renewal eligible if prior US visa expired ≤48 months ago — saves the in-person interview.",
+        "Interview waiver categories shifted in 2024; check current eligibility."
+      ]
+    },
+    "COL-USA": {
+      "label": "Colombian → United States",
+      "visaClass": "B1/B2 visitor",
+      "primaryPortal": {
+        "name": "US Visa Information Service Colombia",
+        "url": "https://ais.usvisa-info.com/es-co/niv",
+        "operator": "CGI Federal"
+      },
+      "alternatePosts": [
+        { "country": "ECU", "city": "Quito", "note": "US Embassy Quito accepts Colombian third-country applications with proof of residence." }
+      ],
+      "processingTimeDays": [120, 540],
+      "appointmentPattern": "Bogotá saturated; Barranquilla has shorter waits historically.",
+      "documentChecklist": [
+        "Passport (valid 6+ months past trip)",
+        "DS-160 confirmation page",
+        "Visa fee receipt ($185)",
+        "Photo (2×2 inches)",
+        "Bank statements + DIAN tax returns last 2 years",
+        "Employment letter or business registration",
+        "Travel itinerary"
+      ],
+      "interviewExpected": true,
+      "feeUsd": 185,
+      "warnings": []
+    },
+    "ECU-DEU": {
+      "label": "Ecuadorian → Germany (Schengen)",
+      "visaClass": "Schengen Type C",
+      "primaryPortal": {
+        "name": "VFS Global Germany Ecuador",
+        "url": "https://visa.vfsglobal.com/ecu/en/deu",
+        "operator": "VFS Global"
+      },
+      "alternatePosts": [],
+      "processingTimeDays": [10, 15],
+      "appointmentPattern": "VFS Quito releases slots irregularly; check Mon/Wed/Fri mornings.",
+      "documentChecklist": [
+        "Passport (valid 3+ months past trip)",
+        "Round-trip flight reservation",
+        "Hotel reservation for full stay",
+        "Travel insurance €30,000+ medical",
+        "Bank statements last 3 months",
+        "Employment letter / business registration",
+        "Visa fee €80",
+        "Two passport-size photos (35×45mm, white background)"
+      ],
+      "interviewExpected": false,
+      "feeUsd": 90,
+      "warnings": [
+        "If Spain Schengen slots scarce, Germany is often easier from Quito for Ecuadorians."
+      ]
+    },
+    "ARG-GBR": {
+      "label": "Argentinian → United Kingdom",
+      "visaClass": "Standard Visitor",
+      "primaryPortal": {
+        "name": "UK Visas and Immigration",
+        "url": "https://www.gov.uk/standard-visitor",
+        "operator": "Home Office (TLScontact biometrics)"
+      },
+      "alternatePosts": [],
+      "processingTimeDays": [15, 21],
+      "appointmentPattern": "TLScontact Buenos Aires; biometrics appointments usually available within 1-2 weeks of online application submission.",
+      "documentChecklist": [
+        "Passport (valid for entire stay)",
+        "Online application + £127 fee paid",
+        "Bank statements last 6 months",
+        "Employment letter or business registration",
+        "Travel itinerary + accommodation",
+        "Invitation letter (if visiting family/friends)",
+        "Photo + biometrics at TLScontact appointment"
+      ],
+      "interviewExpected": false,
+      "feeUsd": 162,
+      "warnings": [
+        "Apply online first, THEN book biometrics — system rejects biometrics-first attempts.",
+        "Argentina passport holders are visa-required for UK; ETA does NOT apply."
+      ]
+    },
+    "VEN-ESP": {
+      "label": "Venezuelan → Spain (Schengen)",
+      "visaClass": "Schengen Type C",
+      "primaryPortal": {
+        "name": "BLS Spain Venezuela",
+        "url": "https://blsspainvisa.com/venezuela/",
+        "operator": "BLS International"
+      },
+      "alternatePosts": [
+        { "country": "COL", "city": "Bogotá", "note": "Spanish consulate Bogotá processes Venezuelan residents of Colombia." },
+        { "country": "ARG", "city": "Buenos Aires", "note": "Spanish consulate BA accepts Venezuelan residents." }
+      ],
+      "processingTimeDays": [15, 30],
+      "appointmentPattern": "BLS Caracas erratic; alternates often faster.",
+      "documentChecklist": [
+        "Passport (valid 3+ months past trip)",
+        "Round-trip flight reservation",
+        "Hotel reservation",
+        "Travel insurance €30,000+",
+        "Bank statements (USD-denominated preferred)",
+        "Employment / income proof",
+        "Visa fee €80",
+        "Photos"
+      ],
+      "interviewExpected": false,
+      "feeUsd": 90,
+      "warnings": [
+        "Strong ties evidence is critical — demonstrate property, family, employment in Venezuela or country of residence."
+      ]
+    }
+  }
+}

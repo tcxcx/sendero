@@ -108,10 +108,7 @@ export async function GET(req: NextRequest) {
       ? (trip.events as Array<Record<string, unknown>>)
       : [];
     const alreadyFired = events.some(
-      e =>
-        typeof e.kind === 'string' &&
-        e.kind === 'checkin_reminder' &&
-        e.bookingId === booking.id
+      e => typeof e.kind === 'string' && e.kind === 'checkin_reminder' && e.bookingId === booking.id
     );
     if (alreadyFired) {
       skipped++;

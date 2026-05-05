@@ -388,6 +388,14 @@ function pushToolMessages(args: {
     // Tools that want a separate share-card surface still emit a
     // distinct tool_result downstream; this path is the AI-SDK generic
     // case where the result is just JSON, not a share artifact.
+    //
+    // Special-case: tools that emit a structured `activation` payload
+    // (book_esim today, future card-issuance / boarding-pass tools)
+    // get rendered as an `esim_activation` ChannelMessage so the
+    // operator preview matches what the traveler sees on Slack/WhatsApp.
+    // The plain Tool block still surfaces alongside for the operator's
+    // input/output forensics.
+    const activation = readActivation(part.output);
     out.push({
       kind: 'tool_invocation',
       id: `${partId}-inv`,
@@ -398,6 +406,24 @@ function pushToolMessages(args: {
       result: part.output ?? null,
       createdAt: baseTime,
     });
+    if (activation) {
+      out.push({
+        kind: 'esim_activation',
+        id: `${partId}-activation`,
+        author,
+        esimId: activation.esimId,
+        planLabel: activation.planLabel,
+        countries: activation.countries,
+        dataMb: activation.dataMb,
+        validityDays: activation.validityDays,
+        qrUrl: activation.qrUrl,
+        lpaCode: activation.lpaCode,
+        installUrl: activation.installUrl,
+        ...(activation.priceLine ? { priceLine: activation.priceLine } : {}),
+        ...(activation.expiresAt ? { expiresAt: activation.expiresAt } : {}),
+        createdAt: baseTime,
+      });
+    }
     return;
   }
   if (state === 'output-error') {
@@ -425,6 +451,50 @@ function pushToolMessages(args: {
     status: state === 'input-available' ? 'streaming' : 'pending',
     createdAt: baseTime,
   });
+}
+
+/**
+ * Pull a structured `activation` payload off a tool output (today only
+ * `book_esim` populates it). Mirrors the validator in
+ * `@sendero/agent::extractActivation` so a malformed entry degrades to
+ * the plain Tool block rather than rendering a broken card.
+ */
+function readActivation(output: unknown): {
+  esimId: string;
+  planLabel: string;
+  countries: string[];
+  dataMb: number;
+  validityDays: number;
+  qrUrl: string;
+  lpaCode: string;
+  installUrl: string;
+  priceLine?: string;
+  expiresAt?: string;
+} | null {
+  if (!output || typeof output !== 'object') return null;
+  const a = (output as { activation?: unknown }).activation;
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return null;
+  const r = a as Record<string, unknown>;
+  if (typeof r.esimId !== 'string') return null;
+  if (typeof r.planLabel !== 'string') return null;
+  if (typeof r.qrUrl !== 'string') return null;
+  if (typeof r.lpaCode !== 'string') return null;
+  if (typeof r.installUrl !== 'string') return null;
+  if (typeof r.dataMb !== 'number') return null;
+  if (typeof r.validityDays !== 'number') return null;
+  if (!Array.isArray(r.countries) || !r.countries.every(c => typeof c === 'string')) return null;
+  return {
+    esimId: r.esimId,
+    planLabel: r.planLabel,
+    countries: r.countries as string[],
+    dataMb: r.dataMb,
+    validityDays: r.validityDays,
+    qrUrl: r.qrUrl,
+    lpaCode: r.lpaCode,
+    installUrl: r.installUrl,
+    ...(typeof r.priceLine === 'string' ? { priceLine: r.priceLine } : {}),
+    ...(typeof r.expiresAt === 'string' ? { expiresAt: r.expiresAt } : {}),
+  };
 }
 
 /**

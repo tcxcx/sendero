@@ -46,7 +46,8 @@ const PROGRAM_BY_STATUS: Record<VisaStatus, Record<string, VisaProgramHint>> = {
     USA: { programName: 'ESTA', applyUrl: 'https://esta.cbp.dhs.gov', leadTimeDays: 3 },
     CAN: {
       programName: 'eTA',
-      applyUrl: 'https://www.canada.ca/en/immigration-refugees-citizenship/services/visit-canada/eta.html',
+      applyUrl:
+        'https://www.canada.ca/en/immigration-refugees-citizenship/services/visit-canada/eta.html',
       leadTimeDays: 1,
     },
     GBR: {
@@ -56,12 +57,17 @@ const PROGRAM_BY_STATUS: Record<VisaStatus, Record<string, VisaProgramHint>> = {
     },
     AUS: {
       programName: 'ETA',
-      applyUrl: 'https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/electronic-travel-authority-601',
+      applyUrl:
+        'https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/electronic-travel-authority-601',
       leadTimeDays: 7,
     },
   },
   evisa_required: {
-    IND: { programName: 'e-Visa India', applyUrl: 'https://indianvisaonline.gov.in/evisa', leadTimeDays: 4 },
+    IND: {
+      programName: 'e-Visa India',
+      applyUrl: 'https://indianvisaonline.gov.in/evisa',
+      leadTimeDays: 4,
+    },
     TUR: { programName: 'e-Visa Türkiye', applyUrl: 'https://www.evisa.gov.tr', leadTimeDays: 1 },
   },
   visa_on_arrival: {},
@@ -96,8 +102,7 @@ export const checkVisaRequirementsTool: ToolDef = {
   },
   async handler(input: CheckVisaInput): Promise<CheckVisaResult> {
     const status = lookupVisaStatus(input.nationalityIso3, input.destinationIso3);
-    const program =
-      PROGRAM_BY_STATUS[status]?.[input.destinationIso3.toUpperCase()] ?? null;
+    const program = PROGRAM_BY_STATUS[status]?.[input.destinationIso3.toUpperCase()] ?? null;
 
     const required = status !== 'visa_free' && status !== 'unknown';
     // ETA / e-visa are paperwork but never gate the actual flight booking

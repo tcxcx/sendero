@@ -301,6 +301,10 @@ export interface ConfirmBookingDeps {
      * reject) — closes the loop on `scoreGeneration`.
      */
     traceId?: string;
+    /// Payer attribution denorm on the Booking row. Optional — undefined
+    /// leaves the column NULL (legacy/unattributed). Tools that resolve
+    /// the payer pass it through; tests and legacy callers omit.
+    provisionedBy?: 'tenant' | 'traveler';
   }): Promise<void>;
 
   /**
@@ -321,6 +325,18 @@ export interface ConfirmBookingDeps {
     status: 'paid' | 'sandbox';
     note: string;
     metadata: Record<string, unknown>;
+    /// Concrete payer of this charge (`tenant` | `traveler`). When the
+    /// caller can't resolve, leave undefined and the dep impl writes
+    /// NULL — analytics queries treat NULL as "unattributed legacy".
+    payerType?: 'tenant' | 'traveler';
+    /// CircleWallet.id (tenant treasury) or Wallet.id (traveler) of the
+    /// debited wallet. Optional — Gateway-unified balances span chains
+    /// without a single Wallet row, so traveler flows often leave it
+    /// null and rely on `payerUserId` for attribution.
+    payerWalletId?: string;
+    /// User.id of the wallet-bearing payer. Distinct from the operator
+    /// who triggered the turn (which still goes on `userId`/`note`).
+    payerUserId?: string;
   }): Promise<void>;
 }
 
@@ -414,6 +430,7 @@ export function dbDependencies(): ConfirmBookingDeps {
           senderoTakeMicroUsdc: args.senderoTakeMicroUsdc,
           pricingPolicyVersion: args.pricingPolicyVersion,
           metadata: mergedMetadata as object,
+          ...(args.provisionedBy ? { provisionedBy: args.provisionedBy } : {}),
         },
       });
     },
@@ -428,6 +445,9 @@ export function dbDependencies(): ConfirmBookingDeps {
           status: args.status,
           note: args.note,
           metadata: args.metadata as object,
+          ...(args.payerType ? { payerType: args.payerType } : {}),
+          ...(args.payerWalletId ? { payerWalletId: args.payerWalletId } : {}),
+          ...(args.payerUserId ? { payerUserId: args.payerUserId } : {}),
         },
       });
     },
@@ -495,6 +515,25 @@ const confirmBookingInput = z.object({
    * dependency layer attempts resolution. Tests inject directly.
    */
   planTier: z.enum(['free', 'basic', 'pro', 'enterprise']).optional(),
+  /**
+   * Override the trip-resolved payer (`tenant` | `traveler`). Pricing
+   * (cost + agency markup + Sendero take) is identical regardless;
+   * this flag only attributes which wallet was debited. Falls back to
+   * `Trip.paymentMode` → `Tenant.defaultPaymentMode`.
+   */
+  provisionedBy: z.enum(['tenant', 'traveler']).optional(),
+  /**
+   * Optional Trip.id for payer resolution. When omitted, the dep
+   * layer's loaded booking does not carry a tripId on the input, so
+   * the resolver falls through to tenant default.
+   */
+  tripId: z.string().optional(),
+  /**
+   * User.id of the traveler whose wallet pays in traveler-mode. The
+   * dispatch route passes this from `ctx.traveler.userId`; tests
+   * inject directly. Required when resolution lands on `traveler`.
+   */
+  travelerUserId: z.string().optional(),
 });
 
 export type ConfirmBookingInput = z.infer<typeof confirmBookingInput>;
@@ -666,6 +705,14 @@ export async function runConfirmBooking(
   // can score the originating trace with the human's decision.
   const activeTraceId = getActiveTraceId();
 
+  // Payer attribution — resolved by the dispatch route via
+  // `resolvePayer` (single source of truth) and passed in as
+  // `input.provisionedBy`. confirm_booking does NOT re-resolve to keep
+  // the tool DB-touch surface bounded to its existing deps; tests can
+  // inject the value directly. When undefined (legacy / unattributed),
+  // analytics surfaces it as such.
+  const payerType: 'tenant' | 'traveler' | undefined = input.provisionedBy;
+
   // Persist before encoding so a partial failure leaves the row in a
   // recoverable state (the userOp encode is pure and replayable; the
   // DB write is the side-effect we care about).
@@ -680,6 +727,7 @@ export async function runConfirmBooking(
     invoiceItemization,
     existingMetadata: ctx.booking.metadata,
     ...(activeTraceId ? { traceId: activeTraceId } : {}),
+    ...(payerType ? { provisionedBy: payerType } : {}),
   });
 
   // Encode commitBookingV2. Three amounts, three recipients (vendor +
@@ -724,6 +772,10 @@ export async function runConfirmBooking(
       perCallMicroUsdc: callMicro.toString(),
       capping: breakdown.capping,
     },
+    ...(payerType ? { payerType } : {}),
+    ...(payerType === 'traveler' && input.travelerUserId
+      ? { payerUserId: input.travelerUserId }
+      : {}),
   });
 
   return {
@@ -794,6 +846,10 @@ export const confirmBookingTool: ToolDef = {
     //
     // The override gate uses `effectiveKeyType` (testnet-beta downgrade
     // aware), NOT the on-key `keyType` — see the gate in runConfirmBooking.
+    //
+    // Payer attribution follows the same precedence: explicit input wins
+    // (operator override or test fixture), else read from `ctx.payer`
+    // populated once by the dispatch route via resolvePayer().
     const merged = {
       ...parsed,
       // ctx.caller.scopes is `readonly string[]` (frozen at the auth layer
@@ -803,6 +859,8 @@ export const confirmBookingTool: ToolDef = {
       callerScopes:
         parsed.callerScopes ?? (ctx?.caller?.scopes ? [...ctx.caller.scopes] : undefined),
       callerKeyType: parsed.callerKeyType ?? ctx?.caller?.effectiveKeyType ?? ctx?.caller?.keyType,
+      provisionedBy: parsed.provisionedBy ?? ctx?.payer?.type,
+      travelerUserId: parsed.travelerUserId ?? ctx?.payer?.travelerUserId,
     };
     return runConfirmBooking(merged, dbDependencies());
   },

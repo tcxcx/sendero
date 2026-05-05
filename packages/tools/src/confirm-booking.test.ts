@@ -55,12 +55,15 @@ interface TestState {
     pricingPolicyVersion: number;
     snapshot: BookingPolicySnapshot;
     invoiceItemization: 'single' | 'itemized';
+    provisionedBy?: 'tenant' | 'traveler';
   }>;
   meters: Array<{
     tenantId: string;
     toolName: string;
     priceMicroUsdc: bigint;
     metadata: Record<string, unknown>;
+    payerType?: 'tenant' | 'traveler';
+    payerUserId?: string;
   }>;
 }
 
@@ -119,6 +122,7 @@ function makeDeps(opts: DepsOverrides): ConfirmBookingDeps {
         pricingPolicyVersion: args.pricingPolicyVersion,
         snapshot: args.snapshot,
         invoiceItemization: args.invoiceItemization,
+        ...(args.provisionedBy ? { provisionedBy: args.provisionedBy } : {}),
       });
     },
     async recordMeter(args) {
@@ -127,6 +131,8 @@ function makeDeps(opts: DepsOverrides): ConfirmBookingDeps {
         toolName: args.toolName,
         priceMicroUsdc: args.priceMicroUsdc,
         metadata: args.metadata,
+        ...(args.payerType ? { payerType: args.payerType } : {}),
+        ...(args.payerUserId ? { payerUserId: args.payerUserId } : {}),
       });
     },
   };
@@ -366,5 +372,41 @@ describe('runConfirmBooking — policy availability', () => {
     expect(err).toBeInstanceOf(PolicyMissingKindError);
     expect((err as PolicyMissingKindError).code).toBe('POLICY_PARTIAL_FOR_KIND');
     expect((err as PolicyMissingKindError).kind).toBe('hotel');
+  });
+});
+
+// ─── Payer attribution (dispatch wiring contract) ───────────────────
+
+describe('runConfirmBooking — payer attribution', () => {
+  test('input.provisionedBy stamps Booking.provisionedBy + MeterEvent.payerType', async () => {
+    const state: TestState = { persisted: [], meters: [] };
+    const deps = makeDeps({ state });
+    const out = await runConfirmBooking(
+      { ...baseInput(), provisionedBy: 'traveler', travelerUserId: 'u_alice' },
+      deps
+    );
+    expect(out.bookingId).toBe('bk_test_001');
+    expect(state.persisted[0].provisionedBy).toBe('traveler');
+    expect(state.meters[0].payerType).toBe('traveler');
+    expect(state.meters[0].payerUserId).toBe('u_alice');
+  });
+
+  test('tenant payer skips payerUserId (no traveler wallet to attribute)', async () => {
+    const state: TestState = { persisted: [], meters: [] };
+    const deps = makeDeps({ state });
+    await runConfirmBooking({ ...baseInput(), provisionedBy: 'tenant' }, deps);
+    expect(state.persisted[0].provisionedBy).toBe('tenant');
+    expect(state.meters[0].payerType).toBe('tenant');
+    expect(state.meters[0].payerUserId).toBeUndefined();
+  });
+
+  test('omitted provisionedBy leaves attribution NULL (legacy / unattributed)', async () => {
+    const state: TestState = { persisted: [], meters: [] };
+    const deps = makeDeps({ state });
+    await runConfirmBooking(baseInput(), deps);
+    // baseInput doesn't set provisionedBy, so the column stays NULL —
+    // the dispatch route's ctx.payer doesn't reach this layer in tests.
+    expect(state.persisted[0].provisionedBy).toBeUndefined();
+    expect(state.meters[0].payerType).toBeUndefined();
   });
 });

@@ -1,0 +1,7 @@
+entrypoint: index.js
+function_type: cloudflare_worker
+invoke_response_mode: passthrough
+name: Sendero WhatsApp support Slack events
+public_endpoint: true
+runtime_config: {}
+slug: sendero-whatsapp-support-slack-events

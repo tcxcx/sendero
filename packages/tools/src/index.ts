@@ -4,6 +4,7 @@ import { airportArrivalPlaybookTool } from './airport-arrival-playbook';
 import { airportTransferCoordinatorTool } from './airport-transfer-coordinator';
 import { bookEsimTool } from './book-esim';
 import { getActiveTripTool } from './get-active-trip';
+import { getTripBriefTool } from './get-trip-brief';
 import { setHomeIataTool } from './set-home-iata';
 import { setTripKindTool } from './set-trip-kind';
 import { sweepDcwToGatewayTool } from './sweep-dcw-to-gateway';
@@ -351,6 +352,20 @@ export {
   getActiveTrip,
   getActiveTripTool,
 } from './get-active-trip';
+export {
+  type GetTripBriefInput,
+  type GetTripBriefResult,
+  type GetTripBriefDeps,
+  type TripBriefSection,
+  type FlightBookingSummary,
+  type StayBookingSummary,
+  type EsimSummary as TripBriefEsimSummary,
+  type TripBriefAlert,
+  type TripBriefHeader,
+  runGetTripBrief,
+  dbDependencies as getTripBriefDbDependencies,
+  getTripBriefTool,
+} from './get-trip-brief';
 export type { JsonSchemaObject, ToolContext, ToolDef } from './types';
 export {
   type ValidateTravelAddressInput,
@@ -455,6 +470,10 @@ export const toolList: ToolDef[] = [
   // how many interactive cards have scrolled past in the WhatsApp
   // conversation history.
   getActiveTripTool,
+  // Single-call canonical recap of an entire trip — flights + stays +
+  // eSIMs + alerts + a public share URL. Replaces the agent stitching
+  // get_active_trip + list_flight_ancillaries + esim status by hand.
+  getTripBriefTool,
   // Phase B.2 — "trip buddy" digital-nomad concierge. `take_me_home`
   // resolves the cheapest return flight from the traveler's current
   // location to their declared home; `set_home_iata` persists the

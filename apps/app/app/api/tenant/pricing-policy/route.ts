@@ -23,7 +23,7 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@sendero/database';
-import { MarkupConfigSchema } from '@sendero/billing';
+import { CORE_BOOKING_KINDS, MarkupConfigSchema } from '@sendero/billing';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -60,7 +60,9 @@ const PostBody = z.object({
 
 // ── Status derivation ────────────────────────────────────────────────
 
-const ALL_KINDS = ['flight', 'hotel', 'rail', 'car', 'other'] as const;
+// Mirrors `packages/tools/src/get-pricing-policy.ts`. Activation requires
+// every CORE kind; eSIM + card opt-in (see CORE_BOOKING_KINDS rationale).
+const ALL_KINDS = CORE_BOOKING_KINDS;
 
 type PolicyStatus = 'active' | 'inactive' | 'partial' | 'sandbox_seed';
 

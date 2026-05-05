@@ -3,6 +3,7 @@ import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import type {
   ChannelMessageApprovalRequest,
   ChannelMessageCard,
+  ChannelMessageEsimActivation,
   ChannelMessageReasoning,
   ChannelMessageText,
   ChannelMessageToolInvocation,
@@ -68,6 +69,22 @@ const toolInvocationMessage: ChannelMessageToolInvocation = {
   toolName: 'search_offers',
   input: { origin: 'JFK', destination: 'LHR' },
   status: 'streaming',
+  createdAt: FROZEN_AT,
+};
+
+const esimActivationMessage: ChannelMessageEsimActivation = {
+  kind: 'esim_activation',
+  id: 'msg-esim-1',
+  author: AGENT_AUTHOR,
+  esimId: 'esim_test_001',
+  planLabel: '5 GB · 30 days · Japan + Korea',
+  countries: ['JP', 'KR'],
+  dataMb: 5120,
+  validityDays: 30,
+  qrUrl: 'https://app.sendero.travel/api/esim/qr/abc.def.png',
+  lpaCode: 'LPA:1$smdp.example.com$ACTIVATION_TEST',
+  installUrl: 'https://app.sendero.travel/install/esim/abc.def',
+  priceLine: '$3.00 · charged to your wallet',
   createdAt: FROZEN_AT,
 };
 
@@ -218,5 +235,39 @@ describe('sendChannelMessageSlack', () => {
     });
 
     expect(sendBlocksCalls[0]?.threadTs).toBe('1699999999.000100');
+  });
+
+  test('esim_activation routes through to sendBlocks with QR + install-URL primary CTA', async () => {
+    const result = await sendChannelMessageSlack({
+      install: slackInstallFixture(),
+      channel: 'C-ESIM',
+      message: esimActivationMessage,
+    });
+    if (!result.sent) throw new Error(`expected sent, got ${result.reason}`);
+
+    const call = sendBlocksCalls[0]!;
+    expect(call.text).toBe('Trip eSIM ready: 5 GB · 30 days · Japan + Korea');
+
+    const blocks = call.blocks as Array<{ type: string }>;
+    expect(blocks.map(b => b.type)).toEqual([
+      'header',
+      'section',
+      'image',
+      'actions',
+      'context',
+    ]);
+
+    // Image block carries the signed QR URL.
+    const image = blocks[2] as unknown as { image_url: string };
+    expect(image.image_url).toBe('https://app.sendero.travel/api/esim/qr/abc.def.png');
+
+    // Primary action button URL = universal install page.
+    const actions = blocks[3] as unknown as {
+      elements: Array<{ url?: string; style?: string; text?: { text?: string } }>;
+    };
+    expect(actions.elements[0].url).toBe('https://app.sendero.travel/install/esim/abc.def');
+    expect(actions.elements[0].style).toBe('primary');
+    expect(actions.elements[0].text?.text).toContain('Install');
+    expect(actions.elements[1].url).toContain('#instructions');
   });
 });

@@ -66,7 +66,9 @@ export interface ChannelCta {
     | 'confirm_cancel'
     | 'open_link'
     | 'tool_invoke'
-    | 'reply';
+    | 'reply'
+    | 'select_seat'
+    | 'add_bag';
   /** Free-form value the receiving handler reads (offer id, url, etc.). */
   value?: string;
   /** When the CTA is a link, the destination. */
@@ -209,6 +211,170 @@ export interface ChannelMessageReasoning {
 }
 
 /**
+ * eSIM activation card — emitted by `book_esim` when an order
+ * succeeds. Carries the QR image URL, full LPA: install string, plan
+ * label + payer line, and a Sendero-hosted install page URL that the
+ * channel renderers point CTAs at. The install page handles the
+ * device-specific dispatch (iOS auto-redirect to LPA: scheme; Android
+ * shows QR + per-device steps).
+ *
+ * Operator-only fields (raw activation code etc.) intentionally stay
+ * server-side — the renderers serialize only what travelers should
+ * see / can act on.
+ */
+export interface ChannelMessageEsimActivation {
+  kind: 'esim_activation';
+  id: string;
+  author: ChannelAuthor;
+  /** Sendero `Esim.id` — round-trips to webhook + admin lookups. */
+  esimId: string;
+  /** "5 GB · 30 days · Japan + Korea". */
+  planLabel: string;
+  /** ISO-3166-1 alpha-2 codes. Surfaced as flags / labels in renderers. */
+  countries: string[];
+  /** Total data quota in MB. */
+  dataMb: number;
+  /** Validity in days from activation. */
+  validityDays: number;
+  /** Signed `/api/esim/qr/<token>.png` URL. Public-fetchable for unfurl bots. */
+  qrUrl: string;
+  /** Full SM-DP+ install string (`LPA:1$smdp.example.com$AC`). */
+  lpaCode: string;
+  /** Universal install page — UA-detects, auto-redirects on iOS. */
+  installUrl: string;
+  /** Optional payer-aware price line ("$3.00 · charged to your wallet"). */
+  priceLine?: string;
+  /** ISO timestamp the plan expires (clock starts at install for some providers). */
+  expiresAt?: string;
+  createdAt: string;
+}
+
+/**
+ * Seat picker for an unconfirmed flight offer. Lists the cheapest /
+ * most-relevant seats for one passenger; tap = stage via `select_seat`.
+ *
+ * Operator + web render as a richer grid component when present;
+ * Slack collapses to an overflow menu; WhatsApp uses an interactive
+ * list message (max 10 rows; renderer truncates with overflow note).
+ */
+export interface ChannelMessageSeatPicker {
+  kind: 'seat_picker';
+  id: string;
+  author: ChannelAuthor;
+  /** Sendero `Trip.id` — staging requires this. */
+  tripId: string;
+  /** Duffel offer id the seats belong to. */
+  offerId: string;
+  /** Duffel passenger id the picker is offering seats for. */
+  passengerId: string;
+  passengerName?: string;
+  options: Array<{
+    serviceId: string;
+    designator: string;
+    price: string;
+    currency: string;
+    cabinClass?: string;
+    disclosures?: string[];
+  }>;
+  /** Currently staged seat for this passenger, if any. */
+  selectedDesignator?: string;
+  createdAt: string;
+}
+
+/**
+ * Generic ancillary picker (bags + cancel-for-any-reason). Each option
+ * has its own CTA; tap = stage via `add_baggage` (or, for cfar, attach
+ * via `book_flight`'s services arg).
+ */
+export interface ChannelMessageAncillaryPicker {
+  kind: 'ancillary_picker';
+  id: string;
+  author: ChannelAuthor;
+  tripId: string;
+  offerId: string;
+  passengerId: string;
+  passengerName?: string;
+  bags: Array<{
+    serviceId: string;
+    label: string;
+    price: string;
+    currency: string;
+    weightKg?: number | null;
+    dimensions?: string;
+    quantitySelected?: number;
+  }>;
+  cancelForAnyReason?: Array<{
+    serviceId: string;
+    price: string;
+    currency: string;
+    summary: string;
+    termsUrl?: string;
+  }>;
+  createdAt: string;
+}
+
+/**
+ * Trip brief — single-call recap of an entire trip. Surfaces the trip
+ * header, flights, stays, eSIM connectivity, alerts, and a public
+ * share URL the traveler can forward. Each channel renders its own
+ * native shape; the canonical payload below is what the `get_trip_brief`
+ * tool emits.
+ */
+export interface ChannelMessageTripBrief {
+  kind: 'trip_brief';
+  id: string;
+  author: ChannelAuthor;
+  trip: {
+    tripId: string;
+    name: string | null;
+    status: string;
+    kind: string;
+    origin: string | null;
+    destination: string | null;
+    destinationCountriesIso2: string[];
+    startDate: string | null;
+    endDate: string | null;
+  };
+  flights: Array<{
+    bookingId: string;
+    pnr: string | null;
+    status: string;
+    origin: string | null;
+    destination: string | null;
+    departureAt: string | null;
+    arrivalAt: string | null;
+    totalUsd: string;
+    segmentCount: number;
+  }>;
+  stays: Array<{
+    bookingId: string;
+    status: string;
+    property: string | null;
+    city: string | null;
+    checkInDate: string | null;
+    checkOutDate: string | null;
+    nights: number | null;
+    totalUsd: string;
+  }>;
+  esims: Array<{
+    esimId: string;
+    status: string;
+    countries: string[];
+    dataMb: number;
+    validityDays: number;
+    expiresAt: string | null;
+    installUrl: string | null;
+  }>;
+  alerts: Array<{
+    kind: string;
+    severity: 'info' | 'warn' | 'critical';
+    message: string;
+  }>;
+  shareUrl: string | null;
+  createdAt: string;
+}
+
+/**
  * Citation list — Places, search results, doc references. Each source
  * has at minimum a title + url; snippet + favicon are optional.
  */
@@ -233,7 +399,11 @@ export type ChannelMessage =
   | ChannelMessageToolResult
   | ChannelMessageApprovalRequest
   | ChannelMessageReasoning
-  | ChannelMessageSources;
+  | ChannelMessageSources
+  | ChannelMessageEsimActivation
+  | ChannelMessageSeatPicker
+  | ChannelMessageAncillaryPicker
+  | ChannelMessageTripBrief;
 
 /**
  * Native payload type each channel renderer emits. Every concrete

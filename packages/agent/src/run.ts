@@ -555,6 +555,12 @@ function collectShareCards(toolResults: unknown): NonNullable<AgentOutput['share
     if (!share || typeof share !== 'object' || Array.isArray(share)) continue;
     const s = share as Record<string, unknown>;
     if (typeof s.title !== 'string' || typeof s.body !== 'string') continue;
+    // Optional first-class activation payload — picked up when the
+    // tool emits a structured `esim_activation`-shaped card. Validated
+    // structurally so a malformed entry (missing field, wrong type)
+    // degrades to share-only rather than producing a broken card.
+    const activation = extractActivation(output);
+
     out.push({
       toolName,
       share: {
@@ -571,9 +577,43 @@ function collectShareCards(toolResults: unknown): NonNullable<AgentOutput['share
           : {}),
         ...(typeof s.imageUrl === 'string' ? { imageUrl: s.imageUrl } : {}),
       },
+      ...(activation ? { activation } : {}),
     });
   }
   return out;
+}
+
+/**
+ * Pull a structured `activation` payload off a tool output, if present.
+ * Returns `null` when any required field is missing or wrong-typed —
+ * channel orchestrators then fall through to the generic `share` card.
+ */
+function extractActivation(
+  output: Record<string, unknown>
+): NonNullable<NonNullable<AgentOutput['shareCards']>[number]['activation']> | null {
+  const a = (output as { activation?: unknown }).activation;
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return null;
+  const r = a as Record<string, unknown>;
+  if (typeof r.esimId !== 'string') return null;
+  if (typeof r.planLabel !== 'string') return null;
+  if (typeof r.qrUrl !== 'string') return null;
+  if (typeof r.lpaCode !== 'string') return null;
+  if (typeof r.installUrl !== 'string') return null;
+  if (typeof r.dataMb !== 'number') return null;
+  if (typeof r.validityDays !== 'number') return null;
+  if (!Array.isArray(r.countries) || !r.countries.every(c => typeof c === 'string')) return null;
+  return {
+    esimId: r.esimId,
+    planLabel: r.planLabel,
+    countries: r.countries as string[],
+    dataMb: r.dataMb,
+    validityDays: r.validityDays,
+    qrUrl: r.qrUrl,
+    lpaCode: r.lpaCode,
+    installUrl: r.installUrl,
+    ...(typeof r.priceLine === 'string' ? { priceLine: r.priceLine } : {}),
+    ...(typeof r.expiresAt === 'string' ? { expiresAt: r.expiresAt } : {}),
+  };
 }
 
 function isCta(value: unknown): boolean {

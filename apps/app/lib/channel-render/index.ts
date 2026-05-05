@@ -23,6 +23,7 @@ export type {
   ChannelMessageApprovalRequest,
   ChannelMessageReasoning,
   ChannelMessageSources,
+  ChannelMessageEsimActivation,
   ChannelKind,
   ChannelRole,
   ChannelAuthor,

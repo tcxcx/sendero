@@ -58,6 +58,19 @@ export interface AgentShareCard {
     secondaryCtas?: Array<{ label: string; kind: string }>;
     imageUrl?: string;
   };
+  /** Optional structured `esim_activation` payload — see AgentOutput. */
+  activation?: {
+    esimId: string;
+    planLabel: string;
+    countries: string[];
+    dataMb: number;
+    validityDays: number;
+    qrUrl: string;
+    lpaCode: string;
+    installUrl: string;
+    priceLine?: string;
+    expiresAt?: string;
+  };
 }
 
 const KNOWN_CTA_KINDS = new Set<ChannelCta['kind']>([
@@ -94,29 +107,60 @@ interface ChannelMessageContext {
  * Pure conversion from agent share cards → canonical ChannelMessage[].
  * Caller passes a stable `idPrefix` (typically the inbound message id
  * or turn id) so each card has a deterministic, dedupable id.
+ *
+ * Cards that carry a structured `activation` payload are emitted as
+ * the dedicated `esim_activation` `ChannelMessage` so renderers can
+ * paint the QR + tap-to-install + per-device tabs natively. All other
+ * cards fall through to the generic `tool_result.share` flow.
  */
 export function shareCardsToChannelMessages(
   cards: AgentShareCard[],
   ctx: ChannelMessageContext
 ): ChannelMessage[] {
-  return cards.map((card, idx) => ({
-    kind: 'tool_result',
-    id: `${ctx.idPrefix}_${idx}_${card.toolName}`,
-    author: { role: 'agent', name: ctx.authorName ?? 'Sendero' },
-    toolName: card.toolName,
-    result: null,
-    share: {
-      title: card.share.title,
-      body: card.share.body,
-      ...(card.share.bullets ? { bullets: card.share.bullets } : {}),
-      ...(card.share.primaryCta ? { primaryCta: narrowCta(card.share.primaryCta) } : {}),
-      ...(card.share.secondaryCtas
-        ? { secondaryCtas: card.share.secondaryCtas.map(narrowCta) }
-        : {}),
-      ...(card.share.imageUrl ? { imageUrl: card.share.imageUrl } : {}),
-    },
-    createdAt: new Date().toISOString(),
-  }));
+  return cards.map((card, idx) => {
+    const id = `${ctx.idPrefix}_${idx}_${card.toolName}`;
+    const author = { role: 'agent' as const, name: ctx.authorName ?? 'Sendero' };
+    const createdAt = new Date().toISOString();
+
+    if (card.activation) {
+      const a = card.activation;
+      return {
+        kind: 'esim_activation',
+        id,
+        author,
+        esimId: a.esimId,
+        planLabel: a.planLabel,
+        countries: a.countries,
+        dataMb: a.dataMb,
+        validityDays: a.validityDays,
+        qrUrl: a.qrUrl,
+        lpaCode: a.lpaCode,
+        installUrl: a.installUrl,
+        ...(a.priceLine ? { priceLine: a.priceLine } : {}),
+        ...(a.expiresAt ? { expiresAt: a.expiresAt } : {}),
+        createdAt,
+      };
+    }
+
+    return {
+      kind: 'tool_result',
+      id,
+      author,
+      toolName: card.toolName,
+      result: null,
+      share: {
+        title: card.share.title,
+        body: card.share.body,
+        ...(card.share.bullets ? { bullets: card.share.bullets } : {}),
+        ...(card.share.primaryCta ? { primaryCta: narrowCta(card.share.primaryCta) } : {}),
+        ...(card.share.secondaryCtas
+          ? { secondaryCtas: card.share.secondaryCtas.map(narrowCta) }
+          : {}),
+        ...(card.share.imageUrl ? { imageUrl: card.share.imageUrl } : {}),
+      },
+      createdAt,
+    };
+  });
 }
 
 // ── Per-channel dispatchers ──────────────────────────────────────────

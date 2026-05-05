@@ -479,7 +479,9 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
             ? { nationality: params.identityDocument.nationality }
             : {}),
           expires_on: params.identityDocument.expiresOn,
-          ...(params.identityDocument.issuedOn ? { issued_on: params.identityDocument.issuedOn } : {}),
+          ...(params.identityDocument.issuedOn
+            ? { issued_on: params.identityDocument.issuedOn }
+            : {}),
         },
       ]
     : undefined;
@@ -583,7 +585,9 @@ export async function getOfferOriginDestinationIso2(offerId: string): Promise<{
         s.destinationCountry &&
         originCountry &&
         s.destinationCountry.toUpperCase() !== originCountry.toUpperCase()
-    )?.destinationCountry ?? last?.destinationCountry ?? null;
+    )?.destinationCountry ??
+    last?.destinationCountry ??
+    null;
   const isInternational = Boolean(
     originCountry &&
       outboundDestCountry &&

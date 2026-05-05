@@ -14,8 +14,11 @@ import type {
   DuffelStaysBookingPayloadWire,
   DuffelStaysCancellationTimelineEntryWire,
 } from '@sendero/duffel';
+import type { MeterPayerType } from '@sendero/database';
 
 import { ensureFlightCustomer } from './ensure-flight-customer';
+import { resolvePayer, PayerResolutionError } from './lib/resolve-payer';
+import { payerCopy } from './lib/payer-copy';
 import type { ToolContext, ToolDef } from './types';
 
 const guestSchema = z.object({
@@ -33,6 +36,14 @@ const inputSchema = z.object({
   loyaltyProgrammeAccountNumber: z.string().optional(),
   accommodationSpecialRequests: z.string().max(1000).optional(),
   additionalCustomerUserIds: z.array(z.string().min(3)).optional(),
+  /// Override the trip-resolved payer for this booking. `tenant` debits
+  /// the tenant treasury at confirm time; `traveler` debits the traveler
+  /// wallet. Falls back to `Trip.paymentMode` → `Tenant.defaultPaymentMode`.
+  /// See `packages/tools/src/lib/resolve-payer.ts`.
+  provisionedBy: z.enum(['tenant', 'traveler']).optional(),
+  /// Optional Trip.id for payer resolution. When omitted we fall through
+  /// to the tenant default; passing the trip pins the resolution.
+  tripId: z.string().optional(),
 });
 
 export type BookStayInput = z.infer<typeof inputSchema>;
@@ -48,6 +59,10 @@ export interface BookStayResult {
   accommodationName?: string;
   customerUserIds: string[];
   cancellationTimeline: DuffelStaysCancellationTimelineEntryWire[];
+  /// Resolved payer for this booking (`tenant` or `traveler`). Echoed
+  /// from `resolvePayer` so downstream `confirm_booking` + renderer copy
+  /// stay consistent without re-resolving.
+  provisionedBy?: MeterPayerType;
   share: {
     title: string;
     body: string;
@@ -56,6 +71,29 @@ export interface BookStayResult {
 }
 
 export async function bookStay(input: BookStayInput, ctx?: ToolContext): Promise<BookStayResult> {
+  // Payer resolution. Precedence: explicit input → ctx.payer (turn-level
+  // resolution from dispatch) → resolvePayer fallback → undefined when
+  // no traveler context is bound at all. Resolution failures (cross-
+  // tenant trip etc.) bubble up.
+  let provisionedBy: MeterPayerType | undefined =
+    input.provisionedBy ?? ctx?.payer?.type ?? undefined;
+  if (!provisionedBy && ctx?.traveler?.tenantId) {
+    try {
+      const resolved = await resolvePayer({
+        tenantId: ctx.traveler.tenantId,
+        tripId: input.tripId,
+        travelerUserId: ctx.traveler.userId,
+      });
+      provisionedBy = resolved.type;
+    } catch (err) {
+      if (err instanceof PayerResolutionError && err.code === 'traveler_required') {
+        provisionedBy = undefined;
+      } else {
+        throw err;
+      }
+    }
+  }
+
   const customerUserIds: DuffelCustomerUserId[] = [];
   if (ctx?.traveler?.userId) {
     try {
@@ -94,11 +132,23 @@ export async function bookStay(input: BookStayInput, ctx?: ToolContext): Promise
 
   const booking = await createStayBooking(payload);
 
+  // Payer attribution line for the share card. `payerCopy` keeps the
+  // tenant-vs-traveler wording consistent across operator/Slack/WhatsApp.
+  // Falls back gracefully when payer was unresolved (legacy guest flows).
+  const priceLine = `${booking.total_amount} ${booking.total_currency}`;
+  const payerLine = provisionedBy
+    ? payerCopy({
+        payer: provisionedBy,
+        amount: priceLine,
+        tenantName: ctx?.traveler?.tenantId ?? null,
+      }).lineItem
+    : priceLine;
+
   const bullets = [
     `Ref ${booking.reference} · ${booking.status}`,
     `${booking.check_in_date} → ${booking.check_out_date}`,
     booking.accommodation?.name ?? '',
-    `${booking.total_amount} ${booking.total_currency}`,
+    payerLine,
     input.loyaltyProgrammeAccountNumber
       ? `Loyalty account: ${input.loyaltyProgrammeAccountNumber}`
       : '',
@@ -115,6 +165,7 @@ export async function bookStay(input: BookStayInput, ctx?: ToolContext): Promise
     accommodationName: booking.accommodation?.name,
     customerUserIds,
     cancellationTimeline: booking.cancellation_timeline ?? [],
+    provisionedBy,
     share: {
       title: `Stay booked · ${booking.reference}`,
       body: booking.accommodation?.name
@@ -157,6 +208,16 @@ export const bookStayTool: ToolDef<BookStayInput, BookStayResult> = {
       additionalCustomerUserIds: {
         type: 'array',
         items: { type: 'string' },
+      },
+      provisionedBy: {
+        type: 'string',
+        enum: ['tenant', 'traveler'],
+        description:
+          'Override the trip-resolved payer. `tenant` = pre-paid budget; `traveler` = consumer wallet. Defaults to Trip.paymentMode.',
+      },
+      tripId: {
+        type: 'string',
+        description: 'Optional Trip.id for payer resolution.',
       },
     },
   },

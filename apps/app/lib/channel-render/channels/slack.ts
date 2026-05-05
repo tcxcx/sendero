@@ -27,11 +27,16 @@
 
 import { buildApprovalBlocks } from '@sendero/slack';
 import { buildShareImageUrl } from '@/lib/og/share-url';
+import { INSTALL_INSTRUCTIONS } from '../install-instructions';
 import type {
   ChannelCta,
   ChannelMessage,
+  ChannelMessageAncillaryPicker,
   ChannelMessageCard,
+  ChannelMessageEsimActivation,
+  ChannelMessageSeatPicker,
   ChannelMessageToolResult,
+  ChannelMessageTripBrief,
   ChannelRenderer,
   RenderedForChannel,
 } from '../types';
@@ -73,6 +78,14 @@ export const renderForSlack: ChannelRenderer<SlackPayload> = async (
       return null;
     case 'sources':
       return renderSources(msg.items);
+    case 'esim_activation':
+      return renderEsimActivation(msg);
+    case 'seat_picker':
+      return renderSeatPicker(msg);
+    case 'ancillary_picker':
+      return renderAncillaryPicker(msg);
+    case 'trip_brief':
+      return renderTripBrief(msg);
     default:
       return exhaustive(msg);
   }
@@ -314,6 +327,364 @@ function renderSources(
           elements: [{ type: 'mrkdwn', text: truncate(linksMrkdwn, MAX_SECTION_TEXT) }],
         },
       ],
+    },
+  };
+}
+
+function renderEsimActivation(
+  msg: ChannelMessageEsimActivation
+): RenderedForChannel<SlackPayload> {
+  // Slack delivery: header + plan section + QR image + actions block
+  // (primary = install URL, secondary = jump to instructions). The
+  // image block is the canonical artifact; tapping the button lands on
+  // the universal install page which then UA-redirects iOS users to the
+  // LPA: scheme. iPhone users in the Slack mobile app open the link in
+  // Safari and the redirect kicks in there.
+  const ios = INSTALL_INSTRUCTIONS.ios;
+  const blocks: unknown[] = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: '📱 Trip eSIM ready', emoji: true },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: truncate(
+          [
+            `*${escapeMrkdwn(msg.planLabel)}*`,
+            `${(msg.dataMb / 1024).toFixed(1)} GB · ${msg.validityDays} days · ${msg.countries.join(', ')}`,
+            msg.priceLine ? `_${escapeMrkdwn(msg.priceLine)}_` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          MAX_SECTION_TEXT
+        ),
+      },
+    },
+    {
+      type: 'image',
+      image_url: msg.qrUrl,
+      alt_text: `Install QR for ${msg.planLabel}`,
+      title: { type: 'plain_text', text: 'Scan to install', emoji: true },
+    },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '📱 Install on iPhone', emoji: true },
+          url: msg.installUrl,
+          action_id: 'sendero_open_link',
+          style: 'primary',
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Other devices', emoji: true },
+          url: `${msg.installUrl}#instructions`,
+          action_id: 'sendero_open_link.instructions',
+        },
+      ],
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: truncate(
+            `iOS one-tap: ${escapeMrkdwn(ios.subLabel ?? '')}. Android scans the QR — tap "Other devices" for steps.`,
+            MAX_SECTION_TEXT
+          ),
+        },
+      ],
+    },
+  ];
+
+  return {
+    channel: 'slack',
+    payload: {
+      channel: '',
+      thread_ts: undefined,
+      text: `Trip eSIM ready: ${msg.planLabel}`,
+      blocks,
+    },
+  };
+}
+
+/**
+ * Slack collapses a seat grid to an overflow menu with up to 25 entries
+ * (Slack's hard cap on overflow). Beyond that we surface the cheapest
+ * 25 + a context note. Tap routes to `select_seat` via `sendero_select_seat`.
+ */
+const MAX_SLACK_SEAT_OPTIONS = 25;
+const MAX_SLACK_BAG_OPTIONS = 5;
+
+function renderSeatPicker(
+  msg: ChannelMessageSeatPicker
+): RenderedForChannel<SlackPayload> {
+  const passenger = msg.passengerName ?? msg.passengerId;
+  const truncated = msg.options.length > MAX_SLACK_SEAT_OPTIONS;
+  const options = msg.options.slice(0, MAX_SLACK_SEAT_OPTIONS);
+
+  const blocks: unknown[] = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: `🪑 Seat for ${passenger}`, emoji: true },
+    },
+  ];
+
+  if (options.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '_No seats available for this segment._' },
+    });
+  } else {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: 'Pick a seat — fare adjusts at booking.',
+      },
+      accessory: {
+        type: 'overflow',
+        action_id: 'sendero_select_seat',
+        options: options.map(o => ({
+          text: {
+            type: 'plain_text',
+            text: truncate(`${o.designator} · ${o.price} ${o.currency}`, 75),
+            emoji: true,
+          },
+          value: truncate(
+            JSON.stringify({
+              tripId: msg.tripId,
+              offerId: msg.offerId,
+              passengerId: msg.passengerId,
+              seatServiceId: o.serviceId,
+              designator: o.designator,
+              price: o.price,
+              currency: o.currency,
+            }),
+            2000
+          ),
+        })),
+      },
+    });
+
+    if (truncated) {
+      blocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `Showing cheapest ${MAX_SLACK_SEAT_OPTIONS} of ${msg.options.length} seats. Ask for a row range to see more.`,
+          },
+        ],
+      });
+    }
+  }
+
+  return {
+    channel: 'slack',
+    payload: {
+      channel: '',
+      thread_ts: undefined,
+      text: `Seat picker for ${passenger}`,
+      blocks,
+    },
+  };
+}
+
+function renderAncillaryPicker(
+  msg: ChannelMessageAncillaryPicker
+): RenderedForChannel<SlackPayload> {
+  const passenger = msg.passengerName ?? msg.passengerId;
+  const blocks: unknown[] = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: `🧳 Bags + extras for ${passenger}`, emoji: true },
+    },
+  ];
+
+  if (msg.bags.length === 0 && (msg.cancelForAnyReason?.length ?? 0) === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: '_No optional extras for this offer._' },
+    });
+  }
+
+  for (const bag of msg.bags.slice(0, MAX_SLACK_BAG_OPTIONS)) {
+    const meta = [bag.weightKg ? `${bag.weightKg}kg` : null, bag.dimensions]
+      .filter(Boolean)
+      .join(' · ');
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${escapeMrkdwn(bag.label)}*${meta ? `\n_${escapeMrkdwn(meta)}_` : ''}\n${bag.price} ${bag.currency}`,
+      },
+      accessory: {
+        type: 'button',
+        text: { type: 'plain_text', text: 'Add', emoji: true },
+        action_id: 'sendero_add_bag',
+        value: truncate(
+          JSON.stringify({
+            tripId: msg.tripId,
+            offerId: msg.offerId,
+            passengerId: msg.passengerId,
+            bagServiceId: bag.serviceId,
+            quantity: 1,
+            label: bag.label,
+            price: bag.price,
+            currency: bag.currency,
+          }),
+          2000
+        ),
+      },
+    });
+  }
+
+  for (const cfar of msg.cancelForAnyReason ?? []) {
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Cancel for any reason*\n_${escapeMrkdwn(cfar.summary)}_\n${cfar.price} ${cfar.currency}`,
+      },
+    });
+  }
+
+  return {
+    channel: 'slack',
+    payload: {
+      channel: '',
+      thread_ts: undefined,
+      text: `Bags + extras for ${passenger}`,
+      blocks,
+    },
+  };
+}
+
+/**
+ * Trip brief → stacked Block Kit sections, one per kind. Operator
+ * approvals + customer-support reads both consume this; the layout
+ * deliberately mirrors the operator card so reading the same trip in
+ * Slack vs. /dashboard/agent-chat gives the same visual rhythm.
+ */
+function renderTripBrief(
+  msg: ChannelMessageTripBrief
+): RenderedForChannel<SlackPayload> {
+  const tripLabel = [msg.trip.origin, msg.trip.destination].filter(Boolean).join(' → ');
+  const dateLabel =
+    msg.trip.startDate && msg.trip.endDate
+      ? `${msg.trip.startDate} → ${msg.trip.endDate}`
+      : (msg.trip.startDate ?? msg.trip.endDate ?? '');
+
+  const headerText =
+    msg.trip.name || tripLabel
+      ? `🧭 ${msg.trip.name ?? tripLabel}`
+      : `🧭 Trip ${msg.trip.tripId}`;
+  const blocks: unknown[] = [
+    {
+      type: 'header',
+      text: { type: 'plain_text', text: truncate(headerText, 150), emoji: true },
+    },
+  ];
+
+  // Status + date row
+  const contextLines: string[] = [`*Status:* ${msg.trip.status}`];
+  if (dateLabel) contextLines.push(`*Dates:* ${dateLabel}`);
+  if (tripLabel && msg.trip.name) contextLines.push(`*Route:* ${tripLabel}`);
+  if (contextLines.length > 0) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: contextLines.join(' · ') }],
+    });
+  }
+
+  // Critical / warn alerts surface up top so they're not lost below the
+  // booking lists. Info-level alerts skip the visual emphasis.
+  const importantAlerts = msg.alerts.filter(a => a.severity !== 'info');
+  if (importantAlerts.length > 0) {
+    const text = importantAlerts
+      .map(a => {
+        const icon = a.severity === 'critical' ? '🔴' : '🟡';
+        return `${icon} ${escapeMrkdwn(a.message)}`;
+      })
+      .join('\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: truncate(text, MAX_SECTION_TEXT) },
+    });
+  }
+
+  if (msg.flights.length > 0) {
+    const text = [
+      '*✈️ Flights*',
+      ...msg.flights.map(f => {
+        const route = `${f.origin ?? '?'} → ${f.destination ?? '?'}`;
+        const stops = f.segmentCount > 1 ? ` · ${f.segmentCount}-stop` : '';
+        const pnr = f.pnr ? ` · \`${f.pnr}\`` : '';
+        return `• ${route}${stops}${pnr} · $${f.totalUsd}`;
+      }),
+    ].join('\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: truncate(text, MAX_SECTION_TEXT) },
+    });
+  }
+
+  if (msg.stays.length > 0) {
+    const text = [
+      '*🏨 Stays*',
+      ...msg.stays.map(s => {
+        const where = s.city ? `${s.property ?? 'Hotel'} · ${s.city}` : (s.property ?? 'Hotel');
+        const nights = s.nights ? ` · ${s.nights}n` : '';
+        return `• ${where}${nights} · $${s.totalUsd}`;
+      }),
+    ].join('\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: truncate(text, MAX_SECTION_TEXT) },
+    });
+  }
+
+  if (msg.esims.length > 0) {
+    const text = [
+      '*📱 Connectivity*',
+      ...msg.esims.map(e => {
+        const gb = (e.dataMb / 1024).toFixed(1);
+        const where = e.countries.join('/') || '—';
+        return `• ${gb} GB · ${e.validityDays}d · ${where} · ${e.status}`;
+      }),
+    ].join('\n');
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: truncate(text, MAX_SECTION_TEXT) },
+    });
+  }
+
+  if (msg.shareUrl) {
+    blocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '🔗 Share trip', emoji: true },
+          url: msg.shareUrl,
+          action_id: 'sendero_open_link.trip_share',
+          style: 'primary',
+        },
+      ],
+    });
+  }
+
+  return {
+    channel: 'slack',
+    payload: {
+      channel: '',
+      thread_ts: undefined,
+      text: `Trip ${msg.trip.tripId}: ${tripLabel || msg.trip.status}`,
+      blocks,
     },
   };
 }

@@ -274,4 +274,72 @@ describe('renderForOperator', () => {
     const bogus = { kind: 'mystery_kind', id: 'x' } as unknown as ChannelMessage;
     expect(() => renderForOperator(bogus)).toThrow('non-exhaustive ChannelMessage kind');
   });
+
+  test('esim_activation renders inside MessageContent with the activation card', () => {
+    const tree = renderForOperator(fixtures.esimActivation());
+    expect(tree.type).toBe(MessageContent);
+    // EsimActivationCard is the inner child; assert via its props rather
+    // than tree-walking JSX it doesn't expand without a renderer.
+    const card = (tree.props as { children?: ReactElement }).children;
+    expect(card && isValidElement(card)).toBe(true);
+    const props = (card as ReactElement).props as {
+      planLabel?: string;
+      lpaCode?: string;
+      installUrl?: string;
+      qrUrl?: string;
+    };
+    expect(props.planLabel).toBe('5 GB · 30 days · Japan + Korea');
+    expect(props.lpaCode).toBe('LPA:1$smdp.example.com$ACTIVATION_TEST');
+    expect(props.installUrl).toBe('https://app.sendero.travel/install/esim/abc.def');
+    expect(props.qrUrl).toBe('https://app.sendero.travel/api/esim/qr/abc.def.png');
+  });
+
+  test('seat_picker renders inside MessageContent with the seat card props', () => {
+    const tree = renderForOperator(fixtures.seatPicker());
+    expect(tree.type).toBe(MessageContent);
+    const card = (tree.props as { children?: ReactElement }).children;
+    expect(card && isValidElement(card)).toBe(true);
+    const props = (card as ReactElement).props as {
+      tripId?: string;
+      offerId?: string;
+      options?: Array<{ designator: string }>;
+    };
+    expect(props.tripId).toBe('trp_test_001');
+    expect(props.offerId).toBe('off_test_abc');
+    expect(props.options?.map(o => o.designator)).toEqual(['12A', '14C']);
+  });
+
+  test('ancillary_picker renders inside MessageContent with bags + cfar props', () => {
+    const tree = renderForOperator(fixtures.ancillaryPicker());
+    expect(tree.type).toBe(MessageContent);
+    const card = (tree.props as { children?: ReactElement }).children;
+    expect(card && isValidElement(card)).toBe(true);
+    const props = (card as ReactElement).props as {
+      bags?: Array<{ serviceId: string }>;
+      cancelForAnyReason?: Array<{ serviceId: string }>;
+    };
+    expect(props.bags).toHaveLength(2);
+    expect(props.cancelForAnyReason).toHaveLength(1);
+  });
+
+  test('trip_brief renders inside MessageContent with all section props + share URL', () => {
+    const tree = renderForOperator(fixtures.tripBrief());
+    expect(tree.type).toBe(MessageContent);
+    const card = (tree.props as { children?: ReactElement }).children;
+    expect(card && isValidElement(card)).toBe(true);
+    const props = (card as ReactElement).props as {
+      trip?: { tripId: string; status: string };
+      flights?: unknown[];
+      stays?: unknown[];
+      esims?: unknown[];
+      alerts?: unknown[];
+      shareUrl?: string | null;
+    };
+    expect(props.trip?.tripId).toBe('trp_test_001');
+    expect(props.flights).toHaveLength(1);
+    expect(props.stays).toHaveLength(1);
+    expect(props.esims).toHaveLength(1);
+    expect(props.alerts).toHaveLength(1);
+    expect(props.shareUrl).toBe('https://app.sendero.travel/trip/abc.def');
+  });
 });

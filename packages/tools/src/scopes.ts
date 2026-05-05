@@ -50,6 +50,10 @@ export const SANDBOX_SCOPES: KeyScope[] = ['*'];
 export function toolToScope(toolName: string): KeyScope {
   if (toolName.startsWith('search_') || toolName.startsWith('find_')) return 'search';
   if (toolName.startsWith('book_') || toolName.startsWith('hold_')) return 'bookings';
+  // Pre-booking ancillary staging — same scope as the bookings they
+  // attach to. A read-mostly key shouldn't be able to stage paid extras
+  // that auto-flow into the next book_flight call.
+  if (toolName === 'select_seat' || toolName === 'add_baggage') return 'bookings';
   if (
     toolName === 'reserve_booking' ||
     toolName === 'commit_booking' ||
@@ -86,7 +90,12 @@ export function toolToScope(toolName: string): KeyScope {
     return 'treasury';
   }
   if (toolName === 'scan_document' || toolName === 'generate_booking_invoice') return 'documents';
-  if (toolName === 'check_travel_eligibility' || toolName === 'read_validation') {
+  if (
+    toolName === 'check_travel_eligibility' ||
+    toolName === 'read_validation' ||
+    toolName === 'check_visa_requirements' ||
+    toolName === 'recommend_visa_application_path'
+  ) {
     return 'compliance';
   }
   if (toolName === 'read_reputation') {
@@ -103,7 +112,10 @@ export function toolToScope(toolName: string): KeyScope {
     toolName === 'timezone_brief' ||
     toolName === 'export_route_map' ||
     toolName === 'geocode_trip_stop' ||
-    toolName === 'validate_travel_address'
+    toolName === 'validate_travel_address' ||
+    toolName === 'currency_convert' ||
+    toolName === 'tipping_etiquette' ||
+    toolName === 'get_trip_brief'
   ) {
     return 'trip_assistance';
   }
@@ -146,6 +158,8 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   // Real-world commit paths
   'book_flight',
   'book_stay',
+  'book_esim',
+  'book_insurance',
   'confirm_flight',
   // Vault-backed + ID-sensitive
   'scan_document', // kind === 'id_document' tightens further at the tool layer

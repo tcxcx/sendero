@@ -11,6 +11,8 @@
 export type StampKind = 'BoardingPass' | 'SettlementReceipt' | 'ItineraryMap' | 'TripPassport';
 
 export interface StampTenantBrand {
+  /** Sendero Tenant.id — needed by the post-mint notify step to look up the WhatsApp install + channel identity. */
+  tenantId: string;
   slug: string;
   displayName: string;
   /** Primary/secondary brand colors as `oklch(...)` strings. */
