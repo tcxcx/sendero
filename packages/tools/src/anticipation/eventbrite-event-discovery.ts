@@ -85,9 +85,7 @@ export interface EventbriteEventDiscoveryDeps {
    * detail payload — used to enrich CSE hits with start time + venue
    * + free/paid signal. Failing-soft.
    */
-  fetchEventDetail?: (
-    eventId: string
-  ) => Promise<Partial<EventbriteEventHit> | null>;
+  fetchEventDetail?: (eventId: string) => Promise<Partial<EventbriteEventHit> | null>;
 }
 
 const DETAIL_ENDPOINT = 'https://www.eventbriteapi.com/v3/events';

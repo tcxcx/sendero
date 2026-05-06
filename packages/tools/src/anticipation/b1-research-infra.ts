@@ -75,17 +75,31 @@ const OFFICIAL_DOMAIN_HINTS: Record<(typeof SOURCE_KINDS)[number], string[]> = {
   gallery: ['galerie', 'gallery', 'kunst', 'arte'],
 };
 
-function scoreOfficialDomain(displayLink: string, kind: OfficialSourceResolverInput['kind']): { confidence: 'low' | 'medium' | 'high'; reason: string } {
+function scoreOfficialDomain(
+  displayLink: string,
+  kind: OfficialSourceResolverInput['kind']
+): { confidence: 'low' | 'medium' | 'high'; reason: string } {
   const host = displayLink.toLowerCase();
   const hints = OFFICIAL_DOMAIN_HINTS[kind] ?? [];
-  if (host.endsWith('.gov') || host.endsWith('.gov.uk') || host.endsWith('.gob.es') || host.endsWith('.go.jp')) {
+  if (
+    host.endsWith('.gov') ||
+    host.endsWith('.gov.uk') ||
+    host.endsWith('.gob.es') ||
+    host.endsWith('.go.jp')
+  ) {
     return { confidence: 'high', reason: 'government TLD' };
   }
-  if (hints.some(h => host.includes(h))) return { confidence: 'high', reason: `matches official-domain hint for ${kind}` };
+  if (hints.some(h => host.includes(h)))
+    return { confidence: 'high', reason: `matches official-domain hint for ${kind}` };
   // Wikipedia / generic encyclopedia is medium for context, not authoritative.
-  if (host.includes('wikipedia.org')) return { confidence: 'medium', reason: 'encyclopedia source — context only' };
+  if (host.includes('wikipedia.org'))
+    return { confidence: 'medium', reason: 'encyclopedia source — context only' };
   // Travel aggregators are low (TripAdvisor, Yelp, etc.)
-  if (host.includes('tripadvisor.com') || host.includes('yelp.com') || host.includes('viator.com')) {
+  if (
+    host.includes('tripadvisor.com') ||
+    host.includes('yelp.com') ||
+    host.includes('viator.com')
+  ) {
     return { confidence: 'low', reason: 'travel aggregator — not authoritative' };
   }
   return { confidence: 'medium', reason: 'unknown authority — caller should verify' };
@@ -99,7 +113,11 @@ async function runOfficialSourceResolver(
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = officialSourceResolverInput.parse(rawInput);
-  const q = [input.name, input.city, input.kind === 'embassy' ? 'embassy consulate' : 'official site']
+  const q = [
+    input.name,
+    input.city,
+    input.kind === 'embassy' ? 'embassy consulate' : 'official site',
+  ]
     .filter(Boolean)
     .join(' ');
   const r = await cseSearch({
@@ -109,7 +127,11 @@ async function runOfficialSourceResolver(
     ...(input.countryCode ? { country: input.countryCode } : {}),
   });
   if (!r.available) {
-    return { status: 'unavailable', reason: r.reason ?? 'cse-unavailable', message: `CSE unavailable: ${r.reason ?? 'unknown'}.` };
+    return {
+      status: 'unavailable',
+      reason: r.reason ?? 'cse-unavailable',
+      message: `CSE unavailable: ${r.reason ?? 'unknown'}.`,
+    };
   }
 
   const sources: OfficialSource[] = r.results.slice(0, 5).map(hit => {
@@ -144,7 +166,7 @@ const officialSourceResolverTool: ToolDef<
   internal: true,
   experimental: true,
   description:
-    "Find authoritative URLs for a name + kind (venue, airport, government, museum, restaurant, ticketing, airline, embassy, hotel, gallery). CSE-scoped lookup with per-kind official-domain hints. Each result tagged with `confidence` (high / medium / low). Use as the first step of any deep-research chain — `monocle_place_researcher` and friends compose this when they need the canonical site URL.",
+    'Find authoritative URLs for a name + kind (venue, airport, government, museum, restaurant, ticketing, airline, embassy, hotel, gallery). CSE-scoped lookup with per-kind official-domain hints. Each result tagged with `confidence` (high / medium / low). Use as the first step of any deep-research chain — `monocle_place_researcher` and friends compose this when they need the canonical site URL.',
   inputSchema: officialSourceResolverInput,
   jsonSchema: {
     type: 'object',
@@ -341,7 +363,12 @@ type ResearchAuditTrailInput = z.infer<typeof researchAuditTrailInput>;
 async function runResearchAuditTrail(
   rawInput: ResearchAuditTrailInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'production_refused'; message: string; auditId?: string; record?: ResearchAuditTrailInput & { recordedAt: string } }> {
+): Promise<{
+  status: 'ok' | 'production_refused';
+  message: string;
+  auditId?: string;
+  record?: ResearchAuditTrailInput & { recordedAt: string };
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
@@ -369,7 +396,12 @@ const researchAuditTrailTool: ToolDef = {
     required: ['recommendation', 'toolsUsed', 'sources', 'finalConfidence'],
     properties: {
       recommendation: { type: 'string', minLength: 1, maxLength: 2000 },
-      toolsUsed: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'string', maxLength: 80 } },
+      toolsUsed: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 20,
+        items: { type: 'string', maxLength: 80 },
+      },
       sources: { type: 'array', maxItems: 20 },
       finalConfidence: { type: 'string', enum: ['low', 'medium', 'high'] },
       traceId: { type: 'string', maxLength: 80 },
@@ -390,7 +422,12 @@ const sourceCacheManagerInput = z.object({
   op: z.enum(['get', 'set', 'invalidate']),
   key: z.string().min(1).max(400),
   value: z.unknown().optional(),
-  ttlSeconds: z.number().int().min(60).max(86_400 * 30).default(86_400),
+  ttlSeconds: z
+    .number()
+    .int()
+    .min(60)
+    .max(86_400 * 30)
+    .default(86_400),
 });
 type SourceCacheManagerInput = z.infer<typeof sourceCacheManagerInput>;
 
@@ -414,7 +451,12 @@ function evictExpired() {
 async function runSourceCacheManager(
   rawInput: SourceCacheManagerInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'production_refused'; message: string; hit?: boolean; value?: unknown }> {
+): Promise<{
+  status: 'ok' | 'production_refused';
+  message: string;
+  hit?: boolean;
+  value?: unknown;
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
@@ -543,9 +585,11 @@ function guessClarifyingQuestion(intent: string): string {
   if (/restaurant|food|eat|dinner|lunch/i.test(intent)) {
     return 'your budget tier (budget / medium / premium) and any dietary restrictions';
   }
-  if (/coffee|cafe/i.test(intent)) return 'whether you need WiFi + outlets to work or just the coffee';
+  if (/coffee|cafe/i.test(intent))
+    return 'whether you need WiFi + outlets to work or just the coffee';
   if (/event|meetup|ticket/i.test(intent)) return 'the date range and topic you care about';
-  if (/hotel|stay|lodging/i.test(intent)) return 'your nightly budget and the neighborhood you prefer';
+  if (/hotel|stay|lodging/i.test(intent))
+    return 'your nightly budget and the neighborhood you prefer';
   return 'a couple of details to narrow this down';
 }
 
@@ -555,7 +599,8 @@ function suggestAlternates(attempted: string[]): string[] {
   if (tried.has('cse')) alternates.push('web_search');
   if (tried.has('web_search')) alternates.push('monocle_place_researcher');
   if (tried.has('specialty_coffee_finder')) alternates.push('foodie_shortlist_builder');
-  if (tried.has('mainstream_event_discovery')) alternates.push('eventbrite_event_discovery', 'professional_networking_scanner');
+  if (tried.has('mainstream_event_discovery'))
+    alternates.push('eventbrite_event_discovery', 'professional_networking_scanner');
   return alternates.length > 0 ? alternates : ['web_search', 'monocle_place_researcher'];
 }
 
@@ -564,7 +609,7 @@ const researchGapRouterTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Router for low-confidence research. Decides among: try_alternate (different tool), ask_traveler (clarifying Q), escalate_handoff (request_human_handoff), accept_low_confidence (quote + caveat). Use as the second step after any failed/uncertain primary research.",
+    'Router for low-confidence research. Decides among: try_alternate (different tool), ask_traveler (clarifying Q), escalate_handoff (request_human_handoff), accept_low_confidence (quote + caveat). Use as the second step after any failed/uncertain primary research.',
   inputSchema: researchGapRouterInput,
   jsonSchema: {
     type: 'object',
@@ -572,7 +617,12 @@ const researchGapRouterTool: ToolDef = {
     properties: {
       intent: { type: 'string', minLength: 1, maxLength: 400 },
       currentConfidence: { type: 'string', enum: ['low', 'medium', 'high'] },
-      attemptedTools: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'string', maxLength: 80 } },
+      attemptedTools: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 20,
+        items: { type: 'string', maxLength: 80 },
+      },
       failedReasons: { type: 'array', maxItems: 10, items: { type: 'string', maxLength: 200 } },
       isBlockingTraveler: { type: 'boolean' },
     },
@@ -587,14 +637,35 @@ const researchGapRouterTool: ToolDef = {
 // ─────────────────────────────────────────────────────────────────────
 
 const TOOL_CATALOG_HINT = [
-  'web_search', 'lookup_match_fixtures', 'monocle_place_researcher', 'visual_aesthetic_scorer',
-  'budget_estimator', 'beauty_budget_ranker', 'specialty_coffee_finder', 'work_from_cafe_ranker',
-  'cheap_michelin_finder', 'ramen_finder', 'foodie_shortlist_builder', 'wine_bar_finder',
-  'bookstore_finder', 'art_gallery_opening_finder', 'running_route_finder', 'gym_day_pass_finder',
-  'eventbrite_event_discovery', 'mainstream_event_discovery', 'crowd_level_predictor',
-  'luma_event_discovery', 'meetup_event_discovery', 'professional_networking_scanner',
-  'city_taste_map_builder', 'hobby_concierge_discover', 'date_plan_builder', 'date_perfume_advisor',
-  'official_source_resolver', 'source_confidence_scorer', 'research_audit_trail',
+  'web_search',
+  'lookup_match_fixtures',
+  'monocle_place_researcher',
+  'visual_aesthetic_scorer',
+  'budget_estimator',
+  'beauty_budget_ranker',
+  'specialty_coffee_finder',
+  'work_from_cafe_ranker',
+  'cheap_michelin_finder',
+  'ramen_finder',
+  'foodie_shortlist_builder',
+  'wine_bar_finder',
+  'bookstore_finder',
+  'art_gallery_opening_finder',
+  'running_route_finder',
+  'gym_day_pass_finder',
+  'eventbrite_event_discovery',
+  'mainstream_event_discovery',
+  'crowd_level_predictor',
+  'luma_event_discovery',
+  'meetup_event_discovery',
+  'professional_networking_scanner',
+  'city_taste_map_builder',
+  'hobby_concierge_discover',
+  'date_plan_builder',
+  'date_perfume_advisor',
+  'official_source_resolver',
+  'source_confidence_scorer',
+  'research_audit_trail',
 ];
 
 const agenticResearchPlannerInput = z.object({
@@ -631,7 +702,11 @@ function resolveVertex() {
   const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!project || !saJson) return null;
   try {
-    return createVertex({ project, location, googleAuthOptions: { credentials: JSON.parse(saJson) } });
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
   } catch {
     return null;
   }
@@ -650,7 +725,10 @@ async function runAgenticResearchPlanner(
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = agenticResearchPlannerInput.parse(rawInput);
-  const tools = input.availableTools && input.availableTools.length > 0 ? input.availableTools : TOOL_CATALOG_HINT;
+  const tools =
+    input.availableTools && input.availableTools.length > 0
+      ? input.availableTools
+      : TOOL_CATALOG_HINT;
 
   const prompt = `You are Sendero's research planner. Given a traveler intent, propose an ordered tool chain — at most ${input.maxSteps} steps — that the agent can run to answer it confidently.
 
@@ -671,8 +749,17 @@ Rules:
   const vertex = resolveVertex();
   if (vertex) {
     try {
-      const r = await generateObject({ model: vertex(VERTEX_MODEL_ID), schema: planSchema, prompt });
-      return { status: 'ok', plan: r.object, via: 'vertex', message: `Planned ${r.object.plan.length} steps via Vertex.` };
+      const r = await generateObject({
+        model: vertex(VERTEX_MODEL_ID),
+        schema: planSchema,
+        prompt,
+      });
+      return {
+        status: 'ok',
+        plan: r.object,
+        via: 'vertex',
+        message: `Planned ${r.object.plan.length} steps via Vertex.`,
+      };
     } catch (err) {
       console.warn(
         '[agentic_research_planner] Vertex direct failed, falling back to AI Gateway:',
@@ -687,7 +774,12 @@ Rules:
       prompt,
       providerOptions: { gateway: { order: ['google'] } },
     });
-    return { status: 'ok', plan: r.object, via: 'gateway', message: `Planned ${r.object.plan.length} steps via gateway.` };
+    return {
+      status: 'ok',
+      plan: r.object,
+      via: 'gateway',
+      message: `Planned ${r.object.plan.length} steps via gateway.`,
+    };
   } catch (err) {
     return {
       status: 'unavailable',
@@ -761,7 +853,9 @@ async function runRecommendationExplainer(
   lines.push(`**${becauseLabel}:** ${input.rationaleParts.join(' · ')}`);
   if (input.budgetEnvelope) lines.push(`**${budgetLabel}:** ${input.budgetEnvelope}`);
   if (input.topSources && input.topSources.length > 0) {
-    const fmt = input.topSources.map(s => `${s.title ?? s.url} (${new URL(s.url).host.replace(/^www\./, '')})`).join(' · ');
+    const fmt = input.topSources
+      .map(s => `${s.title ?? s.url} (${new URL(s.url).host.replace(/^www\./, '')})`)
+      .join(' · ');
     lines.push(`**${sourcesLabel}:** ${fmt}`);
   }
 
@@ -784,7 +878,12 @@ const recommendationExplainerTool: ToolDef = {
     required: ['recommendation', 'rationaleParts'],
     properties: {
       recommendation: { type: 'string', minLength: 1, maxLength: 400 },
-      rationaleParts: { type: 'array', minItems: 1, maxItems: 10, items: { type: 'string', maxLength: 200 } },
+      rationaleParts: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 10,
+        items: { type: 'string', maxLength: 200 },
+      },
       topSources: { type: 'array', maxItems: 3 },
       budgetEnvelope: { type: 'string', maxLength: 120 },
       locale: { type: 'string', minLength: 2, maxLength: 10 },

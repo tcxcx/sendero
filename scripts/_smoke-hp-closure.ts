@@ -40,7 +40,9 @@ const profile = await runDateProfileBuilder(
 );
 console.log(profile.status === 'ok' ? `✓ ${profile.message}` : `✗ ${profile.message}`);
 if (profile.status === 'ok') {
-  console.log(`  budget=${profile.profile.budgetTier} vibe=${profile.profile.preferredVibe} avoid=[${profile.profile.avoid.join(', ')}]`);
+  console.log(
+    `  budget=${profile.profile.budgetTier} vibe=${profile.profile.preferredVibe} avoid=[${profile.profile.avoid.join(', ')}]`
+  );
 }
 
 console.log('\n=== date_plan_ranker (3 candidates) ===');
@@ -52,27 +54,83 @@ const ranker = await runDatePlanRanker(
         label: 'wine bar → parrilla → walk',
         vibe: 'romantic',
         stops: [
-          { name: 'Aldo\'s', category: 'wine_bar', role: 'opener', ambience: 'quiet', walkMinutesFromPrev: 0 },
-          { name: 'Don Julio', category: 'mid_restaurant', role: 'anchor', ambience: 'medium', walkMinutesFromPrev: 8 },
-          { name: 'Avenida Alvear walk', category: 'walk_home', role: 'exit', ambience: 'quiet', walkMinutesFromPrev: 4, weatherSensitive: true },
+          {
+            name: "Aldo's",
+            category: 'wine_bar',
+            role: 'opener',
+            ambience: 'quiet',
+            walkMinutesFromPrev: 0,
+          },
+          {
+            name: 'Don Julio',
+            category: 'mid_restaurant',
+            role: 'anchor',
+            ambience: 'medium',
+            walkMinutesFromPrev: 8,
+          },
+          {
+            name: 'Avenida Alvear walk',
+            category: 'walk_home',
+            role: 'exit',
+            ambience: 'quiet',
+            walkMinutesFromPrev: 4,
+            weatherSensitive: true,
+          },
         ],
       },
       {
         label: 'rooftop → tasting → cocktail',
         vibe: 'romantic',
         stops: [
-          { name: 'Trade Sky Bar', category: 'rooftop_bar', role: 'opener', ambience: 'loud', walkMinutesFromPrev: 0, weatherSensitive: true },
-          { name: 'Tegui', category: 'tasting_menu', role: 'anchor', ambience: 'medium', walkMinutesFromPrev: 18 },
-          { name: 'Florería Atlántico', category: 'cocktail_bar', role: 'second_move', ambience: 'medium', walkMinutesFromPrev: 14 },
+          {
+            name: 'Trade Sky Bar',
+            category: 'rooftop_bar',
+            role: 'opener',
+            ambience: 'loud',
+            walkMinutesFromPrev: 0,
+            weatherSensitive: true,
+          },
+          {
+            name: 'Tegui',
+            category: 'tasting_menu',
+            role: 'anchor',
+            ambience: 'medium',
+            walkMinutesFromPrev: 18,
+          },
+          {
+            name: 'Florería Atlántico',
+            category: 'cocktail_bar',
+            role: 'second_move',
+            ambience: 'medium',
+            walkMinutesFromPrev: 14,
+          },
         ],
       },
       {
         label: 'casual cafe → mid → dessert',
         vibe: 'casual',
         stops: [
-          { name: 'Felix Felicis', category: 'cafe', role: 'opener', ambience: 'quiet', walkMinutesFromPrev: 0 },
-          { name: 'Anchoíta', category: 'mid_restaurant', role: 'anchor', ambience: 'quiet', walkMinutesFromPrev: 6 },
-          { name: 'Rapanui', category: 'late_dessert', role: 'exit', ambience: 'quiet', walkMinutesFromPrev: 2 },
+          {
+            name: 'Felix Felicis',
+            category: 'cafe',
+            role: 'opener',
+            ambience: 'quiet',
+            walkMinutesFromPrev: 0,
+          },
+          {
+            name: 'Anchoíta',
+            category: 'mid_restaurant',
+            role: 'anchor',
+            ambience: 'quiet',
+            walkMinutesFromPrev: 6,
+          },
+          {
+            name: 'Rapanui',
+            category: 'late_dessert',
+            role: 'exit',
+            ambience: 'quiet',
+            walkMinutesFromPrev: 2,
+          },
         ],
       },
     ],
@@ -96,9 +154,14 @@ const replan = await runDateWeatherReplan(
     plan: {
       label: 'wine → parrilla → walk',
       stops: [
-        { name: 'Aldo\'s', category: 'wine_bar', role: 'opener' },
+        { name: "Aldo's", category: 'wine_bar', role: 'opener' },
         { name: 'Don Julio', category: 'mid_restaurant', role: 'anchor' },
-        { name: 'Avenida Alvear walk', category: 'walk_home', role: 'exit', weatherSensitive: true },
+        {
+          name: 'Avenida Alvear walk',
+          category: 'walk_home',
+          role: 'exit',
+          weatherSensitive: true,
+        },
       ],
     },
     weather: { condition: 'rain', precipitationProbability: 0.7, temperatureC: 14 },
@@ -115,7 +178,7 @@ const safety = await runDateRouteSafetyCheck(
   {
     city: 'Buenos Aires',
     stops: [
-      { name: 'Aldo\'s', neighborhood: 'Recoleta', atIso: '2026-05-09T20:00:00-03:00' },
+      { name: "Aldo's", neighborhood: 'Recoleta', atIso: '2026-05-09T20:00:00-03:00' },
       { name: 'Don Julio', neighborhood: 'Palermo Soho', atIso: '2026-05-09T21:30:00-03:00' },
       { name: 'Walk home', neighborhood: 'Constitución', atIso: '2026-05-10T00:30:00-03:00' },
     ],
@@ -129,7 +192,9 @@ const safety = await runDateRouteSafetyCheck(
 );
 if (safety.status === 'ok') {
   for (const v of safety.verdicts ?? []) {
-    console.log(`  [${v.verdict.padEnd(7)}]  ${v.stop}${v.notes.length ? ` — ${v.notes.join('; ')}` : ''}`);
+    console.log(
+      `  [${v.verdict.padEnd(7)}]  ${v.stop}${v.notes.length ? ` — ${v.notes.join('; ')}` : ''}`
+    );
   }
   console.log(`\n  recommendations:`);
   for (const r of safety.recommendations ?? []) console.log(`  · ${r}`);
@@ -150,5 +215,7 @@ const fb = await runTasteFeedbackLoop(
 );
 console.log(fb.status === 'ok' ? `✓ ${fb.message}` : `✗ ${fb.message}`);
 if (fb.status === 'ok') {
-  console.log(`  signals=${fb.signalsWritten} newPrefs=${fb.newPreferences?.length ?? 0} updated=${fb.updatedPreferences?.length ?? 0}`);
+  console.log(
+    `  signals=${fb.signalsWritten} newPrefs=${fb.newPreferences?.length ?? 0} updated=${fb.updatedPreferences?.length ?? 0}`
+  );
 }

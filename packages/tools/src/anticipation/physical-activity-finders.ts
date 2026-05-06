@@ -124,7 +124,9 @@ const runningRouteFinderTool: ToolDef<BaseInput, FinderResult> = {
             ? `mejores recorridos para correr ${city}`
             : `best running routes ${city}`,
         composePlacesQuery: city =>
-          input.languageCode === 'es' ? `parque para correr en ${city}` : `running park trail in ${city}`,
+          input.languageCode === 'es'
+            ? `parque para correr en ${city}`
+            : `running park trail in ${city}`,
         sourceWeights: RUN_WEIGHTS,
         defaultSourceWeight: 0.25,
         isRelevantPlaceType: place => {
@@ -262,7 +264,9 @@ const hikingDayTripFinderTool: ToolDef<BaseInput, FinderResult> = {
             ? `mejores caminatas de un día desde ${city}`
             : `best day hikes near ${city}`,
         composePlacesQuery: city =>
-          input.languageCode === 'es' ? `parques senderos cerca de ${city}` : `hiking trails near ${city}`,
+          input.languageCode === 'es'
+            ? `parques senderos cerca de ${city}`
+            : `hiking trails near ${city}`,
         sourceWeights: HIKE_WEIGHTS,
         defaultSourceWeight: 0.25,
         isRelevantPlaceType: place => {

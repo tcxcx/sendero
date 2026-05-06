@@ -88,7 +88,11 @@ function composeCseQuery(city: string, lang: string, filter: CheapMichelinFinder
       : `${guideTerm} restaurants ${city}`;
 }
 
-function composePlacesQuery(city: string, lang: string, filter: CheapMichelinFinderInput['filter']) {
+function composePlacesQuery(
+  city: string,
+  lang: string,
+  filter: CheapMichelinFinderInput['filter']
+) {
   const term = filter === 'bib' ? 'Bib Gourmand' : 'Michelin';
   return lang === 'es' ? `restaurantes ${term} en ${city}` : `${term} restaurants in ${city}`;
 }
@@ -144,32 +148,33 @@ export async function runCheapMichelinFinder(
   return { status: 'ok', city: r.city, shops: r.shops, message: r.message };
 }
 
-export const cheapMichelinFinderTool: ToolDef<CheapMichelinFinderInput, CheapMichelinFinderResult> = {
-  name: 'cheap_michelin_finder',
-  internal: true,
-  experimental: true,
-  description:
-    "Find Michelin Guide / Bib Gourmand / Selected restaurants in a city — the *affordable* end of the guide. Default `filter='bib'` returns Bib Gourmand only (under typical Michelin price). `filter='selected'` for Michelin Selected (no star, no Bib). `filter='all'` for the full guide including stars. Composes guide.michelin.com + theworlds50best.com + Eater editorial CSE with Places (New). Use when traveler asks 'cheap Michelin <city>', 'Bib Gourmand <city>', 'good-value Michelin'.",
-  inputSchema,
-  jsonSchema: {
-    type: 'object',
-    required: ['city'],
-    properties: {
-      city: { type: 'string', minLength: 1, maxLength: 120 },
-      countryCode: { type: 'string', minLength: 2, maxLength: 2 },
-      languageCode: { type: 'string', maxLength: 10 },
-      filter: { type: 'string', enum: ['bib', 'selected', 'all'] },
-      limit: { type: 'integer', minimum: 1, maximum: 15 },
-      locationBias: {
-        type: 'object',
-        required: ['latitude', 'longitude'],
-        properties: {
-          latitude: { type: 'number' },
-          longitude: { type: 'number' },
-          radiusMeters: { type: 'integer', minimum: 500, maximum: 20000 },
+export const cheapMichelinFinderTool: ToolDef<CheapMichelinFinderInput, CheapMichelinFinderResult> =
+  {
+    name: 'cheap_michelin_finder',
+    internal: true,
+    experimental: true,
+    description:
+      "Find Michelin Guide / Bib Gourmand / Selected restaurants in a city — the *affordable* end of the guide. Default `filter='bib'` returns Bib Gourmand only (under typical Michelin price). `filter='selected'` for Michelin Selected (no star, no Bib). `filter='all'` for the full guide including stars. Composes guide.michelin.com + theworlds50best.com + Eater editorial CSE with Places (New). Use when traveler asks 'cheap Michelin <city>', 'Bib Gourmand <city>', 'good-value Michelin'.",
+    inputSchema,
+    jsonSchema: {
+      type: 'object',
+      required: ['city'],
+      properties: {
+        city: { type: 'string', minLength: 1, maxLength: 120 },
+        countryCode: { type: 'string', minLength: 2, maxLength: 2 },
+        languageCode: { type: 'string', maxLength: 10 },
+        filter: { type: 'string', enum: ['bib', 'selected', 'all'] },
+        limit: { type: 'integer', minimum: 1, maximum: 15 },
+        locationBias: {
+          type: 'object',
+          required: ['latitude', 'longitude'],
+          properties: {
+            latitude: { type: 'number' },
+            longitude: { type: 'number' },
+            radiusMeters: { type: 'integer', minimum: 500, maximum: 20000 },
+          },
         },
       },
     },
-  },
-  handler: runCheapMichelinFinder,
-};
+    handler: runCheapMichelinFinder,
+  };

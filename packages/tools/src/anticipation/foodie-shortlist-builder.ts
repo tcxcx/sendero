@@ -115,9 +115,7 @@ const BUDGET_CATEGORY: Record<
   specialty_coffee: 'cafe',
 };
 
-function shopToPick(
-  shop: GroundedShopHit | CoffeeShopHit
-): FoodieSection['picks'][number] {
+function shopToPick(shop: GroundedShopHit | CoffeeShopHit): FoodieSection['picks'][number] {
   // Both shapes carry the same baseline keys; CoffeeShopHit uses
   // `specialtyScore` instead of `qualityScore` — normalize.
   const score =
@@ -259,7 +257,7 @@ export const foodieShortlistBuilderTool: ToolDef<
   internal: true,
   experimental: true,
   description:
-    "Build a personalized food shortlist for a city. Composes `cheap_michelin_finder` (Bib Gourmand by default) + `ramen_finder` + `specialty_coffee_finder` in parallel, decorates each pick with a `budget_estimator` envelope, and groups by category. Use as the food-discovery entry-point inside HP1 / city pack flows. Pass `travelerId` to fold the taste graph; pass `categories` to scope down (e.g. drop ramen for a Lisbon trip).",
+    'Build a personalized food shortlist for a city. Composes `cheap_michelin_finder` (Bib Gourmand by default) + `ramen_finder` + `specialty_coffee_finder` in parallel, decorates each pick with a `budget_estimator` envelope, and groups by category. Use as the food-discovery entry-point inside HP1 / city pack flows. Pass `travelerId` to fold the taste graph; pass `categories` to scope down (e.g. drop ramen for a Lisbon trip).',
   inputSchema,
   jsonSchema: {
     type: 'object',

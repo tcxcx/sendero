@@ -20,7 +20,9 @@ const ctx: ToolContext = {
   caller: { effectiveKeyType: 'sandbox', keyType: 'sandbox', scopes: ['*'] },
 };
 
-console.log(`\n› crowd_level_predictor({ city: "${city}"${startsAtIso ? `, startsAtIso: "${startsAtIso}"` : ''}${endsAtIso ? `, endsAtIso: "${endsAtIso}"` : ''} })\n`);
+console.log(
+  `\n› crowd_level_predictor({ city: "${city}"${startsAtIso ? `, startsAtIso: "${startsAtIso}"` : ''}${endsAtIso ? `, endsAtIso: "${endsAtIso}"` : ''} })\n`
+);
 
 const input: Record<string, unknown> = { city };
 if (startsAtIso) input.startsAtIso = startsAtIso;

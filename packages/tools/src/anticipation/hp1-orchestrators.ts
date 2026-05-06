@@ -119,7 +119,10 @@ export async function runCityHobbyPackBuilder(
             } as never,
             ctx
           );
-          if (r.status !== 'ok') return r.status === 'production_refused' ? null : { failure: `specialty_coffee:${r.reason ?? 'fail'}` };
+          if (r.status !== 'ok')
+            return r.status === 'production_refused'
+              ? null
+              : { failure: `specialty_coffee:${r.reason ?? 'fail'}` };
           return {
             key: h,
             title: LAYER_TITLES[h],
@@ -144,7 +147,10 @@ export async function runCityHobbyPackBuilder(
             } as never,
             ctx
           );
-          if (r.status !== 'ok') return r.status === 'production_refused' ? null : { failure: `work_from_cafes:${r.reason ?? 'fail'}` };
+          if (r.status !== 'ok')
+            return r.status === 'production_refused'
+              ? null
+              : { failure: `work_from_cafes:${r.reason ?? 'fail'}` };
           return {
             key: h,
             title: LAYER_TITLES[h],
@@ -168,7 +174,10 @@ export async function runCityHobbyPackBuilder(
             } as never,
             ctx
           );
-          if (r.status !== 'ok') return r.status === 'production_refused' ? null : { failure: `ramen:${r.reason ?? 'fail'}` };
+          if (r.status !== 'ok')
+            return r.status === 'production_refused'
+              ? null
+              : { failure: `ramen:${r.reason ?? 'fail'}` };
           return {
             key: h,
             title: LAYER_TITLES[h],
@@ -193,7 +202,10 @@ export async function runCityHobbyPackBuilder(
             } as never,
             ctx
           );
-          if (r.status !== 'ok') return r.status === 'production_refused' ? null : { failure: `cheap_michelin:${r.reason ?? 'fail'}` };
+          if (r.status !== 'ok')
+            return r.status === 'production_refused'
+              ? null
+              : { failure: `cheap_michelin:${r.reason ?? 'fail'}` };
           return {
             key: h,
             title: LAYER_TITLES[h],
@@ -218,7 +230,8 @@ export async function runCityHobbyPackBuilder(
             } as never,
             ctx
           );
-          if (r.status !== 'ok') return r.status === 'production_refused' ? null : { failure: `foodie:${r.message}` };
+          if (r.status !== 'ok')
+            return r.status === 'production_refused' ? null : { failure: `foodie:${r.message}` };
           return {
             key: h,
             title: LAYER_TITLES[h],
@@ -237,7 +250,10 @@ export async function runCityHobbyPackBuilder(
         }
         case 'art_galleries': {
           const r = await runArtGalleryOpeningFinder(input, ctx);
-          if (r.status !== 'ok') return r.status === 'production_refused' ? null : { failure: `art_galleries:${r.reason ?? 'fail'}` };
+          if (r.status !== 'ok')
+            return r.status === 'production_refused'
+              ? null
+              : { failure: `art_galleries:${r.reason ?? 'fail'}` };
           return {
             key: h,
             title: LAYER_TITLES[h],
@@ -253,7 +269,10 @@ export async function runCityHobbyPackBuilder(
         }
         case 'running': {
           const r = await runRunningRouteFinder(input, ctx);
-          if (r.status !== 'ok') return r.status === 'production_refused' ? null : { failure: `running:${r.reason ?? 'fail'}` };
+          if (r.status !== 'ok')
+            return r.status === 'production_refused'
+              ? null
+              : { failure: `running:${r.reason ?? 'fail'}` };
           return {
             key: h,
             title: LAYER_TITLES[h],
@@ -279,7 +298,10 @@ export async function runCityHobbyPackBuilder(
             } as never,
             ctx
           );
-          if (r.status !== 'ok' || !r.events) return r.status === 'production_refused' ? null : { failure: `founder_events:${r.message}` };
+          if (r.status !== 'ok' || !r.events)
+            return r.status === 'production_refused'
+              ? null
+              : { failure: `founder_events:${r.message}` };
           return {
             key: h,
             title: LAYER_TITLES[h],
@@ -410,8 +432,15 @@ export async function runHobbyMapLayerBuilder(
 
   switch (input.layerKey) {
     case 'specialty_coffee': {
-      const r = await runSpecialtyCoffeeFinder({ ...baseArgs, ...(input.travelerId ? { travelerId: input.travelerId } : {}) } as never, ctx);
-      if (r.status !== 'ok') return { status: r.status === 'production_refused' ? 'production_refused' : 'unavailable', message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}` };
+      const r = await runSpecialtyCoffeeFinder(
+        { ...baseArgs, ...(input.travelerId ? { travelerId: input.travelerId } : {}) } as never,
+        ctx
+      );
+      if (r.status !== 'ok')
+        return {
+          status: r.status === 'production_refused' ? 'production_refused' : 'unavailable',
+          message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}`,
+        };
       points = r.shops.map(s => ({
         placeId: s.placeId,
         name: s.name,
@@ -424,7 +453,11 @@ export async function runHobbyMapLayerBuilder(
     }
     case 'ramen': {
       const r = await runRamenFinder(baseArgs as never, ctx);
-      if (r.status !== 'ok') return { status: r.status === 'production_refused' ? 'production_refused' : 'unavailable', message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}` };
+      if (r.status !== 'ok')
+        return {
+          status: r.status === 'production_refused' ? 'production_refused' : 'unavailable',
+          message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}`,
+        };
       points = r.shops.map(s => ({
         placeId: s.placeId,
         name: s.name,
@@ -437,7 +470,11 @@ export async function runHobbyMapLayerBuilder(
     }
     case 'cheap_michelin': {
       const r = await runCheapMichelinFinder({ ...baseArgs, filter: 'bib' } as never, ctx);
-      if (r.status !== 'ok') return { status: r.status === 'production_refused' ? 'production_refused' : 'unavailable', message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}` };
+      if (r.status !== 'ok')
+        return {
+          status: r.status === 'production_refused' ? 'production_refused' : 'unavailable',
+          message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}`,
+        };
       points = r.shops.map(s => ({
         placeId: s.placeId,
         name: s.name,
@@ -450,7 +487,11 @@ export async function runHobbyMapLayerBuilder(
     }
     case 'art_galleries': {
       const r = await runArtGalleryOpeningFinder(baseArgs, ctx);
-      if (r.status !== 'ok') return { status: r.status === 'production_refused' ? 'production_refused' : 'unavailable', message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}` };
+      if (r.status !== 'ok')
+        return {
+          status: r.status === 'production_refused' ? 'production_refused' : 'unavailable',
+          message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}`,
+        };
       points = r.shops.map(s => ({
         placeId: s.placeId,
         name: s.name,
@@ -463,7 +504,11 @@ export async function runHobbyMapLayerBuilder(
     }
     case 'running': {
       const r = await runRunningRouteFinder(baseArgs, ctx);
-      if (r.status !== 'ok') return { status: r.status === 'production_refused' ? 'production_refused' : 'unavailable', message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}` };
+      if (r.status !== 'ok')
+        return {
+          status: r.status === 'production_refused' ? 'production_refused' : 'unavailable',
+          message: r.status === 'production_refused' ? r.message : `${r.reason ?? 'fail'}`,
+        };
       points = r.shops.map(s => ({
         placeId: s.placeId,
         name: s.name,

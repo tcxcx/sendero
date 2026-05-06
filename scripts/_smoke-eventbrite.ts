@@ -22,7 +22,9 @@ const ctx: ToolContext = {
   caller: { effectiveKeyType: 'sandbox', keyType: 'sandbox', scopes: ['*'] },
 };
 
-console.log(`\n› eventbrite_event_discovery({ city: "${city}"${keywords ? `, keywords: "${keywords}"` : ''} })\n`);
+console.log(
+  `\n› eventbrite_event_discovery({ city: "${city}"${keywords ? `, keywords: "${keywords}"` : ''} })\n`
+);
 
 const r = await runEventbriteEventDiscovery(
   { city, ...(keywords ? { keywords } : {}), limit: 8, languageCode: 'en' } as never,

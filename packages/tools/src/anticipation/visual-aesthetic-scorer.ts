@@ -125,11 +125,10 @@ const outputShape = z.object({
   bestFor: z
     .array(z.string())
     .max(4)
-    .describe('Use cases the visuals support: date / solo_lunch / deep_work / group_dinner / tasting.'),
-  notFor: z
-    .array(z.string())
-    .max(4)
-    .describe('Use cases the visuals contraindicate.'),
+    .describe(
+      'Use cases the visuals support: date / solo_lunch / deep_work / group_dinner / tasting.'
+    ),
+  notFor: z.array(z.string()).max(4).describe('Use cases the visuals contraindicate.'),
 });
 
 export type AestheticTag = (typeof AESTHETIC_TAGS)[number];
@@ -144,7 +143,12 @@ export interface VisualAestheticScorerReport {
 }
 
 export type VisualAestheticScorerResult =
-  | { status: 'ok'; report: VisualAestheticScorerReport; via: 'vertex' | 'gateway'; message: string }
+  | {
+      status: 'ok';
+      report: VisualAestheticScorerReport;
+      via: 'vertex' | 'gateway';
+      message: string;
+    }
   | { status: 'production_refused'; message: string }
   | { status: 'unavailable'; reason: string; message: string };
 
@@ -169,9 +173,7 @@ function resolveVertex() {
   }
 }
 
-type ContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image'; image: URL };
+type ContentPart = { type: 'text'; text: string } | { type: 'image'; image: URL };
 
 function buildMessages(input: VisualAestheticScorerInput): Array<{
   role: 'user';
@@ -282,7 +284,7 @@ export const visualAestheticScorerTool: ToolDef<
   internal: true,
   experimental: true,
   description:
-    "Score how beautiful / tasteful a place looks from accessible images via Vertex multimodal vision (Gemini 3 flash). Returns aesthetic score 0-1 + tags from a strict taxonomy (warm_lighting, natural_light, minimal, old_world, japanese_clean, editorial, romantic, cozy, design_forward, beautiful_counter, good_plating, lush_greenery, rooftop_view, generic, touristy, fluorescent, crowded, soulless, instagram_trap) + warnings + confidence. Pass 3-6 publicly-fetchable image URLs (Places photos pre-resolved, official websites, user-supplied). Compose with `budget_estimator` via `beauty_budget_ranker` for taste-per-dollar ranking.",
+    'Score how beautiful / tasteful a place looks from accessible images via Vertex multimodal vision (Gemini 3 flash). Returns aesthetic score 0-1 + tags from a strict taxonomy (warm_lighting, natural_light, minimal, old_world, japanese_clean, editorial, romantic, cozy, design_forward, beautiful_counter, good_plating, lush_greenery, rooftop_view, generic, touristy, fluorescent, crowded, soulless, instagram_trap) + warnings + confidence. Pass 3-6 publicly-fetchable image URLs (Places photos pre-resolved, official websites, user-supplied). Compose with `budget_estimator` via `beauty_budget_ranker` for taste-per-dollar ranking.',
   inputSchema,
   jsonSchema: {
     type: 'object',

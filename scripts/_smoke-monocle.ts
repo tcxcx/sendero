@@ -21,7 +21,9 @@ const ctx: ToolContext = {
   caller: { effectiveKeyType: 'sandbox', keyType: 'sandbox', scopes: ['*'] },
 };
 
-console.log(`\n› monocle_place_researcher({ name: "${name}", city: "${city}"${category ? `, category: "${category}"` : ''}${countryCode ? `, countryCode: "${countryCode}"` : ''} })\n`);
+console.log(
+  `\n› monocle_place_researcher({ name: "${name}", city: "${city}"${category ? `, category: "${category}"` : ''}${countryCode ? `, countryCode: "${countryCode}"` : ''} })\n`
+);
 
 const input: Record<string, unknown> = { name, city, locale: 'en-US' };
 if (category) input.category = category;
@@ -47,13 +49,17 @@ console.log(`reservation req:  ${rep.reservationRequired}`);
 console.log(`best for:         ${rep.bestFor.join(', ')}`);
 console.log(`not for:          ${rep.notFor.join(', ')}`);
 if (rep.guideMentions.length) {
-  console.log(`guides:           ${rep.guideMentions.map(g => `${g.guide}${g.year ? ` (${g.year})` : ''}`).join(', ')}`);
+  console.log(
+    `guides:           ${rep.guideMentions.map(g => `${g.guide}${g.year ? ` (${g.year})` : ''}`).join(', ')}`
+  );
 }
 if (rep.fineprint.length) {
   console.log(`fineprint:        ${rep.fineprint.join(' / ')}`);
 }
 if (rep.budget) {
-  console.log(`\nbudget tier: ${rep.budget.tier}  range: $${rep.budget.range.low}-${rep.budget.range.high}`);
+  console.log(
+    `\nbudget tier: ${rep.budget.tier}  range: $${rep.budget.range.low}-${rep.budget.range.high}`
+  );
   console.log(`money talk:  ${rep.budget.moneyTalk}`);
 }
 console.log(`\nsources (${rep.sources.length}):`);

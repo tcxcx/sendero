@@ -282,53 +282,51 @@ export async function runCrowdLevelPredictor(
 
 // ── Tool registration ────────────────────────────────────────────────
 
-export const crowdLevelPredictorTool: ToolDef<
-  CrowdLevelPredictorInput,
-  CrowdLevelPredictorResult
-> = {
-  name: 'crowd_level_predictor',
-  internal: true,
-  experimental: true,
-  description:
-    "Estimate crowd / demand pressure for a city + date window via PredictHQ. Returns `crowdLevel` ('low'/'moderate'/'high'/'extreme'), peak local-rank, total predicted attendance, and the top demand drivers (concerts, conferences, festivals, sports, holidays). Use when the traveler asks 'is <city> busy that week', 'will hotels be expensive', 'should I shift dates', 'why is everything sold out'. Compose with `mainstream_event_discovery` to surface specific tickets a traveler can buy.",
-  inputSchema,
-  jsonSchema: {
-    type: 'object',
-    required: ['city'],
-    properties: {
-      city: { type: 'string', minLength: 1, maxLength: 120 },
-      countryCode: { type: 'string', minLength: 2, maxLength: 2 },
-      startsAtIso: { type: 'string' },
-      endsAtIso: { type: 'string' },
-      categories: {
-        type: 'array',
-        maxItems: 8,
-        items: {
-          type: 'string',
-          enum: [
-            'concerts',
-            'conferences',
-            'expos',
-            'festivals',
-            'performing-arts',
-            'sports',
-            'community',
-            'public-holidays',
-            'school-holidays',
-            'observances',
-            'politics',
-            'severe-weather',
-            'airport-delays',
-            'disasters',
-            'terror',
-            'health-warnings',
-            'academic',
-          ],
+export const crowdLevelPredictorTool: ToolDef<CrowdLevelPredictorInput, CrowdLevelPredictorResult> =
+  {
+    name: 'crowd_level_predictor',
+    internal: true,
+    experimental: true,
+    description:
+      "Estimate crowd / demand pressure for a city + date window via PredictHQ. Returns `crowdLevel` ('low'/'moderate'/'high'/'extreme'), peak local-rank, total predicted attendance, and the top demand drivers (concerts, conferences, festivals, sports, holidays). Use when the traveler asks 'is <city> busy that week', 'will hotels be expensive', 'should I shift dates', 'why is everything sold out'. Compose with `mainstream_event_discovery` to surface specific tickets a traveler can buy.",
+    inputSchema,
+    jsonSchema: {
+      type: 'object',
+      required: ['city'],
+      properties: {
+        city: { type: 'string', minLength: 1, maxLength: 120 },
+        countryCode: { type: 'string', minLength: 2, maxLength: 2 },
+        startsAtIso: { type: 'string' },
+        endsAtIso: { type: 'string' },
+        categories: {
+          type: 'array',
+          maxItems: 8,
+          items: {
+            type: 'string',
+            enum: [
+              'concerts',
+              'conferences',
+              'expos',
+              'festivals',
+              'performing-arts',
+              'sports',
+              'community',
+              'public-holidays',
+              'school-holidays',
+              'observances',
+              'politics',
+              'severe-weather',
+              'airport-delays',
+              'disasters',
+              'terror',
+              'health-warnings',
+              'academic',
+            ],
+          },
         },
+        minRank: { type: 'integer', minimum: 0, maximum: 100 },
+        topDriversLimit: { type: 'integer', minimum: 1, maximum: 15 },
       },
-      minRank: { type: 'integer', minimum: 0, maximum: 100 },
-      topDriversLimit: { type: 'integer', minimum: 1, maximum: 15 },
     },
-  },
-  handler: runCrowdLevelPredictor,
-};
+    handler: runCrowdLevelPredictor,
+  };

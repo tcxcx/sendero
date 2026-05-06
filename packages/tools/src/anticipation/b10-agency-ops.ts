@@ -34,7 +34,11 @@ function resolveVertex() {
   const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!project || !saJson) return null;
   try {
-    return createVertex({ project, location, googleAuthOptions: { credentials: JSON.parse(saJson) } });
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
   } catch {
     return null;
   }
@@ -75,15 +79,19 @@ const supplierQuoteComparatorTool: ToolDef = {
   },
   handler: async (rawInput: QuoteComparatorInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = quoteComparatorInput.parse(rawInput);
     const ranked = input.quotes
       .map(q => {
         const flags: string[] = [];
-        if (typeof q.depositPct === 'number' && q.depositPct > 50) flags.push(`deposit ${q.depositPct}% > 50% — chase soft-hold first`);
-        if (typeof q.validityDays === 'number' && q.validityDays < 7) flags.push(`validity ${q.validityDays}d — too short for traveler decision cycle`);
+        if (typeof q.depositPct === 'number' && q.depositPct > 50)
+          flags.push(`deposit ${q.depositPct}% > 50% — chase soft-hold first`);
+        if (typeof q.validityDays === 'number' && q.validityDays < 7)
+          flags.push(`validity ${q.validityDays}d — too short for traveler decision cycle`);
         if (!q.cancellationTerms) flags.push('cancellation terms missing — never accept without');
-        if (!q.deliverables || q.deliverables.length === 0) flags.push('deliverables missing — request line-item breakdown');
+        if (!q.deliverables || q.deliverables.length === 0)
+          flags.push('deliverables missing — request line-item breakdown');
         return { ...q, flags };
       })
       .sort((a, b) => a.priceUsd - b.priceUsd);
@@ -107,7 +115,17 @@ const supplierQuoteComparatorTool: ToolDef = {
 const manualSupplierInput = z.object({
   city: z.string().min(1).max(120),
   countryCode: z.string().length(2).optional(),
-  serviceKind: z.enum(['transfer', 'guide', 'driver', 'wedding_planner', 'event_planner', 'photographer', 'translator', 'medical_concierge', 'private_chef']),
+  serviceKind: z.enum([
+    'transfer',
+    'guide',
+    'driver',
+    'wedding_planner',
+    'event_planner',
+    'photographer',
+    'translator',
+    'medical_concierge',
+    'private_chef',
+  ]),
   languageCode: z.string().max(10).default('en'),
   limit: z.number().int().min(1).max(15).default(8),
 });
@@ -126,14 +144,28 @@ const manualSupplierResearcherTool: ToolDef = {
     properties: {
       city: { type: 'string', minLength: 1, maxLength: 120 },
       countryCode: { type: 'string', minLength: 2, maxLength: 2 },
-      serviceKind: { type: 'string', enum: ['transfer', 'guide', 'driver', 'wedding_planner', 'event_planner', 'photographer', 'translator', 'medical_concierge', 'private_chef'] },
+      serviceKind: {
+        type: 'string',
+        enum: [
+          'transfer',
+          'guide',
+          'driver',
+          'wedding_planner',
+          'event_planner',
+          'photographer',
+          'translator',
+          'medical_concierge',
+          'private_chef',
+        ],
+      },
       languageCode: { type: 'string', maxLength: 10 },
       limit: { type: 'integer', minimum: 1, maximum: 15 },
     },
   },
   handler: async (rawInput: ManualSupplierInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = manualSupplierInput.parse(rawInput);
     const r = await cseSearch({
       query: `${input.serviceKind.replace(/_/g, ' ')} ${input.city}`,
@@ -141,14 +173,22 @@ const manualSupplierResearcherTool: ToolDef = {
       lang: input.languageCode,
       ...(input.countryCode ? { country: input.countryCode } : {}),
     });
-    if (!r.available) return { status: 'unavailable' as const, message: `CSE unavailable: ${r.reason ?? 'unknown'}.` };
+    if (!r.available)
+      return {
+        status: 'unavailable' as const,
+        message: `CSE unavailable: ${r.reason ?? 'unknown'}.`,
+      };
     const suppliers = r.results.slice(0, input.limit).map(hit => ({
       name: hit.title.trim(),
       url: hit.link,
       snippet: hit.snippet,
       sourceHost: hit.displayLink,
     }));
-    return { status: 'ok' as const, suppliers, message: `${suppliers.length} ${input.serviceKind} candidates in ${input.city}.` };
+    return {
+      status: 'ok' as const,
+      suppliers,
+      message: `${suppliers.length} ${input.serviceKind} candidates in ${input.city}.`,
+    };
   },
 };
 
@@ -186,17 +226,21 @@ const supplierContactExtractorTool: ToolDef = {
   },
   handler: async (rawInput: ContactExtractorInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = contactExtractorInput.parse(rawInput);
 
     const prompt = `Look up the contact channels for the supplier at ${input.supplierUrl}. Extract: email address, phone number (E.164 if visible), WhatsApp number, contact form URL, hours of operation, typical response time. Pull only from the official site at that URL. Return null for any field not visible.`;
-    const coercePrompt = (text: string, _: string[]) => `Coerce into contact extract schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`;
+    const coercePrompt = (text: string, _: string[]) =>
+      `Coerce into contact extract schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`;
 
     const vertex = resolveVertex();
     async function viaPath(modelLike: any, providerOptions?: any) {
       const grounded = await generateText({
         model: modelLike,
-        tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+        tools: {
+          google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+        },
         prompt,
         ...(providerOptions ? { providerOptions } : {}),
       });
@@ -213,15 +257,30 @@ const supplierContactExtractorTool: ToolDef = {
     if (vertex) {
       try {
         const obj = await viaPath(vertex(VERTEX_MODEL_ID));
-        if (obj) return { status: 'ok' as const, contact: obj, via: 'vertex' as const, message: `Contact extracted via Vertex.` };
+        if (obj)
+          return {
+            status: 'ok' as const,
+            contact: obj,
+            via: 'vertex' as const,
+            message: `Contact extracted via Vertex.`,
+          };
       } catch {}
     }
     try {
       const obj = await viaPath(GATEWAY_MODEL_ID, { gateway: { order: ['google'] } });
-      if (obj) return { status: 'ok' as const, contact: obj, via: 'gateway' as const, message: `Contact extracted via gateway.` };
+      if (obj)
+        return {
+          status: 'ok' as const,
+          contact: obj,
+          via: 'gateway' as const,
+          message: `Contact extracted via gateway.`,
+        };
       return { status: 'unavailable' as const, message: 'No grounded contact data returned.' };
     } catch (err) {
-      return { status: 'unavailable' as const, message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.` };
+      return {
+        status: 'unavailable' as const,
+        message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.`,
+      };
     }
   },
 };
@@ -263,12 +322,17 @@ const supplierReliabilityScoreTool: ToolDef = {
   },
   handler: async (rawInput: ReliabilityInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = reliabilityInput.parse(rawInput);
 
     let publicScore = 0;
     if (input.publicSignals.avgRating && input.publicSignals.reviewCount) {
-      publicScore = Math.min(1, (input.publicSignals.avgRating / 5) * Math.log10(input.publicSignals.reviewCount + 1) / 2.5);
+      publicScore = Math.min(
+        1,
+        ((input.publicSignals.avgRating / 5) * Math.log10(input.publicSignals.reviewCount + 1)) /
+          2.5
+      );
     }
     if (input.publicSignals.websiteHttps === false) publicScore -= 0.1;
     publicScore = Math.max(0, Math.min(1, publicScore));
@@ -289,8 +353,12 @@ const supplierReliabilityScoreTool: ToolDef = {
     const score100 = Math.round(combined * 100);
     const flags: string[] = [];
     if (publicScore < 0.3) flags.push('Weak public signal — request references.');
-    if (input.internalFeedback.issueCount >= 3) flags.push(`${input.internalFeedback.issueCount} prior issues on file — escalate to ops review.`);
-    if (input.internalFeedback.pastEngagements === 0) flags.push('No prior engagement — start with low-stakes booking.');
+    if (input.internalFeedback.issueCount >= 3)
+      flags.push(
+        `${input.internalFeedback.issueCount} prior issues on file — escalate to ops review.`
+      );
+    if (input.internalFeedback.pastEngagements === 0)
+      flags.push('No prior engagement — start with low-stakes booking.');
 
     return {
       status: 'ok' as const,
@@ -306,7 +374,14 @@ const supplierReliabilityScoreTool: ToolDef = {
 // ── 5. ops_followup_scheduler (pure) ─────────────────────────────────
 
 const followupInput = z.object({
-  contextKind: z.enum(['quote_pending', 'docs_pending', 'payment_pending', 'check_in_window', 'post_trip', 'feedback_pending']),
+  contextKind: z.enum([
+    'quote_pending',
+    'docs_pending',
+    'payment_pending',
+    'check_in_window',
+    'post_trip',
+    'feedback_pending',
+  ]),
   lastTouchIso: z.string(),
   travelerName: z.string().min(1).max(120).optional(),
   notesShort: z.string().max(280).optional(),
@@ -324,7 +399,17 @@ const opsFollowupSchedulerTool: ToolDef = {
     type: 'object',
     required: ['contextKind', 'lastTouchIso'],
     properties: {
-      contextKind: { type: 'string', enum: ['quote_pending', 'docs_pending', 'payment_pending', 'check_in_window', 'post_trip', 'feedback_pending'] },
+      contextKind: {
+        type: 'string',
+        enum: [
+          'quote_pending',
+          'docs_pending',
+          'payment_pending',
+          'check_in_window',
+          'post_trip',
+          'feedback_pending',
+        ],
+      },
       lastTouchIso: { type: 'string' },
       travelerName: { type: 'string', minLength: 1, maxLength: 120 },
       notesShort: { type: 'string', maxLength: 280 },
@@ -332,7 +417,8 @@ const opsFollowupSchedulerTool: ToolDef = {
   },
   handler: async (rawInput: FollowupInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = followupInput.parse(rawInput);
     const last = Date.parse(input.lastTouchIso);
     if (!Number.isFinite(last)) return { status: 'ok' as const, message: 'Invalid lastTouchIso.' };
@@ -396,7 +482,8 @@ const bookingGapAuditorTool: ToolDef = {
   },
   handler: async (rawInput: GapAuditorInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = gapAuditorInput.parse(rawInput);
     const t = input.trip;
     const gaps: string[] = [];
@@ -410,7 +497,8 @@ const bookingGapAuditorTool: ToolDef = {
     if (!t.passengerCountConfirmed) gaps.push('Passenger count not confirmed.');
     if (!t.hotelCheckInConfirmed) gaps.push('Hotel check-in details not confirmed.');
     if (!t.transferLocationKnown) gaps.push('Transfer pickup location not set.');
-    if (!t.invoiceIssued) gaps.push('Invoice not yet issued — corporate clients may need before departure.');
+    if (!t.invoiceIssued)
+      gaps.push('Invoice not yet issued — corporate clients may need before departure.');
     if (t.receiptsCount === 0) gaps.push('No receipts on file yet.');
 
     const blocking = gaps.filter(g => /passport|passenger count|check-in|transfer/i.test(g));
@@ -419,7 +507,10 @@ const bookingGapAuditorTool: ToolDef = {
       gaps,
       blocking,
       pctComplete: Math.round(((7 - gaps.length) / 7) * 100),
-      message: gaps.length === 0 ? 'No gaps — trip is ready.' : `${gaps.length} gaps (${blocking.length} blocking).`,
+      message:
+        gaps.length === 0
+          ? 'No gaps — trip is ready.'
+          : `${gaps.length} gaps (${blocking.length} blocking).`,
     };
   },
 };
@@ -430,15 +521,19 @@ const handoffContextInput = z.object({
   travelerId: z.string().max(120),
   channelKind: z.enum(['whatsapp', 'slack', 'web', 'email']),
   topic: z.string().min(1).max(200),
-  recentTurns: z.array(z.object({ role: z.enum(['user', 'agent']), text: z.string().max(800) })).max(8),
+  recentTurns: z
+    .array(z.object({ role: z.enum(['user', 'agent']), text: z.string().max(800) }))
+    .max(8),
   toolsUsed: z.array(z.string().max(60)).max(15),
   lastError: z.string().max(400).optional(),
-  travelerProfile: z.object({
-    name: z.string().max(120).optional(),
-    locale: z.string().max(10).optional(),
-    nationality: z.string().length(2).optional(),
-    activeTripId: z.string().max(120).optional(),
-  }).optional(),
+  travelerProfile: z
+    .object({
+      name: z.string().max(120).optional(),
+      locale: z.string().max(10).optional(),
+      nationality: z.string().length(2).optional(),
+      activeTripId: z.string().max(120).optional(),
+    })
+    .optional(),
 });
 type HandoffContextInput = z.infer<typeof handoffContextInput>;
 
@@ -447,7 +542,7 @@ const handoffContextBuilderTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Build the handoff context bundle for a human operator — channel, topic, recent turns, tools used, last error, traveler profile. Pure tool. Returns a structured payload AND a 1-screen summary text. Compose with `request_human_handoff`.",
+    'Build the handoff context bundle for a human operator — channel, topic, recent turns, tools used, last error, traveler profile. Pure tool. Returns a structured payload AND a 1-screen summary text. Compose with `request_human_handoff`.',
   inputSchema: handoffContextInput,
   jsonSchema: {
     type: 'object',
@@ -464,13 +559,18 @@ const handoffContextBuilderTool: ToolDef = {
   },
   handler: async (rawInput: HandoffContextInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = handoffContextInput.parse(rawInput);
     const lines: string[] = [];
     lines.push(`**Topic:** ${input.topic}`);
     lines.push(`**Channel:** ${input.channelKind}`);
-    if (input.travelerProfile?.name) lines.push(`**Traveler:** ${input.travelerProfile.name}${input.travelerProfile.nationality ? ` (${input.travelerProfile.nationality})` : ''}`);
-    if (input.travelerProfile?.activeTripId) lines.push(`**Active trip:** ${input.travelerProfile.activeTripId}`);
+    if (input.travelerProfile?.name)
+      lines.push(
+        `**Traveler:** ${input.travelerProfile.name}${input.travelerProfile.nationality ? ` (${input.travelerProfile.nationality})` : ''}`
+      );
+    if (input.travelerProfile?.activeTripId)
+      lines.push(`**Active trip:** ${input.travelerProfile.activeTripId}`);
     lines.push(`**Tools attempted:** ${input.toolsUsed.join(', ')}`);
     if (input.lastError) lines.push(`**Last error:** ${input.lastError}`);
     lines.push('**Recent turns:**');
@@ -515,12 +615,16 @@ const postTripFeedbackAnalyzerTool: ToolDef = {
   },
   handler: async (rawInput: FeedbackAnalyzerInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = feedbackAnalyzerInput.parse(rawInput);
     const fb = input.feedback;
     const fbLower = fb.toLowerCase();
 
-    const supplierScores: Array<{ supplier: string; sentiment: 'positive' | 'mixed' | 'negative' | 'unmentioned' }> = [];
+    const supplierScores: Array<{
+      supplier: string;
+      sentiment: 'positive' | 'mixed' | 'negative' | 'unmentioned';
+    }> = [];
     for (const s of input.trip.suppliers) {
       const sLower = s.toLowerCase();
       const idx = fbLower.indexOf(sLower);
@@ -529,18 +633,39 @@ const postTripFeedbackAnalyzerTool: ToolDef = {
         continue;
       }
       const window = fb.slice(Math.max(0, idx - 80), idx + sLower.length + 80).toLowerCase();
-      const positiveTokens = ['great', 'amazing', 'excellent', 'love', 'perfect', 'recommend', 'incredible'];
-      const negativeTokens = ['bad', 'terrible', 'rude', 'late', 'cancelled', 'lost', 'worst', 'never again'];
+      const positiveTokens = [
+        'great',
+        'amazing',
+        'excellent',
+        'love',
+        'perfect',
+        'recommend',
+        'incredible',
+      ];
+      const negativeTokens = [
+        'bad',
+        'terrible',
+        'rude',
+        'late',
+        'cancelled',
+        'lost',
+        'worst',
+        'never again',
+      ];
       const pos = positiveTokens.some(t => window.includes(t));
       const neg = negativeTokens.some(t => window.includes(t));
-      const sentiment: 'positive' | 'mixed' | 'negative' = pos && neg ? 'mixed' : neg ? 'negative' : pos ? 'positive' : 'mixed';
+      const sentiment: 'positive' | 'mixed' | 'negative' =
+        pos && neg ? 'mixed' : neg ? 'negative' : pos ? 'positive' : 'mixed';
       supplierScores.push({ supplier: s, sentiment });
     }
 
     const inferredPreferences: string[] = [];
-    if (/loved|amazing|great/.test(fbLower) && /coffee/i.test(fbLower)) inferredPreferences.push('specialty_coffee:positive');
-    if (/loved|amazing/.test(fbLower) && /ramen/i.test(fbLower)) inferredPreferences.push('ramen:positive');
-    if (/skip|avoid|won't/.test(fbLower) && /touristy|crowded/i.test(fbLower)) inferredPreferences.push('avoid:touristy_crowded');
+    if (/loved|amazing|great/.test(fbLower) && /coffee/i.test(fbLower))
+      inferredPreferences.push('specialty_coffee:positive');
+    if (/loved|amazing/.test(fbLower) && /ramen/i.test(fbLower))
+      inferredPreferences.push('ramen:positive');
+    if (/skip|avoid|won't/.test(fbLower) && /touristy|crowded/i.test(fbLower))
+      inferredPreferences.push('avoid:touristy_crowded');
     if (/quiet|cozy|warm/.test(fbLower)) inferredPreferences.push('ambience:quiet');
     if (/loud|crowded|chaotic/.test(fbLower)) inferredPreferences.push('avoid:loud');
 
@@ -548,7 +673,12 @@ const postTripFeedbackAnalyzerTool: ToolDef = {
       status: 'ok' as const,
       supplierScores,
       inferredPreferences,
-      sentimentGlobal: typeof input.trip.rating === 'number' && input.trip.rating < 3 ? 'negative' : input.trip.rating && input.trip.rating >= 4 ? 'positive' : 'mixed',
+      sentimentGlobal:
+        typeof input.trip.rating === 'number' && input.trip.rating < 3
+          ? 'negative'
+          : input.trip.rating && input.trip.rating >= 4
+            ? 'positive'
+            : 'mixed',
       message: `Analyzed ${supplierScores.length} suppliers + ${inferredPreferences.length} inferred preferences.`,
     };
   },
@@ -587,7 +717,8 @@ const agencyMarginGuardTool: ToolDef = {
   },
   handler: async (rawInput: MarginGuardInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = marginGuardInput.parse(rawInput);
     const margin = input.proposedPriceUsd - input.cogs;
     const markupBps = input.cogs > 0 ? Math.round((margin / input.cogs) * 10_000) : 0;
@@ -603,11 +734,15 @@ const agencyMarginGuardTool: ToolDef = {
     }
     if (markupBps < input.policy.minMarkupBps) {
       verdict = verdict === 'rejected' ? verdict : 'flagged';
-      flags.push(`Markup ${(markupBps / 100).toFixed(1)}% < min ${input.policy.minMarkupBps / 100}%.`);
+      flags.push(
+        `Markup ${(markupBps / 100).toFixed(1)}% < min ${input.policy.minMarkupBps / 100}%.`
+      );
     }
     if (markupBps > input.policy.maxMarkupBps) {
       verdict = 'rejected';
-      flags.push(`Markup ${(markupBps / 100).toFixed(1)}% > max ${input.policy.maxMarkupBps / 100}%.`);
+      flags.push(
+        `Markup ${(markupBps / 100).toFixed(1)}% > max ${input.policy.maxMarkupBps / 100}%.`
+      );
     }
     return {
       status: 'ok' as const,
@@ -659,13 +794,19 @@ const preferredSupplierRouterTool: ToolDef = {
   },
   handler: async (rawInput: SupplierRouterInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = supplierRouterInput.parse(rawInput);
 
     // Filter by reliability when scores are provided.
-    const eligible = input.candidates.filter(c => c.reliabilityScore == null || c.reliabilityScore >= input.policy.minReliability);
+    const eligible = input.candidates.filter(
+      c => c.reliabilityScore == null || c.reliabilityScore >= input.policy.minReliability
+    );
     if (eligible.length === 0) {
-      return { status: 'ok' as const, message: 'No supplier passes reliability gate; widen policy or escalate.' };
+      return {
+        status: 'ok' as const,
+        message: 'No supplier passes reliability gate; widen policy or escalate.',
+      };
     }
 
     const sorted = [...eligible].sort((a, b) => a.priceUsd - b.priceUsd);
@@ -676,9 +817,13 @@ const preferredSupplierRouterTool: ToolDef = {
 
     const winner = cheapestPreferred ?? cheapest;
     const reasons: string[] = [];
-    if (cheapestPreferred) reasons.push(`Preferred supplier ${cheapestPreferred.supplier} within ${input.policy.preferenceTiltPct}% of cheapest.`);
+    if (cheapestPreferred)
+      reasons.push(
+        `Preferred supplier ${cheapestPreferred.supplier} within ${input.policy.preferenceTiltPct}% of cheapest.`
+      );
     else reasons.push('No preferred supplier within tilt; routing to cheapest.');
-    if (winner.reliabilityScore !== undefined) reasons.push(`Reliability score ${winner.reliabilityScore}/100.`);
+    if (winner.reliabilityScore !== undefined)
+      reasons.push(`Reliability score ${winner.reliabilityScore}/100.`);
     return {
       status: 'ok' as const,
       winner,

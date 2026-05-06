@@ -36,7 +36,9 @@ if (fr.status === 'ok') console.log(`  ${fr.message}`);
 console.log('\n=== emergency_numbers_card (JP) ===');
 const jp = await emergencyNumbersCardTool.handler({ countryCode: 'JP' } as never, ctx);
 if (jp.status === 'ok') {
-  console.log(`  general:${jp.card.general} police:${jp.card.police} ambulance:${jp.card.ambulance} fire:${jp.card.fire}`);
+  console.log(
+    `  general:${jp.card.general} police:${jp.card.police} ambulance:${jp.card.ambulance} fire:${jp.card.fire}`
+  );
   for (const n of jp.card.notes) console.log(`  · ${n}`);
 }
 
@@ -45,7 +47,10 @@ const area = await areaAfterDarkCheckTool.handler(
   { city: 'Buenos Aires', neighborhood: 'Constitución' } as never,
   ctx
 );
-if (area.status === 'ok') console.log(`  rating: ${area.rating}${area.notes ? ` — ${area.notes}` : ''} (source=${area.source})`);
+if (area.status === 'ok')
+  console.log(
+    `  rating: ${area.rating}${area.notes ? ` — ${area.notes}` : ''} (source=${area.source})`
+  );
 
 console.log('\n=== safe_route_home (caution → safe, late, group=1) ===');
 const route = await safeRouteHomeTool.handler(
@@ -69,11 +74,40 @@ console.log('\n=== trip_opportunity_ranker (5 candidates, $200 budget, 6h) ===')
 const opps = await tripOpportunityRankerTool.handler(
   {
     opportunities: [
-      { name: 'TeamLab Borderless', category: 'museum', durationHours: 3, approximateCostUsd: 28, fitScore: 0.85 },
-      { name: 'Tsukiji food tour', category: 'foodie', durationHours: 3, approximateCostUsd: 90, weatherSensitive: true },
-      { name: 'Kabukiza play', category: 'cultural', durationHours: 4, approximateCostUsd: 120, fitScore: 0.6 },
-      { name: 'Tokyo Tower viewpoint', category: 'tourist', durationHours: 1.5, approximateCostUsd: 15 },
-      { name: '8h Mt Fuji day-trip', category: 'outdoors', durationHours: 10, approximateCostUsd: 120, weatherSensitive: true },
+      {
+        name: 'TeamLab Borderless',
+        category: 'museum',
+        durationHours: 3,
+        approximateCostUsd: 28,
+        fitScore: 0.85,
+      },
+      {
+        name: 'Tsukiji food tour',
+        category: 'foodie',
+        durationHours: 3,
+        approximateCostUsd: 90,
+        weatherSensitive: true,
+      },
+      {
+        name: 'Kabukiza play',
+        category: 'cultural',
+        durationHours: 4,
+        approximateCostUsd: 120,
+        fitScore: 0.6,
+      },
+      {
+        name: 'Tokyo Tower viewpoint',
+        category: 'tourist',
+        durationHours: 1.5,
+        approximateCostUsd: 15,
+      },
+      {
+        name: '8h Mt Fuji day-trip',
+        category: 'outdoors',
+        durationHours: 10,
+        approximateCostUsd: 120,
+        weatherSensitive: true,
+      },
     ],
     travelerHobbies: ['museum', 'foodie', 'specialty coffee'],
     budgetRemainingUsd: 200,
@@ -83,15 +117,24 @@ const opps = await tripOpportunityRankerTool.handler(
   ctx
 );
 if (opps.status === 'ok') {
-  for (const o of opps.ranked) console.log(`  ${o.score.toFixed(2)}  ${o.name}  ·  ${o.reasons.join(' · ')}`);
+  for (const o of opps.ranked)
+    console.log(`  ${o.score.toFixed(2)}  ${o.name}  ·  ${o.reasons.join(' · ')}`);
 }
 
 console.log('\n=== itinerary_gap_detector ===');
 const gaps = await itineraryGapDetectorTool.handler(
   {
     itinerary: [
-      { title: 'Breakfast', startsAtIso: '2026-05-10T08:00:00Z', endsAtIso: '2026-05-10T09:00:00Z' },
-      { title: 'Museum visit', startsAtIso: '2026-05-10T10:00:00Z', endsAtIso: '2026-05-10T12:00:00Z' },
+      {
+        title: 'Breakfast',
+        startsAtIso: '2026-05-10T08:00:00Z',
+        endsAtIso: '2026-05-10T09:00:00Z',
+      },
+      {
+        title: 'Museum visit',
+        startsAtIso: '2026-05-10T10:00:00Z',
+        endsAtIso: '2026-05-10T12:00:00Z',
+      },
       { title: 'Dinner', startsAtIso: '2026-05-10T19:00:00Z', endsAtIso: '2026-05-10T21:00:00Z' },
     ],
     minGapMinutes: 120,
@@ -100,12 +143,19 @@ const gaps = await itineraryGapDetectorTool.handler(
 );
 if (gaps.status === 'ok') {
   console.log(`  ${gaps.message}`);
-  for (const g of gaps.gaps) console.log(`  · ${g.startsAtIso} → ${g.endsAtIso} (${g.durationMinutes}min)`);
+  for (const g of gaps.gaps)
+    console.log(`  · ${g.startsAtIso} → ${g.endsAtIso} (${g.durationMinutes}min)`);
 }
 
 console.log('\n=== layover_city_escape (300min, with visa, no checked bags) ===');
 const layover = await layoverCityEscapeTool.handler(
-  { airportIata: 'NRT', cityName: 'Tokyo', layoverDurationMinutes: 300, travelerHasVisa: true, hasCheckedBags: false } as never,
+  {
+    airportIata: 'NRT',
+    cityName: 'Tokyo',
+    layoverDurationMinutes: 300,
+    travelerHasVisa: true,
+    hasCheckedBags: false,
+  } as never,
   ctx
 );
 if (layover.status === 'ok') {
@@ -147,10 +197,30 @@ console.log('\n=== trip_pacing_optimizer (overloaded day) ===');
 const pace = await tripPacingOptimizerTool.handler(
   {
     events: [
-      { title: 'Morning hike', startsAtIso: '2026-05-10T07:00:00Z', durationMinutes: 240, intensity: 'high' },
-      { title: 'Museum + lunch', startsAtIso: '2026-05-10T12:00:00Z', durationMinutes: 180, intensity: 'high' },
-      { title: 'Cocktail bar', startsAtIso: '2026-05-10T19:00:00Z', durationMinutes: 120, intensity: 'high' },
-      { title: 'Late dinner', startsAtIso: '2026-05-10T21:30:00Z', durationMinutes: 180, intensity: 'high' },
+      {
+        title: 'Morning hike',
+        startsAtIso: '2026-05-10T07:00:00Z',
+        durationMinutes: 240,
+        intensity: 'high',
+      },
+      {
+        title: 'Museum + lunch',
+        startsAtIso: '2026-05-10T12:00:00Z',
+        durationMinutes: 180,
+        intensity: 'high',
+      },
+      {
+        title: 'Cocktail bar',
+        startsAtIso: '2026-05-10T19:00:00Z',
+        durationMinutes: 120,
+        intensity: 'high',
+      },
+      {
+        title: 'Late dinner',
+        startsAtIso: '2026-05-10T21:30:00Z',
+        durationMinutes: 180,
+        intensity: 'high',
+      },
     ],
   } as never,
   ctx
@@ -165,15 +235,33 @@ const grp = await groupPreferenceReconcilerTool.handler(
   {
     groupName: 'Friends-Tokyo',
     members: [
-      { name: 'A', budgetTier: 'medium', dietaryRestrictions: ['no shellfish'], ambiencePreference: 'quiet', activityPreferences: ['ramen', 'specialty coffee', 'museum'] },
-      { name: 'B', budgetTier: 'budget', ambiencePreference: 'medium', activityPreferences: ['ramen', 'specialty coffee'] },
-      { name: 'C', budgetTier: 'premium', dietaryRestrictions: ['vegetarian'], activityPreferences: ['museum', 'specialty coffee', 'galleries'] },
+      {
+        name: 'A',
+        budgetTier: 'medium',
+        dietaryRestrictions: ['no shellfish'],
+        ambiencePreference: 'quiet',
+        activityPreferences: ['ramen', 'specialty coffee', 'museum'],
+      },
+      {
+        name: 'B',
+        budgetTier: 'budget',
+        ambiencePreference: 'medium',
+        activityPreferences: ['ramen', 'specialty coffee'],
+      },
+      {
+        name: 'C',
+        budgetTier: 'premium',
+        dietaryRestrictions: ['vegetarian'],
+        activityPreferences: ['museum', 'specialty coffee', 'galleries'],
+      },
     ],
   } as never,
   ctx
 );
 if (grp.status === 'ok') {
-  console.log(`  consensus: tier=${grp.consensus.tier}, ambience=${grp.consensus.ambience}, dietary=${grp.consensus.dietaryUnion.join(', ')}`);
+  console.log(
+    `  consensus: tier=${grp.consensus.tier}, ambience=${grp.consensus.ambience}, dietary=${grp.consensus.dietaryUnion.join(', ')}`
+  );
   console.log(`  shared activities: ${grp.consensus.sharedActivities.join(', ')}`);
   for (const t of grp.tensions) console.log(`  ! ${t}`);
 }
@@ -182,8 +270,10 @@ console.log('\n=== trip_contextual_recommender (jet-lag situation) ===');
 const cr = await tripContextualRecommenderTool.handler(
   {
     city: 'Tokyo',
-    situation: 'I just landed after a 14h flight, totally exhausted, jet-lagged, want something low-key tonight near my hotel.',
+    situation:
+      'I just landed after a 14h flight, totally exhausted, jet-lagged, want something low-key tonight near my hotel.',
   } as never,
   ctx
 );
-if (cr.status === 'ok') console.log(`  intent=${cr.intent} → tool=${cr.suggestedTool}\n  why: ${cr.why}`);
+if (cr.status === 'ok')
+  console.log(`  intent=${cr.intent} → tool=${cr.suggestedTool}\n  why: ${cr.why}`);

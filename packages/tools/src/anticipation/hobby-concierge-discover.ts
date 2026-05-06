@@ -69,7 +69,9 @@ export interface HobbyConciergeDiscoverResult {
   recommendedNextAction?: string;
 }
 
-function deriveNetworkingSlot(hobbies?: string[]): 'founder' | 'ai' | 'web3' | 'design' | 'tech' | 'pro' {
+function deriveNetworkingSlot(
+  hobbies?: string[]
+): 'founder' | 'ai' | 'web3' | 'design' | 'tech' | 'pro' {
   if (!hobbies?.length) return 'founder';
   const blob = hobbies.join(' ').toLowerCase();
   if (/web3|crypto|ethereum|blockchain/.test(blob)) return 'web3';

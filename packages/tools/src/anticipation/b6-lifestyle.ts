@@ -147,7 +147,13 @@ const DESIGNER_WEIGHTS: Record<string, number> = {
   'theguardian.com': 0.5,
 };
 
-const DESIGNER_TYPES = new Set(['clothing_store', 'shoe_store', 'home_goods_store', 'store', 'jewelry_store']);
+const DESIGNER_TYPES = new Set([
+  'clothing_store',
+  'shoe_store',
+  'home_goods_store',
+  'store',
+  'jewelry_store',
+]);
 
 const localDesignerFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'local_designer_finder',
@@ -181,7 +187,9 @@ const localDesignerFinderTool: ToolDef<BaseInput, FinderResult> = {
 // ── 3. market_day_finder (pure curated + CSE fallback) ───────────────
 
 const marketDayInput = baseInput.extend({
-  marketKind: z.enum(['flea', 'farmers', 'antique', 'craft', 'design', 'general']).default('general'),
+  marketKind: z
+    .enum(['flea', 'farmers', 'antique', 'craft', 'design', 'general'])
+    .default('general'),
 });
 type MarketDayInput = z.infer<typeof marketDayInput>;
 
@@ -194,34 +202,94 @@ interface MarketEntry {
 }
 
 const CURATED_MARKETS: Array<MarketEntry & { kind: MarketDayInput['marketKind'] }> = [
-  { name: 'Marché aux Puces de Saint-Ouen', city: 'paris', days: 'Sat-Sun-Mon mornings', kind: 'flea', notes: 'Largest flea market in Europe.' },
-  { name: 'Portobello Road Market', city: 'london', days: 'Saturday', kind: 'antique', notes: 'Antiques + vintage.' },
-  { name: 'Borough Market', city: 'london', days: 'Tue-Sat', kind: 'farmers', notes: 'Food market, Tue-Sat 10:00-17:00.' },
-  { name: 'Mercato di Porta Portese', city: 'rome', days: 'Sunday', kind: 'flea', notes: 'Massive Sunday-only flea market.' },
-  { name: 'San Telmo Sunday Fair', city: 'buenos aires', days: 'Sunday', kind: 'antique', notes: 'Antiques + crafts on Defensa street.' },
-  { name: 'Mercado de Coyoacán', city: 'mexico city', days: 'daily; Sat-Sun busiest', kind: 'craft', notes: 'Craft + food.' },
+  {
+    name: 'Marché aux Puces de Saint-Ouen',
+    city: 'paris',
+    days: 'Sat-Sun-Mon mornings',
+    kind: 'flea',
+    notes: 'Largest flea market in Europe.',
+  },
+  {
+    name: 'Portobello Road Market',
+    city: 'london',
+    days: 'Saturday',
+    kind: 'antique',
+    notes: 'Antiques + vintage.',
+  },
+  {
+    name: 'Borough Market',
+    city: 'london',
+    days: 'Tue-Sat',
+    kind: 'farmers',
+    notes: 'Food market, Tue-Sat 10:00-17:00.',
+  },
+  {
+    name: 'Mercato di Porta Portese',
+    city: 'rome',
+    days: 'Sunday',
+    kind: 'flea',
+    notes: 'Massive Sunday-only flea market.',
+  },
+  {
+    name: 'San Telmo Sunday Fair',
+    city: 'buenos aires',
+    days: 'Sunday',
+    kind: 'antique',
+    notes: 'Antiques + crafts on Defensa street.',
+  },
+  {
+    name: 'Mercado de Coyoacán',
+    city: 'mexico city',
+    days: 'daily; Sat-Sun busiest',
+    kind: 'craft',
+    notes: 'Craft + food.',
+  },
   { name: "Hell's Kitchen Flea Market", city: 'new york', days: 'Sat-Sun', kind: 'flea' },
   { name: 'Chelsea Flea', city: 'new york', days: 'Sat-Sun', kind: 'flea' },
   { name: 'Brooklyn Flea', city: 'new york', days: 'weekend rotating', kind: 'flea' },
   { name: 'Marché Bastille', city: 'paris', days: 'Thu + Sun mornings', kind: 'farmers' },
-  { name: 'Mauerpark Flohmarkt', city: 'berlin', days: 'Sunday', kind: 'flea', notes: 'Iconic Sunday flea + open-air karaoke.' },
+  {
+    name: 'Mauerpark Flohmarkt',
+    city: 'berlin',
+    days: 'Sunday',
+    kind: 'flea',
+    notes: 'Iconic Sunday flea + open-air karaoke.',
+  },
   { name: 'Boqueria', city: 'barcelona', days: 'Mon-Sat', kind: 'farmers' },
-  { name: 'Tsukiji Outer Market', city: 'tokyo', days: 'daily; mornings best', kind: 'farmers', notes: 'Inner wholesale market relocated; outer market lives on.' },
+  {
+    name: 'Tsukiji Outer Market',
+    city: 'tokyo',
+    days: 'daily; mornings best',
+    kind: 'farmers',
+    notes: 'Inner wholesale market relocated; outer market lives on.',
+  },
   { name: 'Camden Market', city: 'london', days: 'daily', kind: 'craft' },
-  { name: 'Chatuchak Weekend Market', city: 'bangkok', days: 'Sat-Sun', kind: 'general', notes: '8000+ stalls.' },
+  {
+    name: 'Chatuchak Weekend Market',
+    city: 'bangkok',
+    days: 'Sat-Sun',
+    kind: 'general',
+    notes: '8000+ stalls.',
+  },
 ];
 
 async function runMarketDayFinder(
   rawInput: MarketDayInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'production_refused' | 'unavailable'; message: string; markets?: MarketEntry[] }> {
+): Promise<{
+  status: 'ok' | 'production_refused' | 'unavailable';
+  message: string;
+  markets?: MarketEntry[];
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = marketDayInput.parse(rawInput);
   const cityKey = input.city.trim().toLowerCase();
 
-  const curated = CURATED_MARKETS.filter(m => m.city === cityKey && (input.marketKind === 'general' || m.kind === input.marketKind));
+  const curated = CURATED_MARKETS.filter(
+    m => m.city === cityKey && (input.marketKind === 'general' || m.kind === input.marketKind)
+  );
   if (curated.length > 0) {
     return {
       status: 'ok',
@@ -270,7 +338,10 @@ const marketDayFinderTool: ToolDef = {
     required: ['city'],
     properties: {
       ...baseJsonProps,
-      marketKind: { type: 'string', enum: ['flea', 'farmers', 'antique', 'craft', 'design', 'general'] },
+      marketKind: {
+        type: 'string',
+        enum: ['flea', 'farmers', 'antique', 'craft', 'design', 'general'],
+      },
     },
   },
   handler: runMarketDayFinder,
@@ -281,7 +352,9 @@ const marketDayFinderTool: ToolDef = {
 const giftInput = z.object({
   countryCode: z.string().length(2),
   budgetUsd: z.number().nonnegative().max(2000).default(40),
-  recipient: z.enum(['client', 'partner', 'family', 'friend', 'host_family', 'colleague', 'self']).default('friend'),
+  recipient: z
+    .enum(['client', 'partner', 'family', 'friend', 'host_family', 'colleague', 'self'])
+    .default('friend'),
   travelerNationalityCode: z.string().length(2).optional(),
 });
 type GiftInput = z.infer<typeof giftInput>;
@@ -293,37 +366,127 @@ interface GiftSuggestion {
   packingNote?: string;
 }
 
-const COUNTRY_GIFT_SUGGESTIONS: Record<string, Array<{ category: string; examples: string[]; budgetTier: 'low' | 'medium' | 'high' }>> = {
+const COUNTRY_GIFT_SUGGESTIONS: Record<
+  string,
+  Array<{ category: string; examples: string[]; budgetTier: 'low' | 'medium' | 'high' }>
+> = {
   JP: [
-    { category: 'food', examples: ['Yokan / wagashi from a temple shop', 'Tea (gyokuro / hojicha) from Ippodo or Marukyu Koyamaen', 'Single-origin Tokyo coffee beans'], budgetTier: 'medium' },
-    { category: 'craft', examples: ['Tenugui hand towel from Kamawanu', 'Ceramic teacup from Ginza Sayegusa', 'Furoshiki cloth'], budgetTier: 'medium' },
+    {
+      category: 'food',
+      examples: [
+        'Yokan / wagashi from a temple shop',
+        'Tea (gyokuro / hojicha) from Ippodo or Marukyu Koyamaen',
+        'Single-origin Tokyo coffee beans',
+      ],
+      budgetTier: 'medium',
+    },
+    {
+      category: 'craft',
+      examples: [
+        'Tenugui hand towel from Kamawanu',
+        'Ceramic teacup from Ginza Sayegusa',
+        'Furoshiki cloth',
+      ],
+      budgetTier: 'medium',
+    },
   ],
   FR: [
-    { category: 'food', examples: ['Comté or Beaufort cheese (vacuum-packed at the airport)', 'Bonne Maman jams', 'Pierre Hermé chocolates'], budgetTier: 'medium' },
-    { category: 'craft', examples: ['Astier de Villatte ceramic', 'Le Labo travel candle', 'Diptyque candle (smaller pour-over jar)'], budgetTier: 'high' },
+    {
+      category: 'food',
+      examples: [
+        'Comté or Beaufort cheese (vacuum-packed at the airport)',
+        'Bonne Maman jams',
+        'Pierre Hermé chocolates',
+      ],
+      budgetTier: 'medium',
+    },
+    {
+      category: 'craft',
+      examples: [
+        'Astier de Villatte ceramic',
+        'Le Labo travel candle',
+        'Diptyque candle (smaller pour-over jar)',
+      ],
+      budgetTier: 'high',
+    },
   ],
   IT: [
-    { category: 'food', examples: ['Aged balsamic from Modena', 'Saffron from L\'Aquila', 'Real DOP Parmigiano (vacuum-pack)'], budgetTier: 'medium' },
-    { category: 'craft', examples: ['Florentine leather small good (cardholder, notebook cover)', 'Murano glass paperweight'], budgetTier: 'medium' },
+    {
+      category: 'food',
+      examples: [
+        'Aged balsamic from Modena',
+        "Saffron from L'Aquila",
+        'Real DOP Parmigiano (vacuum-pack)',
+      ],
+      budgetTier: 'medium',
+    },
+    {
+      category: 'craft',
+      examples: [
+        'Florentine leather small good (cardholder, notebook cover)',
+        'Murano glass paperweight',
+      ],
+      budgetTier: 'medium',
+    },
   ],
   AR: [
-    { category: 'food', examples: ['Yerba mate (Cruz de Malta or Rosamonte) + bombilla', 'Alfajores Havanna', 'Olive oil from Mendoza'], budgetTier: 'low' },
-    { category: 'craft', examples: ['Leather mate cup', 'Argentine wool throw', 'Facón (decorative knife — pack in checked!)'], budgetTier: 'medium' },
+    {
+      category: 'food',
+      examples: [
+        'Yerba mate (Cruz de Malta or Rosamonte) + bombilla',
+        'Alfajores Havanna',
+        'Olive oil from Mendoza',
+      ],
+      budgetTier: 'low',
+    },
+    {
+      category: 'craft',
+      examples: [
+        'Leather mate cup',
+        'Argentine wool throw',
+        'Facón (decorative knife — pack in checked!)',
+      ],
+      budgetTier: 'medium',
+    },
   ],
   MX: [
-    { category: 'food', examples: ['Mole paste from Oaxaca', 'Mexican vanilla', 'Tequila aged 1+ years'], budgetTier: 'medium' },
-    { category: 'craft', examples: ['Talavera pottery', 'Oaxaca rug', 'Alebrije'], budgetTier: 'medium' },
+    {
+      category: 'food',
+      examples: ['Mole paste from Oaxaca', 'Mexican vanilla', 'Tequila aged 1+ years'],
+      budgetTier: 'medium',
+    },
+    {
+      category: 'craft',
+      examples: ['Talavera pottery', 'Oaxaca rug', 'Alebrije'],
+      budgetTier: 'medium',
+    },
   ],
   GB: [
-    { category: 'food', examples: ['Single-estate tea (Postcard Teas)', 'Marmite jar gift set', 'Fortnum & Mason biscuits'], budgetTier: 'medium' },
-    { category: 'craft', examples: ['Liberty London printed scarf', 'Burberry scarf travel size', 'Wedgwood mug'], budgetTier: 'high' },
+    {
+      category: 'food',
+      examples: [
+        'Single-estate tea (Postcard Teas)',
+        'Marmite jar gift set',
+        'Fortnum & Mason biscuits',
+      ],
+      budgetTier: 'medium',
+    },
+    {
+      category: 'craft',
+      examples: ['Liberty London printed scarf', 'Burberry scarf travel size', 'Wedgwood mug'],
+      budgetTier: 'high',
+    },
   ],
 };
 
 async function runGiftRecommender(
   rawInput: GiftInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'production_refused'; message: string; suggestions?: GiftSuggestion[] }> {
+): Promise<{
+  status: 'ok' | 'production_refused';
+  message: string;
+  suggestions?: GiftSuggestion[];
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
@@ -346,20 +509,27 @@ async function runGiftRecommender(
           category: e.category,
           examples: e.examples,
           approximateBudget: tier === 'low' ? '$15-30' : tier === 'medium' ? '$30-80' : '$80-200+',
-          packingNote: e.category === 'craft' && /knife|wool/i.test(e.examples.join(' '))
-            ? 'Check airline rules; some items go in checked baggage only.'
-            : 'Buy at the airport when possible — duty-free + last-minute packing risk lower.',
+          packingNote:
+            e.category === 'craft' && /knife|wool/i.test(e.examples.join(' '))
+              ? 'Check airline rules; some items go in checked baggage only.'
+              : 'Buy at the airport when possible — duty-free + last-minute packing risk lower.',
         }))
     : [
         {
           category: 'general',
-          examples: [`Local food specialty from ${input.countryCode}`, `Local craft (textile / ceramic / leather)`, `Regional spirits or coffee`],
+          examples: [
+            `Local food specialty from ${input.countryCode}`,
+            `Local craft (textile / ceramic / leather)`,
+            `Regional spirits or coffee`,
+          ],
           approximateBudget: tier === 'low' ? '$15-30' : tier === 'medium' ? '$30-80' : '$80-200+',
-          packingNote: 'No curated list for this country yet — head to the airport gift shop with the highest editorial signal.',
+          packingNote:
+            'No curated list for this country yet — head to the airport gift shop with the highest editorial signal.',
         },
       ];
 
-  if (recipientGuard) suggestions[0]!.packingNote = `${recipientGuard} ${suggestions[0]!.packingNote ?? ''}`.trim();
+  if (recipientGuard)
+    suggestions[0]!.packingNote = `${recipientGuard} ${suggestions[0]!.packingNote ?? ''}`.trim();
 
   return {
     status: 'ok',
@@ -381,7 +551,10 @@ const giftRecommenderTool: ToolDef = {
     properties: {
       countryCode: { type: 'string', minLength: 2, maxLength: 2 },
       budgetUsd: { type: 'number', minimum: 0, maximum: 2000 },
-      recipient: { type: 'string', enum: ['client', 'partner', 'family', 'friend', 'host_family', 'colleague', 'self'] },
+      recipient: {
+        type: 'string',
+        enum: ['client', 'partner', 'family', 'friend', 'host_family', 'colleague', 'self'],
+      },
       travelerNationalityCode: { type: 'string', minLength: 2, maxLength: 2 },
     },
   },
@@ -399,49 +572,80 @@ const pharmacyInput = z.object({
 });
 type PharmacyInput = z.infer<typeof pharmacyInput>;
 
-const PHARMACY_MAP: Record<string, Record<string, { localName: string; brand?: string; otc: boolean; notes?: string }>> = {
+const PHARMACY_MAP: Record<
+  string,
+  Record<string, { localName: string; brand?: string; otc: boolean; notes?: string }>
+> = {
   ES: {
-    'ibuprofen': { localName: 'ibuprofeno', brand: 'Espidifen', otc: true },
-    'acetaminophen': { localName: 'paracetamol', brand: 'Gelocatil', otc: true },
-    'paracetamol': { localName: 'paracetamol', brand: 'Gelocatil', otc: true },
-    'antihistamine': { localName: 'antihistamínico', brand: 'Cetirizina genérico', otc: true },
-    'sunscreen': { localName: 'protector solar', otc: true },
+    ibuprofen: { localName: 'ibuprofeno', brand: 'Espidifen', otc: true },
+    acetaminophen: { localName: 'paracetamol', brand: 'Gelocatil', otc: true },
+    paracetamol: { localName: 'paracetamol', brand: 'Gelocatil', otc: true },
+    antihistamine: { localName: 'antihistamínico', brand: 'Cetirizina genérico', otc: true },
+    sunscreen: { localName: 'protector solar', otc: true },
   },
   AR: {
-    'ibuprofen': { localName: 'ibuprofeno', brand: 'Ibupirac', otc: true },
-    'acetaminophen': { localName: 'paracetamol', brand: 'Tafirol', otc: true },
-    'paracetamol': { localName: 'paracetamol', brand: 'Tafirol', otc: true },
-    'antihistamine': { localName: 'antihistamínico', brand: 'Loratadina genérica', otc: true },
-    'sunscreen': { localName: 'protector solar', otc: true },
+    ibuprofen: { localName: 'ibuprofeno', brand: 'Ibupirac', otc: true },
+    acetaminophen: { localName: 'paracetamol', brand: 'Tafirol', otc: true },
+    paracetamol: { localName: 'paracetamol', brand: 'Tafirol', otc: true },
+    antihistamine: { localName: 'antihistamínico', brand: 'Loratadina genérica', otc: true },
+    sunscreen: { localName: 'protector solar', otc: true },
   },
   MX: {
-    'ibuprofen': { localName: 'ibuprofeno', brand: 'Advil', otc: true },
-    'acetaminophen': { localName: 'paracetamol', brand: 'Tempra', otc: true },
-    'paracetamol': { localName: 'paracetamol', brand: 'Tempra', otc: true },
+    ibuprofen: { localName: 'ibuprofeno', brand: 'Advil', otc: true },
+    acetaminophen: { localName: 'paracetamol', brand: 'Tempra', otc: true },
+    paracetamol: { localName: 'paracetamol', brand: 'Tempra', otc: true },
   },
   JP: {
-    'ibuprofen': { localName: 'イブプロフェン', brand: 'Eve', otc: true, notes: 'Eve A is most common; brand-name OTC.' },
-    'acetaminophen': { localName: 'アセトアミノフェン', brand: 'Tylenol', otc: true },
-    'antihistamine': { localName: '抗ヒスタミン', brand: 'Claritin', otc: true },
-    'sunscreen': { localName: '日焼け止め', otc: true, notes: 'Anessa Perfect UV is the cult choice.' },
+    ibuprofen: {
+      localName: 'イブプロフェン',
+      brand: 'Eve',
+      otc: true,
+      notes: 'Eve A is most common; brand-name OTC.',
+    },
+    acetaminophen: { localName: 'アセトアミノフェン', brand: 'Tylenol', otc: true },
+    antihistamine: { localName: '抗ヒスタミン', brand: 'Claritin', otc: true },
+    sunscreen: {
+      localName: '日焼け止め',
+      otc: true,
+      notes: 'Anessa Perfect UV is the cult choice.',
+    },
   },
   FR: {
-    'ibuprofen': { localName: 'ibuprofène', brand: 'Advil / Nurofen', otc: true, notes: 'Pharmacy-only (no supermarket).' },
-    'acetaminophen': { localName: 'paracétamol', brand: 'Doliprane', otc: true, notes: 'Cap of 4g/24h enforced; pharmacist may verify.' },
-    'antihistamine': { localName: 'antihistaminique', brand: 'Aerius', otc: true },
+    ibuprofen: {
+      localName: 'ibuprofène',
+      brand: 'Advil / Nurofen',
+      otc: true,
+      notes: 'Pharmacy-only (no supermarket).',
+    },
+    acetaminophen: {
+      localName: 'paracétamol',
+      brand: 'Doliprane',
+      otc: true,
+      notes: 'Cap of 4g/24h enforced; pharmacist may verify.',
+    },
+    antihistamine: { localName: 'antihistaminique', brand: 'Aerius', otc: true },
   },
   GB: {
-    'ibuprofen': { localName: 'ibuprofen', brand: 'Nurofen', otc: true },
-    'acetaminophen': { localName: 'paracetamol', brand: 'Panadol', otc: true },
+    ibuprofen: { localName: 'ibuprofen', brand: 'Nurofen', otc: true },
+    acetaminophen: { localName: 'paracetamol', brand: 'Panadol', otc: true },
   },
   US: {
-    'ibuprofen': { localName: 'ibuprofen', brand: 'Advil / Motrin', otc: true },
-    'acetaminophen': { localName: 'acetaminophen', brand: 'Tylenol', otc: true },
-    'paracetamol': { localName: 'acetaminophen', brand: 'Tylenol', otc: true, notes: 'In the US it\'s "acetaminophen", not "paracetamol".' },
+    ibuprofen: { localName: 'ibuprofen', brand: 'Advil / Motrin', otc: true },
+    acetaminophen: { localName: 'acetaminophen', brand: 'Tylenol', otc: true },
+    paracetamol: {
+      localName: 'acetaminophen',
+      brand: 'Tylenol',
+      otc: true,
+      notes: 'In the US it\'s "acetaminophen", not "paracetamol".',
+    },
   },
   DE: {
-    'ibuprofen': { localName: 'Ibuprofen', otc: true, notes: 'Apotheke only — not Drogerie / supermarket.' },
-    'acetaminophen': { localName: 'Paracetamol', otc: true },
+    ibuprofen: {
+      localName: 'Ibuprofen',
+      otc: true,
+      notes: 'Apotheke only — not Drogerie / supermarket.',
+    },
+    acetaminophen: { localName: 'Paracetamol', otc: true },
   },
 };
 
@@ -557,7 +761,10 @@ async function runElectronicsAdapterChecker(
   const from = COUNTRY_PLUG_SPEC[input.fromCountryCode.toUpperCase()];
   const to = COUNTRY_PLUG_SPEC[input.toCountryCode.toUpperCase()];
   if (!from || !to) {
-    return { status: 'unavailable', message: `No plug spec for ${input.fromCountryCode} → ${input.toCountryCode}.` };
+    return {
+      status: 'unavailable',
+      message: `No plug spec for ${input.fromCountryCode} → ${input.toCountryCode}.`,
+    };
   }
 
   const sharePlug = from.plugTypes.some(t => to.plugTypes.includes(t));
@@ -623,7 +830,8 @@ async function placesFinder(
     languageCode: input.languageCode,
     ...(input.countryCode ? { regionCode: input.countryCode } : {}),
   });
-  if (!places.available) return { status: 'unavailable', message: `Places unavailable: ${places.reason ?? 'unknown'}.` };
+  if (!places.available)
+    return { status: 'unavailable', message: `Places unavailable: ${places.reason ?? 'unknown'}.` };
   const filtered = places.results.filter(p =>
     filterRegex.test(`${p.name} ${p.editorialSummary ?? ''} ${p.types?.join(' ') ?? ''}`)
   );
@@ -648,7 +856,12 @@ const luggageRepairFinderTool: ToolDef = {
   inputSchema: baseInput,
   jsonSchema: { type: 'object', required: ['city'], properties: { ...baseJsonProps } },
   handler: ((input: BaseInput, ctx?: ToolContext) =>
-    placesFinder('luggage repair shop', input, /\b(luggage|suitcase|leather repair|zipper|maleta|reparación)\b/i, ctx)) as ToolDef['handler'],
+    placesFinder(
+      'luggage repair shop',
+      input,
+      /\b(luggage|suitcase|leather repair|zipper|maleta|reparación)\b/i,
+      ctx
+    )) as ToolDef['handler'],
 };
 
 const laundryServiceFinderTool: ToolDef = {
@@ -660,7 +873,12 @@ const laundryServiceFinderTool: ToolDef = {
   inputSchema: baseInput,
   jsonSchema: { type: 'object', required: ['city'], properties: { ...baseJsonProps } },
   handler: ((input: BaseInput, ctx?: ToolContext) =>
-    placesFinder('laundry service', input, /\b(laundry|laundromat|lavander|dry clean|tintorería)\b/i, ctx)) as ToolDef['handler'],
+    placesFinder(
+      'laundry service',
+      input,
+      /\b(laundry|laundromat|lavander|dry clean|tintorería)\b/i,
+      ctx
+    )) as ToolDef['handler'],
 };
 
 const tailorUrgentFinderTool: ToolDef = {
@@ -672,7 +890,12 @@ const tailorUrgentFinderTool: ToolDef = {
   inputSchema: baseInput,
   jsonSchema: { type: 'object', required: ['city'], properties: { ...baseJsonProps } },
   handler: ((input: BaseInput, ctx?: ToolContext) =>
-    placesFinder('tailor alterations same day', input, /\b(tailor|sastr|alterations|costur)\b/i, ctx)) as ToolDef['handler'],
+    placesFinder(
+      'tailor alterations same day',
+      input,
+      /\b(tailor|sastr|alterations|costur)\b/i,
+      ctx
+    )) as ToolDef['handler'],
 };
 
 const vintageThriftFinderTool: ToolDef = {
@@ -684,7 +907,12 @@ const vintageThriftFinderTool: ToolDef = {
   inputSchema: baseInput,
   jsonSchema: { type: 'object', required: ['city'], properties: { ...baseJsonProps } },
   handler: ((input: BaseInput, ctx?: ToolContext) =>
-    placesFinder('vintage thrift store', input, /\b(vintage|thrift|second-hand|consignment|segunda mano|rastro)\b/i, ctx)) as ToolDef['handler'],
+    placesFinder(
+      'vintage thrift store',
+      input,
+      /\b(vintage|thrift|second-hand|consignment|segunda mano|rastro)\b/i,
+      ctx
+    )) as ToolDef['handler'],
 };
 
 const craftBeerFinderTool: ToolDef = {
@@ -696,7 +924,12 @@ const craftBeerFinderTool: ToolDef = {
   inputSchema: baseInput,
   jsonSchema: { type: 'object', required: ['city'], properties: { ...baseJsonProps } },
   handler: ((input: BaseInput, ctx?: ToolContext) =>
-    placesFinder('craft beer brewery taproom', input, /\b(brewery|taproom|cervecer|brewpub|microbrew)\b/i, ctx)) as ToolDef['handler'],
+    placesFinder(
+      'craft beer brewery taproom',
+      input,
+      /\b(brewery|taproom|cervecer|brewpub|microbrew)\b/i,
+      ctx
+    )) as ToolDef['handler'],
 };
 
 // ── 11. personal_shopper_light (composer) ────────────────────────────
@@ -716,7 +949,11 @@ interface ShoppingRoute {
 async function runPersonalShopperLight(
   rawInput: PersonalShopperInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; route?: ShoppingRoute }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  route?: ShoppingRoute;
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 

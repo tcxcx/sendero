@@ -151,60 +151,60 @@ const CITY_MULTIPLIERS: Record<string, number> = {
   // Latin America
   'buenos aires': 0.55,
   'mexico city': 0.7,
-  'cdmx': 0.7,
-  'lima': 0.65,
-  'santiago': 0.75,
-  'medellin': 0.5,
-  'bogota': 0.55,
-  'cuenca': 0.45,
-  'asuncion': 0.45,
+  cdmx: 0.7,
+  lima: 0.65,
+  santiago: 0.75,
+  medellin: 0.5,
+  bogota: 0.55,
+  cuenca: 0.45,
+  asuncion: 0.45,
   'sao paulo': 0.7,
   'rio de janeiro': 0.7,
   // North America
   'new york': 1.4,
-  'nyc': 1.4,
+  nyc: 1.4,
   'san francisco': 1.5,
   'los angeles': 1.25,
-  'chicago': 1.15,
-  'austin': 1.05,
-  'miami': 1.2,
-  'seattle': 1.2,
-  'toronto': 1.1,
-  'montreal': 0.95,
+  chicago: 1.15,
+  austin: 1.05,
+  miami: 1.2,
+  seattle: 1.2,
+  toronto: 1.1,
+  montreal: 0.95,
   // Europe
-  'london': 1.4,
-  'paris': 1.3,
-  'madrid': 0.85,
-  'barcelona': 0.9,
-  'lisbon': 0.8,
-  'porto': 0.7,
-  'berlin': 0.95,
-  'amsterdam': 1.15,
-  'rome': 0.9,
-  'milan': 1.0,
-  'copenhagen': 1.45,
-  'zurich': 1.6,
-  'vienna': 0.95,
-  'stockholm': 1.25,
-  'reykjavik': 1.5,
+  london: 1.4,
+  paris: 1.3,
+  madrid: 0.85,
+  barcelona: 0.9,
+  lisbon: 0.8,
+  porto: 0.7,
+  berlin: 0.95,
+  amsterdam: 1.15,
+  rome: 0.9,
+  milan: 1.0,
+  copenhagen: 1.45,
+  zurich: 1.6,
+  vienna: 0.95,
+  stockholm: 1.25,
+  reykjavik: 1.5,
   // Asia
-  'tokyo': 1.0,
-  'osaka': 0.85,
-  'kyoto': 0.9,
-  'seoul': 0.9,
-  'singapore': 1.2,
-  'bangkok': 0.55,
+  tokyo: 1.0,
+  osaka: 0.85,
+  kyoto: 0.9,
+  seoul: 0.9,
+  singapore: 1.2,
+  bangkok: 0.55,
   'hong kong': 1.2,
-  'taipei': 0.65,
-  'bali': 0.5,
-  'denpasar': 0.5,
-  'mumbai': 0.45,
-  'delhi': 0.4,
+  taipei: 0.65,
+  bali: 0.5,
+  denpasar: 0.5,
+  mumbai: 0.45,
+  delhi: 0.4,
   // Oceania / Middle East / Africa
-  'sydney': 1.25,
-  'melbourne': 1.2,
-  'auckland': 1.1,
-  'dubai': 1.15,
+  sydney: 1.25,
+  melbourne: 1.2,
+  auckland: 1.1,
+  dubai: 1.15,
   'tel aviv': 1.25,
   'cape town': 0.65,
 };
@@ -258,7 +258,8 @@ function resolveCityMultiplier(city: string, countryCode?: string): { mult: numb
   if (typeof direct === 'number') return { mult: direct, src: `city:${norm}` };
   if (countryCode) {
     const country = COUNTRY_MULTIPLIERS[countryCode.toUpperCase()];
-    if (typeof country === 'number') return { mult: country, src: `country:${countryCode.toUpperCase()}` };
+    if (typeof country === 'number')
+      return { mult: country, src: `country:${countryCode.toUpperCase()}` };
   }
   return { mult: 1.0, src: 'global-median' };
 }
@@ -331,7 +332,9 @@ export async function runBudgetEstimator(
   const { mult: cityMult, src: citySrc } = resolveCityMultiplier(input.city, input.countryCode);
 
   const priceLevelShift = input.priceLevel ? PRICE_LEVEL_SHIFTS[input.priceLevel] : 1.0;
-  const michelinShift = input.michelinPriceSymbols ? MICHELIN_SHIFTS[input.michelinPriceSymbols] : 1.0;
+  const michelinShift = input.michelinPriceSymbols
+    ? MICHELIN_SHIFTS[input.michelinPriceSymbols]
+    : 1.0;
 
   const combined = cityMult * priceLevelShift * michelinShift;
 
@@ -363,7 +366,9 @@ export async function runBudgetEstimator(
     low = low * (newTypical / typical);
     high = high * (newTypical / typical);
     typical = newTypical;
-    assumptions.push(`re-anchored to median text-mention ~$${Math.round(textAnchor)} (×${ratio.toFixed(2)})`);
+    assumptions.push(
+      `re-anchored to median text-mention ~$${Math.round(textAnchor)} (×${ratio.toFixed(2)})`
+    );
   }
 
   const rLow = roundUsd(low);

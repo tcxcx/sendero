@@ -26,13 +26,7 @@ import { z } from 'zod';
 import { assertDevOnlyToolAllowed } from '../dev-gate';
 import type { ToolContext, ToolDef } from '../types';
 
-const SEGMENTS = [
-  'Music',
-  'Sports',
-  'Arts & Theatre',
-  'Film',
-  'Miscellaneous',
-] as const;
+const SEGMENTS = ['Music', 'Sports', 'Arts & Theatre', 'Film', 'Miscellaneous'] as const;
 
 const inputSchema = z.object({
   city: z.string().min(1).max(120),
@@ -193,7 +187,9 @@ async function fetchTicketmasterLive(
   }
 }
 
-function pickBestImage(images: Array<{ url?: string; width?: number; ratio?: string }> | undefined): string | undefined {
+function pickBestImage(
+  images: Array<{ url?: string; width?: number; ratio?: string }> | undefined
+): string | undefined {
   if (!images?.length) return undefined;
   // Prefer 16_9 wide hero shots — they unfurl best in WhatsApp / Slack.
   const wide = images.filter(i => i.ratio === '16_9');

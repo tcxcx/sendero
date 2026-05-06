@@ -27,12 +27,7 @@ import { runFoodieShortlistBuilder } from './foodie-shortlist-builder';
 import { runProfessionalNetworkingScanner } from './professional-networking-scanner';
 import { runWorkFromCafeRanker } from './work-from-cafe-ranker';
 
-const CATEGORIES = [
-  'foodie',
-  'specialty_coffee',
-  'work_from_cafes',
-  'networking',
-] as const;
+const CATEGORIES = ['foodie', 'specialty_coffee', 'work_from_cafes', 'networking'] as const;
 
 const inputSchema = z.object({
   city: z.string().min(1).max(120),
@@ -40,16 +35,10 @@ const inputSchema = z.object({
   travelerId: z.string().max(120).optional(),
   languageCode: z.string().max(10).default('en'),
   /** Layers to build. Default: foodie + networking. */
-  categories: z
-    .array(z.enum(CATEGORIES))
-    .min(1)
-    .max(4)
-    .default(['foodie', 'networking']),
+  categories: z.array(z.enum(CATEGORIES)).min(1).max(4).default(['foodie', 'networking']),
   budgetTier: z.enum(['budget', 'medium', 'premium', 'splurge']).default('medium'),
   /** Slot for the networking scanner when 'networking' is in categories. */
-  networkingSlot: z
-    .enum(['founder', 'ai', 'web3', 'design', 'tech', 'pro'])
-    .default('founder'),
+  networkingSlot: z.enum(['founder', 'ai', 'web3', 'design', 'tech', 'pro']).default('founder'),
   perCategoryLimit: z.number().int().min(1).max(8).default(4),
 });
 
@@ -119,8 +108,7 @@ export async function runCityTasteMapBuilder(
           ctx
         );
         if (r.status === 'production_refused') return null;
-        if (r.status === 'unavailable')
-          return { failure: `foodie:${r.reason}` };
+        if (r.status === 'unavailable') return { failure: `foodie:${r.reason}` };
 
         return {
           category: 'foodie',
@@ -152,8 +140,7 @@ export async function runCityTasteMapBuilder(
           ctx
         );
         if (r.status === 'production_refused') return null;
-        if (r.status === 'unavailable')
-          return { failure: `work_from_cafes:${r.reason}` };
+        if (r.status === 'unavailable') return { failure: `work_from_cafes:${r.reason}` };
         return {
           category: 'work_from_cafes',
           title: TITLE.work_from_cafes,
@@ -237,31 +224,35 @@ export async function runCityTasteMapBuilder(
   };
 }
 
-export const cityTasteMapBuilderTool: ToolDef<CityTasteMapBuilderInput, CityTasteMapBuilderResult> = {
-  name: 'city_taste_map_builder',
-  internal: true,
-  experimental: true,
-  description:
-    "Build a personalized taste map for a city in ONE call — flagship HP2 orchestrator. Composes `foodie_shortlist_builder` + `work_from_cafe_ranker` + `professional_networking_scanner` based on the requested `categories`. Returns layered output + a `topMoveToday` the agent quotes immediately. Use when traveler asks 'build my <city> map', 'I'm landing in <city>, what should I do', 'plan my Tokyo week', 'arrival pack for <city>'.",
-  inputSchema,
-  jsonSchema: {
-    type: 'object',
-    required: ['city'],
-    properties: {
-      city: { type: 'string', minLength: 1, maxLength: 120 },
-      countryCode: { type: 'string', minLength: 2, maxLength: 2 },
-      travelerId: { type: 'string', maxLength: 120 },
-      languageCode: { type: 'string', maxLength: 10 },
-      categories: {
-        type: 'array',
-        minItems: 1,
-        maxItems: 4,
-        items: { type: 'string', enum: [...CATEGORIES] },
+export const cityTasteMapBuilderTool: ToolDef<CityTasteMapBuilderInput, CityTasteMapBuilderResult> =
+  {
+    name: 'city_taste_map_builder',
+    internal: true,
+    experimental: true,
+    description:
+      "Build a personalized taste map for a city in ONE call — flagship HP2 orchestrator. Composes `foodie_shortlist_builder` + `work_from_cafe_ranker` + `professional_networking_scanner` based on the requested `categories`. Returns layered output + a `topMoveToday` the agent quotes immediately. Use when traveler asks 'build my <city> map', 'I'm landing in <city>, what should I do', 'plan my Tokyo week', 'arrival pack for <city>'.",
+    inputSchema,
+    jsonSchema: {
+      type: 'object',
+      required: ['city'],
+      properties: {
+        city: { type: 'string', minLength: 1, maxLength: 120 },
+        countryCode: { type: 'string', minLength: 2, maxLength: 2 },
+        travelerId: { type: 'string', maxLength: 120 },
+        languageCode: { type: 'string', maxLength: 10 },
+        categories: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 4,
+          items: { type: 'string', enum: [...CATEGORIES] },
+        },
+        budgetTier: { type: 'string', enum: ['budget', 'medium', 'premium', 'splurge'] },
+        networkingSlot: {
+          type: 'string',
+          enum: ['founder', 'ai', 'web3', 'design', 'tech', 'pro'],
+        },
+        perCategoryLimit: { type: 'integer', minimum: 1, maximum: 8 },
       },
-      budgetTier: { type: 'string', enum: ['budget', 'medium', 'premium', 'splurge'] },
-      networkingSlot: { type: 'string', enum: ['founder', 'ai', 'web3', 'design', 'tech', 'pro'] },
-      perCategoryLimit: { type: 'integer', minimum: 1, maximum: 8 },
     },
-  },
-  handler: runCityTasteMapBuilder,
-};
+    handler: runCityTasteMapBuilder,
+  };

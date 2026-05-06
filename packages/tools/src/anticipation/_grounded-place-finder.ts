@@ -73,7 +73,11 @@ export type GroundedFinderResult =
     }
   | { status: 'unavailable'; reason: string; message: string };
 
-function weightForSource(displayLink: string, weights: Record<string, number>, fallback: number): number {
+function weightForSource(
+  displayLink: string,
+  weights: Record<string, number>,
+  fallback: number
+): number {
   const host = displayLink.toLowerCase().replace(/^www\./, '');
   for (const [domain, w] of Object.entries(weights)) {
     if (host === domain || host.endsWith(`.${domain}`)) return w;
@@ -161,7 +165,10 @@ export async function runGroundedFinder(
 
       let quality = 0;
       if (typeof place.rating === 'number' && typeof place.userRatingCount === 'number') {
-        quality = Math.max(0, Math.min(1, (place.rating * Math.log10(place.userRatingCount + 1)) / 15));
+        quality = Math.max(
+          0,
+          Math.min(1, (place.rating * Math.log10(place.userRatingCount + 1)) / 15)
+        );
         if (place.rating >= 4.5 && place.userRatingCount >= 200) {
           reasons.push(`${place.rating.toFixed(1)}★ over ${place.userRatingCount} reviews`);
         }
@@ -180,7 +187,9 @@ export async function runGroundedFinder(
         ...(place.website ? { website: place.website } : {}),
         ...(place.phone ? { phone: place.phone } : {}),
         ...(typeof place.rating === 'number' ? { rating: place.rating } : {}),
-        ...(typeof place.userRatingCount === 'number' ? { userRatingCount: place.userRatingCount } : {}),
+        ...(typeof place.userRatingCount === 'number'
+          ? { userRatingCount: place.userRatingCount }
+          : {}),
         ...(place.priceLevel ? { priceLevel: place.priceLevel } : {}),
         ...(place.location ? { location: place.location } : {}),
         ...(typeof place.openNow === 'boolean' ? { openNow: place.openNow } : {}),

@@ -73,26 +73,139 @@ interface DateMoveTemplate {
 
 const MOVE_LIBRARY: DateMoveTemplate[] = [
   // BUDGET tier — ~$25-40/person across all moves
-  { role: 'opener', category: 'specialty_coffee', tier: 'budget', vibes: ['casual', 'chill', 'design_forward'], description: 'Specialty coffee + pastry, walking distance to the anchor.', expectedSpend: '$6-12' },
-  { role: 'opener', category: 'gallery', tier: 'budget', vibes: ['cultural', 'design_forward', 'quiet'], description: 'Free / low-cost gallery or museum hour.', expectedSpend: '$0-12' },
-  { role: 'anchor', category: 'casual_restaurant', tier: 'budget', vibes: ['casual', 'foodie'], description: 'Beloved neighborhood spot with a strong house dish.', expectedSpend: '$15-25' },
-  { role: 'second_move', category: 'walk', tier: 'budget', vibes: ['romantic', 'chill', 'quiet'], description: 'Walk to a viewpoint or quiet square — free, beautiful when the weather plays.', expectedSpend: '$0' },
+  {
+    role: 'opener',
+    category: 'specialty_coffee',
+    tier: 'budget',
+    vibes: ['casual', 'chill', 'design_forward'],
+    description: 'Specialty coffee + pastry, walking distance to the anchor.',
+    expectedSpend: '$6-12',
+  },
+  {
+    role: 'opener',
+    category: 'gallery',
+    tier: 'budget',
+    vibes: ['cultural', 'design_forward', 'quiet'],
+    description: 'Free / low-cost gallery or museum hour.',
+    expectedSpend: '$0-12',
+  },
+  {
+    role: 'anchor',
+    category: 'casual_restaurant',
+    tier: 'budget',
+    vibes: ['casual', 'foodie'],
+    description: 'Beloved neighborhood spot with a strong house dish.',
+    expectedSpend: '$15-25',
+  },
+  {
+    role: 'second_move',
+    category: 'walk',
+    tier: 'budget',
+    vibes: ['romantic', 'chill', 'quiet'],
+    description: 'Walk to a viewpoint or quiet square — free, beautiful when the weather plays.',
+    expectedSpend: '$0',
+  },
   // MEDIUM tier — ~$40-90/person
-  { role: 'opener', category: 'wine_bar', tier: 'medium', vibes: ['romantic', 'old_world', 'cultural'], description: 'One glass at a wine bar with a great by-the-glass list.', expectedSpend: '$12-22' },
-  { role: 'opener', category: 'cocktail_bar', tier: 'medium', vibes: ['high_energy', 'design_forward'], description: 'A single signature cocktail to break the ice — short, deliberate.', expectedSpend: '$14-22' },
-  { role: 'anchor', category: 'mid_restaurant', tier: 'medium', vibes: ['romantic', 'foodie', 'design_forward'], description: 'Mid-tier restaurant with a focused menu and warm room.', expectedSpend: '$30-55' },
-  { role: 'second_move', category: 'jazz_club', tier: 'medium', vibes: ['romantic', 'cultural', 'old_world'], description: 'Late jazz set or live music, shared one-drink minimum.', expectedSpend: '$15-25' },
-  { role: 'second_move', category: 'rooftop_bar', tier: 'medium', vibes: ['romantic', 'high_energy'], description: 'Rooftop or terrace nightcap, weather-dependent.', expectedSpend: '$15-22' },
+  {
+    role: 'opener',
+    category: 'wine_bar',
+    tier: 'medium',
+    vibes: ['romantic', 'old_world', 'cultural'],
+    description: 'One glass at a wine bar with a great by-the-glass list.',
+    expectedSpend: '$12-22',
+  },
+  {
+    role: 'opener',
+    category: 'cocktail_bar',
+    tier: 'medium',
+    vibes: ['high_energy', 'design_forward'],
+    description: 'A single signature cocktail to break the ice — short, deliberate.',
+    expectedSpend: '$14-22',
+  },
+  {
+    role: 'anchor',
+    category: 'mid_restaurant',
+    tier: 'medium',
+    vibes: ['romantic', 'foodie', 'design_forward'],
+    description: 'Mid-tier restaurant with a focused menu and warm room.',
+    expectedSpend: '$30-55',
+  },
+  {
+    role: 'second_move',
+    category: 'jazz_club',
+    tier: 'medium',
+    vibes: ['romantic', 'cultural', 'old_world'],
+    description: 'Late jazz set or live music, shared one-drink minimum.',
+    expectedSpend: '$15-25',
+  },
+  {
+    role: 'second_move',
+    category: 'rooftop_bar',
+    tier: 'medium',
+    vibes: ['romantic', 'high_energy'],
+    description: 'Rooftop or terrace nightcap, weather-dependent.',
+    expectedSpend: '$15-22',
+  },
   // PREMIUM tier — ~$90-180/person
-  { role: 'anchor', category: 'fine_restaurant', tier: 'premium', vibes: ['romantic', 'foodie', 'cultural'], description: 'Fine restaurant — chef-led, well-paced, not a tasting marathon.', expectedSpend: '$70-130' },
-  { role: 'second_move', category: 'cocktail_bar', tier: 'premium', vibes: ['romantic', 'design_forward'], description: "Proper cocktail bar after dinner — bartender's choice, sit at the counter.", expectedSpend: '$25-40' },
-  { role: 'second_move', category: 'concert', tier: 'premium', vibes: ['cultural', 'high_energy'], description: 'Concert / theater / dance booked in advance.', expectedSpend: '$30-90' },
+  {
+    role: 'anchor',
+    category: 'fine_restaurant',
+    tier: 'premium',
+    vibes: ['romantic', 'foodie', 'cultural'],
+    description: 'Fine restaurant — chef-led, well-paced, not a tasting marathon.',
+    expectedSpend: '$70-130',
+  },
+  {
+    role: 'second_move',
+    category: 'cocktail_bar',
+    tier: 'premium',
+    vibes: ['romantic', 'design_forward'],
+    description: "Proper cocktail bar after dinner — bartender's choice, sit at the counter.",
+    expectedSpend: '$25-40',
+  },
+  {
+    role: 'second_move',
+    category: 'concert',
+    tier: 'premium',
+    vibes: ['cultural', 'high_energy'],
+    description: 'Concert / theater / dance booked in advance.',
+    expectedSpend: '$30-90',
+  },
   // SPLURGE tier — explicit-request only
-  { role: 'anchor', category: 'tasting_menu', tier: 'splurge', vibes: ['foodie', 'cultural', 'romantic'], description: 'Tasting menu with pairing — long, structured, only when both want it.', expectedSpend: '$180-380' },
-  { role: 'second_move', category: 'private_experience', tier: 'splurge', vibes: ['romantic', 'cultural'], description: 'Private experience — speakeasy reservation, jazz table, arranged in advance.', expectedSpend: '$60-150' },
+  {
+    role: 'anchor',
+    category: 'tasting_menu',
+    tier: 'splurge',
+    vibes: ['foodie', 'cultural', 'romantic'],
+    description: 'Tasting menu with pairing — long, structured, only when both want it.',
+    expectedSpend: '$180-380',
+  },
+  {
+    role: 'second_move',
+    category: 'private_experience',
+    tier: 'splurge',
+    vibes: ['romantic', 'cultural'],
+    description: 'Private experience — speakeasy reservation, jazz table, arranged in advance.',
+    expectedSpend: '$60-150',
+  },
   // EXIT — universal
-  { role: 'exit', category: 'walk_home', tier: 'budget', vibes: ['romantic', 'chill', 'quiet'], description: 'Walk along a safe, well-lit route — no rush, easy to step away whenever feels right.', expectedSpend: '$0' },
-  { role: 'exit', category: 'late_dessert', tier: 'medium', vibes: ['romantic', 'foodie'], description: 'Shared late dessert, optional — only when the energy is mutual.', expectedSpend: '$10-18' },
+  {
+    role: 'exit',
+    category: 'walk_home',
+    tier: 'budget',
+    vibes: ['romantic', 'chill', 'quiet'],
+    description:
+      'Walk along a safe, well-lit route — no rush, easy to step away whenever feels right.',
+    expectedSpend: '$0',
+  },
+  {
+    role: 'exit',
+    category: 'late_dessert',
+    tier: 'medium',
+    vibes: ['romantic', 'foodie'],
+    description: 'Shared late dessert, optional — only when the energy is mutual.',
+    expectedSpend: '$10-18',
+  },
 ];
 
 export interface DateBudgetOptimizerResult {
@@ -146,7 +259,7 @@ const dateBudgetOptimizerTool: ToolDef<DateBudgetOptimizerInput, DateBudgetOptim
   internal: true,
   experimental: true,
   description:
-    "Translate a desired date vibe + budget tier into a curated list of move templates (opener / anchor / second_move / exit) with expected spend envelopes. Pure — no external API. Pass to `date_plan_builder` to compose into a real plan with specific places via `cheap_michelin_finder` / `wine_bar_finder` / etc. Splurge tier surfaces only when both have explicitly chosen it.",
+    'Translate a desired date vibe + budget tier into a curated list of move templates (opener / anchor / second_move / exit) with expected spend envelopes. Pure — no external API. Pass to `date_plan_builder` to compose into a real plan with specific places via `cheap_michelin_finder` / `wine_bar_finder` / etc. Splurge tier surfaces only when both have explicitly chosen it.',
   inputSchema: budgetOptimizerInput,
   jsonSchema: {
     type: 'object',
@@ -187,12 +300,36 @@ export interface DatePerfumeAdvisorResult {
 }
 
 const PROFILES: Record<string, PerfumeProfile> = {
-  day_warm: { family: 'citrus', notes: ['neroli', 'bergamot', 'green tea', 'subtle musk'], intent: 'Light, alive, signals you took the day seriously without trying too hard.' },
-  day_cool: { family: 'tea / light woods', notes: ['white tea', 'iris', 'soft cedar', 'fig leaf'], intent: 'Quiet warmth — close to skin, polite.' },
-  day_cold: { family: 'soft woods', notes: ['cedar', 'iris', 'subtle vanilla', 'cardamom'], intent: 'A discreet halo of warmth without leaving sillage in a small room.' },
-  night_warm: { family: 'amber', notes: ['amber', 'jasmine', 'soft tobacco', 'oud-light'], intent: 'Warm, confident, a few notches above day.' },
-  night_cool: { family: 'warm woods + amber', notes: ['sandalwood', 'amber', 'spicy citrus', 'leather-light'], intent: 'Classic evening — projection enough to be noticed close, never a cloud.' },
-  night_cold: { family: 'oriental', notes: ['amber', 'tobacco', 'vanilla', 'spice'], intent: 'Heavy enough to feel through coats; the goal is discovery, not announcement.' },
+  day_warm: {
+    family: 'citrus',
+    notes: ['neroli', 'bergamot', 'green tea', 'subtle musk'],
+    intent: 'Light, alive, signals you took the day seriously without trying too hard.',
+  },
+  day_cool: {
+    family: 'tea / light woods',
+    notes: ['white tea', 'iris', 'soft cedar', 'fig leaf'],
+    intent: 'Quiet warmth — close to skin, polite.',
+  },
+  day_cold: {
+    family: 'soft woods',
+    notes: ['cedar', 'iris', 'subtle vanilla', 'cardamom'],
+    intent: 'A discreet halo of warmth without leaving sillage in a small room.',
+  },
+  night_warm: {
+    family: 'amber',
+    notes: ['amber', 'jasmine', 'soft tobacco', 'oud-light'],
+    intent: 'Warm, confident, a few notches above day.',
+  },
+  night_cool: {
+    family: 'warm woods + amber',
+    notes: ['sandalwood', 'amber', 'spicy citrus', 'leather-light'],
+    intent: 'Classic evening — projection enough to be noticed close, never a cloud.',
+  },
+  night_cold: {
+    family: 'oriental',
+    notes: ['amber', 'tobacco', 'vanilla', 'spice'],
+    intent: 'Heavy enough to feel through coats; the goal is discovery, not announcement.',
+  },
 };
 
 export async function runDatePerfumeAdvisor(
@@ -206,7 +343,12 @@ export async function runDatePerfumeAdvisor(
   const key = `${input.timeOfDay}_${input.climate}`;
   const profile = PROFILES[key]!;
 
-  const sprayCount = input.timeOfDay === 'night' && input.climate === 'cold' ? 3 : input.timeOfDay === 'night' ? 2 : 1;
+  const sprayCount =
+    input.timeOfDay === 'night' && input.climate === 'cold'
+      ? 3
+      : input.timeOfDay === 'night'
+        ? 2
+        : 1;
 
   return {
     status: 'ok',
@@ -240,9 +382,7 @@ const datePerfumeAdvisorTool: ToolDef<DatePerfumeAdvisorInput, DatePerfumeAdviso
 // ── 3. date_game_tips ────────────────────────────────────────────────
 
 const gameTipsInput = z.object({
-  context: z
-    .enum(['first_date', 'second_date', 'long_term', 'reconnect'])
-    .default('first_date'),
+  context: z.enum(['first_date', 'second_date', 'long_term', 'reconnect']).default('first_date'),
   /** Quiet / loud venue context affects conversation pacing tips. */
   venueQuiet: z.boolean().optional(),
   /** Already-chosen vibe — affects which tips lean confidence vs. presence. */
@@ -280,11 +420,13 @@ export async function runDateGameTips(
     'Ask about texture, not facts. "What was the day like?" beats "Where did you grow up?"',
     'Listen for what they care about and follow that thread. People remember being heard, not being entertained.',
     'When you disagree gently, do it warmly. "I see it differently — say more, I want to understand."',
-    "Silence is not a failure. The first 5 seconds of quiet is where the real conversation starts.",
+    'Silence is not a failure. The first 5 seconds of quiet is where the real conversation starts.',
   ];
 
   if (input.venueQuiet === false) {
-    conversation.push('Loud room: lean in slightly, stay calm, ask shorter questions. Don\'t shout — let the room do the work of bringing you closer.');
+    conversation.push(
+      "Loud room: lean in slightly, stay calm, ask shorter questions. Don't shout — let the room do the work of bringing you closer."
+    );
   }
 
   const timing: string[] = [
@@ -294,7 +436,9 @@ export async function runDateGameTips(
   ];
 
   if (input.context === 'first_date') {
-    timing.push("Don't pre-book everything — leaving 30 minutes of unstructured time is where the real connection happens.");
+    timing.push(
+      "Don't pre-book everything — leaving 30 minutes of unstructured time is where the real connection happens."
+    );
   }
 
   const gracefulExit: string[] = [
@@ -322,7 +466,7 @@ const dateGameTipsTool: ToolDef<DateGameTipsInput, DateGameTipsResult> = {
   internal: true,
   experimental: true,
   description:
-    "Give tasteful, respectful, confidence-building date tips. Returns four bucketed lists — confidence, conversation, timing, graceful exit — plus a consent-aware guardrail line. Strict policy: no manipulation, no pickup-artist tactics, no pressure, no gender stereotypes. Pure tool, no external API.",
+    'Give tasteful, respectful, confidence-building date tips. Returns four bucketed lists — confidence, conversation, timing, graceful exit — plus a consent-aware guardrail line. Strict policy: no manipulation, no pickup-artist tactics, no pressure, no gender stereotypes. Pure tool, no external API.',
   inputSchema: gameTipsInput,
   jsonSchema: {
     type: 'object',
@@ -537,9 +681,4 @@ const datePlanBuilderTool: ToolDef<DatePlanBuilderInput, DatePlanBuilderResult> 
 
 // ── Barrel exports ───────────────────────────────────────────────────
 
-export {
-  dateBudgetOptimizerTool,
-  datePerfumeAdvisorTool,
-  dateGameTipsTool,
-  datePlanBuilderTool,
-};
+export { dateBudgetOptimizerTool, datePerfumeAdvisorTool, dateGameTipsTool, datePlanBuilderTool };

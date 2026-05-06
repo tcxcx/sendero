@@ -118,7 +118,9 @@ const culturalAttractionsFinderTool: ToolDef<BaseInput, FinderResult> = {
     runCfgFinder(
       {
         composeCseQuery: city =>
-          input.languageCode === 'es' ? `mejores atracciones culturales ${city}` : `best cultural attractions monuments ${city}`,
+          input.languageCode === 'es'
+            ? `mejores atracciones culturales ${city}`
+            : `best cultural attractions monuments ${city}`,
         composePlacesQuery: city => `museums monuments in ${city}`,
         sourceWeights: CULTURE_WEIGHTS,
         defaultSourceWeight: 0.25,
@@ -144,7 +146,11 @@ function resolveVertex() {
   const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!project || !saJson) return null;
   try {
-    return createVertex({ project, location, googleAuthOptions: { credentials: JSON.parse(saJson) } });
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
   } catch {
     return null;
   }
@@ -179,13 +185,21 @@ const museumTicketingShape = z.object({
 async function runMuseumTicketingResearcher(
   rawInput: MuseumTicketingInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; ticketing?: z.infer<typeof museumTicketingShape>; via?: 'vertex' | 'gateway' }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  ticketing?: z.infer<typeof museumTicketingShape>;
+  via?: 'vertex' | 'gateway';
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = museumTicketingInput.parse(rawInput);
   const groundingPrompt = `Look up current ticketing details for "${input.museumName}" in ${input.city}: opening hours, closed days, ticket prices (general / student / senior / family), free-entry days, official booking URL, and the most relevant current exhibitions. Cite the official museum site verbatim.`;
-  const coercePrompt = (text: string, sources: string[]) => `Coerce this grounded report into the schema. Locale for narrative fields: ${input.locale}.
+  const coercePrompt = (
+    text: string,
+    sources: string[]
+  ) => `Coerce this grounded report into the schema. Locale for narrative fields: ${input.locale}.
 
 Grounded report:
 """
@@ -193,7 +207,10 @@ ${text}
 """
 
 Sources cited (use for bookingUrl when matching official site):
-${sources.slice(0, 6).map((u, i) => `${i + 1}. ${u}`).join('\n')}
+${sources
+  .slice(0, 6)
+  .map((u, i) => `${i + 1}. ${u}`)
+  .join('\n')}
 
 Rules: never invent prices. Use null when a field isn't reliably reported.`;
 
@@ -202,7 +219,9 @@ Rules: never invent prices. Use null when a field isn't reliably reported.`;
   async function via(modelLike: any, providerOptions?: any) {
     const grounded = await generateText({
       model: modelLike,
-      tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+      tools: {
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+      },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
     });
@@ -226,17 +245,35 @@ Rules: never invent prices. Use null when a field isn't reliably reported.`;
   if (vertex) {
     try {
       const obj = await via(vertex(VERTEX_MODEL_ID));
-      if (obj) return { status: 'ok', ticketing: obj, via: 'vertex', message: `Ticketing for ${input.museumName} via Vertex.` };
+      if (obj)
+        return {
+          status: 'ok',
+          ticketing: obj,
+          via: 'vertex',
+          message: `Ticketing for ${input.museumName} via Vertex.`,
+        };
     } catch (err) {
-      console.warn('[museum_ticketing_researcher] Vertex direct failed, falling back:', (err as Error).message ?? err);
+      console.warn(
+        '[museum_ticketing_researcher] Vertex direct failed, falling back:',
+        (err as Error).message ?? err
+      );
     }
   }
   try {
     const obj = await via(GATEWAY_MODEL_ID, { gateway: { order: ['google'] } });
-    if (obj) return { status: 'ok', ticketing: obj, via: 'gateway', message: `Ticketing for ${input.museumName} via Gateway.` };
+    if (obj)
+      return {
+        status: 'ok',
+        ticketing: obj,
+        via: 'gateway',
+        message: `Ticketing for ${input.museumName} via Gateway.`,
+      };
     return { status: 'unavailable', message: 'No grounded data returned.' };
   } catch (err) {
-    return { status: 'unavailable', message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.` };
+    return {
+      status: 'unavailable',
+      message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.`,
+    };
   }
 }
 
@@ -271,10 +308,21 @@ const NIGHT_WEIGHTS: Record<string, number> = {
   'theguardian.com': 0.55,
   'theworlds50best.com': 0.85,
 };
-const NIGHT_TYPES = new Set(['bar', 'night_club', 'cocktail_bar', 'wine_bar', 'pub', 'jazz_club', 'lounge', 'speakeasy']);
+const NIGHT_TYPES = new Set([
+  'bar',
+  'night_club',
+  'cocktail_bar',
+  'wine_bar',
+  'pub',
+  'jazz_club',
+  'lounge',
+  'speakeasy',
+]);
 
 const nightlifeFitInput = baseInput.extend({
-  fit: z.enum(['cocktail_bar', 'rooftop', 'speakeasy', 'jazz_club', 'club', 'wine_bar', 'lounge']).default('cocktail_bar'),
+  fit: z
+    .enum(['cocktail_bar', 'rooftop', 'speakeasy', 'jazz_club', 'club', 'wine_bar', 'lounge'])
+    .default('cocktail_bar'),
 });
 type NightlifeFitInput = z.infer<typeof nightlifeFitInput>;
 
@@ -293,14 +341,19 @@ const nightlifeFitFinderTool: ToolDef<NightlifeFitInput, FinderResult> = {
       countryCode: { type: 'string', minLength: 2, maxLength: 2 },
       languageCode: { type: 'string', maxLength: 10 },
       limit: { type: 'integer', minimum: 1, maximum: 15 },
-      fit: { type: 'string', enum: ['cocktail_bar', 'rooftop', 'speakeasy', 'jazz_club', 'club', 'wine_bar', 'lounge'] },
+      fit: {
+        type: 'string',
+        enum: ['cocktail_bar', 'rooftop', 'speakeasy', 'jazz_club', 'club', 'wine_bar', 'lounge'],
+      },
     },
   },
   handler: (input, ctx) =>
     runCfgFinder(
       {
         composeCseQuery: city =>
-          input.languageCode === 'es' ? `mejores ${input.fit.replace(/_/g, ' ')} ${city}` : `best ${input.fit.replace(/_/g, ' ')} ${city}`,
+          input.languageCode === 'es'
+            ? `mejores ${input.fit.replace(/_/g, ' ')} ${city}`
+            : `best ${input.fit.replace(/_/g, ' ')} ${city}`,
         composePlacesQuery: city => `${input.fit.replace(/_/g, ' ')} in ${city}`,
         sourceWeights: NIGHT_WEIGHTS,
         defaultSourceWeight: 0.25,
@@ -394,7 +447,11 @@ async function runFamilyFriendlyEventFinder(
     }
   }
   if (events.length === 0) {
-    return { status: 'unavailable', reason: 'no-events', message: `No family-friendly events surfaced for ${input.city}.` };
+    return {
+      status: 'unavailable',
+      reason: 'no-events',
+      message: `No family-friendly events surfaced for ${input.city}.`,
+    };
   }
   return {
     status: 'ok',
@@ -456,13 +513,21 @@ const exhibitionShape = z.object({
 async function runExhibitionCalendarResearcher(
   rawInput: ExhibitionInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; exhibitions?: z.infer<typeof exhibitionShape>; via?: 'vertex' | 'gateway' }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  exhibitions?: z.infer<typeof exhibitionShape>;
+  via?: 'vertex' | 'gateway';
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = exhibitionInput.parse(rawInput);
   const groundingPrompt = `List the most notable temporary exhibitions in ${input.city}${input.countryCode ? ` (${input.countryCode})` : ''} happening between ${input.startsAfterIso ?? 'today'} and ${input.startsBeforeIso ?? 'in 60 days'}. For each exhibition give: title, venue (museum/gallery name), open + close dates, official ticket URL, and a 1-2 sentence summary. Pull from Artforum / Frieze / official venue sites; never invent dates.`;
-  const coercePrompt = (text: string, sources: string[]) => `Coerce this grounded report into the schema. Locale for summary fields: ${input.locale}.
+  const coercePrompt = (
+    text: string,
+    sources: string[]
+  ) => `Coerce this grounded report into the schema. Locale for summary fields: ${input.locale}.
 
 Report:
 """
@@ -470,13 +535,18 @@ ${text}
 """
 
 Sources cited:
-${sources.slice(0, 8).map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
+${sources
+  .slice(0, 8)
+  .map((u, i) => `${i + 1}. ${u}`)
+  .join('\n')}`;
 
   const vertex = resolveVertex();
   async function viaPath(modelLike: any, providerOptions?: any) {
     const grounded = await generateText({
       model: modelLike,
-      tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+      tools: {
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+      },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
     });
@@ -500,17 +570,32 @@ ${sources.slice(0, 8).map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
   if (vertex) {
     try {
       const obj = await viaPath(vertex(VERTEX_MODEL_ID));
-      if (obj) return { status: 'ok', exhibitions: obj, via: 'vertex', message: `${obj.exhibitions.length} exhibitions in ${input.city} via Vertex.` };
+      if (obj)
+        return {
+          status: 'ok',
+          exhibitions: obj,
+          via: 'vertex',
+          message: `${obj.exhibitions.length} exhibitions in ${input.city} via Vertex.`,
+        };
     } catch {
       // fall through
     }
   }
   try {
     const obj = await viaPath(GATEWAY_MODEL_ID, { gateway: { order: ['google'] } });
-    if (obj) return { status: 'ok', exhibitions: obj, via: 'gateway', message: `${obj.exhibitions.length} exhibitions via gateway.` };
+    if (obj)
+      return {
+        status: 'ok',
+        exhibitions: obj,
+        via: 'gateway',
+        message: `${obj.exhibitions.length} exhibitions via gateway.`,
+      };
     return { status: 'unavailable', message: 'No grounded exhibition data returned.' };
   } catch (err) {
-    return { status: 'unavailable', message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.` };
+    return {
+      status: 'unavailable',
+      message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.`,
+    };
   }
 }
 
@@ -558,7 +643,12 @@ async function runFreeEventsFinder(
   if (eb.status !== 'ok') {
     return {
       status: 'unavailable',
-      reason: eb.status === 'production_refused' ? 'refused' : (eb.status === 'unavailable' ? eb.reason : 'fail'),
+      reason:
+        eb.status === 'production_refused'
+          ? 'refused'
+          : eb.status === 'unavailable'
+            ? eb.reason
+            : 'fail',
       message: eb.message,
     };
   }
@@ -567,7 +657,11 @@ async function runFreeEventsFinder(
     e => e.isFree === true || /\bfree\b|gratis|gratuito/i.test(`${e.name} ${e.summary ?? ''}`)
   );
   if (filtered.length === 0) {
-    return { status: 'unavailable', reason: 'no-free-events', message: `No free events surfaced for ${input.city}.` };
+    return {
+      status: 'unavailable',
+      reason: 'no-free-events',
+      message: `No free events surfaced for ${input.city}.`,
+    };
   }
   return {
     status: 'ok',
@@ -638,7 +732,12 @@ async function runLastMinuteTicketsFinder(
   if (r.status !== 'ok') {
     return {
       status: 'unavailable',
-      reason: r.status === 'production_refused' ? 'refused' : (r.status === 'unavailable' ? r.reason : 'fail'),
+      reason:
+        r.status === 'production_refused'
+          ? 'refused'
+          : r.status === 'unavailable'
+            ? r.reason
+            : 'fail',
       message: r.message,
     };
   }
@@ -710,7 +809,11 @@ interface VenueNearbyPlan {
 async function runVenueNearbyPlanBuilder(
   rawInput: VenueNearbyInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; plan?: VenueNearbyPlan }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  plan?: VenueNearbyPlan;
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
@@ -732,11 +835,18 @@ async function runVenueNearbyPlanBuilder(
   const [dinnerR, drinksR] = await Promise.all([dinnerP, drinksP]);
 
   if (!dinnerR.available && !drinksR.available) {
-    return { status: 'unavailable', message: `Couldn't query Places near ${input.venueName}. ${dinnerR.reason ?? ''} ${drinksR.reason ?? ''}` };
+    return {
+      status: 'unavailable',
+      message: `Couldn't query Places near ${input.venueName}. ${dinnerR.reason ?? ''} ${drinksR.reason ?? ''}`,
+    };
   }
 
-  const dinner = dinnerR.available ? dinnerR.results.find(p => p.rating && p.rating >= 4.0) ?? dinnerR.results[0] : undefined;
-  const drinks = drinksR.available ? drinksR.results.find(p => p.rating && p.rating >= 4.2) ?? drinksR.results[0] : undefined;
+  const dinner = dinnerR.available
+    ? (dinnerR.results.find(p => p.rating && p.rating >= 4.0) ?? dinnerR.results[0])
+    : undefined;
+  const drinks = drinksR.available
+    ? (drinksR.results.find(p => p.rating && p.rating >= 4.2) ?? drinksR.results[0])
+    : undefined;
 
   const plan: VenueNearbyPlan = {
     routeNotes: [
@@ -810,20 +920,18 @@ interface RainyDayPlan {
 async function runRainyDayPlanFinder(
   rawInput: RainyDayInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; plan?: RainyDayPlan }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  plan?: RainyDayPlan;
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = rainyDayInput.parse(rawInput);
 
   // Indoor anchors: museums, malls, libraries, cafes, bookstores, theaters.
-  const queries = [
-    'museum',
-    'bookstore',
-    'specialty coffee',
-    'theater cinema',
-    'shopping mall',
-  ];
+  const queries = ['museum', 'bookstore', 'specialty coffee', 'theater cinema', 'shopping mall'];
   const allRes = await Promise.all(
     queries.map(q =>
       searchText({
@@ -852,13 +960,21 @@ async function runRainyDayPlanFinder(
   }
 
   if (picks.length === 0) {
-    return { status: 'unavailable', message: `Couldn't find indoor anchors in ${input.city}. Try a different city or check Places API config.` };
+    return {
+      status: 'unavailable',
+      message: `Couldn't find indoor anchors in ${input.city}. Try a different city or check Places API config.`,
+    };
   }
 
   const pacingNotes: string[] = [];
-  if (input.hoursToFill <= 3) pacingNotes.push('Pick 1 anchor + 1 transition stop. Don\'t over-program.');
-  else if (input.hoursToFill <= 6) pacingNotes.push('Anchor + late lunch/coffee + bookstore browse — natural rainy-day pacing.');
-  else pacingNotes.push('Spread across 2-3 anchors with long transitions; rainy days reward slowing down.');
+  if (input.hoursToFill <= 3)
+    pacingNotes.push("Pick 1 anchor + 1 transition stop. Don't over-program.");
+  else if (input.hoursToFill <= 6)
+    pacingNotes.push('Anchor + late lunch/coffee + bookstore browse — natural rainy-day pacing.');
+  else
+    pacingNotes.push(
+      'Spread across 2-3 anchors with long transitions; rainy days reward slowing down.'
+    );
 
   return {
     status: 'ok',

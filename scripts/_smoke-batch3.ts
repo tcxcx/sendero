@@ -43,10 +43,16 @@ if (resale.status === 'ok' && resale.verdict) {
 
 console.log('\n=== ticket_resale_risk_checker (Ticketmaster, 1.2× face) ===');
 const safe = await ticketResaleRiskCheckerTool.handler(
-  { url: 'https://www.ticketmaster.com/event/abc', askingPrice: 240, faceValue: 200, context: 'football' } as never,
+  {
+    url: 'https://www.ticketmaster.com/event/abc',
+    askingPrice: 240,
+    faceValue: 200,
+    context: 'football',
+  } as never,
   ctx
 );
-if (safe.status === 'ok' && safe.verdict) console.log(`  level: ${safe.verdict.riskLevel} (${safe.verdict.flags.length} flags)`);
+if (safe.status === 'ok' && safe.verdict)
+  console.log(`  level: ${safe.verdict.riskLevel} (${safe.verdict.flags.length} flags)`);
 
 console.log('\n=== match_postponement_monitor (kickoff shifted +2h) ===');
 const post = await matchPostponementMonitorTool.handler(
@@ -95,7 +101,8 @@ const md = await marketDayFinderTool.handler(
   ctx
 );
 if (md.status === 'ok') {
-  for (const m of md.markets ?? []) console.log(`  · ${m.name} (${m.days})${m.notes ? ` — ${m.notes}` : ''}`);
+  for (const m of md.markets ?? [])
+    console.log(`  · ${m.name} (${m.days})${m.notes ? ` — ${m.notes}` : ''}`);
 }
 
 console.log('\n=== gift_recommender (JP / friend / $50) ===');
@@ -116,7 +123,9 @@ const pharm = await pharmacyProductMapperTool.handler(
   ctx
 );
 if (pharm.status === 'ok' && pharm.match) {
-  console.log(`  ${pharm.match.localName} | brand: ${pharm.match.brand} | OTC: ${pharm.match.otc}${pharm.match.notes ? ` | ${pharm.match.notes}` : ''}`);
+  console.log(
+    `  ${pharm.match.localName} | brand: ${pharm.match.brand} | OTC: ${pharm.match.otc}${pharm.match.notes ? ` | ${pharm.match.notes}` : ''}`
+  );
 }
 
 console.log('\n=== electronics_adapter_checker (US → JP) ===');

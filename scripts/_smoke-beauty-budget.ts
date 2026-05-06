@@ -22,12 +22,32 @@ const ctx: ToolContext = {
 const r = await runBeautyBudgetRanker(
   {
     candidates: [
-      { name: 'Tasting Menu Stunner', category: 'tasting_menu', aestheticScore: 0.95, typicalSpend: 380 },
-      { name: 'Mid-tier Beauty', category: 'mid_restaurant', aestheticScore: 0.85, typicalSpend: 45 },
+      {
+        name: 'Tasting Menu Stunner',
+        category: 'tasting_menu',
+        aestheticScore: 0.95,
+        typicalSpend: 380,
+      },
+      {
+        name: 'Mid-tier Beauty',
+        category: 'mid_restaurant',
+        aestheticScore: 0.85,
+        typicalSpend: 45,
+      },
       { name: 'Cute Wine Bar', category: 'wine_bar', aestheticScore: 0.75, typicalSpend: 30 },
-      { name: 'Fine but Generic', category: 'fine_restaurant', aestheticScore: 0.5, typicalSpend: 110 },
+      {
+        name: 'Fine but Generic',
+        category: 'fine_restaurant',
+        aestheticScore: 0.5,
+        typicalSpend: 110,
+      },
       { name: 'Cheap + Lovely Counter', category: 'ramen', aestheticScore: 0.7, typicalSpend: 16 },
-      { name: 'Flashy Tourist Trap', category: 'casual_restaurant', aestheticScore: 0.3, typicalSpend: 35 },
+      {
+        name: 'Flashy Tourist Trap',
+        category: 'casual_restaurant',
+        aestheticScore: 0.3,
+        typicalSpend: 35,
+      },
     ],
     budgetCapUsd: 80,
     preferredTier: 'medium',

@@ -49,7 +49,11 @@ function resolveVertex() {
   const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!project || !saJson) return null;
   try {
-    return createVertex({ project, location, googleAuthOptions: { credentials: JSON.parse(saJson) } });
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
   } catch {
     return null;
   }
@@ -65,7 +69,9 @@ async function runGroundedStructured<T extends z.ZodTypeAny>(
   async function viaPath(modelLike: any, providerOptions?: any) {
     const grounded = await generateText({
       model: modelLike,
-      tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+      tools: {
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+      },
       prompt,
       ...(providerOptions ? { providerOptions } : {}),
     });
@@ -134,15 +140,22 @@ const airportDisruptionMonitorTool: ToolDef = {
   },
   handler: async (rawInput: AirportDisruptionInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = airportDisruptionInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Check current airport disruption status for ${input.airportIata} for the next ${input.windowHours} hours. Cover: strikes, weather, ATC issues, construction, security incidents, partial / full closures. Pull from FlightAware, official airport announcements, Reuters / AP. Surface average delay if reported. Include guidance for arriving + departing travelers.`,
       airportDisruptionShape,
-      (text, _) => `Coerce into airport disruption schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into airport disruption schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, disruption: r.data, via: r.via, message: `${input.airportIata}: ${r.data.status} (${r.data.drivers.length} drivers).` };
+    return {
+      status: 'ok' as const,
+      disruption: r.data,
+      via: r.via,
+      message: `${input.airportIata}: ${r.data.status} (${r.data.drivers.length} drivers).`,
+    };
   },
 };
 
@@ -161,7 +174,7 @@ const localHolidayDisruptionCheckTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Detect public + school holidays + observances + local political events that disrupt normal city operations during a window. Composes `crowd_level_predictor` filtered by holiday categories. Pair with `airport_disruption_monitor` for full-stack disruption picture.",
+    'Detect public + school holidays + observances + local political events that disrupt normal city operations during a window. Composes `crowd_level_predictor` filtered by holiday categories. Pair with `airport_disruption_monitor` for full-stack disruption picture.',
   inputSchema: localHolidayInput,
   jsonSchema: {
     type: 'object',
@@ -175,7 +188,8 @@ const localHolidayDisruptionCheckTool: ToolDef = {
   },
   handler: async (rawInput: LocalHolidayInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = localHolidayInput.parse(rawInput);
     const r = await runCrowdLevelPredictor(
       {
@@ -191,7 +205,11 @@ const localHolidayDisruptionCheckTool: ToolDef = {
     if (r.status !== 'ok') return { status: 'unavailable' as const, message: r.message };
     return {
       status: 'ok' as const,
-      holidays: r.topDrivers.map(d => ({ title: d.title, startsAtIso: d.startsAtIso, category: d.category })),
+      holidays: r.topDrivers.map(d => ({
+        title: d.title,
+        startsAtIso: d.startsAtIso,
+        category: d.category,
+      })),
       crowdLevel: r.crowdLevel,
       message: `${r.topDrivers.length} holidays/observances in ${input.city} between ${input.startsAtIso} and ${input.endsAtIso}.`,
     };
@@ -222,7 +240,7 @@ const venuePolicyCheckerTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Check venue rules — bag policy, ID requirements, entry time, prohibited items, accessibility, parking. Vertex-grounded against the official venue site. Use before any concert / sports / theater visit.",
+    'Check venue rules — bag policy, ID requirements, entry time, prohibited items, accessibility, parking. Vertex-grounded against the official venue site. Use before any concert / sports / theater visit.',
   inputSchema: venuePolicyInput,
   jsonSchema: {
     type: 'object',
@@ -235,15 +253,22 @@ const venuePolicyCheckerTool: ToolDef = {
   },
   handler: async (rawInput: VenuePolicyInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = venuePolicyInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Look up the venue policies for "${input.venueName}" in ${input.city}: bag-size policy + check options, ID requirements at door, entry time / doors-open, prohibited items, accessibility (wheelchair, hearing loop), parking + alternatives. Pull from the official venue site verbatim.`,
       venuePolicyShape,
-      (text, _) => `Coerce into venue policy schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into venue policy schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, policy: r.data, via: r.via, message: `Policy for ${input.venueName} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      policy: r.data,
+      via: r.via,
+      message: `Policy for ${input.venueName} via ${r.via}.`,
+    };
   },
 };
 
@@ -280,7 +305,8 @@ const hotelAreaIntelligenceTool: ToolDef = {
   },
   handler: async (rawInput: HotelAreaInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = hotelAreaInput.parse(rawInput);
     const queries = ['cafe', 'pharmacy convenience', 'restaurant', 'metro station', 'gym'];
     const r = await Promise.all(
@@ -318,7 +344,15 @@ const hotelAreaIntelligenceTool: ToolDef = {
 const neighFitInput = z.object({
   city: z.string().min(1).max(120),
   travelerProfile: z.object({
-    travelStyle: z.enum(['business', 'family', 'couple', 'digital_nomad', 'solo_traveler', 'foodie', 'culture']),
+    travelStyle: z.enum([
+      'business',
+      'family',
+      'couple',
+      'digital_nomad',
+      'solo_traveler',
+      'foodie',
+      'culture',
+    ]),
     budgetTier: z.enum(['budget', 'medium', 'premium', 'splurge']).optional(),
     needsQuiet: z.boolean().optional(),
   }),
@@ -378,26 +412,29 @@ const neighborhoodFitMatcherTool: ToolDef = {
   },
   handler: async (rawInput: NeighFitInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = neighFitInput.parse(rawInput);
     const cityKey = input.city.trim().toLowerCase();
     const cityTags = NEIGHBORHOOD_TAGS[cityKey] ?? {};
-    const ranked = input.candidateNeighborhoods.map(neigh => {
-      const neighKey = neigh.trim().toLowerCase();
-      const tags = cityTags[neighKey] ?? [];
-      let score = 0.5;
-      const reasons: string[] = [];
-      if (tags.includes(input.travelerProfile.travelStyle)) {
-        score += 0.3;
-        reasons.push(`tagged for ${input.travelerProfile.travelStyle}`);
-      }
-      if (input.travelerProfile.needsQuiet && tags.includes('quiet')) {
-        score += 0.15;
-        reasons.push('tagged quiet');
-      }
-      if (tags.length === 0) reasons.push('no curated data');
-      return { neighborhood: neigh, score: Math.max(0, Math.min(1, score)), reasons };
-    }).sort((a, b) => b.score - a.score);
+    const ranked = input.candidateNeighborhoods
+      .map(neigh => {
+        const neighKey = neigh.trim().toLowerCase();
+        const tags = cityTags[neighKey] ?? [];
+        let score = 0.5;
+        const reasons: string[] = [];
+        if (tags.includes(input.travelerProfile.travelStyle)) {
+          score += 0.3;
+          reasons.push(`tagged for ${input.travelerProfile.travelStyle}`);
+        }
+        if (input.travelerProfile.needsQuiet && tags.includes('quiet')) {
+          score += 0.15;
+          reasons.push('tagged quiet');
+        }
+        if (tags.length === 0) reasons.push('no curated data');
+        return { neighborhood: neigh, score: Math.max(0, Math.min(1, score)), reasons };
+      })
+      .sort((a, b) => b.score - a.score);
     return {
       status: 'ok' as const,
       ranked,
@@ -431,7 +468,7 @@ const restaurantReservationResearcherTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Research reservation status for a specific restaurant — required? platform (Resy / OpenTable / TheFork)? deposit? dress code? Vertex-grounded against the official site. Use after `monocle_place_researcher` returns a candidate.",
+    'Research reservation status for a specific restaurant — required? platform (Resy / OpenTable / TheFork)? deposit? dress code? Vertex-grounded against the official site. Use after `monocle_place_researcher` returns a candidate.',
   inputSchema: reservationInput,
   jsonSchema: {
     type: 'object',
@@ -445,15 +482,22 @@ const restaurantReservationResearcherTool: ToolDef = {
   },
   handler: async (rawInput: ReservationInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = reservationInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Look up reservation reality for "${input.restaurantName}" in ${input.city} for party of ${input.partySize}. Cover: is reservation required vs walk-in?, which platform (Resy / OpenTable / TheFork / restaurant site)?, deposit requirement, dress code, menu link. Pull from the official site verbatim.`,
       reservationShape,
-      (text, _) => `Coerce into reservation schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into reservation schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, reservation: r.data, via: r.via, message: `Reservation info for ${input.restaurantName} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      reservation: r.data,
+      via: r.via,
+      message: `Reservation info for ${input.restaurantName} via ${r.via}.`,
+    };
   },
 };
 
@@ -487,21 +531,33 @@ const menuDietaryResearcherTool: ToolDef = {
     properties: {
       restaurantName: { type: 'string', minLength: 1, maxLength: 200 },
       city: { type: 'string', minLength: 1, maxLength: 120 },
-      dietaryRestrictions: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', maxLength: 40 } },
+      dietaryRestrictions: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 8,
+        items: { type: 'string', maxLength: 40 },
+      },
       locale: { type: 'string', minLength: 2, maxLength: 10 },
     },
   },
   handler: async (rawInput: MenuDietaryInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = menuDietaryInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Check the current menu of "${input.restaurantName}" in ${input.city} against these dietary restrictions: ${input.dietaryRestrictions.join(', ')}. Return: overall feasibility, dishes with risk (e.g. "the carbonara contains pancetta — not gluten-free"), dishes that are clearly safe, and ordering recommendations (e.g. "ask for the pasta to be made with rice noodles"). Pull from the official menu URL.`,
       menuDietaryShape,
-      (text, _) => `Coerce into menu dietary schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into menu dietary schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, dietary: r.data, via: r.via, message: `Menu dietary check via ${r.via}: ${r.data.feasible}.` };
+    return {
+      status: 'ok' as const,
+      dietary: r.data,
+      via: r.via,
+      message: `Menu dietary check via ${r.via}: ${r.data.feasible}.`,
+    };
   },
 };
 
@@ -539,30 +595,36 @@ const groundTransportPriceResearcherTool: ToolDef = {
       city: { type: 'string', minLength: 1, maxLength: 120 },
       countryCode: { type: 'string', minLength: 2, maxLength: 2 },
       originType: { type: 'string', enum: ['airport', 'city_center', 'station', 'hotel', 'venue'] },
-      destinationType: { type: 'string', enum: ['airport', 'city_center', 'station', 'hotel', 'venue'] },
+      destinationType: {
+        type: 'string',
+        enum: ['airport', 'city_center', 'station', 'hotel', 'venue'],
+      },
       estimatedKm: { type: 'number', minimum: 0, maximum: 200 },
       locale: { type: 'string', minLength: 2, maxLength: 10 },
     },
   },
   handler: async (rawInput: GroundTransportInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = groundTransportInput.parse(rawInput);
     // Heuristic: distance × city cost multiplier, applied to mode rates.
     // We use a conservative rough table per mode.
-    const km = input.estimatedKm ?? (input.originType === 'airport' || input.destinationType === 'airport' ? 25 : 5);
+    const km =
+      input.estimatedKm ??
+      (input.originType === 'airport' || input.destinationType === 'airport' ? 25 : 5);
     const cityKey = input.city.trim().toLowerCase();
     const CITY_FX: Record<string, number> = {
-      'tokyo': 1.6,
-      'london': 1.5,
+      tokyo: 1.6,
+      london: 1.5,
       'new york': 1.4,
-      'paris': 1.3,
-      'singapore': 1.2,
+      paris: 1.3,
+      singapore: 1.2,
       'mexico city': 0.7,
       'buenos aires': 0.55,
-      'lima': 0.6,
-      'medellin': 0.5,
-      'bangkok': 0.55,
+      lima: 0.6,
+      medellin: 0.5,
+      bangkok: 0.55,
     };
     const mult = CITY_FX[cityKey] ?? 1.0;
     const taxiBase = 8 + km * 1.1;
@@ -572,18 +634,27 @@ const groundTransportPriceResearcherTool: ToolDef = {
     const estimates: GroundTransportEstimate[] = [
       {
         mode: 'taxi',
-        rangeUsd: { low: Math.round(taxiBase * 0.8 * mult), high: Math.round(taxiBase * 1.4 * mult) },
+        rangeUsd: {
+          low: Math.round(taxiBase * 0.8 * mult),
+          high: Math.round(taxiBase * 1.4 * mult),
+        },
         durationMinutes: { low: Math.round(km * 1.5), high: Math.round(km * 3) },
       },
       {
         mode: 'rideshare',
-        rangeUsd: { low: Math.round(rideshareBase * 0.7 * mult), high: Math.round(rideshareBase * 1.3 * mult) },
+        rangeUsd: {
+          low: Math.round(rideshareBase * 0.7 * mult),
+          high: Math.round(rideshareBase * 1.3 * mult),
+        },
         durationMinutes: { low: Math.round(km * 1.5), high: Math.round(km * 3) },
         notes: 'Cabify / Uber / Bolt / 99 / Grab depending on city.',
       },
       {
         mode: 'public_transit',
-        rangeUsd: { low: Math.max(1, Math.round(transitBase * 0.4 * mult)), high: Math.round(transitBase * 1.0 * mult) },
+        rangeUsd: {
+          low: Math.max(1, Math.round(transitBase * 0.4 * mult)),
+          high: Math.round(transitBase * 1.0 * mult),
+        },
         durationMinutes: { low: Math.round(km * 2.5), high: Math.round(km * 4.5) },
         notes: 'Cheapest but slowest with luggage.',
       },
@@ -592,7 +663,10 @@ const groundTransportPriceResearcherTool: ToolDef = {
     if (input.originType === 'airport' || input.destinationType === 'airport') {
       estimates.push({
         mode: 'shared_shuttle',
-        rangeUsd: { low: Math.round(taxiBase * 0.55 * mult), high: Math.round(taxiBase * 0.85 * mult) },
+        rangeUsd: {
+          low: Math.round(taxiBase * 0.55 * mult),
+          high: Math.round(taxiBase * 0.85 * mult),
+        },
         durationMinutes: { low: Math.round(km * 2.5), high: Math.round(km * 5) },
         notes: 'Shared van — multi-stop, slower than taxi.',
       });
@@ -630,7 +704,7 @@ const publicTransitTicketingBriefTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Explain how public transit ticketing works for a city — primary mode, payment methods (contactless, IC card, mobile), ticket types (single, day pass, weekly), the right app or smart card to load, fare example. Vertex-grounded.",
+    'Explain how public transit ticketing works for a city — primary mode, payment methods (contactless, IC card, mobile), ticket types (single, day pass, weekly), the right app or smart card to load, fare example. Vertex-grounded.',
   inputSchema: transitTicketingInput,
   jsonSchema: {
     type: 'object',
@@ -643,15 +717,22 @@ const publicTransitTicketingBriefTool: ToolDef = {
   },
   handler: async (rawInput: TransitTicketingInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = transitTicketingInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Explain how public transit ticketing works for ${input.city}${input.countryCode ? ` (${input.countryCode})` : ''}. Cover: primary mode (metro / bus / tram / train), payment methods (contactless cards, IC cards like Suica / Oyster / Compass, mobile apps), ticket types (single / day / weekly), the recommended app or smart card to load, a single fare example, common gotchas (zones, peak surcharges).`,
       transitTicketingShape,
-      (text, _) => `Coerce into transit ticketing schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into transit ticketing schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, brief: r.data, via: r.via, message: `Transit ticketing brief for ${input.city} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      brief: r.data,
+      via: r.via,
+      message: `Transit ticketing brief for ${input.city} via ${r.via}.`,
+    };
   },
 };
 
@@ -691,15 +772,22 @@ const airportTerminalResolverTool: ToolDef = {
   },
   handler: async (rawInput: AirportTerminalInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = airportTerminalInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Determine the terminal, check-in area, and lounge options at ${input.airportIata}${input.airline ? ` for ${input.airline}` : ''}${input.flightNumber ? ` (flight ${input.flightNumber})` : ''}. Pull from official airport + airline pages.`,
       airportTerminalShape,
-      (text, _) => `Coerce into airport terminal schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into airport terminal schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, terminal: r.data, via: r.via, message: `Terminal info for ${input.airportIata} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      terminal: r.data,
+      via: r.via,
+      message: `Terminal info for ${input.airportIata} via ${r.via}.`,
+    };
   },
 };
 
@@ -722,7 +810,7 @@ const layoverViabilityCheckerTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Assess whether a layover is viable. Pure rules: minimum-connection-time-style heuristic considering immigration, bag recheck, terminal change, domestic/international mix. Returns viable / risky / not_viable + buffer minutes.",
+    'Assess whether a layover is viable. Pure rules: minimum-connection-time-style heuristic considering immigration, bag recheck, terminal change, domestic/international mix. Returns viable / risky / not_viable + buffer minutes.',
   inputSchema: layoverViabilityInput,
   jsonSchema: {
     type: 'object',
@@ -740,13 +828,19 @@ const layoverViabilityCheckerTool: ToolDef = {
   },
   handler: async (rawInput: LayoverViabilityInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = layoverViabilityInput.parse(rawInput);
     let minimum = 30;
     if (!input.sameTerminal) minimum += 25;
     if (input.immigrationRequired) minimum += 30;
     if (input.bagsRecheckRequired) minimum += 25;
-    if (!input.arriveDomestic && !input.departDomestic && input.arriveAirportIata !== input.departAirportIata) minimum += 20;
+    if (
+      !input.arriveDomestic &&
+      !input.departDomestic &&
+      input.arriveAirportIata !== input.departAirportIata
+    )
+      minimum += 20;
     if (input.arriveAirportIata !== input.departAirportIata) minimum += 60; // airport change
 
     let verdict: 'viable' | 'risky' | 'not_viable' = 'viable';
@@ -754,9 +848,14 @@ const layoverViabilityCheckerTool: ToolDef = {
     else if (input.layoverMinutes < minimum * 1.3) verdict = 'risky';
 
     const tips: string[] = [];
-    if (verdict === 'risky') tips.push('Pack carry-on only — checked bags often miss tight connections.');
-    if (input.immigrationRequired) tips.push('Pre-fill arrival declarations on the carrier app to save 10-15min.');
-    if (verdict === 'not_viable') tips.push('Airline-protected vs self-booked: only self-booked (saver / award separately) leaves you exposed if missed.');
+    if (verdict === 'risky')
+      tips.push('Pack carry-on only — checked bags often miss tight connections.');
+    if (input.immigrationRequired)
+      tips.push('Pre-fill arrival declarations on the carrier app to save 10-15min.');
+    if (verdict === 'not_viable')
+      tips.push(
+        'Airline-protected vs self-booked: only self-booked (saver / award separately) leaves you exposed if missed.'
+      );
     return {
       status: 'ok' as const,
       verdict,
@@ -777,12 +876,39 @@ const altAirportInput = z.object({
 type AltAirportInput = z.infer<typeof altAirportInput>;
 
 // Hand-curated common alternatives.
-const ALT_AIRPORT_TABLE: Record<string, Array<{ iata: string; name: string; rough: string; tradeoff: string }>> = {
-  EZE: [{ iata: 'AEP', name: 'Aeroparque Jorge Newbery', rough: 'closer to downtown but mostly domestic', tradeoff: 'much shorter taxi but limited intl' }],
-  AEP: [{ iata: 'EZE', name: 'Ministro Pistarini', rough: 'main international hub', tradeoff: 'further from downtown' }],
+const ALT_AIRPORT_TABLE: Record<
+  string,
+  Array<{ iata: string; name: string; rough: string; tradeoff: string }>
+> = {
+  EZE: [
+    {
+      iata: 'AEP',
+      name: 'Aeroparque Jorge Newbery',
+      rough: 'closer to downtown but mostly domestic',
+      tradeoff: 'much shorter taxi but limited intl',
+    },
+  ],
+  AEP: [
+    {
+      iata: 'EZE',
+      name: 'Ministro Pistarini',
+      rough: 'main international hub',
+      tradeoff: 'further from downtown',
+    },
+  ],
   JFK: [
-    { iata: 'LGA', name: 'LaGuardia', rough: 'closer, mostly domestic', tradeoff: 'no major intl long-haul' },
-    { iata: 'EWR', name: 'Newark', rough: 'NJ side, full intl', tradeoff: 'slower taxi from Manhattan' },
+    {
+      iata: 'LGA',
+      name: 'LaGuardia',
+      rough: 'closer, mostly domestic',
+      tradeoff: 'no major intl long-haul',
+    },
+    {
+      iata: 'EWR',
+      name: 'Newark',
+      rough: 'NJ side, full intl',
+      tradeoff: 'slower taxi from Manhattan',
+    },
   ],
   LGA: [
     { iata: 'JFK', name: 'JFK', rough: 'main intl hub', tradeoff: 'further from Manhattan' },
@@ -790,17 +916,53 @@ const ALT_AIRPORT_TABLE: Record<string, Array<{ iata: string; name: string; roug
   ],
   EWR: [
     { iata: 'JFK', name: 'JFK', rough: 'NY-side intl', tradeoff: 'longer if staying in NJ' },
-    { iata: 'LGA', name: 'LaGuardia', rough: 'closer to Manhattan, mostly domestic', tradeoff: 'no long-haul' },
+    {
+      iata: 'LGA',
+      name: 'LaGuardia',
+      rough: 'closer to Manhattan, mostly domestic',
+      tradeoff: 'no long-haul',
+    },
   ],
   LHR: [
-    { iata: 'LGW', name: 'Gatwick', rough: 'south London, lots of charter / leisure', tradeoff: 'longer from West London' },
+    {
+      iata: 'LGW',
+      name: 'Gatwick',
+      rough: 'south London, lots of charter / leisure',
+      tradeoff: 'longer from West London',
+    },
     { iata: 'STN', name: 'Stansted', rough: 'budget hub', tradeoff: 'far from central London' },
-    { iata: 'LCY', name: 'London City', rough: 'closest to financial district', tradeoff: 'shorter routes only' },
+    {
+      iata: 'LCY',
+      name: 'London City',
+      rough: 'closest to financial district',
+      tradeoff: 'shorter routes only',
+    },
   ],
-  CDG: [{ iata: 'ORY', name: 'Orly', rough: 'south Paris, more domestic', tradeoff: 'limited intl long-haul' }],
+  CDG: [
+    {
+      iata: 'ORY',
+      name: 'Orly',
+      rough: 'south Paris, more domestic',
+      tradeoff: 'limited intl long-haul',
+    },
+  ],
   HND: [{ iata: 'NRT', name: 'Narita', rough: 'main intl', tradeoff: 'further + slower train' }],
-  NRT: [{ iata: 'HND', name: 'Haneda', rough: 'closer to Tokyo center', tradeoff: 'fewer intl flights' }],
-  DXB: [{ iata: 'AUH', name: 'Abu Dhabi', rough: 'Etihad hub', tradeoff: 'further from Dubai (~90min)' }],
+  NRT: [
+    {
+      iata: 'HND',
+      name: 'Haneda',
+      rough: 'closer to Tokyo center',
+      tradeoff: 'fewer intl flights',
+    },
+  ],
+  DXB: [
+    {
+      iata: 'AUH',
+      name: 'Abu Dhabi',
+      rough: 'Etihad hub',
+      tradeoff: 'further from Dubai (~90min)',
+    },
+  ],
   GRU: [
     { iata: 'CGH', name: 'Congonhas', rough: 'domestic hub', tradeoff: 'no intl' },
     { iata: 'VCP', name: 'Viracopos', rough: 'cargo + secondary', tradeoff: 'far from city' },
@@ -824,11 +986,15 @@ const nearbyAirportAlternativeResearcherTool: ToolDef = {
   },
   handler: async (rawInput: AltAirportInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = altAirportInput.parse(rawInput);
     const alts = ALT_AIRPORT_TABLE[input.primaryIata.toUpperCase()] ?? [];
     if (alts.length === 0) {
-      return { status: 'unavailable' as const, message: `No curated alternatives for ${input.primaryIata}.` };
+      return {
+        status: 'unavailable' as const,
+        message: `No curated alternatives for ${input.primaryIata}.`,
+      };
     }
     return {
       status: 'ok' as const,
@@ -880,15 +1046,22 @@ const routeAlternativeResearcherTool: ToolDef = {
   },
   handler: async (rawInput: RouteAltInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = routeAltInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Find alternative travel modes from ${input.origin} to ${input.destination} given primary mode is ${input.primaryMode}. Cover: train (incl. high-speed), bus / coach, ferry where applicable, nearby-airport alternative pairs. For each: approx duration, approx price (range, USD-equivalent), notes (booking platform, reservation requirement, scenic value).`,
       routeAltShape,
-      (text, _) => `Coerce into route alternatives schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into route alternatives schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, alternatives: r.data.alternatives, via: r.via, message: `${r.data.alternatives.length} alternatives ${input.origin} → ${input.destination}.` };
+    return {
+      status: 'ok' as const,
+      alternatives: r.data.alternatives,
+      via: r.via,
+      message: `${r.data.alternatives.length} alternatives ${input.origin} → ${input.destination}.`,
+    };
   },
 };
 
@@ -921,11 +1094,15 @@ const tripBudgetResearcherTool: ToolDef = {
   },
   handler: async (rawInput: TripBudgetInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = tripBudgetInput.parse(rawInput);
 
     // Daily template per style.
-    const TEMPLATES: Record<TripBudgetInput['travelStyle'], Array<Parameters<typeof runBudgetEstimator>[0]['category']>> = {
+    const TEMPLATES: Record<
+      TripBudgetInput['travelStyle'],
+      Array<Parameters<typeof runBudgetEstimator>[0]['category']>
+    > = {
       budget: ['cafe', 'fast_casual', 'casual_restaurant'],
       medium: ['cafe', 'casual_restaurant', 'mid_restaurant', 'bar'],
       premium: ['cafe', 'mid_restaurant', 'fine_restaurant', 'cocktail_bar'],
@@ -935,7 +1112,12 @@ const tripBudgetResearcherTool: ToolDef = {
     const results = await Promise.all(
       cats.map(c =>
         runBudgetEstimator(
-          { category: c, city: input.city, ...(input.countryCode ? { countryCode: input.countryCode } : {}), partySize: 1 } as never,
+          {
+            category: c,
+            city: input.city,
+            ...(input.countryCode ? { countryCode: input.countryCode } : {}),
+            partySize: 1,
+          } as never,
           ctx
         )
       )
@@ -953,7 +1135,12 @@ const tripBudgetResearcherTool: ToolDef = {
     return {
       status: 'ok' as const,
       perDay: { low: dailyLow, typical: dailyTyp, high: dailyHigh, currency: 'USD' },
-      total: { low: dailyLow * input.daysCount, typical: dailyTyp * input.daysCount, high: dailyHigh * input.daysCount, currency: 'USD' },
+      total: {
+        low: dailyLow * input.daysCount,
+        typical: dailyTyp * input.daysCount,
+        high: dailyHigh * input.daysCount,
+        currency: 'USD',
+      },
       style: input.travelStyle,
       message: `Daily spend: $${dailyLow}-$${dailyHigh}/person × ${input.daysCount}d = $${dailyLow * input.daysCount}-$${dailyHigh * input.daysCount} total.`,
     };
@@ -995,15 +1182,22 @@ const localPaymentAcceptanceBriefTool: ToolDef = {
   },
   handler: async (rawInput: PaymentAcceptanceInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = paymentAcceptanceInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Explain payment acceptance for a tourist in ${input.countryCode}. Cover: card acceptance breadth (Visa / Mastercard / Amex), is contactless the norm?, is cash still needed (markets, taxis, tips)?, local wallets (Pix / Alipay / WeChat / Mercado Pago / Bizum / etc.), ATM availability + fees, tip expectation. Pull from official tourism + recent traveler reports.`,
       paymentAcceptanceShape,
-      (text, _) => `Coerce into payment acceptance schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into payment acceptance schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, brief: r.data, via: r.via, message: `Payment brief for ${input.countryCode} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      brief: r.data,
+      via: r.via,
+      message: `Payment brief for ${input.countryCode} via ${r.via}.`,
+    };
   },
 };
 
@@ -1043,15 +1237,22 @@ const invoiceTaxRequirementsResearcherTool: ToolDef = {
   },
   handler: async (rawInput: InvoiceTaxInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = invoiceTaxInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Research the corporate invoice / tax-receipt requirements in ${input.countryCode} for ${input.expenseKind} expenses. Cover: expected invoice format, whether the tax ID is needed (and what it's called locally — CUIT, NIF, RFC, VAT, GSTIN, etc.), reverse-charge applicability for foreign buyers, retention period, common gotchas (e.g. needing the company's full legal name).`,
       invoiceTaxShape,
-      (text, _) => `Coerce into invoice tax schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into invoice tax schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, brief: r.data, via: r.via, message: `Invoice tax brief for ${input.countryCode} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      brief: r.data,
+      via: r.via,
+      message: `Invoice tax brief for ${input.countryCode} via ${r.via}.`,
+    };
   },
 };
 
@@ -1092,15 +1293,22 @@ const travelInsuranceRequirementCheckerTool: ToolDef = {
   },
   handler: async (rawInput: InsuranceInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = insuranceInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Check whether travel / health insurance is mandatory for a ${input.travelerNationalityCode ?? 'foreign'} traveler entering ${input.destinationCountryCode}. Cover: mandatory flag, minimum coverage required (USD-equivalent), accepted providers / what counts, whether proof is checked at border. Pull from official immigration + tourism sites.`,
       insuranceShape,
-      (text, _) => `Coerce into insurance schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into insurance schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, brief: r.data, via: r.via, message: `Insurance check for ${input.destinationCountryCode} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      brief: r.data,
+      via: r.via,
+      message: `Insurance check for ${input.destinationCountryCode} via ${r.via}.`,
+    };
   },
 };
 
@@ -1118,7 +1326,7 @@ const medicalAccessBriefTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Quick medical access brief — emergency numbers + nearest private clinic (Places) + nearest 24h pharmacy. Composes `clinic_finder` + `pharmacy_24h_finder` + `emergency_numbers_card`. Use after arrival as part of the safety pack.",
+    'Quick medical access brief — emergency numbers + nearest private clinic (Places) + nearest 24h pharmacy. Composes `clinic_finder` + `pharmacy_24h_finder` + `emergency_numbers_card`. Use after arrival as part of the safety pack.',
   inputSchema: medicalAccessInput,
   jsonSchema: {
     type: 'object',
@@ -1131,14 +1339,33 @@ const medicalAccessBriefTool: ToolDef = {
   },
   handler: async (rawInput: MedicalAccessInput, ctx) => {
     // Lazy import to avoid a circular surface.
-    const { clinicFinderTool, pharmacy24hFinderTool, emergencyNumbersCardTool } = await import('./b7-health-safety');
+    const { clinicFinderTool, pharmacy24hFinderTool, emergencyNumbersCardTool } = await import(
+      './b7-health-safety'
+    );
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = medicalAccessInput.parse(rawInput);
 
     const [clinicR, pharmR, ecR] = await Promise.all([
-      clinicFinderTool.handler({ city: input.city, countryCode: input.countryCode, languageCode: input.languageCode, limit: 3 } as never, ctx),
-      pharmacy24hFinderTool.handler({ city: input.city, countryCode: input.countryCode, languageCode: input.languageCode, limit: 3 } as never, ctx),
+      clinicFinderTool.handler(
+        {
+          city: input.city,
+          countryCode: input.countryCode,
+          languageCode: input.languageCode,
+          limit: 3,
+        } as never,
+        ctx
+      ),
+      pharmacy24hFinderTool.handler(
+        {
+          city: input.city,
+          countryCode: input.countryCode,
+          languageCode: input.languageCode,
+          limit: 3,
+        } as never,
+        ctx
+      ),
       emergencyNumbersCardTool.handler({ countryCode: input.countryCode } as never, ctx),
     ]);
 
@@ -1187,15 +1414,22 @@ const communicationsResearcherTool: ToolDef = {
   },
   handler: async (rawInput: CommunicationsInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = communicationsInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Research telecom for tourists in ${input.countryCode}: top 3 cellular networks + their reputation, eSIM support (which networks support tourist eSIM), coverage outside cities, roaming notes for foreign SIMs, free WiFi availability (cafés, transit, public).`,
       communicationsShape,
-      (text, _) => `Coerce into communications schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into communications schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, brief: r.data, via: r.via, message: `Communications brief for ${input.countryCode} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      brief: r.data,
+      via: r.via,
+      message: `Communications brief for ${input.countryCode} via ${r.via}.`,
+    };
   },
 };
 
@@ -1221,7 +1455,7 @@ const culturalProtocolBriefTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Practical cultural / etiquette guidance for a country + context (general / meal / host_home / public / shopping). Vertex-grounded. Different from `local_business_protocol_brief` (B4) which is business-meeting-specific.",
+    'Practical cultural / etiquette guidance for a country + context (general / meal / host_home / public / shopping). Vertex-grounded. Different from `local_business_protocol_brief` (B4) which is business-meeting-specific.',
   inputSchema: cultProtocolInput,
   jsonSchema: {
     type: 'object',
@@ -1234,15 +1468,22 @@ const culturalProtocolBriefTool: ToolDef = {
   },
   handler: async (rawInput: CultProtocolInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = cultProtocolInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Practical cultural etiquette for a tourist visiting ${input.countryCode} in a ${input.context} context. Cover: greetings, dining etiquette, public behavior norms, taboos to avoid (topics, gestures). Verifiable, widely-documented norms only.`,
       cultProtocolShape,
-      (text, _) => `Coerce into cultural protocol schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into cultural protocol schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, brief: r.data, via: r.via, message: `Cultural protocol brief for ${input.countryCode} via ${r.via}.` };
+    return {
+      status: 'ok' as const,
+      brief: r.data,
+      via: r.via,
+      message: `Cultural protocol brief for ${input.countryCode} via ${r.via}.`,
+    };
   },
 };
 
@@ -1289,15 +1530,22 @@ const liveNewsTripRiskScannerTool: ToolDef = {
   },
   handler: async (rawInput: LiveNewsInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = liveNewsInput.parse(rawInput);
     const r = await runGroundedStructured(
       `Scan news from the last ${input.windowDays} days for risks affecting a tourist visiting ${input.city}${input.countryCode ? ` (${input.countryCode})` : ''}. Look for: protests, strikes, weather events, security incidents, transit disruptions, political unrest. Pull from Reuters / AP / BBC / local English press. Don't sensationalize. Set risk level: low if nothing notable, medium if individual disruptions to plan around, high if traveler should consider rescheduling.`,
       liveNewsShape,
-      (text, _) => `Coerce into live news schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
+      (text, _) =>
+        `Coerce into live news schema. Locale: ${input.locale}.\n\nReport:\n"""\n${text}\n"""`
     );
     if (!r.ok || !r.data) return { status: 'unavailable' as const, message: r.reason ?? 'no-data' };
-    return { status: 'ok' as const, scan: r.data, via: r.via, message: `News scan for ${input.city} (${input.windowDays}d): ${r.data.riskLevel} risk.` };
+    return {
+      status: 'ok' as const,
+      scan: r.data,
+      via: r.via,
+      message: `News scan for ${input.city} (${input.windowDays}d): ${r.data.riskLevel} risk.`,
+    };
   },
 };
 

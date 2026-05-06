@@ -91,14 +91,19 @@ function buildSignals(input: TasteFeedbackLoopInput): Array<{
   value: string;
   confidence: 'low' | 'medium' | 'high';
 }> {
-  const signals: Array<{ source: 'feedback'; value: string; confidence: 'low' | 'medium' | 'high' }> = [];
+  const signals: Array<{
+    source: 'feedback';
+    value: string;
+    confidence: 'low' | 'medium' | 'high';
+  }> = [];
 
   // Action-level signal.
   if (POSITIVE_ACTIONS.has(input.action)) {
     signals.push({
       source: 'feedback',
       value: `${input.category} (${input.placeName} in ${input.city}) — ${input.action}`,
-      confidence: input.action === 'loved' || input.action === 'recommend_to_friend' ? 'high' : 'medium',
+      confidence:
+        input.action === 'loved' || input.action === 'recommend_to_friend' ? 'high' : 'medium',
     });
   } else if (NEGATIVE_ACTIONS.has(input.action)) {
     signals.push({
@@ -116,7 +121,11 @@ function buildSignals(input: TasteFeedbackLoopInput): Array<{
 
   // Reason-level signals — each becomes a category note.
   for (const reason of input.reasons ?? []) {
-    const verb = reason.startsWith('too_') ? 'avoid' : reason === 'great_value' || reason === 'great_service' ? 'prefer' : 'note';
+    const verb = reason.startsWith('too_')
+      ? 'avoid'
+      : reason === 'great_value' || reason === 'great_service'
+        ? 'prefer'
+        : 'note';
     signals.push({
       source: 'feedback',
       value: `${verb} ${reason.replace(/_/g, ' ')} ${input.category}`,
@@ -193,7 +202,10 @@ export const tasteFeedbackLoopTool: ToolDef<TasteFeedbackLoopInput, TasteFeedbac
       placeName: { type: 'string', minLength: 1, maxLength: 200 },
       category: { type: 'string', minLength: 1, maxLength: 60 },
       city: { type: 'string', minLength: 1, maxLength: 120 },
-      action: { type: 'string', enum: ['saved', 'visited', 'loved', 'skip', 'revisit', 'recommend_to_friend'] },
+      action: {
+        type: 'string',
+        enum: ['saved', 'visited', 'loved', 'skip', 'revisit', 'recommend_to_friend'],
+      },
       reasons: {
         type: 'array',
         maxItems: 6,

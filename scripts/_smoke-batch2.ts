@@ -32,16 +32,26 @@ console.log('\n=== source_confidence_scorer ===');
 const conf = await runSourceConfidenceScorer(
   {
     sources: [
-      { url: 'https://guide.michelin.com/ar/buenos-aires-region/restaurant/don-julio', publishedAtIso: '2024-12-01T00:00:00Z' },
-      { url: 'https://www.tripadvisor.com/Restaurant_Review-don-julio.html', publishedAtIso: '2020-01-15T00:00:00Z' },
-      { url: 'https://reuters.com/business/lifestyle/parrillas-buenos-aires.html', publishedAtIso: '2025-08-01T00:00:00Z' },
+      {
+        url: 'https://guide.michelin.com/ar/buenos-aires-region/restaurant/don-julio',
+        publishedAtIso: '2024-12-01T00:00:00Z',
+      },
+      {
+        url: 'https://www.tripadvisor.com/Restaurant_Review-don-julio.html',
+        publishedAtIso: '2020-01-15T00:00:00Z',
+      },
+      {
+        url: 'https://reuters.com/business/lifestyle/parrillas-buenos-aires.html',
+        publishedAtIso: '2025-08-01T00:00:00Z',
+      },
     ],
     countryCode: 'AR',
     category: 'restaurant',
   } as never,
   ctx
 );
-if (conf.status === 'ok' && conf.ranked) for (const s of conf.ranked) console.log(`  ${s.combined.toFixed(2)}  ${s.url} — ${s.rationale}`);
+if (conf.status === 'ok' && conf.ranked)
+  for (const s of conf.ranked) console.log(`  ${s.combined.toFixed(2)}  ${s.url} — ${s.rationale}`);
 
 console.log('\n=== research_gap_router (blocking + low) ===');
 const route = await runResearchGapRouter(
@@ -61,7 +71,12 @@ console.log('\n=== networking_intro_strategy (demo day, founder, fundraise) ==='
 const strat = await runNetworkingIntroStrategy(
   {
     event: { name: 'YC Demo Day W26', kind: 'demo_day', expectedAttendance: '300_plus' },
-    travelerProfile: { role: 'founder', isFirstTime: false, extroversion: 'medium', desiredOutcome: 'fundraise' },
+    travelerProfile: {
+      role: 'founder',
+      isFirstTime: false,
+      extroversion: 'medium',
+      desiredOutcome: 'fundraise',
+    },
   } as never,
   ctx
 );
@@ -109,7 +124,8 @@ const exp = await expensePolicyCheckerTool.handler(
 );
 if (exp.status === 'ok') {
   console.log(`  total $${exp.totalUsd} · within=${exp.withinPolicy}`);
-  for (const v of exp.verdicts ?? []) console.log(`    [${v.verdict}] ${v.category}: $${v.amountUsd} — ${v.reason}`);
+  for (const v of exp.verdicts ?? [])
+    console.log(`    [${v.verdict}] ${v.category}: $${v.amountUsd} — ${v.reason}`);
 }
 
 console.log('\n=== meeting_commute_planner (Mexico City, 9am rush) ===');
@@ -130,7 +146,10 @@ if (cmt.status === 'ok') {
 }
 
 console.log('\n=== source_cache_manager round-trip ===');
-const set = await runSourceCacheManager({ op: 'set', key: 'coffee:Tokyo', value: { count: 8 }, ttlSeconds: 3600 } as never, ctx);
+const set = await runSourceCacheManager(
+  { op: 'set', key: 'coffee:Tokyo', value: { count: 8 }, ttlSeconds: 3600 } as never,
+  ctx
+);
 console.log(`  ${set.message}`);
 const got = await runSourceCacheManager({ op: 'get', key: 'coffee:Tokyo' } as never, ctx);
 console.log(`  ${got.message} value=${JSON.stringify((got as { value?: unknown }).value ?? null)}`);
@@ -154,7 +173,11 @@ console.log('\n=== recommendation_explainer (ES) ===');
 const explain = await runRecommendationExplainer(
   {
     recommendation: 'Mameya Kakeru — pour-over de especialidad en Tokio.',
-    rationaleParts: ['Featured by Sprudge', '4.6★ over 1200 reviews', 'wifi + tomas mencionados en editorial'],
+    rationaleParts: [
+      'Featured by Sprudge',
+      '4.6★ over 1200 reviews',
+      'wifi + tomas mencionados en editorial',
+    ],
     topSources: [{ url: 'https://sprudge.com/mameya-kakeru' }],
     budgetEnvelope: '~$8-15/persona',
     locale: 'es-AR',
@@ -167,9 +190,21 @@ console.log('\n=== receipt_collection_assistant ===');
 const rec = await receiptCollectionAssistantTool.handler(
   {
     bookings: [
-      { kind: 'flight', ref: 'PNR-ABC123', date: '2026-05-09', amountUsd: 850, receiptOnFile: true },
+      {
+        kind: 'flight',
+        ref: 'PNR-ABC123',
+        date: '2026-05-09',
+        amountUsd: 850,
+        receiptOnFile: true,
+      },
       { kind: 'hotel', ref: 'CONF-9999', date: '2026-05-10', amountUsd: 280, receiptOnFile: false },
-      { kind: 'restaurant', ref: 'AMEX-Don-Julio', date: '2026-05-11', amountUsd: 95, receiptOnFile: false },
+      {
+        kind: 'restaurant',
+        ref: 'AMEX-Don-Julio',
+        date: '2026-05-11',
+        amountUsd: 95,
+        receiptOnFile: false,
+      },
       { kind: 'transport', ref: 'UBER-2x', amountUsd: 35, receiptOnFile: true },
     ],
   } as never,
@@ -177,5 +212,6 @@ const rec = await receiptCollectionAssistantTool.handler(
 );
 if (rec.status === 'ok') {
   console.log(`  ${rec.message}`);
-  for (const m of rec.missing ?? []) console.log(`    · [${m.kind}] ${m.ref}: ${m.suggestedAction}`);
+  for (const m of rec.missing ?? [])
+    console.log(`    · [${m.kind}] ${m.ref}: ${m.suggestedAction}`);
 }
