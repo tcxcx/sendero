@@ -296,6 +296,10 @@ Every customer-facing answer must end with \`complete_task\` (or \`enter_waiting
                   'set_home_iata',
                   'sweep_dcw_to_gateway',
                   'set_trip_kind',
+                  'hobby_profile_builder',
+                  'city_bucket_list_manager',
+                  'specialty_coffee_finder',
+                  'work_from_cafe_ranker',
                 ],
                 type: 'string',
                 description: "Sendero tool slug. Pick the one that matches the traveler's intent.",
@@ -626,6 +630,11 @@ Flow:
 - Reputation → \`read_reputation\`, \`give_feedback\`.
 - Concierge: \`trip_weather_brief\`, \`air_quality_brief\`, \`elevation_risk_brief\`, \`timezone_brief\` — need lat/lng. Always \`geocode_trip_stop({address})\` FIRST.
 - Restaurants: \`recommend_restaurants\` then on tap \`restaurant_route_card\` + \`send_image_message\` with route map.
+- Anticipation (DEV / SANDBOX ONLY — silently no-op in prod):
+  - Traveler expresses or implies a preference ("me encanta el café de especialidad", "always look for cheap Michelin", "I'm a founder who likes meeting other builders") → \`hobby_profile_builder\` with explicitPreferences.
+  - Traveler reacts to a SPECIFIC PLACE ("save Mameya Kakeru to my Tokyo list", "we went to Maido in Lima — incredible", "skip that overrated café") → \`city_bucket_list_manager\`.
+  - Traveler asks WHERE to get good coffee in a city ("specialty coffee in Tokyo", "tercera ola en Buenos Aires") → \`specialty_coffee_finder\` with city + languageCode.
+  - Traveler asks where to WORK FROM ("café para trabajar con la laptop", "wifi + outlets in <city>") → \`work_from_cafe_ranker\` (pass city for fresh discovery, or candidates list to re-rank a prior result).
 - Airport transfers: \`request_location\` first, then \`airport_transfer_coordinator\`.
 - Group: \`claim_group_seat({token})\` when inbound starts with \`claim:<token>\`. **Autonomous group creation:** when the user says "trip for N to X" / "viaje para N a X" / "<event> for <N> people" — call \`create_group_trip({ name, destination?, maxPassengers: N })\`. The result returns \`openSeatClaimUrl\`. Reply with ONE \`send_cta_url_message\` containing the URL + a one-line copy ("Compartí este link con los <N-1> que faltan, claman su lugar y armo el resto"). Then \`complete_task\`. **Don't** add passengers up-front by phone unless the user volunteered phones — let the claim URL fan-out itself. **Group-broadcast opt-out:** when the inbound message is exactly or primarily \`stop\` / \`unsubscribe\` / \`baja\` / \`basta\` / \`pare\` (any locale, any case) AND the traveler is on at least one active GroupTrip in this tenant, call \`set_group_broadcast_optout({ optOut: true })\` then reply briefly in their language ("Listo, te saco de los avisos del grupo. Cualquier cosa, escribime."). If they say "resume"/"opt back in"/"alta", call \`set_group_broadcast_optout({ optOut: false })\` instead.
 - Prefund: \`prefund_trip\`, \`guest_claim_link\`.
@@ -873,6 +882,11 @@ When traveler is back home ("ya estoy de vuelta", "trip is over"):
 ## Hotel + restaurant + transfer flows
 - Hotel: \`search_hotels\` → list \`id:'hotel:<searchResultId>'\` → tap → \`list_stay_rates({ searchResultId, checkInDate, checkOutDate, rooms, guests })\` → list \`id:'rate:<rateId>'\` (refundable / non-refundable variants surface here, plus pay-now vs pay-at-property) → tap → \`quote_stay({ rateId })\` → \`stayQuoteReview\` payload (full Duffel pre-booking review: guests, rooms, nights, address, check-in/out times, billing breakdown with separated tax/fee/due-at-property, cancellation timeline, conditions verbatim, key collection) → confirm card → \`book_stay({ quoteId, email, guests:[{givenName, familyName}] })\`. The \`stayBookingConfirmation\` reply carries the API-returned \`reference\` — surface it verbatim ("Reservado · ref AFE33SE2") plus the cancellation timeline + key collection so the traveler has them in-thread before they arrive at the property.
 - Restaurant: \`recommend_restaurants\` → list → tap → \`restaurant_route_card\` + \`send_image_message\` (route map).
+- Anticipation (DEV / SANDBOX ONLY — silent no-op in prod, the four tools below all dev-gate):
+  - Preference expressed → \`hobby_profile_builder\` with explicitPreferences.
+  - Place reaction (save / loved / skip / recommend_to_friend) → \`city_bucket_list_manager\`.
+  - Specialty coffee in <city> → \`specialty_coffee_finder({ city, languageCode })\`.
+  - Café para trabajar / laptop spot → \`work_from_cafe_ranker({ city })\`.
 - Transfer: \`request_location\` → user shares pin → \`airport_transfer_coordinator\` → list of providers.
 
 ## Date handling
@@ -1021,6 +1035,10 @@ Works: EZE↔LIM, EZE↔SCL, EZE↔GIG, GRU↔SCL, GRU↔EZE, MIA↔BCN, JFK↔L
                   'set_home_iata',
                   'sweep_dcw_to_gateway',
                   'set_trip_kind',
+                  'hobby_profile_builder',
+                  'city_bucket_list_manager',
+                  'specialty_coffee_finder',
+                  'work_from_cafe_ranker',
                 ],
                 type: 'string',
                 description: "Sendero tool slug. Pick the one that matches the traveler's intent.",
