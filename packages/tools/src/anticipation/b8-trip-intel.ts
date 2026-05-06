@@ -64,7 +64,8 @@ const cityPulseBriefTool: ToolDef = {
   },
   handler: async (rawInput: PulseInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
 
     const input = pulseInput.parse(rawInput);
     const start = new Date().toISOString().slice(0, 10);
@@ -136,7 +137,8 @@ const tripOpportunityRankerTool: ToolDef = {
   },
   handler: async (rawInput: OpportunityInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
 
     const input = opportunityInput.parse(rawInput);
     const hobbiesBlob = (input.travelerHobbies ?? []).join(' ').toLowerCase();
@@ -154,9 +156,14 @@ const tripOpportunityRankerTool: ToolDef = {
           score -= 0.15;
           reasons.push(`exceeds available time (${opp.durationHours}h > ${input.hoursAvailable}h)`);
         }
-        if (typeof input.budgetRemainingUsd === 'number' && typeof opp.approximateCostUsd === 'number') {
+        if (
+          typeof input.budgetRemainingUsd === 'number' &&
+          typeof opp.approximateCostUsd === 'number'
+        ) {
           if (opp.approximateCostUsd <= input.budgetRemainingUsd) {
-            reasons.push(`within budget ($${opp.approximateCostUsd} ≤ $${input.budgetRemainingUsd})`);
+            reasons.push(
+              `within budget ($${opp.approximateCostUsd} ≤ $${input.budgetRemainingUsd})`
+            );
           } else {
             score -= 0.2;
             reasons.push(`over budget ($${opp.approximateCostUsd} > $${input.budgetRemainingUsd})`);
@@ -222,7 +229,8 @@ const itineraryGapDetectorTool: ToolDef = {
   },
   handler: async (rawInput: GapDetectorInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = gapDetectorInput.parse(rawInput);
     const sorted = [...input.itinerary]
       .map(e => ({ ...e, startMs: Date.parse(e.startsAtIso), endMs: Date.parse(e.endsAtIso) }))
@@ -284,7 +292,8 @@ const microItineraryBuilderTool: ToolDef = {
   },
   handler: async (rawInput: MicroInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = microInput.parse(rawInput);
     const anchorQ =
       input.vibe === 'cultural'
@@ -305,7 +314,11 @@ const microItineraryBuilderTool: ToolDef = {
       languageCode: input.languageCode,
       ...(input.countryCode ? { regionCode: input.countryCode } : {}),
     });
-    if (!places.available) return { status: 'unavailable' as const, message: `Places unavailable: ${places.reason ?? 'unknown'}.` };
+    if (!places.available)
+      return {
+        status: 'unavailable' as const,
+        message: `Places unavailable: ${places.reason ?? 'unknown'}.`,
+      };
 
     // Pick stops based on duration: 1 stop per ~75min.
     const stops = Math.max(1, Math.min(4, Math.floor((input.durationHours * 60) / 75)));
@@ -344,7 +357,7 @@ const layoverCityEscapeTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Decide if a traveler can leave the airport during a layover. Pure rules — checks duration / visa / bag status / typical airport→downtown time. Returns canEscape boolean + recommended max-stay duration + tips.",
+    'Decide if a traveler can leave the airport during a layover. Pure rules — checks duration / visa / bag status / typical airport→downtown time. Returns canEscape boolean + recommended max-stay duration + tips.',
   inputSchema: layoverInput,
   jsonSchema: {
     type: 'object',
@@ -359,7 +372,8 @@ const layoverCityEscapeTool: ToolDef = {
   },
   handler: async (rawInput: LayoverInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = layoverInput.parse(rawInput);
 
     // Typical buffers — these are estimates per international airport norms.
@@ -368,19 +382,31 @@ const layoverCityEscapeTool: ToolDef = {
     const minWalkAroundTime = 60; // less than this = not worth it
 
     const totalNeeded = securityBuffer + transitOneWay * 2 + minWalkAroundTime;
-    const canEscape = input.travelerHasVisa && input.layoverDurationMinutes >= totalNeeded && !input.hasCheckedBags;
+    const canEscape =
+      input.travelerHasVisa && input.layoverDurationMinutes >= totalNeeded && !input.hasCheckedBags;
     const maxStay = canEscape ? input.layoverDurationMinutes - totalNeeded : 0;
 
     const tips: string[] = [];
-    if (!input.travelerHasVisa) tips.push('Without transit visa, the traveler must stay airside in most countries.');
-    if (input.hasCheckedBags) tips.push('Checked bags through to the next leg cannot be reclaimed mid-layover — stay airside.');
+    if (!input.travelerHasVisa)
+      tips.push('Without transit visa, the traveler must stay airside in most countries.');
+    if (input.hasCheckedBags)
+      tips.push(
+        'Checked bags through to the next leg cannot be reclaimed mid-layover — stay airside.'
+      );
     if (canEscape) {
-      tips.push(`Plan to be back at the airport ${securityBuffer}min before next flight (security + immigration).`);
+      tips.push(
+        `Plan to be back at the airport ${securityBuffer}min before next flight (security + immigration).`
+      );
       tips.push(`Have ~${transitOneWay}min one-way transit time to/from downtown.`);
-      if (maxStay >= 180) tips.push(`Could realistically do a meal + a single attraction (~${maxStay}min walk-around budget).`);
+      if (maxStay >= 180)
+        tips.push(
+          `Could realistically do a meal + a single attraction (~${maxStay}min walk-around budget).`
+        );
       else tips.push(`Tight: limit to a single anchor near the airport-side rapid transit.`);
     } else if (input.layoverDurationMinutes < totalNeeded) {
-      tips.push(`Layover too short (${input.layoverDurationMinutes}min < required ~${totalNeeded}min). Stay airside, find a lounge.`);
+      tips.push(
+        `Layover too short (${input.layoverDurationMinutes}min < required ~${totalNeeded}min). Stay airside, find a lounge.`
+      );
     }
 
     return {
@@ -412,7 +438,7 @@ const firstDaySoftPlanTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Build a gentle arrival-day plan based on flight duration + jet-lag direction + local arrival time. Pure logic + Places nearby for one café anchor. Use after `book_flight` to give the traveler a recovery-friendly first day.",
+    'Build a gentle arrival-day plan based on flight duration + jet-lag direction + local arrival time. Pure logic + Places nearby for one café anchor. Use after `book_flight` to give the traveler a recovery-friendly first day.',
   inputSchema: firstDayInput,
   jsonSchema: {
     type: 'object',
@@ -428,19 +454,27 @@ const firstDaySoftPlanTool: ToolDef = {
   },
   handler: async (rawInput: FirstDayInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = firstDayInput.parse(rawInput);
 
     const arrivalHour = new Date(input.arrivalLocalIso).getHours();
     const longHaul = input.flightDurationHours >= 8;
     const moves: string[] = [];
 
-    if (longHaul) moves.push('Drop bags + shower at the hotel within 1h of arrival — non-negotiable for long-haul.');
-    if (input.jetlagDirection === 'east') moves.push('Get bright sunlight within 2h of arrival; do NOT nap longer than 30min.');
-    if (input.jetlagDirection === 'west') moves.push('Push a single short walk in late afternoon; bedtime ~22:00 local.');
+    if (longHaul)
+      moves.push(
+        'Drop bags + shower at the hotel within 1h of arrival — non-negotiable for long-haul.'
+      );
+    if (input.jetlagDirection === 'east')
+      moves.push('Get bright sunlight within 2h of arrival; do NOT nap longer than 30min.');
+    if (input.jetlagDirection === 'west')
+      moves.push('Push a single short walk in late afternoon; bedtime ~22:00 local.');
 
     if (arrivalHour >= 6 && arrivalHour <= 11) {
-      moves.push('Morning arrival: anchor the day with a 9-12 specialty coffee + casual breakfast.');
+      moves.push(
+        'Morning arrival: anchor the day with a 9-12 specialty coffee + casual breakfast.'
+      );
       moves.push('Aim for one short walk or single light cultural anchor (no museum marathons).');
     } else if (arrivalHour >= 12 && arrivalHour <= 16) {
       moves.push('Afternoon arrival: short walk + early casual dinner. Skip nightlife day 1.');
@@ -499,12 +533,14 @@ const lastDayCheckoutPlanTool: ToolDef = {
   },
   handler: async (rawInput: LastDayInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = lastDayInput.parse(rawInput);
 
     const checkout = Date.parse(input.hotelCheckoutTimeIso);
     const flight = Date.parse(input.flightDepartureIso);
-    if (!Number.isFinite(checkout) || !Number.isFinite(flight)) return { status: 'ok' as const, message: 'Invalid date input.' };
+    if (!Number.isFinite(checkout) || !Number.isFinite(flight))
+      return { status: 'ok' as const, message: 'Invalid date input.' };
 
     const securityBuffer = input.hasCheckedBags ? 180 : 120; // minutes
     const transitOneWay = 45;
@@ -515,10 +551,14 @@ const lastDayCheckoutPlanTool: ToolDef = {
     if (gapMinutes < 60) moves.push('Tight gap — go straight to the airport from checkout.');
     else if (gapMinutes < 180) moves.push('Coffee + one nearby walk; head to airport early.');
     else if (gapMinutes < 360) {
-      moves.push('Use a luggage-storage service near the city center (compose `luggage_storage_finder`).');
+      moves.push(
+        'Use a luggage-storage service near the city center (compose `luggage_storage_finder`).'
+      );
       moves.push('One anchor: lunch + a brief museum or shopping district visit.');
     } else {
-      moves.push('Full half-day available — full lunch + one cultural anchor. Use luggage storage.');
+      moves.push(
+        'Full half-day available — full lunch + one cultural anchor. Use luggage storage.'
+      );
     }
 
     return {
@@ -563,7 +603,8 @@ const luggageStorageFinderTool: ToolDef = {
   },
   handler: async (rawInput: LuggageStorageInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = luggageStorageInput.parse(rawInput);
     const places = await searchText({
       query: `luggage storage lockers ${input.near ? `near ${input.near}` : `in ${input.city}`}`,
@@ -571,8 +612,14 @@ const luggageStorageFinderTool: ToolDef = {
       languageCode: input.languageCode,
       ...(input.countryCode ? { regionCode: input.countryCode } : {}),
     });
-    if (!places.available) return { status: 'unavailable' as const, message: `Places unavailable: ${places.reason ?? 'unknown'}.` };
-    const filtered = places.results.filter(p => /\b(luggage|storage|locker|deposit|consigna)\b/i.test(`${p.name} ${p.editorialSummary ?? ''}`));
+    if (!places.available)
+      return {
+        status: 'unavailable' as const,
+        message: `Places unavailable: ${places.reason ?? 'unknown'}.`,
+      };
+    const filtered = places.results.filter(p =>
+      /\b(luggage|storage|locker|deposit|consigna)\b/i.test(`${p.name} ${p.editorialSummary ?? ''}`)
+    );
     return {
       status: 'ok' as const,
       results: filtered.slice(0, input.limit).map(p => ({
@@ -607,7 +654,7 @@ const tripPacingOptimizerTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Detect over-packed days and suggest pacing adjustments. Pure analysis — flags days with >3 high-intensity events, recommends spacing or moving items. Use to sanity-check itineraries before locking them.",
+    'Detect over-packed days and suggest pacing adjustments. Pure analysis — flags days with >3 high-intensity events, recommends spacing or moving items. Use to sanity-check itineraries before locking them.',
   inputSchema: pacingInput,
   jsonSchema: {
     type: 'object',
@@ -616,7 +663,8 @@ const tripPacingOptimizerTool: ToolDef = {
   },
   handler: async (rawInput: PacingInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = pacingInput.parse(rawInput);
 
     // Bucket events by date.
@@ -626,7 +674,13 @@ const tripPacingOptimizerTool: ToolDef = {
       byDate.set(day, [...(byDate.get(day) ?? []), e]);
     }
 
-    const overloaded: Array<{ date: string; eventCount: number; highIntensityCount: number; totalMinutes: number; warning: string }> = [];
+    const overloaded: Array<{
+      date: string;
+      eventCount: number;
+      highIntensityCount: number;
+      totalMinutes: number;
+      warning: string;
+    }> = [];
     const recommendations: string[] = [];
 
     for (const [date, events] of byDate.entries()) {
@@ -634,15 +688,26 @@ const tripPacingOptimizerTool: ToolDef = {
       const highCount = events.filter(e => e.intensity === 'high').length;
       let warning = '';
       if (highCount >= 3) warning = `${highCount} high-intensity events on one day — burnout risk.`;
-      else if (total > 600) warning = `${Math.round(total / 60)}h scheduled — leaves no slack for traveler exhaustion or weather.`;
-      else if (events.length >= 6) warning = `${events.length} discrete moves — every transition costs energy.`;
-      if (warning) overloaded.push({ date, eventCount: events.length, highIntensityCount: highCount, totalMinutes: total, warning });
+      else if (total > 600)
+        warning = `${Math.round(total / 60)}h scheduled — leaves no slack for traveler exhaustion or weather.`;
+      else if (events.length >= 6)
+        warning = `${events.length} discrete moves — every transition costs energy.`;
+      if (warning)
+        overloaded.push({
+          date,
+          eventCount: events.length,
+          highIntensityCount: highCount,
+          totalMinutes: total,
+          warning,
+        });
     }
 
     if (overloaded.length > 0) {
       recommendations.push('Move one high-intensity event per overloaded day to a lighter day.');
       recommendations.push('Allow 90min buffer between high-intensity events.');
-      recommendations.push('Schedule a "no-plan window" of at least 2h per day for travel surprises.');
+      recommendations.push(
+        'Schedule a "no-plan window" of at least 2h per day for travel surprises.'
+      );
     } else {
       recommendations.push('Pacing reads ok — no overloaded days detected.');
     }
@@ -663,7 +728,15 @@ const weatherReplanInput = z.object({
   countryCode: z.string().length(2).optional(),
   languageCode: z.string().max(10).default('en'),
   weather: z.object({
-    condition: z.enum(['rain', 'heavy_rain', 'snow', 'wind', 'extreme_heat', 'extreme_cold', 'clear']),
+    condition: z.enum([
+      'rain',
+      'heavy_rain',
+      'snow',
+      'wind',
+      'extreme_heat',
+      'extreme_cold',
+      'clear',
+    ]),
     temperatureC: z.number().min(-40).max(50).optional(),
   }),
   hoursToFill: z.number().int().min(1).max(12).default(4),
@@ -690,7 +763,8 @@ const weatherReplanEngineTool: ToolDef = {
   },
   handler: async (rawInput: WeatherReplanInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = weatherReplanInput.parse(rawInput);
 
     if (input.weather.condition === 'clear') {
@@ -713,7 +787,10 @@ const weatherReplanEngineTool: ToolDef = {
       status: rainy.status === 'ok' ? ('ok' as const) : ('unavailable' as const),
       replanNeeded: true,
       rainyDayPlan: rainy.status === 'ok' ? rainy.plan : undefined,
-      message: rainy.status === 'ok' ? `Replan needed (${input.weather.condition}); indoor plan composed.` : `Replan needed but couldn't compose: ${rainy.message}`,
+      message:
+        rainy.status === 'ok'
+          ? `Replan needed (${input.weather.condition}); indoor plan composed.`
+          : `Replan needed but couldn't compose: ${rainy.message}`,
     };
   },
 };
@@ -754,38 +831,64 @@ const groupPreferenceReconcilerTool: ToolDef = {
   },
   handler: async (rawInput: GroupReconcilerInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = groupReconcilerInput.parse(rawInput);
 
     // Tier: lowest-common (don't price out the cheapest member).
     const tierOrder = ['budget', 'medium', 'premium', 'splurge'] as const;
-    const declaredTiers = input.members.map(m => m.budgetTier).filter((t): t is NonNullable<typeof t> => !!t);
-    const consensusTier = declaredTiers.length > 0 ? tierOrder[Math.min(...declaredTiers.map(t => tierOrder.indexOf(t)))]! : 'medium';
+    const declaredTiers = input.members
+      .map(m => m.budgetTier)
+      .filter((t): t is NonNullable<typeof t> => !!t);
+    const consensusTier =
+      declaredTiers.length > 0
+        ? tierOrder[Math.min(...declaredTiers.map(t => tierOrder.indexOf(t)))]!
+        : 'medium';
 
     // Ambience: most common, default medium.
     const ambienceMix: Record<string, number> = {};
-    for (const m of input.members) if (m.ambiencePreference) ambienceMix[m.ambiencePreference] = (ambienceMix[m.ambiencePreference] ?? 0) + 1;
-    const consensusAmbience = (Object.entries(ambienceMix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'medium') as 'quiet' | 'medium' | 'loud';
+    for (const m of input.members)
+      if (m.ambiencePreference)
+        ambienceMix[m.ambiencePreference] = (ambienceMix[m.ambiencePreference] ?? 0) + 1;
+    const consensusAmbience = (Object.entries(ambienceMix).sort((a, b) => b[1] - a[1])[0]?.[0] ??
+      'medium') as 'quiet' | 'medium' | 'loud';
 
     // Dietary: union — must accommodate all.
-    const dietaryUnion = Array.from(new Set(input.members.flatMap(m => m.dietaryRestrictions ?? [])));
+    const dietaryUnion = Array.from(
+      new Set(input.members.flatMap(m => m.dietaryRestrictions ?? []))
+    );
 
     // Activities: intersection (members who all like X).
     const activityCounts: Record<string, number> = {};
-    for (const m of input.members) for (const a of m.activityPreferences ?? []) activityCounts[a] = (activityCounts[a] ?? 0) + 1;
+    for (const m of input.members)
+      for (const a of m.activityPreferences ?? []) activityCounts[a] = (activityCounts[a] ?? 0) + 1;
     const sharedActivities = Object.entries(activityCounts)
       .filter(([, c]) => c >= Math.ceil(input.members.length / 2))
       .sort((a, b) => b[1] - a[1])
       .map(([a]) => a);
 
     const tensions: string[] = [];
-    if (declaredTiers.length > 0 && new Set(declaredTiers).size > 2) tensions.push(`Budget tiers span ${new Set(declaredTiers).size} levels — anchor to the lowest, offer optional upgrades.`);
-    if (Object.keys(ambienceMix).length > 1) tensions.push(`Ambience preferences mixed — pick venues that work across (avoid extreme dive bars OR formal rooms).`);
-    if (dietaryUnion.length >= 3) tensions.push(`${dietaryUnion.length} dietary constraints — restaurants need flexibility (limit fine-dining tasting menus).`);
+    if (declaredTiers.length > 0 && new Set(declaredTiers).size > 2)
+      tensions.push(
+        `Budget tiers span ${new Set(declaredTiers).size} levels — anchor to the lowest, offer optional upgrades.`
+      );
+    if (Object.keys(ambienceMix).length > 1)
+      tensions.push(
+        `Ambience preferences mixed — pick venues that work across (avoid extreme dive bars OR formal rooms).`
+      );
+    if (dietaryUnion.length >= 3)
+      tensions.push(
+        `${dietaryUnion.length} dietary constraints — restaurants need flexibility (limit fine-dining tasting menus).`
+      );
 
     return {
       status: 'ok' as const,
-      consensus: { tier: consensusTier, ambience: consensusAmbience, dietaryUnion, sharedActivities: sharedActivities.slice(0, 6) },
+      consensus: {
+        tier: consensusTier,
+        ambience: consensusAmbience,
+        dietaryUnion,
+        sharedActivities: sharedActivities.slice(0, 6),
+      },
       tensions,
       message: `Group "${input.groupName}" reconciled: ${consensusTier} / ${consensusAmbience} / ${dietaryUnion.length} dietary / ${sharedActivities.length} shared activities.`,
     };
@@ -829,7 +932,8 @@ const perfectEveningBuilderTool: ToolDef = {
   },
   handler: async (rawInput: PerfectEveningInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
 
     const input = perfectEveningInput.parse(rawInput);
     if (input.weatherIsPoor) {
@@ -911,11 +1015,18 @@ const tripContextualRecommenderTool: ToolDef = {
   },
   handler: async (rawInput: ContextualInput, ctx) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = contextualInput.parse(rawInput);
     const s = input.situation.toLowerCase();
 
-    let intent: 'low_key' | 'foodie_anchor' | 'event_hunt' | 'walk_explore' | 'cafe_work' | 'romantic' = 'low_key';
+    let intent:
+      | 'low_key'
+      | 'foodie_anchor'
+      | 'event_hunt'
+      | 'walk_explore'
+      | 'cafe_work'
+      | 'romantic' = 'low_key';
     if (/jet[\s-]?lag|tired|exhausted|early flight/i.test(s)) intent = 'low_key';
     else if (/foodie|hungry|dinner|lunch|comer|cena/i.test(s)) intent = 'foodie_anchor';
     else if (/event|concert|happening|tonight|fun/i.test(s)) intent = 'event_hunt';

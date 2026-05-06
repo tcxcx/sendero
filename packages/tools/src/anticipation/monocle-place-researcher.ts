@@ -218,10 +218,12 @@ ${groundedText}
 """
 
 Sources cited:
-${sourceUris
-  .slice(0, 8)
-  .map((u, i) => `${i + 1}. ${u}`)
-  .join('\n') || '(none)'}
+${
+  sourceUris
+    .slice(0, 8)
+    .map((u, i) => `${i + 1}. ${u}`)
+    .join('\n') || '(none)'
+}
 
 Rules:
 - Only emit fields you have evidence for. Use null for unknowns.
@@ -247,7 +249,9 @@ function extractGrounded(result: GenerateTextLike): {
   const sources: Array<{ uri: string; title?: string }> = [];
 
   type GroundingMeta = {
-    google?: { groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> } };
+    google?: {
+      groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string; title?: string } }> };
+    };
   };
   const meta = result.providerMetadata as GroundingMeta | undefined;
   for (const c of meta?.google?.groundingMetadata?.groundingChunks ?? []) {
@@ -261,8 +265,7 @@ function extractGrounded(result: GenerateTextLike): {
   // The AI SDK may also surface URL sources via `result.sources`. Merge
   // those when distinct.
   for (const s of result.sources ?? []) {
-    const uri =
-      (s as { url?: string; uri?: string }).url ?? (s as { uri?: string }).uri ?? '';
+    const uri = (s as { url?: string; uri?: string }).url ?? (s as { uri?: string }).uri ?? '';
     const title = (s as { title?: string }).title;
     if (uri && !sourceUris.includes(uri)) {
       sourceUris.push(uri);
@@ -367,7 +370,10 @@ export async function runMonoclePlaceResearcher(
   let placeMeta: PlacesPlace | undefined;
   if (input.placeId && deps.getPlace) {
     try {
-      const r = await deps.getPlace({ placeId: input.placeId, languageCode: input.locale.split('-')[0] });
+      const r = await deps.getPlace({
+        placeId: input.placeId,
+        languageCode: input.locale.split('-')[0],
+      });
       if (r.available && r.place) placeMeta = r.place;
     } catch {
       /* fail-soft — Places is decoration, not load-bearing */

@@ -48,7 +48,11 @@ function resolveVertex() {
   const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!project || !saJson) return null;
   try {
-    return createVertex({ project, location, googleAuthOptions: { credentials: JSON.parse(saJson) } });
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
   } catch {
     return null;
   }
@@ -84,7 +88,13 @@ const classifyInput = z.object({
 export type ClassifyDisruptionInput = z.infer<typeof classifyInput>;
 
 interface RecoveryPath {
-  step: 'check_fare_rules' | 'duffel_voluntary_refund' | 'duffel_change' | 'compassionate_exception' | 'insurance_claim' | 'ops_handoff';
+  step:
+    | 'check_fare_rules'
+    | 'duffel_voluntary_refund'
+    | 'duffel_change'
+    | 'compassionate_exception'
+    | 'insurance_claim'
+    | 'ops_handoff';
   why: string;
 }
 
@@ -129,17 +139,23 @@ const KIND_PATTERNS: Array<{ kind: DisruptionKind; patterns: RegExp[]; needs: st
   },
   {
     kind: 'natural_disaster',
-    patterns: [/\b(hurricane|earthquake|terremoto|huracán|wildfire|flood|tsunami|volcanic|erupción)\b/i],
+    patterns: [
+      /\b(hurricane|earthquake|terremoto|huracán|wildfire|flood|tsunami|volcanic|erupción)\b/i,
+    ],
     needs: ['government advisory or local-news source for the event'],
   },
   {
     kind: 'visa_denied',
-    patterns: [/\b(visa denied|denied entry|visa rechazada|rechazaron la visa|negaron la visa|consular refusal)\b/i],
+    patterns: [
+      /\b(visa denied|denied entry|visa rechazada|rechazaron la visa|negaron la visa|consular refusal)\b/i,
+    ],
     needs: ['consulate denial letter', 'passport copy'],
   },
   {
     kind: 'force_majeure_other',
-    patterns: [/\b(war|civil unrest|coup|pandemic|state of emergency|estado de emergencia|toque de queda)\b/i],
+    patterns: [
+      /\b(war|civil unrest|coup|pandemic|state of emergency|estado de emergencia|toque de queda)\b/i,
+    ],
     needs: ['government advisory referencing the event'],
   },
   {
@@ -149,7 +165,9 @@ const KIND_PATTERNS: Array<{ kind: DisruptionKind; patterns: RegExp[]; needs: st
   },
   {
     kind: 'voluntary_no_refund_fare',
-    patterns: [/\b(changed my mind|cambié de opinión|don't want to go anymore|no quiero ir|cambio de planes)\b/i],
+    patterns: [
+      /\b(changed my mind|cambié de opinión|don't want to go anymore|no quiero ir|cambio de planes)\b/i,
+    ],
     needs: [],
   },
 ];
@@ -175,7 +193,9 @@ const KIND_PRIORITY: Record<DisruptionKind, number> = {
   other: 0,
 };
 
-function pickKindFromText(text: string): { kind: DisruptionKind; matches: string[]; needs: string[] } | null {
+function pickKindFromText(
+  text: string
+): { kind: DisruptionKind; matches: string[]; needs: string[] } | null {
   const scored = KIND_PATTERNS.map(entry => {
     const hits: string[] = [];
     for (const p of entry.patterns) {
@@ -202,7 +222,10 @@ function recommendedPathFor(kind: DisruptionKind, hoursToDeparture: number | nul
   const beforeDep = hoursToDeparture === null || hoursToDeparture > 0;
   // Universal: always read fare rules first — frees the cheap path when fare is generous.
   const path: RecoveryPath[] = [
-    { step: 'check_fare_rules', why: 'Read what the fare actually allows before assuming non-refundable.' },
+    {
+      step: 'check_fare_rules',
+      why: 'Read what the fare actually allows before assuming non-refundable.',
+    },
   ];
 
   switch (kind) {
@@ -211,46 +234,97 @@ function recommendedPathFor(kind: DisruptionKind, hoursToDeparture: number | nul
     case 'legal_hold':
     case 'military_orders':
       path.push(
-        { step: 'duffel_voluntary_refund', why: 'Some "non-refundable" fares allow refund within 24h or with hardship — try the API first.' },
-        { step: 'compassionate_exception', why: `${kind.replace(/_/g, ' ')} typically qualifies for an airline waiver — research the specific policy.` },
-        { step: 'duffel_change', why: 'If waiver denied, push the date to a future window with documented hardship; some waive the change fee.' },
-        { step: 'insurance_claim', why: 'Trip-cancellation insurance covers this kind of disruption; build the packet regardless of airline outcome.' },
-        { step: 'ops_handoff', why: 'Phone agents can invoke waivers the API cannot — escalate with full case file.' },
+        {
+          step: 'duffel_voluntary_refund',
+          why: 'Some "non-refundable" fares allow refund within 24h or with hardship — try the API first.',
+        },
+        {
+          step: 'compassionate_exception',
+          why: `${kind.replace(/_/g, ' ')} typically qualifies for an airline waiver — research the specific policy.`,
+        },
+        {
+          step: 'duffel_change',
+          why: 'If waiver denied, push the date to a future window with documented hardship; some waive the change fee.',
+        },
+        {
+          step: 'insurance_claim',
+          why: 'Trip-cancellation insurance covers this kind of disruption; build the packet regardless of airline outcome.',
+        },
+        {
+          step: 'ops_handoff',
+          why: 'Phone agents can invoke waivers the API cannot — escalate with full case file.',
+        }
       );
       break;
     case 'natural_disaster':
     case 'force_majeure_other':
       path.push(
-        { step: 'duffel_voluntary_refund', why: 'Mass-disruption events often trigger automatic airline waivers visible in Duffel.' },
-        { step: 'compassionate_exception', why: 'Check the airline\'s travel-advisory page for the specific event.' },
+        {
+          step: 'duffel_voluntary_refund',
+          why: 'Mass-disruption events often trigger automatic airline waivers visible in Duffel.',
+        },
+        {
+          step: 'compassionate_exception',
+          why: "Check the airline's travel-advisory page for the specific event.",
+        },
         { step: 'duffel_change', why: 'Airlines usually waive change fees for advisory events.' },
-        { step: 'insurance_claim', why: 'Force majeure is typically covered by trip-cancellation insurance.' },
-        { step: 'ops_handoff', why: 'For complex multi-leg disruptions ops can rebook on partner carriers.' },
+        {
+          step: 'insurance_claim',
+          why: 'Force majeure is typically covered by trip-cancellation insurance.',
+        },
+        {
+          step: 'ops_handoff',
+          why: 'For complex multi-leg disruptions ops can rebook on partner carriers.',
+        }
       );
       break;
     case 'visa_denied':
       path.push(
-        { step: 'duffel_voluntary_refund', why: 'Some carriers refund on documented visa denial; try the cheap path first.' },
+        {
+          step: 'duffel_voluntary_refund',
+          why: 'Some carriers refund on documented visa denial; try the cheap path first.',
+        },
         { step: 'duffel_change', why: 'Push to a date after the visa appeal / second attempt.' },
-        { step: 'insurance_claim', why: 'Visa-denial coverage is policy-dependent — build packet only if the policy includes it.' },
-        { step: 'ops_handoff', why: 'Visa denial often needs the consular letter forwarded directly to airline ops.' },
+        {
+          step: 'insurance_claim',
+          why: 'Visa-denial coverage is policy-dependent — build packet only if the policy includes it.',
+        },
+        {
+          step: 'ops_handoff',
+          why: 'Visa denial often needs the consular letter forwarded directly to airline ops.',
+        }
       );
       break;
     case 'missed_connection':
-      path.push({ step: 'ops_handoff', why: 'Use the existing missed-connection / trip_delay_replanner flow, not this workflow.' });
+      path.push({
+        step: 'ops_handoff',
+        why: 'Use the existing missed-connection / trip_delay_replanner flow, not this workflow.',
+      });
       break;
     case 'voluntary_no_refund_fare':
       path.push(
-        { step: 'duffel_voluntary_refund', why: 'Try the API; outside the fare rules this will return $0.' },
-        { step: 'duffel_change', why: 'Even non-refundable fares typically allow a date change for a fee + price diff.' },
-        { step: 'insurance_claim', why: '"Cancel for any reason" insurance covers this; standard policies do not.' },
+        {
+          step: 'duffel_voluntary_refund',
+          why: 'Try the API; outside the fare rules this will return $0.',
+        },
+        {
+          step: 'duffel_change',
+          why: 'Even non-refundable fares typically allow a date change for a fee + price diff.',
+        },
+        {
+          step: 'insurance_claim',
+          why: '"Cancel for any reason" insurance covers this; standard policies do not.',
+        }
       );
       break;
     case 'other':
       path.push(
         { step: 'duffel_voluntary_refund', why: 'Try the API path first.' },
-        { step: 'compassionate_exception', why: 'Even if the kind is unknown, the airline may publish a relevant policy.' },
-        { step: 'ops_handoff', why: 'Unknown kind defaults to ops with full context.' },
+        {
+          step: 'compassionate_exception',
+          why: 'Even if the kind is unknown, the airline may publish a relevant policy.',
+        },
+        { step: 'ops_handoff', why: 'Unknown kind defaults to ops with full context.' }
       );
       break;
   }
@@ -258,8 +332,14 @@ function recommendedPathFor(kind: DisruptionKind, hoursToDeparture: number | nul
   // Time-to-departure adjustments.
   if (!beforeDep) {
     return [
-      { step: 'ops_handoff', why: 'Departure has passed — voluntary refund/change paths are closed; only ops + insurance remain.' },
-      { step: 'insurance_claim', why: 'Even with departure passed, no-show insurance claims may pay out with documentation.' },
+      {
+        step: 'ops_handoff',
+        why: 'Departure has passed — voluntary refund/change paths are closed; only ops + insurance remain.',
+      },
+      {
+        step: 'insurance_claim',
+        why: 'Even with departure passed, no-show insurance claims may pay out with documentation.',
+      },
     ];
   }
   return path;
@@ -281,7 +361,10 @@ const classifyDisruptionTool: ToolDef = {
       departureAtIso: { type: 'string' },
     },
   },
-  handler: async (rawInput: ClassifyDisruptionInput, ctx?: ToolContext): Promise<ClassifyDisruptionResult> => {
+  handler: async (
+    rawInput: ClassifyDisruptionInput,
+    ctx?: ToolContext
+  ): Promise<ClassifyDisruptionResult> => {
     const gate = assertDevOnlyToolAllowed(ctx);
     if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
     const input = classifyInput.parse(rawInput);
@@ -289,7 +372,11 @@ const classifyDisruptionTool: ToolDef = {
     const matched = pickKindFromText(input.description);
     const kind: DisruptionKind = matched?.kind ?? 'other';
     const evidence = matched?.matches ?? [];
-    const confidence: 'low' | 'medium' | 'high' = matched ? (evidence.length >= 2 ? 'high' : 'medium') : 'low';
+    const confidence: 'low' | 'medium' | 'high' = matched
+      ? evidence.length >= 2
+        ? 'high'
+        : 'medium'
+      : 'low';
 
     let hoursToDeparture: number | null = null;
     if (input.departureAtIso) {
@@ -339,7 +426,12 @@ const compassionateShape = z.object({
 });
 
 export type CompassionateExceptionResult =
-  | { status: 'ok'; policy: z.infer<typeof compassionateShape>; via: 'vertex' | 'gateway'; message: string }
+  | {
+      status: 'ok';
+      policy: z.infer<typeof compassionateShape>;
+      via: 'vertex' | 'gateway';
+      message: string;
+    }
   | { status: 'unavailable'; reason: string; message: string }
   | { status: 'production_refused'; message: string };
 
@@ -362,7 +454,10 @@ Pull from the airline's own help center first, then from FlyerTalk / TripAdvisor
 
 Country of traveler: ${input.countryOfTravelerCode ?? 'unspecified'}.`;
 
-  const coercePrompt = (text: string, sources: string[]) => `Coerce the report into the schema. Locale: ${input.locale}.
+  const coercePrompt = (
+    text: string,
+    sources: string[]
+  ) => `Coerce the report into the schema. Locale: ${input.locale}.
 
 Report:
 """
@@ -370,7 +465,10 @@ ${text}
 """
 
 Sources cited:
-${sources.slice(0, 8).map((u, i) => `${i + 1}. ${u}`).join('\n')}
+${sources
+  .slice(0, 8)
+  .map((u, i) => `${i + 1}. ${u}`)
+  .join('\n')}
 
 Rules:
 - policyExists: 'documented' if found on the airline's help/policy pages, 'reported_via_phone' if multiple traveler reports describe the waiver but the page doesn't, 'no_evidence' if nothing surfaces.
@@ -380,7 +478,9 @@ Rules:
   async function viaPath(modelLike: any, providerOptions?: any) {
     const grounded = await generateText({
       model: modelLike,
-      tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+      tools: {
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+      },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
     });
@@ -404,15 +504,35 @@ Rules:
   if (vertex) {
     try {
       const obj = await viaPath(vertex(VERTEX_MODEL_ID));
-      if (obj) return { status: 'ok', policy: obj, via: 'vertex', message: `${input.airlineName} ${input.kind} policy via Vertex (exists=${obj.policyExists}).` };
+      if (obj)
+        return {
+          status: 'ok',
+          policy: obj,
+          via: 'vertex',
+          message: `${input.airlineName} ${input.kind} policy via Vertex (exists=${obj.policyExists}).`,
+        };
     } catch {}
   }
   try {
     const obj = await viaPath(GATEWAY_MODEL_ID, { gateway: { order: ['google'] } });
-    if (obj) return { status: 'ok', policy: obj, via: 'gateway', message: `${input.airlineName} ${input.kind} policy via gateway.` };
-    return { status: 'unavailable', reason: 'no-grounded-text', message: 'No policy data returned.' };
+    if (obj)
+      return {
+        status: 'ok',
+        policy: obj,
+        via: 'gateway',
+        message: `${input.airlineName} ${input.kind} policy via gateway.`,
+      };
+    return {
+      status: 'unavailable',
+      reason: 'no-grounded-text',
+      message: 'No policy data returned.',
+    };
   } catch (err) {
-    return { status: 'unavailable', reason: (err as Error).message ?? 'gateway-failed', message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.` };
+    return {
+      status: 'unavailable',
+      reason: (err as Error).message ?? 'gateway-failed',
+      message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.`,
+    };
   }
 }
 
@@ -483,7 +603,7 @@ const buildInsuranceClaimPacketTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Bundle a structured insurance-claim packet from the trip + disruption + airline-response facts. Pure tool — does NOT submit the claim, just produces the narrative + evidence checklist + amount. Compose AFTER airline path is exhausted (whether refunded partially or rejected entirely). The amountClaimedUsd is `paidNonRefundable - refundOffered - creditOffered`.",
+    'Bundle a structured insurance-claim packet from the trip + disruption + airline-response facts. Pure tool — does NOT submit the claim, just produces the narrative + evidence checklist + amount. Compose AFTER airline path is exhausted (whether refunded partially or rejected entirely). The amountClaimedUsd is `paidNonRefundable - refundOffered - creditOffered`.',
   inputSchema: insuranceClaimInput,
   jsonSchema: {
     type: 'object',
@@ -498,14 +618,23 @@ const buildInsuranceClaimPacketTool: ToolDef = {
       locale: { type: 'string', minLength: 2, maxLength: 10 },
     },
   },
-  handler: async (rawInput: InsuranceClaimInput, ctx?: ToolContext): Promise<{ status: 'ok' | 'production_refused'; message: string; packet?: InsuranceClaimPacket }> => {
+  handler: async (
+    rawInput: InsuranceClaimInput,
+    ctx?: ToolContext
+  ): Promise<{
+    status: 'ok' | 'production_refused';
+    message: string;
+    packet?: InsuranceClaimPacket;
+  }> => {
     const gate = assertDevOnlyToolAllowed(ctx);
     if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
     const input = insuranceClaimInput.parse(rawInput);
 
     const amountClaimed = Math.max(
       0,
-      input.trip.paidNonRefundableUsd - input.airlineResponse.refundOfferedUsd - input.airlineResponse.creditOfferedUsd
+      input.trip.paidNonRefundableUsd -
+        input.airlineResponse.refundOfferedUsd -
+        input.airlineResponse.creditOfferedUsd
     );
 
     const isSpanish = /^es/i.test(input.locale);
@@ -566,7 +695,9 @@ const buildInsuranceClaimPacketTool: ToolDef = {
     ].join('\n\n');
 
     const next: string[] = [
-      isSpanish ? 'Adjuntar todos los documentos del checklist `evidence`.' : 'Attach all documents listed in the evidence checklist.',
+      isSpanish
+        ? 'Adjuntar todos los documentos del checklist `evidence`.'
+        : 'Attach all documents listed in the evidence checklist.',
       isSpanish
         ? `Enviar a ${input.insurerName ?? 'la aseguradora'}${input.policyNumber ? ` con la póliza ${input.policyNumber}` : ''}.`
         : `Submit to ${input.insurerName ?? 'the insurer'}${input.policyNumber ? ` with policy ${input.policyNumber}` : ''}.`,
@@ -576,7 +707,9 @@ const buildInsuranceClaimPacketTool: ToolDef = {
     ];
     if (evidence.some(e => e.status === 'needed')) {
       next.unshift(
-        isSpanish ? 'Conseguir los documentos faltantes ANTES de presentar.' : 'Obtain the missing documents BEFORE submitting.'
+        isSpanish
+          ? 'Conseguir los documentos faltantes ANTES de presentar.'
+          : 'Obtain the missing documents BEFORE submitting.'
       );
     }
 
@@ -641,7 +774,13 @@ export interface TripDisruptionRecoveryResult {
   caseFile?: {
     summary: string;
     documentsRequired: string[];
-    likelyOutcome: 'partial_refund' | 'full_refund' | 'credit_only' | 'rebooking_only' | 'ops_required' | 'insurance_only';
+    likelyOutcome:
+      | 'partial_refund'
+      | 'full_refund'
+      | 'credit_only'
+      | 'rebooking_only'
+      | 'ops_required'
+      | 'insurance_only';
   };
 }
 
@@ -662,11 +801,17 @@ async function runTripDisruptionRecovery(
     ctx
   )) as ClassifyDisruptionResult;
   if (classification.status !== 'ok') {
-    return { status: 'unavailable', message: 'Classification failed; cannot build recovery chain.', classification };
+    return {
+      status: 'unavailable',
+      message: 'Classification failed; cannot build recovery chain.',
+      classification,
+    };
   }
 
   const kind = classification.kind!;
-  const isHardship = ['bereavement', 'serious_illness', 'legal_hold', 'military_orders'].includes(kind);
+  const isHardship = ['bereavement', 'serious_illness', 'legal_hold', 'military_orders'].includes(
+    kind
+  );
 
   // Step 2: research compassionate policy (only for hardship kinds).
   let compassionate: CompassionateExceptionResult | undefined;
@@ -676,7 +821,9 @@ async function runTripDisruptionRecovery(
         airlineName: input.airlineName,
         ...(input.airlineIata ? { airlineIata: input.airlineIata } : {}),
         kind,
-        ...(input.countryOfTravelerCode ? { countryOfTravelerCode: input.countryOfTravelerCode } : {}),
+        ...(input.countryOfTravelerCode
+          ? { countryOfTravelerCode: input.countryOfTravelerCode }
+          : {}),
         locale: input.locale,
       } as never,
       ctx
@@ -693,7 +840,8 @@ async function runTripDisruptionRecovery(
           tool: 'display_offer_conditions',
           ...(input.duffelOfferId ? { toolArgs: { offerId: input.duffelOfferId } } : {}),
           why: path.why,
-          expectedOutcome: 'Returns refund + change conditions per slice. Cheap and always-correct snapshot of what the API will allow.',
+          expectedOutcome:
+            'Returns refund + change conditions per slice. Cheap and always-correct snapshot of what the API will allow.',
         });
         break;
       case 'duffel_voluntary_refund':
@@ -702,7 +850,8 @@ async function runTripDisruptionRecovery(
           tool: 'cancel_order_quote',
           ...(input.duffelOrderId ? { toolArgs: { orderId: input.duffelOrderId } } : {}),
           why: path.why,
-          expectedOutcome: 'Returns refundAmount + penaltyAmount. If refundAmount > 0, follow up with confirm_cancel_order to execute.',
+          expectedOutcome:
+            'Returns refundAmount + penaltyAmount. If refundAmount > 0, follow up with confirm_cancel_order to execute.',
         });
         break;
       case 'duffel_change':
@@ -711,17 +860,22 @@ async function runTripDisruptionRecovery(
           tool: 'request_order_change',
           ...(input.duffelOrderId ? { toolArgs: { orderId: input.duffelOrderId } } : {}),
           why: path.why,
-          expectedOutcome: 'Returns alternative-date offers. Pick one with select_order_change_offer + confirm_order_change. Watch the change_total_amount — that\'s the out-of-pocket diff.',
+          expectedOutcome:
+            "Returns alternative-date offers. Pick one with select_order_change_offer + confirm_order_change. Watch the change_total_amount — that's the out-of-pocket diff.",
         });
         break;
       case 'compassionate_exception':
         chain.push({
           step: 'compassionate_exception',
-          tool: compassionate?.status === 'ok' ? 'research_compassionate_exception_policy' : 'request_human_handoff',
+          tool:
+            compassionate?.status === 'ok'
+              ? 'research_compassionate_exception_policy'
+              : 'request_human_handoff',
           why: path.why,
-          expectedOutcome: compassionate?.status === 'ok'
-            ? `Already researched: policyExists=${compassionate.policy.policyExists}, offers=${compassionate.policy.refundOrCreditOffered}. Required docs: ${compassionate.policy.documentationRequired.join(', ')}. Contact: ${compassionate.policy.contactPath}.`
-            : 'Phone the airline directly with documentation; some waivers exist only via agent.',
+          expectedOutcome:
+            compassionate?.status === 'ok'
+              ? `Already researched: policyExists=${compassionate.policy.policyExists}, offers=${compassionate.policy.refundOrCreditOffered}. Required docs: ${compassionate.policy.documentationRequired.join(', ')}. Contact: ${compassionate.policy.contactPath}.`
+              : 'Phone the airline directly with documentation; some waivers exist only via agent.',
         });
         break;
       case 'insurance_claim':
@@ -746,13 +900,15 @@ async function runTripDisruptionRecovery(
               locale: input.locale,
             },
             why: path.why,
-            expectedOutcome: 'Returns claim subject + narrative + evidence checklist + amount claimable. Build ONLY after airline path resolves so refund/credit numbers are accurate.',
+            expectedOutcome:
+              'Returns claim subject + narrative + evidence checklist + amount claimable. Build ONLY after airline path resolves so refund/credit numbers are accurate.',
           });
         } else {
           chain.push({
             step: 'insurance_claim',
             why: 'Skipped — traveler has no insurance on file. Tell traveler to check credit-card travel coverage as a fallback.',
-            expectedOutcome: 'Note: many premium credit cards include trip-cancellation insurance; ask the traveler to check card benefits.',
+            expectedOutcome:
+              'Note: many premium credit cards include trip-cancellation insurance; ask the traveler to check card benefits.',
           });
         }
         break;
@@ -765,29 +921,32 @@ async function runTripDisruptionRecovery(
             severity: isHardship ? 'high' : 'medium',
           },
           why: path.why,
-          expectedOutcome: 'Ops takes over with full case file. Include the compassionate-research findings + Duffel transcripts + insurance status.',
+          expectedOutcome:
+            'Ops takes over with full case file. Include the compassionate-research findings + Duffel transcripts + insurance status.',
         });
         break;
     }
   }
 
   // Step 4: predict likely outcome.
-  let likelyOutcome: NonNullable<TripDisruptionRecoveryResult['caseFile']>['likelyOutcome'] = 'ops_required';
+  let likelyOutcome: NonNullable<TripDisruptionRecoveryResult['caseFile']>['likelyOutcome'] =
+    'ops_required';
   if (kind === 'voluntary_no_refund_fare') likelyOutcome = 'rebooking_only';
   else if (compassionate?.status === 'ok' && compassionate.policy.policyExists !== 'no_evidence') {
-    likelyOutcome = compassionate.policy.refundOrCreditOffered === 'refund'
-      ? 'partial_refund'
-      : compassionate.policy.refundOrCreditOffered === 'credit'
-        ? 'credit_only'
-        : compassionate.policy.refundOrCreditOffered === 'rebooking_only'
-          ? 'rebooking_only'
-          : 'ops_required';
+    likelyOutcome =
+      compassionate.policy.refundOrCreditOffered === 'refund'
+        ? 'partial_refund'
+        : compassionate.policy.refundOrCreditOffered === 'credit'
+          ? 'credit_only'
+          : compassionate.policy.refundOrCreditOffered === 'rebooking_only'
+            ? 'rebooking_only'
+            : 'ops_required';
   } else if (input.hasInsurance) {
     likelyOutcome = 'insurance_only';
   }
 
   const docsRequired = [
-    ...classification.needsDocumentation ?? [],
+    ...(classification.needsDocumentation ?? []),
     ...(compassionate?.status === 'ok' ? compassionate.policy.documentationRequired : []),
   ];
 
@@ -814,7 +973,16 @@ const tripDisruptionRecoveryTool: ToolDef = {
   inputSchema: recoveryInput,
   jsonSchema: {
     type: 'object',
-    required: ['description', 'airlineName', 'travelerName', 'bookingReference', 'paidNonRefundableUsd', 'bookedTotalUsd', 'route', 'departureAtIso'],
+    required: [
+      'description',
+      'airlineName',
+      'travelerName',
+      'bookingReference',
+      'paidNonRefundableUsd',
+      'bookedTotalUsd',
+      'route',
+      'departureAtIso',
+    ],
     properties: {
       description: { type: 'string', minLength: 3, maxLength: 2000 },
       duffelOrderId: { type: 'string', maxLength: 120 },
@@ -881,7 +1049,8 @@ const recoveryCaseFileRendererTool: ToolDef = {
   },
   handler: async (rawInput: CaseFileRendererInput, ctx?: ToolContext) => {
     const gate = assertDevOnlyToolAllowed(ctx);
-    if (gate.allowed === false) return { status: 'production_refused' as const, message: gate.reason };
+    if (gate.allowed === false)
+      return { status: 'production_refused' as const, message: gate.reason };
     const input = caseFileRendererInput.parse(rawInput);
     const cf = input.caseFile;
     const isSpanish = /^es/i.test(input.locale);
@@ -914,25 +1083,38 @@ const recoveryCaseFileRendererTool: ToolDef = {
     ];
 
     if (cf.compassionatePolicySummary) {
-      lines.push('', `*${T('Airline compassionate policy (researched)', 'Política compasiva (investigada)')}:*`, cf.compassionatePolicySummary);
+      lines.push(
+        '',
+        `*${T('Airline compassionate policy (researched)', 'Política compasiva (investigada)')}:*`,
+        cf.compassionatePolicySummary
+      );
     }
     if (cf.insurerName) {
       lines.push('', `*${T('Insurance', 'Seguro')}:* ${cf.insurerName}`);
     }
-    lines.push('', `_${T('Owner: assign to a human ops agent. This case is sensitive — empathy first, transactional second.', 'Asignación: agente humano de ops. Caso sensible — empatía primero, lo transaccional después.')}_`);
+    lines.push(
+      '',
+      `_${T('Owner: assign to a human ops agent. This case is sensitive — empathy first, transactional second.', 'Asignación: agente humano de ops. Caso sensible — empatía primero, lo transaccional después.')}_`
+    );
 
     const text = lines.join('\n');
 
     if (input.format === 'slack_blocks') {
-      const blocks = [
-        { type: 'section', text: { type: 'mrkdwn', text } },
-      ];
-      return { status: 'ok' as const, blocks, text, message: `Case file rendered as Slack blocks (${text.length} chars).` };
+      const blocks = [{ type: 'section', text: { type: 'mrkdwn', text } }];
+      return {
+        status: 'ok' as const,
+        blocks,
+        text,
+        message: `Case file rendered as Slack blocks (${text.length} chars).`,
+      };
     }
     if (input.format === 'email') {
       return {
         status: 'ok' as const,
-        subject: T(`Disruption case — ${cf.travelerName} (${cf.bookingReference})`, `Caso de disrupción — ${cf.travelerName} (${cf.bookingReference})`),
+        subject: T(
+          `Disruption case — ${cf.travelerName} (${cf.bookingReference})`,
+          `Caso de disrupción — ${cf.travelerName} (${cf.bookingReference})`
+        ),
         body: text,
         message: `Case file rendered as email.`,
       };

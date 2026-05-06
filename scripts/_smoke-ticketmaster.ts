@@ -20,7 +20,9 @@ const ctx: ToolContext = {
   caller: { effectiveKeyType: 'sandbox', keyType: 'sandbox', scopes: ['*'] },
 };
 
-console.log(`\n› mainstream_event_discovery({ city: "${city}"${segment ? `, segment: "${segment}"` : ''} })\n`);
+console.log(
+  `\n› mainstream_event_discovery({ city: "${city}"${segment ? `, segment: "${segment}"` : ''} })\n`
+);
 
 const input: Record<string, unknown> = { city, limit: 10 };
 if (segment) input.segment = segment;

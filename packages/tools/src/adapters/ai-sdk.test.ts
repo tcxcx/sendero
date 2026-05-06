@@ -76,9 +76,9 @@ describe('toAiSdkTool — experimental span stamping', () => {
       throw new Error('OTel internal error');
     });
     const t = toAiSdkTool(experimentalDef);
-    const result = (await (t as { execute: (input: unknown) => Promise<unknown> }).execute(
-      {}
-    )) as { ok: boolean };
+    const result = (await (t as { execute: (input: unknown) => Promise<unknown> }).execute({})) as {
+      ok: boolean;
+    };
     expect(result.ok).toBe(true);
   });
 });

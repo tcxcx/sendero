@@ -177,7 +177,8 @@ const photographySpotFinderTool: ToolDef<BaseInput, FinderResult> = {
           const all = [...(place.types ?? []), place.primaryType].filter(Boolean) as string[];
           return all.some(t => PHOTO_TYPES.has(t));
         },
-        cseSnippetMustMatch: /\b(photo|photography|viewpoint|mirador|skyline|golden hour|sunset spot)\b/i,
+        cseSnippetMustMatch:
+          /\b(photo|photography|viewpoint|mirador|skyline|golden hour|sunset spot)\b/i,
       },
       input,
       ctx

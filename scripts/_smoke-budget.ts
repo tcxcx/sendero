@@ -22,11 +22,26 @@ const ctx: ToolContext = {
 const cases = [
   { category: 'ramen' as const, city: 'Tokyo', countryCode: 'JP' },
   { category: 'ramen' as const, city: 'Buenos Aires', countryCode: 'AR' },
-  { category: 'fine_restaurant' as const, city: 'New York', countryCode: 'US', priceLevel: 'PRICE_LEVEL_VERY_EXPENSIVE' as const },
+  {
+    category: 'fine_restaurant' as const,
+    city: 'New York',
+    countryCode: 'US',
+    priceLevel: 'PRICE_LEVEL_VERY_EXPENSIVE' as const,
+  },
   { category: 'fine_restaurant' as const, city: 'Lisbon', countryCode: 'PT' },
-  { category: 'tasting_menu' as const, city: 'Tokyo', countryCode: 'JP', michelinPriceSymbols: '$$$' as const },
+  {
+    category: 'tasting_menu' as const,
+    city: 'Tokyo',
+    countryCode: 'JP',
+    michelinPriceSymbols: '$$$' as const,
+  },
   { category: 'cafe' as const, city: 'Mexico City', countryCode: 'MX' },
-  { category: 'wine_bar' as const, city: 'Madrid', countryCode: 'ES', reviewMentions: ['copa de vino $9', 'tapas around $12 each'] },
+  {
+    category: 'wine_bar' as const,
+    city: 'Madrid',
+    countryCode: 'ES',
+    reviewMentions: ['copa de vino $9', 'tapas around $12 each'],
+  },
   { category: 'cafe' as const, city: 'Reykjavik', countryCode: 'IS' },
 ];
 

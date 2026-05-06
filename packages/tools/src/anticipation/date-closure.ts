@@ -130,7 +130,7 @@ const dateProfileBuilderTool: ToolDef<DateProfileBuilderInput, DateProfileBuilde
   internal: true,
   experimental: true,
   description:
-    'Capture / update the traveler\'s dating preferences — budget tier, vibe, ambience, formality, dietary restrictions, things to avoid. Sibling of `hobby_profile_builder` but scoped to date-planning. Pure DB-only (in-process for v0.1, promotes to a `DateProfile` Postgres row in v0.2). Strict policy: never persist sensitive romantic / sexual traits — only travel-relevant preferences.',
+    "Capture / update the traveler's dating preferences — budget tier, vibe, ambience, formality, dietary restrictions, things to avoid. Sibling of `hobby_profile_builder` but scoped to date-planning. Pure DB-only (in-process for v0.1, promotes to a `DateProfile` Postgres row in v0.2). Strict policy: never persist sensitive romantic / sexual traits — only travel-relevant preferences.",
   inputSchema: dateProfileInput,
   jsonSchema: {
     type: 'object',
@@ -141,7 +141,10 @@ const dateProfileBuilderTool: ToolDef<DateProfileBuilderInput, DateProfileBuilde
       preferredVibe: { type: 'string', enum: [...DATE_VIBES] },
       avoid: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 80 } },
       preferredDateLength: { type: 'string', enum: ['short', 'medium', 'long'] },
-      preferredFirstMove: { type: 'string', enum: ['coffee', 'wine_bar', 'gallery', 'walk', 'cocktail_bar'] },
+      preferredFirstMove: {
+        type: 'string',
+        enum: ['coffee', 'wine_bar', 'gallery', 'walk', 'cocktail_bar'],
+      },
       preferredAmbience: { type: 'string', enum: ['quiet', 'medium', 'loud'] },
       preferredFormality: { type: 'string', enum: ['casual', 'medium', 'fancy'] },
       dietaryRestrictions: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 40 } },
@@ -284,7 +287,7 @@ const datePlanRankerTool: ToolDef<DatePlanRankerInput, DatePlanRankerResult> = {
   internal: true,
   experimental: true,
   description:
-    "Rank multiple candidate date plans by vibe fit + walk distance between stops + weather resilience + ambience fit + structural completeness (opener/anchor/second_move/exit). Pure tool — caller passes plans already assembled by `date_plan_builder` (or one per tier from `date_budget_optimizer`). Returns ranked list with explanations.",
+    'Rank multiple candidate date plans by vibe fit + walk distance between stops + weather resilience + ambience fit + structural completeness (opener/anchor/second_move/exit). Pure tool — caller passes plans already assembled by `date_plan_builder` (or one per tier from `date_budget_optimizer`). Returns ranked list with explanations.',
   inputSchema: planRankerInput,
   jsonSchema: {
     type: 'object',
@@ -342,7 +345,16 @@ const secondMoveInput = z.object({
   anchorName: z.string().max(160).optional(),
   /** Caller picks the kind. */
   kind: z
-    .enum(['dessert', 'wine_bar', 'cocktail', 'walk', 'viewpoint', 'music', 'bookstore', 'late_coffee'])
+    .enum([
+      'dessert',
+      'wine_bar',
+      'cocktail',
+      'walk',
+      'viewpoint',
+      'music',
+      'bookstore',
+      'late_coffee',
+    ])
     .default('wine_bar'),
   budgetTier: z.enum(DATE_BUDGET_TIERS).default('medium'),
   limit: z.number().int().min(1).max(8).default(4),
@@ -391,7 +403,8 @@ export async function runDateSecondMoveFinder(
       },
       ctx
     );
-    if (r.status === 'production_refused') return { status: 'production_refused', message: r.message };
+    if (r.status === 'production_refused')
+      return { status: 'production_refused', message: r.message };
     if (r.status !== 'ok') {
       outcome = 'unavailable';
       reason = r.reason;
@@ -415,7 +428,8 @@ export async function runDateSecondMoveFinder(
       },
       ctx
     );
-    if (r.status === 'production_refused') return { status: 'production_refused', message: r.message };
+    if (r.status === 'production_refused')
+      return { status: 'production_refused', message: r.message };
     if (r.status !== 'ok') {
       outcome = 'unavailable';
       reason = r.message;
@@ -448,10 +462,7 @@ export async function runDateSecondMoveFinder(
   };
 }
 
-const dateSecondMoveFinderTool: ToolDef<
-  DateSecondMoveFinderInput,
-  DateSecondMoveFinderResult
-> = {
+const dateSecondMoveFinderTool: ToolDef<DateSecondMoveFinderInput, DateSecondMoveFinderResult> = {
   name: 'date_second_move_finder',
   internal: true,
   experimental: true,
@@ -468,7 +479,16 @@ const dateSecondMoveFinderTool: ToolDef<
       anchorName: { type: 'string', maxLength: 160 },
       kind: {
         type: 'string',
-        enum: ['dessert', 'wine_bar', 'cocktail', 'walk', 'viewpoint', 'music', 'bookstore', 'late_coffee'],
+        enum: [
+          'dessert',
+          'wine_bar',
+          'cocktail',
+          'walk',
+          'viewpoint',
+          'music',
+          'bookstore',
+          'late_coffee',
+        ],
       },
       budgetTier: { type: 'string', enum: [...DATE_BUDGET_TIERS] },
       limit: { type: 'integer', minimum: 1, maximum: 8 },
@@ -484,18 +504,23 @@ const weatherReplanInput = z.object({
   /** Existing date plan to replan. */
   plan: z.object({
     label: z.string().min(1).max(80),
-    stops: z.array(
-      z.object({
-        name: z.string().min(1).max(160),
-        category: z.string().max(60),
-        role: z.enum(['opener', 'anchor', 'second_move', 'exit']).optional(),
-        weatherSensitive: z.boolean().optional(),
-      })
-    ).min(2).max(6),
+    stops: z
+      .array(
+        z.object({
+          name: z.string().min(1).max(160),
+          category: z.string().max(60),
+          role: z.enum(['opener', 'anchor', 'second_move', 'exit']).optional(),
+          weatherSensitive: z.boolean().optional(),
+        })
+      )
+      .min(2)
+      .max(6),
   }),
   /** Weather signal — shape sourced from `trip_weather_brief` output. */
   weather: z.object({
-    condition: z.enum(['rain', 'heavy_rain', 'snow', 'wind', 'extreme_heat', 'extreme_cold', 'clear']).default('clear'),
+    condition: z
+      .enum(['rain', 'heavy_rain', 'snow', 'wind', 'extreme_heat', 'extreme_cold', 'clear'])
+      .default('clear'),
     temperatureC: z.number().min(-40).max(50).optional(),
     precipitationProbability: z.number().min(0).max(1).optional(),
   }),
@@ -541,7 +566,9 @@ export async function runDateWeatherReplan(
     case 'wind':
       if (exposed.length > 0) {
         needsReplan = true;
-        recs.push('Walks become miserable in wind > 30 km/h — replace with cocktail bar second move.');
+        recs.push(
+          'Walks become miserable in wind > 30 km/h — replace with cocktail bar second move.'
+        );
       }
       break;
     case 'extreme_heat':
@@ -552,11 +579,15 @@ export async function runDateWeatherReplan(
       break;
     case 'extreme_cold':
       needsReplan = true;
-      recs.push('Pick a single warm anchor and one second move next door — don\'t make them walk a kilometer.');
+      recs.push(
+        "Pick a single warm anchor and one second move next door — don't make them walk a kilometer."
+      );
       recs.push('A spirited Negroni / mulled wine opener does heavy lifting in cold weather.');
       break;
     case 'clear':
-      recs.push('Weather is clear — no replan needed. Consider adding a walk between stops if pacing allows.');
+      recs.push(
+        'Weather is clear — no replan needed. Consider adding a walk between stops if pacing allows.'
+      );
       break;
   }
 
@@ -609,10 +640,7 @@ const routeSafetyInput = z.object({
     .max(6),
   /** Caller-supplied per-neighborhood after-dark assessment, when known. */
   neighborhoodNotes: z
-    .record(
-      z.string(),
-      z.enum(['safe', 'mostly_safe', 'caution', 'avoid'])
-    )
+    .record(z.string(), z.enum(['safe', 'mostly_safe', 'caution', 'avoid']))
     .optional(),
 });
 
@@ -672,11 +700,17 @@ export async function runDateRouteSafetyCheck(
     recommendations.push('At least one stop is in an avoid-rated neighborhood — replan that stop.');
   }
   if (verdicts.some(v => v.verdict === 'caution')) {
-    recommendations.push('Pre-arrange the trip home before the late stop — taxi app / arranged ride.');
-    recommendations.push('Avoid walking alone between the last two stops — book a single taxi for both.');
+    recommendations.push(
+      'Pre-arrange the trip home before the late stop — taxi app / arranged ride.'
+    );
+    recommendations.push(
+      'Avoid walking alone between the last two stops — book a single taxi for both.'
+    );
   }
   if (recommendations.length === 0) {
-    recommendations.push('Route reads ok across all stops — keep usual common-sense (phone charged, share location with one trusted contact).');
+    recommendations.push(
+      'Route reads ok across all stops — keep usual common-sense (phone charged, share location with one trusted contact).'
+    );
   }
 
   return {
@@ -715,11 +749,7 @@ const romanticPackInput = z.object({
   travelerId: z.string().max(120).optional(),
   languageCode: z.string().max(10).default('en'),
   /** Pack covers all four budget tiers by default. Pass to scope down. */
-  tiers: z
-    .array(z.enum(DATE_BUDGET_TIERS))
-    .min(1)
-    .max(4)
-    .default(['budget', 'medium', 'premium']),
+  tiers: z.array(z.enum(DATE_BUDGET_TIERS)).min(1).max(4).default(['budget', 'medium', 'premium']),
   perTierStops: z.number().int().min(2).max(4).default(3),
 });
 

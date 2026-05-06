@@ -38,7 +38,8 @@ if (classified.status === 'ok') {
   console.log(`  hours-to-dep: ${classified.hoursToDeparture}`);
   console.log(`  docs needed: ${(classified.needsDocumentation ?? []).join(', ')}`);
   console.log(`  recommended path:`);
-  for (const p of classified.recommendedPath ?? []) console.log(`    ${p.step.padEnd(28)} — ${p.why}`);
+  for (const p of classified.recommendedPath ?? [])
+    console.log(`    ${p.step.padEnd(28)} — ${p.why}`);
 }
 
 console.log('\n=== trip_disruption_recovery (full orchestrator) ===');
@@ -72,7 +73,9 @@ if (recovery.status === 'ok') {
     console.log(`       expect:  ${s.expectedOutcome}`);
   }
   if (recovery.compassionateResearch) {
-    console.log(`\n  compassionate research: ${recovery.compassionateResearch.status} via ${(recovery.compassionateResearch as { via?: string }).via ?? '?'}`);
+    console.log(
+      `\n  compassionate research: ${recovery.compassionateResearch.status} via ${(recovery.compassionateResearch as { via?: string }).via ?? '?'}`
+    );
     if (recovery.compassionateResearch.status === 'ok') {
       const p = recovery.compassionateResearch.policy;
       console.log(`    exists:        ${p.policyExists}`);
@@ -117,7 +120,8 @@ if (claim.status === 'ok') {
   console.log(`  subject:        ${claim.packet?.claimSubject}`);
   console.log(`  amount claimed: USD ${claim.packet?.amountClaimedUsd}`);
   console.log(`  evidence:`);
-  for (const e of claim.packet?.evidence ?? []) console.log(`    [${e.status === 'on_file' ? '✓' : '?'}] ${e.kind}`);
+  for (const e of claim.packet?.evidence ?? [])
+    console.log(`    [${e.status === 'on_file' ? '✓' : '?'}] ${e.kind}`);
   console.log(`\n  narrative (first 500 chars):`);
   console.log(`  ${(claim.packet?.claimNarrative ?? '').slice(0, 500)}`);
 }

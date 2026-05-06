@@ -35,7 +35,11 @@ function resolveVertex() {
   const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!project || !saJson) return null;
   try {
-    return createVertex({ project, location, googleAuthOptions: { credentials: JSON.parse(saJson) } });
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
   } catch {
     return null;
   }
@@ -70,15 +74,21 @@ interface TeamTravelLeg {
 async function runTeamTravelPackageBuilder(
   rawInput: TeamTravelInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; legs?: TeamTravelLeg[] }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  legs?: TeamTravelLeg[];
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = teamTravelInput.parse(rawInput);
   const fixtureQuery = [input.team, input.competition, 'next fixtures'].filter(Boolean).join(' ');
-  const fixtures = await lookupMatchFixturesTool.handler(
-    { query: fixtureQuery, limit: input.fixtureLimit, locale: input.locale } as never
-  );
+  const fixtures = await lookupMatchFixturesTool.handler({
+    query: fixtureQuery,
+    limit: input.fixtureLimit,
+    locale: input.locale,
+  } as never);
   if (fixtures.status !== 'ok' || fixtures.fixtures.length === 0) {
     return {
       status: 'unavailable',
@@ -155,13 +165,18 @@ interface StadiumDayPlan {
 async function runStadiumDayPlan(
   rawInput: StadiumDayInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; plan?: StadiumDayPlan }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  plan?: StadiumDayPlan;
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = stadiumDayInput.parse(rawInput);
   const matchAt = new Date(input.matchAtIso);
-  if (Number.isNaN(matchAt.getTime())) return { status: 'unavailable', message: 'Invalid matchAtIso.' };
+  if (Number.isNaN(matchAt.getTime()))
+    return { status: 'unavailable', message: 'Invalid matchAtIso.' };
 
   const arriveBy = new Date(matchAt.getTime() - input.arrivalBufferMinutes * 60_000);
   const leaveBy = new Date(arriveBy.getTime() - 30 * 60_000);
@@ -183,10 +198,12 @@ async function runStadiumDayPlan(
   const [pre, post] = await Promise.all([preP, postP]);
 
   const preTop = pre.available
-    ? pre.results.find(p => (p.rating ?? 0) >= 4.0 && (p.userRatingCount ?? 0) >= 200) ?? pre.results[0]
+    ? (pre.results.find(p => (p.rating ?? 0) >= 4.0 && (p.userRatingCount ?? 0) >= 200) ??
+      pre.results[0])
     : undefined;
   const postTop = post.available
-    ? post.results.find(p => (p.rating ?? 0) >= 4.0 && (p.userRatingCount ?? 0) >= 200) ?? post.results[0]
+    ? (post.results.find(p => (p.rating ?? 0) >= 4.0 && (p.userRatingCount ?? 0) >= 200) ??
+      post.results[0])
     : undefined;
 
   const tips: string[] = [
@@ -194,7 +211,8 @@ async function runStadiumDayPlan(
     `Match starts ${matchAt.toISOString()}; gates typically open 90 minutes prior.`,
     `Group of ${input.fanCount}: agree on a meeting point at the stadium BEFORE entering — phone signal dies inside.`,
   ];
-  if (input.fanCount >= 6) tips.push('Groups of 6+: consider arranging two cabs going in (one going out is much harder).');
+  if (input.fanCount >= 6)
+    tips.push('Groups of 6+: consider arranging two cabs going in (one going out is much harder).');
 
   return {
     status: 'ok',
@@ -272,13 +290,21 @@ const awayFanSafetyShape = z.object({
 async function runAwayFanSafetyBrief(
   rawInput: AwayFanSafetyInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; brief?: z.infer<typeof awayFanSafetyShape>; via?: 'vertex' | 'gateway' }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  brief?: z.infer<typeof awayFanSafetyShape>;
+  via?: 'vertex' | 'gateway';
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = awayFanSafetyInput.parse(rawInput);
   const groundingPrompt = `Provide cautious, practical safety guidance for an away fan of ${input.team} traveling to ${input.hostCity}, ${input.hostCountryCode}. Rivalry level: ${input.rivalry}. Cover: general risk level, away-section guidance (where to enter, who to look for), what to wear and not wear, arrival/egress tips, post-match safety considerations, emergency notes. Pull from official club + UEFA/FIFA away-supporter guidance + recent reporting. Never sensationalize or speculate.`;
-  const coercePrompt = (text: string, sources: string[]) => `Coerce this safety report into the schema. Locale: ${input.locale}.
+  const coercePrompt = (
+    text: string,
+    sources: string[]
+  ) => `Coerce this safety report into the schema. Locale: ${input.locale}.
 
 Report:
 """
@@ -286,13 +312,18 @@ ${text}
 """
 
 Sources cited:
-${sources.slice(0, 6).map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
+${sources
+  .slice(0, 6)
+  .map((u, i) => `${i + 1}. ${u}`)
+  .join('\n')}`;
 
   const vertex = resolveVertex();
   async function viaPath(modelLike: any, providerOptions?: any) {
     const grounded = await generateText({
       model: modelLike,
-      tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+      tools: {
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+      },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
     });
@@ -316,15 +347,30 @@ ${sources.slice(0, 6).map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
   if (vertex) {
     try {
       const obj = await viaPath(vertex(VERTEX_MODEL_ID));
-      if (obj) return { status: 'ok', brief: obj, via: 'vertex', message: `Away-fan safety brief for ${input.hostCity} via Vertex (risk=${obj.generalRiskLevel}).` };
+      if (obj)
+        return {
+          status: 'ok',
+          brief: obj,
+          via: 'vertex',
+          message: `Away-fan safety brief for ${input.hostCity} via Vertex (risk=${obj.generalRiskLevel}).`,
+        };
     } catch {}
   }
   try {
     const obj = await viaPath(GATEWAY_MODEL_ID, { gateway: { order: ['google'] } });
-    if (obj) return { status: 'ok', brief: obj, via: 'gateway', message: `Away-fan safety brief via gateway.` };
+    if (obj)
+      return {
+        status: 'ok',
+        brief: obj,
+        via: 'gateway',
+        message: `Away-fan safety brief via gateway.`,
+      };
     return { status: 'unavailable', message: 'No grounded data returned.' };
   } catch (err) {
-    return { status: 'unavailable', message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.` };
+    return {
+      status: 'unavailable',
+      message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.`,
+    };
   }
 }
 
@@ -333,7 +379,7 @@ const awayFanSafetyBriefTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Cautious safety guidance for away fans — risk level, away-section logistics, what to wear/not wear, arrival/egress tips, post-match safety, emergency notes. Vertex-grounded research with Gateway fallback. Use whenever the traveler is going to a derby, high-rivalry, or international away match.",
+    'Cautious safety guidance for away fans — risk level, away-section logistics, what to wear/not wear, arrival/egress tips, post-match safety, emergency notes. Vertex-grounded research with Gateway fallback. Use whenever the traveler is going to a derby, high-rivalry, or international away match.',
   inputSchema: awayFanSafetyInput,
   jsonSchema: {
     type: 'object',
@@ -407,20 +453,30 @@ async function runTicketResaleRiskChecker(
   if (input.askingPrice && input.faceValue) {
     const ratio = input.askingPrice / input.faceValue;
     if (ratio > 4) {
-      flags.push(`Asking ${ratio.toFixed(1)}× face value — extreme markup; check secondary platforms first.`);
+      flags.push(
+        `Asking ${ratio.toFixed(1)}× face value — extreme markup; check secondary platforms first.`
+      );
       level = level === 'low' ? 'medium' : level;
     } else if (ratio < 0.4) {
-      flags.push(`Asking ${ratio.toFixed(1)}× face value — suspiciously cheap; classic scam pattern.`);
+      flags.push(
+        `Asking ${ratio.toFixed(1)}× face value — suspiciously cheap; classic scam pattern.`
+      );
       level = 'avoid';
     }
   }
 
   if (input.context === 'football') {
-    recommendations.push('For football: many leagues void resale tickets that aren\'t transferred via the official app — verify before buying.');
+    recommendations.push(
+      "For football: many leagues void resale tickets that aren't transferred via the official app — verify before buying."
+    );
   }
   if (level !== 'low') {
-    recommendations.push('Pay only via methods with chargeback protection (credit card or PayPal goods+services). Never via wire or crypto.');
-    recommendations.push('Ask for the seller\'s purchase confirmation screenshot WITH the order number visible — and verify on the official site.');
+    recommendations.push(
+      'Pay only via methods with chargeback protection (credit card or PayPal goods+services). Never via wire or crypto.'
+    );
+    recommendations.push(
+      "Ask for the seller's purchase confirmation screenshot WITH the order number visible — and verify on the official site."
+    );
   }
 
   return {
@@ -456,7 +512,9 @@ const sportsBarInput = z.object({
   city: z.string().min(1).max(120),
   countryCode: z.string().length(2).optional(),
   /** Sport / league watching for. */
-  matchKind: z.enum(['football', 'nfl', 'mlb', 'nba', 'rugby', 'cricket', 'f1', 'tennis', 'general']).default('football'),
+  matchKind: z
+    .enum(['football', 'nfl', 'mlb', 'nba', 'rugby', 'cricket', 'f1', 'tennis', 'general'])
+    .default('football'),
   languageCode: z.string().max(10).default('en'),
   limit: z.number().int().min(1).max(15).default(8),
 });
@@ -480,7 +538,13 @@ async function runSportsBarFinder(
 ): Promise<{
   status: 'ok' | 'unavailable' | 'production_refused';
   message: string;
-  bars?: Array<{ name: string; url?: string; rationale: string; rating?: number; reviewCount?: number }>;
+  bars?: Array<{
+    name: string;
+    url?: string;
+    rationale: string;
+    rating?: number;
+    reviewCount?: number;
+  }>;
 }> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
@@ -497,7 +561,11 @@ async function runSportsBarFinder(
     return { status: 'unavailable', message: `Places unavailable: ${places.reason ?? 'unknown'}.` };
   }
   const bars = places.results
-    .filter(p => /\b(bar|pub|tavern|brew|sport|cervecer|bodeg)/i.test(`${p.name} ${p.editorialSummary ?? ''} ${p.types?.join(' ') ?? ''}`))
+    .filter(p =>
+      /\b(bar|pub|tavern|brew|sport|cervecer|bodeg)/i.test(
+        `${p.name} ${p.editorialSummary ?? ''} ${p.types?.join(' ') ?? ''}`
+      )
+    )
     .slice(0, input.limit)
     .map(p => ({
       name: p.name,
@@ -527,7 +595,10 @@ const sportsBarFinderTool: ToolDef = {
     properties: {
       city: { type: 'string', minLength: 1, maxLength: 120 },
       countryCode: { type: 'string', minLength: 2, maxLength: 2 },
-      matchKind: { type: 'string', enum: ['football', 'nfl', 'mlb', 'nba', 'rugby', 'cricket', 'f1', 'tennis', 'general'] },
+      matchKind: {
+        type: 'string',
+        enum: ['football', 'nfl', 'mlb', 'nba', 'rugby', 'cricket', 'f1', 'tennis', 'general'],
+      },
       languageCode: { type: 'string', maxLength: 10 },
       limit: { type: 'integer', minimum: 1, maximum: 15 },
     },
@@ -563,7 +634,8 @@ async function runMatchPostponementMonitor(
   guidance?: string[];
 }> {
   const gate = assertDevOnlyToolAllowed(ctx);
-  if (gate.allowed === false) return { status: 'production_refused', message: gate.reason, changed: false };
+  if (gate.allowed === false)
+    return { status: 'production_refused', message: gate.reason, changed: false };
 
   const input = postponementInput.parse(rawInput);
   const orig = new Date(input.originalKickoffIso).getTime();
@@ -574,13 +646,19 @@ async function runMatchPostponementMonitor(
 
   const shiftMinutes = Math.round((latest - orig) / 60_000);
   const venueChanged = !!input.latestVenue && false; // venue compare against prior would need prior venue; flag only as ◐
-  const statusChanged = !!input.latestStatus && /postponed|cancelled|abandoned/i.test(input.latestStatus);
+  const statusChanged =
+    !!input.latestStatus && /postponed|cancelled|abandoned/i.test(input.latestStatus);
   const changed = shiftMinutes !== 0 || statusChanged;
 
   const guidance: string[] = [];
-  if (Math.abs(shiftMinutes) >= 60) guidance.push('Kickoff moved >1h — re-check transit + dinner reservations.');
-  if (Math.abs(shiftMinutes) >= 1440) guidance.push('Kickoff moved by >1 day — re-check flights + hotel nights.');
-  if (statusChanged) guidance.push(`Match marked "${input.latestStatus}" — verify with the official source before traveling.`);
+  if (Math.abs(shiftMinutes) >= 60)
+    guidance.push('Kickoff moved >1h — re-check transit + dinner reservations.');
+  if (Math.abs(shiftMinutes) >= 1440)
+    guidance.push('Kickoff moved by >1 day — re-check flights + hotel nights.');
+  if (statusChanged)
+    guidance.push(
+      `Match marked "${input.latestStatus}" — verify with the official source before traveling.`
+    );
 
   return {
     status: 'ok',
@@ -628,7 +706,9 @@ const fanGroupInput = z.object({
         name: z.string().min(1).max(80),
         homeIata: z.string().length(3).optional(),
         budgetTier: z.enum(['budget', 'medium', 'premium', 'splurge']).optional(),
-        seatPreference: z.enum(['away_section', 'home_section', 'mixed', 'no_preference']).optional(),
+        seatPreference: z
+          .enum(['away_section', 'home_section', 'mixed', 'no_preference'])
+          .optional(),
         wantsHotel: z.boolean().default(true),
       })
     )
@@ -668,24 +748,39 @@ async function runFanGroupCoordinationTool(
   const declaredTiers = Object.entries(budgetMix);
   const recommendedTier =
     declaredTiers.length > 0
-      ? tierOrder.find(t => budgetMix[t] && budgetMix[t]! >= Math.ceil(input.members.length / 2)) ?? 'medium'
+      ? (tierOrder.find(
+          t => budgetMix[t] && budgetMix[t]! >= Math.ceil(input.members.length / 2)
+        ) ?? 'medium')
       : 'medium';
-  const recommendedSection =
-    Object.entries(seatMix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'mixed';
+  const recommendedSection = Object.entries(seatMix).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'mixed';
 
   const recommendations: string[] = [];
   if (Object.keys(origins).length >= 3) {
-    recommendations.push(`Group spans ${Object.keys(origins).length} origin cities — book a meeting hotel near the stadium so transfers from each airport are simple.`);
+    recommendations.push(
+      `Group spans ${Object.keys(origins).length} origin cities — book a meeting hotel near the stadium so transfers from each airport are simple.`
+    );
   } else if (Object.keys(origins).length === 1) {
-    recommendations.push('Group all flying from one origin — book a single charter / group rate via the airline.');
+    recommendations.push(
+      'Group all flying from one origin — book a single charter / group rate via the airline.'
+    );
   }
   if (input.members.length >= 8) {
-    recommendations.push('Group ≥ 8: lock 1 person as "logistics lead" and run the trip in a shared sheet, not in chat.');
+    recommendations.push(
+      'Group ≥ 8: lock 1 person as "logistics lead" and run the trip in a shared sheet, not in chat.'
+    );
   }
-  if (declaredTiers.length > 0 && declaredTiers.length === input.members.length && new Set(declaredTiers.map(([t]) => t)).size > 2) {
-    recommendations.push('Budget tier varies widely — consider 2 hotel options (one mid, one premium) so each person picks.');
+  if (
+    declaredTiers.length > 0 &&
+    declaredTiers.length === input.members.length &&
+    new Set(declaredTiers.map(([t]) => t)).size > 2
+  ) {
+    recommendations.push(
+      'Budget tier varies widely — consider 2 hotel options (one mid, one premium) so each person picks.'
+    );
   }
-  recommendations.push('Pay tickets through one card → individual Venmo / Splitwise reimbursements. Avoids the trust hit of pooled pre-pay.');
+  recommendations.push(
+    'Pay tickets through one card → individual Venmo / Splitwise reimbursements. Avoids the trust hit of pooled pre-pay.'
+  );
 
   return {
     status: 'ok',

@@ -11,9 +11,7 @@ import 'dotenv/config';
 
 import { webSearchTool } from '../packages/tools/src/web-search';
 
-const query =
-  process.argv.slice(2).join(' ').trim() ||
-  'next Boca Juniors home match May 2026';
+const query = process.argv.slice(2).join(' ').trim() || 'next Boca Juniors home match May 2026';
 
 console.log(`\n› web_search("${query}")\n`);
 

@@ -80,9 +80,7 @@ function composeCseQuery(city: string, lang: string, style?: string) {
 
 function composePlacesQuery(city: string, lang: string, style?: string) {
   const styleTerm = style ? `${style} ` : '';
-  return lang === 'es'
-    ? `${styleTerm}ramen en ${city}`
-    : `${styleTerm}ramen in ${city}`;
+  return lang === 'es' ? `${styleTerm}ramen en ${city}` : `${styleTerm}ramen in ${city}`;
 }
 
 const RELEVANT_TYPES = new Set([

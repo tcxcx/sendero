@@ -5,7 +5,11 @@
  */
 
 import type { ToolContext } from '../types';
-import { wineBarFinderTool, type CulturalCommerceFinderInput, type CulturalCommerceFinderResult } from './cultural-commerce-finders';
+import {
+  wineBarFinderTool,
+  type CulturalCommerceFinderInput,
+  type CulturalCommerceFinderResult,
+} from './cultural-commerce-finders';
 import {
   type FoodieShortlistBuilderInput,
   type FoodieShortlistBuilderResult,

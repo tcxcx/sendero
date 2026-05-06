@@ -43,7 +43,11 @@ function resolveVertex() {
   const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
   if (!project || !saJson) return null;
   try {
-    return createVertex({ project, location, googleAuthOptions: { credentials: JSON.parse(saJson) } });
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
   } catch {
     return null;
   }
@@ -56,7 +60,15 @@ const clientDinnerInput = z.object({
   countryCode: z.string().length(2).optional(),
   languageCode: z.string().max(10).default('en'),
   /** Tone of the dinner. */
-  tone: z.enum(['classic_steakhouse', 'modern_tasting', 'understated_local', 'safe_international', 'celebratory']).default('safe_international'),
+  tone: z
+    .enum([
+      'classic_steakhouse',
+      'modern_tasting',
+      'understated_local',
+      'safe_international',
+      'celebratory',
+    ])
+    .default('safe_international'),
   partySize: z.number().int().min(2).max(20).default(4),
   budgetTier: z.enum(['medium', 'premium', 'splurge']).default('premium'),
 });
@@ -73,12 +85,17 @@ interface ClientDinnerCandidate {
 async function runClientDinnerRecommender(
   rawInput: ClientDinnerInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; candidates?: ClientDinnerCandidate[] }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  candidates?: ClientDinnerCandidate[];
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = clientDinnerInput.parse(rawInput);
-  const filter = input.budgetTier === 'splurge' ? 'all' : input.budgetTier === 'premium' ? 'all' : 'bib';
+  const filter =
+    input.budgetTier === 'splurge' ? 'all' : input.budgetTier === 'premium' ? 'all' : 'bib';
 
   const r = await runCheapMichelinFinder(
     {
@@ -93,7 +110,10 @@ async function runClientDinnerRecommender(
   if (r.status !== 'ok') {
     return {
       status: 'unavailable',
-      message: r.status === 'production_refused' ? r.message : `${r.status === 'unavailable' ? r.reason : 'fail'}`,
+      message:
+        r.status === 'production_refused'
+          ? r.message
+          : `${r.status === 'unavailable' ? r.reason : 'fail'}`,
     };
   }
   const candidates: ClientDinnerCandidate[] = r.shops.slice(0, 5).map(s => ({
@@ -125,7 +145,13 @@ const clientDinnerRecommenderTool: ToolDef = {
       languageCode: { type: 'string', maxLength: 10 },
       tone: {
         type: 'string',
-        enum: ['classic_steakhouse', 'modern_tasting', 'understated_local', 'safe_international', 'celebratory'],
+        enum: [
+          'classic_steakhouse',
+          'modern_tasting',
+          'understated_local',
+          'safe_international',
+          'celebratory',
+        ],
       },
       partySize: { type: 'integer', minimum: 2, maximum: 20 },
       budgetTier: { type: 'string', enum: ['medium', 'premium', 'splurge'] },
@@ -157,7 +183,11 @@ interface LoungeCandidate {
 async function runExecutiveLoungeFinder(
   rawInput: LoungeInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; candidates?: LoungeCandidate[] }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  candidates?: LoungeCandidate[];
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
@@ -170,7 +200,8 @@ async function runExecutiveLoungeFinder(
       lang: input.languageCode,
       ...(input.countryCode ? { country: input.countryCode } : {}),
     });
-    if (!cse.available) return { status: 'unavailable', message: `CSE unavailable: ${cse.reason ?? 'unknown'}.` };
+    if (!cse.available)
+      return { status: 'unavailable', message: `CSE unavailable: ${cse.reason ?? 'unknown'}.` };
     return {
       status: 'ok',
       candidates: cse.results.slice(0, input.limit).map(hit => ({
@@ -194,7 +225,8 @@ async function runExecutiveLoungeFinder(
     languageCode: input.languageCode,
     ...(input.countryCode ? { regionCode: input.countryCode } : {}),
   });
-  if (!places.available) return { status: 'unavailable', message: `Places unavailable: ${places.reason ?? 'unknown'}.` };
+  if (!places.available)
+    return { status: 'unavailable', message: `Places unavailable: ${places.reason ?? 'unknown'}.` };
 
   return {
     status: 'ok',
@@ -245,7 +277,11 @@ type MeetingRoomInput = z.infer<typeof meetingRoomInput>;
 async function runPrivateMeetingRoomFinder(
   rawInput: MeetingRoomInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; candidates?: LoungeCandidate[] }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  candidates?: LoungeCandidate[];
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
@@ -256,7 +292,8 @@ async function runPrivateMeetingRoomFinder(
     lang: input.languageCode,
     ...(input.countryCode ? { country: input.countryCode } : {}),
   });
-  if (!cse.available) return { status: 'unavailable', message: `CSE unavailable: ${cse.reason ?? 'unknown'}.` };
+  if (!cse.available)
+    return { status: 'unavailable', message: `CSE unavailable: ${cse.reason ?? 'unknown'}.` };
 
   return {
     status: 'ok',
@@ -300,45 +337,70 @@ const privateMeetingRoomFinderTool: ToolDef = {
 const dressCodeInput = z.object({
   countryCode: z.string().length(2),
   city: z.string().max(120).optional(),
-  industry: z.enum(['banking', 'consulting', 'tech', 'creative', 'legal', 'government', 'manufacturing', 'unknown']).default('tech'),
-  meetingType: z.enum(['client_pitch', 'internal_meeting', 'client_dinner', 'conference', 'site_visit', 'unknown']).default('client_pitch'),
+  industry: z
+    .enum([
+      'banking',
+      'consulting',
+      'tech',
+      'creative',
+      'legal',
+      'government',
+      'manufacturing',
+      'unknown',
+    ])
+    .default('tech'),
+  meetingType: z
+    .enum([
+      'client_pitch',
+      'internal_meeting',
+      'client_dinner',
+      'conference',
+      'site_visit',
+      'unknown',
+    ])
+    .default('client_pitch'),
   /** Weather hint — drives layering advice. */
   climate: z.enum(['warm', 'cool', 'cold', 'tropical_humid', 'unknown']).default('unknown'),
 });
 type DressCodeInput = z.infer<typeof dressCodeInput>;
 
-const COUNTRY_FORMALITY: Record<string, 'high' | 'medium-high' | 'medium' | 'medium-low' | 'low'> = {
-  JP: 'high',
-  KR: 'high',
-  CH: 'high',
-  DE: 'medium-high',
-  FR: 'medium-high',
-  GB: 'medium-high',
-  IT: 'medium',
-  ES: 'medium',
-  US: 'medium-low',
-  CA: 'medium-low',
-  MX: 'medium',
-  AR: 'medium',
-  BR: 'medium',
-  CL: 'medium',
-  AU: 'medium-low',
-  NL: 'medium-low',
-  SE: 'medium-low',
-  NO: 'medium-low',
-  IS: 'medium-low',
-  IN: 'medium-high',
-  SG: 'medium-high',
-  HK: 'medium-high',
-  AE: 'high',
-  IL: 'medium-low',
-  ZA: 'medium',
-};
+const COUNTRY_FORMALITY: Record<string, 'high' | 'medium-high' | 'medium' | 'medium-low' | 'low'> =
+  {
+    JP: 'high',
+    KR: 'high',
+    CH: 'high',
+    DE: 'medium-high',
+    FR: 'medium-high',
+    GB: 'medium-high',
+    IT: 'medium',
+    ES: 'medium',
+    US: 'medium-low',
+    CA: 'medium-low',
+    MX: 'medium',
+    AR: 'medium',
+    BR: 'medium',
+    CL: 'medium',
+    AU: 'medium-low',
+    NL: 'medium-low',
+    SE: 'medium-low',
+    NO: 'medium-low',
+    IS: 'medium-low',
+    IN: 'medium-high',
+    SG: 'medium-high',
+    HK: 'medium-high',
+    AE: 'high',
+    IL: 'medium-low',
+    ZA: 'medium',
+  };
 
 async function runBusinessDressCodeBrief(
   rawInput: DressCodeInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'production_refused'; message: string; brief?: { formality: string; men: string; women: string; layering: string; guardrail: string } }> {
+): Promise<{
+  status: 'ok' | 'production_refused';
+  message: string;
+  brief?: { formality: string; men: string; women: string; layering: string; guardrail: string };
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
@@ -347,31 +409,38 @@ async function runBusinessDressCodeBrief(
   const baseFormality = COUNTRY_FORMALITY[cc] ?? 'medium';
 
   let formality = baseFormality;
-  if (input.industry === 'banking' || input.industry === 'consulting' || input.industry === 'legal') formality = 'high';
+  if (input.industry === 'banking' || input.industry === 'consulting' || input.industry === 'legal')
+    formality = 'high';
   if (input.industry === 'tech' || input.industry === 'creative') formality = 'medium-low';
   if (input.industry === 'government') formality = 'medium-high';
 
-  const men = formality === 'high'
-    ? 'Dark suit (charcoal / navy), white or light-blue shirt, conservative tie, black leather lace-ups. Pressed.'
-    : formality === 'medium-high'
-      ? 'Suit (no tie acceptable in tech), crisp shirt, leather Oxfords or polished derbys.'
-      : formality === 'medium'
-        ? 'Sport coat + chinos / wool trousers, button-down. Loafers or polished sneakers (city-dependent).'
-        : 'Smart casual: button-down + chinos or dark jeans, clean leather sneakers. Skip the suit.';
+  const men =
+    formality === 'high'
+      ? 'Dark suit (charcoal / navy), white or light-blue shirt, conservative tie, black leather lace-ups. Pressed.'
+      : formality === 'medium-high'
+        ? 'Suit (no tie acceptable in tech), crisp shirt, leather Oxfords or polished derbys.'
+        : formality === 'medium'
+          ? 'Sport coat + chinos / wool trousers, button-down. Loafers or polished sneakers (city-dependent).'
+          : 'Smart casual: button-down + chinos or dark jeans, clean leather sneakers. Skip the suit.';
 
-  const women = formality === 'high'
-    ? 'Tailored suit / sheath dress + blazer, low-heeled pumps, minimal jewelry. Conservative.'
-    : formality === 'medium-high'
-      ? 'Tailored separates (blazer + trousers / midi skirt), structured blouse, comfortable heels or polished flats.'
-      : formality === 'medium'
-        ? 'Smart blouse + tailored trousers OR shift dress + cardigan/blazer. Polished flats / low heels.'
-        : 'Smart casual blouse + dark jeans / trousers, blazer optional, clean leather flats or sneakers.';
+  const women =
+    formality === 'high'
+      ? 'Tailored suit / sheath dress + blazer, low-heeled pumps, minimal jewelry. Conservative.'
+      : formality === 'medium-high'
+        ? 'Tailored separates (blazer + trousers / midi skirt), structured blouse, comfortable heels or polished flats.'
+        : formality === 'medium'
+          ? 'Smart blouse + tailored trousers OR shift dress + cardigan/blazer. Polished flats / low heels.'
+          : 'Smart casual blouse + dark jeans / trousers, blazer optional, clean leather flats or sneakers.';
 
   const layering = (() => {
-    if (input.climate === 'cold') return 'Wool overcoat, cashmere scarf in office-appropriate color (charcoal / navy / camel), leather gloves.';
-    if (input.climate === 'cool') return 'Lightweight wool coat or trench. One layer warmer than feels needed walking in — meeting rooms run cold.';
-    if (input.climate === 'warm') return 'Single layer + a packable blazer for AC. Skip wool — linen-blend or tropical wool reads better.';
-    if (input.climate === 'tropical_humid') return 'Tropical-weight fabrics. Bring a fresh shirt to change into between morning + afternoon meetings; humidity is unforgiving.';
+    if (input.climate === 'cold')
+      return 'Wool overcoat, cashmere scarf in office-appropriate color (charcoal / navy / camel), leather gloves.';
+    if (input.climate === 'cool')
+      return 'Lightweight wool coat or trench. One layer warmer than feels needed walking in — meeting rooms run cold.';
+    if (input.climate === 'warm')
+      return 'Single layer + a packable blazer for AC. Skip wool — linen-blend or tropical wool reads better.';
+    if (input.climate === 'tropical_humid')
+      return 'Tropical-weight fabrics. Bring a fresh shirt to change into between morning + afternoon meetings; humidity is unforgiving.';
     return 'Pack one layer warmer than expected — most meeting rooms run cold from AC.';
   })();
 
@@ -400,11 +469,27 @@ const businessDressCodeBriefTool: ToolDef = {
       city: { type: 'string', maxLength: 120 },
       industry: {
         type: 'string',
-        enum: ['banking', 'consulting', 'tech', 'creative', 'legal', 'government', 'manufacturing', 'unknown'],
+        enum: [
+          'banking',
+          'consulting',
+          'tech',
+          'creative',
+          'legal',
+          'government',
+          'manufacturing',
+          'unknown',
+        ],
       },
       meetingType: {
         type: 'string',
-        enum: ['client_pitch', 'internal_meeting', 'client_dinner', 'conference', 'site_visit', 'unknown'],
+        enum: [
+          'client_pitch',
+          'internal_meeting',
+          'client_dinner',
+          'conference',
+          'site_visit',
+          'unknown',
+        ],
       },
       climate: { type: 'string', enum: ['warm', 'cool', 'cold', 'tropical_humid', 'unknown'] },
     },
@@ -417,7 +502,16 @@ const businessDressCodeBriefTool: ToolDef = {
 const protocolInput = z.object({
   countryCode: z.string().length(2),
   city: z.string().max(120).optional(),
-  meetingContext: z.enum(['first_meeting', 'closing_deal', 'client_dinner', 'office_visit', 'conference', 'general']).default('first_meeting'),
+  meetingContext: z
+    .enum([
+      'first_meeting',
+      'closing_deal',
+      'client_dinner',
+      'office_visit',
+      'conference',
+      'general',
+    ])
+    .default('first_meeting'),
   travelerNationalityCode: z.string().length(2).optional(),
   locale: z.string().min(2).max(10).default('en-US'),
 });
@@ -436,13 +530,21 @@ const protocolShape = z.object({
 async function runLocalBusinessProtocolBrief(
   rawInput: ProtocolInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; brief?: z.infer<typeof protocolShape>; via?: 'vertex' | 'gateway' }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  brief?: z.infer<typeof protocolShape>;
+  via?: 'vertex' | 'gateway';
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = protocolInput.parse(rawInput);
   const groundingPrompt = `Provide practical business etiquette for a foreigner meeting local counterparts in ${input.countryCode}${input.city ? ` (specifically ${input.city})` : ''} for a ${input.meetingContext} context. Cover: greeting protocol (handshake / bow / kiss), business card exchange ritual (give/receive with one or two hands?), punctuality norms, gift conventions, toasting protocol if dinners are involved, and taboos to avoid (topics, gestures, food). Only include verifiable, widely-documented norms; never invent.`;
-  const coercePrompt = (text: string, sources: string[]) => `Coerce into the protocol schema. Locale: ${input.locale}.
+  const coercePrompt = (
+    text: string,
+    sources: string[]
+  ) => `Coerce into the protocol schema. Locale: ${input.locale}.
 
 Report:
 """
@@ -450,13 +552,18 @@ ${text}
 """
 
 Sources cited:
-${sources.slice(0, 6).map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
+${sources
+  .slice(0, 6)
+  .map((u, i) => `${i + 1}. ${u}`)
+  .join('\n')}`;
 
   const vertex = resolveVertex();
   async function viaPath(modelLike: any, providerOptions?: any) {
     const grounded = await generateText({
       model: modelLike,
-      tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+      tools: {
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+      },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
     });
@@ -480,17 +587,27 @@ ${sources.slice(0, 6).map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
   if (vertex) {
     try {
       const obj = await viaPath(vertex(VERTEX_MODEL_ID));
-      if (obj) return { status: 'ok', brief: obj, via: 'vertex', message: `Protocol brief for ${input.countryCode} via Vertex.` };
+      if (obj)
+        return {
+          status: 'ok',
+          brief: obj,
+          via: 'vertex',
+          message: `Protocol brief for ${input.countryCode} via Vertex.`,
+        };
     } catch {
       // fall through
     }
   }
   try {
     const obj = await viaPath(GATEWAY_MODEL_ID, { gateway: { order: ['google'] } });
-    if (obj) return { status: 'ok', brief: obj, via: 'gateway', message: `Protocol brief via gateway.` };
+    if (obj)
+      return { status: 'ok', brief: obj, via: 'gateway', message: `Protocol brief via gateway.` };
     return { status: 'unavailable', message: 'No grounded data returned.' };
   } catch (err) {
-    return { status: 'unavailable', message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.` };
+    return {
+      status: 'unavailable',
+      message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.`,
+    };
   }
 }
 
@@ -507,7 +624,17 @@ const localBusinessProtocolBriefTool: ToolDef = {
     properties: {
       countryCode: { type: 'string', minLength: 2, maxLength: 2 },
       city: { type: 'string', maxLength: 120 },
-      meetingContext: { type: 'string', enum: ['first_meeting', 'closing_deal', 'client_dinner', 'office_visit', 'conference', 'general'] },
+      meetingContext: {
+        type: 'string',
+        enum: [
+          'first_meeting',
+          'closing_deal',
+          'client_dinner',
+          'office_visit',
+          'conference',
+          'general',
+        ],
+      },
       travelerNationalityCode: { type: 'string', minLength: 2, maxLength: 2 },
       locale: { type: 'string', minLength: 2, maxLength: 10 },
     },
@@ -524,7 +651,15 @@ const expensePolicyInput = z.object({
   expenses: z
     .array(
       z.object({
-        category: z.enum(['flight', 'hotel_per_night', 'meal', 'ground_transport', 'incidental', 'entertainment', 'other']),
+        category: z.enum([
+          'flight',
+          'hotel_per_night',
+          'meal',
+          'ground_transport',
+          'incidental',
+          'entertainment',
+          'other',
+        ]),
         amountUsd: z.number().nonnegative(),
         description: z.string().max(200).optional(),
       })
@@ -567,7 +702,9 @@ async function runExpensePolicyChecker(
   const verdicts: ExpenseVerdict[] = [];
 
   // Aggregate meal across the trip — meals are per-day not per-row.
-  const mealTotal = input.expenses.filter(e => e.category === 'meal').reduce((n, e) => n + e.amountUsd, 0);
+  const mealTotal = input.expenses
+    .filter(e => e.category === 'meal')
+    .reduce((n, e) => n + e.amountUsd, 0);
   const mealCap = input.policy.mealPerDayUsd * input.tripDays;
 
   for (const exp of input.expenses) {
@@ -582,7 +719,8 @@ async function runExpensePolicyChecker(
       verdicts.push({
         category: 'hotel_per_night',
         amountUsd: exp.amountUsd,
-        verdict: exp.amountUsd <= input.policy.hotelPerNightUsd ? 'within_policy' : 'requires_approval',
+        verdict:
+          exp.amountUsd <= input.policy.hotelPerNightUsd ? 'within_policy' : 'requires_approval',
         reason: `per-night cap is $${input.policy.hotelPerNightUsd}`,
       });
     } else if (exp.category === 'meal') {
@@ -592,7 +730,8 @@ async function runExpensePolicyChecker(
         verdict:
           mealTotal <= mealCap
             ? 'within_policy'
-            : exp.amountUsd === Math.max(...input.expenses.filter(e => e.category === 'meal').map(e => e.amountUsd))
+            : exp.amountUsd ===
+                Math.max(...input.expenses.filter(e => e.category === 'meal').map(e => e.amountUsd))
               ? 'over_policy'
               : 'within_policy',
         reason: `trip meal cap = $${mealCap} ($${input.policy.mealPerDayUsd}/day × ${input.tripDays} days). Trip total: $${mealTotal}.`,
@@ -634,7 +773,7 @@ const expensePolicyCheckerTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    'Check proposed expenses against company travel policy. Pure rules-based — caller passes expenses[] + policy{flightCabin, flightCapUsd, hotelPerNightUsd, mealPerDayUsd, ...}. Returns per-line verdict (within / over / requires_approval / not_allowed) + trip total. Use BEFORE the traveler books anything that\'s borderline.',
+    "Check proposed expenses against company travel policy. Pure rules-based — caller passes expenses[] + policy{flightCabin, flightCapUsd, hotelPerNightUsd, mealPerDayUsd, ...}. Returns per-line verdict (within / over / requires_approval / not_allowed) + trip total. Use BEFORE the traveler books anything that's borderline.",
   inputSchema: expensePolicyInput,
   jsonSchema: {
     type: 'object',
@@ -689,13 +828,14 @@ async function runReceiptCollectionAssistant(
     missing: missing.map(m => ({
       kind: m.kind,
       ref: m.ref,
-      suggestedAction: m.kind === 'flight'
-        ? `Pull from airline confirmation email or PNR ${m.ref} on the carrier's manage-booking page.`
-        : m.kind === 'hotel'
-          ? `Email the hotel for a folio referencing booking ${m.ref}.`
-          : m.kind === 'restaurant'
-            ? `If paid by card, request a copy via the issuing bank's transaction detail page.`
-            : `Find ref ${m.ref} in the relevant inbox / wallet history.`,
+      suggestedAction:
+        m.kind === 'flight'
+          ? `Pull from airline confirmation email or PNR ${m.ref} on the carrier's manage-booking page.`
+          : m.kind === 'hotel'
+            ? `Email the hotel for a folio referencing booking ${m.ref}.`
+            : m.kind === 'restaurant'
+              ? `If paid by card, request a copy via the issuing bank's transaction detail page.`
+              : `Find ref ${m.ref} in the relevant inbox / wallet history.`,
     })),
     message: `${missing.length} receipts missing of ${input.bookings.length} bookings (${pct}% complete).`,
   };
@@ -742,13 +882,21 @@ const vatShape = z.object({
 async function runVatRefundResearcher(
   rawInput: VatInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; refund?: z.infer<typeof vatShape>; via?: 'vertex' | 'gateway' }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  refund?: z.infer<typeof vatShape>;
+  via?: 'vertex' | 'gateway';
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
   const input = vatInput.parse(rawInput);
   const groundingPrompt = `Research VAT refund / tax-free shopping rules for a tourist visiting ${input.countryCode}${input.travelerNationalityCode ? ` (passport ${input.travelerNationalityCode})` : ''}. Cover: minimum purchase amount, VAT rate, step-by-step refund process (in-store + at airport / departure), required documents (passport, original receipts, tax-free form). Cite official tax authority + aggregator sites. Never invent rates.`;
-  const coercePrompt = (text: string, sources: string[]) => `Coerce into VAT refund schema. Locale: ${input.locale}.
+  const coercePrompt = (
+    text: string,
+    sources: string[]
+  ) => `Coerce into VAT refund schema. Locale: ${input.locale}.
 
 Report:
 """
@@ -756,13 +904,18 @@ ${text}
 """
 
 Sources:
-${sources.slice(0, 6).map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
+${sources
+  .slice(0, 6)
+  .map((u, i) => `${i + 1}. ${u}`)
+  .join('\n')}`;
 
   const vertex = resolveVertex();
   async function viaPath(modelLike: any, providerOptions?: any) {
     const grounded = await generateText({
       model: modelLike,
-      tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+      tools: {
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+      },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
     });
@@ -786,15 +939,30 @@ ${sources.slice(0, 6).map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
   if (vertex) {
     try {
       const obj = await viaPath(vertex(VERTEX_MODEL_ID));
-      if (obj) return { status: 'ok', refund: obj, via: 'vertex', message: `VAT refund brief for ${input.countryCode} via Vertex (eligible=${obj.eligible}).` };
+      if (obj)
+        return {
+          status: 'ok',
+          refund: obj,
+          via: 'vertex',
+          message: `VAT refund brief for ${input.countryCode} via Vertex (eligible=${obj.eligible}).`,
+        };
     } catch {}
   }
   try {
     const obj = await viaPath(GATEWAY_MODEL_ID, { gateway: { order: ['google'] } });
-    if (obj) return { status: 'ok', refund: obj, via: 'gateway', message: `VAT refund brief via gateway.` };
+    if (obj)
+      return {
+        status: 'ok',
+        refund: obj,
+        via: 'gateway',
+        message: `VAT refund brief via gateway.`,
+      };
     return { status: 'unavailable', message: 'No grounded data returned.' };
   } catch (err) {
-    return { status: 'unavailable', message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.` };
+    return {
+      status: 'unavailable',
+      message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.`,
+    };
   }
 }
 
@@ -837,7 +1005,12 @@ interface RiskDigest {
 async function runCorporateTravelRiskDigest(
   rawInput: RiskDigestInput,
   ctx?: ToolContext
-): Promise<{ status: 'ok' | 'unavailable' | 'production_refused'; message: string; digest?: RiskDigest; via?: 'vertex' | 'gateway' }> {
+): Promise<{
+  status: 'ok' | 'unavailable' | 'production_refused';
+  message: string;
+  digest?: RiskDigest;
+  via?: 'vertex' | 'gateway';
+}> {
   const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) return { status: 'production_refused', message: gate.reason };
 
@@ -854,7 +1027,9 @@ async function runCorporateTravelRiskDigest(
   async function viaPath(modelLike: any, providerOptions?: any) {
     const grounded = await generateText({
       model: modelLike,
-      tools: { google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}) },
+      tools: {
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+      },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
     });
@@ -872,15 +1047,25 @@ async function runCorporateTravelRiskDigest(
   if (vertex) {
     try {
       const obj = await viaPath(vertex(VERTEX_MODEL_ID));
-      if (obj) return { status: 'ok', digest: obj, via: 'vertex', message: `Risk digest for ${input.city} via Vertex.` };
+      if (obj)
+        return {
+          status: 'ok',
+          digest: obj,
+          via: 'vertex',
+          message: `Risk digest for ${input.city} via Vertex.`,
+        };
     } catch {}
   }
   try {
     const obj = await viaPath(GATEWAY_MODEL_ID, { gateway: { order: ['google'] } });
-    if (obj) return { status: 'ok', digest: obj, via: 'gateway', message: `Risk digest via gateway.` };
+    if (obj)
+      return { status: 'ok', digest: obj, via: 'gateway', message: `Risk digest via gateway.` };
     return { status: 'unavailable', message: 'No grounded data returned.' };
   } catch (err) {
-    return { status: 'unavailable', message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.` };
+    return {
+      status: 'unavailable',
+      message: `Vertex + gateway both failed: ${(err as Error).message ?? 'unknown'}.`,
+    };
   }
 }
 
@@ -889,7 +1074,7 @@ const corporateTravelRiskDigestTool: ToolDef = {
   internal: true,
   experimental: true,
   description:
-    "Daily risk digest for travel teams — top 3-5 specific risks (protests, strikes, weather, security advisories, transit) + official advisory level + recommendations. Vertex-grounded research with Gateway fallback. Compose with `crowd_level_predictor` for full city-pulse picture.",
+    'Daily risk digest for travel teams — top 3-5 specific risks (protests, strikes, weather, security advisories, transit) + official advisory level + recommendations. Vertex-grounded research with Gateway fallback. Compose with `crowd_level_predictor` for full city-pulse picture.',
   inputSchema: riskDigestInput,
   jsonSchema: {
     type: 'object',
@@ -925,18 +1110,18 @@ type CommutePlannerInput = z.infer<typeof commutePlannerInput>;
 const RUSH_HOUR_BUFFER_BY_CITY: Record<string, number> = {
   'mexico city': 1.6,
   'sao paulo': 1.7,
-  'mumbai': 1.8,
-  'jakarta': 1.8,
-  'cairo': 1.6,
-  'lagos': 1.8,
-  'london': 1.4,
+  mumbai: 1.8,
+  jakarta: 1.8,
+  cairo: 1.6,
+  lagos: 1.8,
+  london: 1.4,
   'new york': 1.45,
-  'paris': 1.4,
-  'tokyo': 1.3,
-  'seoul': 1.4,
-  'bangkok': 1.7,
-  'manila': 1.7,
-  'istanbul': 1.55,
+  paris: 1.4,
+  tokyo: 1.3,
+  seoul: 1.4,
+  bangkok: 1.7,
+  manila: 1.7,
+  istanbul: 1.55,
 };
 
 async function runMeetingCommutePlanner(
@@ -962,7 +1147,8 @@ async function runMeetingCommutePlanner(
   const cityKey = input.city.trim().toLowerCase();
   const rushFactor = RUSH_HOUR_BUFFER_BY_CITY[cityKey] ?? 1.3;
   const meetingHour = meetingAt.getHours();
-  const isRushHour = (meetingHour >= 7 && meetingHour <= 10) || (meetingHour >= 17 && meetingHour <= 19);
+  const isRushHour =
+    (meetingHour >= 7 && meetingHour <= 10) || (meetingHour >= 17 && meetingHour <= 19);
 
   // Base minutes from origin.
   const baseMinutes = input.origin === 'airport' ? 50 : input.origin === 'home_office' ? 25 : 20;
@@ -972,17 +1158,25 @@ async function runMeetingCommutePlanner(
   const totalMinutes = Math.ceil(adjusted + safetyBuffer);
 
   const leaveBy = new Date(meetingAt.getTime() - totalMinutes * 60_000);
-  const modeRecommendation =
-    !input.transitAvailable
-      ? 'taxi / arranged car only'
-      : isRushHour
-        ? 'public transit if available — taxi will sit in traffic'
-        : 'taxi or transit, your call';
+  const modeRecommendation = !input.transitAvailable
+    ? 'taxi / arranged car only'
+    : isRushHour
+      ? 'public transit if available — taxi will sit in traffic'
+      : 'taxi or transit, your call';
 
   const notes: string[] = [];
-  if (isRushHour) notes.push(`Rush-hour multiplier (${rushFactor.toFixed(2)}×) applied — ${cityKey === 'tokyo' ? 'Tokyo rush is mostly transit congestion, not road' : 'roads will be slow'}.`);
-  if (input.origin === 'airport') notes.push('Airport→meeting transfers should add ~15min for terminal egress + bag claim if checked.');
-  if (totalMinutes > 90) notes.push('Total travel >90min — strongly consider rescheduling to a later slot if any flexibility.');
+  if (isRushHour)
+    notes.push(
+      `Rush-hour multiplier (${rushFactor.toFixed(2)}×) applied — ${cityKey === 'tokyo' ? 'Tokyo rush is mostly transit congestion, not road' : 'roads will be slow'}.`
+    );
+  if (input.origin === 'airport')
+    notes.push(
+      'Airport→meeting transfers should add ~15min for terminal egress + bag claim if checked.'
+    );
+  if (totalMinutes > 90)
+    notes.push(
+      'Total travel >90min — strongly consider rescheduling to a later slot if any flexibility.'
+    );
 
   return {
     status: 'ok',

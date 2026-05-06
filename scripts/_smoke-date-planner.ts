@@ -32,7 +32,9 @@ const opt = await runDateBudgetOptimizer(
 if (opt.status === 'ok') {
   console.log(`  envelope: ${opt.totalEnvelope}`);
   for (const m of opt.moves!.slice(0, 6)) {
-    console.log(`  • ${m.role.padEnd(11)} ${m.category.padEnd(20)} ${m.expectedSpend.padEnd(8)}  ${m.description}`);
+    console.log(
+      `  • ${m.role.padEnd(11)} ${m.category.padEnd(20)} ${m.expectedSpend.padEnd(8)}  ${m.description}`
+    );
   }
 }
 
@@ -71,10 +73,26 @@ const plan = await runDatePlanBuilder(
     vibe: 'romantic',
     budgetTier: 'medium',
     candidates: [
-      { name: 'Aldo\'s Vinoteca', category: 'wine_bar', rationale: 'Casual + great by-the-glass list.' },
-      { name: 'Don Julio', category: 'mid_restaurant', rationale: 'Top parrilla — book ahead, warm room.' },
-      { name: 'Florería Atlántico', category: 'cocktail_bar', rationale: 'Hidden cocktail bar inside a flower shop, second-move energy.' },
-      { name: 'Walk along Avenida Alvear', category: 'walk_home', rationale: 'Tree-lined, well-lit, easy graceful exit.' },
+      {
+        name: "Aldo's Vinoteca",
+        category: 'wine_bar',
+        rationale: 'Casual + great by-the-glass list.',
+      },
+      {
+        name: 'Don Julio',
+        category: 'mid_restaurant',
+        rationale: 'Top parrilla — book ahead, warm room.',
+      },
+      {
+        name: 'Florería Atlántico',
+        category: 'cocktail_bar',
+        rationale: 'Hidden cocktail bar inside a flower shop, second-move energy.',
+      },
+      {
+        name: 'Walk along Avenida Alvear',
+        category: 'walk_home',
+        rationale: 'Tree-lined, well-lit, easy graceful exit.',
+      },
     ],
     includeSecondMove: true,
   } as never,

@@ -22,7 +22,9 @@ const ctx: ToolContext = {
   caller: { effectiveKeyType: 'sandbox', keyType: 'sandbox', scopes: ['*'] },
 };
 
-console.log(`\n› foodie_shortlist_builder({ city: "${city}"${countryCode ? `, countryCode: "${countryCode}"` : ''} })\n`);
+console.log(
+  `\n› foodie_shortlist_builder({ city: "${city}"${countryCode ? `, countryCode: "${countryCode}"` : ''} })\n`
+);
 
 const input: Record<string, unknown> = { city, perCategoryLimit: 4, languageCode: 'en' };
 if (countryCode) input.countryCode = countryCode;

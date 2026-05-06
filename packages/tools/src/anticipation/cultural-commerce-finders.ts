@@ -125,14 +125,19 @@ const wineBarFinderTool: ToolDef<BaseInput, FinderResult> = {
     runFinder(
       {
         composeCseQuery: city =>
-          input.languageCode === 'es' ? `mejores wine bars vinotecas ${city}` : `best wine bars ${city}`,
+          input.languageCode === 'es'
+            ? `mejores wine bars vinotecas ${city}`
+            : `best wine bars ${city}`,
         composePlacesQuery: city =>
           input.languageCode === 'es' ? `wine bar vinoteca en ${city}` : `wine bar in ${city}`,
         sourceWeights: WINE_WEIGHTS,
         defaultSourceWeight: 0.25,
         isRelevantPlaceType: place => {
           const all = [...(place.types ?? []), place.primaryType].filter(Boolean) as string[];
-          return all.some(t => WINE_TYPES.has(t)) && /wine|vino|natural|enot|caviste/i.test(`${place.name} ${place.editorialSummary ?? ''}`);
+          return (
+            all.some(t => WINE_TYPES.has(t)) &&
+            /wine|vino|natural|enot|caviste/i.test(`${place.name} ${place.editorialSummary ?? ''}`)
+          );
         },
         cseSnippetMustMatch: /\b(wine|vinoteca|natural wine|by[- ]the[- ]glass|caviste)\b/i,
       },
@@ -225,7 +230,10 @@ const recordStoreFinderTool: ToolDef<BaseInput, FinderResult> = {
         isRelevantPlaceType: place => {
           const all = [...(place.types ?? []), place.primaryType].filter(Boolean) as string[];
           if (all.includes('music_store')) return true;
-          return all.some(t => RECORD_TYPES.has(t)) && /record|vinyl|disc|music|disquer/i.test(place.name);
+          return (
+            all.some(t => RECORD_TYPES.has(t)) &&
+            /record|vinyl|disc|music|disquer/i.test(place.name)
+          );
         },
         cseSnippetMustMatch: /\b(record store|vinyl|disquería|discos)\b/i,
       },
@@ -247,13 +255,7 @@ const MARKET_WEIGHTS: Record<string, number> = {
   'culinarybackstreets.com': 0.85,
   'atlasobscura.com': 0.7,
 };
-const MARKET_TYPES = new Set([
-  'market',
-  'food_market',
-  'farmers_market',
-  'fish_market',
-  'farm',
-]);
+const MARKET_TYPES = new Set(['market', 'food_market', 'farmers_market', 'fish_market', 'farm']);
 const localFoodMarketFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'local_food_market_finder',
   internal: true,
@@ -324,7 +326,8 @@ const artGalleryOpeningFinderTool: ToolDef<BaseInput, FinderResult> = {
           const all = [...(place.types ?? []), place.primaryType].filter(Boolean) as string[];
           return all.some(t => ART_TYPES.has(t));
         },
-        cseSnippetMustMatch: /\b(gallery|galería|opening|vernissage|exhibition|exposición|art fair)\b/i,
+        cseSnippetMustMatch:
+          /\b(gallery|galería|opening|vernissage|exhibition|exposición|art fair)\b/i,
       },
       input,
       ctx
@@ -466,4 +469,7 @@ export {
   bibGourmandCityScannerTool,
   worlds50bestNearbyResearcherTool,
 };
-export type { BaseInput as CulturalCommerceFinderInput, FinderResult as CulturalCommerceFinderResult };
+export type {
+  BaseInput as CulturalCommerceFinderInput,
+  FinderResult as CulturalCommerceFinderResult,
+};

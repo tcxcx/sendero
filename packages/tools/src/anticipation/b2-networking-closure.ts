@@ -171,7 +171,8 @@ const universityEntrepreneurshipEventScannerTool: ToolDef<BaseInput, ScannerResu
       languageCode: { type: 'string', maxLength: 10 },
     },
   },
-  handler: (input, ctx) => runDomainScopedScan(input, UNIVERSITY_DOMAINS, 'university entrepreneurship', ctx),
+  handler: (input, ctx) =>
+    runDomainScopedScan(input, UNIVERSITY_DOMAINS, 'university entrepreneurship', ctx),
 };
 
 // ─────────────────────────────────────────────────────────────────────
@@ -182,17 +183,40 @@ const universityEntrepreneurshipEventScannerTool: ToolDef<BaseInput, ScannerResu
 const introStrategyInput = z.object({
   event: z.object({
     name: z.string().min(1).max(200),
-    kind: z.enum(['demo_day', 'panel', 'meetup', 'happy_hour', 'pitch_night', 'breakfast', 'workshop', 'mixer', 'conference', 'private_dinner']),
+    kind: z.enum([
+      'demo_day',
+      'panel',
+      'meetup',
+      'happy_hour',
+      'pitch_night',
+      'breakfast',
+      'workshop',
+      'mixer',
+      'conference',
+      'private_dinner',
+    ]),
     cityKnown: z.string().max(120).optional(),
     expectedAttendance: z.enum(['under_30', '30_to_100', '100_to_300', '300_plus']).optional(),
     attendeeProfile: z.string().max(200).optional(),
   }),
   travelerProfile: z.object({
-    role: z.enum(['founder', 'engineer', 'designer', 'investor', 'operator', 'student', 'other']).default('founder'),
+    role: z
+      .enum(['founder', 'engineer', 'designer', 'investor', 'operator', 'student', 'other'])
+      .default('founder'),
     isFirstTime: z.boolean().default(false),
     extroversion: z.enum(['low', 'medium', 'high']).default('medium'),
     /** Specific outcome the traveler wants. Drives the advice tilt. */
-    desiredOutcome: z.enum(['hire', 'fundraise', 'learn', 'hire_or_fundraise', 'social', 'recruit_customers', 'none']).default('learn'),
+    desiredOutcome: z
+      .enum([
+        'hire',
+        'fundraise',
+        'learn',
+        'hire_or_fundraise',
+        'social',
+        'recruit_customers',
+        'none',
+      ])
+      .default('learn'),
   }),
 });
 type IntroStrategyInput = z.infer<typeof introStrategyInput>;
@@ -224,13 +248,19 @@ async function runNetworkingIntroStrategy(
   let worthReason = '';
   if (e.kind === 'demo_day' && (t.desiredOutcome === 'fundraise' || t.desiredOutcome === 'learn')) {
     worth = 'yes';
-    worthReason = "Demo days have explicit deal-making energy — go.";
-  } else if (e.kind === 'mixer' && e.expectedAttendance === '300_plus' && t.extroversion === 'low') {
+    worthReason = 'Demo days have explicit deal-making energy — go.';
+  } else if (
+    e.kind === 'mixer' &&
+    e.expectedAttendance === '300_plus' &&
+    t.extroversion === 'low'
+  ) {
     worth = 'pass';
-    worthReason = '300+ mixers are the worst ROI for low-extroversion travelers — find a smaller event.';
+    worthReason =
+      '300+ mixers are the worst ROI for low-extroversion travelers — find a smaller event.';
   } else if (e.kind === 'happy_hour' && t.desiredOutcome === 'fundraise') {
     worth = 'maybe';
-    worthReason = 'Happy hours are weak for fundraise asks — better to set up a coffee with a target investor.';
+    worthReason =
+      'Happy hours are weak for fundraise asks — better to set up a coffee with a target investor.';
   } else if (e.kind === 'private_dinner') {
     worth = 'yes';
     worthReason = 'Private dinners are high-signal — every attendee is curated.';
@@ -243,46 +273,68 @@ async function runNetworkingIntroStrategy(
 
   // Arrival timing.
   const arrivalTiming = (() => {
-    if (e.kind === 'demo_day' || e.kind === 'panel' || e.kind === 'workshop') return 'Arrive 5 minutes early — the agenda is the point. Don\'t walk in mid-pitch.';
-    if (e.kind === 'happy_hour' || e.kind === 'mixer') return 'Arrive 20-30 minutes after start. Earlier is awkward; later you\'ve missed the introduction phase.';
-    if (e.kind === 'pitch_night') return 'Arrive 10 minutes early. Find a spot near the back so you can step out between pitches if needed.';
-    if (e.kind === 'private_dinner') return 'Arrive on time exactly. Hosts notice both early and late.';
+    if (e.kind === 'demo_day' || e.kind === 'panel' || e.kind === 'workshop')
+      return "Arrive 5 minutes early — the agenda is the point. Don't walk in mid-pitch.";
+    if (e.kind === 'happy_hour' || e.kind === 'mixer')
+      return "Arrive 20-30 minutes after start. Earlier is awkward; later you've missed the introduction phase.";
+    if (e.kind === 'pitch_night')
+      return 'Arrive 10 minutes early. Find a spot near the back so you can step out between pitches if needed.';
+    if (e.kind === 'private_dinner')
+      return 'Arrive on time exactly. Hosts notice both early and late.';
     if (e.kind === 'breakfast') return 'Arrive 10 minutes early — breakfast crowds dissipate fast.';
     return 'Arrive 10-15 minutes after start time.';
   })();
 
   // Intro opener.
   const introOpener = (() => {
-    if (t.isFirstTime) return '"This is my first time at one of these — what brought you here?" Honest disclosure beats canned pitches.';
-    if (t.desiredOutcome === 'fundraise') return '"I work on [one-line product]. Curious what people are building / investing in lately." Soft entry — never lead with the ask.';
-    if (t.desiredOutcome === 'hire' || t.desiredOutcome === 'hire_or_fundraise') return '"What\'s the most interesting thing you\'re working on right now?" Listen first, then volunteer that you\'re hiring.';
-    if (t.desiredOutcome === 'learn') return '"What brought you here tonight?" — then follow whatever thread they pick.';
+    if (t.isFirstTime)
+      return '"This is my first time at one of these — what brought you here?" Honest disclosure beats canned pitches.';
+    if (t.desiredOutcome === 'fundraise')
+      return '"I work on [one-line product]. Curious what people are building / investing in lately." Soft entry — never lead with the ask.';
+    if (t.desiredOutcome === 'hire' || t.desiredOutcome === 'hire_or_fundraise')
+      return "\"What's the most interesting thing you're working on right now?\" Listen first, then volunteer that you're hiring.";
+    if (t.desiredOutcome === 'learn')
+      return '"What brought you here tonight?" — then follow whatever thread they pick.';
     return '"What brought you here?" — works in 90% of cases.';
   })();
 
   // Who to talk to.
   const whoToTalkTo: string[] = [];
-  whoToTalkTo.push('Someone standing alone — they\'re relieved when you walk over.');
+  whoToTalkTo.push("Someone standing alone — they're relieved when you walk over.");
   whoToTalkTo.push('Two people not in deep conversation — say "mind if I join?" and listen first.');
-  if (t.desiredOutcome === 'fundraise') whoToTalkTo.push('Anyone wearing the host org\'s lanyard — they tend to know who\'s actively writing checks.');
-  if (t.desiredOutcome === 'hire') whoToTalkTo.push('People asking thoughtful questions during Q&A — recruit them.');
+  if (t.desiredOutcome === 'fundraise')
+    whoToTalkTo.push(
+      "Anyone wearing the host org's lanyard — they tend to know who's actively writing checks."
+    );
+  if (t.desiredOutcome === 'hire')
+    whoToTalkTo.push('People asking thoughtful questions during Q&A — recruit them.');
 
   // What to bring.
   const whatToBring: string[] = [];
-  if (e.kind === 'demo_day' || e.kind === 'pitch_night') whatToBring.push('Phone with the pitch deck on Drive (open in browser, not Keynote).');
+  if (e.kind === 'demo_day' || e.kind === 'pitch_night')
+    whatToBring.push('Phone with the pitch deck on Drive (open in browser, not Keynote).');
   whatToBring.push('Two pens.');
-  whatToBring.push('A small notebook — write down what you want to remember about each conversation while it\'s fresh.');
-  if (t.desiredOutcome !== 'social') whatToBring.push('A 1-line bio: "I work on X" — practiced enough to deliver in 5 seconds.');
-  if (e.kind === 'private_dinner' || e.kind === 'breakfast') whatToBring.push('A small thank-you for the host — book / wine / chocolate from your home country travels well.');
+  whatToBring.push(
+    "A small notebook — write down what you want to remember about each conversation while it's fresh."
+  );
+  if (t.desiredOutcome !== 'social')
+    whatToBring.push('A 1-line bio: "I work on X" — practiced enough to deliver in 5 seconds.');
+  if (e.kind === 'private_dinner' || e.kind === 'breakfast')
+    whatToBring.push(
+      'A small thank-you for the host — book / wine / chocolate from your home country travels well.'
+    );
 
   // Exit strategy.
   const exitStrategy = (() => {
-    if (e.kind === 'demo_day' || e.kind === 'pitch_night') return 'Leave 15 minutes after the formal program ends. Quality conversations don\'t happen at minute 90.';
-    if (e.kind === 'happy_hour' || e.kind === 'mixer') return 'Set yourself a 90-minute limit. If you haven\'t had two real conversations by then, the room isn\'t for you tonight.';
+    if (e.kind === 'demo_day' || e.kind === 'pitch_night')
+      return "Leave 15 minutes after the formal program ends. Quality conversations don't happen at minute 90.";
+    if (e.kind === 'happy_hour' || e.kind === 'mixer')
+      return "Set yourself a 90-minute limit. If you haven't had two real conversations by then, the room isn't for you tonight.";
     return 'Leave when energy dips — not when the event "officially" ends.';
   })();
 
-  const followUpRule = 'Send a one-line follow-up within 24h. Reference one specific thing from the conversation. Never paste the same template — feels like spam.';
+  const followUpRule =
+    'Send a one-line follow-up within 24h. Reference one specific thing from the conversation. Never paste the same template — feels like spam.';
 
   return {
     status: 'ok',
@@ -318,7 +370,18 @@ const networkingIntroStrategyTool: ToolDef = {
           name: { type: 'string', minLength: 1, maxLength: 200 },
           kind: {
             type: 'string',
-            enum: ['demo_day', 'panel', 'meetup', 'happy_hour', 'pitch_night', 'breakfast', 'workshop', 'mixer', 'conference', 'private_dinner'],
+            enum: [
+              'demo_day',
+              'panel',
+              'meetup',
+              'happy_hour',
+              'pitch_night',
+              'breakfast',
+              'workshop',
+              'mixer',
+              'conference',
+              'private_dinner',
+            ],
           },
           cityKnown: { type: 'string', maxLength: 120 },
           expectedAttendance: {
@@ -331,12 +394,23 @@ const networkingIntroStrategyTool: ToolDef = {
       travelerProfile: {
         type: 'object',
         properties: {
-          role: { type: 'string', enum: ['founder', 'engineer', 'designer', 'investor', 'operator', 'student', 'other'] },
+          role: {
+            type: 'string',
+            enum: ['founder', 'engineer', 'designer', 'investor', 'operator', 'student', 'other'],
+          },
           isFirstTime: { type: 'boolean' },
           extroversion: { type: 'string', enum: ['low', 'medium', 'high'] },
           desiredOutcome: {
             type: 'string',
-            enum: ['hire', 'fundraise', 'learn', 'hire_or_fundraise', 'social', 'recruit_customers', 'none'],
+            enum: [
+              'hire',
+              'fundraise',
+              'learn',
+              'hire_or_fundraise',
+              'social',
+              'recruit_customers',
+              'none',
+            ],
           },
         },
       },

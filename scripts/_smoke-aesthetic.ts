@@ -17,7 +17,14 @@ import { runVisualAestheticScorer } from '../packages/tools/src/anticipation/vis
 import type { ToolContext } from '../packages/tools/src/types';
 
 const args = process.argv.slice(2);
-const category = (args[0] ?? 'cafe') as 'cafe' | 'restaurant' | 'bar' | 'hotel' | 'museum' | 'date_spot' | 'shop';
+const category = (args[0] ?? 'cafe') as
+  | 'cafe'
+  | 'restaurant'
+  | 'bar'
+  | 'hotel'
+  | 'museum'
+  | 'date_spot'
+  | 'shop';
 const placeName = args[1] ?? 'Sample Specialty Café';
 const cliImages = args.slice(2);
 
@@ -34,7 +41,9 @@ const ctx: ToolContext = {
   caller: { effectiveKeyType: 'sandbox', keyType: 'sandbox', scopes: ['*'] },
 };
 
-console.log(`\n› visual_aesthetic_scorer({ placeName: "${placeName}", category: "${category}", images: ${imageUrls.length} })\n`);
+console.log(
+  `\n› visual_aesthetic_scorer({ placeName: "${placeName}", category: "${category}", images: ${imageUrls.length} })\n`
+);
 
 const r = await runVisualAestheticScorer(
   {

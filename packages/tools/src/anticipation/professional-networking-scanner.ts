@@ -139,9 +139,7 @@ async function scanAccelerators(
   });
   if (!r.available) return [];
   return r.results
-    .filter(h =>
-      ACCELERATOR_DOMAINS.some(d => h.displayLink.toLowerCase().includes(d))
-    )
+    .filter(h => ACCELERATOR_DOMAINS.some(d => h.displayLink.toLowerCase().includes(d)))
     .slice(0, input.perSourceLimit)
     .map(hit => ({
       id: hit.cacheId ?? hit.link,
