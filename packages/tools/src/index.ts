@@ -11,6 +11,8 @@ import { recallSimilarTurnsTool } from './recall-similar-turns';
 import { findResolvedGapTool } from './find-resolved-gap';
 import { hobbyProfileBuilderTool } from './anticipation/hobby-profile-builder';
 import { cityBucketListManagerTool } from './anticipation/city-bucket-list-manager';
+import { specialtyCoffeeFinderTool } from './anticipation/specialty-coffee-finder';
+import { workFromCafeRankerTool } from './anticipation/work-from-cafe-ranker';
 import { setHomeIataTool } from './set-home-iata';
 import { setTripKindTool } from './set-trip-kind';
 import { sweepDcwToGatewayTool } from './sweep-dcw-to-gateway';
@@ -472,6 +474,22 @@ export {
   runCityBucketListManager,
   cityBucketListManagerTool,
 } from './anticipation/city-bucket-list-manager';
+export {
+  type SpecialtyCoffeeFinderInput,
+  type SpecialtyCoffeeFinderResult,
+  type SpecialtyCoffeeFinderDeps,
+  type CoffeeShopHit,
+  runSpecialtyCoffeeFinder,
+  specialtyCoffeeFinderTool,
+} from './anticipation/specialty-coffee-finder';
+export {
+  type WorkFromCafeRankerInput,
+  type WorkFromCafeRankerResult,
+  type WorkFromCafeRankerDeps,
+  type WorkFromCafeShop,
+  runWorkFromCafeRanker,
+  workFromCafeRankerTool,
+} from './anticipation/work-from-cafe-ranker';
 export type { JsonSchemaObject, ToolContext, ToolDef } from './types';
 export {
   type ValidateTravelAddressInput,
@@ -609,6 +627,12 @@ export const toolList: ToolDef[] = [
   // Spec: docs/specs/anticipatory-concierge.md §4.0 HP1 + Appendix A.4.
   hobbyProfileBuilderTool,
   cityBucketListManagerTool,
+  // Anticipation HP1 — first specialty wedge. specialty_coffee_finder
+  // composes the curated CSE with Places (New); work_from_cafe_ranker
+  // re-ranks for laptop sessions. Both experimental + dev-gated.
+  // Spec: docs/specs/anticipatory-concierge.md Appendix A.4 #6.
+  specialtyCoffeeFinderTool,
+  workFromCafeRankerTool,
   // Phase B.2 — "trip buddy" digital-nomad concierge. `take_me_home`
   // resolves the cheapest return flight from the traveler's current
   // location to their declared home; `set_home_iata` persists the

@@ -580,6 +580,14 @@
         "react": "^19.0.0",
       },
     },
+    "packages/google-places": {
+      "name": "@sendero/google-places",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "^1.3.13",
+        "typescript": "^5.8.3",
+      },
+    },
     "packages/guest": {
       "name": "@sendero/guest",
       "version": "0.1.0",
@@ -795,6 +803,7 @@
         "@sendero/duffel": "*",
         "@sendero/env": "*",
         "@sendero/esim": "*",
+        "@sendero/google-places": "*",
         "@sendero/guest": "*",
         "@sendero/insurance": "*",
         "@sendero/invoicing": "*",
@@ -806,6 +815,7 @@
         "@sendero/ocr": "*",
         "@sendero/slack": "*",
         "@sendero/vault": "*",
+        "@sendero/web-search": "*",
         "@sendero/whatsapp": "*",
         "@vercel/blob": "^2.3.3",
         "ai": "*",
@@ -877,6 +887,14 @@
         "@sendero/database": "*",
         "@sendero/ocr": "*",
         "@sendero/sherpa": "*",
+      },
+    },
+    "packages/web-search": {
+      "name": "@sendero/web-search",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "^1.3.13",
+        "typescript": "^5.8.3",
       },
     },
     "packages/webhooks": {
@@ -1964,6 +1982,8 @@
 
     "@sendero/fonts": ["@sendero/fonts@workspace:packages/fonts"],
 
+    "@sendero/google-places": ["@sendero/google-places@workspace:packages/google-places"],
+
     "@sendero/guest": ["@sendero/guest@workspace:packages/guest"],
 
     "@sendero/help": ["@sendero/help@workspace:apps/help"],
@@ -2015,6 +2035,8 @@
     "@sendero/ui": ["@sendero/ui@workspace:packages/ui"],
 
     "@sendero/vault": ["@sendero/vault@workspace:packages/vault"],
+
+    "@sendero/web-search": ["@sendero/web-search@workspace:packages/web-search"],
 
     "@sendero/webhooks": ["@sendero/webhooks@workspace:packages/webhooks"],
 

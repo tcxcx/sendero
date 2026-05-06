@@ -44,6 +44,8 @@
     "@sendero/duffel": "*",
     "@sendero/env": "*",
     "@sendero/esim": "*",
+    "@sendero/google-places": "*",
+    "@sendero/web-search": "*",
     "@sendero/insurance": "*",
     "@sendero/guest": "*",
     "@sendero/invoicing": "*",

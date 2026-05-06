@@ -36,6 +36,11 @@ import {
   type HobbyProfileBuilderDeps,
   runHobbyProfileBuilder,
 } from '../anticipation/hobby-profile-builder';
+import {
+  type SpecialtyCoffeeFinderDeps,
+  runSpecialtyCoffeeFinder,
+} from '../anticipation/specialty-coffee-finder';
+import { runWorkFromCafeRanker } from '../anticipation/work-from-cafe-ranker';
 import type { ToolContext } from '../types';
 
 const HAS_KEY = Boolean(process.env.OPENAI_API_KEY);
@@ -73,6 +78,14 @@ You build long-term taste graphs of every traveler so future trips feel anticipa
   "Skip that tourist trap café" → action='skip'.
   "I'd take a friend back here" → action='recommend_to_friend'.
   Always pass the city (where the place is, not where the traveler lives now).
+- specialty_coffee_finder — when the traveler asks WHERE to get good coffee in
+  a city. "specialty coffee in Tokyo", "tercera ola en Buenos Aires",
+  "third wave coffee Mexico City", "best café in <city>". Pass the city
+  string and optionally a languageCode (es/pt/en).
+- work_from_cafe_ranker — when the traveler asks where to WORK from a café.
+  "café para trabajar", "remote-friendly café", "where can I work from with
+  my laptop in <city>". Either pass an existing candidates list OR a city
+  for fresh discovery. Prefer city for first-time asks.
 
 ## Style
 
@@ -159,6 +172,41 @@ function makeBucketDeps(): {
   return { deps, upserts };
 }
 
+/**
+ * Stubbed specialty deps for E2E. Returns a deterministic Tokyo result
+ * regardless of city — the LLM is making the tool-selection call;
+ * we're not testing CSE / Places live.
+ */
+function makeSpecialtyDeps(): SpecialtyCoffeeFinderDeps {
+  return {
+    cse: async () => ({
+      available: true,
+      results: [
+        {
+          title: 'Tokyo specialty coffee picks',
+          link: 'https://sprudge.com/tokyo',
+          displayLink: 'sprudge.com',
+          formattedUrl: 'sprudge.com/tokyo',
+          snippet: 'Mameya Kakeru and Glitch are top spots.',
+        },
+      ],
+    }),
+    places: async () => ({
+      available: true,
+      results: [
+        {
+          placeId: 'p_e2e',
+          name: 'Mameya Kakeru',
+          types: ['coffee_shop'],
+          primaryType: 'coffee_shop',
+          rating: 4.6,
+          userRatingCount: 350,
+        },
+      ],
+    }),
+  };
+}
+
 interface AgentTurnResult {
   text: string;
   calls: CapturedCall[];
@@ -213,6 +261,35 @@ async function runAgentTurn(userMessage: string): Promise<AgentTurnResult> {
       execute: async input => {
         calls.push({ toolName: 'city_bucket_list_manager', input });
         return runCityBucketListManager(input as any, ctx, bucket.deps);
+      },
+    }),
+    specialty_coffee_finder: tool({
+      description: 'Find specialty coffee shops in a city, ranked by editorial × quality.',
+      inputSchema: z.object({
+        city: z.string(),
+        countryCode: z.string().length(2).optional(),
+        languageCode: z.string().optional(),
+        travelerId: z.string().optional(),
+        limit: z.number().int().min(1).max(15).optional(),
+      }),
+      execute: async input => {
+        calls.push({ toolName: 'specialty_coffee_finder', input });
+        return runSpecialtyCoffeeFinder(input as any, ctx, makeSpecialtyDeps());
+      },
+    }),
+    work_from_cafe_ranker: tool({
+      description:
+        'Re-rank cafes for laptop / remote-work. Pass either candidates or just a city.',
+      inputSchema: z.object({
+        city: z.string().optional(),
+        countryCode: z.string().length(2).optional(),
+        languageCode: z.string().optional(),
+        travelerId: z.string().optional(),
+        limit: z.number().int().min(1).max(15).optional(),
+      }),
+      execute: async input => {
+        calls.push({ toolName: 'work_from_cafe_ranker', input });
+        return runWorkFromCafeRanker(input as any, ctx, { specialty: makeSpecialtyDeps() });
       },
     }),
   };
@@ -384,5 +461,44 @@ describe('HP1 anticipation — composed turns', () => {
       expect(r.bucketUpserts[0]?.status).toBe('loved');
     },
     60_000
+  );
+});
+
+describe('HP1 anticipation — specialty + work-from-cafe via real LLM', () => {
+  itAi(
+    'specialty coffee question routes to specialty_coffee_finder with city',
+    async () => {
+      const r = await runAgentTurn('Where can I get specialty coffee in Tokyo?');
+      const call = r.calls.find(c => c.toolName === 'specialty_coffee_finder');
+      expect(call, 'expected specialty_coffee_finder to fire').toBeDefined();
+      expect((call?.input as { city?: string }).city).toBe('Tokyo');
+    },
+    45_000
+  );
+
+  itAi(
+    'laptop / work café question routes to work_from_cafe_ranker',
+    async () => {
+      const r = await runAgentTurn(
+        'I need a café in Buenos Aires where I can work from with my laptop. Wifi + outlets matter.'
+      );
+      const call = r.calls.find(c => c.toolName === 'work_from_cafe_ranker');
+      expect(call, 'expected work_from_cafe_ranker to fire').toBeDefined();
+      // The model can pass either `city` or `candidates`. For a fresh
+      // ask with no prior list, it should pass `city`.
+      const input = (call?.input ?? {}) as { city?: string };
+      expect(input.city).toBe('Buenos Aires');
+    },
+    45_000
+  );
+
+  itAi(
+    'Spanish "café para trabajar" still routes to work_from_cafe_ranker',
+    async () => {
+      const r = await runAgentTurn('Buen café para trabajar con la laptop en Buenos Aires?');
+      const call = r.calls.find(c => c.toolName === 'work_from_cafe_ranker');
+      expect(call, 'expected work_from_cafe_ranker to fire').toBeDefined();
+    },
+    45_000
   );
 });
