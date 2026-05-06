@@ -7,6 +7,9 @@ import { getActiveTripTool } from './get-active-trip';
 import { getTripBriefTool } from './get-trip-brief';
 import { reportKnowledgeGapTool } from './report-knowledge-gap';
 import { listAvailableToolsTool } from './list-available-tools';
+import { inspectMyWhatsappChannelTool } from './inspect-my-whatsapp';
+import { inspectMySlackChannelTool } from './inspect-my-slack';
+import { startTravelerWhatsappConversationTool } from './start-traveler-whatsapp-conversation';
 import { recallSimilarTurnsTool } from './recall-similar-turns';
 import { findResolvedGapTool } from './find-resolved-gap';
 import { hobbyProfileBuilderTool } from './anticipation/hobby-profile-builder';
@@ -329,6 +332,8 @@ import { saveTravelerPreferenceTool } from './save-traveler-preference';
 import { gatewayTxHistoryTool } from './gateway-tx-history';
 import { tippingEtiquetteTool } from './tipping-etiquette';
 import { localColorBriefTool } from './local-color-brief';
+import { getOperatorAgencyTool } from './get-operator-agency';
+import { getSenderoIdentityTool } from './get-sendero-identity';
 export {
   localColorBrief,
   type LocalColorBriefInput,
@@ -573,6 +578,18 @@ export {
   type SaveTravelerPreferenceResult,
   saveTravelerPreferenceTool,
 } from './save-traveler-preference';
+export {
+  type GetOperatorAgencyInput,
+  type OperatorAgencyResult,
+  getOperatorAgency,
+  getOperatorAgencyTool,
+} from './get-operator-agency';
+export {
+  type GetSenderoIdentityInput,
+  type SenderoIdentityResult,
+  getSenderoIdentity,
+  getSenderoIdentityTool,
+} from './get-sendero-identity';
 export {
   type GatewayTxHistoryInput,
   type GatewayTxHistoryResult,
@@ -826,6 +843,9 @@ export {
  * catalogs from this array. Avoids tool drift.
  */
 export const toolList: ToolDef[] = [
+  inspectMyWhatsappChannelTool,
+  inspectMySlackChannelTool,
+  startTravelerWhatsappConversationTool,
   searchFlightsTool,
   bookFlightTool,
   searchHotelsTool,
@@ -886,6 +906,13 @@ export const toolList: ToolDef[] = [
   webSearchTool,
   lookupMatchFixturesTool,
   saveTravelerPreferenceTool,
+  // Identity layer — separates Sendero (the AI platform) from the
+  // tenant agency (the customer-facing brand). Agent must lead with
+  // the agency identity for who/what-agency questions; reach for
+  // Sendero identity only when explicitly asked about the AI
+  // platform / on-chain reputation of the AI itself.
+  getOperatorAgencyTool,
+  getSenderoIdentityTool,
   gatewayTxHistoryTool,
   tippingEtiquetteTool,
   recommendRestaurantsTool,

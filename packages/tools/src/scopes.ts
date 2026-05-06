@@ -109,6 +109,12 @@ export function toolToScope(toolName: string): KeyScope {
   if (toolName === 'read_reputation') {
     return 'trip_assistance';
   }
+  // Identity layer — public read-only. Tenant agency brand and
+  // Sendero's own ERC-8004 agent record. Scoped to `trip_assistance`
+  // so user-minted prod keys can call them (default-allowed scope set).
+  if (toolName === 'get_operator_agency' || toolName === 'get_sendero_identity') {
+    return 'trip_assistance';
+  }
   if (
     toolName.startsWith('airport_') ||
     toolName.startsWith('trip_') ||
