@@ -152,7 +152,7 @@ export const startTravelerWhatsappConversationTool: ToolDef<
   name: 'start_traveler_whatsapp_conversation',
   internal: true,
   description:
-    "Start a WhatsApp trip-intake conversation with a traveler. Single call: provisions the User by phone, opens or rebinds a Trip, creates the ChannelIdentity, and sends the localized intake template (falls back to free-form on template rejection). Returns tripId + a console deep-link so the UI can route to `/dashboard/console?tripId=…`. Use this whenever the operator says \"text the traveler\", \"DM them on whatsapp\", or \"start a trip via whatsapp\". Never ask the operator for travelerName / tripSummary / intakeLink — sensible defaults exist; the only required input is the phone in E.164.",
+    'Start a WhatsApp trip-intake conversation with a traveler. Single call: provisions the User by phone, opens or rebinds a Trip, creates the ChannelIdentity, and sends the localized intake template (falls back to free-form on template rejection). Returns tripId + a console deep-link so the UI can route to `/dashboard/console?tripId=…`. Use this whenever the operator says "text the traveler", "DM them on whatsapp", or "start a trip via whatsapp". Never ask the operator for travelerName / tripSummary / intakeLink — sensible defaults exist; the only required input is the phone in E.164.',
   inputSchema,
   jsonSchema: {
     type: 'object',

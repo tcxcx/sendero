@@ -78,4 +78,3 @@ export async function resolveSandboxOutboundInstall(
   if (!sandbox || sandbox.status === 'disabled') return null;
   return { install: sandbox, viaSandbox: true, attributionTenantId: tenantId };
 }
-

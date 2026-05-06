@@ -95,10 +95,7 @@ export function ChannelDiagnosticCard({ data }: { data: ChannelDiagnostic }) {
 
       {(data.recentInbound && data.recentInbound.length > 0) ||
       (data.recentOutbound && data.recentOutbound.length > 0) ? (
-        <PreviewsBlock
-          inbound={data.recentInbound ?? []}
-          outbound={data.recentOutbound ?? []}
-        />
+        <PreviewsBlock inbound={data.recentInbound ?? []} outbound={data.recentOutbound ?? []} />
       ) : null}
 
       <div style={{ padding: '8px 16px 14px' }}>
@@ -340,8 +337,7 @@ function ActivityGrid({
 function PeopleGrid({ data }: { data: ChannelDiagnostic }) {
   const ids = data.identities;
   const trips = data.trips;
-  const idCount =
-    data.kind === 'whatsapp' ? (ids?.totalActive ?? 0) : (ids?.boundUsers ?? 0);
+  const idCount = data.kind === 'whatsapp' ? (ids?.totalActive ?? 0) : (ids?.boundUsers ?? 0);
   const idLabel = data.kind === 'whatsapp' ? 'Channel identities' : 'Bound users';
   return (
     <div
@@ -352,11 +348,7 @@ function PeopleGrid({ data }: { data: ChannelDiagnostic }) {
         padding: '0 16px',
       }}
     >
-      <CompactKpi
-        icon={<Users className="size-3" />}
-        label={idLabel}
-        value={String(idCount)}
-      />
+      <CompactKpi icon={<Users className="size-3" />} label={idLabel} value={String(idCount)} />
       <CompactKpi
         icon={<Hash className="size-3" />}
         label="Active linked trips"
@@ -535,9 +527,7 @@ function PreviewColumn({
             >
               {formatTime(it.at)}
             </span>
-            <span style={{ color: 'var(--text)', whiteSpace: 'pre-wrap' }}>
-              {it.preview}
-            </span>
+            <span style={{ color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{it.preview}</span>
           </div>
         ))}
       </div>

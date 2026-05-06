@@ -355,8 +355,7 @@ export function useChatStoreSync(messages: readonly unknown[]) {
                 install: {
                   exists: Boolean(r.install?.exists),
                   status: r.install?.status ?? 'pending',
-                  identifier:
-                    r.install?.teamName ?? r.install?.teamId ?? null,
+                  identifier: r.install?.teamName ?? r.install?.teamId ?? null,
                   isEnterpriseInstall: r.install?.isEnterpriseInstall,
                   scopes: r.install?.scopes,
                   defaultChannel: r.install?.defaultChannel ?? null,

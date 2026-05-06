@@ -62,7 +62,8 @@ const requestHumanHandoffInput = z
     tripId: z.string().min(1).optional(),
   })
   .refine(v => Boolean(v.question || v.reason), {
-    message: 'request_human_handoff requires `question` (or `reason`) describing what to ask the team.',
+    message:
+      'request_human_handoff requires `question` (or `reason`) describing what to ask the team.',
   });
 
 interface RequestHumanHandoffOutput {
@@ -377,9 +378,7 @@ async function notifyOperatorSlack(args: {
           type: 'context',
           elements: [
             { type: 'mrkdwn', text: `Channel: \`${args.channel}\`` },
-            ...(args.tripId
-              ? [{ type: 'mrkdwn' as const, text: `Trip: \`${args.tripId}\`` }]
-              : []),
+            ...(args.tripId ? [{ type: 'mrkdwn' as const, text: `Trip: \`${args.tripId}\`` }] : []),
             { type: 'mrkdwn', text: `Handoff: \`${args.handoffId}\`` },
           ],
         },

@@ -222,10 +222,8 @@ export async function runInspectMyWhatsapp(
         hasMetaPhoneNumberId: Boolean(install.phoneNumberId),
         hasMetaWaba: Boolean(install.businessAccountId),
         lastErrorMessage: install.lastErrorMessage ?? null,
-        installedAt:
-          (install as { createdAt?: Date }).createdAt?.toISOString() ?? null,
-        updatedAt:
-          (install as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
+        installedAt: (install as { createdAt?: Date }).createdAt?.toISOString() ?? null,
+        updatedAt: (install as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
       }
     : NOT_INSTALLED;
 
