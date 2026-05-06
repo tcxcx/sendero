@@ -26,6 +26,7 @@
 
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { prisma } from '@sendero/database';
 
@@ -118,7 +119,14 @@ async function main(args: CliArgs): Promise<void> {
 }
 
 if (import.meta.main) {
-  const defaultOutputPath = resolve(process.cwd(), 'docs/agent-gaps/board.md');
+  // Self-locate the repo root so the default output path is correct
+  // regardless of the cwd the script was invoked from. `import.meta.url`
+  // points at this file (`<root>/scripts/scan-knowledge-gaps.ts`), so
+  // walking up one directory lands at the repo root. Fixes the
+  // workspace-resolution bug where `bun run …/scripts/scan-…` from
+  // `apps/app/` defaulted the board to `apps/app/docs/agent-gaps/`.
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const defaultOutputPath = resolve(repoRoot, 'docs/agent-gaps/board.md');
   const args = parseArgs(process.argv.slice(2), defaultOutputPath);
   main(args).catch(err => {
     console.error(err);
