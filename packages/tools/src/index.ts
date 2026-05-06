@@ -13,6 +13,188 @@ import { hobbyProfileBuilderTool } from './anticipation/hobby-profile-builder';
 import { cityBucketListManagerTool } from './anticipation/city-bucket-list-manager';
 import { specialtyCoffeeFinderTool } from './anticipation/specialty-coffee-finder';
 import { workFromCafeRankerTool } from './anticipation/work-from-cafe-ranker';
+import { budgetEstimatorTool } from './anticipation/budget-estimator';
+import { eventbriteEventDiscoveryTool } from './anticipation/eventbrite-event-discovery';
+import { mainstreamEventDiscoveryTool } from './anticipation/mainstream-event-discovery';
+import { crowdLevelPredictorTool } from './anticipation/crowd-level-predictor';
+import { monoclePlaceResearcherTool } from './anticipation/monocle-place-researcher';
+import { visualAestheticScorerTool } from './anticipation/visual-aesthetic-scorer';
+import { beautyBudgetRankerTool } from './anticipation/beauty-budget-ranker';
+import { cheapMichelinFinderTool } from './anticipation/cheap-michelin-finder';
+import { ramenFinderTool } from './anticipation/ramen-finder';
+import { foodieShortlistBuilderTool } from './anticipation/foodie-shortlist-builder';
+import { lumaEventDiscoveryTool } from './anticipation/luma-event-discovery';
+import { meetupEventDiscoveryTool } from './anticipation/meetup-event-discovery';
+import { professionalNetworkingScannerTool } from './anticipation/professional-networking-scanner';
+import { cityTasteMapBuilderTool } from './anticipation/city-taste-map-builder';
+import { hobbyConciergeDiscoverTool } from './anticipation/hobby-concierge-discover';
+import {
+  dateBudgetOptimizerTool,
+  datePerfumeAdvisorTool,
+  dateGameTipsTool,
+  datePlanBuilderTool,
+} from './anticipation/date-planner';
+import {
+  wineBarFinderTool,
+  bookstoreFinderTool,
+  recordStoreFinderTool,
+  localFoodMarketFinderTool,
+  artGalleryOpeningFinderTool,
+  bibGourmandCityScannerTool,
+  worlds50bestNearbyResearcherTool,
+} from './anticipation/cultural-commerce-finders';
+import {
+  runningRouteFinderTool,
+  gymDayPassFinderTool,
+  yogaPilatesClassFinderTool,
+  hikingDayTripFinderTool,
+} from './anticipation/physical-activity-finders';
+import {
+  languageExchangeFinderTool,
+  photographySpotFinderTool,
+} from './anticipation/niche-finders';
+import {
+  cityHobbyPackBuilderTool,
+  hobbyMapLayerBuilderTool,
+} from './anticipation/hp1-orchestrators';
+import { tasteFeedbackLoopTool } from './anticipation/taste-feedback-loop';
+import {
+  dateProfileBuilderTool,
+  datePlanRankerTool,
+  dateSecondMoveFinderTool,
+  dateWeatherReplanTool,
+  dateRouteSafetyCheckTool,
+  romanticCityPackBuilderTool,
+} from './anticipation/date-closure';
+import {
+  officialSourceResolverTool,
+  sourceConfidenceScorerTool,
+  researchAuditTrailTool,
+  sourceCacheManagerTool,
+  researchGapRouterTool,
+  agenticResearchPlannerTool,
+  recommendationExplainerTool,
+} from './anticipation/b1-research-infra';
+import {
+  coworkingEventCalendarScannerTool,
+  universityEntrepreneurshipEventScannerTool,
+  networkingIntroStrategyTool,
+} from './anticipation/b2-networking-closure';
+import {
+  culturalAttractionsFinderTool,
+  museumTicketingResearcherTool,
+  nightlifeFitFinderTool,
+  familyFriendlyEventFinderTool,
+  exhibitionCalendarResearcherTool,
+  freeEventsFinderTool,
+  lastMinuteTicketsFinderTool,
+  venueNearbyPlanBuilderTool,
+  rainyDayPlanFinderTool,
+} from './anticipation/b3-events-nightlife';
+import {
+  clientDinnerRecommenderTool,
+  executiveLoungeFinderTool,
+  privateMeetingRoomFinderTool,
+  businessDressCodeBriefTool,
+  localBusinessProtocolBriefTool,
+  expensePolicyCheckerTool,
+  receiptCollectionAssistantTool,
+  vatRefundResearcherTool,
+  corporateTravelRiskDigestTool,
+  meetingCommutePlannerTool,
+} from './anticipation/b4-corporate';
+import {
+  teamTravelPackageBuilderTool,
+  stadiumDayPlanTool,
+  awayFanSafetyBriefTool,
+  ticketResaleRiskCheckerTool,
+  sportsBarFinderTool,
+  matchPostponementMonitorTool,
+  fanGroupCoordinationToolTool,
+} from './anticipation/b5-sports';
+import {
+  shoppingDistrictBriefTool,
+  localDesignerFinderTool,
+  marketDayFinderTool,
+  giftRecommenderTool,
+  pharmacyProductMapperTool,
+  electronicsAdapterCheckerTool,
+  luggageRepairFinderTool,
+  laundryServiceFinderTool,
+  tailorUrgentFinderTool,
+  personalShopperLightTool,
+  vintageThriftFinderTool,
+  craftBeerFinderTool,
+} from './anticipation/b6-lifestyle';
+import {
+  clinicFinderTool,
+  pharmacy24hFinderTool,
+  travelVaccineResearcherTool,
+  foodSafetyBriefTool,
+  allergySafeRestaurantFinderTool,
+  emergencyNumbersCardTool,
+  embassyConsulateLocatorTool,
+  safeRouteHomeTool,
+  areaAfterDarkCheckTool,
+  scamRiskBriefTool,
+} from './anticipation/b7-health-safety';
+import {
+  cityPulseBriefTool,
+  tripOpportunityRankerTool,
+  itineraryGapDetectorTool,
+  microItineraryBuilderTool,
+  layoverCityEscapeTool,
+  firstDaySoftPlanTool,
+  lastDayCheckoutPlanTool,
+  luggageStorageFinderTool,
+  tripPacingOptimizerTool,
+  weatherReplanEngineTool,
+  groupPreferenceReconcilerTool,
+  perfectEveningBuilderTool,
+  tripContextualRecommenderTool,
+} from './anticipation/b8-trip-intel';
+import {
+  classifyDisruptionTool,
+  researchCompassionateExceptionPolicyTool,
+  buildInsuranceClaimPacketTool,
+  tripDisruptionRecoveryTool,
+  recoveryCaseFileRendererTool,
+} from './disruption-recovery';
+import {
+  airportDisruptionMonitorTool,
+  localHolidayDisruptionCheckTool,
+  venuePolicyCheckerTool,
+  hotelAreaIntelligenceTool,
+  neighborhoodFitMatcherTool,
+  restaurantReservationResearcherTool,
+  menuDietaryResearcherTool,
+  groundTransportPriceResearcherTool,
+  publicTransitTicketingBriefTool,
+  airportTerminalResolverTool,
+  layoverViabilityCheckerTool,
+  nearbyAirportAlternativeResearcherTool,
+  routeAlternativeResearcherTool,
+  tripBudgetResearcherTool,
+  localPaymentAcceptanceBriefTool,
+  invoiceTaxRequirementsResearcherTool,
+  travelInsuranceRequirementCheckerTool,
+  medicalAccessBriefTool,
+  communicationsResearcherTool,
+  culturalProtocolBriefTool,
+  liveNewsTripRiskScannerTool,
+} from './anticipation/b9-logistics';
+import {
+  supplierQuoteComparatorTool,
+  manualSupplierResearcherTool,
+  supplierContactExtractorTool,
+  supplierReliabilityScoreTool,
+  opsFollowupSchedulerTool,
+  bookingGapAuditorTool,
+  handoffContextBuilderTool,
+  postTripFeedbackAnalyzerTool,
+  agencyMarginGuardTool,
+  preferredSupplierRouterTool,
+} from './anticipation/b10-agency-ops';
 import { setHomeIataTool } from './set-home-iata';
 import { setTripKindTool } from './set-trip-kind';
 import { sweepDcwToGatewayTool } from './sweep-dcw-to-gateway';
@@ -490,6 +672,146 @@ export {
   runWorkFromCafeRanker,
   workFromCafeRankerTool,
 } from './anticipation/work-from-cafe-ranker';
+export {
+  type BudgetEstimatorInput,
+  type BudgetEstimatorResult,
+  type BudgetTier,
+  runBudgetEstimator,
+  budgetEstimatorTool,
+} from './anticipation/budget-estimator';
+export {
+  type EventbriteEventDiscoveryInput,
+  type EventbriteEventDiscoveryResult,
+  type EventbriteEventDiscoveryDeps,
+  type EventbriteEventHit,
+  runEventbriteEventDiscovery,
+  eventbriteEventDiscoveryTool,
+} from './anticipation/eventbrite-event-discovery';
+export {
+  type MainstreamEventDiscoveryInput,
+  type MainstreamEventDiscoveryResult,
+  type MainstreamEventDiscoveryDeps,
+  type MainstreamEventHit,
+  runMainstreamEventDiscovery,
+  mainstreamEventDiscoveryTool,
+} from './anticipation/mainstream-event-discovery';
+export {
+  type CrowdLevelPredictorInput,
+  type CrowdLevelPredictorResult,
+  type CrowdLevelPredictorDeps,
+  type CrowdLevel,
+  type CrowdDriver,
+  runCrowdLevelPredictor,
+  crowdLevelPredictorTool,
+} from './anticipation/crowd-level-predictor';
+export {
+  type MonoclePlaceResearcherInput,
+  type MonoclePlaceResearcherResult,
+  type MonoclePlaceResearcherDeps,
+  type MonoclePlaceReport,
+  runMonoclePlaceResearcher,
+  monoclePlaceResearcherTool,
+} from './anticipation/monocle-place-researcher';
+export {
+  type VisualAestheticScorerInput,
+  type VisualAestheticScorerResult,
+  type VisualAestheticScorerReport,
+  type AestheticTag,
+  runVisualAestheticScorer,
+  visualAestheticScorerTool,
+} from './anticipation/visual-aesthetic-scorer';
+export {
+  type BeautyBudgetRankerInput,
+  type BeautyBudgetRankerResult,
+  type BeautyBudgetCandidate,
+  type BeautyBudgetRankedItem,
+  runBeautyBudgetRanker,
+  beautyBudgetRankerTool,
+} from './anticipation/beauty-budget-ranker';
+export {
+  type CheapMichelinFinderInput,
+  type CheapMichelinFinderResult,
+  runCheapMichelinFinder,
+  cheapMichelinFinderTool,
+} from './anticipation/cheap-michelin-finder';
+export {
+  type RamenFinderInput,
+  type RamenFinderResult,
+  runRamenFinder,
+  ramenFinderTool,
+} from './anticipation/ramen-finder';
+export {
+  type FoodieShortlistBuilderInput,
+  type FoodieShortlistBuilderResult,
+  type FoodieShortlistBuilderDeps,
+  type FoodieSection,
+  runFoodieShortlistBuilder,
+  foodieShortlistBuilderTool,
+} from './anticipation/foodie-shortlist-builder';
+export {
+  type LumaEventDiscoveryInput,
+  type LumaEventDiscoveryResult,
+  type LumaEventDiscoveryDeps,
+  type LumaEventHit,
+  runLumaEventDiscovery,
+  lumaEventDiscoveryTool,
+} from './anticipation/luma-event-discovery';
+export {
+  type MeetupEventDiscoveryInput,
+  type MeetupEventDiscoveryResult,
+  type MeetupEventDiscoveryDeps,
+  type MeetupEventHit,
+  runMeetupEventDiscovery,
+  meetupEventDiscoveryTool,
+} from './anticipation/meetup-event-discovery';
+export {
+  type ProfessionalNetworkingScannerInput,
+  type ProfessionalNetworkingScannerResult,
+  type ProfessionalNetworkingScannerDeps,
+  type NetworkingEventHit,
+  runProfessionalNetworkingScanner,
+  professionalNetworkingScannerTool,
+} from './anticipation/professional-networking-scanner';
+export {
+  type CityTasteMapBuilderInput,
+  type CityTasteMapBuilderResult,
+  type CityTasteLayer,
+  runCityTasteMapBuilder,
+  cityTasteMapBuilderTool,
+} from './anticipation/city-taste-map-builder';
+export {
+  type HobbyConciergeDiscoverInput,
+  type HobbyConciergeDiscoverResult,
+  type HobbyConciergeSection,
+  runHobbyConciergeDiscover,
+  hobbyConciergeDiscoverTool,
+} from './anticipation/hobby-concierge-discover';
+export {
+  type DateBudgetOptimizerInput,
+  type DateBudgetOptimizerResult,
+  type DatePerfumeAdvisorInput,
+  type DatePerfumeAdvisorResult,
+  type DateGameTipsInput,
+  type DateGameTipsResult,
+  type DatePlanBuilderInput,
+  type DatePlanBuilderResult,
+  type DateBudgetTier,
+  type DateVibe,
+  type DateTimelineRole,
+  type DatePlanStop,
+  type PerfumeProfile,
+  DATE_BUDGET_TIERS,
+  DATE_VIBES,
+  TIMELINE_ROLES,
+  runDateBudgetOptimizer,
+  runDatePerfumeAdvisor,
+  runDateGameTips,
+  runDatePlanBuilder,
+  dateBudgetOptimizerTool,
+  datePerfumeAdvisorTool,
+  dateGameTipsTool,
+  datePlanBuilderTool,
+} from './anticipation/date-planner';
 export type { JsonSchemaObject, ToolContext, ToolDef } from './types';
 export {
   type ValidateTravelAddressInput,
@@ -633,6 +955,190 @@ export const toolList: ToolDef[] = [
   // Spec: docs/specs/anticipatory-concierge.md Appendix A.4 #6.
   specialtyCoffeeFinderTool,
   workFromCafeRankerTool,
+  // HP2 / B-bucket experimental discovery — judgment + events
+  // foundation. budget_estimator is pure (city × category × Places
+  // priceLevel × Michelin band → range); eventbrite + ticketmaster +
+  // predicthq wrap external APIs (env: EVENTBRITE_PRIVATE_TOKEN,
+  // TICKETMASTER_API_KEY, PREDICTHQ_ACCESS_TOKEN). monocle_place_researcher
+  // is the deep "is this worth it" tool — Vertex direct + Gateway
+  // fallback, two grounded LLM passes per call.
+  // Spec: docs/specs/anticipatory-concierge.md §4.0 HP2 +
+  // docs/experimental-tools-wip/sendero_final_experimental_tool_roadmap.md
+  budgetEstimatorTool,
+  eventbriteEventDiscoveryTool,
+  mainstreamEventDiscoveryTool,
+  crowdLevelPredictorTool,
+  monoclePlaceResearcherTool,
+  // HP1 specialty finders — cultural commerce
+  wineBarFinderTool,
+  bookstoreFinderTool,
+  recordStoreFinderTool,
+  localFoodMarketFinderTool,
+  artGalleryOpeningFinderTool,
+  bibGourmandCityScannerTool,
+  worlds50bestNearbyResearcherTool,
+  // HP1 specialty finders — physical activity
+  runningRouteFinderTool,
+  gymDayPassFinderTool,
+  yogaPilatesClassFinderTool,
+  hikingDayTripFinderTool,
+  // HP1 specialty finders — niche
+  languageExchangeFinderTool,
+  photographySpotFinderTool,
+  // HP1 orchestrators
+  cityHobbyPackBuilderTool,
+  hobbyMapLayerBuilderTool,
+  // HP2 close-out
+  tasteFeedbackLoopTool,
+  // HP3 close-out
+  dateProfileBuilderTool,
+  datePlanRankerTool,
+  dateSecondMoveFinderTool,
+  dateWeatherReplanTool,
+  dateRouteSafetyCheckTool,
+  romanticCityPackBuilderTool,
+  // HP1 / HP2 / HP3 — full anticipatory concierge surface.
+  // Vision (Vertex multimodal), pure rankers, food/event finders,
+  // flagship orchestrators, date planner suite. All experimental +
+  // internal + dev-gated. Spec: docs/specs/anticipatory-concierge.md +
+  // docs/experimental-tools-wip/sendero_final_experimental_tool_roadmap.md.
+  visualAestheticScorerTool,
+  beautyBudgetRankerTool,
+  cheapMichelinFinderTool,
+  ramenFinderTool,
+  foodieShortlistBuilderTool,
+  lumaEventDiscoveryTool,
+  meetupEventDiscoveryTool,
+  professionalNetworkingScannerTool,
+  cityTasteMapBuilderTool,
+  hobbyConciergeDiscoverTool,
+  dateBudgetOptimizerTool,
+  datePerfumeAdvisorTool,
+  dateGameTipsTool,
+  datePlanBuilderTool,
+  // B1 — Research Infrastructure (foundation for every other bucket).
+  officialSourceResolverTool,
+  sourceConfidenceScorerTool,
+  researchAuditTrailTool,
+  sourceCacheManagerTool,
+  researchGapRouterTool,
+  agenticResearchPlannerTool,
+  recommendationExplainerTool,
+  // B2 — Professional Networking close-out.
+  coworkingEventCalendarScannerTool,
+  universityEntrepreneurshipEventScannerTool,
+  networkingIntroStrategyTool,
+  // B3 — Events / Culture / Nightlife close-out.
+  culturalAttractionsFinderTool,
+  museumTicketingResearcherTool,
+  nightlifeFitFinderTool,
+  familyFriendlyEventFinderTool,
+  exhibitionCalendarResearcherTool,
+  freeEventsFinderTool,
+  lastMinuteTicketsFinderTool,
+  venueNearbyPlanBuilderTool,
+  rainyDayPlanFinderTool,
+  // B4 — Corporate / Business Travel.
+  clientDinnerRecommenderTool,
+  executiveLoungeFinderTool,
+  privateMeetingRoomFinderTool,
+  businessDressCodeBriefTool,
+  localBusinessProtocolBriefTool,
+  expensePolicyCheckerTool,
+  receiptCollectionAssistantTool,
+  vatRefundResearcherTool,
+  corporateTravelRiskDigestTool,
+  meetingCommutePlannerTool,
+  // B5 — Sports / Fan Travel.
+  teamTravelPackageBuilderTool,
+  stadiumDayPlanTool,
+  awayFanSafetyBriefTool,
+  ticketResaleRiskCheckerTool,
+  sportsBarFinderTool,
+  matchPostponementMonitorTool,
+  fanGroupCoordinationToolTool,
+  // B6 — Lifestyle / Local Commerce.
+  shoppingDistrictBriefTool,
+  localDesignerFinderTool,
+  marketDayFinderTool,
+  giftRecommenderTool,
+  pharmacyProductMapperTool,
+  electronicsAdapterCheckerTool,
+  luggageRepairFinderTool,
+  laundryServiceFinderTool,
+  tailorUrgentFinderTool,
+  personalShopperLightTool,
+  vintageThriftFinderTool,
+  craftBeerFinderTool,
+  // B7 — Health, Safety, Wellness.
+  clinicFinderTool,
+  pharmacy24hFinderTool,
+  travelVaccineResearcherTool,
+  foodSafetyBriefTool,
+  allergySafeRestaurantFinderTool,
+  emergencyNumbersCardTool,
+  embassyConsulateLocatorTool,
+  safeRouteHomeTool,
+  areaAfterDarkCheckTool,
+  scamRiskBriefTool,
+  // B8 — Trip Intelligence / Anticipation.
+  cityPulseBriefTool,
+  tripOpportunityRankerTool,
+  itineraryGapDetectorTool,
+  microItineraryBuilderTool,
+  layoverCityEscapeTool,
+  firstDaySoftPlanTool,
+  lastDayCheckoutPlanTool,
+  luggageStorageFinderTool,
+  tripPacingOptimizerTool,
+  weatherReplanEngineTool,
+  groupPreferenceReconcilerTool,
+  perfectEveningBuilderTool,
+  tripContextualRecommenderTool,
+  // B9 — Travel Disruption / Policy / Logistics Research.
+  airportDisruptionMonitorTool,
+  localHolidayDisruptionCheckTool,
+  venuePolicyCheckerTool,
+  hotelAreaIntelligenceTool,
+  neighborhoodFitMatcherTool,
+  restaurantReservationResearcherTool,
+  menuDietaryResearcherTool,
+  groundTransportPriceResearcherTool,
+  publicTransitTicketingBriefTool,
+  airportTerminalResolverTool,
+  layoverViabilityCheckerTool,
+  nearbyAirportAlternativeResearcherTool,
+  routeAlternativeResearcherTool,
+  tripBudgetResearcherTool,
+  localPaymentAcceptanceBriefTool,
+  invoiceTaxRequirementsResearcherTool,
+  travelInsuranceRequirementCheckerTool,
+  medicalAccessBriefTool,
+  communicationsResearcherTool,
+  culturalProtocolBriefTool,
+  liveNewsTripRiskScannerTool,
+  // B10 — Agency Ops / Travel Team Automation.
+  supplierQuoteComparatorTool,
+  manualSupplierResearcherTool,
+  supplierContactExtractorTool,
+  supplierReliabilityScoreTool,
+  opsFollowupSchedulerTool,
+  bookingGapAuditorTool,
+  handoffContextBuilderTool,
+  postTripFeedbackAnalyzerTool,
+  agencyMarginGuardTool,
+  preferredSupplierRouterTool,
+  // Disruption recovery — when a traveler can't take a booked trip
+  // (bereavement, illness, legal hold, military, force majeure, visa
+  // denied, voluntary). Composes Duffel cancel/change/conditions +
+  // Vertex-grounded compassionate-policy research + insurance-claim
+  // packet + ops handoff into one chain. Spec: file header in
+  // packages/tools/src/disruption-recovery.ts.
+  classifyDisruptionTool,
+  researchCompassionateExceptionPolicyTool,
+  buildInsuranceClaimPacketTool,
+  tripDisruptionRecoveryTool,
+  recoveryCaseFileRendererTool,
   // Phase B.2 — "trip buddy" digital-nomad concierge. `take_me_home`
   // resolves the cheapest return flight from the traveler's current
   // location to their declared home; `set_home_iata` persists the
