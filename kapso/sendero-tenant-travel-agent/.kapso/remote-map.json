@@ -317,7 +317,7 @@
   "workflows": {
     "sendero-tenant-travel-agent": {
       "files": {
-        "workflows/sendero-tenant-travel-agent/definition.json": "2d9d8914f4c09ff36496e0f746ee4f49bebb34352f44612e8a40dd8f19f514c5",
+        "workflows/sendero-tenant-travel-agent/definition.json": "63d44c28160c8e8bfc1f5c521e28fba3faa741b58496e14fc8bde644e0223051",
         "workflows/sendero-tenant-travel-agent/workflow.yaml": "e2f6cb5ac3b9bf4b5c069aa387208702617bf735cd0f1413815a0f559f82d3ae"
       },
       "generatedSource": {
@@ -328,7 +328,7 @@
       "lockVersion": 161,
       "slug": "sendero-tenant-travel-agent",
       "sourceFile": {
-        "hash": "252ee0c4e9acdcd2711a36927659c0b8b1a9b9a567ffdfb958e5dd3df8deb8fc",
+        "hash": "11a1f95b48cd9635582df416c12599abc4a08610e36743405b5456cf9021e2f3",
         "path": "workflows/sendero-tenant-travel-agent/workflow.js"
       },
       "status": "active",
