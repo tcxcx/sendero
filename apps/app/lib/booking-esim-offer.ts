@@ -108,20 +108,45 @@ function readDestinationCity(segments: unknown): string | null {
 }
 
 function inferDays(segments: unknown): number {
-  // Best-effort: derive trip duration from first depart → last arrive
-  // when both ISO timestamps are present. Default 7 days when unknown
-  // (matches the cheapest tier's validity for most regions).
+  // Derive trip duration from segments. For ROUND-TRIPS (origin equals
+  // the final destination), first depart → last arrive captures the
+  // actual stay. For ONE-WAYS we have no return-leg signal, so fall
+  // back to 7 days — matches the cheapest tier's validity for most
+  // regions and is the most common business-trip length.
+  //
+  // The pre-fix bug: a one-way BUE→LIM is one segment; first.depart
+  // and last.arrive are 3 hours apart, ceil to 1 day. The eSIM offer
+  // then deep-links into a 1-day plan that the traveler doesn't want.
   if (!Array.isArray(segments) || segments.length === 0) return 7;
-  const first = segments[0] as Record<string, unknown>;
-  const last = segments[segments.length - 1] as Record<string, unknown>;
-  const depart = typeof first.departureAt === 'string' ? first.departureAt : null;
-  const arrive = typeof last.arrivalAt === 'string' ? last.arrivalAt : null;
+  const arr = segments as Array<Record<string, unknown>>;
+  const first = arr[0];
+  const last = arr[arr.length - 1];
+
+  // One-way detection: origin country differs from final destination
+  // country (or, when country missing, origin IATA differs from final
+  // destination IATA — pessimistic, treats every leg-with-stop as
+  // one-way which is what we want for eSIM duration purposes).
+  const originCountry =
+    typeof first?.originCountry === 'string' ? first.originCountry.toUpperCase() : null;
+  const destCountry =
+    typeof last?.destinationCountry === 'string' ? last.destinationCountry.toUpperCase() : null;
+  const originIata = typeof first?.originIata === 'string' ? first.originIata : null;
+  const destIata = typeof last?.destinationIata === 'string' ? last.destinationIata : null;
+  const isRoundTrip =
+    (originCountry && destCountry && originCountry === destCountry) ||
+    (!originCountry && originIata && destIata && originIata === destIata);
+  if (!isRoundTrip) return 7;
+
+  const depart = typeof first?.departureAt === 'string' ? first.departureAt : null;
+  const arrive = typeof last?.arrivalAt === 'string' ? last.arrivalAt : null;
   if (!depart || !arrive) return 7;
   const d = Date.parse(depart);
   const a = Date.parse(arrive);
   if (!Number.isFinite(d) || !Number.isFinite(a) || a <= d) return 7;
   const days = Math.ceil((a - d) / (1000 * 60 * 60 * 24));
-  return Math.max(1, Math.min(30, days));
+  // Floor at 3 days — even short round-trips deserve more than the
+  // ceil-of-flight-time baseline. Cap at 30, the longest common plan.
+  return Math.max(3, Math.min(30, days));
 }
 
 export async function sendEsimOfferToTraveler(
