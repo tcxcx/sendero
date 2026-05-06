@@ -11,7 +11,8 @@
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "test:e2e:smoke": "playwright test e2e/public-smoke.spec.ts"
+    "test:e2e:smoke": "playwright test e2e/public-smoke.spec.ts",
+    "gaps:scan": "bun run ../../scripts/scan-knowledge-gaps.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
