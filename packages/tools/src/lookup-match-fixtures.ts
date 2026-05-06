@@ -26,8 +26,9 @@
  */
 
 import { z } from 'zod';
-import { generateObject } from 'ai';
+import { generateObject, generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createVertex } from '@ai-sdk/google-vertex';
 
 import type { ToolDef } from './types';
 
@@ -56,7 +57,7 @@ const fixtureShape = z.object({
   kickoff: z
     .string()
     .describe(
-      "ISO 8601 date or datetime. Use full datetime when kickoff time is known (e.g. 2026-05-22T21:30:00-03:00); date-only when only the day is reported (2026-05-22)."
+      'ISO 8601 date or datetime. Use full datetime when kickoff time is known (e.g. 2026-05-22T21:30:00-03:00); date-only when only the day is reported (2026-05-22).'
     ),
   homeTeam: z.string().describe('Home team name.'),
   awayTeam: z.string().describe('Away team name.'),
@@ -101,45 +102,129 @@ export interface LookupMatchFixturesResult {
 
 const MODEL_ID = 'gemini-3-flash-preview';
 
+/**
+ * Provider resolution: prefer Vertex AI when configured (corporate
+ * billing, no AI-Studio prepay-credit caps), otherwise fall back to
+ * AI Studio. Both expose `googleSearch` grounding via the same SDK
+ * shape, so the rest of the function is provider-agnostic.
+ */
+function resolveProvider() {
+  const project = process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GOOGLE_VERTEX_PROJECT ?? null;
+  const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
+  const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (project && saJson) {
+    try {
+      const vertex = createVertex({
+        project,
+        location,
+        googleAuthOptions: { credentials: JSON.parse(saJson) },
+      });
+      return { kind: 'vertex' as const, client: vertex };
+    } catch {
+      // Bad SA JSON — fall through to AI Studio.
+    }
+  }
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
+  if (apiKey) {
+    return { kind: 'studio' as const, client: createGoogleGenerativeAI({ apiKey }) };
+  }
+  return null;
+}
+
 async function lookupMatchFixtures(
   input: LookupMatchFixturesInput
 ): Promise<LookupMatchFixturesResult> {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const provider = resolveProvider();
+  if (!provider) {
     return {
       status: 'no_api_key',
       message:
-        'lookup_match_fixtures: GOOGLE_GENERATIVE_AI_API_KEY (or GEMINI_API_KEY) not set.',
+        'lookup_match_fixtures: no Gemini provider configured. Set GOOGLE_APPLICATION_CREDENTIALS_JSON + GOOGLE_CLOUD_PROJECT (Vertex) or GOOGLE_GENERATIVE_AI_API_KEY (AI Studio).',
       fixtures: [],
       notes: null,
       locale: input.locale ?? 'es-AR',
     };
   }
-
-  const client = createGoogleGenerativeAI({ apiKey });
+  const { client } = provider;
   const locale = input.locale ?? 'es-AR';
   const limit = input.limit ?? 4;
 
-  // We use generateObject with the structured schema so Gemini emits
-  // typed fixture rows directly. The model is instructed to ground in
-  // public web data — but generateObject doesn't expose google_search
-  // grounding directly, so we run a two-step: free-form ground via
-  // a system message that asks the model to lean on the most-recent
-  // public sources it knows + a structured generation pass.
+  // Two-pass implementation. Gemini doesn't allow combining structured
+  // output (responseSchema) with googleSearchRetrieval — they're
+  // mutually exclusive on the API. So:
+  //   1. `generateText` with google_search grounding to get a fresh,
+  //      cited answer from the public web.
+  //   2. `generateObject` to coerce that grounded text into our typed
+  //      fixture rows.
+  // Without grounding, Gemini answers from training data only, which
+  // doesn't have current-season fixtures — the bug we shipped this fix to close.
+  const grounded = await generateText({
+    model: client(MODEL_ID),
+    tools: {
+      google_search: client.tools.googleSearch({}),
+    },
+    prompt: `Look up the most recent public fixture schedule for: ${input.query}
+
+Return the next ${limit} fixtures as a clear list. For each fixture include:
+- Date and (when known) kick-off time, in the local time zone of the host city.
+- Home team and away team (full club name).
+- Host city and country.
+- Stadium / venue, when reported.
+- Brief one-line note about confidence (e.g. "kickoff times TBD pending broadcaster").
+
+If reliable public information is unavailable, say so explicitly. Never invent dates.
+
+Cite the official confederation or league source when possible (e.g. conmebol.com, fifa.com, espn.com).`,
+  });
+
+  const groundedText = grounded.text?.trim() ?? '';
+  const sourceUris: string[] = [];
+  // AI SDK exposes grounding metadata via `providerMetadata` on the
+  // generation result. Best-effort pull.
+  type GroundingMeta = {
+    google?: { groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> } };
+  };
+  const meta = grounded.providerMetadata as GroundingMeta | undefined;
+  const chunks = meta?.google?.groundingMetadata?.groundingChunks ?? [];
+  for (const c of chunks) {
+    const uri = c?.web?.uri;
+    if (typeof uri === 'string') sourceUris.push(uri);
+  }
+
+  if (!groundedText) {
+    return {
+      status: 'no_results',
+      fixtures: [],
+      notes: 'Gemini search grounding returned no text. Try a more specific query.',
+      locale,
+    };
+  }
+
+  // Pass 2: coerce grounded text into structured fixture rows.
   const result = await generateObject({
     model: client(MODEL_ID),
     schema: outputShape,
-    prompt: `Look up the most recent public fixture schedule for the following query, then return the next ${limit} fixtures as a structured list.
+    prompt: `Coerce the following grounded fixture report into a structured list of AT MOST ${limit} fixtures.
 
-Query: ${input.query}
+Grounded report:
+"""
+${groundedText}
+"""
+
+Sources Gemini cited (use for sourceUri when matching a fixture):
+${
+  sourceUris
+    .slice(0, 8)
+    .map((u, i) => `${i + 1}. ${u}`)
+    .join('\n') || '(none)'
+}
 
 Rules:
-- Return AT MOST ${limit} fixtures. Prefer the most recent / next-up matches.
+- Return AT MOST ${limit} fixtures. Prefer the next-up matches.
 - Use ISO 8601 for kickoff (full datetime when known, date-only when not).
-- Resolve city + countryIso2 + airportIataHint for each fixture (the major-airport IATA closest to the host city).
-- If you can't find reliable public information, return an empty fixtures array and explain in 'notes'.
-- Never invent dates. If a fixture date isn't confirmed, omit it.
-- Notes should be a one-line confidence statement in ${locale}.`,
+- Resolve city + countryIso2 + airportIataHint for each fixture (major airport IATA closest to the host city — e.g. Asunción → ASU, São Paulo → GRU, Buenos Aires → EZE, Cuenca Ecuador → CUE).
+- If a fixture's date isn't in the grounded report, omit that fixture rather than guessing.
+- Notes: one short line in ${locale} reflecting Gemini's confidence statement.`,
   });
 
   const fixtures = result.object.fixtures.slice(0, limit);
@@ -151,38 +236,36 @@ Rules:
   };
 }
 
-export const lookupMatchFixturesTool: ToolDef<
-  LookupMatchFixturesInput,
-  LookupMatchFixturesResult
-> = {
-  name: 'lookup_match_fixtures',
-  description:
-    "Look up upcoming sports fixtures (soccer, basketball, NFL, etc.) or event dates and return them as a STRUCTURED list ready to chain into `search_flights` and `search_hotels`. Use when the traveler wants to plan a trip around a match or event and the dates aren't given. Each fixture comes back with kickoff, teams, city, country (ISO-2), venue, and an IATA airport hint. Hand the `fixtures[]` directly to follow-on flight/hotel searches without re-asking the traveler. NEVER use for queries already covered by canonical Sendero tools (flights, hotels, etc).",
-  inputSchema,
-  jsonSchema: {
-    type: 'object',
-    required: ['query'],
-    properties: {
-      query: {
-        type: 'string',
-        minLength: 3,
-        maxLength: 400,
-        description:
-          "Free-form fixture query (include team, competition, year). E.g. 'Deportivo Cuenca Copa Sudamericana 2026 remaining fixtures'.",
-      },
-      limit: {
-        type: 'integer',
-        minimum: 1,
-        maximum: 10,
-        description: 'Max fixtures to return. Default 4.',
-      },
-      locale: {
-        type: 'string',
-        minLength: 2,
-        maxLength: 10,
-        description: 'BCP-47 locale for notes (default es-AR).',
+export const lookupMatchFixturesTool: ToolDef<LookupMatchFixturesInput, LookupMatchFixturesResult> =
+  {
+    name: 'lookup_match_fixtures',
+    description:
+      "Look up upcoming sports fixtures (soccer, basketball, NFL, etc.) or event dates and return them as a STRUCTURED list ready to chain into `search_flights` and `search_hotels`. Use when the traveler wants to plan a trip around a match or event and the dates aren't given. Each fixture comes back with kickoff, teams, city, country (ISO-2), venue, and an IATA airport hint. Hand the `fixtures[]` directly to follow-on flight/hotel searches without re-asking the traveler. NEVER use for queries already covered by canonical Sendero tools (flights, hotels, etc).",
+    inputSchema,
+    jsonSchema: {
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: {
+          type: 'string',
+          minLength: 3,
+          maxLength: 400,
+          description:
+            "Free-form fixture query (include team, competition, year). E.g. 'Deportivo Cuenca Copa Sudamericana 2026 remaining fixtures'.",
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 10,
+          description: 'Max fixtures to return. Default 4.',
+        },
+        locale: {
+          type: 'string',
+          minLength: 2,
+          maxLength: 10,
+          description: 'BCP-47 locale for notes (default es-AR).',
+        },
       },
     },
-  },
-  handler: lookupMatchFixtures,
-};
+    handler: lookupMatchFixtures,
+  };

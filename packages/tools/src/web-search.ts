@@ -25,9 +25,36 @@
 
 import { z } from 'zod';
 import { generateText } from 'ai';
-import { createGoogleGenerativeAI, google } from '@ai-sdk/google';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createVertex } from '@ai-sdk/google-vertex';
 
 import type { ToolDef } from './types';
+
+/**
+ * Provider resolution: prefer Vertex AI when configured (corporate
+ * billing, no AI-Studio prepay-credit caps), otherwise fall back to
+ * AI Studio. Both expose `googleSearch` grounding via the same SDK
+ * shape. Mirrors the resolver in `lookup-match-fixtures.ts`.
+ */
+function resolveGeminiProvider() {
+  const project = process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GOOGLE_VERTEX_PROJECT ?? null;
+  const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
+  const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (project && saJson) {
+    try {
+      return createVertex({
+        project,
+        location,
+        googleAuthOptions: { credentials: JSON.parse(saJson) },
+      });
+    } catch {
+      // Bad SA JSON — fall through to AI Studio.
+    }
+  }
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
+  if (apiKey) return createGoogleGenerativeAI({ apiKey });
+  return null;
+}
 
 const inputSchema = z.object({
   query: z
@@ -70,20 +97,19 @@ export interface WebSearchResult {
 const MODEL_ID = 'gemini-3-flash-preview';
 
 async function webSearch(input: WebSearchInput): Promise<WebSearchResult> {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  const client = resolveGeminiProvider();
+  if (!client) {
     throw new Error(
-      'web_search: GOOGLE_GENERATIVE_AI_API_KEY (or GEMINI_API_KEY) not set. Add it to env.'
+      'web_search: no Gemini provider configured. Set GOOGLE_APPLICATION_CREDENTIALS_JSON + GOOGLE_CLOUD_PROJECT (Vertex) or GOOGLE_GENERATIVE_AI_API_KEY (AI Studio).'
     );
   }
 
-  const client = createGoogleGenerativeAI({ apiKey });
   const locale = input.locale ?? 'es-AR';
 
   const result = await generateText({
     model: client(MODEL_ID),
     tools: {
-      google_search: google.tools.googleSearch({}),
+      google_search: client.tools.googleSearch({}),
     },
     prompt: `${input.query}\n\nAnswer in ${locale}. Be concise (≤ 4 sentences). When citing a date, source, or fixture, mention the source verbatim. If the answer isn't reliably available from public web sources, say "no encontré información confiable sobre eso" rather than guessing.`,
   });
@@ -91,16 +117,21 @@ async function webSearch(input: WebSearchInput): Promise<WebSearchResult> {
   // AI SDK exposes `sources` (grounding citations) on the result. Each
   // source has a `url` + `title`. We surface the canonical (gateway)
   // URI Gemini emits — that's what's safe to share with travelers.
-  const sources: WebSearchSource[] = (result.sources ?? []).map(s => ({
-    uri: (s as { url?: string; uri?: string }).url ?? (s as { uri?: string }).uri ?? '',
-    title: (s as { title?: string }).title ?? null,
-  })).filter(s => s.uri);
+  const sources: WebSearchSource[] = (result.sources ?? [])
+    .map(s => ({
+      uri: (s as { url?: string; uri?: string }).url ?? (s as { uri?: string }).uri ?? '',
+      title: (s as { title?: string }).title ?? null,
+    }))
+    .filter(s => s.uri);
 
   // groundingMetadata.webSearchQueries surfaces the actual queries the
   // model ran. Useful when ops audits which search terms hit the bill.
   const searchQueries: string[] =
-    (result.providerMetadata as { google?: { groundingMetadata?: { webSearchQueries?: string[] } } } | undefined)
-      ?.google?.groundingMetadata?.webSearchQueries ?? [];
+    (
+      result.providerMetadata as
+        | { google?: { groundingMetadata?: { webSearchQueries?: string[] } } }
+        | undefined
+    )?.google?.groundingMetadata?.webSearchQueries ?? [];
 
   return {
     text: result.text,
@@ -124,7 +155,7 @@ export const webSearchTool: ToolDef<WebSearchInput, WebSearchResult> = {
         minLength: 3,
         maxLength: 400,
         description:
-          "Natural-language search query. Be specific (include team, event, city, dates when known).",
+          'Natural-language search query. Be specific (include team, event, city, dates when known).',
       },
       locale: {
         type: 'string',
