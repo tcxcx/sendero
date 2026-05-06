@@ -103,6 +103,8 @@
     "@circle-fin/developer-controlled-wallets": "^8.0.0",
     "@circle-fin/smart-contract-platform": "^10.3.0",
     "@sendero/agent": "workspace:*",
+    "@sendero/arize-phoenix": "workspace:*",
+    "@sendero/database": "workspace:*",
     "@sendero/langfuse": "workspace:*",
     "@turbo/gen": "^2.9.6",
     "@types/node": "^22.9.0",
