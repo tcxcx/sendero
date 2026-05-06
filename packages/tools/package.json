@@ -33,6 +33,7 @@
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",
     "@ai-sdk/google": "*",
+    "@ai-sdk/google-vertex": "*",
     "@ai-sdk/openai": "*",
     "@circle-fin/app-kit": "*",
     "@circle-fin/unified-balance-kit": "*",
