@@ -27,7 +27,7 @@
 
 import { z } from 'zod';
 import { generateObject, generateText } from 'ai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
 
 import type { ToolDef } from './types';
@@ -100,70 +100,41 @@ export interface LookupMatchFixturesResult {
   locale: string;
 }
 
-const MODEL_ID = 'gemini-3-flash-preview';
-
 /**
- * Provider resolution: prefer Vertex AI when configured (corporate
- * billing, no AI-Studio prepay-credit caps), otherwise fall back to
- * AI Studio. Both expose `googleSearch` grounding via the same SDK
- * shape, so the rest of the function is provider-agnostic.
+ * Vertex direct uses the model's preview ID; the AI Gateway exposes
+ * the same family under its canonical alias (no `-preview` suffix).
+ * See `packages/agent/src/models.ts::GATEWAY_MODELS`.
  */
-function resolveProvider() {
+const VERTEX_MODEL_ID = 'gemini-3-flash-preview';
+const GATEWAY_MODEL_ID = 'google/gemini-3-flash';
+
+function resolveVertex() {
   const project = process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GOOGLE_VERTEX_PROJECT ?? null;
   const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
   const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
-  if (project && saJson) {
-    try {
-      const vertex = createVertex({
-        project,
-        location,
-        googleAuthOptions: { credentials: JSON.parse(saJson) },
-      });
-      return { kind: 'vertex' as const, client: vertex };
-    } catch {
-      // Bad SA JSON — fall through to AI Studio.
-    }
+  if (!project || !saJson) return null;
+  try {
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
+  } catch {
+    return null;
   }
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (apiKey) {
-    return { kind: 'studio' as const, client: createGoogleGenerativeAI({ apiKey }) };
-  }
-  return null;
 }
 
-async function lookupMatchFixtures(
-  input: LookupMatchFixturesInput
-): Promise<LookupMatchFixturesResult> {
-  const provider = resolveProvider();
-  if (!provider) {
-    return {
-      status: 'no_api_key',
-      message:
-        'lookup_match_fixtures: no Gemini provider configured. Set GOOGLE_APPLICATION_CREDENTIALS_JSON + GOOGLE_CLOUD_PROJECT (Vertex) or GOOGLE_GENERATIVE_AI_API_KEY (AI Studio).',
-      fixtures: [],
-      notes: null,
-      locale: input.locale ?? 'es-AR',
-    };
-  }
-  const { client } = provider;
-  const locale = input.locale ?? 'es-AR';
-  const limit = input.limit ?? 4;
+interface PromptBundle {
+  groundingPrompt: string;
+  coerce: (groundedText: string, sourceUris: string[]) => string;
+}
 
-  // Two-pass implementation. Gemini doesn't allow combining structured
-  // output (responseSchema) with googleSearchRetrieval — they're
-  // mutually exclusive on the API. So:
-  //   1. `generateText` with google_search grounding to get a fresh,
-  //      cited answer from the public web.
-  //   2. `generateObject` to coerce that grounded text into our typed
-  //      fixture rows.
-  // Without grounding, Gemini answers from training data only, which
-  // doesn't have current-season fixtures — the bug we shipped this fix to close.
-  const grounded = await generateText({
-    model: client(MODEL_ID),
-    tools: {
-      google_search: client.tools.googleSearch({}),
-    },
-    prompt: `Look up the most recent public fixture schedule for: ${input.query}
+function buildPrompts(
+  input: LookupMatchFixturesInput,
+  locale: string,
+  limit: number
+): PromptBundle {
+  const groundingPrompt = `Look up the most recent public fixture schedule for: ${input.query}
 
 Return the next ${limit} fixtures as a clear list. For each fixture include:
 - Date and (when known) kick-off time, in the local time zone of the host city.
@@ -174,37 +145,10 @@ Return the next ${limit} fixtures as a clear list. For each fixture include:
 
 If reliable public information is unavailable, say so explicitly. Never invent dates.
 
-Cite the official confederation or league source when possible (e.g. conmebol.com, fifa.com, espn.com).`,
-  });
+Cite the official confederation or league source when possible (e.g. conmebol.com, fifa.com, espn.com).`;
 
-  const groundedText = grounded.text?.trim() ?? '';
-  const sourceUris: string[] = [];
-  // AI SDK exposes grounding metadata via `providerMetadata` on the
-  // generation result. Best-effort pull.
-  type GroundingMeta = {
-    google?: { groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> } };
-  };
-  const meta = grounded.providerMetadata as GroundingMeta | undefined;
-  const chunks = meta?.google?.groundingMetadata?.groundingChunks ?? [];
-  for (const c of chunks) {
-    const uri = c?.web?.uri;
-    if (typeof uri === 'string') sourceUris.push(uri);
-  }
-
-  if (!groundedText) {
-    return {
-      status: 'no_results',
-      fixtures: [],
-      notes: 'Gemini search grounding returned no text. Try a more specific query.',
-      locale,
-    };
-  }
-
-  // Pass 2: coerce grounded text into structured fixture rows.
-  const result = await generateObject({
-    model: client(MODEL_ID),
-    schema: outputShape,
-    prompt: `Coerce the following grounded fixture report into a structured list of AT MOST ${limit} fixtures.
+  const coerce = (groundedText: string, sourceUris: string[]) =>
+    `Coerce the following grounded fixture report into a structured list of AT MOST ${limit} fixtures.
 
 Grounded report:
 """
@@ -224,9 +168,64 @@ Rules:
 - Use ISO 8601 for kickoff (full datetime when known, date-only when not).
 - Resolve city + countryIso2 + airportIataHint for each fixture (major airport IATA closest to the host city — e.g. Asunción → ASU, São Paulo → GRU, Buenos Aires → EZE, Cuenca Ecuador → CUE).
 - If a fixture's date isn't in the grounded report, omit that fixture rather than guessing.
-- Notes: one short line in ${locale} reflecting Gemini's confidence statement.`,
-  });
+- Notes: one short line in ${locale} reflecting Gemini's confidence statement.`;
 
+  return { groundingPrompt, coerce };
+}
+
+interface GenerateTextLike {
+  text: string;
+  providerMetadata?: unknown;
+}
+
+function extractGrounded(result: GenerateTextLike): {
+  text: string;
+  sourceUris: string[];
+} {
+  const text = result.text?.trim() ?? '';
+  const sourceUris: string[] = [];
+  type GroundingMeta = {
+    google?: { groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> } };
+  };
+  const meta = result.providerMetadata as GroundingMeta | undefined;
+  const chunks = meta?.google?.groundingMetadata?.groundingChunks ?? [];
+  for (const c of chunks) {
+    const uri = c?.web?.uri;
+    if (typeof uri === 'string') sourceUris.push(uri);
+  }
+  return { text, sourceUris };
+}
+
+async function runVertex(
+  input: LookupMatchFixturesInput,
+  vertex: ReturnType<typeof createVertex>,
+  locale: string,
+  limit: number
+): Promise<LookupMatchFixturesResult> {
+  const { groundingPrompt, coerce } = buildPrompts(input, locale, limit);
+
+  // Pass 1: grounded text via Vertex + googleSearch tool.
+  const grounded = await generateText({
+    model: vertex(VERTEX_MODEL_ID),
+    tools: { google_search: vertex.tools.googleSearch({}) },
+    prompt: groundingPrompt,
+  });
+  const { text: groundedText, sourceUris } = extractGrounded(grounded);
+  if (!groundedText) {
+    return {
+      status: 'no_results',
+      fixtures: [],
+      notes: 'Gemini search grounding returned no text. Try a more specific query.',
+      locale,
+    };
+  }
+
+  // Pass 2: structured-output coercion (no grounding — mutually exclusive).
+  const result = await generateObject({
+    model: vertex(VERTEX_MODEL_ID),
+    schema: outputShape,
+    prompt: coerce(groundedText, sourceUris),
+  });
   const fixtures = result.object.fixtures.slice(0, limit);
   return {
     status: fixtures.length > 0 ? 'ok' : 'no_results',
@@ -234,6 +233,75 @@ Rules:
     notes: result.object.notes,
     locale,
   };
+}
+
+async function runGateway(
+  input: LookupMatchFixturesInput,
+  locale: string,
+  limit: number
+): Promise<LookupMatchFixturesResult> {
+  const { groundingPrompt, coerce } = buildPrompts(input, locale, limit);
+
+  // Pass 1: grounded text via gateway. Grounding travels as a provider
+  // tool descriptor — the gateway's Google leg honors `googleSearch`.
+  const grounded = await generateText({
+    model: GATEWAY_MODEL_ID,
+    tools: { google_search: google.tools.googleSearch({}) },
+    prompt: groundingPrompt,
+    providerOptions: {
+      gateway: { order: ['google'] },
+    },
+  });
+  const { text: groundedText, sourceUris } = extractGrounded(grounded);
+  if (!groundedText) {
+    return {
+      status: 'no_results',
+      fixtures: [],
+      notes: 'Gemini search grounding returned no text. Try a more specific query.',
+      locale,
+    };
+  }
+
+  // Pass 2: structured-output coercion via gateway. No grounding here.
+  const result = await generateObject({
+    model: GATEWAY_MODEL_ID,
+    schema: outputShape,
+    prompt: coerce(groundedText, sourceUris),
+    providerOptions: {
+      gateway: { order: ['google'] },
+    },
+  });
+  const fixtures = result.object.fixtures.slice(0, limit);
+  return {
+    status: fixtures.length > 0 ? 'ok' : 'no_results',
+    fixtures,
+    notes: result.object.notes,
+    locale,
+  };
+}
+
+async function lookupMatchFixtures(
+  input: LookupMatchFixturesInput
+): Promise<LookupMatchFixturesResult> {
+  const locale = input.locale ?? 'es-AR';
+  const limit = input.limit ?? 4;
+
+  // Path 1: Vertex direct (Vortex / corporate Google billing).
+  const vertex = resolveVertex();
+  if (vertex) {
+    try {
+      return await runVertex(input, vertex, locale, limit);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[lookup_match_fixtures] Vertex direct failed, falling back to AI Gateway:',
+        (err as Error).message ?? err
+      );
+    }
+  }
+
+  // Path 2: Vercel AI Gateway fallback.
+  return runGateway(input, locale, limit);
 }
 
 export const lookupMatchFixturesTool: ToolDef<LookupMatchFixturesInput, LookupMatchFixturesResult> =
