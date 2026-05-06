@@ -357,6 +357,9 @@ model Tenant {
   gatewayTransfers             GatewayTransferLog[]
   walletAccessLogs             WalletAccessLog[]
   travelerProfiles             TravelerProfile[]
+  travelerTasteEntries         TravelerTasteEntry[]
+  cityBucketListItems          CityBucketListItem[]
+  anticipationEvents           AnticipationEvent[]
 
   @@index([parentTenantId])
   @@index([createdAt])
@@ -421,6 +424,8 @@ model User {
   moonpayTopUps          MoonPayTopUp[]
   moonpayOffRamps        MoonPayOffRamp[]
   travelerProfile        TravelerProfile?
+  travelerTasteEntries   TravelerTasteEntry[]
+  cityBucketListItems    CityBucketListItem[]
 
   @@index([createdAt])
   @@map("users")
@@ -483,6 +488,108 @@ model TravelerProfile {
 
   @@index([tenantId, lastTripAt])
   @@map("traveler_profiles")
+}
+
+/// Anticipation: traveler taste entry (row-per-hobby).
+/// Spec: docs/specs/anticipatory-concierge.md §4.0 HP1 + Appendix A.4.
+/// Powers `hobby_profile_builder`, `city_hobby_pack_builder`,
+/// `hobby_concierge_discover` and every HP1 finder tool.
+model TravelerTasteEntry {
+  id       String @id @default(cuid())
+  userId   String
+  tenantId String
+
+  /// Hobby key. Spec lists canonical values
+  /// (specialty_coffee, work_from_cafes, cheap_michelin, bib_gourmand,
+  /// worlds_50_best, ramen, founder_networking, ai_events, web3_events,
+  /// meetups, date_spots, bookstores, wine_bars, record_stores, running,
+  /// gyms, language_exchange, art_galleries, local_design); custom
+  /// strings allowed for traveler-defined hobbies.
+  key String
+
+  /// 'low' | 'medium' | 'high'.
+  priority String @default("medium")
+  notes    String?
+  /// Negative tags ("loud cafés", "tourist trap food").
+  avoid    String[] @default([])
+  /// 'morning' | 'afternoon' | 'evening' | 'late_night'.
+  preferredTimeOfDay String? @map("preferred_time_of_day")
+  /// 'budget' | 'medium' | 'premium' | 'splurge' | 'no_limit'.
+  preferredBudget    String? @map("preferred_budget")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([tenantId, key])
+  @@map("traveler_taste_entries")
+}
+
+/// Anticipation: city bucket-list item (the feedback loop).
+/// Powers `city_bucket_list_manager` per Appendix A.4 #2.
+model CityBucketListItem {
+  id       String @id @default(cuid())
+  userId   String
+  tenantId String
+
+  city     String
+  name     String
+  category String
+  placeId  String? @map("place_id")
+  url      String?
+
+  status BucketListItemStatus @default(want_to_visit)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, city])
+  @@index([tenantId, status])
+  @@map("city_bucket_list_items")
+}
+
+enum BucketListItemStatus {
+  want_to_visit
+  visited
+  loved
+  skip
+  revisit
+}
+
+/// Anticipation: every fired trigger (B5 group-trip confluence,
+/// B4 monday ops rollup, T-48h, etc.). Append-only; powers the
+/// operator strip and frequency-cap quota.
+/// Spec: docs/specs/anticipatory-concierge.md §4.0 + §11.
+model AnticipationEvent {
+  id       String  @id @default(cuid())
+  tenantId String
+  /// Optional — operator-side anticipation (Slack ops rollup) has no traveler.
+  travelerUserId String? @map("traveler_user_id")
+
+  /// 'group_confluence' | 'monday_ops_rollup' | 't_minus_48h_brief'
+  /// | 'hobby_arrival_pack' | 'self_heal_applied' | …
+  kind String
+  /// 'fired' | 'positive' | 'negative' | 'suppressed_quota' | 'suppressed_optout'.
+  status String @default("fired")
+
+  firedAt DateTime @default(now()) @db.Timestamptz(6) @map("fired_at")
+  /// Free-form context: triggerKey, channelKind, messageId, traceId, etc.
+  payload Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, firedAt(sort: Desc)])
+  @@index([tenantId, kind, firedAt(sort: Desc)])
+  @@map("anticipation_events")
 }
 
 /// Cached Duffel airline credit (unused ticket, MCO, voucher, etc.).

@@ -9,6 +9,8 @@ import { reportKnowledgeGapTool } from './report-knowledge-gap';
 import { listAvailableToolsTool } from './list-available-tools';
 import { recallSimilarTurnsTool } from './recall-similar-turns';
 import { findResolvedGapTool } from './find-resolved-gap';
+import { hobbyProfileBuilderTool } from './anticipation/hobby-profile-builder';
+import { cityBucketListManagerTool } from './anticipation/city-bucket-list-manager';
 import { setHomeIataTool } from './set-home-iata';
 import { setTripKindTool } from './set-trip-kind';
 import { sweepDcwToGatewayTool } from './sweep-dcw-to-gateway';
@@ -454,6 +456,22 @@ export {
   runFindResolvedGap,
   findResolvedGapTool,
 } from './find-resolved-gap';
+export {
+  type HobbyProfileBuilderInput,
+  type HobbyProfileBuilderResult,
+  type HobbyProfileBuilderDeps,
+  type TravelerTasteGraph,
+  runHobbyProfileBuilder,
+  normalizeHobbyKey,
+  hobbyProfileBuilderTool,
+} from './anticipation/hobby-profile-builder';
+export {
+  type CityBucketListManagerInput,
+  type CityBucketListManagerResult,
+  type CityBucketListManagerDeps,
+  runCityBucketListManager,
+  cityBucketListManagerTool,
+} from './anticipation/city-bucket-list-manager';
 export type { JsonSchemaObject, ToolContext, ToolDef } from './types';
 export {
   type ValidateTravelAddressInput,
@@ -586,6 +604,11 @@ export const toolList: ToolDef[] = [
   // and retry; if not, escalate normally. The hackathon-bonus piece.
   // Spec: docs/specs/arize-phoenix-integration.md §4.3 PR3.
   findResolvedGapTool,
+  // Anticipation HP1 — Hobby-Aware Concierge taste-graph foundation.
+  // Both `experimental: true` + dev-only gate at handler-time.
+  // Spec: docs/specs/anticipatory-concierge.md §4.0 HP1 + Appendix A.4.
+  hobbyProfileBuilderTool,
+  cityBucketListManagerTool,
   // Phase B.2 — "trip buddy" digital-nomad concierge. `take_me_home`
   // resolves the cheapest return flight from the traveler's current
   // location to their declared home; `set_home_iata` persists the
