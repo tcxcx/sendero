@@ -138,6 +138,7 @@ import { tripDelayReplannerTool } from './trip-delay-replanner';
 import { tripWeatherBriefTool } from './trip-weather-brief';
 import { currencyConvertTool } from './currency-convert';
 import { webSearchTool } from './web-search';
+import { lookupMatchFixturesTool } from './lookup-match-fixtures';
 import { saveTravelerPreferenceTool } from './save-traveler-preference';
 import { tippingEtiquetteTool } from './tipping-etiquette';
 import { localColorBriefTool } from './local-color-brief';
@@ -375,6 +376,12 @@ export {
   webSearchTool,
 } from './web-search';
 export {
+  type LookupMatchFixturesInput,
+  type LookupMatchFixturesResult,
+  type FixtureRow,
+  lookupMatchFixturesTool,
+} from './lookup-match-fixtures';
+export {
   type SaveTravelerPreferenceInput,
   type SaveTravelerPreferenceResult,
   saveTravelerPreferenceTool,
@@ -510,6 +517,7 @@ export const toolList: ToolDef[] = [
   // Free-API utilities — no partner contracts, no auth.
   currencyConvertTool,
   webSearchTool,
+  lookupMatchFixturesTool,
   saveTravelerPreferenceTool,
   tippingEtiquetteTool,
   recommendRestaurantsTool,
