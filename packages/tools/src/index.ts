@@ -137,6 +137,7 @@ import { tripCheckinReminderTool } from './trip-checkin-reminder';
 import { tripDelayReplannerTool } from './trip-delay-replanner';
 import { tripWeatherBriefTool } from './trip-weather-brief';
 import { currencyConvertTool } from './currency-convert';
+import { webSearchTool } from './web-search';
 import { tippingEtiquetteTool } from './tipping-etiquette';
 import { localColorBriefTool } from './local-color-brief';
 export {
@@ -367,6 +368,12 @@ export {
   currencyConvertTool,
 } from './currency-convert';
 export {
+  type WebSearchInput,
+  type WebSearchResult,
+  type WebSearchSource,
+  webSearchTool,
+} from './web-search';
+export {
   type TippingEtiquetteInput,
   type TippingEtiquetteResult,
   type TippingScenario,
@@ -496,6 +503,7 @@ export const toolList: ToolDef[] = [
   travelSafetyAidTool,
   // Free-API utilities — no partner contracts, no auth.
   currencyConvertTool,
+  webSearchTool,
   tippingEtiquetteTool,
   recommendRestaurantsTool,
   exportRouteMapTool,

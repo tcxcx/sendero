@@ -317,22 +317,22 @@
   "workflows": {
     "sendero-tenant-travel-agent": {
       "files": {
-        "workflows/sendero-tenant-travel-agent/definition.json": "a2f0a70055f4fe78b29202337a121339a639176e119d5d24b814f0f7217f62e1",
+        "workflows/sendero-tenant-travel-agent/definition.json": "46389ec5137a3dcd0fea1b66f50710f255abc208d07eb11d73280ddb52e2b7fe",
         "workflows/sendero-tenant-travel-agent/workflow.yaml": "e2f6cb5ac3b9bf4b5c069aa387208702617bf735cd0f1413815a0f559f82d3ae"
       },
       "generatedSource": {
-        "hash": "913a3a572ca4523ee172a32aab78161283b123fd844f456a2bd271dcc6d697c8",
+        "hash": "5c3212dd0039b6c4dc056d37b2c3046fd5ca4bb03530922336f441445f669618",
         "path": "workflows/sendero-tenant-travel-agent/workflow.js"
       },
       "id": "325dbf4b-1d92-4260-89df-d17e38e1b314",
-      "lockVersion": 154,
+      "lockVersion": 156,
       "slug": "sendero-tenant-travel-agent",
       "sourceFile": {
         "hash": "61c9b71197bd24fccf0e52f08162b7073f680db10c95eb43060b02beb8157745",
         "path": "workflows/sendero-tenant-travel-agent/workflow.js"
       },
       "status": "active",
-      "updatedAt": "2026-05-05T23:23:53-04:00"
+      "updatedAt": "2026-05-05T23:40:37-04:00"
     },
     "sendero-whatsapp-support-agent": {
       "files": {
