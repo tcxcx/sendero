@@ -182,11 +182,7 @@ describe('specialty_coffee_finder — taste-graph integration', () => {
         return { prefersWorkingFromCafes: true, likesLocalHiddenGems: false };
       },
     });
-    const r = await runSpecialtyCoffeeFinder(
-      { city: 'Tokyo', travelerId: 'usr_1' },
-      ctx,
-      deps
-    );
+    const r = await runSpecialtyCoffeeFinder({ city: 'Tokyo', travelerId: 'usr_1' }, ctx, deps);
     expect(read).toBe(true);
     if (r.status === 'ok') {
       // Rationale should hint at the work-from-cafés taste so the next
@@ -215,11 +211,7 @@ describe('specialty_coffee_finder — taste-graph integration', () => {
         throw new Error('db down');
       },
     });
-    const r = await runSpecialtyCoffeeFinder(
-      { city: 'Tokyo', travelerId: 'usr_1' },
-      ctx,
-      deps
-    );
+    const r = await runSpecialtyCoffeeFinder({ city: 'Tokyo', travelerId: 'usr_1' }, ctx, deps);
     expect(r.status).toBe('ok'); // didn't throw
   });
 });

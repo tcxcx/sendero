@@ -370,7 +370,7 @@ export async function runSpecialtyCoffeeFinder(
     },
     message:
       ranked.length === 0
-        ? `No specialty coffee shops surfaced for ${input.city}. CSE: ${cseRes.available ? `${cseHits.length} hits` : cseRes.reason ?? 'down'}, Places: ${placesRes.available ? `${placeHits.length} hits` : placesRes.reason ?? 'down'}.`
+        ? `No specialty coffee shops surfaced for ${input.city}. CSE: ${cseRes.available ? `${cseHits.length} hits` : (cseRes.reason ?? 'down')}, Places: ${placesRes.available ? `${placeHits.length} hits` : (placesRes.reason ?? 'down')}.`
         : `${ranked.length} specialty coffee shops in ${input.city}, ranked by editorial × quality.`,
   };
 }

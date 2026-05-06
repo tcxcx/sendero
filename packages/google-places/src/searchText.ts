@@ -101,7 +101,10 @@ export async function searchText(args: SearchTextArgs): Promise<SearchTextResult
       return { available: false, reason: `places-http-${res.status}`, results: [] };
     }
 
-    const data = (await res.json()) as { places?: RawPlace[]; error?: { code?: number; message?: string } } | null;
+    const data = (await res.json()) as {
+      places?: RawPlace[];
+      error?: { code?: number; message?: string };
+    } | null;
 
     if (data?.error) {
       return {

@@ -278,8 +278,7 @@ async function runAgentTurn(userMessage: string): Promise<AgentTurnResult> {
       },
     }),
     work_from_cafe_ranker: tool({
-      description:
-        'Re-rank cafes for laptop / remote-work. Pass either candidates or just a city.',
+      description: 'Re-rank cafes for laptop / remote-work. Pass either candidates or just a city.',
       inputSchema: z.object({
         city: z.string().optional(),
         countryCode: z.string().length(2).optional(),
