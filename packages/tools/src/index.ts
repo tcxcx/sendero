@@ -140,6 +140,7 @@ import { currencyConvertTool } from './currency-convert';
 import { webSearchTool } from './web-search';
 import { lookupMatchFixturesTool } from './lookup-match-fixtures';
 import { saveTravelerPreferenceTool } from './save-traveler-preference';
+import { gatewayTxHistoryTool } from './gateway-tx-history';
 import { tippingEtiquetteTool } from './tipping-etiquette';
 import { localColorBriefTool } from './local-color-brief';
 export {
@@ -387,6 +388,14 @@ export {
   saveTravelerPreferenceTool,
 } from './save-traveler-preference';
 export {
+  type GatewayTxHistoryInput,
+  type GatewayTxHistoryResult,
+  type TxHistoryEntry,
+  type TxKind,
+  type TxStatus,
+  gatewayTxHistoryTool,
+} from './gateway-tx-history';
+export {
   type TippingEtiquetteInput,
   type TippingEtiquetteResult,
   type TippingScenario,
@@ -519,6 +528,7 @@ export const toolList: ToolDef[] = [
   webSearchTool,
   lookupMatchFixturesTool,
   saveTravelerPreferenceTool,
+  gatewayTxHistoryTool,
   tippingEtiquetteTool,
   recommendRestaurantsTool,
   exportRouteMapTool,
