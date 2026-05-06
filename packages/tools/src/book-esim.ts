@@ -519,7 +519,17 @@ export async function bookEsim(input: BookEsimInput, ctx?: ToolContext): Promise
         `${(plan.dataMb / 1024).toFixed(1)} GB · ${plan.validityDays} days`,
         plan.countries.length === 1 ? plan.countries[0] : `${plan.countries.length} countries`,
         payerLine,
-        ...(qrTokenUrl ? ['Scan QR or tap "Install eSIM" on the device you\'ll travel with.'] : []),
+        // Device-aware install hints — show both paths so the traveler
+        // sees the one that fits their device without us guessing.
+        // The universal install page (`/install/esim/<token>`) UA-detects
+        // and redirects; these bullets are the fallback for surfaces
+        // where the rich `esim_activation` card doesn't render.
+        ...(qrTokenUrl
+          ? [
+              'iPhone (iOS 17.4+): tap "Install eSIM" — opens Settings → Add eSIM.',
+              "Android: tap the link, then scan the QR with the device you'll travel with.",
+            ]
+          : []),
       ],
     },
     ...(activation ? { activation } : {}),
@@ -669,10 +679,12 @@ async function sendEsimEmail(args: {
   const notifier = createNotifier();
   await notifier.sendShareCard(profile.email, {
     title: `📱 Trip eSIM ready · ${region}`,
-    body: `${args.planLabel}\n\nScan the QR with the device you'll travel with — or, on iOS 17.4+, tap "Install eSIM" to install in one tap. Keep this email until after your trip; the QR is one-shot per device.`,
+    body: `${args.planLabel}\n\nOpen this email on the device you'll travel with, then tap "Install eSIM". On iPhone (iOS 17.4+) it installs in one tap; on Android, follow the on-page steps to scan the QR. Keep this email until after your trip — the QR is one-shot per device.`,
     bullets: [
       `${dataLabel} · ${args.validityDays} days`,
       args.priceLine,
+      'iPhone (iOS 17.4+): one-tap install via the button below.',
+      'Android: open on the travel device, then scan the QR.',
       ...(args.expiresAt
         ? [
             `Activate by ${new Date(args.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
