@@ -36,6 +36,7 @@
 import type { ChannelMessage } from '@/lib/channel-render';
 import { sendChannelMessageSlack } from '@/lib/channel-send/slack';
 import { sendChannelMessageWhatsApp } from '@/lib/channel-send/whatsapp';
+import { resolveSandboxOutboundInstall } from '@/lib/whatsapp-sandbox-routing';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 
@@ -148,12 +149,15 @@ async function dispatchWhatsApp(args: DispatchToTravelerArgs): Promise<DispatchT
     return { sent: false, reason: 'no_traveler_channel', channel: 'whatsapp' };
   }
 
-  const install = await prisma.whatsAppInstall.findUnique({
-    where: { tenantId: args.tenantId },
-  });
-  if (!install || install.status === 'disabled') {
+  // Real install wins. In dev mode, if the operator tenant has none,
+  // fall back to the Sendero sandbox install — same wire path, the
+  // sandbox phone number stamps the `from` field. Production posture
+  // is unchanged: missing install → `whatsapp_install_missing`.
+  const resolved = await resolveSandboxOutboundInstall(args.tenantId);
+  if (!resolved) {
     return { sent: false, reason: 'whatsapp_install_missing', channel: 'whatsapp' };
   }
+  const install = resolved.install;
 
   const accessToken = env.whatsappAccessToken() ?? env.kapsoApiKey();
   const apiBaseUrl =

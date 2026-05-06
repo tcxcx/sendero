@@ -171,6 +171,76 @@ export interface UserAuth {
   phone: string;
 }
 
+/**
+ * Discriminated union mirroring the inspect_my_{whatsapp,slack}_channel
+ * tool results, kept structurally compatible so the chat-store-sync
+ * helper can drop the result straight in. Keep this loose — the card
+ * tolerates missing fields and renders whatever lands.
+ */
+export interface ChannelDiagnosticInstallSummary {
+  exists: boolean;
+  status: string;
+  identifier?: string | null;
+  hasMetaPhoneNumberId?: boolean;
+  hasKapsoConnection?: boolean;
+  hasMetaWaba?: boolean;
+  scopes?: string[];
+  isEnterpriseInstall?: boolean;
+  defaultChannel?: string | null;
+  routingConfigured?: boolean;
+  lastErrorMessage?: string | null;
+  installedAt?: string | null;
+  updatedAt?: string | null;
+  revokedAt?: string | null;
+}
+
+export interface ChannelDiagnosticActivity {
+  hours: number;
+  inboundMessages?: number;
+  agentReplies?: number;
+  meteredReplies?: number;
+  webhookEvents?: number;
+  outboundTotal?: number;
+  delivered?: number;
+  read?: number;
+  failed?: number;
+  badSignature?: number;
+  droppedReplay?: number;
+  droppedDuplicate?: number;
+  apiTotal?: number;
+  apiOk?: number;
+  apiErrored?: number;
+}
+
+export interface ChannelDiagnosticFailure {
+  at: string;
+  recipient: string;
+  source: string;
+  reason: string;
+}
+
+export interface ChannelDiagnosticPreview {
+  at: string;
+  preview: string;
+  direction?: string;
+  kind?: string;
+  source?: string;
+  status?: string;
+}
+
+export interface ChannelDiagnostic {
+  kind: 'whatsapp' | 'slack';
+  message: string;
+  install: ChannelDiagnosticInstallSummary;
+  activity?: ChannelDiagnosticActivity;
+  identities?: { totalActive?: number; boundUsers?: number };
+  trips?: { activeLinked: number };
+  recentFailures?: ChannelDiagnosticFailure[];
+  recentInbound?: ChannelDiagnosticPreview[];
+  recentOutbound?: ChannelDiagnosticPreview[];
+  refreshedAt: string;
+}
+
 interface SenderoState {
   // Settings
   showWorkflow: boolean;
@@ -209,6 +279,11 @@ interface SenderoState {
 
   // Treasury
   treasury: TreasuryState | null;
+
+  // Channel diagnostic — populated by inspect_my_{whatsapp,slack}_channel
+  // tool results so Stage renders an AI Elements card next to the chat.
+  channelDiagnostic: ChannelDiagnostic | null;
+  setChannelDiagnostic: (d: ChannelDiagnostic | null) => void;
 
   // Workflow log
   workflow: WorkflowEvent[];
@@ -322,6 +397,9 @@ export const useSendero = create<SenderoState>(set => ({
 
   treasury: null,
 
+  channelDiagnostic: null,
+  setChannelDiagnostic: channelDiagnostic => set({ channelDiagnostic }),
+
   workflow: [],
 
   setShowWorkflow: showWorkflow => set({ showWorkflow }),
@@ -355,6 +433,7 @@ export const useSendero = create<SenderoState>(set => ({
       hotels: [],
       status: 'idle',
       error: null,
+      channelDiagnostic: null,
       workflow: [],
       settlement: {
         phase: 'idle',

@@ -18,6 +18,8 @@
 
 import { useEffect, useRef } from 'react';
 
+import { useRouter } from 'next/navigation';
+
 import { refreshTreasury } from './actions';
 import { useSendero } from './store';
 
@@ -50,6 +52,7 @@ const clock = () => new Date().toTimeString().slice(0, 8);
 export function useChatStoreSync(messages: readonly unknown[]) {
   const startedToolIds = useRef<Set<string>>(new Set());
   const doneToolIds = useRef<Set<string>>(new Set());
+  const router = useRouter();
 
   useEffect(() => {
     const s = useSendero.getState();
@@ -255,6 +258,130 @@ export function useChatStoreSync(messages: readonly unknown[]) {
                 : `${toolName} ${output.state}`,
               t: clock(),
             });
+          } else if (
+            toolName === 'inspect_my_whatsapp_channel' &&
+            output &&
+            typeof output === 'object'
+          ) {
+            const r = output as Record<string, any>;
+            if (r.status === 'ok') {
+              s.setChannelDiagnostic({
+                kind: 'whatsapp',
+                message: r.message ?? '',
+                install: {
+                  exists: Boolean(r.install?.exists),
+                  status: r.install?.status ?? 'pending',
+                  identifier: r.install?.businessDisplayName
+                    ? `${r.install.businessDisplayName} · ${r.install.displayPhoneNumber ?? ''}`.trim()
+                    : (r.install?.displayPhoneNumber ?? null),
+                  hasMetaPhoneNumberId: r.install?.hasMetaPhoneNumberId,
+                  hasKapsoConnection: r.install?.hasKapsoConnection,
+                  hasMetaWaba: r.install?.hasMetaWaba,
+                  lastErrorMessage: r.install?.lastErrorMessage ?? null,
+                  installedAt: r.install?.installedAt ?? null,
+                  updatedAt: r.install?.updatedAt ?? null,
+                },
+                activity: r.inbound
+                  ? {
+                      hours: r.inbound.hours ?? 24,
+                      inboundMessages: r.inbound.inboundMessages,
+                      webhookEvents: r.inbound.webhookEvents,
+                      droppedReplay: r.inbound.droppedReplay,
+                      droppedDuplicate: r.inbound.droppedDuplicate,
+                      badSignature: r.inbound.badSignature,
+                      outboundTotal: r.outbound?.total,
+                      delivered: r.outbound?.delivered,
+                      read: r.outbound?.read,
+                      failed: r.outbound?.failed,
+                      apiTotal: r.api?.total,
+                      apiOk: r.api?.ok,
+                      apiErrored: r.api?.errored,
+                    }
+                  : undefined,
+                identities: r.identities,
+                trips: r.trips,
+                recentFailures: r.recentFailures,
+                recentInbound: r.recentInbound,
+                recentOutbound: r.recentOutbound,
+                refreshedAt: new Date().toISOString(),
+              });
+            }
+            s.updateLastEvent(toolName, { bullet: 'done' });
+          } else if (
+            toolName === 'start_traveler_whatsapp_conversation' &&
+            output &&
+            typeof output === 'object'
+          ) {
+            const r = output as Record<string, any>;
+            if (r.ok && r.tripId && typeof window !== 'undefined') {
+              // Navigate the operator straight into the thread. Use
+              // Next router.replace so the RSC tree re-renders with
+              // `loadConsoleData(scopedTripId)` — that's what populates
+              // `focusedChannel = 'whatsapp'` (from the new
+              // ChannelIdentity) and lets MetaInboxLive default
+              // composerMode to 'channel'. A bare history.replaceState
+              // would skip the RSC fetch and the composer would stay
+              // in 'internal' mode.
+              try {
+                const current = new URL(window.location.href);
+                const desiredTripId = String(r.tripId);
+                if (current.searchParams.get('tripId') !== desiredTripId) {
+                  if (current.pathname.startsWith('/dashboard/console')) {
+                    current.searchParams.set('tripId', desiredTripId);
+                    router.replace(`${current.pathname}?${current.searchParams.toString()}`);
+                  } else {
+                    router.push(`/dashboard/console?tripId=${desiredTripId}`);
+                  }
+                } else {
+                  // Already scoped to this trip — refresh the RSC tree
+                  // so the new outbound event lands in the conversation.
+                  router.refresh();
+                }
+              } catch {
+                /* navigation best-effort */
+              }
+            }
+            s.updateLastEvent(toolName, { bullet: 'done' });
+          } else if (
+            toolName === 'inspect_my_slack_channel' &&
+            output &&
+            typeof output === 'object'
+          ) {
+            const r = output as Record<string, any>;
+            if (r.status === 'ok') {
+              s.setChannelDiagnostic({
+                kind: 'slack',
+                message: r.message ?? '',
+                install: {
+                  exists: Boolean(r.install?.exists),
+                  status: r.install?.status ?? 'pending',
+                  identifier:
+                    r.install?.teamName ?? r.install?.teamId ?? null,
+                  isEnterpriseInstall: r.install?.isEnterpriseInstall,
+                  scopes: r.install?.scopes,
+                  defaultChannel: r.install?.defaultChannel ?? null,
+                  routingConfigured: r.install?.routingConfigured,
+                  lastErrorMessage: r.install?.lastErrorMessage ?? null,
+                  installedAt: r.install?.installedAt ?? null,
+                  updatedAt: r.install?.updatedAt ?? null,
+                  revokedAt: r.install?.revokedAt ?? null,
+                },
+                activity: r.activity
+                  ? {
+                      hours: r.activity.hours ?? 24,
+                      inboundMessages: r.activity.inboundMessages,
+                      agentReplies: r.activity.agentReplies,
+                      meteredReplies: r.activity.meteredReplies,
+                    }
+                  : undefined,
+                identities: r.identities,
+                trips: r.trips,
+                recentInbound: r.recentInbound,
+                recentOutbound: r.recentOutbound,
+                refreshedAt: new Date().toISOString(),
+              });
+            }
+            s.updateLastEvent(toolName, { bullet: 'done' });
           } else {
             // Generic done tick for tools without specific data binding.
             s.updateLastEvent(toolName, { bullet: 'done' });

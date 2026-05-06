@@ -274,6 +274,28 @@ async function notifyOperatorInbox(args: {
   summary: string | null;
 }): Promise<void> {
   try {
+    // Resolve real operator clerk user IDs so the Liveblocks bell in
+    // `liveblocks-inbox.tsx` lights up for signed-in admins/finance.
+    // The hardcoded `agent:customer-support` user (still emitted) only
+    // ever wakes the webhook fanout, never a human's UI.
+    let operatorUserIds: string[] = [];
+    try {
+      const memberships = await prisma.membership.findMany({
+        where: {
+          tenantId: args.tenantId,
+          status: 'active',
+          role: { in: ['agency_admin', 'finance'] },
+          user: { clerkUserId: { not: null } },
+        },
+        select: { user: { select: { clerkUserId: true } } },
+        take: 50,
+      });
+      operatorUserIds = memberships
+        .map(m => m.user?.clerkUserId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    } catch {
+      operatorUserIds = [];
+    }
     await notifyOperatorHandoff({
       tenantId: args.tenantId,
       handoffId: args.handoffId,
@@ -281,6 +303,7 @@ async function notifyOperatorInbox(args: {
       title: 'Sendero needs your input',
       message: args.summary ? `${args.question} — ${args.summary}` : args.question,
       url: `/dashboard/handoffs/${args.handoffId}`,
+      operatorUserIds,
     });
   } catch (err) {
     console.warn('[handoff] liveblocks notify failed', {

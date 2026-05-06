@@ -960,6 +960,11 @@ async function upsertChannelIdentity(msg: NormalizedInboundMessage): Promise<{
   /** True when the User row was created on this turn — drives first-touch UX. */
   provisional: boolean;
 } | null> {
+  // Inbound always belongs to the install owner — the sender becomes
+  // a customer ChannelIdentity on that tenant. Critical for the
+  // dual-identity flow: an operator who is also admin of an org can
+  // text their own org's sandbox number from a personal phone and
+  // appear as a customer of their own org.
   const tenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
   if (!tenantId) return null;
 
@@ -1050,6 +1055,27 @@ async function ensureUserForWhatsAppIdentity(
   identity: WhatsAppIdentity,
   bsuid: string | null | undefined
 ): Promise<string> {
+  // Dual-identity unification: if a User row already has this phone
+  // populated (operator who signed up via Clerk and stored their
+  // mobile), reuse it instead of provisioning a placeholder. This is
+  // what lets a web-Admin operator engage their own org's sandbox
+  // number from their personal phone and surface as the same User —
+  // not a separate "provisional" twin.
+  const phone = identity.phone ?? identity.phoneRaw ?? null;
+  if (phone) {
+    const existing = await prisma.user.findFirst({
+      where: { phone },
+      select: { id: true },
+    });
+    if (existing) {
+      await prisma.channelIdentity.update({
+        where: { id: channelIdentityId },
+        data: { userId: existing.id },
+      });
+      return existing.id;
+    }
+  }
+
   const handle = (bsuid ?? identity.phone ?? identity.phoneRaw ?? channelIdentityId)
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
@@ -1057,7 +1083,7 @@ async function ensureUserForWhatsAppIdentity(
   let userId: string;
   try {
     const created = await prisma.user.create({
-      data: { email: placeholderEmail, source: 'whatsapp' },
+      data: { email: placeholderEmail, source: 'whatsapp', phone: phone ?? undefined },
       select: { id: true },
     });
     userId = created.id;

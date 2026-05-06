@@ -20,6 +20,7 @@ import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useQueryState } from 'nuqs';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -132,7 +133,8 @@ function ChatHistoryList() {
   // `cs` lives in the URL so reloads / shared links resume. nuqs
   // defaults to shallow (history.replaceState) so clicks don't
   // re-fetch the dashboard RSC tree or fire the loading.tsx overlay.
-  const [activeCs, setActiveCs] = useQueryState('cs');
+  const [activeCs] = useQueryState('cs');
+  const router = useRouter();
 
   // Stable refetch fn — pulled out so the SSE subscriber + intra-tab
   // BroadcastChannel listener can both call it. `useCallback` so the
@@ -265,7 +267,15 @@ function ChatHistoryList() {
           key={s.id}
           type="button"
           onClick={() => {
-            void setActiveCs(s.id);
+            // Set BOTH `cs` and `tripId` (when linked) via a real
+            // navigation so `loadConsoleData` re-runs server-side and
+            // the right column shows the linked trip's offers /
+            // pending booking. Shallow nuqs updates skip RSC and
+            // would leave the right column stale.
+            const params = new URLSearchParams();
+            params.set('cs', s.id);
+            if (s.tripId) params.set('tripId', s.tripId);
+            router.push(`/dashboard/console?${params.toString()}`);
           }}
           style={{
             display: 'block',

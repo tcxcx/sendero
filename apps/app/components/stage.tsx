@@ -15,6 +15,7 @@ import { sendViaChat } from './chat-bridge';
 import { StepRail, ErrorBanner } from './ui';
 import { SettlePanel } from './settle-panel';
 import { FundCard } from './fund-card';
+import { ChannelDiagnosticCard } from './console/channel-diagnostic-card';
 
 export function Stage() {
   const search = useSendero(s => s.search);
@@ -24,6 +25,7 @@ export function Stage() {
   const payment = useSendero(s => s.payment);
   const onChainSettlement = useSendero(s => s.onChainSettlement);
   const selectedOfferId = useSendero(s => s.selectedOfferId);
+  const channelDiagnostic = useSendero(s => s.channelDiagnostic);
 
   return (
     <div className="col" style={{ background: 'transparent' }}>
@@ -32,7 +34,9 @@ export function Stage() {
           <StepRail />
           <ErrorBanner />
 
-          {!search && status === 'idle' && <SearchForm />}
+          {channelDiagnostic && <ChannelDiagnosticCard data={channelDiagnostic} />}
+
+          {!search && status === 'idle' && !channelDiagnostic && <SearchForm />}
 
           {offers.length > 0 && status !== 'held' && status !== 'confirmed' && (
             <OffersCard

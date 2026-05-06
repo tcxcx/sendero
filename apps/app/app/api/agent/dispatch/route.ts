@@ -51,6 +51,9 @@ import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-
 import { enforcePolicyChain } from '@/lib/transfer-policy';
 import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
 import { appendTripEvent, type TripEvent } from '@/lib/trip-events';
+import { notifyTripEvent } from '@/lib/trip-events-notify';
+import { notifyTenantOperators } from '@/lib/liveblocks-notify-operators';
+import { roomIdForTrip } from '@sendero/collaboration/server';
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
@@ -364,21 +367,53 @@ export async function POST(req: NextRequest) {
   if (body.tripId && body.text) {
     const inboundChannel = ledgerChannelFromDispatchChannel(body.channel);
     if (inboundChannel) {
+      const inboundCreatedAt = new Date().toISOString();
+      const inboundId = `inbound_${agentInput.turnId}`;
       await appendTripEvent({
         tripId: body.tripId,
         tenantId: body.tenantId,
         event: {
-          id: `inbound_${agentInput.turnId}`,
+          id: inboundId,
           kind: 'inbox_reply',
           direction: 'inbound',
           channel: inboundChannel,
-          createdAt: new Date().toISOString(),
+          createdAt: inboundCreatedAt,
           text: body.text,
           author: {
             kind: isServiceAccount ? 'system' : 'traveler',
             userId: body.userId,
           },
         },
+      });
+      void notifyTripEvent({
+        tenantId: body.tenantId,
+        tripId: body.tripId,
+        entry: {
+          id: inboundId,
+          kind: 'inbox_reply',
+          direction: 'inbound',
+          channel: inboundChannel,
+          createdAt: inboundCreatedAt,
+        },
+      });
+      // Light up the tenant operators' Liveblocks bell. Channel-aware
+      // title so the inbox preview is legible at a glance. Fire-and-
+      // forget — bell notifications must never gate dispatch.
+      const channelLabel =
+        inboundChannel === 'whatsapp'
+          ? 'WhatsApp'
+          : inboundChannel === 'slack'
+            ? 'Slack'
+            : inboundChannel === 'email'
+              ? 'Email'
+              : 'Web';
+      void notifyTenantOperators({
+        tenantId: body.tenantId,
+        subjectId: inboundId,
+        roomId: roomIdForTrip(body.tenantId, body.tripId),
+        title: `${channelLabel} · new traveler message`,
+        message: body.text.slice(0, 200),
+        url: `/dashboard/console?tripId=${body.tripId}`,
       });
     }
   }
@@ -565,17 +600,30 @@ export async function POST(req: NextRequest) {
     if (body.tripId && result.text) {
       const outboundChannel = ledgerChannelFromDispatchChannel(body.channel);
       if (outboundChannel) {
+        const outboundCreatedAt = new Date().toISOString();
+        const outboundId = `agent_${agentInput.turnId}`;
         await appendTripEvent({
           tripId: body.tripId,
           tenantId: body.tenantId,
           event: {
-            id: `agent_${agentInput.turnId}`,
+            id: outboundId,
             kind: 'agent_reply',
             direction: 'outbound',
             channel: outboundChannel,
-            createdAt: new Date().toISOString(),
+            createdAt: outboundCreatedAt,
             text: result.text,
             author: { kind: 'agent' },
+          },
+        });
+        void notifyTripEvent({
+          tenantId: body.tenantId,
+          tripId: body.tripId,
+          entry: {
+            id: outboundId,
+            kind: 'agent_reply',
+            direction: 'outbound',
+            channel: outboundChannel,
+            createdAt: outboundCreatedAt,
           },
         });
       }

@@ -89,12 +89,31 @@ export function MetaInboxLive({
     ? asChannelKey(trips.find(t => t.id === scopedTripId)?.channel)
     : 'internal';
 
+  // Resume vs. fresh: `?cs=<id>` in the URL means the operator clicked
+  // a row in the CHAT MODE rail. We use that id as the chatSessionId
+  // and rehydrate setMessages from /api/chats/[id]. Without `?cs=` we
+  // fall back to a freshly minted id so a brand-new conversation gets
+  // its own ChatSession row on the first turn. nuqs is shallow by
+  // default — switching sessions updates the URL via history.replaceState
+  // with no RSC refetch and no loading.tsx overlay.
+  //
+  // Hoisted above `composerMode` so the initial state can read `activeCs`
+  // — chat-mode clicks force internal so the chat stream is visible.
+  const [activeCs, setActiveCs] = useQueryState('cs');
+  const [freshSessionId] = useState(
+    () => `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  );
+  const chatSessionId = activeCs ?? freshSessionId;
+
   // Composer mode. Unscoped is locked to 'internal'; scoped defaults to
   // 'channel' (replies go to the traveler) but the operator can flip to
   // 'internal' to take a private aside with Sendero AI without
-  // interrupting the autonomous customer conversation.
+  // interrupting the autonomous customer conversation. When the URL
+  // carries `?cs=<id>`, the operator is viewing a chat session — force
+  // internal so the chat stream renders in the middle column even when
+  // a `tripId` is also present (the right column still shows the trip).
   const [composerMode, setComposerMode] = useState<ComposerMode>(
-    scopedTripId ? 'channel' : 'internal'
+    activeCs ? 'internal' : scopedTripId ? 'channel' : 'internal'
   );
 
   // Scripted "demo trip" — autonomous customer↔agent simulation. Activated
@@ -103,23 +122,13 @@ export function MetaInboxLive({
   const [demoActive, setDemoActive] = useState(false);
   const [demoMessages, setDemoMessages] = useState<DemoMessage[]>([]);
 
-  // If the route changes scope, reset the default sensibly.
+  // If the route changes scope, reset the default sensibly. A present
+  // `cs` wins — chat-mode views render the AI Elements stream in the
+  // middle even when a tripId is also scoped (right column shows the
+  // trip; middle shows the chat).
   useEffect(() => {
-    setComposerMode(scopedTripId ? 'channel' : 'internal');
-  }, [scopedTripId]);
-
-  // Resume vs. fresh: `?cs=<id>` in the URL means the operator clicked
-  // a row in the CHAT MODE rail. We use that id as the chatSessionId
-  // and rehydrate setMessages from /api/chats/[id]. Without `?cs=` we
-  // fall back to a freshly minted id so a brand-new conversation gets
-  // its own ChatSession row on the first turn. nuqs is shallow by
-  // default — switching sessions updates the URL via history.replaceState
-  // with no RSC refetch and no loading.tsx overlay.
-  const [activeCs, setActiveCs] = useQueryState('cs');
-  const [freshSessionId] = useState(
-    () => `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
-  );
-  const chatSessionId = activeCs ?? freshSessionId;
+    setComposerMode(activeCs ? 'internal' : scopedTripId ? 'channel' : 'internal');
+  }, [scopedTripId, activeCs]);
 
   const [chatModel] = useChatModel();
 

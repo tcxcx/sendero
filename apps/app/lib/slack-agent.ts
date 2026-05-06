@@ -56,6 +56,9 @@ import {
 import { senderoSlackTools } from './slack-agent-tools';
 import { markThreadSubscribed } from './slack-thread-subscription';
 import { appendTripEvent, resolveActiveTripForUser } from './trip-events';
+import { notifyTripEvent } from './trip-events-notify';
+import { notifyTenantOperators } from './liveblocks-notify-operators';
+import { roomIdForTrip } from '@sendero/collaboration/server';
 
 /**
  * Persisted Slack install — superset of OAuth's `SlackInstall` plus the
@@ -321,15 +324,17 @@ export async function runSlackAgentTurn(
     userId: args.senderoUserId,
   });
   if (tripIdForLedger && args.text) {
+    const inboundCreatedAt = new Date().toISOString();
+    const inboundId = `inbound_${turnId}`;
     await appendTripEvent({
       tripId: tripIdForLedger,
       tenantId: args.install.tenantId,
       event: {
-        id: `inbound_${turnId}`,
+        id: inboundId,
         kind: 'inbox_reply',
         direction: 'inbound',
         channel: 'slack',
-        createdAt: new Date().toISOString(),
+        createdAt: inboundCreatedAt,
         text: args.text,
         author: {
           kind: 'traveler',
@@ -337,6 +342,25 @@ export async function runSlackAgentTurn(
           userId: args.senderoUserId,
         },
       },
+    });
+    void notifyTripEvent({
+      tenantId: args.install.tenantId,
+      tripId: tripIdForLedger,
+      entry: {
+        id: inboundId,
+        kind: 'inbox_reply',
+        direction: 'inbound',
+        channel: 'slack',
+        createdAt: inboundCreatedAt,
+      },
+    });
+    void notifyTenantOperators({
+      tenantId: args.install.tenantId,
+      subjectId: inboundId,
+      roomId: roomIdForTrip(args.install.tenantId, tripIdForLedger),
+      title: 'Slack · new traveler message',
+      message: args.text.slice(0, 200),
+      url: `/dashboard/console?tripId=${tripIdForLedger}`,
     });
   }
 
@@ -517,17 +541,30 @@ export async function runSlackAgentTurn(
   // event written above so the operator sees the full thread on the
   // trip inbox view. Skipped when no trip resolved or empty reply.
   if (tripIdForLedger && result.text && result.text.trim().length > 0) {
+    const outboundCreatedAt = new Date().toISOString();
+    const outboundId = `agent_${turnId}`;
     await appendTripEvent({
       tripId: tripIdForLedger,
       tenantId: args.install.tenantId,
       event: {
-        id: `agent_${turnId}`,
+        id: outboundId,
         kind: 'agent_reply',
         direction: 'outbound',
         channel: 'slack',
-        createdAt: new Date().toISOString(),
+        createdAt: outboundCreatedAt,
         text: result.text,
         author: { kind: 'agent' },
+      },
+    });
+    void notifyTripEvent({
+      tenantId: args.install.tenantId,
+      tripId: tripIdForLedger,
+      entry: {
+        id: outboundId,
+        kind: 'agent_reply',
+        direction: 'outbound',
+        channel: 'slack',
+        createdAt: outboundCreatedAt,
       },
     });
   }

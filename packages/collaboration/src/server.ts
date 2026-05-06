@@ -202,21 +202,45 @@ export async function notifyOperatorHandoff(args: {
   title: string;
   message: string;
   url: string;
+  /**
+   * Operator user ids (Clerk userIds) to wake. When supplied, each
+   * gets its own inbox notification — this is how the bell in
+   * `liveblocks-inbox.tsx` actually lights up for a signed-in
+   * operator. The legacy `agent:customer-support` notification is
+   * still emitted so existing fanout consumers keep their handle.
+   */
+  operatorUserIds?: readonly string[];
 }): Promise<void> {
   const client = getClient();
   if (!client) return;
-  await client.triggerInboxNotification({
-    userId: 'agent:customer-support',
-    kind: '$handoffRequired',
-    subjectId: args.handoffId,
-    roomId: args.liveblocksRoomId,
-    activityData: {
-      title: args.title,
-      message: args.message,
-      provider: 'sendero',
-      url: args.url,
-    },
-  });
+  const activityData = {
+    title: args.title,
+    message: args.message,
+    provider: 'sendero',
+    url: args.url,
+  } as const;
+  const tasks: Promise<unknown>[] = [
+    client.triggerInboxNotification({
+      userId: 'agent:customer-support',
+      kind: '$handoffRequired',
+      subjectId: args.handoffId,
+      roomId: args.liveblocksRoomId,
+      activityData,
+    }),
+  ];
+  for (const userId of args.operatorUserIds ?? []) {
+    if (!userId) continue;
+    tasks.push(
+      client.triggerInboxNotification({
+        userId,
+        kind: '$handoffRequired',
+        subjectId: args.handoffId,
+        roomId: args.liveblocksRoomId,
+        activityData,
+      })
+    );
+  }
+  await Promise.allSettled(tasks);
 }
 
 /** Ensure the tenant-wide dashboard room exists. */
