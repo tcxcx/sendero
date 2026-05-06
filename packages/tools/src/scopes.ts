@@ -53,6 +53,11 @@ export function toolToScope(toolName: string): KeyScope {
   // no PII surfaced. Same scope as the search itself.
   if (toolName === 'list_stay_rates') return 'search';
   if (toolName.startsWith('book_') || toolName.startsWith('hold_')) return 'bookings';
+  // Group-trip operator actions — broadcast fans out N WhatsApp sends,
+  // same tier as a booking commit (real-world, customer-visible, not
+  // free-form chat). User-minted prod keys can't invoke it because
+  // `bookings` isn't in DEFAULT_PROD_SCOPES.
+  if (toolName === 'broadcast_to_group_trip') return 'bookings';
   // Pre-booking ancillary staging — same scope as the bookings they
   // attach to. A read-mostly key shouldn't be able to stage paid extras
   // that auto-flow into the next book_flight call.
@@ -184,6 +189,11 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   'give_feedback',
   'request_validation',
   'submit_validation_response',
+  // Group broadcasts — fans out N WhatsApp template sends through
+  // Kapso. Not strictly money, but customer-visible mass messaging
+  // and template-cost-bearing; HMAC requirement keeps a leaked
+  // bearer key from spamming traveler phones.
+  'broadcast_to_group_trip',
 ]);
 // Note: channel-provisioning tools (kapso_*, slack_*) are NOT listed
 // here.  They're `internal: true` on their ToolDef, which strips them

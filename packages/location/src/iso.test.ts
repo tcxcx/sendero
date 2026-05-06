@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test';
 import { iso2to3, iso3to2, lookupCountry } from './iso';
+import { describe, expect, test } from 'bun:test';
 
 describe('iso3to2', () => {
   test('LatAm + Caribbean', () => {

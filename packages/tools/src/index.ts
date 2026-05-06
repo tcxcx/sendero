@@ -7,6 +7,8 @@ import { getActiveTripTool } from './get-active-trip';
 import { getTripBriefTool } from './get-trip-brief';
 import { reportKnowledgeGapTool } from './report-knowledge-gap';
 import { listAvailableToolsTool } from './list-available-tools';
+import { recallSimilarTurnsTool } from './recall-similar-turns';
+import { findResolvedGapTool } from './find-resolved-gap';
 import { setHomeIataTool } from './set-home-iata';
 import { setTripKindTool } from './set-trip-kind';
 import { sweepDcwToGatewayTool } from './sweep-dcw-to-gateway';
@@ -33,10 +35,21 @@ import { createTripTool } from './create-trip';
 import { displayOfferConditionsTool } from './display-offer-conditions';
 import {
   addPassengerToGroupTripTool,
+  broadcastToGroupTripTool,
   claimGroupSeatTool,
   createGroupTripTool,
   removePassengerFromGroupTripTool,
   removePassengerTool,
+  setGroupBroadcastOptoutTool,
+} from './group-trips';
+export {
+  addPassengerToGroupTripTool,
+  broadcastToGroupTripTool,
+  claimGroupSeatTool,
+  createGroupTripTool,
+  removePassengerFromGroupTripTool,
+  removePassengerTool,
+  setGroupBroadcastOptoutTool,
 } from './group-trips';
 import { elevationRiskBriefTool } from './elevation-risk-brief';
 import { ensureFlightCustomerTool } from './ensure-flight-customer';
@@ -398,6 +411,20 @@ export {
   runListAvailableTools,
   listAvailableToolsTool,
 } from './list-available-tools';
+export {
+  type RecallSimilarTurnsInput,
+  type RecallSimilarTurnsResult,
+  type RecallSimilarTurnsDeps,
+  runRecallSimilarTurns,
+  recallSimilarTurnsTool,
+} from './recall-similar-turns';
+export {
+  type FindResolvedGapInput,
+  type FindResolvedGapResult,
+  type FindResolvedGapDeps,
+  runFindResolvedGap,
+  findResolvedGapTool,
+} from './find-resolved-gap';
 export type { JsonSchemaObject, ToolContext, ToolDef } from './types';
 export {
   type ValidateTravelAddressInput,
@@ -517,6 +544,15 @@ export const toolList: ToolDef[] = [
   // scripts/scan-knowledge-gaps.ts (`bun gaps:scan`).
   reportKnowledgeGapTool,
   listAvailableToolsTool,
+  // Demand-driven recall — agent reads its own past Phoenix traces
+  // BEFORE planning. Same dev-only gate as report_knowledge_gap.
+  // Spec: docs/specs/arize-phoenix-integration.md §4.3.
+  recallSimilarTurnsTool,
+  // Self-heal — agent checks `sendero-resolved-gaps` Phoenix dataset
+  // BEFORE calling report_knowledge_gap. If a prior fix exists, apply
+  // and retry; if not, escalate normally. The hackathon-bonus piece.
+  // Spec: docs/specs/arize-phoenix-integration.md §4.3 PR3.
+  findResolvedGapTool,
   // Phase B.2 — "trip buddy" digital-nomad concierge. `take_me_home`
   // resolves the cheapest return flight from the traveler's current
   // location to their declared home; `set_home_iata` persists the
@@ -554,6 +590,10 @@ export const toolList: ToolDef[] = [
   claimGroupSeatTool,
   removePassengerFromGroupTripTool,
   removePassengerTool,
+  // Operator → all passengers WhatsApp fan-out via Kapso broadcasts.
+  broadcastToGroupTripTool,
+  // Per-passenger opt-out toggle (stop / baja / basta keywords).
+  setGroupBroadcastOptoutTool,
   // Multimodal OCR / document extraction
   scanDocumentTool,
   scanDocumentAutoTool,

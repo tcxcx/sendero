@@ -734,11 +734,42 @@ model ChatMessage {
 /// manages many travelers under one roof. Distinct from `Trip`, which
 /// is per-traveler and per-itinerary; a single GroupTrip eventually
 /// fans out into N child Trips at booking time.
+/// Lifecycle of a GroupTrip from "operator just clicked New Group" to
+/// terminal close. Drives the operator dashboard column + governs
+/// which passengers can still claim. See group-trips.ts handlers.
+///   draft     — created, not yet sharing claim links
+///   inviting  — claim link active, capacity not full
+///   active    — bookings landing; reachable from concierge
+///   completed — last segment landed; passengers minted NFTs
+///   canceled  — operator killed the group; claim links 410
+enum GroupTripStatus {
+  draft
+  inviting
+  active
+  completed
+  canceled
+}
+
+/// Per-seat claim state. Operator pre-allocates a seat (status='invited',
+/// passengerSeatId in the signed token) OR an open-seat token gets
+/// claimed (status='claimed' immediately). Decline / cancel are operator
+/// or self-serve drops.
+enum GroupTripPassengerStatus {
+  invited
+  claimed
+  declined
+  canceled
+}
+
 model GroupTrip {
   id            String   @id @default(cuid())
   tenantId      String
   name          String
   destination   String?
+  /// Lifecycle column. New rows default to `draft`; the
+  /// `create_group_trip` tool flips to `inviting` once the open-seat
+  /// token is minted. See `packages/tools/src/group-trips.ts`.
+  status        GroupTripStatus @default(draft)
   /// Optional capacity cap. Adds beyond this throw at the tool layer.
   /// Null = unlimited.
   maxPassengers Int?
@@ -751,23 +782,35 @@ model GroupTrip {
   passengers GroupTripPassenger[]
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, status])
   @@map("group_trips")
 }
 
 /// Many-to-many between GroupTrip and User. One row per passenger
 /// membership. Role is free-form ('lead', 'guest', 'attendee', …).
 model GroupTripPassenger {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String                   @id @default(uuid()) @db.Uuid
   groupTripId String
   userId      String
-  role        String   @default("attendee")
-  addedAt     DateTime @default(now()) @db.Timestamptz(6)
+  role        String                   @default("attendee")
+  /// Per-seat lifecycle state. `claimed` means this row is bound to
+  /// the User and the seat counts toward capacity. `invited` means
+  /// the operator pre-allocated the seat for this User but they
+  /// haven't tapped the claim link yet. `declined` / `canceled` are
+  /// operator-driven removals (kept for audit, not garbage-collected).
+  status      GroupTripPassengerStatus @default(claimed)
+  /// Group-broadcast opt-out. Inbound "stop"/"unsubscribe"/"baja"
+  /// inside a group thread flips this true; broadcast_to_group_trip
+  /// skips with reason `opted_out`. Per-passenger, not tenant-wide.
+  broadcastOptedOut Boolean             @default(false) @map("broadcast_opted_out")
+  addedAt     DateTime                 @default(now()) @db.Timestamptz(6)
 
   groupTrip GroupTrip @relation(fields: [groupTripId], references: [id], onDelete: Cascade)
   user      User      @relation("GroupTripPassengers", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([groupTripId, userId])
   @@index([userId])
+  @@index([groupTripId, status])
   @@map("group_trip_passengers")
 }
 
@@ -1802,12 +1845,18 @@ model WhatsAppOutboundMessage {
   readAt         DateTime? @map("read_at") @db.Timestamptz(6)
   failedAt       DateTime? @map("failed_at") @db.Timestamptz(6)
   traceId        String?   @map("trace_id")
+  /// When `source = 'group_broadcast'`, the GroupTrip + Kapso broadcast
+  /// it belongs to. Lets the operator UI roll up per-recipient delivery
+  /// state without a join through Trip.events.
+  groupTripId    String?   @map("group_trip_id")
+  broadcastId    String?   @map("broadcast_id")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, sentAt(sort: Desc)])
   @@index([tenantId, deliveryStatus])
   @@index([tenantId, source])
+  @@index([groupTripId, broadcastId])
   @@map("whatsapp_outbound_messages")
 }
 

@@ -84,3 +84,7 @@ og-previews/
 # macOS Finder noise
 .DS_Store
 **/.DS_Store
+
+# Self-hosted Phoenix data dir (packages/arize-phoenix/docker-compose.yml)
+.phoenix-data/
+packages/arize-phoenix/.phoenix-data/

@@ -20,7 +20,12 @@ export {
 } from './client';
 export { evaluateTrace } from './evaluators';
 export { flushLangfuse } from './flush';
-export { initLangfuseOtel } from './otel';
+export {
+  buildLangfuseSpanProcessor,
+  getSpanProcessor,
+  initLangfuseOtel,
+  markOtelInitialized,
+} from './otel';
 export { compilePrompt, getPromptRaw, getPromptWithFallback } from './prompts';
 export type { LangfusePromptResult } from './prompts';
 export {

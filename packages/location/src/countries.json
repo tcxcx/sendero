@@ -708,6 +708,14 @@
       "EURC": { "name": "EURC", "symbol": "EURC" }
     },
     "languages": { "fra": "French" },
+    "flag": "🇬🇫"
+  },
+  {
+    "cca2": "ZW",
+    "currencies": {
+      "ZWL": { "name": "Zimbabwean dollar", "symbol": "Z$" },
+      "USD": { "name": "United States dollar", "symbol": "$" }
+    },
     "languages": {
       "bwg": "Chibarwe",
       "eng": "English",

@@ -49,6 +49,8 @@ const isPublicRoute = createRouteMatcher([
   '/api/esim/qr/(.*)', // travel eSIM activation QR PNG — same trust model (HMAC-signed token gates lookup, image is public to unfurl bots).
   '/install/esim/(.*)', // travel eSIM install page — opened from WhatsApp/Slack CTA buttons; HMAC token in path gates the lookup so no Clerk session needed.
   '/trip/(.*)', // public read-only trip brief — opened from WhatsApp/Slack share buttons; HMAC token gates trip lookup, no PII surfaced.
+  '/group/(.*)', // public group-trip claim landing — HMAC-signed token gates GroupTrip lookup; sign-in happens after "Claim seat" tap.
+  '/api/groups/claim/(.*)', // group-trip claim POST — Clerk session required; route auth-checks in-route.
   '/api/webhooks/(.*)', // Duffel, Clerk, etc. — signature-verified per route
   '/api/agent/dispatch', // internal fan-in — protected by AGENT_DISPATCH_SECRET / CRON_SECRET in-route
   '/api/tools/(.*)', // single-tool HTTP surface for Kapso agent runtime — auth via X-API-Key OR x-sendero-dispatch-secret in-route

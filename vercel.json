@@ -20,6 +20,14 @@
     {
       "path": "/api/cron/reconcile-credits",
       "schedule": "7 * * * *"
+    },
+    {
+      "path": "/api/cron/phoenix-promote-successes",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/phoenix-promote-resolutions",
+      "schedule": "30 4 * * *"
     }
   ]
 }
