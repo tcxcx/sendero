@@ -107,5 +107,33 @@ export interface ToolDef<I = any, O = any> {
    * filtering happens at the channel + API-key boundary.
    */
   internal?: boolean;
+  /**
+   * Mark a tool as experimental — a *phase*, not a permanent label.
+   *
+   * Five consequences flow from the flag (spec: docs/specs/anticipatory-concierge.md §5):
+   *
+   * 1. **Registry filter** (PR-A1+, future). Production prod-key
+   *    catalogs strip `experimental` tools by default. Sandbox keys
+   *    + the in-process operator console see all. Tenants opt in
+   *    per-tool via `Tenant.metadata.experimental.toolsEnabled[<name>]=true`.
+   * 2. **Span attribute** (PR-A1+, future). Each invocation stamps
+   *    `sendero.experimental_tool: true` on the active OTel span.
+   * 3. **Operator badge** (PR-A1+, future). `/dashboard/spend` Phoenix
+   *    introspection strip + the new anticipation strip render an
+   *    "experimental" pill next to the tool name.
+   * 4. **Per-tool kill switch** (PR-A1+, future). `SENDERO_EXPERIMENTAL_DISABLED`
+   *    env (comma-list) flips a single primitive to `production_refused`
+   *    without touching the rest of the catalog.
+   * 5. **Auto-graduation** (PR-A1+, future). Flips to `false` on a PR
+   *    once threshold is met (≥30 invocations × ≥2 tenants × ≥0.85
+   *    eval × ≤2% gap rate over 30 days for v0.1; tightens after first
+   *    paying TMC).
+   *
+   * v0.3: the flag itself is annotative — registry filters and badge
+   * UI come in PR-A1. Tools tagged `experimental: true` today still
+   * compose with the existing dev-gate (env + key + tenant) when they
+   * also call `assertDevOnlyToolAllowed(ctx)` from their handler.
+   */
+  experimental?: boolean;
   handler(input: I, ctx?: ToolContext): Promise<O>;
 }
