@@ -85,9 +85,27 @@ export const searchHotelsTool: ToolDef<SearchHotelsInput, SearchHotelsResult> = 
     },
   },
   async handler(input) {
+    // Route every free-form location through Google Geocoding before
+    // hitting Duffel Stays. Duffel only accepts coordinates; the
+    // duffel wrapper used to silently fall back to London for any
+    // unrecognized city (Lima, Cusco, São Paulo, every LatAm corridor).
+    // Surfacing LocationNotResolvedError here lets the agent re-ask
+    // instead of returning wrong-city inventory.
+    let resolved;
+    try {
+      resolved = await resolveStayLocation(input.location);
+    } catch (err) {
+      if (err instanceof LocationNotResolvedError) {
+        throw new Error(
+          `search_hotels: couldn't resolve "${input.location}" to coordinates. Ask the user for a more specific location (city, neighborhood, hotel name, or "lat,lng"). Original: ${err.message}`
+        );
+      }
+      throw err;
+    }
+
     const hotels = (
       await searchHotels({
-        location: input.location,
+        location: `${resolved.latitude},${resolved.longitude}`,
         checkInDate: input.checkInDate,
         checkOutDate: input.checkOutDate,
         guests: input.guests ?? 1,
@@ -114,6 +132,8 @@ export const searchHotelsTool: ToolDef<SearchHotelsInput, SearchHotelsResult> = 
     const summaryLine = summaryHotel
       ? `${summaryHotel.name} from ${summaryHotel.cheapestPrice} ${summaryHotel.cheapestCurrency}`
       : 'No hotels found.';
+    const headerLocation =
+      resolved.formattedAddress ?? input.location;
 
     return {
       hotels,
@@ -126,7 +146,7 @@ export const searchHotelsTool: ToolDef<SearchHotelsInput, SearchHotelsResult> = 
         business,
       },
       share: {
-        title: `🏨 ${view.length} hotel${view.length === 1 ? '' : 's'} · ${input.checkInDate} → ${input.checkOutDate}`,
+        title: `🏨 ${view.length} hotel${view.length === 1 ? '' : 's'} in ${headerLocation} · ${input.checkInDate} → ${input.checkOutDate}`,
         body: summaryLine,
         bullets: view.slice(0, 5).map(h => {
           const stars = h.stars ? `${'★'.repeat(h.stars)} · ` : '';

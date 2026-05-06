@@ -62,6 +62,30 @@ export async function traceAgent<T>(
       const liveTraceId = tracing.getActiveTraceId();
       if (liveTraceId) resolvedTraceId = liveTraceId;
 
+      // Stamp Sendero attrs on the live OTel span so Phoenix queries
+      // can filter cross-tenant. Langfuse's metadata path is separate
+      // (set via updateActiveTrace below) — both are needed because
+      // Langfuse reads its own metadata while Phoenix reads OTel
+      // attributes. Sendero attribute keys are mirrored in
+      // @sendero/arize-phoenix/types::SENDERO_SPAN_ATTRS.
+      try {
+        const { trace: otelTrace } =
+          require('@opentelemetry/api') as typeof import('@opentelemetry/api');
+        const otelSpan = otelTrace.getActiveSpan();
+        if (otelSpan) {
+          if (metadata.tenantId) otelSpan.setAttribute('sendero.tenant_id', metadata.tenantId);
+          if (metadata.userId) otelSpan.setAttribute('sendero.user_id', metadata.userId);
+          if (metadata.surface) otelSpan.setAttribute('sendero.surface', metadata.surface);
+          if (metadata.channel) otelSpan.setAttribute('sendero.channel', metadata.channel);
+          if (metadata.tripId) otelSpan.setAttribute('sendero.trip_id', metadata.tripId);
+          if (metadata.turnId) otelSpan.setAttribute('sendero.turn_id', metadata.turnId);
+          if (metadata.model) otelSpan.setAttribute('sendero.model', metadata.model);
+          otelSpan.setAttribute('sendero.agent_type', agentType);
+        }
+      } catch {
+        // OTel API unavailable — Langfuse-only path still works
+      }
+
       tracing.updateActiveTrace({
         name: agentType,
         userId: metadata.userId,

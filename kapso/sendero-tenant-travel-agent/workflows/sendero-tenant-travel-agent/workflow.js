@@ -271,6 +271,8 @@ Every customer-facing answer must end with \`complete_task\` (or \`enter_waiting
                   'create_group_trip',
                   'add_passenger_to_group_trip',
                   'claim_group_seat',
+                  'broadcast_to_group_trip',
+                  'set_group_broadcast_optout',
                   'prefund_trip',
                   'guest_claim_link',
                   'send_pay_link',
@@ -625,7 +627,7 @@ Flow:
 - Concierge: \`trip_weather_brief\`, \`air_quality_brief\`, \`elevation_risk_brief\`, \`timezone_brief\` — need lat/lng. Always \`geocode_trip_stop({address})\` FIRST.
 - Restaurants: \`recommend_restaurants\` then on tap \`restaurant_route_card\` + \`send_image_message\` with route map.
 - Airport transfers: \`request_location\` first, then \`airport_transfer_coordinator\`.
-- Group: \`claim_group_seat({token})\` when inbound starts with \`claim:<token>\`.
+- Group: \`claim_group_seat({token})\` when inbound starts with \`claim:<token>\`. **Autonomous group creation:** when the user says "trip for N to X" / "viaje para N a X" / "<event> for <N> people" — call \`create_group_trip({ name, destination?, maxPassengers: N })\`. The result returns \`openSeatClaimUrl\`. Reply with ONE \`send_cta_url_message\` containing the URL + a one-line copy ("Compartí este link con los <N-1> que faltan, claman su lugar y armo el resto"). Then \`complete_task\`. **Don't** add passengers up-front by phone unless the user volunteered phones — let the claim URL fan-out itself. **Group-broadcast opt-out:** when the inbound message is exactly or primarily \`stop\` / \`unsubscribe\` / \`baja\` / \`basta\` / \`pare\` (any locale, any case) AND the traveler is on at least one active GroupTrip in this tenant, call \`set_group_broadcast_optout({ optOut: true })\` then reply briefly in their language ("Listo, te saco de los avisos del grupo. Cualquier cosa, escribime."). If they say "resume"/"opt back in"/"alta", call \`set_group_broadcast_optout({ optOut: false })\` instead.
 - Prefund: \`prefund_trip\`, \`guest_claim_link\`.
 - Off-script policy / refund / weird edge → \`request_human_handoff({question, summary})\` then \`enter_waiting\`. Tell user "Let me check with the team — I'll be right back."
 - Off-window outbound → \`send_whatsapp_template\`.
@@ -994,6 +996,8 @@ Works: EZE↔LIM, EZE↔SCL, EZE↔GIG, GRU↔SCL, GRU↔EZE, MIA↔BCN, JFK↔L
                   'create_group_trip',
                   'add_passenger_to_group_trip',
                   'claim_group_seat',
+                  'broadcast_to_group_trip',
+                  'set_group_broadcast_optout',
                   'prefund_trip',
                   'guest_claim_link',
                   'send_pay_link',

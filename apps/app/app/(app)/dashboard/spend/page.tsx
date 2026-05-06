@@ -15,6 +15,7 @@ import { prisma } from '@sendero/database';
 
 import { RetryButton } from '@/components/admin/retry-button';
 import { PageActions } from '@/components/dashboard/page-actions';
+import { PhoenixIntrospectionStrip } from '@/components/spend/phoenix-introspection-strip';
 import { SpendDashboard, type SpendRange } from '@/components/spend/spend-dashboard';
 import { requireAnyRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
@@ -53,7 +54,30 @@ export default async function SpendPage({
   const now = new Date();
   const from = new Date(now.getTime() - days * DAY_MS);
 
-  const [summary, caps, recentBatches, settlementSplit] = await Promise.all([
+  // Agent self-improvement counts — Phoenix-backed recall + self-heal at a glance.
+  // Postgres-only (no Phoenix REST round-trip during page render). The PR4 cron
+  // mirrors these resolved gaps into the Phoenix `sendero-resolved-gaps` dataset
+  // overnight; the count here is the upstream truth.
+  const sevenDaysAgo = new Date(now.getTime() - 7 * DAY_MS);
+  const phoenixCountsPromise = Promise.all([
+    prisma.knowledgeGap.count({
+      where: { tenantId: tenant.id, status: 'resolved', resolvedAt: { gte: sevenDaysAgo } },
+    }),
+    prisma.knowledgeGap.count({
+      where: { tenantId: tenant.id, status: 'resolved' },
+    }),
+    prisma.knowledgeGap.count({
+      where: { tenantId: tenant.id, status: 'open' },
+    }),
+  ]).then(([resolvedThisWeek, resolvedTotal, openGaps]) => ({
+    resolvedThisWeek,
+    resolvedTotal,
+    openGaps,
+  }));
+
+  const phoenixWorkspace = derivePhoenixWorkspace();
+
+  const [summary, caps, recentBatches, settlementSplit, phoenixCounts] = await Promise.all([
     tenantSpendSummary(makeAnalyticsStore(), { tenantId: tenant.id, from, to: now, bucket: 'day' }),
     prisma.tenantSpendCap.findMany({
       where: { tenantId: tenant.id },
@@ -105,6 +129,7 @@ export default async function SpendPage({
       reconciledMicro: reconciled._sum.priceMicroUsdc ?? 0n,
       reconciledCount: reconciled._count,
     })),
+    phoenixCountsPromise,
   ]);
 
   return (
@@ -123,8 +148,29 @@ export default async function SpendPage({
         recentBatches={recentBatches}
         settlementSplit={settlementSplit}
       />
+      <div style={{ marginTop: 24 }}>
+        <PhoenixIntrospectionStrip
+          resolvedThisWeek={phoenixCounts.resolvedThisWeek}
+          resolvedTotal={phoenixCounts.resolvedTotal}
+          openGaps={phoenixCounts.openGaps}
+          phoenixWorkspace={phoenixWorkspace}
+        />
+      </div>
     </>
   );
+}
+
+/**
+ * Resolve the Phoenix workspace slug from env. Format on Cloud is
+ * `https://app.phoenix.arize.com/s/<workspace>` — we extract just the
+ * trailing slug for the deep-link URL builder. Returns null when
+ * Phoenix is not configured (the strip falls back to "Not configured").
+ */
+function derivePhoenixWorkspace(): string | null {
+  if (!process.env.PHOENIX_API_KEY) return null;
+  const collector = process.env.PHOENIX_COLLECTOR_ENDPOINT ?? process.env.PHOENIX_BASE_URL ?? '';
+  const match = collector.match(/\/s\/([^/]+)/);
+  return match?.[1] ?? null;
 }
 
 function makeAnalyticsStore() {

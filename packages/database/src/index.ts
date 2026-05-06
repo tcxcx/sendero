@@ -61,5 +61,25 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export { Prisma, PrismaClient } from '@prisma/client';
+
+// Runtime enum values consumers import as values OR types. Without an
+// explicit value-side re-export, `export type *` strips them and
+// downstream packages (without @prisma/client as a direct dep) can't
+// resolve them via the workspace symlink chain.
+export { BookingKind, MeterPayerType, TripPaymentMode } from '@prisma/client';
+
+// Model types — `export type *` SHOULD cover these, but explicit
+// type-side re-exports defend against TS resolver edge cases when
+// consumer packages transitively reach them through @sendero/database
+// without listing @prisma/client themselves.
+export type {
+  Booking,
+  Esim,
+  Invoice,
+  InvoiceLineItem,
+  Tenant,
+  Trip,
+} from '@prisma/client';
+
 export type * from '@prisma/client';
 export * as Types from './types';

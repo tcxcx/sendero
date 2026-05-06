@@ -1,0 +1,23 @@
+# Self-hosted Phoenix — for demo recording when Cloud rate-limits, or
+# offline dev. Switch by setting PHOENIX_COLLECTOR_ENDPOINT=http://localhost:6006
+# (and unsetting PHOENIX_API_KEY for the open-source build, which doesn't
+# require auth).
+#
+# Up:    docker compose up -d
+# Down:  docker compose down
+# UI:    http://localhost:6006
+# OTLP:  http://localhost:6006/v1/traces (HTTP) or :4317 (gRPC)
+#
+# Persists traces to ./.phoenix-data/ — gitignored.
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: sendero-phoenix
+    ports:
+      - "6006:6006"   # UI + OTLP HTTP
+      - "4317:4317"   # OTLP gRPC
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    volumes:
+      - ./.phoenix-data:/mnt/data
+    restart: unless-stopped

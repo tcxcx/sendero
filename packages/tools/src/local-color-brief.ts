@@ -153,7 +153,22 @@ async function placesTrendingNear(args: {
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) return { topNames: [], openNowName: null };
+  if (!response.ok) {
+    // 429 / quota exhaustion is a `runtime_constraint` we want to
+    // surface to the dev gap board so we know to upgrade the Places
+    // billing tier before it recurs in production turns. Fire-and-
+    // forget; never block the brief on this. Spec: docs/architecture/
+    // concierge-magic.md §5.5 + raj-demand-driven-context skill.
+    if (response.status === 429 || response.status === 403) {
+      void emitPlacesQuotaGap({
+        status: response.status,
+        statusText: response.statusText,
+        lat: args.lat,
+        lng: args.lng,
+      });
+    }
+    return { topNames: [], openNowName: null };
+  }
   const data = (await response.json()) as RawPlacesResponse;
   const all = (data.places ?? []).filter(
     p => (p.rating ?? 0) >= 4.3 && (p.userRatingCount ?? 0) >= 100
@@ -168,6 +183,37 @@ async function placesTrendingNear(args: {
   const openNowName = all.find(p => p.currentOpeningHours?.openNow)?.displayName?.text ?? null;
 
   return { topNames, openNowName };
+}
+
+/**
+ * Fire-and-forget knowledge-gap emission when Places returns 429/403.
+ * The gap-tool itself is dev/sandbox-only — production turns where
+ * Places is quota-exhausted just degrade silently with `partial:true`.
+ * Lazy-imports so production bundles don't pull in the gap surface.
+ */
+async function emitPlacesQuotaGap(args: {
+  status: number;
+  statusText: string;
+  lat: number;
+  lng: number;
+}): Promise<void> {
+  try {
+    const { runReportKnowledgeGap } = await import('./report-knowledge-gap');
+    await runReportKnowledgeGap({
+      kind: 'runtime_constraint',
+      toolName: 'local_color_brief',
+      errorMessage: `Google Places searchText returned ${args.status} ${args.statusText} during local-color compose`,
+      attemptedInput: { lat: args.lat.toFixed(2), lng: args.lng.toFixed(2) },
+      hypothesis:
+        args.status === 429
+          ? 'Places API quota exhausted; bump billing tier or switch to a cached top-rated dataset for popular cities.'
+          : 'Places API rejected with 403; check API key referrer restrictions + Places API (New) enablement.',
+      suggestedFix: 'See packages/tools/src/local-color-brief.ts §placesTrendingNear',
+      blockingTraveler: false,
+    });
+  } catch {
+    // Silent — gap reporting is itself observability, never blocking.
+  }
 }
 
 // ── Weather summary ──────────────────────────────────────────────────

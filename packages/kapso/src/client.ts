@@ -19,6 +19,8 @@ import {
   CreateWebhookRequest,
   CreateWhatsAppFlowRequest,
   CreateWorkflowTriggerRequest,
+  KapsoBroadcast,
+  KapsoBroadcastRecipient,
   KapsoCustomer,
   KapsoPhoneHealth,
   KapsoSetupLink,
@@ -436,6 +438,107 @@ export class KapsoClient {
       ((raw as { messages?: Array<{ id?: string }> }).messages?.[0] as { id?: string } | undefined);
     if (!parsed?.id) throw new KapsoError(500, raw, 'Kapso sendTemplate: missing message.id');
     return { id: parsed.id };
+  }
+
+  // ── Broadcasts ────────────────────────────────────────────────────
+  /**
+   * Three-step Kapso broadcast lifecycle: create draft → add recipients
+   * → send. The composite helper `broadcastTemplate` runs all three for
+   * the common case (one shot, send-now) — Sendero's group-trip operator
+   * fan-out uses it; ad-hoc callers can drive the steps directly when
+   * they need to schedule or batch recipients across calls.
+   *
+   * `whatsappTemplateId` is Kapso's preferred shape: the **Meta**
+   * template id (the canonical id Meta returns when the template is
+   * approved), NOT Sendero's internal name. Resolve via Kapso template
+   * registry / Meta GET /message_templates before calling.
+   */
+  async createBroadcast(args: {
+    name: string;
+    phoneNumberId: string;
+    whatsappTemplateId: string;
+  }): Promise<KapsoBroadcast> {
+    const raw = await this.request<unknown>('/whatsapp/broadcasts', {
+      method: 'POST',
+      body: JSON.stringify({
+        whatsapp_broadcast: {
+          name: args.name,
+          phone_number_id: args.phoneNumberId,
+          whatsapp_template_id: args.whatsappTemplateId,
+        },
+      }),
+    });
+    return KapsoBroadcast.parse(unwrap(raw, 'data') ?? unwrap(raw, 'whatsapp_broadcast') ?? raw);
+  }
+
+  async addBroadcastRecipients(
+    broadcastId: string,
+    recipients: KapsoBroadcastRecipient[]
+  ): Promise<{ added: number }> {
+    const raw = await this.request<unknown>(
+      `/whatsapp/broadcasts/${encodeURIComponent(broadcastId)}/recipients`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          whatsapp_broadcast: { recipients },
+        }),
+      }
+    );
+    const data = unwrap(raw, 'data') ?? raw;
+    const added =
+      typeof data === 'object' && data !== null && 'added' in data
+        ? Number((data as Record<string, unknown>).added ?? recipients.length)
+        : recipients.length;
+    return { added };
+  }
+
+  async sendBroadcast(broadcastId: string): Promise<KapsoBroadcast> {
+    const raw = await this.request<unknown>(
+      `/whatsapp/broadcasts/${encodeURIComponent(broadcastId)}/send`,
+      { method: 'POST' }
+    );
+    const data = unwrap(raw, 'data') ?? raw;
+    // Send response is a slim subset; coerce to full schema for the
+    // caller's convenience (downstream getBroadcast fills counts).
+    return KapsoBroadcast.parse({
+      ...(typeof data === 'object' && data !== null ? (data as object) : {}),
+      // Defaults for fields the send response omits.
+      sent_count: 0,
+      failed_count: 0,
+      delivered_count: 0,
+      read_count: 0,
+    });
+  }
+
+  async getBroadcast(broadcastId: string): Promise<KapsoBroadcast> {
+    const raw = await this.request<unknown>(
+      `/whatsapp/broadcasts/${encodeURIComponent(broadcastId)}`
+    );
+    return KapsoBroadcast.parse(unwrap(raw, 'data') ?? unwrap(raw, 'whatsapp_broadcast') ?? raw);
+  }
+
+  /**
+   * Composite: create draft + add recipients + send. Single round-trip
+   * from the caller's perspective; three Kapso calls under the hood.
+   * Returns the broadcast row after `send` (counts initialise to 0 —
+   * call `getBroadcast` later for live progress).
+   */
+  async broadcastTemplate(args: {
+    name: string;
+    phoneNumberId: string;
+    whatsappTemplateId: string;
+    recipients: KapsoBroadcastRecipient[];
+  }): Promise<KapsoBroadcast> {
+    if (args.recipients.length === 0) {
+      throw new KapsoError(400, null, 'Kapso broadcastTemplate: empty recipient list');
+    }
+    const draft = await this.createBroadcast({
+      name: args.name,
+      phoneNumberId: args.phoneNumberId,
+      whatsappTemplateId: args.whatsappTemplateId,
+    });
+    await this.addBroadcastRecipients(draft.id, args.recipients);
+    return this.sendBroadcast(draft.id);
   }
 
   /** Health ping — Platform API status. 200 when project API key is valid. */

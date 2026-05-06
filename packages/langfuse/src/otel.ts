@@ -1,9 +1,20 @@
 /**
  * @sendero/langfuse/otel — OpenTelemetry initialization with LangfuseSpanProcessor
  *
- * Call initLangfuseOtel() once at application startup:
- *   - Next.js: apps/app/instrumentation.ts
- *   - Trigger.dev / background workers: task entry file
+ * Two entry shapes:
+ *
+ *   1. **Orchestrator path** (Next.js): `apps/app/instrumentation.ts`
+ *      calls `buildLangfuseSpanProcessor()` to get the processor, then
+ *      gathers it alongside `buildPhoenixSpanProcessor()` and constructs
+ *      a SINGLE global `NodeTracerProvider` with both processors.
+ *      Required because OTel v2 `BasicTracerProvider` does NOT support
+ *      `addSpanProcessor()` after construction — processors must be
+ *      passed in via `TracerConfig`.
+ *
+ *   2. **Legacy path** (Trigger.dev workers, scripts): `initLangfuseOtel()`
+ *      builds + registers a Langfuse-only provider. Idempotent —
+ *      subsequent calls (or calls after the orchestrator path already
+ *      ran) no-op.
  *
  * The LangfuseSpanProcessor intercepts every AI SDK span (generateText,
  * streamText, generateObject) and ships it to Langfuse. The filtering
@@ -13,28 +24,27 @@
 
 import { isLangfuseEnabled, getLangfuseBaseUrl } from './client';
 
-let _otelInitialized = false;
-let _spanProcessor: { forceFlush: () => Promise<void> } | null = null;
+type SpanProcessor = import('@opentelemetry/sdk-trace-base').SpanProcessor;
 
-export function getSpanProcessor(): { forceFlush: () => Promise<void> } | null {
+let _otelInitialized = false;
+let _spanProcessor: SpanProcessor | null = null;
+
+export function getSpanProcessor(): SpanProcessor | null {
   return _spanProcessor;
 }
 
-export function initLangfuseOtel(): {
-  spanProcessor: { forceFlush: () => Promise<void> };
-  shutdown: () => Promise<void>;
-} | null {
-  if (_otelInitialized) return null;
-  _otelInitialized = true;
-
+/**
+ * Build (but don't register) the Langfuse span processor. Returns
+ * `null` when Langfuse is not configured. Used by the orchestrator at
+ * `apps/app/instrumentation.ts` to gather processors before constructing
+ * the global provider once.
+ */
+export function buildLangfuseSpanProcessor(): SpanProcessor | null {
   if (!isLangfuseEnabled()) return null;
 
   try {
     const { LangfuseSpanProcessor } = require('@langfuse/otel') as typeof import('@langfuse/otel');
-    const { NodeTracerProvider } =
-      require('@opentelemetry/sdk-trace-node') as typeof import('@opentelemetry/sdk-trace-node');
-
-    const spanProcessor = new LangfuseSpanProcessor({
+    return new LangfuseSpanProcessor({
       // Only export spans from AI SDK and Langfuse — not HTTP, DB, etc.
       shouldExportSpan: ({
         otelSpan,
@@ -50,26 +60,70 @@ export function initLangfuseOtel(): {
           '@ai-sdk/google',
           '@ai-sdk/google-vertex',
           '@ai-sdk/groq',
+          // OpenInference instrumentors (richer Gemini span attrs in PR2+)
+          '@arizeai/openinference-instrumentation-vertexai',
+          '@arizeai/openinference-instrumentation-google-genai',
         ];
         return allowedScopes.includes(otelSpan.instrumentationScope.name);
       },
-    });
+    }) as unknown as SpanProcessor;
+  } catch (err) {
+    console.warn(
+      '[langfuse] Failed to build span processor:',
+      err instanceof Error ? err.message : err
+    );
+    return null;
+  }
+}
 
-    const provider = new NodeTracerProvider({
-      spanProcessors: [spanProcessor],
-    });
+/**
+ * Mark OTel as initialized externally — used by orchestrators that
+ * construct the provider themselves. Subsequent `initLangfuseOtel()`
+ * calls become no-ops, preventing a second `provider.register()` that
+ * OTel would silently ignore.
+ */
+export function markOtelInitialized(processor: SpanProcessor | null): void {
+  _otelInitialized = true;
+  if (processor) _spanProcessor = processor;
+}
 
+/**
+ * Legacy stand-alone initialization for non-Next entry points
+ * (Trigger.dev workers, scripts). Constructs a Langfuse-only provider.
+ * Next.js routes through `apps/app/instrumentation.ts` which orchestrates
+ * Langfuse + Phoenix together via `buildLangfuseSpanProcessor()` +
+ * `buildPhoenixSpanProcessor()`.
+ *
+ * Idempotent — repeated calls (or calls after the orchestrator already
+ * registered a provider via `markOtelInitialized`) return null without
+ * side effects.
+ */
+export function initLangfuseOtel(): {
+  spanProcessor: SpanProcessor;
+  shutdown: () => Promise<void>;
+} | null {
+  if (_otelInitialized) return null;
+  _otelInitialized = true;
+
+  const processor = buildLangfuseSpanProcessor();
+  if (!processor) return null;
+
+  try {
+    const { NodeTracerProvider } =
+      require('@opentelemetry/sdk-trace-node') as typeof import('@opentelemetry/sdk-trace-node');
+
+    const provider = new NodeTracerProvider({ spanProcessors: [processor] });
     provider.register();
-    _spanProcessor = spanProcessor;
+    _spanProcessor = processor;
 
-    console.info('[langfuse] OTel initialized', {
+    console.info('[langfuse] OTel initialized (legacy stand-alone path)', {
       baseUrl: getLangfuseBaseUrl() ?? 'cloud (default)',
     });
 
     return {
-      spanProcessor,
+      spanProcessor: processor,
       shutdown: async () => {
-        await spanProcessor.forceFlush();
+        await processor.forceFlush();
         await provider.shutdown();
       },
     };

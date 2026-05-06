@@ -27,7 +27,8 @@
     "./lib/resolve-payer": "./src/lib/resolve-payer.ts",
     "./lib/payer-copy": "./src/lib/payer-copy.ts",
     "./lib/trip-brief-token": "./src/lib/trip-brief-token.ts",
-    "./lib/traveler-profile": "./src/lib/traveler-profile.ts"
+    "./lib/traveler-profile": "./src/lib/traveler-profile.ts",
+    "./lib/group-claim-token": "./src/lib/group-claim-token.ts"
   },
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",
@@ -36,6 +37,7 @@
     "@circle-fin/app-kit": "*",
     "@circle-fin/unified-balance-kit": "*",
     "@sendero/arc": "*",
+    "@sendero/arize-phoenix": "*",
     "@sendero/circle": "*",
     "@sendero/collaboration": "*",
     "@sendero/database": "*",

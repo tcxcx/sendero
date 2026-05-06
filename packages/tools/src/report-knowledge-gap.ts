@@ -30,6 +30,7 @@ import { createHash } from 'node:crypto';
 import { Prisma, prisma } from '@sendero/database';
 import { z } from 'zod';
 
+import { assertDevOnlyToolAllowed } from './dev-gate';
 import type { ToolContext, ToolDef } from './types';
 
 const KIND_VALUES = [
@@ -129,58 +130,8 @@ function computeDedupKey(input: ReportKnowledgeGapInput): string {
 }
 
 // ── Caller mode gate ─────────────────────────────────────────────────
-
-/**
- * Strict dev-only gate. Two conditions, BOTH must hold for the tool
- * to actually persist a row:
- *
- *   1. **Environment is non-production.** A row is never written when
- *      NODE_ENV='production' AND VERCEL_ENV ∈ {'production','preview'}.
- *      Preview deploys are explicitly blocked because preview is a
- *      shared surface that ships traffic to whoever clicks the URL —
- *      we don't want partial-trust callers writing into the gap board
- *      from there. Local dev (`vercel dev` / `bun dev` / no VERCEL_ENV
- *      at all) and explicit `VERCEL_ENV=development` deployments are
- *      allowed.
- *   2. **Caller is not a production prod-key.** Sandbox keys + operator
- *      console (no caller object — Clerk-authed) are always allowed.
- *      A production-typed prod-key gets `production_refused` regardless
- *      of env so leaked prod credentials never write here.
- *
- * Override: `SENDERO_GAPS_ALLOW_NONDEV=1` re-enables the tool in any
- * env. Reserved for the operator dashboard's manual "file gap" surface
- * — never wire into the agent runtime.
- */
-function isCallerAllowed(
-  ctx: ToolContext | undefined
-): { allowed: true } | { allowed: false; reason: string } {
-  if (process.env.SENDERO_GAPS_ALLOW_NONDEV === '1') {
-    // Manual operator override (e.g. dashboard "file gap" button)
-    // still respects the prod-key reject.
-  } else {
-    const nodeEnv = process.env.NODE_ENV ?? 'development';
-    const vercelEnv = process.env.VERCEL_ENV; // 'production' | 'preview' | 'development' | undefined (local)
-    const isProdEnv =
-      nodeEnv === 'production' && (vercelEnv === 'production' || vercelEnv === 'preview');
-    if (isProdEnv) {
-      return {
-        allowed: false,
-        reason:
-          'report_knowledge_gap is dev-only. Set NODE_ENV=development OR run on local host. In production turns, escalate via request_human_handoff so an operator answers the traveler.',
-      };
-    }
-  }
-
-  // Operator console (no caller object) — allowed.
-  if (!ctx?.caller) return { allowed: true };
-  // Sandbox keys + testnet-beta downgrades — allowed.
-  if (ctx.caller.effectiveKeyType === 'sandbox') return { allowed: true };
-  return {
-    allowed: false,
-    reason:
-      'report_knowledge_gap is dev/sandbox only. Production prod-keys are refused regardless of environment to prevent capability-inventory leaks via leaked credentials.',
-  };
-}
+// Extracted to @sendero/tools/src/dev-gate.ts so recall_similar_turns
+// (PR2) and find_resolved_gap (PR3) share the exact same enforcement.
 
 // ── DB plumbing ──────────────────────────────────────────────────────
 
@@ -258,7 +209,7 @@ export async function runReportKnowledgeGap(
   ctx?: ToolContext,
   deps: ReportKnowledgeGapDeps = dbDependencies
 ): Promise<ReportKnowledgeGapResult> {
-  const gate = isCallerAllowed(ctx);
+  const gate = assertDevOnlyToolAllowed(ctx);
   if (gate.allowed === false) {
     return {
       status: 'production_refused',
@@ -266,16 +217,8 @@ export async function runReportKnowledgeGap(
     };
   }
 
-  const tenantId = ctx?.traveler?.tenantId;
-  if (!tenantId) {
-    // Without a tenant we can't index — refuse silently rather than
-    // creating an orphan row that the scanner can't bucket.
-    return {
-      status: 'production_refused',
-      message:
-        'report_knowledge_gap requires tenant context — call from a turn with a resolved tenant.',
-    };
-  }
+  // Gate guarantees ctx.traveler.tenantId is populated.
+  const tenantId = ctx!.traveler!.tenantId!;
 
   const severity = inferSeverity(input);
   const dedupKey = computeDedupKey(input);

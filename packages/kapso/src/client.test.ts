@@ -346,3 +346,119 @@ describe('KapsoClient', () => {
     expect(out.id).toBe('cus_bare');
   });
 });
+
+describe('KapsoClient.broadcasts', () => {
+  it('broadcastTemplate runs create + addRecipients + send', async () => {
+    const calls: Array<{ url: string; method: string; body: string }> = [];
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async (input, init) => {
+        calls.push({
+          url: String(input),
+          method: init?.method ?? 'GET',
+          body: String(init?.body ?? ''),
+        });
+        const url = String(input);
+        if (url.endsWith('/whatsapp/broadcasts')) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                id: 'bcast_1',
+                name: 'group_meeting_point — gt_42',
+                status: 'draft',
+                created_at: '2026-05-05T00:00:00Z',
+                updated_at: '2026-05-05T00:00:00Z',
+              },
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (url.endsWith('/recipients')) {
+          return new Response(JSON.stringify({ data: { added: 2 } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        // /send
+        return new Response(
+          JSON.stringify({
+            data: {
+              id: 'bcast_1',
+              name: 'group_meeting_point — gt_42',
+              status: 'sending',
+              started_at: '2026-05-05T00:00:01Z',
+            },
+          }),
+          { status: 202, headers: { 'Content-Type': 'application/json' } }
+        );
+      }) as typeof fetch,
+    });
+
+    const out = await client.broadcastTemplate({
+      name: 'group_meeting_point — gt_42',
+      phoneNumberId: 'pn_1',
+      whatsappTemplateId: 'meta_tpl_abc',
+      recipients: [
+        { phone_number: '+15551111111', components: [] },
+        { phone_number: '+15552222222', components: [] },
+      ],
+    });
+
+    expect(out.id).toBe('bcast_1');
+    expect(out.status).toBe('sending');
+    expect(calls).toHaveLength(3);
+    expect(calls[0]!.method).toBe('POST');
+    expect(calls[0]!.url).toContain('/whatsapp/broadcasts');
+    expect(calls[0]!.body).toContain('"whatsapp_template_id":"meta_tpl_abc"');
+    expect(calls[1]!.url).toContain('/whatsapp/broadcasts/bcast_1/recipients');
+    expect(calls[1]!.body).toContain('"phone_number":"+15551111111"');
+    expect(calls[2]!.url).toContain('/whatsapp/broadcasts/bcast_1/send');
+  });
+
+  it('broadcastTemplate refuses empty recipient list', async () => {
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async () => {
+        throw new Error('fetch should not be called');
+      }) as typeof fetch,
+    });
+    try {
+      await client.broadcastTemplate({
+        name: 'n',
+        phoneNumberId: 'pn',
+        whatsappTemplateId: 't',
+        recipients: [],
+      });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(KapsoError);
+      expect((err as KapsoError).status).toBe(400);
+    }
+  });
+
+  it('getBroadcast unwraps live progress counts', async () => {
+    const client = new KapsoClient({
+      apiKey: 'k',
+      fetchImpl: (async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              id: 'bcast_1',
+              name: 'n',
+              status: 'completed',
+              sent_count: 6,
+              delivered_count: 5,
+              failed_count: 1,
+              read_count: 4,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )) as typeof fetch,
+    });
+    const b = await client.getBroadcast('bcast_1');
+    expect(b.status).toBe('completed');
+    expect(b.sent_count).toBe(6);
+    expect(b.delivered_count).toBe(5);
+    expect(b.failed_count).toBe(1);
+  });
+});

@@ -208,6 +208,50 @@ export const SendTemplateRequest = z.object({
 });
 export type SendTemplateRequest = z.infer<typeof SendTemplateRequest>;
 
+// ── Broadcasts ───────────────────────────────────────────────────────
+// Kapso WhatsApp broadcasts are 3-step: create draft → add recipients
+// → send. Recipients map 1:1 to template parameter variations (each
+// recipient can supply its own components array). Sendero composes all
+// three calls inside `broadcastTemplate` so callers don't carry the
+// state machine themselves.
+
+export const KapsoTemplateComponent = z.object({
+  type: z.enum(['header', 'body', 'button']),
+  /** Default `body` for header/body. `quick_reply` / `url` for button. */
+  sub_type: z.enum(['quick_reply', 'url']).optional(),
+  /** Button index 0..2 — only used when `type === 'button'`. */
+  index: z.number().int().min(0).max(2).optional(),
+  parameters: z.array(
+    z.object({
+      type: z.enum(['text', 'currency', 'date_time', 'image', 'document']),
+      text: z.string().optional(),
+    })
+  ),
+});
+export type KapsoTemplateComponent = z.infer<typeof KapsoTemplateComponent>;
+
+export const KapsoBroadcastRecipient = z.object({
+  /** E.164. Required unless `whatsapp_contact_id` is provided. */
+  phone_number: z.string().optional(),
+  whatsapp_contact_id: z.string().optional(),
+  components: z.array(KapsoTemplateComponent).optional(),
+});
+export type KapsoBroadcastRecipient = z.infer<typeof KapsoBroadcastRecipient>;
+
+export const KapsoBroadcast = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(['draft', 'scheduled', 'sending', 'completed', 'failed']),
+  scheduled_at: z.string().nullable().optional(),
+  started_at: z.string().nullable().optional(),
+  completed_at: z.string().nullable().optional(),
+  sent_count: z.number().int().optional(),
+  failed_count: z.number().int().optional(),
+  delivered_count: z.number().int().optional(),
+  read_count: z.number().int().optional(),
+});
+export type KapsoBroadcast = z.infer<typeof KapsoBroadcast>;
+
 // ── Connection lifecycle webhook event ───────────────────────────────
 /**
  * `whatsapp.phone_number.created` — fired when a customer finishes the
