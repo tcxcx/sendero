@@ -1,10 +1,10 @@
 /**
  * web_search — Gemini-grounded web search for real-time public data.
  *
- * Wraps the Vercel AI SDK's `google.tools.googleSearch` grounding so
- * the agent can answer queries that aren't covered by canonical
- * Sendero tools — soccer fixtures, event dates, live news, sports
- * standings, public-domain factual questions.
+ * Wraps Google's `googleSearch` grounding so the agent can answer
+ * queries that aren't covered by canonical Sendero tools — soccer
+ * fixtures, event dates, live news, sports standings, public-domain
+ * factual questions.
  *
  * NOT a substitute for canonical Sendero tools. The persona slab
  * teaches the agent to always reach for `search_flights` /
@@ -25,36 +25,10 @@
 
 import { z } from 'zod';
 import { generateText } from 'ai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
 
 import type { ToolDef } from './types';
-
-/**
- * Provider resolution: prefer Vertex AI when configured (corporate
- * billing, no AI-Studio prepay-credit caps), otherwise fall back to
- * AI Studio. Both expose `googleSearch` grounding via the same SDK
- * shape. Mirrors the resolver in `lookup-match-fixtures.ts`.
- */
-function resolveGeminiProvider() {
-  const project = process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GOOGLE_VERTEX_PROJECT ?? null;
-  const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
-  const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
-  if (project && saJson) {
-    try {
-      return createVertex({
-        project,
-        location,
-        googleAuthOptions: { credentials: JSON.parse(saJson) },
-      });
-    } catch {
-      // Bad SA JSON — fall through to AI Studio.
-    }
-  }
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (apiKey) return createGoogleGenerativeAI({ apiKey });
-  return null;
-}
 
 const inputSchema = z.object({
   query: z
@@ -94,51 +68,97 @@ export interface WebSearchResult {
   locale: string;
 }
 
-const MODEL_ID = 'gemini-3-flash-preview';
+/**
+ * Vertex direct uses the model's preview ID; the AI Gateway exposes
+ * the same family under its canonical alias (no `-preview` suffix).
+ * See `packages/agent/src/models.ts::GATEWAY_MODELS`.
+ */
+const VERTEX_MODEL_ID = 'gemini-3-flash-preview';
+const GATEWAY_MODEL_ID = 'google/gemini-3-flash';
 
-async function webSearch(input: WebSearchInput): Promise<WebSearchResult> {
-  const client = resolveGeminiProvider();
-  if (!client) {
-    throw new Error(
-      'web_search: no Gemini provider configured. Set GOOGLE_APPLICATION_CREDENTIALS_JSON + GOOGLE_CLOUD_PROJECT (Vertex) or GOOGLE_GENERATIVE_AI_API_KEY (AI Studio).'
-    );
+function resolveVertex() {
+  const project = process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GOOGLE_VERTEX_PROJECT ?? null;
+  const location = process.env.GOOGLE_CLOUD_LOCATION ?? 'global';
+  const saJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (!project || !saJson) return null;
+  try {
+    return createVertex({
+      project,
+      location,
+      googleAuthOptions: { credentials: JSON.parse(saJson) },
+    });
+  } catch {
+    return null;
   }
+}
 
-  const locale = input.locale ?? 'es-AR';
+function buildPrompt(input: WebSearchInput, locale: string): string {
+  return `${input.query}\n\nAnswer in ${locale}. Be concise (≤ 4 sentences). When citing a date, source, or fixture, mention the source verbatim. If the answer isn't reliably available from public web sources, say "no encontré información confiable sobre eso" rather than guessing.`;
+}
 
-  const result = await generateText({
-    model: client(MODEL_ID),
-    tools: {
-      google_search: client.tools.googleSearch({}),
-    },
-    prompt: `${input.query}\n\nAnswer in ${locale}. Be concise (≤ 4 sentences). When citing a date, source, or fixture, mention the source verbatim. If the answer isn't reliably available from public web sources, say "no encontré información confiable sobre eso" rather than guessing.`,
-  });
+interface GenerateTextLike {
+  text: string;
+  sources?: ReadonlyArray<unknown>;
+  providerMetadata?: unknown;
+}
 
-  // AI SDK exposes `sources` (grounding citations) on the result. Each
-  // source has a `url` + `title`. We surface the canonical (gateway)
-  // URI Gemini emits — that's what's safe to share with travelers.
+function extractResult(result: GenerateTextLike, locale: string): WebSearchResult {
   const sources: WebSearchSource[] = (result.sources ?? [])
     .map(s => ({
       uri: (s as { url?: string; uri?: string }).url ?? (s as { uri?: string }).uri ?? '',
       title: (s as { title?: string }).title ?? null,
     }))
     .filter(s => s.uri);
-
-  // groundingMetadata.webSearchQueries surfaces the actual queries the
-  // model ran. Useful when ops audits which search terms hit the bill.
   const searchQueries: string[] =
     (
       result.providerMetadata as
         | { google?: { groundingMetadata?: { webSearchQueries?: string[] } } }
         | undefined
     )?.google?.groundingMetadata?.webSearchQueries ?? [];
-
   return {
     text: result.text,
     sources,
     searchQueries,
     locale,
   };
+}
+
+async function webSearch(input: WebSearchInput): Promise<WebSearchResult> {
+  const locale = input.locale ?? 'es-AR';
+  const prompt = buildPrompt(input, locale);
+
+  // Path 1: Vertex direct (Vortex / corporate Google billing).
+  const vertex = resolveVertex();
+  if (vertex) {
+    try {
+      const r = await generateText({
+        model: vertex(VERTEX_MODEL_ID),
+        tools: { google_search: vertex.tools.googleSearch({}) },
+        prompt,
+      });
+      return extractResult(r, locale);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[web_search] Vertex direct failed, falling back to AI Gateway:',
+        (err as Error).message ?? err
+      );
+    }
+  }
+
+  // Path 2: Vercel AI Gateway. Routes to Google via Vercel-sponsored
+  // billing; works wherever AI_GATEWAY_API_KEY is bound. Grounding
+  // travels through as a provider tool descriptor — the gateway's
+  // Google leg honors `google.tools.googleSearch`.
+  const r = await generateText({
+    model: GATEWAY_MODEL_ID,
+    tools: { google_search: google.tools.googleSearch({}) },
+    prompt,
+    providerOptions: {
+      gateway: { order: ['google'] },
+    },
+  });
+  return extractResult(r, locale);
 }
 
 export const webSearchTool: ToolDef<WebSearchInput, WebSearchResult> = {
