@@ -21,6 +21,7 @@
  */
 
 import { Prisma, prisma } from '@sendero/database';
+import { dispatchToTraveler } from '@/lib/channel-dispatch';
 
 export type DispatchStatus = 'processed' | 'skipped' | 'failed' | 'duplicate';
 
@@ -182,6 +183,16 @@ async function applyTransactionState(
 
   const completedAt = status === 'completed' ? new Date() : undefined;
 
+  // Read prev status before upsert so we can fire a single notify per
+  // state transition (MoonPay re-emits `transaction_updated` multiple
+  // times during a single buy — without this guard the traveler would
+  // see "✅ acreditados" duplicated).
+  const prev = await prisma.moonPayTopUp.findUnique({
+    where: { moonpayTransactionId: data.id },
+    select: { status: true },
+  });
+  const prevStatus = prev?.status ?? null;
+
   const row = await prisma.moonPayTopUp.upsert({
     where: { moonpayTransactionId: data.id },
     create: {
@@ -215,7 +226,97 @@ async function applyTransactionState(
     select: { id: true, userId: true },
   });
 
+  // Auto-notify on state transition into completed / failed. Pending /
+  // waitingPayment / abandoned do NOT notify (waitingPayment fires too
+  // often; abandoned is the user closing the widget without paying —
+  // not a result they need a card for).
+  if (prevStatus !== status && (status === 'completed' || status === 'failed')) {
+    void notifyTopUpStateChange({
+      userId: row.userId,
+      moonpayTopUpId: row.id,
+      newStatus: status,
+      amountUsd: data.baseCurrencyAmount != null ? String(data.baseCurrencyAmount) : null,
+      amountUsdc: data.quoteCurrencyAmount != null ? String(data.quoteCurrencyAmount) : null,
+      failureReason: data.failureReason ?? null,
+      txHash: data.cryptoTransactionId ?? null,
+    }).catch(err => {
+      console.warn('[moonpay] notifyTopUpStateChange failed (non-fatal)', {
+        moonpayTopUpId: row.id,
+        userId: row.userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   return { status: 'processed', userId: row.userId, topUpId: row.id };
+}
+
+/**
+ * Push a state-change card to the traveler when MoonPay flips the
+ * top-up to completed / failed. Resolves the user's primary tenant
+ * from `User.metadata.primaryTenantId` and dispatches via the
+ * canonical channel-render layer (WhatsApp first, Slack fallback).
+ *
+ * Fire-and-forget. Webhook ack does not block on this.
+ */
+async function notifyTopUpStateChange(args: {
+  userId: string;
+  moonpayTopUpId: string;
+  newStatus: 'completed' | 'failed';
+  amountUsd: string | null;
+  amountUsdc: string | null;
+  failureReason: string | null;
+  txHash: string | null;
+}): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: args.userId },
+    select: { metadata: true },
+  });
+  const meta = (user?.metadata ?? {}) as Record<string, unknown>;
+  const tenantId = typeof meta.primaryTenantId === 'string' ? meta.primaryTenantId : null;
+  if (!tenantId) {
+    console.warn('[moonpay] notifyTopUpStateChange: no primaryTenantId on user', {
+      userId: args.userId,
+      moonpayTopUpId: args.moonpayTopUpId,
+    });
+    return;
+  }
+
+  const amountLabel =
+    args.amountUsd != null
+      ? `$${args.amountUsd}`
+      : args.amountUsdc != null
+        ? `${args.amountUsdc} USDC`
+        : 'tu top-up';
+
+  const message =
+    args.newStatus === 'completed'
+      ? {
+          kind: 'card' as const,
+          id: `moonpay_topup_completed_${args.moonpayTopUpId}`,
+          author: { role: 'agent' as const, name: 'Sendero' },
+          createdAt: new Date().toISOString(),
+          title: '✅ Top-up acreditado',
+          body: `${amountLabel} ya está en tu wallet · listo para reservar.`,
+          bullets: [],
+        }
+      : {
+          kind: 'card' as const,
+          id: `moonpay_topup_failed_${args.moonpayTopUpId}`,
+          author: { role: 'agent' as const, name: 'Sendero' },
+          createdAt: new Date().toISOString(),
+          title: '❌ Top-up falló',
+          body: args.failureReason
+            ? `${amountLabel} no se pudo procesar: ${args.failureReason}. Probá otra tarjeta o decime y abrimos un caso.`
+            : `${amountLabel} no se pudo procesar. Probá otra tarjeta o decime y abrimos un caso.`,
+          bullets: [],
+        };
+
+  await dispatchToTraveler({
+    tenantId,
+    travelerUserId: args.userId,
+    message,
+  });
 }
 
 /**
@@ -247,6 +348,13 @@ async function applySellTransactionState(
   const status = type === 'sell_transaction_failed' ? 'failed' : (data.status ?? 'pending');
 
   const completedAt = status === 'completed' ? new Date() : undefined;
+
+  // State-transition guard — see notifyTopUpStateChange rationale.
+  const prev = await prisma.moonPayOffRamp.findUnique({
+    where: { moonpaySellTransactionId: data.id },
+    select: { status: true },
+  });
+  const prevStatus = prev?.status ?? null;
 
   const row = await prisma.moonPayOffRamp.upsert({
     where: { moonpaySellTransactionId: data.id },
@@ -281,7 +389,88 @@ async function applySellTransactionState(
     select: { id: true, userId: true },
   });
 
+  if (prevStatus !== status && (status === 'completed' || status === 'failed')) {
+    void notifyOffRampStateChange({
+      userId: row.userId,
+      moonpayOffRampId: row.id,
+      newStatus: status,
+      amountUsdc: data.baseCurrencyAmount != null ? String(data.baseCurrencyAmount) : null,
+      amountFiat: data.quoteCurrencyAmount != null ? String(data.quoteCurrencyAmount) : null,
+      fiatCode: data.quoteCurrencyCode ?? 'USD',
+      failureReason: data.failureReason ?? null,
+    }).catch(err => {
+      console.warn('[moonpay] notifyOffRampStateChange failed (non-fatal)', {
+        moonpayOffRampId: row.id,
+        userId: row.userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   return { status: 'processed', userId: row.userId, offRampId: row.id };
+}
+
+/**
+ * Push a state-change card to the traveler when MoonPay flips the
+ * off-ramp to completed / failed. Mirror of `notifyTopUpStateChange`.
+ */
+async function notifyOffRampStateChange(args: {
+  userId: string;
+  moonpayOffRampId: string;
+  newStatus: 'completed' | 'failed';
+  amountUsdc: string | null;
+  amountFiat: string | null;
+  fiatCode: string;
+  failureReason: string | null;
+}): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: args.userId },
+    select: { metadata: true },
+  });
+  const meta = (user?.metadata ?? {}) as Record<string, unknown>;
+  const tenantId = typeof meta.primaryTenantId === 'string' ? meta.primaryTenantId : null;
+  if (!tenantId) {
+    console.warn('[moonpay] notifyOffRampStateChange: no primaryTenantId on user', {
+      userId: args.userId,
+      moonpayOffRampId: args.moonpayOffRampId,
+    });
+    return;
+  }
+
+  const sentLabel = args.amountUsdc != null ? `${args.amountUsdc} USDC` : 'tu cash-out';
+  const receivedLabel =
+    args.amountFiat != null ? `${args.fiatCode.toUpperCase()} ${args.amountFiat}` : null;
+
+  const message =
+    args.newStatus === 'completed'
+      ? {
+          kind: 'card' as const,
+          id: `moonpay_offramp_completed_${args.moonpayOffRampId}`,
+          author: { role: 'agent' as const, name: 'Sendero' },
+          createdAt: new Date().toISOString(),
+          title: '✅ Cash-out enviado',
+          body: receivedLabel
+            ? `${sentLabel} → ${receivedLabel} en camino a tu banco · 1-2 días hábiles.`
+            : `${sentLabel} en camino a tu banco · 1-2 días hábiles.`,
+          bullets: [],
+        }
+      : {
+          kind: 'card' as const,
+          id: `moonpay_offramp_failed_${args.moonpayOffRampId}`,
+          author: { role: 'agent' as const, name: 'Sendero' },
+          createdAt: new Date().toISOString(),
+          title: '❌ Cash-out falló',
+          body: args.failureReason
+            ? `${sentLabel} no se pudo procesar: ${args.failureReason}. Los fondos vuelven a tu wallet.`
+            : `${sentLabel} no se pudo procesar. Los fondos vuelven a tu wallet.`,
+          bullets: [],
+        };
+
+  await dispatchToTraveler({
+    tenantId,
+    travelerUserId: args.userId,
+    message,
+  });
 }
 
 /**
