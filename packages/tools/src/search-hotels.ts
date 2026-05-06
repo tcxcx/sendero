@@ -132,8 +132,7 @@ export const searchHotelsTool: ToolDef<SearchHotelsInput, SearchHotelsResult> = 
     const summaryLine = summaryHotel
       ? `${summaryHotel.name} from ${summaryHotel.cheapestPrice} ${summaryHotel.cheapestCurrency}`
       : 'No hotels found.';
-    const headerLocation =
-      resolved.formattedAddress ?? input.location;
+    const headerLocation = resolved.formattedAddress ?? input.location;
 
     return {
       hotels,
