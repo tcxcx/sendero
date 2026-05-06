@@ -98,7 +98,11 @@ describe('searchText — request shape', () => {
 
   test('clamps limit to [1, 20]', async () => {
     const { calls } = installFetchMock(
-      () => new Response(JSON.stringify({ places: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+      () =>
+        new Response(JSON.stringify({ places: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
     );
 
     await searchText({ query: 'coffee', limit: 99 });
@@ -110,7 +114,11 @@ describe('searchText — request shape', () => {
 
   test('forwards locationBias when provided', async () => {
     const { calls } = installFetchMock(
-      () => new Response(JSON.stringify({ places: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+      () =>
+        new Response(JSON.stringify({ places: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
     );
 
     await searchText({

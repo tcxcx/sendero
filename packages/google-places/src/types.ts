@@ -28,7 +28,11 @@ export interface PlacesPlace {
   types: string[];
   /** Most-specific type (`coffee_shop`, `mexican_restaurant`, etc.). */
   primaryType?: string;
-  priceLevel?: 'PRICE_LEVEL_INEXPENSIVE' | 'PRICE_LEVEL_MODERATE' | 'PRICE_LEVEL_EXPENSIVE' | 'PRICE_LEVEL_VERY_EXPENSIVE';
+  priceLevel?:
+    | 'PRICE_LEVEL_INEXPENSIVE'
+    | 'PRICE_LEVEL_MODERATE'
+    | 'PRICE_LEVEL_EXPENSIVE'
+    | 'PRICE_LEVEL_VERY_EXPENSIVE';
   /** 0.0 – 5.0 average rating from Google reviews. */
   rating?: number;
   /** Total review count. Useful as a quality / popularity signal. */

@@ -6,10 +6,7 @@
 
 import { describe, expect, test } from 'bun:test';
 
-import {
-  type WorkFromCafeRankerDeps,
-  runWorkFromCafeRanker,
-} from './work-from-cafe-ranker';
+import { type WorkFromCafeRankerDeps, runWorkFromCafeRanker } from './work-from-cafe-ranker';
 import type { ToolContext } from '../types';
 
 function makeCtx(overrides?: Partial<ToolContext>): ToolContext {
@@ -77,9 +74,7 @@ describe('work_from_cafe_ranker — pass-through scoring', () => {
       // Loaded should win on combined despite lower specialty — wifi +
       // outlets + laptop + quiet boost workFriendlyScore enough.
       expect(r.shops[0]?.name).toBe('Loaded Cafe');
-      expect(r.shops[0]?.workFriendlyScore).toBeGreaterThan(
-        r.shops[1]?.workFriendlyScore ?? 1
-      );
+      expect(r.shops[0]?.workFriendlyScore).toBeGreaterThan(r.shops[1]?.workFriendlyScore ?? 1);
       const sigs = r.shops[0]?.workSignals ?? [];
       expect(sigs.some(s => s.includes('wifi'))).toBe(true);
       expect(sigs.some(s => s.includes('outlets'))).toBe(true);
