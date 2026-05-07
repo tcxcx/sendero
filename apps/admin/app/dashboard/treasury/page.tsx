@@ -11,21 +11,22 @@ import {
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { requirePlatformRole } from '@/lib/access';
+import { getArcTreasury } from '@/lib/treasury/provision-arc';
 import { getSolanaTreasury } from '@/lib/treasury/provision-solana';
+import { ArcProvisionForm } from './_components/arc-provision-form';
 import { SolanaProvisionForm } from './_components/solana-provision-form';
 
 /**
  * Treasury landing — superadmin-only by per-page guard. Two cards,
- * one per chain. Solana card is wired in Phase 7.4 (this turn).
- * Arc card stays disabled until Phase 7.5 wires Circle MSCA via the
- * existing `@sendero/multisig` package.
+ * one per chain. Phase 7.4 wired Solana (live, Squads V4); Phase 7.5
+ * wires Arc in **intent mode** (form + persistence; on-chain deploy
+ * lands in 7.5.x).
  */
 export default async function TreasuryPage() {
   const guard = await requirePlatformRole(['superadmin']);
   if (!guard.ok) redirect('/unauthorized');
 
-  // Read live Solana treasury (or null if not yet provisioned).
-  const sol = await getSolanaTreasury();
+  const [sol, arc] = await Promise.all([getSolanaTreasury(), getArcTreasury()]);
 
   return (
     <div className="space-y-6">
@@ -38,12 +39,14 @@ export default async function TreasuryPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {sol ? <SolanaTreasuryCard treasury={sol} /> : <SolanaProvisionCard />}
-        <ArcTreasuryCard />
+        {arc ? <ArcTreasuryCard treasury={arc} /> : <ArcProvisionCard />}
       </div>
 
       <p className="text-xs text-[color:var(--color-muted-foreground)]">
-        Phase 7.4 ships Solana provisioning (Squads V4 on devnet). Arc lands in
-        7.5 via <code>@sendero/multisig</code> + Circle MSCA. See{' '}
+        Phase 7.4 ships live Solana provisioning (Squads V4 on devnet). Phase 7.5
+        ships Arc in <strong>intent mode</strong> via{' '}
+        <code>@sendero/multisig</code>; on-chain Circle MSCA deploy lands in 7.5.x
+        (counterfactual address + Gas Station paymaster + bundler glue). See{' '}
         <code>docs/specs/sendero-admin-app.md</code>.
       </p>
     </div>
@@ -68,8 +71,8 @@ function SolanaTreasuryCard({
           </span>
         </div>
         <CardDescription>
-          Squads V4 multisig vault. Owns Anchor program upgrade authority +
-          Sendero Solana treasury USDC.
+          Squads V4 multisig vault. Owns Anchor program upgrade authority + Sendero Solana treasury
+          USDC.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -120,8 +123,8 @@ function SolanaProvisionCard() {
           </span>
         </div>
         <CardDescription>
-          Provision a Squads V4 multisig vault. Will own Anchor program upgrade
-          authority + Sendero Solana treasury USDC + agent NFT custody.
+          Provision a Squads V4 multisig vault. Will own Anchor program upgrade authority + Sendero
+          Solana treasury USDC + agent NFT custody.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -131,9 +134,69 @@ function SolanaProvisionCard() {
   );
 }
 
-// ──────────────────── Arc — Phase 7.5 placeholder ────────────────────
+// ──────────────────── Arc — provisioned (intent or live) ────────────────────
 
-function ArcTreasuryCard() {
+function ArcTreasuryCard({
+  treasury,
+}: {
+  treasury: NonNullable<Awaited<ReturnType<typeof getArcTreasury>>>;
+}) {
+  const members = Array.isArray(treasury.members) ? (treasury.members as string[]) : [];
+  const isIntent = treasury.status === 'intent';
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-baseline justify-between">
+          <CardTitle>Arc</CardTitle>
+          <span className="rounded-full bg-[color:var(--color-secondary)] px-2 py-0.5 text-xs font-medium uppercase tracking-wider">
+            {treasury.network}
+          </span>
+        </div>
+        <CardDescription>
+          Circle MSCA weighted multisig. Will own SenderoGuestEscrow +
+          AgenticCommerce upgrade roles + Arc treasury USDC + Sendero canonical
+          agent NFT.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <dl className="grid grid-cols-[7rem_1fr] gap-y-2 text-sm">
+          <dt className="text-[color:var(--color-muted-foreground)]">Status</dt>
+          <dd className="font-medium uppercase tracking-wide">{treasury.status}</dd>
+          <dt className="text-[color:var(--color-muted-foreground)]">
+            {isIntent ? 'Placeholder' : 'MSCA'}
+          </dt>
+          <dd className="break-all font-mono text-xs">{treasury.multisigAddress}</dd>
+          <dt className="text-[color:var(--color-muted-foreground)]">Threshold</dt>
+          <dd className="font-medium">
+            {treasury.threshold} of {members.length} signers
+          </dd>
+        </dl>
+        {isIntent ? (
+          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+            Intent reserved. On-chain MSCA deploy + Circle Gas Station paymaster
+            wiring lands in Phase 7.5.x.
+          </p>
+        ) : null}
+      </CardContent>
+      <CardFooter>
+        <Button
+          variant="outline"
+          disabled
+          className="w-full"
+          title={isIntent ? 'Phase 7.5.x' : 'Phase 7.6'}
+        >
+          {isIntent
+            ? 'Deploy on-chain (Phase 7.5.x)'
+            : 'Sign / Execute proposals (Phase 7.6)'}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+// ──────────────────── Arc — not yet provisioned ────────────────────
+
+function ArcProvisionCard() {
   return (
     <Card>
       <CardHeader>
@@ -144,34 +207,14 @@ function ArcTreasuryCard() {
           </span>
         </div>
         <CardDescription>
-          Circle Modular Wallets MSCA (weighted multisig). Will own
+          Reserve a Circle MSCA weighted multisig intent. Will own
           SenderoGuestEscrow + AgenticCommerce upgrade roles + Arc treasury USDC
-          + Sendero canonical agent NFT.
+          + Sendero canonical agent NFT once deployed (Phase 7.5.x).
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <dl className="grid grid-cols-2 gap-y-2 text-sm">
-          <dt className="text-[color:var(--color-muted-foreground)]">Standard</dt>
-          <dd className="font-medium">Circle MSCA</dd>
-          <Separator className="col-span-2" />
-          <dt className="text-[color:var(--color-muted-foreground)]">Status</dt>
-          <dd className="font-medium">Not provisioned</dd>
-          <dt className="text-[color:var(--color-muted-foreground)]">Vault</dt>
-          <dd className="text-[color:var(--color-muted-foreground)]">—</dd>
-          <dt className="text-[color:var(--color-muted-foreground)]">Threshold</dt>
-          <dd className="text-[color:var(--color-muted-foreground)]">—</dd>
-        </dl>
+        <ArcProvisionForm />
       </CardContent>
-      <CardFooter>
-        <Button
-          variant="outline"
-          disabled
-          className="w-full"
-          title="Provision flow lands in Phase 7.5"
-        >
-          Provision (Phase 7.5)
-        </Button>
-      </CardFooter>
     </Card>
   );
 }
