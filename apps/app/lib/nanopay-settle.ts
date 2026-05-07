@@ -183,43 +183,107 @@ export function makeSettleFn(): SettleFn {
 }
 
 /**
- * Phase 6.x.y — Solana settle path (placeholder).
+ * Phase 6.x.y — Solana settle path. Per-tenant Solana DCWs landed in
+ * Phase 4.x.y; this fn debits the tenant's SOL-DEVNET treasury via
+ * Circle's `createTransaction` API, sending USDC SPL to the Sendero
+ * Solana treasury address.
  *
- * The Arc settler debits the tenant's Gateway unified balance; the
- * Solana counterpart needs a per-tenant Solana wallet AND a Solana
- * Sendero treasury address. Per-tenant Solana wallets land in
- * Phase 3.x; once they exist, this helper:
- *   1. Reads `tenant.primaryChain === 'sol'` (defensive).
- *   2. Loads the tenant's Solana DCW / Squads vault.
- *   3. Calls `transferUSDCByChain({ chain: 'sol', to: solTreasury,
- *      amount, ... })` from `@sendero/nanopayments/router`.
- *   4. Returns `{ txHash: <solana sig> }`.
+ * Async settlement contract: Circle's DCW `createTransaction` returns
+ * a Circle internal `transactionId` immediately with state='INITIATED'.
+ * The on-chain confirmation lands later via Circle's webhook. We
+ * persist the Circle txId as `provisioningTxRef` (treated as the
+ * batch's txHash for audit purposes); downstream readers can resolve
+ * the on-chain Solana sig via `getTransaction(txId)` when needed.
  *
- * Today it throws — the cron filter excludes Sol tenants from the
- * candidate scan, so this is reachable only via direct call. The
- * throw makes that obvious instead of silently producing the wrong
- * result.
+ * The retrySettlingBatches age-based reconciler already handles
+ * status='settling' rows that haven't confirmed within 10min — same
+ * mechanism Arc uses. No Sol-specific cron logic needed; the existing
+ * batch lifecycle works as-is.
  */
 export function makeSolanaSettleFn(): SettleFn {
-  return async ({ tenantId }) => {
-    throw new Error(
-      `[nanopay-settle] Solana settle path is Phase 6.x.y; tenant ${tenantId} cannot settle until per-tenant Solana wallets are provisioned (Phase 3.x).`
-    );
+  return async ({ totalMicroUsdc, tenantId }) => {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { primaryChain: true },
+    });
+    if (tenant?.primaryChain !== 'sol') {
+      throw new Error(
+        `[nanopay-settle:sol] tenant ${tenantId} primaryChain is '${tenant?.primaryChain}' — expected 'sol'.`
+      );
+    }
+
+    const treasury = await prisma.circleWallet.findFirst({
+      where: {
+        tenantId,
+        kind: 'treasury',
+        chain: { in: ['SOL-DEVNET', 'SOL'] },
+      },
+      select: { circleWalletId: true, chain: true, address: true },
+    });
+    if (!treasury?.circleWalletId) {
+      throw new Error(
+        `[nanopay-settle:sol] tenant ${tenantId} has no Solana treasury CircleWallet (Phase 4.x.y provisioning hasn't run).`
+      );
+    }
+
+    const senderoSolTreasury = process.env.SENDERO_SOLANA_TREASURY_ADDRESS;
+    if (!senderoSolTreasury) {
+      throw new Error(
+        '[nanopay-settle:sol] SENDERO_SOLANA_TREASURY_ADDRESS not set — Sol settle path needs a destination address.'
+      );
+    }
+
+    const tokenId =
+      treasury.chain === 'SOL'
+        ? process.env.CIRCLE_USDC_SOL_TOKEN_ID
+        : process.env.CIRCLE_USDC_SOL_DEVNET_TOKEN_ID;
+    if (!tokenId) {
+      throw new Error(
+        `[nanopay-settle:sol] CIRCLE_USDC_${treasury.chain === 'SOL' ? '' : 'SOL_DEVNET_'}TOKEN_ID not set.`
+      );
+    }
+
+    // Lazy-import @sendero/circle so this lib doesn't pull in the
+    // Circle DCW SDK on Arc-only flows.
+    const { getCircle } = await import('@sendero/circle/wallets');
+    const circle = getCircle();
+
+    const amount = microUsdcToDecimal(totalMicroUsdc);
+    const response = await circle.createTransaction({
+      walletId: treasury.circleWalletId,
+      tokenId,
+      destinationAddress: senderoSolTreasury,
+      amount: [amount],
+      fee: { type: 'level', config: { feeLevel: 'MEDIUM' as never } },
+      refId: `nanopay-${tenantId}-${Date.now()}`,
+    } as never);
+
+    const transactionId =
+      (response.data as { id?: string } | undefined)?.id ?? '';
+    if (!transactionId) {
+      throw new Error(
+        `[nanopay-settle:sol] Circle createTransaction returned no transactionId for tenant ${tenantId}.`
+      );
+    }
+
+    // Echo the Circle txId as txHash. The reconciler webhook (Circle
+    // event monitor) resolves it to the on-chain Solana signature on
+    // confirmation. Until then the row sits at status='settling';
+    // retrySettlingBatches handles age-based reconciliation.
+    return { txHash: transactionId };
   };
 }
 
 /**
  * Phase 6.x — caller-side filter for the cron candidate scan.
  *
- * Returns the subset of tenant ids that should run through the Arc
- * settle pipeline today. Solana-primary tenants are excluded so
- * their MeterEvent rows don't keep queueing batches that would
- * either fail loudly (defensive throw above) or settle to the wrong
- * chain. Their events accumulate harmlessly in `meter_events`
- * pending Phase 6.x.y.
+ * Phase 6.x.y note: Sol tenants are no longer filtered out here.
+ * The cron now routes each tenant through their primaryChain's
+ * settle fn (`makeSettleFn` for arc, `makeSolanaSettleFn` for sol).
  *
- * Pure helper — single Prisma read, returned as a Set for O(1)
- * membership checks at the cron layer.
+ * This helper stays exported in case future flows need to pre-filter
+ * by chain — but the current cron uses `tenantPrimaryChainMap`
+ * below, which returns chain per id rather than a binary include set.
  */
 export async function arcSettleEligibleTenantIds(
   candidateTenantIds: string[]
@@ -233,4 +297,20 @@ export async function arcSettleEligibleTenantIds(
     select: { id: true },
   });
   return new Set(rows.map(r => r.id));
+}
+
+/**
+ * Phase 6.x.y — return a per-tenant chain map so the cron can route
+ * each candidate through the correct settle fn. Replaces the binary
+ * "is eligible for arc" filter with a chain-aware dispatch.
+ */
+export async function tenantPrimaryChainMap(
+  candidateTenantIds: string[]
+): Promise<Map<string, 'arc' | 'sol'>> {
+  if (candidateTenantIds.length === 0) return new Map();
+  const rows = await prisma.tenant.findMany({
+    where: { id: { in: candidateTenantIds } },
+    select: { id: true, primaryChain: true },
+  });
+  return new Map(rows.map(r => [r.id, r.primaryChain]));
 }
