@@ -2922,6 +2922,55 @@ model NftStampOwnership {
 /// ERC-8004 IdentityRegistry agent NFT bound to a Sendero subject.
 /// Either the org's treasury wallet (kind='org', tenantId set) or the
 /// user's DCW (kind='user', userId set). Provisioning is async-with-
+/// Sendero superadmin's dual-chain treasury — one row per chain.
+/// Phase 7.4 provisions the Solana side (Squads V4 multisig vault on
+/// SOL devnet). Phase 7.5 provisions the Arc side (Circle MSCA
+/// weighted multisig via @sendero/multisig). Both treasuries serve
+/// the same logical role: receive platform fees, fund payouts,
+/// authorize contract upgrades.
+///
+/// Storage shape is chain-agnostic by design — `chain` + `network`
+/// disambiguate, `multisigAddress` + `vaultAddress` cover the Solana
+/// (config PDA + vault PDA at index 0 are distinct) and EVM (MSCA
+/// holds tokens directly, both addresses equal) split.
+model SuperOrgTreasury {
+  id                  String    @id @default(cuid())
+  chain               ChainKind
+  /// Free-form network identifier matching the `CircleWallet.chain`
+  /// String convention: "sol-devnet" | "sol-mainnet" | "arc-testnet" |
+  /// "arc-mainnet". Used for explorer URL building + cross-references.
+  network             String
+  /// Solana: multisig PDA (config). EVM: MSCA address. The "config"
+  /// surface — distinct from the vault on Solana, same address on EVM.
+  multisigAddress     String    @unique
+  /// Solana: vault PDA at index 0 (where USDC actually lives).
+  /// EVM: same as `multisigAddress` (the MSCA holds tokens directly).
+  vaultAddress        String
+  /// Threshold required for proposal execution.
+  threshold           Int
+  /// Member pubkeys (Solana) / EOAs (EVM). JSON array of strings.
+  /// Each entry is the signer's external pubkey, not the multisig PDA.
+  members             Json
+  /// Squads V4 createKey pubkey (Solana only). Used to derive the
+  /// multisig PDA — kept for audit + tooling. Null on EVM.
+  createKey           String?
+  /// On-chain tx signature/hash that provisioned the multisig.
+  provisioningTxRef   String?
+  /// 'pending' (provisioning tx submitted, awaiting confirmation) |
+  /// 'live' (vault confirmed, ready to use) | 'failed' (terminal).
+  status              String    @default("pending")
+  /// Clerk userId of the superadmin who clicked Provision. Audit trail
+  /// — paired with Clerk's own session log.
+  provisionedByUserId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([chain, network])
+  @@index([status])
+  @@map("super_org_treasuries")
+}
+
 /// retry, mirroring NftStamp.status semantics: `pending` → `minted` |
 /// `failed`. The sweeper retries `pending` rows forever; `failed` is
 /// terminal and surfaces in the admin UI.
