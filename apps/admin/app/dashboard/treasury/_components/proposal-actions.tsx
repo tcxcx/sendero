@@ -33,6 +33,10 @@ interface Props {
   multisigAddress: string;
   txIndex: number;
   status: string;
+  /** Multisig member pubkeys (base58). Phase 7.6.y preflight: only
+   *  these wallets can Approve / Reject. Anyone can Execute once the
+   *  threshold is met (Squads SDK validates server-side regardless). */
+  members: string[];
 }
 
 type Action = 'approve' | 'reject' | 'execute';
@@ -42,6 +46,7 @@ export function ProposalActions({
   multisigAddress,
   txIndex,
   status,
+  members,
 }: Props) {
   const router = useRouter();
   const { connection } = useConnection();
@@ -50,19 +55,21 @@ export function ProposalActions({
   const [error, setError] = React.useState<string | null>(null);
 
   const isTerminal =
-    status === 'executed' ||
-    status === 'rejected' ||
-    status === 'cancelled' ||
-    status === 'failed';
+    status === 'executed' || status === 'rejected' || status === 'cancelled' || status === 'failed';
 
   if (isTerminal) return null;
 
   const showApproveReject = status === 'pending';
   const showExecute = status === 'approved';
+  const isMember = connected && publicKey ? members.includes(publicKey.toBase58()) : false;
 
   async function run(action: Action) {
     if (!publicKey || !connected) {
       setError('Connect a Solana wallet first.');
+      return;
+    }
+    if ((action === 'approve' || action === 'reject') && !isMember) {
+      setError("Your wallet isn't a multisig member. Connect a member wallet to vote.");
       return;
     }
     setPending(action);
@@ -126,10 +133,7 @@ export function ProposalActions({
       );
 
       // Reconcile the row's status from on-chain.
-      await refreshProposalStatus(
-        proposalId,
-        action === 'execute' ? sig : undefined
-      );
+      await refreshProposalStatus(proposalId, action === 'execute' ? sig : undefined);
       router.refresh();
     } catch (err) {
       setError((err as Error).message ?? 'Action failed.');
@@ -147,24 +151,20 @@ export function ProposalActions({
               type="button"
               size="sm"
               variant="default"
-              disabled={!connected || pending !== null}
+              disabled={!connected || !isMember || pending !== null}
               onClick={() => run('approve')}
             >
-              {pending === 'approve' ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : null}
+              {pending === 'approve' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               Approve
             </Button>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              disabled={!connected || pending !== null}
+              disabled={!connected || !isMember || pending !== null}
               onClick={() => run('reject')}
             >
-              {pending === 'reject' ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : null}
+              {pending === 'reject' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               Reject
             </Button>
           </>
@@ -177,15 +177,18 @@ export function ProposalActions({
             disabled={!connected || pending !== null}
             onClick={() => run('execute')}
           >
-            {pending === 'execute' ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : null}
+            {pending === 'execute' ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
             Execute
           </Button>
         ) : null}
         {!connected ? (
           <span className="self-center text-[11px] text-[color:var(--color-muted-foreground)]">
             Connect a member wallet to vote
+          </span>
+        ) : null}
+        {connected && !isMember && showApproveReject ? (
+          <span className="self-center text-[11px] text-[color:var(--color-muted-foreground)]">
+            Your wallet isn&apos;t a multisig member
           </span>
         ) : null}
       </div>

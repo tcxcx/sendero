@@ -3009,6 +3009,11 @@ model TreasuryProposal {
   proposalTxRef     String?
   /// Sig of the execution tx, when status === 'executed'.
   executedTxRef     String?
+  /// Cached count of `Proposal.approved` from the last
+  /// `refreshProposalStatus` reconcile. Pairs with
+  /// `SuperOrgTreasury.threshold` for the "X of Y approved" pill so
+  /// the UI doesn't have to round-trip to the chain on every render.
+  approvedCount     Int      @default(0)
   /// Status: pending | approved | executed | rejected | cancelled | failed.
   status            String   @default("pending")
   /// Clerk userId of the superadmin who proposed. Audit trail.

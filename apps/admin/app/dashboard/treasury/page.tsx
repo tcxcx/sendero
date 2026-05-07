@@ -108,6 +108,8 @@ function SolanaTreasuryCard({
           <ProposalList
             treasuryId={treasury.id}
             multisigAddress={treasury.multisigAddress}
+            threshold={treasury.threshold}
+            members={members}
           />
         </div>
 
@@ -115,8 +117,8 @@ function SolanaTreasuryCard({
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2">
         <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-          Vote / execute via your connected Solana wallet (Phase 7.6.x). Status
-          pills above mirror the on-chain proposal PDA after each tx confirms.
+          Vote / execute via your connected Solana wallet (Phase 7.6.x). Status pills above mirror
+          the on-chain proposal PDA after each tx confirms.
         </p>
       </CardFooter>
     </Card>

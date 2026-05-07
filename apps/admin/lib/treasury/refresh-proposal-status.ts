@@ -57,10 +57,7 @@ export async function refreshProposalStatus(
 
   let proposal;
   try {
-    proposal = await multisig.accounts.Proposal.fromAccountAddress(
-      connection,
-      proposalPda
-    );
+    proposal = await multisig.accounts.Proposal.fromAccountAddress(connection, proposalPda);
   } catch (err) {
     return {
       ok: false,
@@ -83,6 +80,7 @@ export async function refreshProposalStatus(
     where: { id: proposalId },
     data: {
       status: newStatus,
+      approvedCount,
       ...(executedTxRef && newStatus === 'executed' ? { executedTxRef } : {}),
     },
   });
