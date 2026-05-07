@@ -10,183 +10,398 @@
 //!                ↘ Rejected
 //!                ↘ Expired (claim_refund after expiredAt)
 //!
-//! # Differences from Solidity reference
+//! # Storage layout
 //!
-//! - **Storage:** Each `Job` lives at a PDA seeded by
-//!   `[b"job", job_counter.to_le_bytes()]`. Counter on a singleton
-//!   `Config` PDA (`[b"config"]`) — equivalent to `jobCounter` storage var.
-//! - **USDC:** SPL Token transfers with `anchor_spl::token`. `paymentToken`
-//!   is the USDC mint configured at `initialize`. Devnet mint
-//!   `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`.
-//! - **Hooks:** Solidity's `IACPHook` callbacks become CPI calls into a
-//!   user-supplied `hook_program` when `Job.hook_program` is non-default.
-//!   Whitelist enforced via `Config.whitelisted_hooks` Vec.
-//! - **Fees:** Same bps math (platform_fee_bp + evaluator_fee_bp ≤ 10000).
-//!   Treasury is a token-account address, not a wallet — caller passes it.
-//! - **Reentrancy:** Anchor's account-mutability + CPI guard handles this
-//!   without explicit reentrancy lock. We still use `#[access_control(...)]`
-//!   to assert state transitions atomically.
+//! - `Config` PDA singleton at `[b"config"]` — admin, payment_mint,
+//!   platform_treasury_ata, fees, job_counter.
+//! - `Job` PDA at `[b"job", job_id.to_le_bytes()]` — one per job.
+//! - `Vault` SPL TokenAccount at `[b"vault", job_id.to_le_bytes()]`
+//!   owned by its Job PDA — holds the USDC escrow for that job.
+//!   Created on `fund`, drained on `complete` / `reject` /
+//!   `claim_refund`.
 //!
-//! # Authorization model
+//! # Authorization
 //!
-//! - `client = Job.client` — only the client can `fund` / `complete`
-//!   (when client is also evaluator) / call `set_provider` while the
-//!   provider is still default.
-//! - `provider = Job.provider` — only the provider can `set_budget` /
-//!   `submit`.
-//! - `evaluator = Job.evaluator` — only the evaluator can `complete` /
-//!   `reject` after `Funded`/`Submitted`.
+//! - `client = Job.client` — only the client can `set_provider`,
+//!   `fund`, `reject` while Open.
+//! - `provider = Job.provider` — only the provider can `set_budget`
+//!   and `submit`.
+//! - `evaluator = Job.evaluator` — only the evaluator can `complete`
+//!   or `reject` after Funded/Submitted.
+//! - `claim_refund` — anyone can call after expired_at when status ∈
+//!   {Funded, Submitted}; tokens always go back to the original client.
+//!
+//! # Phasing
+//!
+//! - This commit (state + accounts + initialize + create_job +
+//!   set_provider + set_budget). Bodies for `fund` / `submit` /
+//!   `complete` / `reject` / `claim_refund` land in the sibling
+//!   commit so each diff stays within the size budget.
+//! - Hooks: Solidity's `IACPHook` callbacks are out of scope for v1.
+//!   `Job.hook_program` is captured but only `Pubkey::default()` is
+//!   accepted at `create_job`.
 
 use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token::{Mint, Token, TokenAccount};
 
 declare_id!("4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9");
+
+const BPS_DENOMINATOR: u16 = 10_000;
+/// Mirrors Solidity's `expiredAt <= block.timestamp + 5 minutes` guard.
+const MIN_EXPIRY_LEAD: i64 = 5 * 60;
+const CONFIG_SEED: &[u8] = b"config";
+const JOB_SEED: &[u8] = b"job";
+const VAULT_SEED: &[u8] = b"vault";
 
 #[program]
 pub mod agentic_commerce {
     use super::*;
 
-    /// One-time init. Sets payment_mint (USDC), platform fee config, admin.
-    pub fn initialize(_ctx: Context<Initialize>, _admin: Pubkey) -> Result<()> {
-        // Phase 1 — implementation lands in next turn.
-        // Spec:
-        //   - Init Config PDA singleton at seeds=[b"config"].
-        //   - Set payment_mint, platform_fee_bp=0, evaluator_fee_bp=0.
-        //   - Set admin (multisig pubkey for production).
-        //   - Whitelist Pubkey::default() as the no-op hook.
-        Ok(())
-    }
-
-    /// Create a new job. Mirrors `createJob(provider, evaluator, expiredAt, description, hook)`.
-    /// Allocates a `Job` PDA, increments `Config.job_counter`, sets status=Open.
-    pub fn create_job(
-        _ctx: Context<CreateJob>,
-        _provider: Pubkey,
-        _evaluator: Pubkey,
-        _expired_at: i64,
-        _description: String,
-        _hook_program: Pubkey,
+    /// One-time init. Caller becomes admin. Sets payment_mint + fees +
+    /// platform treasury token account.
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        platform_fee_bp: u16,
+        evaluator_fee_bp: u16,
     ) -> Result<()> {
-        // Spec:
-        //   - Assert evaluator != Pubkey::default()
-        //   - Assert expired_at > Clock::get()?.unix_timestamp + 5 minutes
-        //   - Assert hook_program is whitelisted (or default)
-        //   - Emit JobCreated event mirroring Solidity event signature
+        require!(
+            (platform_fee_bp as u32) + (evaluator_fee_bp as u32) <= BPS_DENOMINATOR as u32,
+            AgenticCommerceError::FeesTooHigh
+        );
+
+        let config = &mut ctx.accounts.config;
+        config.admin = ctx.accounts.admin.key();
+        config.payment_mint = ctx.accounts.payment_mint.key();
+        config.platform_treasury = ctx.accounts.platform_treasury.key();
+        config.platform_fee_bp = platform_fee_bp;
+        config.evaluator_fee_bp = evaluator_fee_bp;
+        config.job_counter = 0;
+        config.bump = ctx.bumps.config;
         Ok(())
     }
 
-    pub fn set_provider(_ctx: Context<JobAction>, _provider: Pubkey) -> Result<()> {
-        // Solidity's setProvider — only the client can call, only when status=Open
-        // and current provider is default.
+    /// Create a new job in `Open` state. `job_id` MUST equal
+    /// `config.job_counter + 1` so the PDA seed is deterministic and
+    /// stable for follow-up instructions.
+    pub fn create_job(
+        ctx: Context<CreateJob>,
+        job_id: u64,
+        provider: Pubkey,
+        evaluator: Pubkey,
+        expired_at: i64,
+        description: String,
+        hook_program: Pubkey,
+    ) -> Result<()> {
+        require!(
+            evaluator != Pubkey::default(),
+            AgenticCommerceError::ZeroAddress
+        );
+
+        let now = Clock::get()?.unix_timestamp;
+        require!(
+            expired_at > now + MIN_EXPIRY_LEAD,
+            AgenticCommerceError::ExpiryTooShort
+        );
+        require!(
+            description.len() <= Job::MAX_DESCRIPTION_LEN,
+            AgenticCommerceError::DescriptionTooLong
+        );
+        // v1: only the no-op hook is accepted. Phase 2+ widens this.
+        require!(
+            hook_program == Pubkey::default(),
+            AgenticCommerceError::HookNotWhitelisted
+        );
+
+        let config = &mut ctx.accounts.config;
+        require!(
+            job_id == config.job_counter + 1,
+            AgenticCommerceError::InvalidJobId
+        );
+        config.job_counter = job_id;
+
+        let job = &mut ctx.accounts.job;
+        job.id = job_id;
+        job.client = ctx.accounts.client.key();
+        job.provider = provider;
+        job.evaluator = evaluator;
+        job.description = description;
+        job.budget = 0;
+        job.expired_at = expired_at;
+        job.status = JobStatus::Open;
+        job.hook_program = hook_program;
+        job.has_budget = false;
+        job.bump = ctx.bumps.job;
+
+        emit!(JobCreated {
+            job_id,
+            client: job.client,
+            provider: job.provider,
+            evaluator: job.evaluator,
+            expired_at,
+            hook_program,
+        });
         Ok(())
     }
 
-    pub fn set_budget(_ctx: Context<JobAction>, _amount: u64) -> Result<()> {
-        // Provider sets price. Stamps `job_has_budget=true`.
+    /// Client assigns the provider when it was left unset at
+    /// `create_job` (Solidity's `setProvider` semantics).
+    pub fn set_provider(
+        ctx: Context<JobAdmin>,
+        _job_id: u64,
+        new_provider: Pubkey,
+    ) -> Result<()> {
+        let job = &mut ctx.accounts.job;
+        require!(job.status == JobStatus::Open, AgenticCommerceError::WrongStatus);
+        require!(
+            job.client == ctx.accounts.signer.key(),
+            AgenticCommerceError::Unauthorized
+        );
+        require!(
+            job.provider == Pubkey::default(),
+            AgenticCommerceError::WrongStatus
+        );
+        require!(
+            new_provider != Pubkey::default(),
+            AgenticCommerceError::ZeroAddress
+        );
+        job.provider = new_provider;
+        emit!(ProviderSet {
+            job_id: job.id,
+            provider: new_provider,
+        });
         Ok(())
     }
 
-    pub fn fund(_ctx: Context<FundJob>) -> Result<()> {
-        // Client transfers USDC from their token account into the escrow
-        // PDA's token account. Status: Open → Funded.
-        // Pre: provider != default, block.timestamp < expired_at, status=Open.
+    /// Provider sets the price. Solidity allows zero (no-op fund), but
+    /// require positive here so subsequent fee math doesn't degenerate.
+    pub fn set_budget(ctx: Context<JobAdmin>, _job_id: u64, amount: u64) -> Result<()> {
+        let job = &mut ctx.accounts.job;
+        require!(job.status == JobStatus::Open, AgenticCommerceError::WrongStatus);
+        require!(
+            job.provider == ctx.accounts.signer.key(),
+            AgenticCommerceError::Unauthorized
+        );
+        require!(amount > 0, AgenticCommerceError::ZeroBudget);
+        job.budget = amount;
+        job.has_budget = true;
+        emit!(BudgetSet { job_id: job.id, amount });
         Ok(())
     }
 
-    pub fn submit(_ctx: Context<JobAction>, _deliverable: [u8; 32]) -> Result<()> {
-        // Provider submits 32-byte deliverable hash. Status → Submitted.
+    // Bodies below land in the sibling commit. Stub returns Ok(()) so
+    // the program builds clean and the PDA shape is callable from the
+    // TS test client — those calls just won't move state until the
+    // bodies are filled.
+
+    pub fn fund(_ctx: Context<FundJob>, _job_id: u64) -> Result<()> {
         Ok(())
     }
 
-    pub fn complete(_ctx: Context<CompleteJob>, _reason: [u8; 32]) -> Result<()> {
-        // Evaluator approves. Status → Completed. Splits escrow to:
-        //   - platform_treasury: (budget * platform_fee_bp) / 10000
-        //   - evaluator: (budget * evaluator_fee_bp) / 10000
-        //   - provider: net (the rest)
-        // All transfers via anchor_spl::token::transfer with the escrow PDA
-        // signer seeds.
+    pub fn submit(
+        _ctx: Context<JobAdmin>,
+        _job_id: u64,
+        _deliverable: [u8; 32],
+    ) -> Result<()> {
         Ok(())
     }
 
-    pub fn reject(_ctx: Context<JobAction>, _reason: [u8; 32]) -> Result<()> {
-        // Open → client only. Funded/Submitted → evaluator only.
-        // Refunds full budget to client when funds were already in escrow.
+    pub fn complete(
+        _ctx: Context<CompleteJob>,
+        _job_id: u64,
+        _reason: [u8; 32],
+    ) -> Result<()> {
         Ok(())
     }
 
-    pub fn claim_refund(_ctx: Context<ClaimRefund>) -> Result<()> {
-        // Anyone can call after expired_at if status ∈ {Funded, Submitted}.
-        // Status → Expired, full budget refunded to client.
+    pub fn reject(
+        _ctx: Context<RefundOrReject>,
+        _job_id: u64,
+        _reason: [u8; 32],
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn claim_refund(_ctx: Context<RefundOrReject>, _job_id: u64) -> Result<()> {
         Ok(())
     }
 }
 
-// ──────────────────── Account contexts (skeletons — bodies in Phase 1) ────────────────────
+// ──────────────────── Account contexts ────────────────────
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
+    pub payment_mint: Account<'info, Mint>,
+    /// Token account (already-existing ATA on the platform treasury
+    /// MSCA / Squads vault) that receives platform-fee payouts.
+    #[account(token::mint = payment_mint)]
+    pub platform_treasury: Account<'info, TokenAccount>,
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + Config::INIT_SPACE,
+        seeds = [CONFIG_SEED],
+        bump
+    )]
+    pub config: Account<'info, Config>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
+#[instruction(job_id: u64)]
 pub struct CreateJob<'info> {
     #[account(mut)]
     pub client: Signer<'info>,
+    #[account(mut, seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, Config>,
+    #[account(
+        init,
+        payer = client,
+        space = 8 + Job::INIT_SPACE,
+        seeds = [JOB_SEED, &job_id.to_le_bytes()],
+        bump
+    )]
+    pub job: Account<'info, Job>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct JobAction<'info> {
-    #[account(mut)]
+#[instruction(job_id: u64)]
+pub struct JobAdmin<'info> {
     pub signer: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [JOB_SEED, &job_id.to_le_bytes()],
+        bump = job.bump
+    )]
+    pub job: Account<'info, Job>,
 }
 
 #[derive(Accounts)]
+#[instruction(job_id: u64)]
 pub struct FundJob<'info> {
     #[account(mut)]
     pub client: Signer<'info>,
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, Config>,
+    #[account(
+        mut,
+        seeds = [JOB_SEED, &job_id.to_le_bytes()],
+        bump = job.bump
+    )]
+    pub job: Account<'info, Job>,
+    #[account(address = config.payment_mint)]
+    pub payment_mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = client,
+        seeds = [VAULT_SEED, &job_id.to_le_bytes()],
+        bump,
+        token::mint = payment_mint,
+        token::authority = job,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    #[account(mut, token::mint = payment_mint, token::authority = client)]
+    pub client_token_account: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
+#[instruction(job_id: u64)]
 pub struct CompleteJob<'info> {
-    #[account(mut)]
     pub evaluator: Signer<'info>,
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, Config>,
+    #[account(
+        mut,
+        seeds = [JOB_SEED, &job_id.to_le_bytes()],
+        bump = job.bump
+    )]
+    pub job: Account<'info, Job>,
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, &job_id.to_le_bytes()],
+        bump,
+        token::authority = job,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        token::mint = config.payment_mint,
+        address = config.platform_treasury
+    )]
+    pub platform_treasury_ata: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        token::mint = config.payment_mint,
+        token::authority = job.provider
+    )]
+    pub provider_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        token::mint = config.payment_mint,
+        token::authority = job.evaluator
+    )]
+    pub evaluator_token_account: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
-pub struct ClaimRefund<'info> {
-    #[account(mut)]
+#[instruction(job_id: u64)]
+pub struct RefundOrReject<'info> {
     pub caller: Signer<'info>,
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, Config>,
+    #[account(
+        mut,
+        seeds = [JOB_SEED, &job_id.to_le_bytes()],
+        bump = job.bump
+    )]
+    pub job: Account<'info, Job>,
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, &job_id.to_le_bytes()],
+        bump,
+        token::authority = job,
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        token::mint = config.payment_mint,
+        token::authority = job.client
+    )]
+    pub client_token_account: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
 
-// ──────────────────── State accounts ────────────────────
+// ──────────────────── State ────────────────────
 
 #[account]
+#[derive(InitSpace)]
 pub struct Config {
-    /// Admin signer — can update fees, treasury, hook whitelist.
     pub admin: Pubkey,
-    /// USDC mint (SPL token) — devnet `4zMMC9srt5Ri…`.
     pub payment_mint: Pubkey,
-    /// Token account that receives the platform fee cut. Treasury MSCA.
+    /// Token account (not wallet) that receives platform-fee payouts.
     pub platform_treasury: Pubkey,
-    /// 0-10000 basis points. platform_fee_bp + evaluator_fee_bp ≤ 10000.
     pub platform_fee_bp: u16,
     pub evaluator_fee_bp: u16,
-    /// Auto-incrementing job id seeder. Mirrors Solidity `jobCounter`.
     pub job_counter: u64,
-    /// Whitelisted hook programs. Default `Pubkey::default()` always allowed.
-    pub whitelisted_hooks: Vec<Pubkey>,
     pub bump: u8,
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct Job {
     pub id: u64,
     pub client: Pubkey,
     pub provider: Pubkey,
     pub evaluator: Pubkey,
-    /// Free-form. Bound at 256 bytes to keep PDA size stable.
+    #[max_len(256)]
     pub description: String,
     pub budget: u64,
     pub expired_at: i64,
@@ -196,7 +411,11 @@ pub struct Job {
     pub bump: u8,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+impl Job {
+    pub const MAX_DESCRIPTION_LEN: usize = 256;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, InitSpace, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum JobStatus {
     Open,
     Funded,
@@ -206,12 +425,14 @@ pub enum JobStatus {
     Expired,
 }
 
-// ──────────────────── Errors (mirror Solidity's custom errors) ────────────────────
+// ──────────────────── Errors (mirror Solidity custom errors) ────────────────────
 
 #[error_code]
 pub enum AgenticCommerceError {
     #[msg("Job does not exist or invalid id")]
     InvalidJob,
+    #[msg("job_id must equal config.job_counter + 1")]
+    InvalidJobId,
     #[msg("Job is not in the required state for this action")]
     WrongStatus,
     #[msg("Caller is not authorized for this action")]
@@ -226,8 +447,12 @@ pub enum AgenticCommerceError {
     ProviderNotSet,
     #[msg("platform_fee_bp + evaluator_fee_bp exceeds 10000")]
     FeesTooHigh,
-    #[msg("Hook program is not whitelisted")]
+    #[msg("Hook program is not whitelisted (v1: only Pubkey::default() allowed)")]
     HookNotWhitelisted,
+    #[msg("Description exceeds 256-byte cap")]
+    DescriptionTooLong,
+    #[msg("Fee math overflow")]
+    FeeMathOverflow,
 }
 
 // ──────────────────── Events (mirror Solidity events) ────────────────────
@@ -240,6 +465,12 @@ pub struct JobCreated {
     pub evaluator: Pubkey,
     pub expired_at: i64,
     pub hook_program: Pubkey,
+}
+
+#[event]
+pub struct ProviderSet {
+    pub job_id: u64,
+    pub provider: Pubkey,
 }
 
 #[event]
