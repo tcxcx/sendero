@@ -7,11 +7,7 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
  * `assertSuperadminOrRedirect()` from `lib/superadmin` — middleware
  * only enforces "is signed in".
  */
-const isPublicRoute = createRouteMatcher([
-  '/sign-in(.*)',
-  '/unauthorized',
-  '/api/health',
-]);
+const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/unauthorized', '/api/health']);
 
 export default clerkMiddleware(async (auth, req) => {
   if (!isPublicRoute(req)) {

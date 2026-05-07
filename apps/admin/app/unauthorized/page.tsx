@@ -12,14 +12,19 @@ import { requireSuperadmin } from '@/lib/superadmin';
 export default async function UnauthorizedPage() {
   const result = await requireSuperadmin();
   const signedIn = result.ok || result.reason !== 'unauthenticated';
-  const email = result.ok ? result.email : result.email ?? null;
+  const email = result.ok ? result.email : (result.email ?? null);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 px-6 py-12 text-center">
       <h1 className="text-3xl font-semibold">Not authorized</h1>
       <p className="text-base text-[color:var(--color-muted-fg)]">
         This account is not registered as a Sendero superadmin.
-        {email ? <> Currently signed in as <code>{email}</code>.</> : null}
+        {email ? (
+          <>
+            {' '}
+            Currently signed in as <code>{email}</code>.
+          </>
+        ) : null}
       </p>
       <div className="rounded-lg border bg-[color:var(--color-muted)] px-4 py-3 text-left text-sm">
         <p className="font-medium">If you should have access:</p>
@@ -33,10 +38,7 @@ export default async function UnauthorizedPage() {
         </ol>
       </div>
       <div className="flex gap-3">
-        <Link
-          href="/sign-in"
-          className="rounded-md border px-4 py-2 text-sm font-medium"
-        >
+        <Link href="/sign-in" className="rounded-md border px-4 py-2 text-sm font-medium">
           Try a different account
         </Link>
         {signedIn ? (
