@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { requirePlatformRole } from '@/lib/access';
 import { getArcTreasury } from '@/lib/treasury/provision-arc';
 import { getSolanaTreasury } from '@/lib/treasury/provision-solana';
+import { ArcDeployButton } from './_components/arc-deploy-button';
 import { ArcDeriveButton } from './_components/arc-derive-button';
 import { ArcProvisionForm } from './_components/arc-provision-form';
 import { ProposalList } from './_components/proposal-list';
@@ -159,6 +160,8 @@ function ArcTreasuryCard({
 }) {
   const members = Array.isArray(treasury.members) ? (treasury.members as string[]) : [];
   const isIntent = treasury.status === 'intent';
+  const isPending = treasury.status === 'pending';
+  const isLive = treasury.status === 'live';
   return (
     <Card>
       <CardHeader>
@@ -189,19 +192,36 @@ function ArcTreasuryCard({
         {isIntent ? (
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
             Intent reserved with a placeholder address. Click below to derive the real Circle MSCA
-            counterfactual address. The MSCA deploys lazily on first userOp (Gas Station sponsored).
+            counterfactual address.
           </p>
-        ) : (
+        ) : null}
+        {isPending ? (
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            Counterfactual address derived. The MSCA deploys on the first userOp via Circle&apos;s
-            bundler with Gas Station paymaster sponsorship. Multi-owner weighted multisig install
-            ships via the proposal-execution flow (Phase 7.6.x.y).
+            Counterfactual address derived. Click below to submit the deploy userOp via Circle&apos;s
+            bundler — Gas Station sponsors gas. Multi-owner weighted multisig install ships next
+            (Phase 7.5.x.yy).
           </p>
-        )}
+        ) : null}
+        {isLive ? (
+          <>
+            <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+              MSCA deployed. The Sendero platform EOA is the bootstrap owner. Multi-owner weighted
+              multisig install ships next (Phase 7.5.x.yy) — until then the platform key signs.
+            </p>
+            {treasury.provisioningTxRef ? (
+              <div className="text-[11px]">
+                <span className="text-[color:var(--color-muted-foreground)]">UserOp: </span>
+                <span className="break-all font-mono">{treasury.provisioningTxRef}</span>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </CardContent>
       <CardFooter>
         {isIntent ? (
           <ArcDeriveButton treasuryId={treasury.id} status={treasury.status} />
+        ) : isPending ? (
+          <ArcDeployButton treasuryId={treasury.id} status={treasury.status} />
         ) : (
           <Button variant="outline" disabled className="w-full" title="Phase 7.6">
             Sign / Execute proposals (Phase 7.6)
