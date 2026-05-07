@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { requirePlatformRole } from '@/lib/access';
 import { getArcTreasury } from '@/lib/treasury/provision-arc';
 import { getSolanaTreasury } from '@/lib/treasury/provision-solana';
+import { ArcDeriveButton } from './_components/arc-derive-button';
 import { ArcProvisionForm } from './_components/arc-provision-form';
 import { ProposalList } from './_components/proposal-list';
 import { SolanaProposeForm } from './_components/solana-propose-form';
@@ -187,20 +188,25 @@ function ArcTreasuryCard({
         </dl>
         {isIntent ? (
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            Intent reserved. On-chain MSCA deploy + Circle Gas Station paymaster wiring lands in
-            Phase 7.5.x.
+            Intent reserved with a placeholder address. Click below to derive the real Circle MSCA
+            counterfactual address. The MSCA deploys lazily on first userOp (Gas Station sponsored).
           </p>
-        ) : null}
+        ) : (
+          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+            Counterfactual address derived. The MSCA deploys on the first userOp via Circle&apos;s
+            bundler with Gas Station paymaster sponsorship. Multi-owner weighted multisig install
+            ships via the proposal-execution flow (Phase 7.6.x.y).
+          </p>
+        )}
       </CardContent>
       <CardFooter>
-        <Button
-          variant="outline"
-          disabled
-          className="w-full"
-          title={isIntent ? 'Phase 7.5.x' : 'Phase 7.6'}
-        >
-          {isIntent ? 'Deploy on-chain (Phase 7.5.x)' : 'Sign / Execute proposals (Phase 7.6)'}
-        </Button>
+        {isIntent ? (
+          <ArcDeriveButton treasuryId={treasury.id} status={treasury.status} />
+        ) : (
+          <Button variant="outline" disabled className="w-full" title="Phase 7.6">
+            Sign / Execute proposals (Phase 7.6)
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );
