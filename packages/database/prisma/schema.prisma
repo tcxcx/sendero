@@ -2963,7 +2963,18 @@ model SuperOrgTreasury {
   /// multisig PDA — kept for audit + tooling. Null on EVM.
   createKey           String?
   /// On-chain tx signature/hash that provisioned the multisig.
+  /// On Arc: the deploy userOp hash (Phase 7.5.x.y).
   provisioningTxRef   String?
+  /// Phase 7.5.x.yy — Arc: hash of the userOp that called
+  /// `updateMultisigWeights` to add the form's members + set the
+  /// configured threshold. Null until the multisig install runs.
+  /// Distinct from `provisioningTxRef` (the deploy tx) so the audit
+  /// trail keeps both events.
+  multisigInstallTxRef String?
+  /// Phase 7.5.x.yy — when the multisig was installed. UI uses this
+  /// as the boolean "is multi-owner config complete" rather than
+  /// growing the `status` enum further.
+  multisigInstalledAt DateTime? @db.Timestamptz(6)
   /// 'pending' (provisioning tx submitted, awaiting confirmation) |
   /// 'live' (vault confirmed, ready to use) | 'failed' (terminal).
   status              String    @default("pending")

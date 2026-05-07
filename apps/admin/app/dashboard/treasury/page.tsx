@@ -15,6 +15,7 @@ import { getArcTreasury } from '@/lib/treasury/provision-arc';
 import { getSolanaTreasury } from '@/lib/treasury/provision-solana';
 import { ArcDeployButton } from './_components/arc-deploy-button';
 import { ArcDeriveButton } from './_components/arc-derive-button';
+import { ArcInstallMultisigButton } from './_components/arc-install-multisig-button';
 import { ArcProvisionForm } from './_components/arc-provision-form';
 import { ProposalList } from './_components/proposal-list';
 import { SolanaProposeForm } from './_components/solana-propose-form';
@@ -162,6 +163,7 @@ function ArcTreasuryCard({
   const isIntent = treasury.status === 'intent';
   const isPending = treasury.status === 'pending';
   const isLive = treasury.status === 'live';
+  const multisigInstalled = Boolean(treasury.multisigInstalledAt);
   return (
     <Card>
       <CardHeader>
@@ -205,13 +207,20 @@ function ArcTreasuryCard({
         {isLive ? (
           <>
             <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-              MSCA deployed. The Sendero platform EOA is the bootstrap owner. Multi-owner weighted
-              multisig install ships next (Phase 7.5.x.yy) — until then the platform key signs.
+              {multisigInstalled
+                ? `MSCA deployed and multi-owner weighted multisig installed. ${members.length} member(s) at threshold ${treasury.threshold}; the Sendero platform EOA stays as a recovery signer.`
+                : 'MSCA deployed with the Sendero platform EOA as bootstrap owner. Click below to install the form-configured members + threshold via updateMultisigWeights.'}
             </p>
             {treasury.provisioningTxRef ? (
               <div className="text-[11px]">
-                <span className="text-[color:var(--color-muted-foreground)]">UserOp: </span>
+                <span className="text-[color:var(--color-muted-foreground)]">Deploy: </span>
                 <span className="break-all font-mono">{treasury.provisioningTxRef}</span>
+              </div>
+            ) : null}
+            {treasury.multisigInstallTxRef ? (
+              <div className="text-[11px]">
+                <span className="text-[color:var(--color-muted-foreground)]">Install: </span>
+                <span className="break-all font-mono">{treasury.multisigInstallTxRef}</span>
               </div>
             ) : null}
           </>
@@ -222,6 +231,11 @@ function ArcTreasuryCard({
           <ArcDeriveButton treasuryId={treasury.id} status={treasury.status} />
         ) : isPending ? (
           <ArcDeployButton treasuryId={treasury.id} status={treasury.status} />
+        ) : isLive && !multisigInstalled ? (
+          <ArcInstallMultisigButton
+            treasuryId={treasury.id}
+            alreadyInstalled={multisigInstalled}
+          />
         ) : (
           <Button variant="outline" disabled className="w-full" title="Phase 7.6">
             Sign / Execute proposals (Phase 7.6)
