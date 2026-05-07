@@ -3,15 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Sendero — atomic commission fan-out settlement primitive (canonicalSplit, settleCommissionSplit) on Arc.",
+  "description": "Sendero — atomic commission fan-out settlement primitive (canonicalSplit, settleCommissionSplit) on Arc + Solana.",
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./solana": "./src/solana.ts",
+    "./router": "./src/router.ts"
   },
   "dependencies": {
     "@sendero/env": "workspace:*"
   },
   "peerDependencies": {
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
     "viem": "^2.21.0"
   }
 }
