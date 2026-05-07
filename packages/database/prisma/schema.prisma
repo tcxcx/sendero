@@ -3045,8 +3045,13 @@ model OnchainIdentity {
   kind                  String
   tenantId              String? // populated when kind='org'
   userId                String? // populated when kind='user'
+  /// Phase 5 — chain this identity lives on. A dual-chain tenant has
+  /// two rows (one with `arc`, one with `sol`); `loadMirroredAgentProfile`
+  /// aggregates `cached*` across both. Defaults to `arc` so existing
+  /// rows backfill without a data migration.
+  chain                 ChainKind @default(arc)
   chainId               Int // 5042002 for ARC-TESTNET
-  contract              String // IdentityRegistry address (0x8004A8…)
+  contract              String // IdentityRegistry address (0x8004A8…) on Arc; Agent Registry program id on Sol
   /// uint256 token id from IdentityRegistry — decimal string. Null
   /// while pending; populated from the Transfer event in the mint
   /// receipt.
@@ -3085,12 +3090,14 @@ model OnchainIdentity {
   validations ValidationCheck[]
 
   @@unique([contract, agentId])
-  /// App layer enforces "exactly one identity per (kind, subject)"
-  /// — Postgres partial-unique on these two pairs.
-  @@unique([kind, tenantId])
-  @@unique([kind, userId])
+  /// App layer enforces "exactly one identity per (kind, subject, chain)"
+  /// — Postgres partial-unique on these two pairs. Phase 5 added
+  /// `chain` so a dual-chain tenant can hold one identity per chain.
+  @@unique([kind, tenantId, chain])
+  @@unique([kind, userId, chain])
   @@index([holderAddress])
   @@index([status])
+  @@index([chain])
   @@map("onchain_identities")
 }
 

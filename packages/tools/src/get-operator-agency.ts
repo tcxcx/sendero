@@ -114,8 +114,13 @@ export async function getOperatorAgency(
     };
   }
 
+  // Phase 5: the `(kind, tenantId)` compound unique grew a `chain` leg.
+  // This tool reads the Arc-side identity for now — Phase 5.x's loader
+  // (`loadMirroredReputation`) is the canonical multi-chain read; this
+  // surface is operator-facing and stays Arc-pinned until the Solana
+  // indexer lands.
   const onchain = await prisma.onchainIdentity.findUnique({
-    where: { kind_tenantId: { kind: 'org', tenantId: tenant.id } },
+    where: { kind_tenantId_chain: { kind: 'org', tenantId: tenant.id, chain: 'arc' } },
     select: {
       agentId: true,
       holderAddress: true,
