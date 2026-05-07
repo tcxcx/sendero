@@ -35,6 +35,11 @@ export {
   type StampAgentRegistryAttributesResult,
 } from './stamp-agent-attributes';
 export {
+  registerCoreAgentIdentity,
+  type RegisterIdentityInput,
+  type RegisterIdentityResult,
+} from './register-identity';
+export {
   describeTenantAgentRegistration,
   AGENT_REGISTRY_PROGRAM_ID,
   type RegisterTenantAgentInput,

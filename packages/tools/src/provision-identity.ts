@@ -26,6 +26,7 @@ import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
 import {
   AGENT_REGISTRY_PROGRAM_ID,
   mintCoreAgentIdentity,
+  registerCoreAgentIdentity,
   stampAgentRegistryAttributes,
 } from '@sendero/metaplex';
 import { prisma } from '@sendero/database';
@@ -191,6 +192,22 @@ async function ensureOrgIdentitySolana(args: {
         error: err instanceof Error ? err.message : String(err),
       });
     });
+    // Phase 4.x.y.zzz — backfill formal Agent Registry record on
+    // cached rows. Idempotent: registerCoreAgentIdentity returns
+    // status='already_registered' when the on-chain PDA exists.
+    void registerCoreAgentIdentity({
+      assetAddress: existing.agentId,
+      agentRegistrationUri: existing.metadataUri,
+    }).catch(err => {
+      console.warn(
+        '[ensureOrgIdentitySolana] cached-row registry backfill failed (non-fatal)',
+        {
+          tenantId: args.tenantId,
+          assetAddress: existing.agentId,
+          error: err instanceof Error ? err.message : String(err),
+        }
+      );
+    });
     return {
       status: 'cached',
       identityId: existing.id,
@@ -280,6 +297,25 @@ async function ensureOrgIdentitySolana(args: {
     });
   } catch (err) {
     console.warn('[ensureOrgIdentitySolana] post-mint attribute stamp failed (non-fatal)', {
+      tenantId: args.tenantId,
+      assetAddress: result.assetAddress,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Phase 4.x.y.zzz — formal Agent Registry record submission via
+  // mpl-agent-registry's registerIdentityV1. Creates the on-chain
+  // agent_identity PDA + AgentIdentity plugin (with Transfer/Update/
+  // Execute lifecycle hooks) on the same Core asset. Best-effort
+  // for the same reason — the cached-row backfill retries on
+  // subsequent calls.
+  try {
+    await registerCoreAgentIdentity({
+      assetAddress: result.assetAddress,
+      agentRegistrationUri: metadataUri,
+    });
+  } catch (err) {
+    console.warn('[ensureOrgIdentitySolana] post-mint registry submit failed (non-fatal)', {
       tenantId: args.tenantId,
       assetAddress: result.assetAddress,
       error: err instanceof Error ? err.message : String(err),

@@ -21,13 +21,13 @@
  *     submit; absent → `getUmi` throws so callers fail loud.
  */
 
-import {
-  createSignerFromKeypair,
-  signerIdentity,
-  type Umi,
-} from '@metaplex-foundation/umi';
+import { createSignerFromKeypair, signerIdentity, type Umi } from '@metaplex-foundation/umi';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
+import {
+  mplAgentIdentity,
+  mplAgentTools,
+} from '@metaplex-foundation/mpl-agent-registry';
 import bs58 from 'bs58';
 
 const DEFAULT_RPC = 'https://api.devnet.solana.com';
@@ -45,7 +45,10 @@ export function getUmi(): Umi {
     );
   }
 
-  const umi = createUmi(rpcUrl).use(mplCore());
+  const umi = createUmi(rpcUrl)
+    .use(mplCore())
+    .use(mplAgentIdentity())
+    .use(mplAgentTools());
 
   const keyBytes = bs58.decode(secret);
   const kp = umi.eddsa.createKeypairFromSecretKey(keyBytes);
