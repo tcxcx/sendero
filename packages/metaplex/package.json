@@ -1,0 +1,28 @@
+{
+  "name": "@sendero/metaplex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero — Metaplex helpers: Core trip-stamp NFTs + Agent Registry tenant identity for Solana parity.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./umi": "./src/_umi.ts",
+    "./mint-trip-stamp": "./src/mint-trip-stamp.ts",
+    "./register-tenant-agent": "./src/register-tenant-agent.ts"
+  },
+  "dependencies": {
+    "@sendero/database": "workspace:*",
+    "@sendero/env": "workspace:*"
+  },
+  "peerDependencies": {
+    "@metaplex-foundation/mpl-core": "^1.1.0",
+    "@metaplex-foundation/umi": "^0.9.2",
+    "@metaplex-foundation/umi-bundle-defaults": "^0.9.2",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}
