@@ -140,19 +140,25 @@ export async function ensureOrgIdentity(args: {
 }
 
 /**
- * Phase 4.x — Solana intent path for org identity.
+ * Phase 4.x.y — Solana org identity. Writes an `OnchainIdentity` row
+ * with `chain='sol'`, `status='intent'`, and the tenant's REAL
+ * just-provisioned Solana DCW treasury as `holderAddress`.
  *
- * Solana-primary tenants don't have Arc Circle treasuries (Phase 3
- * gates the Circle provisioning out). Their Solana treasury is a
- * Squads V4 vault provisioned via the admin app (Phase 7.4) once
- * Phase 3.x lands per-tenant Solana wallets. Until then this writes
- * an `OnchainIdentity` row with `status='intent'` so the cross-chain
- * reputation mirror (Phase 5) knows the tenant is ON Solana but not
- * yet registered, and skips it cleanly.
+ * Resolution chain:
+ *   1. CircleWallet (kind='treasury', chain='SOL-DEVNET' | 'SOL') —
+ *      the per-tenant Circle DCW EOA programmatically created via
+ *      `provisionTenantSolanaTreasury` in the Clerk webhook.
+ *   2. Throws if no Solana treasury exists yet — caller must
+ *      provision the wallet first (mirrors the Arc throw shape).
  *
- * `holderAddress` is the Sendero platform Solana pubkey as a
- * placeholder — Phase 4.x.y replaces it with the tenant's Squads
- * vault address and flips status to `pending` → `minted`.
+ * `status='intent'` is intentional. The on-chain Agent Registry
+ * submit via @metaplex-foundation/mpl-agent-identity lands in
+ * Phase 4.x.y.z once that SDK pins to a stable release. Intent
+ * rows let the cross-chain reputation mirror (Phase 5) know the
+ * tenant has a real Solana holder and is awaiting registry submit.
+ *
+ * Re-running after the row exists returns the cached row with
+ * `status='pending'` (mirrors the Arc cached-but-not-minted shape).
  */
 async function ensureOrgIdentitySolanaIntent(args: {
   tenantId: string;
@@ -172,17 +178,30 @@ async function ensureOrgIdentitySolanaIntent(args: {
     };
   }
 
-  // Placeholder pubkey — System program. Phase 4.x.y will resolve
-  // the real Squads V4 vault address once per-tenant Solana wallets
-  // are provisioned.
-  const placeholderHolder = '11111111111111111111111111111112';
+  // Resolve the real holder — the tenant's Solana DCW treasury.
+  const treasury = await prisma.circleWallet.findFirst({
+    where: {
+      tenantId: args.tenantId,
+      kind: 'treasury',
+      chain: { in: ['SOL-DEVNET', 'SOL'] },
+    },
+    select: { address: true, chain: true },
+  });
+  if (!treasury) {
+    throw new Error(
+      `Cannot mint sol org identity for tenant ${args.tenantId} — no treasury CircleWallet on SOL-DEVNET. Provision the wallet first via provisionTenantSolanaTreasury.`
+    );
+  }
+
   const metadataUri = metadataUriFor('org', args.tenantId);
 
-  // Validates inputs + returns a structured intent descriptor. Logs
-  // what the on-chain submit WILL look like; no network call.
+  // Validates inputs + returns a structured intent descriptor. The
+  // describe... helper now sees the real treasury pubkey and
+  // validates it as base58 — catches a corrupt CircleWallet row at
+  // identity-write time rather than at on-chain submit time.
   const intent = describeTenantAgentRegistration({
     tenantId: args.tenantId,
-    treasuryPubkey: placeholderHolder,
+    treasuryPubkey: treasury.address,
     name: args.displayName,
     identityUri: metadataUri,
   });
@@ -195,7 +214,7 @@ async function ensureOrgIdentitySolanaIntent(args: {
       chain: 'sol',
       chainId: SOLANA_CHAIN_ID,
       contract: AGENT_REGISTRY_PROGRAM_ID,
-      holderAddress: placeholderHolder,
+      holderAddress: treasury.address,
       metadataUri: intent.identityUri,
       status: 'intent',
       attemptCount: 0,

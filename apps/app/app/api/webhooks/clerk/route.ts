@@ -27,6 +27,7 @@ import { PLANS, type PlanTier, resolvePlan } from '@sendero/billing/plans';
 import { provisionTenantWallet } from '@sendero/circle';
 import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { provisionTenantSolanaTreasury } from '@sendero/circle/provision-tenant-solana-treasury';
 import type { BillingTier, SubscriptionStatus } from '@sendero/database';
 import { type Prisma, prisma } from '@sendero/database';
 import {
@@ -350,23 +351,39 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     }
   }
 
-  // Phase 3 — primary-chain cascade. Tenants opting into Solana skip
-  // the Arc provisioning blocks entirely; Phase 3.x wires the parallel
-  // Solana path (Squads V4 from Phase 7.4 + Solana DCWs). For now we
-  // log + early-return out of the Arc-specific work so a Solana tenant
-  // doesn't silently end up with a half-provisioned Arc Circle wallet.
+  // Phase 4.x.y — Solana-primary provisioning. Programmatic, mirrors
+  // the Arc path: Circle DCW (EOA on SOL-DEVNET) → ensureOrgIdentity
+  // (which forks on tenant.primaryChain → Phase 4 intent helper that
+  // now resolves the REAL just-provisioned holder address). Failures
+  // bubble; svix retries; the retry-solana-wallet-provision sweeper
+  // covers the long tail.
   if (tenant.primaryChain === 'sol') {
-    console.log('[webhooks/clerk] tenant on Solana — Arc provisioning skipped (Phase 3.x)', {
-      id,
+    const solResult = await provisionTenantSolanaTreasury({
       tenantId: tenant.id,
+      clerkOrgId: id,
     });
+
+    // Identity intent: writes an OnchainIdentity row with chain='sol',
+    // status='intent', and the real Solana DCW as holderAddress. The
+    // real Agent Registry submit lands when @metaplex-foundation/mpl-agent-identity
+    // pins (see provisionTenantSolanaIdentity below in 4.x.y.x).
+    try {
+      await ensureOrgIdentity({ tenantId: tenant.id });
+    } catch (err) {
+      console.warn('[webhooks/clerk] sol org identity intent failed (non-fatal)', {
+        id,
+        tenantId: tenant.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     const client = await clerkClient();
     await client.organizations.updateOrganization(id, {
       publicMetadata: {
         tenantId: tenant.id,
         primaryChain: 'sol',
-        chainGate: 'sol_pending',
-        onboardingComplete: false,
+        solTreasuryAddress: solResult.address,
+        onboardingComplete: true,
       },
     });
     return;

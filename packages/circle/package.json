@@ -23,6 +23,7 @@
     "./sca-deploy": "./src/sca-deploy.ts",
     "./modular-wallets": "./src/modular-wallets.ts",
     "./provision-tenant-wallet": "./src/provision-tenant-wallet.ts",
+    "./provision-tenant-solana-treasury": "./src/provision-tenant-solana-treasury.ts",
     "./sync-wallet-set": "./src/sync-wallet-set.ts"
   },
   "dependencies": {
