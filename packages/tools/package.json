@@ -53,6 +53,7 @@
     "@sendero/kapso": "*",
     "@sendero/langfuse": "*",
     "@sendero/location": "*",
+    "@sendero/metaplex": "*",
     "@sendero/nanopayments": "*",
     "@sendero/notifications": "*",
     "@sendero/ocr": "*",

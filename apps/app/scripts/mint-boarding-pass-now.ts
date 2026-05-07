@@ -33,7 +33,9 @@ const trip = await prisma.trip.findUnique({
 if (!trip?.traveler?.wallets[0]?.address) throw new Error(`No DCW wallet for trip ${tripId}`);
 
 const stamp = await prisma.nftStamp.findUnique({
-  where: { kind_primaryKey: { kind: 'BoardingPass', primaryKey: bookingId } },
+  where: {
+    kind_primaryKey_chain: { kind: 'BoardingPass', primaryKey: bookingId, chain: 'arc' },
+  },
 });
 if (!stamp) throw new Error(`No NftStamp row for bookingId ${bookingId}`);
 if (stamp.status === 'minted') {

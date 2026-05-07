@@ -2759,6 +2759,11 @@ model NftStamp {
   tripId     String?
   bookingId  String?
   travelerId String?
+  /// Phase 4.x — chain this stamp lives on. `arc` writes to the
+  /// SenderoStamps ERC-1155 contract via thirdweb; `sol` mints a
+  /// Metaplex Core asset via @sendero/metaplex. Defaults to `arc`
+  /// so existing rows backfill without a data migration.
+  chain      ChainKind @default(arc)
   /// One of: BoardingPass | SettlementReceipt | ItineraryMap | TripPassport
   /// | StayCheckIn | TripCompletion
   kind       String
@@ -2799,12 +2804,15 @@ model NftStamp {
   traveler   User?               @relation("StampTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
   ownerships NftStampOwnership[]
 
-  @@unique([kind, primaryKey])
+  /// Phase 4.x widened idempotency to include chain so a tenant on
+  /// both chains can mint distinct stamps for the same domain key.
+  @@unique([kind, primaryKey, chain])
   @@unique([contract, tokenId])
   @@index([tenantId, mintedAt])
   @@index([travelerId, mintedAt])
   @@index([tripId])
   @@index([status])
+  @@index([chain])
   @@map("nft_stamps")
 }
 

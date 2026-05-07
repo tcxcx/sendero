@@ -23,10 +23,18 @@
  */
 
 import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
+import {
+  AGENT_REGISTRY_PROGRAM_ID,
+  describeTenantAgentRegistration,
+} from '@sendero/metaplex';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
+/// Phase 4.x — sentinel chainId for Solana rows. Solana has no
+/// numeric chainId; we use 0 as a marker rather than overloading
+/// 5042002. The `chain` enum is the authoritative discriminator.
+const SOLANA_CHAIN_ID = 0;
 
 /// After this many consecutive failed mint attempts, the sweeper resets
 /// the row back to a fresh pending attempt. 12 attempts × 5min cron =
@@ -70,8 +78,27 @@ export async function ensureOrgIdentity(args: {
 }): Promise<ProvisionIdentityResult> {
   const { tenantId } = args;
 
+  // Phase 4.x — read tenant.primaryChain to decide which registry
+  // to register against. Arc → ERC-8004 IdentityRegistry (existing
+  // path). Sol → Metaplex Agent Registry (intent-only in v1; real
+  // submit lands when the @metaplex-foundation/mpl-agent-identity
+  // SDK pins to a stable release).
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { primaryChain: true, displayName: true },
+  });
+  if (!tenant) {
+    throw new Error(`Cannot mint org identity — no Tenant row for id ${tenantId}`);
+  }
+  if (tenant.primaryChain === 'sol') {
+    return ensureOrgIdentitySolanaIntent({
+      tenantId,
+      displayName: tenant.displayName ?? `Tenant ${tenantId}`,
+    });
+  }
+
   const existing = await prisma.onchainIdentity.findFirst({
-    where: { kind: 'org', tenantId },
+    where: { kind: 'org', tenantId, chain: 'arc' },
   });
   if (existing && existing.status === 'minted' && existing.agentId) {
     return {
@@ -110,6 +137,80 @@ export async function ensureOrgIdentity(args: {
     metadataUri,
     existingId: existing?.id ?? null,
   });
+}
+
+/**
+ * Phase 4.x — Solana intent path for org identity.
+ *
+ * Solana-primary tenants don't have Arc Circle treasuries (Phase 3
+ * gates the Circle provisioning out). Their Solana treasury is a
+ * Squads V4 vault provisioned via the admin app (Phase 7.4) once
+ * Phase 3.x lands per-tenant Solana wallets. Until then this writes
+ * an `OnchainIdentity` row with `status='intent'` so the cross-chain
+ * reputation mirror (Phase 5) knows the tenant is ON Solana but not
+ * yet registered, and skips it cleanly.
+ *
+ * `holderAddress` is the Sendero platform Solana pubkey as a
+ * placeholder — Phase 4.x.y replaces it with the tenant's Squads
+ * vault address and flips status to `pending` → `minted`.
+ */
+async function ensureOrgIdentitySolanaIntent(args: {
+  tenantId: string;
+  displayName: string;
+}): Promise<ProvisionIdentityResult> {
+  const existing = await prisma.onchainIdentity.findFirst({
+    where: { kind: 'org', tenantId: args.tenantId, chain: 'sol' },
+  });
+  if (existing) {
+    return {
+      status: existing.status === 'minted' ? 'cached' : 'pending',
+      identityId: existing.id,
+      agentId: existing.agentId,
+      contract: existing.contract,
+      holderAddress: existing.holderAddress,
+      txHash: existing.mintTxHash,
+    };
+  }
+
+  // Placeholder pubkey — System program. Phase 4.x.y will resolve
+  // the real Squads V4 vault address once per-tenant Solana wallets
+  // are provisioned.
+  const placeholderHolder = '11111111111111111111111111111112';
+  const metadataUri = metadataUriFor('org', args.tenantId);
+
+  // Validates inputs + returns a structured intent descriptor. Logs
+  // what the on-chain submit WILL look like; no network call.
+  const intent = describeTenantAgentRegistration({
+    tenantId: args.tenantId,
+    treasuryPubkey: placeholderHolder,
+    name: args.displayName,
+    identityUri: metadataUri,
+  });
+
+  const row = await prisma.onchainIdentity.create({
+    data: {
+      kind: 'org',
+      tenantId: args.tenantId,
+      userId: null,
+      chain: 'sol',
+      chainId: SOLANA_CHAIN_ID,
+      contract: AGENT_REGISTRY_PROGRAM_ID,
+      holderAddress: placeholderHolder,
+      metadataUri: intent.identityUri,
+      status: 'intent',
+      attemptCount: 0,
+      lastAttemptAt: new Date(),
+    },
+  });
+
+  return {
+    status: 'pending',
+    identityId: row.id,
+    agentId: null,
+    contract: row.contract,
+    holderAddress: row.holderAddress,
+    txHash: null,
+  };
 }
 
 /**
