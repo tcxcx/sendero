@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./umi": "./src/_umi.ts",
     "./mint-trip-stamp": "./src/mint-trip-stamp.ts",
+    "./mint-agent-identity": "./src/mint-agent-identity.ts",
     "./register-tenant-agent": "./src/register-tenant-agent.ts"
   },
   "dependencies": {

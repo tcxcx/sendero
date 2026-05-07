@@ -25,7 +25,7 @@
 import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
 import {
   AGENT_REGISTRY_PROGRAM_ID,
-  describeTenantAgentRegistration,
+  mintCoreAgentIdentity,
 } from '@sendero/metaplex';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
@@ -91,7 +91,7 @@ export async function ensureOrgIdentity(args: {
     throw new Error(`Cannot mint org identity — no Tenant row for id ${tenantId}`);
   }
   if (tenant.primaryChain === 'sol') {
-    return ensureOrgIdentitySolanaIntent({
+    return ensureOrgIdentitySolana({
       tenantId,
       displayName: tenant.displayName ?? `Tenant ${tenantId}`,
     });
@@ -140,36 +140,42 @@ export async function ensureOrgIdentity(args: {
 }
 
 /**
- * Phase 4.x.y — Solana org identity. Writes an `OnchainIdentity` row
- * with `chain='sol'`, `status='intent'`, and the tenant's REAL
- * just-provisioned Solana DCW treasury as `holderAddress`.
+ * Phase 4.x.y.z — REAL Solana org identity mint. Replaces the
+ * intent-only path from Phase 4 / 4.x / 4.x.y.
  *
- * Resolution chain:
- *   1. CircleWallet (kind='treasury', chain='SOL-DEVNET' | 'SOL') —
- *      the per-tenant Circle DCW EOA programmatically created via
- *      `provisionTenantSolanaTreasury` in the Clerk webhook.
- *   2. Throws if no Solana treasury exists yet — caller must
- *      provision the wallet first (mirrors the Arc throw shape).
+ * Flow (mirrors the Arc `mintAndPersist` shape):
+ *   1. Resolve the holder — the tenant's Solana DCW treasury
+ *      (provisioned in Phase 4.x.y).
+ *   2. Upsert an `OnchainIdentity` row with `status='pending'` so
+ *      a crash mid-mint can be reasoned about. (kind, tenantId,
+ *      chain) UNIQUE prevents concurrent provisioners.
+ *   3. Submit a Metaplex Core asset mint via `mintCoreAgentIdentity`
+ *      from @sendero/metaplex. Asset address = canonical agent
+ *      identity reference; persisted as `agentId`.
+ *   4. On success: status → 'minted', agentId = assetAddress,
+ *      mintTxHash = signature.
+ *   5. On failure: row stays `pending` with `lastError` bumped;
+ *      the existing sweepPendingIdentities cron retries.
  *
- * `status='intent'` is intentional. The on-chain Agent Registry
- * submit via @metaplex-foundation/mpl-agent-identity lands in
- * Phase 4.x.y.z once that SDK pins to a stable release. Intent
- * rows let the cross-chain reputation mirror (Phase 5) know the
- * tenant has a real Solana holder and is awaiting registry submit.
- *
- * Re-running after the row exists returns the cached row with
- * `status='pending'` (mirrors the Arc cached-but-not-minted shape).
+ * Why Core asset = agent identity:
+ *   - Per the Metaplex skill, every Core asset has a built-in
+ *     wallet (Asset Signer PDA) via Core's Execute hook. The Agent
+ *     Registry program adds a discoverability + delegation layer
+ *     ON TOP, but the asset itself IS the identity reference.
+ *   - When @metaplex-foundation/mpl-agent-identity pins to a stable
+ *     release, Phase 4.x.y.zz adds the registry record submit
+ *     against this same asset — no re-mint needed.
  */
-async function ensureOrgIdentitySolanaIntent(args: {
+async function ensureOrgIdentitySolana(args: {
   tenantId: string;
   displayName: string;
 }): Promise<ProvisionIdentityResult> {
   const existing = await prisma.onchainIdentity.findFirst({
     where: { kind: 'org', tenantId: args.tenantId, chain: 'sol' },
   });
-  if (existing) {
+  if (existing && existing.status === 'minted' && existing.agentId) {
     return {
-      status: existing.status === 'minted' ? 'cached' : 'pending',
+      status: 'cached',
       identityId: existing.id,
       agentId: existing.agentId,
       contract: existing.contract,
@@ -195,40 +201,72 @@ async function ensureOrgIdentitySolanaIntent(args: {
 
   const metadataUri = metadataUriFor('org', args.tenantId);
 
-  // Validates inputs + returns a structured intent descriptor. The
-  // describe... helper now sees the real treasury pubkey and
-  // validates it as base58 — catches a corrupt CircleWallet row at
-  // identity-write time rather than at on-chain submit time.
-  const intent = describeTenantAgentRegistration({
-    tenantId: args.tenantId,
-    treasuryPubkey: treasury.address,
-    name: args.displayName,
-    identityUri: metadataUri,
-  });
+  // Pending row — written before the mint so a mid-flight crash
+  // leaves an auditable trail. Reuse an existing intent / pending /
+  // failed row when present (the sweeper sets pending after retry).
+  const pending = existing
+    ? await prisma.onchainIdentity.update({
+        where: { id: existing.id },
+        data: {
+          attemptCount: { increment: 1 },
+          lastAttemptAt: new Date(),
+          status: 'pending',
+          // Refresh in case the treasury was re-provisioned.
+          holderAddress: treasury.address,
+          metadataUri,
+        },
+      })
+    : await prisma.onchainIdentity.create({
+        data: {
+          kind: 'org',
+          tenantId: args.tenantId,
+          userId: null,
+          chain: 'sol',
+          chainId: SOLANA_CHAIN_ID,
+          contract: AGENT_REGISTRY_PROGRAM_ID,
+          holderAddress: treasury.address,
+          metadataUri,
+          status: 'pending',
+          attemptCount: 1,
+          lastAttemptAt: new Date(),
+        },
+      });
 
-  const row = await prisma.onchainIdentity.create({
-    data: {
-      kind: 'org',
+  let result: { assetAddress: string; signature: string };
+  try {
+    result = await mintCoreAgentIdentity({
       tenantId: args.tenantId,
-      userId: null,
-      chain: 'sol',
-      chainId: SOLANA_CHAIN_ID,
-      contract: AGENT_REGISTRY_PROGRAM_ID,
-      holderAddress: treasury.address,
-      metadataUri: intent.identityUri,
-      status: 'intent',
-      attemptCount: 0,
-      lastAttemptAt: new Date(),
+      name: args.displayName,
+      ownerPubkey: treasury.address,
+      identityUri: metadataUri,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown_mint_error';
+    await prisma.onchainIdentity.update({
+      where: { id: pending.id },
+      data: { lastError: message.slice(0, 500) },
+    });
+    throw err;
+  }
+
+  const minted = await prisma.onchainIdentity.update({
+    where: { id: pending.id },
+    data: {
+      status: 'minted',
+      agentId: result.assetAddress,
+      mintTxHash: result.signature,
+      mintedAt: new Date(),
+      lastError: null,
     },
   });
 
   return {
-    status: 'pending',
-    identityId: row.id,
-    agentId: null,
-    contract: row.contract,
-    holderAddress: row.holderAddress,
-    txHash: null,
+    status: 'minted',
+    identityId: minted.id,
+    agentId: minted.agentId,
+    contract: minted.contract,
+    holderAddress: minted.holderAddress,
+    txHash: minted.mintTxHash,
   };
 }
 
