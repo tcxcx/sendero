@@ -20,7 +20,7 @@ import { buildAndSettleBatch, retrySettlingBatches } from '@sendero/billing/batc
 import { prisma } from '@sendero/database';
 import { fireBatchFailedAlert } from '@sendero/slack';
 
-import { makeBatchStore, makeSettleFn } from '@/lib/nanopay-settle';
+import { arcSettleEligibleTenantIds, makeBatchStore, makeSettleFn } from '@/lib/nanopay-settle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -75,10 +75,24 @@ export async function GET(req: NextRequest) {
     take: 500,
   });
 
+  // Phase 6.x — exclude Solana-primary tenants. Their per-tenant
+  // Solana wallets don't yet exist (Phase 3.x), so the Arc Gateway
+  // settle path cannot draw from them. Phase 6.x.y wires the
+  // Solana settle path via makeSolanaSettleFn + transferUSDCByChain.
+  const candidateIds = tenants
+    .map(t => t.tenantId)
+    .filter((id): id is string => Boolean(id));
+  const eligibleSet = await arcSettleEligibleTenantIds(candidateIds);
+
   const results: Array<{ tenantId: string; outcome: string; batchId?: string; txHash?: string }> =
     [];
+  let solanaSkipped = 0;
   for (const { tenantId } of tenants) {
     if (!tenantId) continue;
+    if (!eligibleSet.has(tenantId)) {
+      solanaSkipped++;
+      continue;
+    }
     const result = await buildAndSettleBatch(store, settle, { tenantId });
     if (result.status === 'empty') {
       results.push({ tenantId, outcome: 'empty' });
@@ -127,5 +141,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ran: tenants.length, results });
+  return NextResponse.json({ ran: tenants.length, solanaSkipped, results });
 }
