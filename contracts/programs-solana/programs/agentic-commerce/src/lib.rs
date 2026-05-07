@@ -465,7 +465,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + Config::INIT_SPACE,
+        space = Config::DISCRIMINATOR.len() + Config::INIT_SPACE,
         seeds = [CONFIG_SEED],
         bump
     )]
@@ -483,7 +483,7 @@ pub struct CreateJob<'info> {
     #[account(
         init,
         payer = client,
-        space = 8 + Job::INIT_SPACE,
+        space = Job::DISCRIMINATOR.len() + Job::INIT_SPACE,
         seeds = [JOB_SEED, &job_id.to_le_bytes()],
         bump
     )]

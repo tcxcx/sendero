@@ -332,6 +332,16 @@ pub mod sendero_guest_escrow {
         );
         require!(duffel_order_ref != [0u8; 32], GuestEscrowError::ZeroValue);
 
+        // Defense-in-depth: vendor_token_account and operator_token_account
+        // must NOT be the same account. If they were, the second SPL
+        // transfer would over-credit the same account and the
+        // bookkeeping math (settle_amount split into vendor + fee)
+        // would silently lose track of the fee leg's destination.
+        require!(
+            ctx.accounts.vendor_token_account.key() != ctx.accounts.operator_token_account.key(),
+            GuestEscrowError::DuplicateTokenAccount
+        );
+
         let booking = &ctx.accounts.booking;
         require!(
             booking.status == BookingStatus::Committed,
@@ -678,7 +688,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + Config::INIT_SPACE,
+        space = Config::DISCRIMINATOR.len() + Config::INIT_SPACE,
         seeds = [CONFIG_SEED],
         bump
     )]
@@ -696,7 +706,7 @@ pub struct PreFundTrip<'info> {
     #[account(
         init,
         payer = buyer,
-        space = 8 + Trip::INIT_SPACE,
+        space = Trip::DISCRIMINATOR.len() + Trip::INIT_SPACE,
         seeds = [TRIP_SEED, &trip_id],
         bump
     )]
@@ -748,7 +758,7 @@ pub struct ReserveBooking<'info> {
     #[account(
         init,
         payer = operator,
-        space = 8 + Booking::INIT_SPACE,
+        space = Booking::DISCRIMINATOR.len() + Booking::INIT_SPACE,
         seeds = [BOOKING_SEED, &booking_id],
         bump
     )]
@@ -970,6 +980,8 @@ pub enum GuestEscrowError {
     ZeroValue,
     #[msg("Program is paused")]
     Paused,
+    #[msg("vendor and operator token accounts must differ — duplicate would lose the fee leg")]
+    DuplicateTokenAccount,
 }
 
 // ──────────────────── Events ────────────────────
