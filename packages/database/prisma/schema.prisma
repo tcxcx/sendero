@@ -266,6 +266,21 @@ enum UserSource {
   guest
 }
 
+/// Blockchain operating mode for a tenant. Set at org creation time
+/// and cascades through wallet provisioning, NFT mint paths, escrow
+/// contract selection, and x402 signature scheme.
+///
+/// Phase 1 supports `arc` (Arc Testnet today, Arc mainnet at GA) and
+/// `sol` (Solana Devnet today, Mainnet at GA). The existing
+/// `CircleWallet.chain` String column carries the per-wallet chain
+/// after provisioning — this enum is the per-tenant DEFAULT that drives
+/// it. Multi-chain tenants (rare, enterprise-only) override per-wallet
+/// via the `TenantGatewaySigner` config.
+enum ChainKind {
+  arc
+  sol
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TENANCY
 // ─────────────────────────────────────────────────────────────────────────────
@@ -299,6 +314,21 @@ model Tenant {
   /// (consumer mode is the bigger bet). Per-trip override lives on
   /// `Trip.paymentMode`.
   defaultPaymentMode TripPaymentMode @default(traveler)
+
+  /// Source-of-truth blockchain for this tenant. Drives:
+  /// - new CircleWallet provisioning chain
+  /// - per-traveler Wallet rows for travelers booking with this agency
+  /// - OnchainIdentity contract resolution (Arc → ERC-8004 IdentityRegistry,
+  ///   Solana → Metaplex Agent Registry)
+  /// - Trip stamp NFT minting path (Arc → SenderoStamps thirdweb,
+  ///   Solana → Metaplex Core)
+  /// - escrow contract (Arc → AgenticCommerce.sol + SenderoGuestEscrow.sol,
+  ///   Solana → agentic_commerce + sendero_guest_escrow Anchor programs)
+  /// - x402 signature scheme (Arc → secp256k1, Solana → Ed25519)
+  /// Existing tenants backfill to `arc` to preserve current behavior.
+  /// Set at tenant creation; immutable afterwards (cross-chain migrate
+  /// would require draining wallets + re-minting NFTs).
+  primaryChain ChainKind @default(arc)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
