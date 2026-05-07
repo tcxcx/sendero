@@ -1,0 +1,22 @@
+[package]
+name = "agentic-commerce"
+version = "0.1.0"
+description = "Solana port of ERC-8183 AgenticCommerce — Job escrow with USDC SPL settlement"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "agentic_commerce"
+
+[features]
+default = []
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = "0.31.1"
