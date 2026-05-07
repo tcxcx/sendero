@@ -1,11 +1,15 @@
 import { redirect } from 'next/navigation';
 
-import { requireSuperadmin } from '@/lib/superadmin';
+import { pickHomeRoute } from '@/lib/access';
 
+/**
+ * Root redirect. Lands the caller on the highest-priority home for
+ * their roles per `HOME_BY_ROLE`. Middleware has already enforced
+ * "is signed in and has at least one platform role"; this just picks
+ * the destination.
+ */
 export default async function RootPage() {
-  const result = await requireSuperadmin();
-  if (!result.ok) {
-    redirect(result.reason === 'unauthenticated' ? '/sign-in' : '/unauthorized');
-  }
-  redirect('/dashboard/treasury');
+  const home = await pickHomeRoute();
+  if (home === null) redirect('/unauthorized');
+  redirect(home);
 }

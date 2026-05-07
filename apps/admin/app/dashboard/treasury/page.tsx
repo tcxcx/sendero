@@ -1,17 +1,22 @@
+import { redirect } from 'next/navigation';
+
+import { requirePlatformRole } from '@/lib/access';
+
 /**
- * Treasury landing — Phase 7.0 stub.
+ * Treasury landing — Phase 7.0 stub. **Superadmin only** at the
+ * page-level guard; the layout already filtered the sidebar entry,
+ * but middleware bypass via header (CVE-2025-29927) means we
+ * re-check here. Defense-in-depth.
  *
- * Two cards, one per chain. Each card surfaces the multisig provisioning
- * state. Phase 7.2 wires Squads V4 (Solana). Phase 7.3 wires Circle
- * Modular Wallets (Arc/EVM).
- *
- * Both treasuries serve the same logical role: receive platform fees,
- * fund payouts, authorize contract upgrades. Choice of multisig per
- * chain is driven by what's idiomatic on that chain — Squads on
- * Solana, Modular Wallets on EVM. We never bridge a multisig.
+ * Two cards, one per chain. Each card surfaces the multisig
+ * provisioning state. Phase 7.4 wires Squads V4 (Solana). Phase 7.5
+ * wires Circle Modular Wallets MSCA (Arc/EVM).
  */
 
-export default function TreasuryPage() {
+export default async function TreasuryPage() {
+  const guard = await requirePlatformRole(['superadmin']);
+  if (!guard.ok) redirect('/unauthorized');
+
   return (
     <div className="space-y-6">
       <div>
@@ -26,21 +31,22 @@ export default function TreasuryPage() {
           chain="Solana"
           chainHint="SOL-DEV"
           multisigStandard="Squads V4"
-          phase="7.2"
+          phase="7.4"
           description="Owns Anchor program upgrade authority + Sendero Solana treasury USDC + agent NFT custody."
         />
         <TreasuryCard
           chain="Arc"
           chainHint="ARC-TESTNET"
           multisigStandard="Circle Modular Wallets MSCA"
-          phase="7.3"
+          phase="7.5"
           description="Owns SenderoGuestEscrow + AgenticCommerce upgrade roles + Arc treasury USDC + Sendero canonical agent NFT."
         />
       </div>
 
       <p className="text-xs text-[color:var(--color-muted-fg)]">
-        Phase 7.0 is auth + scaffold only. Multisig SDKs land in 7.2 (Solana) and
-        7.3 (Arc). See <code>docs/specs/sendero-admin-app.md</code> for the rollout.
+        Phase 7.0 is auth + scaffold only. Multisig SDKs land in 7.4 (Solana) and
+        7.5 (Arc). See <code>docs/specs/sendero-admin-app.md</code> for the
+        rollout.
       </p>
     </div>
   );
@@ -61,7 +67,9 @@ function TreasuryCard(props: {
           {props.chainHint}
         </span>
       </header>
-      <p className="text-sm text-[color:var(--color-muted-fg)]">{props.description}</p>
+      <p className="text-sm text-[color:var(--color-muted-fg)]">
+        {props.description}
+      </p>
 
       <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
         <dt className="text-[color:var(--color-muted-fg)]">Standard</dt>
