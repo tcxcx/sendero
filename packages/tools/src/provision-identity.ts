@@ -26,6 +26,7 @@ import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
 import {
   AGENT_REGISTRY_PROGRAM_ID,
   mintCoreAgentIdentity,
+  stampAgentRegistryAttributes,
 } from '@sendero/metaplex';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
@@ -174,6 +175,22 @@ async function ensureOrgIdentitySolana(args: {
     where: { kind: 'org', tenantId: args.tenantId, chain: 'sol' },
   });
   if (existing && existing.status === 'minted' && existing.agentId) {
+    // Phase 4.x.y.zz — backfill attributes on rows that were minted
+    // in 4.x.y.z (Core asset only). Idempotent: skips if already
+    // stamped on-chain. Best-effort; non-fatal so the cached path
+    // doesn't degrade if the stamp call fails.
+    void stampAgentRegistryAttributes({
+      assetAddress: existing.agentId,
+      tenantId: args.tenantId,
+      name: args.displayName,
+      metadataUri: existing.metadataUri,
+    }).catch(err => {
+      console.warn('[ensureOrgIdentitySolana] cached-row attribute backfill failed (non-fatal)', {
+        tenantId: args.tenantId,
+        assetAddress: existing.agentId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
     return {
       status: 'cached',
       identityId: existing.id,
@@ -247,6 +264,26 @@ async function ensureOrgIdentitySolana(args: {
       data: { lastError: message.slice(0, 500) },
     });
     throw err;
+  }
+
+  // Phase 4.x.y.zz — stamp Agent Registry attributes on the freshly-
+  // minted Core asset. Best-effort: a stamp failure does NOT block the
+  // mint from being recorded. The backfill path on the cached branch
+  // (above) re-attempts the stamp on subsequent ensureOrgIdentity
+  // calls — so a transient RPC failure here just gets retried later.
+  try {
+    await stampAgentRegistryAttributes({
+      assetAddress: result.assetAddress,
+      tenantId: args.tenantId,
+      name: args.displayName,
+      metadataUri,
+    });
+  } catch (err) {
+    console.warn('[ensureOrgIdentitySolana] post-mint attribute stamp failed (non-fatal)', {
+      tenantId: args.tenantId,
+      assetAddress: result.assetAddress,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const minted = await prisma.onchainIdentity.update({

@@ -30,6 +30,11 @@ export {
   type MintAgentIdentityResult,
 } from './mint-agent-identity';
 export {
+  stampAgentRegistryAttributes,
+  type StampAgentRegistryAttributesInput,
+  type StampAgentRegistryAttributesResult,
+} from './stamp-agent-attributes';
+export {
   describeTenantAgentRegistration,
   AGENT_REGISTRY_PROGRAM_ID,
   type RegisterTenantAgentInput,
