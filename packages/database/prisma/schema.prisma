@@ -2975,6 +2975,13 @@ model SuperOrgTreasury {
   /// as the boolean "is multi-owner config complete" rather than
   /// growing the `status` enum further.
   multisigInstalledAt DateTime? @db.Timestamptz(6)
+  /// Phase 7.5.x.yy.y — when the platform recovery owner was removed
+  /// (set to weight=0 via a follow-up updateMultisigWeights). Null
+  /// means the platform EOA is still a recovery signer; non-null
+  /// means the multisig is in full tenant self-custody.
+  platformOwnerRemovedAt DateTime? @db.Timestamptz(6)
+  /// Phase 7.5.x.yy.y — userOp hash of the platform-removal tx.
+  platformOwnerRemovalTxRef String?
   /// 'pending' (provisioning tx submitted, awaiting confirmation) |
   /// 'live' (vault confirmed, ready to use) | 'failed' (terminal).
   status              String    @default("pending")

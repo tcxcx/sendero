@@ -17,6 +17,7 @@ import { ArcDeployButton } from './_components/arc-deploy-button';
 import { ArcDeriveButton } from './_components/arc-derive-button';
 import { ArcInstallMultisigButton } from './_components/arc-install-multisig-button';
 import { ArcProvisionForm } from './_components/arc-provision-form';
+import { ArcRemovePlatformButton } from './_components/arc-remove-platform-button';
 import { ProposalList } from './_components/proposal-list';
 import { SolanaProposeForm } from './_components/solana-propose-form';
 import { SolanaProvisionForm } from './_components/solana-provision-form';
@@ -164,6 +165,7 @@ function ArcTreasuryCard({
   const isPending = treasury.status === 'pending';
   const isLive = treasury.status === 'live';
   const multisigInstalled = Boolean(treasury.multisigInstalledAt);
+  const platformOwnerRemoved = Boolean(treasury.platformOwnerRemovedAt);
   return (
     <Card>
       <CardHeader>
@@ -207,9 +209,11 @@ function ArcTreasuryCard({
         {isLive ? (
           <>
             <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-              {multisigInstalled
-                ? `MSCA deployed and multi-owner weighted multisig installed. ${members.length} member(s) at threshold ${treasury.threshold}; the Sendero platform EOA stays as a recovery signer.`
-                : 'MSCA deployed with the Sendero platform EOA as bootstrap owner. Click below to install the form-configured members + threshold via updateMultisigWeights.'}
+              {!multisigInstalled
+                ? 'MSCA deployed with the Sendero platform EOA as bootstrap owner. Click below to install the form-configured members + threshold via updateMultisigWeights.'
+                : platformOwnerRemoved
+                  ? `MSCA in full self-custody. ${members.length} member(s) at threshold ${treasury.threshold}; the Sendero platform recovery signer was removed.`
+                  : `MSCA deployed and multi-owner weighted multisig installed. ${members.length} member(s) at threshold ${treasury.threshold}; the Sendero platform EOA stays as a recovery signer (remove below for full self-custody).`}
             </p>
             {treasury.provisioningTxRef ? (
               <div className="text-[11px]">
@@ -221,6 +225,14 @@ function ArcTreasuryCard({
               <div className="text-[11px]">
                 <span className="text-[color:var(--color-muted-foreground)]">Install: </span>
                 <span className="break-all font-mono">{treasury.multisigInstallTxRef}</span>
+              </div>
+            ) : null}
+            {treasury.platformOwnerRemovalTxRef ? (
+              <div className="text-[11px]">
+                <span className="text-[color:var(--color-muted-foreground)]">
+                  Self-custody:{' '}
+                </span>
+                <span className="break-all font-mono">{treasury.platformOwnerRemovalTxRef}</span>
               </div>
             ) : null}
           </>
@@ -236,6 +248,16 @@ function ArcTreasuryCard({
             treasuryId={treasury.id}
             alreadyInstalled={multisigInstalled}
           />
+        ) : isLive && multisigInstalled && !platformOwnerRemoved ? (
+          <div className="flex flex-col gap-2 w-full">
+            <ArcRemovePlatformButton
+              treasuryId={treasury.id}
+              alreadyRemoved={platformOwnerRemoved}
+            />
+            <Button variant="outline" disabled className="w-full" title="Phase 7.6">
+              Sign / Execute proposals (Phase 7.6)
+            </Button>
+          </div>
         ) : (
           <Button variant="outline" disabled className="w-full" title="Phase 7.6">
             Sign / Execute proposals (Phase 7.6)
