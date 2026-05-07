@@ -105,16 +105,18 @@ function SolanaTreasuryCard({
         <Separator />
         <div className="space-y-2">
           <h3 className="text-sm font-medium">Proposals</h3>
-          <ProposalList treasuryId={treasury.id} />
+          <ProposalList
+            treasuryId={treasury.id}
+            multisigAddress={treasury.multisigAddress}
+          />
         </div>
 
         <SolanaProposeForm treasuryId={treasury.id} />
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2">
         <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-          Phase 7.6 ships propose + list. Approve / execute via Solana wallet
-          adapter lands in Phase 7.6.x — until then the multisig threshold
-          stays at the proposal-create stage.
+          Vote / execute via your connected Solana wallet (Phase 7.6.x). Status
+          pills above mirror the on-chain proposal PDA after each tx confirms.
         </p>
       </CardFooter>
     </Card>

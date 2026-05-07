@@ -2,12 +2,21 @@ import { ExternalLink } from 'lucide-react';
 
 import { listTreasuryProposals } from '@/lib/treasury/propose-solana';
 
+import { ProposalActions } from './proposal-actions';
+
 /**
  * Server Component — renders the list of TreasuryProposal rows for a
- * given treasury, newest first. No mutations here; vote/execute UI
- * ships in Phase 7.6.x.
+ * given treasury, newest first. Each row mounts <ProposalActions />
+ * (Phase 7.6.x) which surfaces Approve / Reject / Execute buttons
+ * gated by the row's status + the connected wallet.
  */
-export async function ProposalList({ treasuryId }: { treasuryId: string }) {
+export async function ProposalList({
+  treasuryId,
+  multisigAddress,
+}: {
+  treasuryId: string;
+  multisigAddress: string;
+}) {
   const rows = await listTreasuryProposals(treasuryId);
   if (rows.length === 0) {
     return (
@@ -51,19 +60,36 @@ export async function ProposalList({ treasuryId }: { treasuryId: string }) {
                 memo: {payload.memo}
               </div>
             ) : null}
-            {row.proposalTxRef ? (
-              <div className="mt-1.5">
+            <div className="mt-1.5 flex items-center gap-3 text-[11px]">
+              {row.proposalTxRef ? (
                 <a
                   href={`https://explorer.solana.com/tx/${row.proposalTxRef}?cluster=devnet`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] underline"
+                  className="inline-flex items-center gap-1 underline"
                 >
                   Proposal tx
                   <ExternalLink className="h-3 w-3" />
                 </a>
-              </div>
-            ) : null}
+              ) : null}
+              {row.executedTxRef ? (
+                <a
+                  href={`https://explorer.solana.com/tx/${row.executedTxRef}?cluster=devnet`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 underline"
+                >
+                  Execution tx
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : null}
+            </div>
+            <ProposalActions
+              proposalId={row.id}
+              multisigAddress={multisigAddress}
+              txIndex={row.txIndex}
+              status={row.status}
+            />
           </li>
         );
       })}
