@@ -43,7 +43,7 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
-use anchor_spl::token::{Mint, Token, TokenAccount};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 declare_id!("4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9");
 
@@ -189,42 +189,266 @@ pub mod agentic_commerce {
         Ok(())
     }
 
-    // Bodies below land in the sibling commit. Stub returns Ok(()) so
-    // the program builds clean and the PDA shape is callable from the
-    // TS test client — those calls just won't move state until the
-    // bodies are filled.
+    /// Client funds the escrow vault. Status `Open → Funded`. Solidity
+    /// uses `safeTransferFrom`; here we use `token::transfer` with the
+    /// client as the signer authority. The vault TokenAccount is
+    /// created lazily by the `init` constraint on FundJob.
+    pub fn fund(ctx: Context<FundJob>, _job_id: u64) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let job = &ctx.accounts.job;
+        require!(job.status == JobStatus::Open, AgenticCommerceError::WrongStatus);
+        require!(
+            job.client == ctx.accounts.client.key(),
+            AgenticCommerceError::Unauthorized
+        );
+        require!(
+            job.provider != Pubkey::default(),
+            AgenticCommerceError::ProviderNotSet
+        );
+        require!(now < job.expired_at, AgenticCommerceError::WrongStatus);
+        require!(job.has_budget, AgenticCommerceError::ZeroBudget);
 
-    pub fn fund(_ctx: Context<FundJob>, _job_id: u64) -> Result<()> {
+        let amount = job.budget;
+        let cpi = CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.client_token_account.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+                authority: ctx.accounts.client.to_account_info(),
+            },
+        );
+        token::transfer(cpi, amount)?;
+
+        let job = &mut ctx.accounts.job;
+        job.status = JobStatus::Funded;
+        emit!(JobFunded {
+            job_id: job.id,
+            client: job.client,
+            amount,
+        });
         Ok(())
     }
 
+    /// Provider submits a `[u8; 32]` deliverable hash. Status
+    /// `Funded → Submitted`.
     pub fn submit(
-        _ctx: Context<JobAdmin>,
+        ctx: Context<JobAdmin>,
         _job_id: u64,
-        _deliverable: [u8; 32],
+        deliverable: [u8; 32],
     ) -> Result<()> {
+        let job = &mut ctx.accounts.job;
+        require!(
+            job.status == JobStatus::Funded,
+            AgenticCommerceError::WrongStatus
+        );
+        require!(
+            job.provider == ctx.accounts.signer.key(),
+            AgenticCommerceError::Unauthorized
+        );
+        job.status = JobStatus::Submitted;
+        emit!(JobSubmitted {
+            job_id: job.id,
+            provider: job.provider,
+            deliverable,
+        });
         Ok(())
     }
 
+    /// Evaluator approves. Splits escrow and pays out via 3 SPL
+    /// transfers, signed by the Job PDA. Status `Submitted →
+    /// Completed`.
     pub fn complete(
-        _ctx: Context<CompleteJob>,
+        ctx: Context<CompleteJob>,
         _job_id: u64,
-        _reason: [u8; 32],
+        reason: [u8; 32],
     ) -> Result<()> {
+        require!(
+            ctx.accounts.job.status == JobStatus::Submitted,
+            AgenticCommerceError::WrongStatus
+        );
+        require!(
+            ctx.accounts.job.evaluator == ctx.accounts.evaluator.key(),
+            AgenticCommerceError::Unauthorized
+        );
+
+        let amount = ctx.accounts.job.budget;
+        let platform_fee_bp = ctx.accounts.config.platform_fee_bp as u128;
+        let evaluator_fee_bp = ctx.accounts.config.evaluator_fee_bp as u128;
+        let amount_u128 = amount as u128;
+
+        let platform_fee =
+            (amount_u128 * platform_fee_bp / BPS_DENOMINATOR as u128) as u64;
+        let evaluator_fee =
+            (amount_u128 * evaluator_fee_bp / BPS_DENOMINATOR as u128) as u64;
+        let net = amount
+            .checked_sub(platform_fee)
+            .and_then(|v| v.checked_sub(evaluator_fee))
+            .ok_or(AgenticCommerceError::FeeMathOverflow)?;
+
+        // PDA signer seeds — Job PDA is the vault authority + signs
+        // the transfer-out CPIs.
+        let job_id_bytes = ctx.accounts.job.id.to_le_bytes();
+        let job_bump = ctx.accounts.job.bump;
+        let signer_seeds: &[&[u8]] = &[JOB_SEED, &job_id_bytes, &[job_bump]];
+        let signer = &[signer_seeds];
+
+        if platform_fee > 0 {
+            let cpi = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.platform_treasury_ata.to_account_info(),
+                    authority: ctx.accounts.job.to_account_info(),
+                },
+                signer,
+            );
+            token::transfer(cpi, platform_fee)?;
+        }
+        if evaluator_fee > 0 {
+            let cpi = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.evaluator_token_account.to_account_info(),
+                    authority: ctx.accounts.job.to_account_info(),
+                },
+                signer,
+            );
+            token::transfer(cpi, evaluator_fee)?;
+            emit!(EvaluatorFeePaid {
+                job_id: ctx.accounts.job.id,
+                evaluator: ctx.accounts.job.evaluator,
+                amount: evaluator_fee,
+            });
+        }
+        if net > 0 {
+            let cpi = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.provider_token_account.to_account_info(),
+                    authority: ctx.accounts.job.to_account_info(),
+                },
+                signer,
+            );
+            token::transfer(cpi, net)?;
+        }
+
+        let job = &mut ctx.accounts.job;
+        job.status = JobStatus::Completed;
+        emit!(JobCompleted {
+            job_id: job.id,
+            evaluator: job.evaluator,
+            reason,
+        });
+        emit!(PaymentReleased {
+            job_id: job.id,
+            provider: job.provider,
+            amount: net,
+        });
         Ok(())
     }
 
+    /// Reject. Solidity authorization shape:
+    ///   - Open: client only.
+    ///   - Funded / Submitted: evaluator only.
+    /// When funds were already escrowed, refund the full budget to
+    /// the client.
     pub fn reject(
-        _ctx: Context<RefundOrReject>,
+        ctx: Context<RefundOrReject>,
         _job_id: u64,
-        _reason: [u8; 32],
+        reason: [u8; 32],
     ) -> Result<()> {
+        let job_status = ctx.accounts.job.status;
+        let signer_key = ctx.accounts.caller.key();
+        match job_status {
+            JobStatus::Open => {
+                require!(
+                    ctx.accounts.job.client == signer_key,
+                    AgenticCommerceError::Unauthorized
+                );
+            }
+            JobStatus::Funded | JobStatus::Submitted => {
+                require!(
+                    ctx.accounts.job.evaluator == signer_key,
+                    AgenticCommerceError::Unauthorized
+                );
+            }
+            _ => return err!(AgenticCommerceError::WrongStatus),
+        }
+
+        let had_funds = matches!(job_status, JobStatus::Funded | JobStatus::Submitted);
+        if had_funds && ctx.accounts.job.budget > 0 {
+            transfer_full_vault_to_client(&ctx)?;
+            emit!(Refunded {
+                job_id: ctx.accounts.job.id,
+                client: ctx.accounts.job.client,
+                amount: ctx.accounts.job.budget,
+            });
+        }
+
+        let job = &mut ctx.accounts.job;
+        job.status = JobStatus::Rejected;
+        emit!(JobRejected {
+            job_id: job.id,
+            rejector: signer_key,
+            reason,
+        });
         Ok(())
     }
 
-    pub fn claim_refund(_ctx: Context<RefundOrReject>, _job_id: u64) -> Result<()> {
+    /// After `expired_at`, anyone can claim the refund for the
+    /// original client. Status `Funded` / `Submitted` → `Expired`.
+    pub fn claim_refund(ctx: Context<RefundOrReject>, _job_id: u64) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let job_status = ctx.accounts.job.status;
+        require!(
+            job_status == JobStatus::Funded || job_status == JobStatus::Submitted,
+            AgenticCommerceError::WrongStatus
+        );
+        require!(
+            now >= ctx.accounts.job.expired_at,
+            AgenticCommerceError::WrongStatus
+        );
+
+        if ctx.accounts.job.budget > 0 {
+            transfer_full_vault_to_client(&ctx)?;
+            emit!(Refunded {
+                job_id: ctx.accounts.job.id,
+                client: ctx.accounts.job.client,
+                amount: ctx.accounts.job.budget,
+            });
+        }
+
+        let job = &mut ctx.accounts.job;
+        job.status = JobStatus::Expired;
+        emit!(JobExpired { job_id: job.id });
         Ok(())
     }
+}
+
+/// Transfer the entire vault back to the client's token account,
+/// signed by the Job PDA. Used by both `reject` (when funded) and
+/// `claim_refund`.
+fn transfer_full_vault_to_client(ctx: &Context<RefundOrReject>) -> Result<()> {
+    let amount = ctx.accounts.vault.amount;
+    if amount == 0 {
+        return Ok(());
+    }
+    let job_id_bytes = ctx.accounts.job.id.to_le_bytes();
+    let job_bump = ctx.accounts.job.bump;
+    let seeds: &[&[u8]] = &[JOB_SEED, &job_id_bytes, &[job_bump]];
+    let signer = &[seeds];
+    let cpi = CpiContext::new_with_signer(
+        ctx.accounts.token_program.to_account_info(),
+        Transfer {
+            from: ctx.accounts.vault.to_account_info(),
+            to: ctx.accounts.client_token_account.to_account_info(),
+            authority: ctx.accounts.job.to_account_info(),
+        },
+        signer,
+    );
+    token::transfer(cpi, amount)
 }
 
 // ──────────────────── Account contexts ────────────────────
