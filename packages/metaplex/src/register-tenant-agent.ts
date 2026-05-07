@@ -38,8 +38,7 @@
 import { publicKey as toPublicKey } from '@metaplex-foundation/umi';
 
 /** Solana Agent Registry program ID (devnet + mainnet). */
-export const AGENT_REGISTRY_PROGRAM_ID =
-  '1DREGFgysWYxLnRnKQnwrxnJQeSMk2HmGaC6whw2B2p';
+export const AGENT_REGISTRY_PROGRAM_ID = '1DREGFgysWYxLnRnKQnwrxnJQeSMk2HmGaC6whw2B2p';
 
 export interface RegisterTenantAgentInput {
   /** Sendero tenant id — used by the caller to anchor the OnchainIdentity row. */

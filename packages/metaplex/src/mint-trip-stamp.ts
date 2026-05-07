@@ -78,9 +78,7 @@ export interface MintTripStampResult {
   ownerPubkey: string;
 }
 
-export async function mintCoreTripStamp(
-  input: MintTripStampInput
-): Promise<MintTripStampResult> {
+export async function mintCoreTripStamp(input: MintTripStampInput): Promise<MintTripStampResult> {
   if (!input.uri) throw new Error('mintCoreTripStamp: uri is required');
   if (!input.name) throw new Error('mintCoreTripStamp: name is required');
   if (!input.ownerPubkey) {
@@ -103,9 +101,10 @@ export async function mintCoreTripStamp(
 
   return {
     assetAddress: asset.publicKey.toString(),
-    signature: typeof result.signature === 'string'
-      ? result.signature
-      : Buffer.from(result.signature).toString('base64'),
+    signature:
+      typeof result.signature === 'string'
+        ? result.signature
+        : Buffer.from(result.signature).toString('base64'),
     ownerPubkey: input.ownerPubkey,
   };
 }
