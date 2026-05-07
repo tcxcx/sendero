@@ -28,9 +28,7 @@ export function useSidebar() {
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
-  return (
-    <SidebarContext.Provider value={{ open, setOpen }}>{children}</SidebarContext.Provider>
-  );
+  return <SidebarContext.Provider value={{ open, setOpen }}>{children}</SidebarContext.Provider>;
 }
 
 /**
@@ -76,9 +74,7 @@ export function SidebarHeader({
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div className={cn('flex h-14 items-center border-b px-4', className)}>{children}</div>
-  );
+  return <div className={cn('flex h-14 items-center border-b px-4', className)}>{children}</div>;
 }
 
 export function SidebarContent({
@@ -88,9 +84,7 @@ export function SidebarContent({
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div className={cn('flex-1 overflow-y-auto px-2 py-3', className)}>{children}</div>
-  );
+  return <div className={cn('flex-1 overflow-y-auto px-2 py-3', className)}>{children}</div>;
 }
 
 export function SidebarFooter({
@@ -100,9 +94,7 @@ export function SidebarFooter({
   className?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div className={cn('border-t px-4 py-3', className)}>{children}</div>
-  );
+  return <div className={cn('border-t px-4 py-3', className)}>{children}</div>;
 }
 
 export function SidebarMenu({
@@ -192,8 +184,6 @@ export function SidebarInset({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn('flex min-h-screen flex-1 flex-col lg:pl-0', className)}>
-      {children}
-    </div>
+    <div className={cn('flex min-h-screen flex-1 flex-col lg:pl-0', className)}>{children}</div>
   );
 }
