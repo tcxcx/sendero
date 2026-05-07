@@ -36,9 +36,15 @@ export async function GET(req: NextRequest) {
   // Candidates: Tenants with a clerkOrgId but no treasury wallet yet.
   // Gateway operations wallets may already exist; treasury is still
   // required for tenant settlement and operator wallet views.
+  //
+  // Phase 3 — exclude Solana-primary tenants. The Arc Circle path
+  // doesn't apply; Solana provisioning lands in Phase 3.x via a
+  // separate sweeper. Without this filter the cron would burn Circle
+  // API calls retrying tenants we never intend to put on Arc.
   const candidates = await prisma.tenant.findMany({
     where: {
       circleWallets: { none: { kind: 'treasury' } },
+      primaryChain: 'arc',
     },
     select: { id: true, clerkOrgId: true },
     take: 50,
@@ -59,6 +65,7 @@ export async function GET(req: NextRequest) {
         await client.organizations.updateOrganization(c.clerkOrgId, {
           publicMetadata: {
             tenantId: c.id,
+            primaryChain: 'arc',
             arcWalletAddress: result.address,
             onboardingComplete: true,
           },

@@ -24,6 +24,10 @@ async function installCorporate(formData: FormData): Promise<void> {
   const fiscalCountry = String(formData.get('fiscalCountry') ?? '')
     .trim()
     .toUpperCase();
+  // Phase 3 — primary chain selection cascades through wallet
+  // provisioning, escrow ownership, and trip-stamp NFTs.
+  const primaryChainRaw = String(formData.get('primaryChain') ?? 'arc');
+  const primaryChain = primaryChainRaw === 'sol' ? 'sol' : 'arc';
   if (!slug || !displayName) return;
 
   const clientId = env.slackClientId();
@@ -40,12 +44,14 @@ async function installCorporate(formData: FormData): Promise<void> {
       displayName,
       billingTier: 'business',
       fiscalCountry: fiscalCountry || null,
+      primaryChain,
       metadata: { kind: 'corporate' },
     },
     update: {
       displayName,
       billingTier: 'business',
       fiscalCountry: fiscalCountry || null,
+      primaryChain,
       metadata: { kind: 'corporate' },
     },
     select: { id: true },
@@ -111,6 +117,25 @@ export default async function CorporateOnboardingPage({ searchParams }: Props) {
         <label style={labelStyle}>
           <span>Fiscal country (ISO-3166-1 alpha-2)</span>
           <input name="fiscalCountry" maxLength={2} placeholder="BR" style={inputStyle} />
+        </label>
+        <label style={labelStyle}>
+          <span>Primary chain</span>
+          <select name="primaryChain" defaultValue="arc" style={inputStyle}>
+            <option value="arc">Arc — Circle MSCA + USDC settlement (default)</option>
+            <option value="sol">Solana — Squads V4 + USDC SPL (Phase 3.x preview)</option>
+          </select>
+          <span
+            style={{
+              ...labelStyle,
+              fontSize: 10,
+              textTransform: 'none',
+              letterSpacing: 0,
+              color: '#888',
+            }}
+          >
+            Solana tenants reserve their primary-chain intent now; full provisioning lands in Phase
+            3.x (cron sweeper + Squads multisig + Solana DCWs).
+          </span>
         </label>
         <button type="submit" style={submitStyle}>
           Continue to Slack install →

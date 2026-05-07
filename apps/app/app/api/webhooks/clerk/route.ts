@@ -350,6 +350,28 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     }
   }
 
+  // Phase 3 — primary-chain cascade. Tenants opting into Solana skip
+  // the Arc provisioning blocks entirely; Phase 3.x wires the parallel
+  // Solana path (Squads V4 from Phase 7.4 + Solana DCWs). For now we
+  // log + early-return out of the Arc-specific work so a Solana tenant
+  // doesn't silently end up with a half-provisioned Arc Circle wallet.
+  if (tenant.primaryChain === 'sol') {
+    console.log('[webhooks/clerk] tenant on Solana — Arc provisioning skipped (Phase 3.x)', {
+      id,
+      tenantId: tenant.id,
+    });
+    const client = await clerkClient();
+    await client.organizations.updateOrganization(id, {
+      publicMetadata: {
+        tenantId: tenant.id,
+        primaryChain: 'sol',
+        chainGate: 'sol_pending',
+        onboardingComplete: false,
+      },
+    });
+    return;
+  }
+
   // Let provisioning exceptions bubble — the route returns 500, svix
   // retries, and the retry-wallet-provision cron backs that up.
   const result = await provisionTenantWallet({
@@ -423,6 +445,7 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
   await client.organizations.updateOrganization(id, {
     publicMetadata: {
       tenantId: tenant.id,
+      primaryChain: 'arc',
       arcWalletAddress: result.address,
       onboardingComplete: true,
     },
