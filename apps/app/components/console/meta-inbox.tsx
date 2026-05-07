@@ -83,6 +83,12 @@ interface MetaInboxProps {
     avgResponseLabel: string | null;
   };
   /**
+   * Phase B — when true, suppresses the inline KPI grid in
+   * ConsoleHero (workspace mode). The @kpis parallel-routes slot
+   * renders the KPI strip above the inbox in the layout.
+   */
+  hideKpiStrip?: boolean;
+  /**
    * Active composer mode. In unscoped (no tripId) mode this is forced
    * to 'internal'. In scoped mode the operator can flip via the footer
    * toggle. MetaInboxLive owns the state so it can route the next
@@ -111,6 +117,7 @@ export function MetaInbox({
   holdExpires,
   pendingBooking,
   kpis,
+  hideKpiStrip = false,
   composerMode,
   onComposerModeChange,
   onSubmit,
@@ -227,6 +234,7 @@ export function MetaInbox({
             settled30dFare={kpis?.settled30dFare ?? null}
             avgResponseLabel={kpis?.avgResponseLabel ?? null}
             onCommand={onCommand}
+            hideKpiStrip={hideKpiStrip}
           />
         )}
 

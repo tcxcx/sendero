@@ -25,18 +25,22 @@ import type { ReactNode } from 'react';
 interface Props {
   children: ReactNode;
   context: ReactNode;
+  kpis: ReactNode;
 }
 
-export default function ConsoleLayout({ children, context }: Props) {
+export default function ConsoleLayout({ children, context, kpis }: Props) {
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-row gap-0">
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
-      <aside
-        className="hidden w-[18rem] shrink-0 border-l border-[color:var(--surface-border,rgba(0,0,0,0.08))] bg-[color:var(--surface-raised,#fff)]/40 lg:flex lg:flex-col"
-        aria-label="Trip context"
-      >
-        {context}
-      </aside>
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-0">
+      {kpis}
+      <div className="flex min-h-0 w-full flex-1 flex-row gap-0">
+        <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+        <aside
+          className="hidden w-[18rem] shrink-0 border-l border-[color:var(--surface-border,rgba(0,0,0,0.08))] bg-[color:var(--surface-raised,#fff)]/40 lg:flex lg:flex-col"
+          aria-label="Trip context"
+        >
+          {context}
+        </aside>
+      </div>
     </div>
   );
 }

@@ -40,6 +40,7 @@ export default async function ConsolePage(props: ConsolePageProps) {
         holdExpires={holdExpires}
         pendingBooking={pendingBooking}
         kpis={kpis}
+        hideKpiStrip
       />
     </div>
   );

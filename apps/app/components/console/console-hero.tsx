@@ -259,6 +259,12 @@ export interface ConsoleHeroProps {
   avgResponseLabel?: string | null;
   /** Optional chip handler. When omitted, chips render inert (decorative). */
   onCommand?: (prefix: string) => void;
+  /**
+   * Phase B — when the @kpis parallel-routes slot owns the workspace
+   * KPI strip, hide the inline grid here to avoid duplication.
+   * QuickCommandsPanel keeps rendering regardless.
+   */
+  hideKpiStrip?: boolean;
 }
 
 export function ConsoleHero({
@@ -267,6 +273,7 @@ export function ConsoleHero({
   settled30dCount,
   avgResponseLabel,
   onCommand,
+  hideKpiStrip = false,
 }: ConsoleHeroProps) {
   // Derived live counts. The `trips` slice is the same one the rail
   // reads — keeping the source consistent so the hero never disagrees
@@ -276,29 +283,31 @@ export function ConsoleHero({
 
   return (
     <HeroBand>
-      <div
-        className="console-hero-kpis"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'auto auto auto',
-          gap: 0,
-          minWidth: 0,
-        }}
-      >
-        <KpiCol
-          label="Today"
-          big={String(inFlight)}
-          sub={`${inFlight === 1 ? 'trip' : 'trips'} in flight · ${awaiting} awaiting`}
-          showDivider
-        />
-        <KpiCol
-          label="Settled 30d"
-          big={settled30dCount != null ? String(settled30dCount) : '—'}
-          sub={settled30dFare ?? 'awaiting roll-up'}
-          showDivider
-        />
-        <KpiCol label="Avg response" big={avgResponseLabel ?? '—'} sub="agent latency" />
-      </div>
+      {hideKpiStrip ? null : (
+        <div
+          className="console-hero-kpis"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'auto auto auto',
+            gap: 0,
+            minWidth: 0,
+          }}
+        >
+          <KpiCol
+            label="Today"
+            big={String(inFlight)}
+            sub={`${inFlight === 1 ? 'trip' : 'trips'} in flight · ${awaiting} awaiting`}
+            showDivider
+          />
+          <KpiCol
+            label="Settled 30d"
+            big={settled30dCount != null ? String(settled30dCount) : '—'}
+            sub={settled30dFare ?? 'awaiting roll-up'}
+            showDivider
+          />
+          <KpiCol label="Avg response" big={avgResponseLabel ?? '—'} sub="agent latency" />
+        </div>
+      )}
       <QuickCommandsPanel onCommand={onCommand} />
     </HeroBand>
   );

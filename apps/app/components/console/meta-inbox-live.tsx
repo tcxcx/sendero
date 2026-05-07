@@ -73,6 +73,11 @@ interface MetaInboxLiveProps {
     settled30dFare: string | null;
     avgResponseLabel: string | null;
   };
+  /**
+   * Phase B — when true, the workspace KPI strip in ConsoleHero is
+   * suppressed; the @kpis parallel-routes slot owns the rendering.
+   */
+  hideKpiStrip?: boolean;
 }
 
 export function MetaInboxLive({
@@ -83,6 +88,7 @@ export function MetaInboxLive({
   holdExpires,
   pendingBooking,
   kpis,
+  hideKpiStrip = false,
 }: MetaInboxLiveProps) {
   const router = useRouter();
   const focusedChannel: ChannelKey = scopedTripId
@@ -583,6 +589,7 @@ export function MetaInboxLive({
         holdExpires={holdExpires}
         pendingBooking={pendingBooking}
         kpis={kpis}
+        hideKpiStrip={hideKpiStrip}
         composerMode={composerMode}
         onComposerModeChange={setComposerMode}
         onSubmit={handleSubmit}
