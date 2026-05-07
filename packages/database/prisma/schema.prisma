@@ -2966,9 +2966,62 @@ model SuperOrgTreasury {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
+  proposals TreasuryProposal[]
+
   @@index([chain, network])
   @@index([status])
   @@map("super_org_treasuries")
+}
+
+/// Phase 7.6 — proposals against a SuperOrgTreasury. One row per
+/// Squads V4 vault transaction (or Arc MSCA userOp once 7.5.x ships).
+/// Captures the on-chain PDAs / addresses needed to vote + execute,
+/// plus the off-chain audit trail (who proposed, who approved).
+///
+/// Lifecycle:
+///   pending  — proposal PDA created, awaiting threshold of votes
+///   approved — threshold met, ready to execute
+///   executed — execution tx confirmed; `executedTxRef` populated
+///   rejected — explicit reject reached; refunds N/A on Squads
+///   cancelled — proposer cancelled before threshold
+///   failed   — terminal error during execution; surfaces in UI
+model TreasuryProposal {
+  id                String   @id @default(cuid())
+  treasuryId        String
+  /// Squads transaction index (u64). Stamped as `transactionIndex`
+  /// when creating the vault tx + proposal PDAs. Auto-incremented
+  /// per multisig — tracked off-chain for UI ergonomics.
+  txIndex           Int
+  /// Solana vault transaction PDA (`getTransactionPda`). EVM: TODO
+  /// Phase 7.5.x.
+  transactionPda    String
+  /// Solana proposal PDA (`getProposalPda`). EVM: TODO Phase 7.5.x.
+  proposalPda       String
+  /// Proposal kind. Phase 7.6: `'usdc-transfer'` only. Phase 7.6.x
+  /// adds `'sol-transfer'`, `'config-change'`, `'program-upgrade'`.
+  kind              String
+  /// Free-form payload — destination, amount, memo, etc. Shape varies
+  /// by `kind`. For 'usdc-transfer':
+  ///   { recipient: string, amountMicro: string, memo?: string }
+  payload           Json
+  /// Sig of the tx that created the proposal (vaultTransactionCreate +
+  /// proposalCreate are batched on Solana).
+  proposalTxRef     String?
+  /// Sig of the execution tx, when status === 'executed'.
+  executedTxRef     String?
+  /// Status: pending | approved | executed | rejected | cancelled | failed.
+  status            String   @default("pending")
+  /// Clerk userId of the superadmin who proposed. Audit trail.
+  proposedByUserId  String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  treasury SuperOrgTreasury @relation(fields: [treasuryId], references: [id], onDelete: Cascade)
+
+  @@unique([treasuryId, txIndex])
+  @@index([treasuryId, status])
+  @@map("treasury_proposals")
 }
 
 /// retry, mirroring NftStamp.status semantics: `pending` → `minted` |
