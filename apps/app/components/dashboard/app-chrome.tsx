@@ -14,6 +14,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { BridgeDialog } from '@/components/bridge-dialog';
 import { ClerkWalletBridge } from '@/components/clerk-wallet-bridge';
 import { DepositDialog } from '@/components/deposit-dialog';
+import { GlobalCommandPalette } from '@/components/global-command-palette';
 import { SendDialog } from '@/components/send-dialog';
 import { hydrateFromStorage } from '@/components/store';
 import { SwapDialog } from '@/components/swap-dialog';
@@ -90,6 +91,7 @@ export function AppChrome({
       <SendDialog />
       <BridgeDialog />
       <DepositDialog />
+      <GlobalCommandPalette />
     </div>
   );
 }
