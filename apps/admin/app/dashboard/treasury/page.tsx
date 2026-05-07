@@ -14,6 +14,8 @@ import { requirePlatformRole } from '@/lib/access';
 import { getArcTreasury } from '@/lib/treasury/provision-arc';
 import { getSolanaTreasury } from '@/lib/treasury/provision-solana';
 import { ArcProvisionForm } from './_components/arc-provision-form';
+import { ProposalList } from './_components/proposal-list';
+import { SolanaProposeForm } from './_components/solana-propose-form';
 import { SolanaProvisionForm } from './_components/solana-provision-form';
 
 /**
@@ -43,10 +45,9 @@ export default async function TreasuryPage() {
       </div>
 
       <p className="text-xs text-[color:var(--color-muted-foreground)]">
-        Phase 7.4 ships live Solana provisioning (Squads V4 on devnet). Phase 7.5
-        ships Arc in <strong>intent mode</strong> via{' '}
-        <code>@sendero/multisig</code>; on-chain Circle MSCA deploy lands in 7.5.x
-        (counterfactual address + Gas Station paymaster + bundler glue). See{' '}
+        Phase 7.4 ships live Solana provisioning (Squads V4 on devnet). Phase 7.5 ships Arc in{' '}
+        <strong>intent mode</strong> via <code>@sendero/multisig</code>; on-chain Circle MSCA deploy
+        lands in 7.5.x (counterfactual address + Gas Station paymaster + bundler glue). See{' '}
         <code>docs/specs/sendero-admin-app.md</code>.
       </p>
     </div>
@@ -100,11 +101,21 @@ function SolanaTreasuryCard({
             </a>
           </div>
         ) : null}
+
+        <Separator />
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Proposals</h3>
+          <ProposalList treasuryId={treasury.id} />
+        </div>
+
+        <SolanaProposeForm treasuryId={treasury.id} />
       </CardContent>
-      <CardFooter>
-        <Button variant="outline" disabled className="w-full" title="Phase 7.6">
-          Sign / Execute proposals (Phase 7.6)
-        </Button>
+      <CardFooter className="flex-col items-stretch gap-2">
+        <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+          Phase 7.6 ships propose + list. Approve / execute via Solana wallet
+          adapter lands in Phase 7.6.x — until then the multisig threshold
+          stays at the proposal-create stage.
+        </p>
       </CardFooter>
     </Card>
   );
@@ -153,9 +164,8 @@ function ArcTreasuryCard({
           </span>
         </div>
         <CardDescription>
-          Circle MSCA weighted multisig. Will own SenderoGuestEscrow +
-          AgenticCommerce upgrade roles + Arc treasury USDC + Sendero canonical
-          agent NFT.
+          Circle MSCA weighted multisig. Will own SenderoGuestEscrow + AgenticCommerce upgrade roles
+          + Arc treasury USDC + Sendero canonical agent NFT.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -173,8 +183,8 @@ function ArcTreasuryCard({
         </dl>
         {isIntent ? (
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            Intent reserved. On-chain MSCA deploy + Circle Gas Station paymaster
-            wiring lands in Phase 7.5.x.
+            Intent reserved. On-chain MSCA deploy + Circle Gas Station paymaster wiring lands in
+            Phase 7.5.x.
           </p>
         ) : null}
       </CardContent>
@@ -185,9 +195,7 @@ function ArcTreasuryCard({
           className="w-full"
           title={isIntent ? 'Phase 7.5.x' : 'Phase 7.6'}
         >
-          {isIntent
-            ? 'Deploy on-chain (Phase 7.5.x)'
-            : 'Sign / Execute proposals (Phase 7.6)'}
+          {isIntent ? 'Deploy on-chain (Phase 7.5.x)' : 'Sign / Execute proposals (Phase 7.6)'}
         </Button>
       </CardFooter>
     </Card>
@@ -207,9 +215,9 @@ function ArcProvisionCard() {
           </span>
         </div>
         <CardDescription>
-          Reserve a Circle MSCA weighted multisig intent. Will own
-          SenderoGuestEscrow + AgenticCommerce upgrade roles + Arc treasury USDC
-          + Sendero canonical agent NFT once deployed (Phase 7.5.x).
+          Reserve a Circle MSCA weighted multisig intent. Will own SenderoGuestEscrow +
+          AgenticCommerce upgrade roles + Arc treasury USDC + Sendero canonical agent NFT once
+          deployed (Phase 7.5.x).
         </CardDescription>
       </CardHeader>
       <CardContent>
