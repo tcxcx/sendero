@@ -474,21 +474,21 @@ model User {
 ///
 /// Spec: docs/architecture/concierge-magic.md §2.1.
 model TravelerProfile {
-  id     String @id @default(cuid())
-  userId String @unique
+  id       String @id @default(cuid())
+  userId   String @unique
   tenantId String
 
   /// Accumulated preferences. Low-confidence inference allowed
   /// (e.g. one vegetarian-tagged restaurant tap → tentative dietary
   /// hint); the agent bias-corrects over time when user contradicts.
-  dietary   String[] @default([])
-  allergies String[] @default([])
+  dietary        String[] @default([])
+  allergies      String[] @default([])
   /// 'plan_ahead' | 'mix' | 'improvise'.
-  pace      String?
+  pace           String?
   /// Flips true after the first inbound audio message. One-way —
   /// never flips back without explicit user toggle. The agent uses
   /// this to bias outbound copy ("mandá un audio si querés…").
-  voicePreferred Boolean @default(false)
+  voicePreferred Boolean  @default(false)
 
   /// Cabin class the traveler picked on prior bookings (most-recent
   /// wins). Bias the search defaults; never lock — every search still
@@ -501,8 +501,8 @@ model TravelerProfile {
 
   /// Memory. visitedCities is JSON, shape:
   ///   [{ iso2: 'PE', citySlug: 'lima', lastVisitedAt: ISO }]
-  visitedCities Json     @default("[]")
-  totalTrips    Int      @default(0)
+  visitedCities Json      @default("[]")
+  totalTrips    Int       @default(0)
   lastTripAt    DateTime? @db.Timestamptz(6)
 
   /// Loyalty programmes accumulated from `book_flight` inputs. JSON
@@ -538,17 +538,17 @@ model TravelerTasteEntry {
   key String
 
   /// 'low' | 'medium' | 'high'.
-  priority String @default("medium")
-  notes    String?
+  priority           String   @default("medium")
+  notes              String?
   /// Negative tags ("loud cafés", "tourist trap food").
-  avoid    String[] @default([])
+  avoid              String[] @default([])
   /// 'morning' | 'afternoon' | 'evening' | 'late_night'.
-  preferredTimeOfDay String? @map("preferred_time_of_day")
+  preferredTimeOfDay String?  @map("preferred_time_of_day")
   /// 'budget' | 'medium' | 'premium' | 'splurge' | 'no_limit'.
-  preferredBudget    String? @map("preferred_budget")
+  preferredBudget    String?  @map("preferred_budget")
 
-  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
-  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -573,8 +573,8 @@ model CityBucketListItem {
 
   status BucketListItemStatus @default(want_to_visit)
 
-  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
-  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -597,23 +597,23 @@ enum BucketListItemStatus {
 /// operator strip and frequency-cap quota.
 /// Spec: docs/specs/anticipatory-concierge.md §4.0 + §11.
 model AnticipationEvent {
-  id       String  @id @default(cuid())
-  tenantId String
+  id             String  @id @default(cuid())
+  tenantId       String
   /// Optional — operator-side anticipation (Slack ops rollup) has no traveler.
   travelerUserId String? @map("traveler_user_id")
 
   /// 'group_confluence' | 'monday_ops_rollup' | 't_minus_48h_brief'
   /// | 'hobby_arrival_pack' | 'self_heal_applied' | …
-  kind String
+  kind   String
   /// 'fired' | 'positive' | 'negative' | 'suppressed_quota' | 'suppressed_optout'.
   status String @default("fired")
 
-  firedAt DateTime @default(now()) @db.Timestamptz(6) @map("fired_at")
+  firedAt DateTime @default(now()) @map("fired_at") @db.Timestamptz(6)
   /// Free-form context: triggerKey, channelKind, messageId, traceId, etc.
   payload Json?
 
-  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
-  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -790,6 +790,17 @@ model Trip {
   /// reads this field. Null on legacy rows; treated as `tenant` by the
   /// resolver for backwards compatibility (matches pre-retro behavior).
   paymentMode           TripPaymentMode?
+  /// ISO-3166 alpha-2 origin country, derived at write time via
+  /// `@sendero/tools/lib/derive-route-countries` from segments / intent.
+  /// Source of truth for the trip-map UI + downstream tools that need
+  /// fast country lookups without parsing JSON. Nullable for now;
+  /// follow-up migration flips NOT NULL once the backfill verifies
+  /// zero stragglers (run `bun scripts/backfill-route-countries.ts`).
+  originCountry         String?          @db.Char(2)
+  /// ISO-3166 alpha-2 destination country (the OUTBOUND destination,
+  /// not the round-trip return). Same provenance + nullability as
+  /// `originCountry`.
+  destinationCountry    String?          @db.Char(2)
   createdAt             DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime         @updatedAt @db.Timestamptz(6)
 
@@ -812,6 +823,7 @@ model Trip {
   @@index([policyId])
   @@index([travelerId])
   @@index([createdById])
+  @@index([tenantId, destinationCountry])
   @@map("trips")
 }
 
@@ -899,7 +911,7 @@ enum GroupTripPassengerStatus {
 }
 
 model GroupTrip {
-  id            String   @id @default(cuid())
+  id            String          @id @default(cuid())
   tenantId      String
   name          String
   destination   String?
@@ -912,8 +924,8 @@ model GroupTrip {
   maxPassengers Int?
   /// Free-form metadata (purpose, deposit terms, etc.).
   metadata      Json?
-  createdAt     DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
 
   tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   passengers GroupTripPassenger[]
@@ -926,21 +938,21 @@ model GroupTrip {
 /// Many-to-many between GroupTrip and User. One row per passenger
 /// membership. Role is free-form ('lead', 'guest', 'attendee', …).
 model GroupTripPassenger {
-  id          String                   @id @default(uuid()) @db.Uuid
-  groupTripId String
-  userId      String
-  role        String                   @default("attendee")
+  id                String                   @id @default(uuid()) @db.Uuid
+  groupTripId       String
+  userId            String
+  role              String                   @default("attendee")
   /// Per-seat lifecycle state. `claimed` means this row is bound to
   /// the User and the seat counts toward capacity. `invited` means
   /// the operator pre-allocated the seat for this User but they
   /// haven't tapped the claim link yet. `declined` / `canceled` are
   /// operator-driven removals (kept for audit, not garbage-collected).
-  status      GroupTripPassengerStatus @default(claimed)
+  status            GroupTripPassengerStatus @default(claimed)
   /// Group-broadcast opt-out. Inbound "stop"/"unsubscribe"/"baja"
   /// inside a group thread flips this true; broadcast_to_group_trip
   /// skips with reason `opted_out`. Per-passenger, not tenant-wide.
-  broadcastOptedOut Boolean             @default(false) @map("broadcast_opted_out")
-  addedAt     DateTime                 @default(now()) @db.Timestamptz(6)
+  broadcastOptedOut Boolean                  @default(false) @map("broadcast_opted_out")
+  addedAt           DateTime                 @default(now()) @db.Timestamptz(6)
 
   groupTrip GroupTrip @relation(fields: [groupTripId], references: [id], onDelete: Cascade)
   user      User      @relation("GroupTripPassengers", fields: [userId], references: [id], onDelete: Cascade)
@@ -1011,6 +1023,14 @@ model Booking {
   /// supplier didn't return a document (rare; logged for ops).
   eTicketDocumentUrl   String?
   eTicketIssuedAt      DateTime?       @db.Timestamptz(6)
+  /// ISO-3166 alpha-2 origin country for this booking. Derived at
+  /// write time from segments via `@sendero/tools/lib/derive-route-countries`
+  /// — same column on Trip carries the trip-level rollup. Nullable for
+  /// now; tightened to NOT NULL in a follow-up migration once backfill
+  /// completes.
+  originCountry        String?         @db.Char(2)
+  /// ISO-3166 alpha-2 destination country for this booking.
+  destinationCountry   String?         @db.Char(2)
   createdAt            DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime        @updatedAt @db.Timestamptz(6)
 
@@ -1032,6 +1052,7 @@ model Booking {
   @@index([supplierId])
   @@index([status])
   @@index([provisionedBy])
+  @@index([tenantId, destinationCountry])
   @@map("bookings")
 }
 
@@ -2942,52 +2963,52 @@ model NftStampOwnership {
 /// (config PDA + vault PDA at index 0 are distinct) and EVM (MSCA
 /// holds tokens directly, both addresses equal) split.
 model SuperOrgTreasury {
-  id                  String    @id @default(cuid())
-  chain               ChainKind
+  id                        String    @id @default(cuid())
+  chain                     ChainKind
   /// Free-form network identifier matching the `CircleWallet.chain`
   /// String convention: "sol-devnet" | "sol-mainnet" | "arc-testnet" |
   /// "arc-mainnet". Used for explorer URL building + cross-references.
-  network             String
+  network                   String
   /// Solana: multisig PDA (config). EVM: MSCA address. The "config"
   /// surface — distinct from the vault on Solana, same address on EVM.
-  multisigAddress     String    @unique
+  multisigAddress           String    @unique
   /// Solana: vault PDA at index 0 (where USDC actually lives).
   /// EVM: same as `multisigAddress` (the MSCA holds tokens directly).
-  vaultAddress        String
+  vaultAddress              String
   /// Threshold required for proposal execution.
-  threshold           Int
+  threshold                 Int
   /// Member pubkeys (Solana) / EOAs (EVM). JSON array of strings.
   /// Each entry is the signer's external pubkey, not the multisig PDA.
-  members             Json
+  members                   Json
   /// Squads V4 createKey pubkey (Solana only). Used to derive the
   /// multisig PDA — kept for audit + tooling. Null on EVM.
-  createKey           String?
+  createKey                 String?
   /// On-chain tx signature/hash that provisioned the multisig.
   /// On Arc: the deploy userOp hash (Phase 7.5.x.y).
-  provisioningTxRef   String?
+  provisioningTxRef         String?
   /// Phase 7.5.x.yy — Arc: hash of the userOp that called
   /// `updateMultisigWeights` to add the form's members + set the
   /// configured threshold. Null until the multisig install runs.
   /// Distinct from `provisioningTxRef` (the deploy tx) so the audit
   /// trail keeps both events.
-  multisigInstallTxRef String?
+  multisigInstallTxRef      String?
   /// Phase 7.5.x.yy — when the multisig was installed. UI uses this
   /// as the boolean "is multi-owner config complete" rather than
   /// growing the `status` enum further.
-  multisigInstalledAt DateTime? @db.Timestamptz(6)
+  multisigInstalledAt       DateTime? @db.Timestamptz(6)
   /// Phase 7.5.x.yy.y — when the platform recovery owner was removed
   /// (set to weight=0 via a follow-up updateMultisigWeights). Null
   /// means the platform EOA is still a recovery signer; non-null
   /// means the multisig is in full tenant self-custody.
-  platformOwnerRemovedAt DateTime? @db.Timestamptz(6)
+  platformOwnerRemovedAt    DateTime? @db.Timestamptz(6)
   /// Phase 7.5.x.yy.y — userOp hash of the platform-removal tx.
   platformOwnerRemovalTxRef String?
   /// 'pending' (provisioning tx submitted, awaiting confirmation) |
   /// 'live' (vault confirmed, ready to use) | 'failed' (terminal).
-  status              String    @default("pending")
+  status                    String    @default("pending")
   /// Clerk userId of the superadmin who clicked Provision. Audit trail
   /// — paired with Clerk's own session log.
-  provisionedByUserId String
+  provisionedByUserId       String
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -3012,38 +3033,38 @@ model SuperOrgTreasury {
 ///   cancelled — proposer cancelled before threshold
 ///   failed   — terminal error during execution; surfaces in UI
 model TreasuryProposal {
-  id                String   @id @default(cuid())
-  treasuryId        String
+  id               String  @id @default(cuid())
+  treasuryId       String
   /// Squads transaction index (u64). Stamped as `transactionIndex`
   /// when creating the vault tx + proposal PDAs. Auto-incremented
   /// per multisig — tracked off-chain for UI ergonomics.
-  txIndex           Int
+  txIndex          Int
   /// Solana vault transaction PDA (`getTransactionPda`). EVM: TODO
   /// Phase 7.5.x.
-  transactionPda    String
+  transactionPda   String
   /// Solana proposal PDA (`getProposalPda`). EVM: TODO Phase 7.5.x.
-  proposalPda       String
+  proposalPda      String
   /// Proposal kind. Phase 7.6: `'usdc-transfer'` only. Phase 7.6.x
   /// adds `'sol-transfer'`, `'config-change'`, `'program-upgrade'`.
-  kind              String
+  kind             String
   /// Free-form payload — destination, amount, memo, etc. Shape varies
   /// by `kind`. For 'usdc-transfer':
   ///   { recipient: string, amountMicro: string, memo?: string }
-  payload           Json
+  payload          Json
   /// Sig of the tx that created the proposal (vaultTransactionCreate +
   /// proposalCreate are batched on Solana).
-  proposalTxRef     String?
+  proposalTxRef    String?
   /// Sig of the execution tx, when status === 'executed'.
-  executedTxRef     String?
+  executedTxRef    String?
   /// Cached count of `Proposal.approved` from the last
   /// `refreshProposalStatus` reconcile. Pairs with
   /// `SuperOrgTreasury.threshold` for the "X of Y approved" pill so
   /// the UI doesn't have to round-trip to the chain on every render.
-  approvedCount     Int      @default(0)
+  approvedCount    Int     @default(0)
   /// Status: pending | approved | executed | rejected | cancelled | failed.
-  status            String   @default("pending")
+  status           String  @default("pending")
   /// Clerk userId of the superadmin who proposed. Audit trail.
-  proposedByUserId  String
+  proposedByUserId String
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -3589,7 +3610,7 @@ model ShortLink {
 /// columns let the scanner compute "how long has this been broken?"
 /// and "is it still happening?" without scanning every row.
 model KnowledgeGap {
-  id   String @id @default(cuid())
+  id String @id @default(cuid())
 
   tenantId String  @map("tenant_id")
   /// Optional Langfuse trace id for round-trip into the trace tree.
@@ -3612,9 +3633,9 @@ model KnowledgeGap {
   blockingTraveler Boolean @default(false) @map("blocking_traveler")
 
   /// Context.
-  channelKind      String?  @map("channel_kind")
+  channelKind      String? @map("channel_kind")
   surface          String?
-  reportedByUserId String?  @map("reported_by_user_id")
+  reportedByUserId String? @map("reported_by_user_id")
 
   /// Resolution.
   resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(6)

@@ -18,8 +18,9 @@
 
 import { z } from 'zod';
 
-import { prisma } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
 
+import { deriveCountriesFromIntent } from './lib/derive-route-countries';
 import type { ToolDef } from './types';
 
 const intentSchema = z.object({
@@ -121,13 +122,32 @@ export const createTripTool: ToolDef<Input, CreateTripResult> = {
       }
     }
 
+    // Derive ISO-3166 country codes from the intent's IATA fields when
+    // possible. The map UI + downstream tools consume these directly
+    // off `Trip.intent.{originIso2,destinationIso2}`. Resolution chain
+    // is in `@sendero/tools/lib/derive-route-countries`; never guess
+    // from city names alone.
+    const baseIntent = (input.intent ?? {}) as Record<string, unknown>;
+    const derived = deriveCountriesFromIntent(baseIntent);
+    const enrichedIntent: Record<string, unknown> = {
+      ...baseIntent,
+      ...(derived.originCountry && !baseIntent.originIso2
+        ? { originIso2: derived.originCountry }
+        : {}),
+      ...(derived.destinationCountry && !baseIntent.destinationIso2
+        ? { destinationIso2: derived.destinationCountry }
+        : {}),
+    };
+
     const trip = await prisma.trip.create({
       data: {
         tenantId,
         travelerId: travelerId ?? undefined,
         createdById: ctx?.traveler?.userId ?? undefined,
-        intent: input.intent ?? {},
+        intent: enrichedIntent as unknown as Prisma.InputJsonValue,
         status: 'draft',
+        ...(derived.originCountry ? { originCountry: derived.originCountry } : {}),
+        ...(derived.destinationCountry ? { destinationCountry: derived.destinationCountry } : {}),
         metadata: {
           ...(input.metadata ?? {}),
           ...(input.name ? { name: input.name } : {}),

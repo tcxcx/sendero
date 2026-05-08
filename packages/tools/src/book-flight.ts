@@ -1,33 +1,32 @@
-import crypto from 'node:crypto';
-
-import { z } from 'zod';
+import { queryUnifiedBalance } from '@sendero/circle/gateway';
+import { type MeterPayerType, type Prisma, prisma } from '@sendero/database';
 import {
   createHoldOrder,
+  type DuffelAirlineCreditId,
+  type DuffelPassengerIdentityDocument,
+  type DuffelPaymentInput,
   getAirlineCredit,
   getOfferOriginDestinationIso2,
   getOrder,
   payFromBalance,
   payOrder,
   projectFlightSegmentsFromPayload,
-  type DuffelAirlineCreditId,
-  type DuffelPaymentInput,
-  type DuffelPassengerIdentityDocument,
 } from '@sendero/duffel';
-import type { ToolDef, ToolContext } from './types';
-import { ensureFlightCustomer } from './ensure-flight-customer';
-import { ensureTravelerWallet } from './ensure-traveler-wallet';
-import { type Prisma, prisma, type MeterPayerType } from '@sendero/database';
 import { iso3to2 as locationIso3to2 } from '@sendero/location/iso';
 import { decryptVaultPayload } from '@sendero/vault';
-import { queryUnifiedBalance } from '@sendero/circle/gateway';
-import { getOrCreateGatewaySigner, getUserGatewaySigner } from '@sendero/circle/gateway-signer';
+import type { Address } from 'viem';
+import { z } from 'zod';
+
+import { ensureFlightCustomer } from './ensure-flight-customer';
+import { ensureTravelerWallet } from './ensure-traveler-wallet';
 import { resolvePayer } from './lib/resolve-payer';
 import {
   mergeServices,
-  readPendingAncillaries,
   type PendingFlightAncillaries,
+  readPendingAncillaries,
 } from './lib/trip-ancillaries';
-import type { Address } from 'viem';
+import type { ToolContext, ToolDef } from './types';
+import crypto from 'node:crypto';
 
 const serviceSchema = z.object({
   id: z.string().min(1),
@@ -1038,7 +1037,7 @@ async function loadIdentityDocumentFromVault(args: {
 
 function pickOutboundDestinationIata(
   segments: import('@sendero/duffel').NormalizedFlightSegment[],
-  originIata: string | null,
+  _originIata: string | null,
   fallback: string | null
 ): string | null {
   if (!Array.isArray(segments) || segments.length === 0) return fallback;
@@ -1107,13 +1106,28 @@ async function persistBookingAndTrip(args: {
     args.destinationIata
   );
 
+  // Phase E — derive originIso2 + destinationIso2 from segments first,
+  // falling back to the IATA→country table for codes Duffel didn't
+  // stamp. Single source: `@sendero/tools/lib/derive-route-countries`.
+  // The map UI + downstream surfaces consume these directly.
+  const { deriveRouteCountries } = await import('./lib/derive-route-countries');
+  const derivedRoute = deriveRouteCountries({ segments: args.segments });
+
   const tripIntent: Record<string, unknown> = {
     source: 'book_flight',
     duffelOrderId: args.duffelOrderId,
   };
   if (args.originIata) tripIntent.origin = args.originIata;
   if (outboundDestinationIata) tripIntent.destination = outboundDestinationIata;
-  if (args.destinationIso2.length > 0) tripIntent.destinationIso2 = args.destinationIso2;
+  if (derivedRoute.originCountry) tripIntent.originIso2 = derivedRoute.originCountry;
+  // destinationIso2 stays an array shape (matches existing readers); when
+  // the projector left it empty, swap in the derived value as a single-
+  // element array so map UI + get_active_trip pick it up.
+  if (args.destinationIso2.length > 0) {
+    tripIntent.destinationIso2 = args.destinationIso2;
+  } else if (derivedRoute.destinationCountry) {
+    tripIntent.destinationIso2 = [derivedRoute.destinationCountry];
+  }
   if (args.startDate) tripIntent.startDate = args.startDate;
   if (args.endDate) tripIntent.endDate = args.endDate;
 
@@ -1130,6 +1144,10 @@ async function persistBookingAndTrip(args: {
           // (confirm_booking, settlement, refund) sees the same value
           // without re-deriving from override/tenant default.
           paymentMode: args.provisionedBy,
+          ...(derivedRoute.originCountry ? { originCountry: derivedRoute.originCountry } : {}),
+          ...(derivedRoute.destinationCountry
+            ? { destinationCountry: derivedRoute.destinationCountry }
+            : {}),
         },
         select: { id: true },
       })
@@ -1147,6 +1165,8 @@ async function persistBookingAndTrip(args: {
       await prisma.$executeRaw`
         UPDATE "trips"
         SET intent = COALESCE(intent, '{}'::jsonb) || ${JSON.stringify(tripIntent)}::jsonb,
+            "originCountry" = COALESCE("originCountry", ${derivedRoute.originCountry}),
+            "destinationCountry" = COALESCE("destinationCountry", ${derivedRoute.destinationCountry}),
             "updatedAt" = NOW()
         WHERE id = ${existingTrip.id}
           AND "tenantId" = ${args.tenantId}
@@ -1183,6 +1203,27 @@ async function persistBookingAndTrip(args: {
     });
   }
 
+  // Phase E — backfill any missing originCountry/destinationCountry
+  // per segment via the IATA→country fallback. Duffel populates these
+  // via `iata_country_code` when present, but charter/regional codes
+  // sometimes omit it; we want every persisted segment to have country
+  // metadata so the map + get_active_trip can resolve unconditionally.
+  const { deriveCountriesFromSegment } = await import('./lib/derive-route-countries');
+  const enrichedSegments = args.segments.map(seg => {
+    const derived = deriveCountriesFromSegment(seg);
+    if (
+      (seg.originCountry && seg.destinationCountry) ||
+      (!derived.originCountry && !derived.destinationCountry)
+    ) {
+      return seg;
+    }
+    return {
+      ...seg,
+      originCountry: seg.originCountry ?? derived.originCountry,
+      destinationCountry: seg.destinationCountry ?? derived.destinationCountry,
+    };
+  });
+
   const booking = await prisma.booking.create({
     data: {
       tenantId: args.tenantId,
@@ -1196,10 +1237,14 @@ async function persistBookingAndTrip(args: {
       bookedAt: new Date(),
       provisionedBy: args.provisionedBy,
       ...(eTicketUrl ? { eTicketDocumentUrl: eTicketUrl, eTicketIssuedAt: new Date() } : {}),
+      ...(derivedRoute.originCountry ? { originCountry: derivedRoute.originCountry } : {}),
+      ...(derivedRoute.destinationCountry
+        ? { destinationCountry: derivedRoute.destinationCountry }
+        : {}),
       // Normalized itinerary projection. `get_active_trip` and the
       // post-mint stamp prompts read this; rawDuffel is kept as
       // audit + fallback parsing surface.
-      segments: args.segments as unknown as Prisma.InputJsonValue,
+      segments: enrichedSegments as unknown as Prisma.InputJsonValue,
       ...(args.rawDuffel ? { rawDuffel: args.rawDuffel as unknown as Prisma.InputJsonValue } : {}),
       metadata: {
         paymentStatus: args.paymentStatus,
@@ -1584,13 +1629,15 @@ async function settleTravelerUsdcToTreasury(args: {
   });
   if (!evmDcw?.address) return null;
 
-  const senderoRecipient = process.env.TREASURY_VIEM_ADDRESS;
-  if (!senderoRecipient) {
+  const { resolvePlatformTreasuryDestination } = await import('./platform-treasury');
+  const senderoTreasury = await resolvePlatformTreasuryDestination('arc');
+  if (!senderoTreasury) {
     console.warn(
-      '[book_flight] TREASURY_VIEM_ADDRESS unset — refusing to settle (would lose money)'
+      '[book_flight] no live Arc SuperOrgTreasury — refusing to settle traveler reimbursement'
     );
     return null;
   }
+  const senderoRecipient = senderoTreasury.address;
 
   // Lazy import avoids pulling the full unified-gateway module into
   // the cold path of every book_flight invocation that doesn't end up
@@ -1608,6 +1655,8 @@ async function settleTravelerUsdcToTreasury(args: {
     travelerUserId: args.travelerUserId,
     amountUsdc: args.amountUsdc,
     recipient: senderoRecipient,
+    treasuryId: senderoTreasury.treasuryId,
+    treasuryNetwork: senderoTreasury.network,
     note: 'tenant markup share is Phase H v2 — not wired yet',
   });
 
