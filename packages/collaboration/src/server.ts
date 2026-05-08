@@ -161,6 +161,19 @@ export {
 /**
  * Ensure a room exists (idempotent). Call once when a group trip is
  * created so the first visitor doesn't race room bootstrap.
+ *
+ * Phase C-1 — also grants `tenant:{tenantId}` group write access via
+ * `updateRoom`. WebSocket entry works without this because
+ * `/api/liveblocks-auth` issues a room-scoped session.allow() per
+ * connection, but the Liveblocks Comments REST API
+ * (`/v2/c/rooms/{roomId}/threads`) is checked against the user's id
+ * token, which carries `tenant:{tenantId}` group binding (set in
+ * `identifySession`). Without `groupsAccesses` on the room, every
+ * threads fetch returns 403 and TripComments shows
+ * "Comments unavailable".
+ *
+ * `updateRoom` is idempotent — calling it on every ensureRoom is safe
+ * and also self-heals rooms created before this Phase C-1 fix.
  */
 export async function ensureRoom(args: {
   tenantId: string;
@@ -173,8 +186,10 @@ export async function ensureRoom(args: {
   const client = getClient();
   if (!client) return;
   const roomId = roomIdForTrip(args.tenantId, args.tripId);
+  const tenantGroup = `tenant:${args.tenantId}`;
   await client.getOrCreateRoom(roomId, {
     defaultAccesses: args.defaultAccesses ?? [],
+    groupsAccesses: { [tenantGroup]: ['room:write'] },
     metadata: {
       tenantId: args.tenantId,
       kind: 'trip',
@@ -182,6 +197,12 @@ export async function ensureRoom(args: {
       title: args.title ?? `Trip ${args.tripId.slice(0, 8)}`,
       url: args.url ?? `/dashboard/trips/${args.tripId}`,
     },
+  });
+  // Self-heal pre-Phase-C-1 rooms that were created without the
+  // tenant-group grant. getOrCreateRoom does not modify existing rooms,
+  // so explicit updateRoom is required.
+  await client.updateRoom(roomId, {
+    groupsAccesses: { [tenantGroup]: ['room:write'] },
   });
 }
 

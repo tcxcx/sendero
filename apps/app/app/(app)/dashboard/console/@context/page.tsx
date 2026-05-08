@@ -10,11 +10,19 @@
  * When unscoped (no tripId), renders a tenant-level snapshot
  * instead: recent activity counts + active operator hints.
  *
+ * Phase C-1 — when scoped, also renders <TripComments> below the
+ * trip-event drawer. The comments aside relies on the trip-room
+ * Liveblocks context provided by <ConsoleTripRoomBridge> (mounted
+ * in the console layout). Without the bridge, TripComments would
+ * crash on `useThreads()`; with it, comments render once the
+ * bootstrap fetch lands.
+ *
  * The matching loading.tsx provides the skeleton fallback.
  */
 
 import { prisma } from '@sendero/database';
 
+import { TripComments } from '@/components/collaboration/trip-comments';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 interface Props {
@@ -135,6 +143,13 @@ async function ScopedTripContext({ tenantId, tripId }: { tenantId: string; tripI
           </ul>
         )}
       </section>
+
+      {/* Phase C-1 — trip-scoped Liveblocks comments. Mounted inside
+          the @context drawer so the comments aside lives where prior
+          /dashboard/inbox/[tripId] readers expect it. Requires the
+          ConsoleTripRoomBridge in the layout to provide the trip
+          room context; without it `useThreads` would crash. */}
+      <TripComments tripId={tripId} />
     </div>
   );
 }
