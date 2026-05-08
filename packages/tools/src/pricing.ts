@@ -106,10 +106,19 @@ export const TOOL_PRICING: Record<string, string> = {
 /** USDC has 6 decimals on every chain. */
 const USDC_DECIMALS = 6;
 
+/**
+ * Default pricing class for tools without an explicit `TOOL_PRICING`
+ * entry. `'0'` means free — the tool runs, the meter records the call
+ * for audit, but no USDC settles. This is the right default for reads,
+ * config lookups, and explainers (codex consult 2026-05-08): every tool
+ * needs a pricing *policy*, but most should be free until we have a
+ * deliberate reason to charge for them. Fill in `TOOL_PRICING` rows
+ * when a tool actually creates infra/provider cost.
+ */
+const DEFAULT_FREE_PRICE = '0';
+
 export function priceFor(toolName: string): string {
-  const p = TOOL_PRICING[toolName];
-  if (!p) throw new Error(`No price configured for tool: ${toolName}`);
-  return p;
+  return TOOL_PRICING[toolName] ?? DEFAULT_FREE_PRICE;
 }
 
 /** Decimal "0.005" → atomic "5000" (6 decimals). */

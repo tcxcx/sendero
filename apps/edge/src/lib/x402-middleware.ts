@@ -81,6 +81,23 @@ function base64Decode<T>(s: string): T {
 export function requirePayment(toolName: string): MiddlewareHandler {
   return async (c, next) => {
     const priceUsdc = priceFor(toolName);
+
+    // Free tier short-circuit. Tools without an explicit `TOOL_PRICING`
+    // entry resolve to '0' via the default-free policy. They still need
+    // an audit row in the meter, but no EIP-3009 settlement happens. Skip
+    // the 402 dance and run the handler directly. See codex consult
+    // 2026-05-08: every tool needs a pricing *policy*, most should be $0.
+    if (priceUsdc === '0') {
+      logMeter({
+        at: Date.now(),
+        toolName,
+        priceUsdc,
+        status: 'paid',
+        note: 'free-tier (no TOOL_PRICING entry)',
+      });
+      return next();
+    }
+
     const requirements = buildRequirements(toolName, priceUsdc);
     const header = c.req.header('Payment-Signature');
 

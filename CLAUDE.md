@@ -29,9 +29,31 @@ WhatsApp/Slack/web agents should help tenant travel teams close deals, plan trip
 - **Paid tenant production:** paid tenants activate their own WhatsApp number after Kapso phone health passes; provisioning attaches the Kapso tenant workflow trigger to that phone number.
 - **Cross-channel continuity:** WhatsApp customer threads, Slack operator threads, web handoff records, and trip events must reconcile around tenant, customer identity, trip id, workflow execution id, and trace id.
 
+## Meta admin: multi-vertical AI agents (apps/admin)
+
+`apps/admin/` is **meta**. It does not exist to "create new orgs in Sendero" — it exists to spin up **multiple vertical AI agents**. Sendero (travel ops) is one of those verticals; the next ones are legal, real-estate, healthcare, etc. Each vertical reuses the same template app shell + channel adapters (WhatsApp, Slack, MCP, web) + settlement rail + billing plumbing. **The only thing that changes per vertical is the tool catalog.**
+
+Hierarchy admin must surface (rollups in this order):
+
+```
+business unit  >  vertical agent (Sendero / legal / …)  >  business (TMC)  >  tenant  >  tool
+```
+
+Rules:
+- No hardcoded `"Sendero"` strings in admin UI — pull from active vertical context. Branding (logo, copy, default agent persona) replaceable per vertical.
+- Tenant/org creation flows ask "which vertical?" first. Vertical → team → user is the auth/permissions tree.
+- Channel tracking parity: every "Slack" surface in admin must have a WhatsApp peer. They are the two production channels; treating Slack as primary is a recurring bug.
+- Empty sidebar items use a **single shared** `<ComingSoonScreen feature="…" />` (location: `apps/admin/components/`). Do not populate placeholder pages with bespoke content — one screen, swapped in until the real feature ships.
+- Billing dashboards: per-tool spend rolls up cleanly to per-tenant → per-business → per-vertical → per-business-unit. Reuse the existing admin graph/stats primitives (founder approves the look).
+- Tool catalog UI is the primary differentiation knob — uploading/swapping/configuring per vertical, not building new app shells.
+
+When in doubt: "does this generalize across verticals?" If not, stop and rebuild the abstraction.
+
 ## Billing & pricing (source: `packages/billing/src/plans.ts`)
 
 Two revenue legs, independent: SaaS MRR (Clerk Billing) + nanopayments (per-call x402, agent wallet pays). Trial skips MRR; nanopay keeps flowing.
+
+**Audience split — do not surface nanopay as the headline price to humans.** TMCs / corporate travel buyers see *only* "monthly platform + included usage + transparent overages" plus the agentic resale model on top (they sell agent capacity to their travelers). x402 nanopayments are the agent-to-agent settlement rail surfaced to **other AI agents calling Sendero via MCP**, not on `/app/billing/plans` or in TMC sales decks. Codex consult 2026-05-08 flagged that exposing both legs to the same buyer reads as "subscription + per-click + transaction tax". Keep nanopay internal to the ledger UI for humans, public for MCP consumers.
 
 | Tier | Slug | Monthly | Annual/mo | Public | Workspaces | Prod keys | Cap | Nano % | Take % |
 |---|---|---|---|---|---|---|---|---|---|
@@ -51,6 +73,8 @@ Two revenue legs, independent: SaaS MRR (Clerk Billing) + nanopayments (per-call
 **Free trial.** Native Clerk, no card (Oct 2025+). Plan: Pro, 14 days. Dashboard: "Require payment method" OFF, trial=14d on Pro. Don't roll custom logic — `has({ plan: 'pro' })` returns true during trial.
 
 **Resolver:** `apps/app/lib/billing-plan.ts` — `currentOrgPlan()`, `currentOrgPlanTier()`, `hasBillingFeature()`, `canCreateAdditionalWorkspace()`. Nanopay discount: `apps/app/app/api/agent/dispatch/route.ts` → `resolveTenantPlan()` + `buildPlanOverrides()` → `runAgentTurn({ pricingOverrides })`. UI: `/app/billing/plans` + `<PlanTeaser />`.
+
+**Default-free tool pricing.** `priceFor(toolName)` in `packages/tools/src/pricing.ts` returns `'0'` (the `DEFAULT_FREE_PRICE` constant) for any tool without a `TOOL_PRICING` entry — it does NOT throw. The edge worker's `requirePayment` middleware (`apps/edge/src/lib/x402-middleware.ts`) short-circuits when price is `'0'`: it logs a `paid` meter row tagged `'free-tier (no TOOL_PRICING entry)'` and skips the 402 dance. Every tool needs a pricing **policy**, but most should be `'0'` until they actually create infra/provider cost worth charging for. Reads, config lookups, balances, explainers → free. External API calls, on-chain writes, composed flows → priced. Don't reflexively fill in 286 prices; price what creates real cost. Codex consult 2026-05-08.
 
 ## Circle wallet balances
 
