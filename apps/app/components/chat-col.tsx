@@ -109,10 +109,10 @@ export function ChatCol() {
   // Stage SearchForm + quick-command surfaces dispatch through this
   // singleton so form-driven tool runs land in chat history (and
   // rehydrate on reload) instead of hitting /api/flights/search direct.
-  // `sendMessage` is reference-stable; we pass it as the key so re-
-  // registers from the same surface skip the duplicate warning even
-  // though the wrapper closure is fresh on each render.
-  registerChatBridge((text: string) => sendMessage({ text }), sendMessage);
+  // The key is the mounted surface, not the hook callback identity:
+  // useChat can replace `sendMessage` across lifecycle edges, but
+  // same-surface re-registers are benign.
+  registerChatBridge((text: string) => sendMessage({ text }), 'chat-col');
 
   // HoldCard / FundCard call noteToChat() AFTER a direct API call
   // succeeds (POST /api/bookings/hold, POST /api/bookings/pay). The
@@ -128,7 +128,7 @@ export function ChatCol() {
         parts: [{ type: 'text' as const, text }],
       },
     ]);
-  }, setMessages);
+  }, 'chat-col');
 
   // Every tool call the agent makes drives the store so that Stage,
   // StepRail, WorkflowLog, FooterRail and AgentCard all move in lockstep
