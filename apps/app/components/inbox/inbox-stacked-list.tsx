@@ -178,7 +178,7 @@ export function InboxStackedList({ trips }: Props) {
           visible.map(t => (
             <Link
               key={t.id}
-              href={`/dashboard/inbox/${t.id}`}
+              href={`/dashboard/console?tripId=${t.id}`}
               className="relative flex items-center gap-4 rounded-[var(--radius-md)] px-5 py-4 no-underline transition-colors hover:bg-[color:color-mix(in_oklab,var(--midnight)_8%,transparent)]"
               style={{
                 background: 'color-mix(in oklab, var(--midnight) 5%, transparent)',

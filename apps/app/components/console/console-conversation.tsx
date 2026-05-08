@@ -55,7 +55,7 @@ import {
   runDemoTripScript,
 } from '@/components/console/demo-trip';
 import { InjectCardDialog } from '@/components/console/inject-card-dialog';
-import { UnifiedConversation } from '@/components/console/meta-inbox';
+import { UnifiedConversation } from '@/components/console/unified-conversation';
 import type { UnifiedMessage } from '@/lib/unified-message';
 
 interface ConsoleConversationProps {

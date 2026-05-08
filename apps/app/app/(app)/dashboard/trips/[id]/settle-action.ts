@@ -167,7 +167,7 @@ export async function settleHoldAction(args: {
   });
 
   revalidatePath(`/dashboard/trips/${args.tripId}`);
-  revalidatePath(`/dashboard/inbox/${args.tripId}`);
+  revalidatePath(`/dashboard/console`);
 
   // Fire the bidirectional rate_counterparty workflow on a successful
   // settle. Fire-and-forget — the workflow has its own 72h SLA + WDK
