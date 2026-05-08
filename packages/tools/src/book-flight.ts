@@ -1629,13 +1629,20 @@ async function settleTravelerUsdcToTreasury(args: {
   });
   if (!evmDcw?.address) return null;
 
-  const senderoRecipient = process.env.TREASURY_VIEM_ADDRESS;
-  if (!senderoRecipient) {
+  // Resolve the Sendero-platform treasury via the admin-panel-backed
+  // helper (live SuperOrgTreasury row preferred; TREASURY_VIEM_ADDRESS
+  // env fallback when no admin-panel provisioning exists). Refuse to
+  // settle when neither is set — settlements without a known recipient
+  // lose money.
+  const { resolvePlatformTreasuryDestination } = await import('./platform-treasury');
+  const senderoTreasury = await resolvePlatformTreasuryDestination('arc');
+  if (!senderoTreasury) {
     console.warn(
-      '[book_flight] TREASURY_VIEM_ADDRESS unset — refusing to settle (would lose money)'
+      '[book_flight] no Arc platform treasury (admin panel + env both empty) — refusing to settle'
     );
     return null;
   }
+  const senderoRecipient = senderoTreasury.address;
 
   // Lazy import avoids pulling the full unified-gateway module into
   // the cold path of every book_flight invocation that doesn't end up
@@ -1653,6 +1660,9 @@ async function settleTravelerUsdcToTreasury(args: {
     travelerUserId: args.travelerUserId,
     amountUsdc: args.amountUsdc,
     recipient: senderoRecipient,
+    treasurySource: senderoTreasury.source,
+    treasuryId: senderoTreasury.treasuryId,
+    treasuryNetwork: senderoTreasury.network,
     note: 'tenant markup share is Phase H v2 — not wired yet',
   });
 
