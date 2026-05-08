@@ -78,6 +78,14 @@ interface MetaInboxLiveProps {
    * suppressed; the @kpis parallel-routes slot owns the rendering.
    */
   hideKpiStrip?: boolean;
+  /**
+   * Phase B — when false, the embedded InboxRail is omitted from the
+   * MetaInbox grid because the console route mounts the rail via the
+   * @threads parallel-routes slot. The `trips` prop is still required
+   * because ConsoleHero (workspace mode) reads from it for the row of
+   * recent traveler avatars in the hero.
+   */
+  embedRail?: boolean;
 }
 
 export function MetaInboxLive({
@@ -89,6 +97,7 @@ export function MetaInboxLive({
   pendingBooking,
   kpis,
   hideKpiStrip = false,
+  embedRail = true,
 }: MetaInboxLiveProps) {
   const router = useRouter();
   const focusedChannel: ChannelKey = scopedTripId
@@ -591,6 +600,7 @@ export function MetaInboxLive({
         pendingBooking={pendingBooking}
         kpis={kpis}
         hideKpiStrip={hideKpiStrip}
+        embedRail={embedRail}
         composerMode={composerMode}
         onComposerModeChange={setComposerMode}
         onSubmit={handleSubmit}

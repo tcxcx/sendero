@@ -2624,7 +2624,13 @@ hr.rule {
     --meta-inbox-cols: minmax(0, 1fr);
   }
 
-  .meta-inbox-grid > :first-child {
+  /* Hide the rail at narrow widths when MetaInbox owns it. When the
+     console parallel-routes setup feeds the rail via @threads, the
+     layout's `hidden md:flex` already handles narrow widths and the
+     first child of this grid is the conversation — which we want
+     visible, not hidden. */
+  .meta-inbox-grid[data-embed-rail="true"] > :first-child,
+  .meta-inbox-grid:not([data-embed-rail]) > :first-child {
     display: none !important;
   }
 
@@ -2641,7 +2647,8 @@ hr.rule {
     --meta-inbox-cols: minmax(0, 1fr);
   }
 
-  .meta-inbox-grid > :first-child {
+  .meta-inbox-grid[data-embed-rail="true"] > :first-child,
+  .meta-inbox-grid:not([data-embed-rail]) > :first-child {
     display: none !important;
   }
 }

@@ -1,23 +1,33 @@
 /**
  * Phase A — parallel routes for streaming Suspense.
  *
- * The console layout receives `children` (the existing MetaInbox via
- * page.tsx) AND a named `context` slot — a right-side drawer that
- * streams independently. Each slot has its own loading.tsx, so the
- * inbox paints instantly while the context drawer's slower fetch
- * lands when ready.
+ * Phase B (this file) extends the slot grid:
  *
- * Pattern lifted from next-shadcn-dashboard-starter's
- * `dashboard/overview/@sales` setup. We add `default.tsx` per slot
- * so this layout doesn't break when other routes share its scope.
+ *     ┌───────────────────────────────────────────────────────────┐
+ *     │                       @kpis                              │
+ *     ├───────────┬─────────────────────────────────┬─────────────┤
+ *     │ @threads  │            children             │  @context   │
+ *     │  (rail)   │  (MetaInbox: conversation +     │  (drawer)   │
+ *     │           │   stage + composer)             │             │
+ *     └───────────┴─────────────────────────────────┴─────────────┘
  *
- * Why purely additive (instead of refactoring inbox into slots):
- *   The existing MetaInbox is a single live client component
- *   (Liveblocks + presence + composer + thread rail). Splitting it
- *   into N slots means breaking apart its client islands — an entire
- *   refactor. This phase A delivers the streaming PATTERN with a new
- *   context drawer, leaving the existing inbox untouched. Phase B
- *   migrates the inbox itself.
+ * Each slot has its own page.tsx + loading.tsx + default.tsx so the
+ * inbox rail, the focused conversation, the workspace KPIs, and the
+ * trip-context drawer all stream in from independent server fetches.
+ *
+ * Why this split:
+ *   - `@threads` only needs the 12-most-recent trip query. It can
+ *     paint as soon as that lands without waiting for the focused
+ *     trip's events JSON.
+ *   - `children` (MetaInboxLive) renders the conversation column
+ *     and composer. It still owns the cross-cutting client state
+ *     (useChat / presence / EventSource / optimistic posts), but no
+ *     longer mounts the rail itself — the rail comes from `@threads`.
+ *   - `@context` and `@kpis` were the Phase A and Phase B-α slots.
+ *
+ * Cross-cutting state (composerMode, ?tripId, ?cs) lives in the URL
+ * via nuqs, so a rail click in `@threads` re-renders only the slots
+ * that actually depend on the focused trip.
  */
 
 import type { ReactNode } from 'react';
@@ -26,14 +36,20 @@ interface Props {
   children: ReactNode;
   context: ReactNode;
   kpis: ReactNode;
+  threads: ReactNode;
 }
 
-export default function ConsoleLayout({ children, context, kpis }: Props) {
+export default function ConsoleLayout({ children, context, kpis, threads }: Props) {
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-0">
       {kpis}
       <div className="flex min-h-0 w-full flex-1 flex-row gap-0">
-        <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+        {/* @threads — server-fetched rail. Hidden below 900px so the
+            existing MetaInbox responsive rules (which collapse the
+            grid to a single column) keep working. The InboxRail's
+            own collapsed state still works inside this column. */}
+        <div className="hidden min-h-0 shrink-0 md:flex">{threads}</div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
         <aside
           className="hidden w-[18rem] shrink-0 border-l border-[color:var(--surface-border,rgba(0,0,0,0.08))] bg-[color:var(--surface-raised,#fff)]/40 lg:flex lg:flex-col"
           aria-label="Trip context"

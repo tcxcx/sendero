@@ -106,6 +106,14 @@ interface MetaInboxProps {
    * — Phase G.4. Hidden in unscoped (no tripId) state.
    */
   composerExtras?: React.ReactNode;
+  /**
+   * Phase B — when false, the InboxRail column is omitted from the
+   * grid. The console route renders the rail as a sibling parallel-
+   * routes slot (`@threads`) so it streams in independently.
+   * Defaults to true to preserve backward-compatible mounting from
+   * any other surface still composing MetaInbox directly.
+   */
+  embedRail?: boolean;
 }
 
 export function MetaInbox({
@@ -123,6 +131,7 @@ export function MetaInbox({
   onSubmit,
   disabled,
   composerExtras,
+  embedRail = true,
 }: MetaInboxProps) {
   const [customerPanelOpen, setCustomerPanelOpen] = useState(false);
   const showWorkflow = useSendero(s => s.showWorkflow);
@@ -157,7 +166,15 @@ export function MetaInbox({
   // Narrower conversation column so the stage (offers / artifacts / etc) gets
   // more room. Operators can pop the conversation into a full-screen dialog
   // via the expand button on the SENDERO AI header.
-  const baseCols = 'auto 380px 1fr';
+  //
+  // When `embedRail` is false (the console route's parallel-routes
+  // setup), the rail column is dropped — the @threads slot renders
+  // it as a sibling. Responsive overrides in globals.css still target
+  // `:first-child` of `.meta-inbox-grid`; with no rail that's the
+  // conversation column, which is exactly what we want hidden at
+  // narrow widths anyway (the conversation column owns `grid-column:
+  // 1 / -1` at ≤900px, so the rule still resolves correctly).
+  const baseCols = embedRail ? 'auto 380px 1fr' : '380px 1fr';
   const cols = baseCols + (showWorkflow ? ' 240px' : '');
 
   return (
@@ -240,6 +257,7 @@ export function MetaInbox({
 
         <div
           className="meta-inbox-grid"
+          data-embed-rail={embedRail ? 'true' : 'false'}
           style={{
             display: 'grid',
             gridTemplateColumns: `var(--meta-inbox-cols, ${cols})`,
@@ -250,13 +268,19 @@ export function MetaInbox({
         >
           {/* LEFT — collapsible inbox rail. Default-collapsed thin
               strip with awaiting/holds/settled counts; expands to the
-              full TripRail with the trip list + filters. */}
-          <InboxRail
-            trips={trips}
-            activeTripId={focused?.id ?? null}
-            scopedTripId={scopedTripId}
-            scopedChannel={isTrip ? channel : undefined}
-          />
+              full TripRail with the trip list + filters.
+              Phase B: when the console route owns the rail via the
+              @threads parallel-routes slot, embedRail is false and
+              this column is omitted. The grid then starts at the
+              conversation column. */}
+          {embedRail ? (
+            <InboxRail
+              trips={trips}
+              activeTripId={focused?.id ?? null}
+              scopedTripId={scopedTripId}
+              scopedChannel={isTrip ? channel : undefined}
+            />
+          ) : null}
 
           {/* CENTER — conversation */}
           <div

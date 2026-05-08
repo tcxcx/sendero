@@ -8,8 +8,15 @@
  *     Channel-tinted header, customer-bubble messages tagged with
  *     "via {channel} · {time}", channel-tinted composer.
  *
- * Server-side fetch lives in `@/lib/console-data` so the inbox routes
- * share the same shape.
+ * Phase B — the parallel-routes layout splits the surface into four
+ * server-streamed segments:
+ *   - `@kpis`   — workspace KPI strip (top, unscoped only)
+ *   - `@threads` — InboxRail (left, server-fetches trips)
+ *   - children  (this page) — MetaInbox conversation + stage + composer
+ *   - `@context` — trip-context drawer (right aside, ≥lg)
+ *
+ * This page is now responsible only for the focused-trip data the
+ * conversation column needs. Trips and KPIs land via their slots.
  */
 
 import { MetaInboxLive } from '@/components/console/meta-inbox-live';
@@ -27,6 +34,13 @@ export default async function ConsolePage(props: ConsolePageProps) {
   const scopedTripId = params.tripId ?? null;
   const { tenant } = await requireCurrentTenant();
 
+  // `loadConsoleData` still returns the full payload because the
+  // ConsoleHero (workspace mode) reads `trips` for its avatar row,
+  // and MetaInboxLive's chat-bridge wiring still expects the trip
+  // list. The @threads slot performs an independent server fetch
+  // (parallel routes can't share data via React props), which is
+  // the trade we're making for independent streaming. The duplicate
+  // `prisma.trip.findMany` is a 12-row query — acceptable cost.
   const { trips, conversation, traveler, holdExpires, pendingBooking, kpis } =
     await loadConsoleData(tenant.id, scopedTripId);
 
@@ -41,6 +55,7 @@ export default async function ConsolePage(props: ConsolePageProps) {
         pendingBooking={pendingBooking}
         kpis={kpis}
         hideKpiStrip
+        embedRail={false}
       />
     </div>
   );
