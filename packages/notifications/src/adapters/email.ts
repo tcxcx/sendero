@@ -14,7 +14,7 @@
  */
 
 import { clerkClient } from '@clerk/nextjs/server';
-import { notifier } from '@sendero/notifications';
+import { notifier } from '../index';
 
 import type { ChannelAdapter } from '../dispatch';
 
@@ -23,8 +23,7 @@ export const emailAdapter: ChannelAdapter = async ({ event, recipient }) => {
   try {
     const client = await clerkClient();
     const user = await client.users.getUser(recipient.userId);
-    to =
-      user.primaryEmailAddress?.emailAddress ?? user.emailAddresses[0]?.emailAddress ?? null;
+    to = user.primaryEmailAddress?.emailAddress ?? user.emailAddresses[0]?.emailAddress ?? null;
   } catch (err) {
     return {
       ok: false,
@@ -35,8 +34,7 @@ export const emailAdapter: ChannelAdapter = async ({ event, recipient }) => {
   if (!to) return { ok: false, error: 'recipient has no email address' };
 
   const data = (event.data ?? {}) as Record<string, unknown>;
-  const title =
-    typeof data.title === 'string' ? data.title : defaultTitleFor(event.kind);
+  const title = typeof data.title === 'string' ? data.title : defaultTitleFor(event.kind);
   const body = typeof data.message === 'string' ? data.message : '';
   const bullets = Array.isArray(data.bullets)
     ? (data.bullets.filter(b => typeof b === 'string') as string[])

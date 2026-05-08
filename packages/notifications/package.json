@@ -11,7 +11,10 @@
     "./trip-event-templates": "./src/trip-event-templates.ts",
     "./otp": "./src/otp.ts",
     "./security-alerts": "./src/security-alerts.ts",
-    "./event-kinds": "./src/event-kinds.ts"
+    "./event-kinds": "./src/event-kinds.ts",
+    "./dispatch": "./src/dispatch.ts",
+    "./dedup-slot": "./src/dedup-slot.ts",
+    "./fallback-chain": "./src/fallback-chain.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -22,7 +25,11 @@
     "viem": "^2.21.0"
   },
   "peerDependencies": {
-    "@sendero/invoicing": "workspace:*"
+    "@clerk/nextjs": "*",
+    "@liveblocks/node": "*",
+    "@sendero/database": "workspace:*",
+    "@sendero/invoicing": "workspace:*",
+    "@slack/web-api": "*"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

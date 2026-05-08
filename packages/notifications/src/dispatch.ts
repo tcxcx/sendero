@@ -40,16 +40,17 @@
  * `NotificationDispatch` row is a correlation envelope only.
  */
 
-import { Prisma, prisma } from '@sendero/database';
+import { prisma } from '@sendero/database';
+
+import { claimDispatchSlot, markDispatchFailed } from './dedup-slot';
 import {
   type ChannelKind,
-  computeDedupKey,
   DEFAULT_CHANNELS_BY_EVENT,
   type EventKind,
   type NotificationEvent,
   type RecipientDescriptor,
   V1_ADAPTERS,
-} from '@sendero/notifications/event-kinds';
+} from './event-kinds';
 
 export interface DispatchContext {
   /** Tenant id — fails closed if absent (Responsible AI ship gate). */
@@ -113,38 +114,26 @@ export async function dispatch(input: DispatchInput): Promise<DispatchResult> {
     const snapshotPrefs = { eventKind: event.kind, channels, resolvedAt: new Date().toISOString() };
 
     for (const channelKind of channels) {
-      const dedupKey = computeDedupKey(event.kind, event.sourceId, recipient.userId, channelKind);
+      const claim = await claimDispatchSlot({
+        tenantId: context.tenantId,
+        eventKind: event.kind,
+        sourceKind: event.sourceKind,
+        sourceId: event.sourceId,
+        recipientUserId: recipient.userId,
+        recipientReason: recipient.reason,
+        channelKind,
+        triggeredBy: context.triggeredBy,
+        snapshotPrefs,
+      });
 
       const attempt: DispatchAttempt = {
         recipientUserId: recipient.userId,
         channelKind,
-        dedupKey,
-        status: 'sent',
+        dedupKey: claim.dedupKey,
+        status: claim.claimed ? 'sent' : 'skipped_dupe',
       };
 
-      try {
-        await prisma.notificationDispatch.create({
-          data: {
-            tenantId: context.tenantId,
-            sourceKind: event.sourceKind,
-            sourceId: event.sourceId,
-            eventKind: event.kind,
-            dedupKey,
-            channelKind,
-            recipients: [{ userId: recipient.userId, reason: recipient.reason ?? null }],
-            snapshotPrefs,
-            status: 'sent',
-            triggeredBy: context.triggeredBy,
-          },
-        });
-      } catch (err) {
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-          attempt.status = 'skipped_dupe';
-          attempts.push(attempt);
-          continue;
-        }
-        attempt.status = 'failed';
-        attempt.error = err instanceof Error ? err.message : String(err);
+      if (!claim.claimed) {
         attempts.push(attempt);
         continue;
       }
@@ -154,7 +143,7 @@ export async function dispatch(input: DispatchInput): Promise<DispatchResult> {
       if (!V1_ADAPTERS.includes(channelKind)) {
         attempt.status = 'no_adapter';
         attempt.error = `no adapter wired for ${channelKind} in v1`;
-        await markDispatchFailed(context.tenantId, dedupKey, channelKind, attempt.error);
+        await markDispatchFailed(context.tenantId, claim.dedupKey, channelKind, attempt.error);
         attempts.push(attempt);
         continue;
       }
@@ -163,7 +152,7 @@ export async function dispatch(input: DispatchInput): Promise<DispatchResult> {
       if (!result.ok) {
         attempt.status = 'failed';
         attempt.error = result.error ?? 'adapter returned ok=false';
-        await markDispatchFailed(context.tenantId, dedupKey, channelKind, attempt.error);
+        await markDispatchFailed(context.tenantId, claim.dedupKey, channelKind, attempt.error);
       }
       attempts.push(attempt);
     }
@@ -191,30 +180,6 @@ async function resolveChannels(
   });
   if (pref) return pref.channels as ChannelKind[];
   return DEFAULT_CHANNELS_BY_EVENT[eventKind];
-}
-
-async function markDispatchFailed(
-  tenantId: string,
-  dedupKey: string,
-  channelKind: ChannelKind,
-  error: string
-): Promise<void> {
-  try {
-    await prisma.notificationDispatch.update({
-      where: { tenantId_dedupKey_channelKind: { tenantId, dedupKey, channelKind } },
-      data: { status: 'failed' },
-    });
-  } catch {
-    // The row may not exist yet (race on adapter failure before insert
-    // commits). Swallow — the failure is already in the attempts array
-    // and the caller logs.
-  }
-  console.warn('[dispatch] adapter failed', {
-    tenantId,
-    channelKind,
-    dedupKey: dedupKey.slice(0, 8),
-    error,
-  });
 }
 
 async function runAdapter(
