@@ -1,62 +1,100 @@
 /**
  * Phase A — parallel routes for streaming Suspense.
+ * Phase B-α/B — added @kpis + @threads slots.
+ * Phase B-γ (this revision) — added @conversation + @stage slots and
+ * mounted the layout-level <ConsoleChatHost />:
  *
- * Phase B (this file) extends the slot grid:
+ *     ┌─────────────────────────────────────────────────────────────┐
+ *     │                          @kpis                              │
+ *     ├─────────┬───────────────┬──────────────────┬────────────────┤
+ *     │@threads │ @conversation │      @stage      │   @context     │
+ *     │ (rail)  │ (chat + comp.)│ (Stage + WL when │ (trip drawer + │
+ *     │         │               │  showWorkflow)   │ customer panel)│
+ *     └─────────┴───────────────┴──────────────────┴────────────────┘
+ *                                ▲
+ *                                │ all chat consumers read from
+ *                                │ useSendero zustand
+ *                                │
+ *                    ┌───────────┴────────────┐
+ *                    │  ConsoleChatHost       │  (mounted here, renders
+ *                    │  ─────────────────────  │   null; owns useChat,
+ *                    │  • useChat({transport})│   syncs to store, owns
+ *                    │  • useChatStoreSync    │   bridge registration,
+ *                    │  • bridge register     │   EventSource, resume)
+ *                    │  • EventSource         │
+ *                    │  • resume effect (?cs=)│
+ *                    └────────────────────────┘
  *
- *     ┌───────────────────────────────────────────────────────────┐
- *     │                       @kpis                              │
- *     ├───────────┬─────────────────────────────────┬─────────────┤
- *     │ @threads  │            children             │  @context   │
- *     │  (rail)   │  (MetaInbox: conversation +     │  (drawer)   │
- *     │           │   stage + composer)             │             │
- *     └───────────┴─────────────────────────────────┴─────────────┘
- *
- * Each slot has its own page.tsx + loading.tsx + default.tsx so the
- * inbox rail, the focused conversation, the workspace KPIs, and the
- * trip-context drawer all stream in from independent server fetches.
- *
- * Why this split:
- *   - `@threads` only needs the 12-most-recent trip query. It can
- *     paint as soon as that lands without waiting for the focused
- *     trip's events JSON.
- *   - `children` (MetaInboxLive) renders the conversation column
- *     and composer. It still owns the cross-cutting client state
- *     (useChat / presence / EventSource / optimistic posts), but no
- *     longer mounts the rail itself — the rail comes from `@threads`.
- *   - `@context` and `@kpis` were the Phase A and Phase B-α slots.
- *
- * Cross-cutting state (composerMode, ?tripId, ?cs) lives in the URL
- * via nuqs, so a rail click in `@threads` re-renders only the slots
- * that actually depend on the focused trip.
+ * The console route's `children` slot (page.tsx) returns null — every
+ * column is a sibling slot. This is intentional: deleting page.tsx
+ * would 404 (Codex outside-voice #3). The host survives ?tripId / ?cs
+ * flips because the layout client tree is preserved across slot
+ * navigations within /dashboard/console.
  */
 
 import type { ReactNode } from 'react';
+
+import { ConsoleChatHost } from '@/components/console/console-chat-host';
 
 interface Props {
   children: ReactNode;
   context: ReactNode;
   kpis: ReactNode;
   threads: ReactNode;
+  conversation: ReactNode;
+  stage: ReactNode;
 }
 
-export default function ConsoleLayout({ children, context, kpis, threads }: Props) {
+export default function ConsoleLayout({
+  children,
+  context,
+  kpis,
+  threads,
+  conversation,
+  stage,
+}: Props) {
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-0">
+      {/* Layout-level chat host. Headless (renders null). Owns useChat
+          and mirrors messages/status/error into the Zustand store so
+          @conversation and @stage can render without owning the hook. */}
+      <ConsoleChatHost />
+
       {kpis}
+
       <div className="flex min-h-0 w-full flex-1 flex-row gap-0">
-        {/* @threads — server-fetched rail. Hidden below 900px so the
-            existing MetaInbox responsive rules (which collapse the
-            grid to a single column) keep working. The InboxRail's
-            own collapsed state still works inside this column. */}
+        {/* @threads — server-fetched rail. Hidden below md. */}
         <div className="hidden min-h-0 shrink-0 md:flex">{threads}</div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+
+        {/* @conversation — middle column. ~380px on the inbox grid;
+            here it's a flex child sized by content + flex behavior. */}
+        <div
+          className="hidden min-h-0 shrink-0 md:flex md:flex-col"
+          style={{ width: 'min(440px, 38vw)' }}
+        >
+          {conversation}
+        </div>
+
+        {/* @stage — flex 1, fills remaining space. */}
+        <div className="hidden min-h-0 min-w-0 flex-1 lg:flex lg:flex-col">{stage}</div>
+
+        {/* @context — right aside, ≥lg only. */}
         <aside
           className="hidden w-[18rem] shrink-0 border-l border-[color:var(--surface-border,rgba(0,0,0,0.08))] bg-[color:var(--surface-raised,#fff)]/40 lg:flex lg:flex-col"
           aria-label="Trip context"
         >
           {context}
         </aside>
+
+        {/* Narrow-viewport fallback: render conversation full-width
+            when md hides @threads/@stage/@context. The conversation
+            slot's own responsive rules collapse it to single column. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:hidden">{conversation}</div>
       </div>
+
+      {/* `children` (page.tsx) returns null. Kept mounted so Next.js
+          recognizes the route segment. Hidden visually. */}
+      <div className="hidden">{children}</div>
     </div>
   );
 }

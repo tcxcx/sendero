@@ -114,6 +114,26 @@ interface MetaInboxProps {
    * any other surface still composing MetaInbox directly.
    */
   embedRail?: boolean;
+  /**
+   * Phase B-γ — when false, the Stage column is omitted from the
+   * grid. The console route renders Stage in its own `@stage` slot.
+   * Defaults to true so /dashboard/inbox/[tripId] keeps its embedded
+   * stage column.
+   */
+  embedStage?: boolean;
+  /**
+   * Phase B-γ — when false, the WorkflowLog column is omitted from
+   * the grid. The console route renders it inside `@stage` (gated on
+   * `showWorkflow`). Defaults to true so /dashboard/inbox/[tripId]
+   * keeps its embedded workflow column.
+   */
+  embedWorkflow?: boolean;
+  /**
+   * Phase B-γ — when false, the customer panel toggle button + column
+   * are omitted. The console route folds the customer panel into the
+   * `@context` drawer instead.
+   */
+  embedCustomerPanel?: boolean;
 }
 
 export function MetaInbox({
@@ -132,6 +152,9 @@ export function MetaInbox({
   disabled,
   composerExtras,
   embedRail = true,
+  embedStage = true,
+  embedWorkflow = true,
+  embedCustomerPanel = true,
 }: MetaInboxProps) {
   const [customerPanelOpen, setCustomerPanelOpen] = useState(false);
   const showWorkflow = useSendero(s => s.showWorkflow);
@@ -174,8 +197,17 @@ export function MetaInbox({
   // conversation column, which is exactly what we want hidden at
   // narrow widths anyway (the conversation column owns `grid-column:
   // 1 / -1` at ≤900px, so the rule still resolves correctly).
-  const baseCols = embedRail ? 'auto 380px 1fr' : '380px 1fr';
-  const cols = baseCols + (showWorkflow ? ' 240px' : '');
+  //
+  // Phase B-γ: when embedStage / embedWorkflow are false, those
+  // columns drop too. The console route lifts them into the `@stage`
+  // slot. When BOTH stage and workflow are dropped, the conversation
+  // column expands to fill the available width (the slot itself owns
+  // the bounding width via layout flex).
+  const conversationTrack = embedStage || (embedWorkflow && showWorkflow) ? '380px' : '1fr';
+  const stageCol = embedStage ? ' 1fr' : '';
+  const workflowCol = embedWorkflow && showWorkflow ? ' 240px' : '';
+  const railCol = embedRail ? 'auto ' : '';
+  const cols = `${railCol}${conversationTrack}${stageCol}${workflowCol}`;
 
   return (
     <div
@@ -210,22 +242,24 @@ export function MetaInbox({
             onCommand={onCommand}
             toolbarSlot={
               <>
-                <button
-                  type="button"
-                  onClick={() => setCustomerPanelOpen(v => !v)}
-                  className="t-mono"
-                  style={{
-                    padding: '5px 10px',
-                    background: customerPanelOpen ? 'transparent' : 'var(--midnight)',
-                    color: customerPanelOpen ? 'var(--midnight)' : '#fdfbf7',
-                    border: customerPanelOpen ? '1px solid var(--hairline-color)' : 0,
-                    borderRadius: 5,
-                    fontSize: 10.5,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {customerPanelOpen ? '◨ Close panel' : '◧ Show customer panel'}
-                </button>
+                {embedCustomerPanel ? (
+                  <button
+                    type="button"
+                    onClick={() => setCustomerPanelOpen(v => !v)}
+                    className="t-mono"
+                    style={{
+                      padding: '5px 10px',
+                      background: customerPanelOpen ? 'transparent' : 'var(--midnight)',
+                      color: customerPanelOpen ? 'var(--midnight)' : '#fdfbf7',
+                      border: customerPanelOpen ? '1px solid var(--hairline-color)' : 0,
+                      borderRadius: 5,
+                      fontSize: 10.5,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {customerPanelOpen ? '◨ Close panel' : '◧ Show customer panel'}
+                  </button>
+                ) : null}
                 <Link
                   href="/dashboard/console"
                   className="sd-pill sd-pill-outline"
@@ -359,22 +393,28 @@ export function MetaInbox({
               MetaInboxLive's useChatStoreSync feeds it the data so
               flights/hotels/treasury flows render here as the agent
               runs tools. Borderless + transparent so it floats over
-              the parchment field per DESIGN.md §9. */}
-          <div
-            className="meta-inbox-stage"
-            style={{
-              minWidth: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            <Stage />
-          </div>
+              the parchment field per DESIGN.md §9.
+              Phase B-γ: skipped when `embedStage` is false; the
+              console route renders it via the @stage slot. */}
+          {embedStage ? (
+            <div
+              className="meta-inbox-stage"
+              style={{
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              <Stage />
+            </div>
+          ) : null}
 
           {/* CUSTOMER — only when scoped + open. Hidden by default; the
-              footer chip can re-open it for trip context lookups. */}
-          {isTrip && customerPanelOpen ? (
+              footer chip can re-open it for trip context lookups.
+              Phase B-γ: skipped on the console route (embedCustomerPanel=false);
+              the @context drawer hosts the same content there. */}
+          {embedCustomerPanel && isTrip && customerPanelOpen ? (
             <div
               className="meta-inbox-customer"
               style={{
@@ -406,8 +446,10 @@ export function MetaInbox({
           {/* WORKFLOW — the SenderoApp WorkflowLog, gated by the global
               showWorkflow tweaks toggle. Same component the `/` shell
               uses, so meter ticks + workflow events render through one
-              canonical view across the app. */}
-          {showWorkflow ? (
+              canonical view across the app.
+              Phase B-γ: skipped when `embedWorkflow` is false; the
+              console route renders WorkflowLog under Stage in @stage. */}
+          {embedWorkflow && showWorkflow ? (
             <div
               className="meta-inbox-workflow"
               style={{
@@ -440,7 +482,11 @@ const FILTER_OPTIONS: ReadonlyArray<{ key: 'all' | ChannelKey; label: string }> 
   { key: 'sms', label: 'SMS' },
 ];
 
-function UnifiedConversation({
+// Phase B-γ — exported so ConsoleConversation in @conversation can
+// render channel-mode trip event logs without re-implementing the
+// channel-filter chip rail. Re-collapse in B-δ when MetaInbox itself
+// is deleted.
+export function UnifiedConversation({
   messages,
   isTrip,
   travelerInitials,

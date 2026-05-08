@@ -246,6 +246,35 @@ interface SenderoState {
   showWorkflow: boolean;
   dark: boolean;
 
+  // Phase B-γ — true while the active chat surface (ConsoleChatHost on
+  // /dashboard/console, or chat-col on /, or meta-inbox-live on
+  // /dashboard/inbox/[tripId]) has its bridge registration live. The
+  // sibling @conversation slot composer disables submit while false to
+  // close the cold-load race where it could mount and accept input
+  // before the layout-level host's effect ran. Lifecycle-bound: hosts
+  // MUST set true in the same useEffect that registers with the chat-
+  // bridge and false in that effect's cleanup, so StrictMode dev
+  // double-mount doesn't leave it stale (Codex outside-voice #1).
+  hostReady: boolean;
+  setHostReady: (value: boolean) => void;
+
+  // Phase B-γ — Zustand-backed mirror of useChat's messages/status/error
+  // so the @conversation slot can render the AI Elements stream without
+  // owning useChat itself. The ConsoleChatHost (mounted in the console
+  // layout) syncs these via useEffect on every render. Subscribers
+  // re-render on each token, same frequency as today's MetaInboxLive
+  // (the split's win is JS-execution count for sibling slots Stage and
+  // WorkflowLog, not for @conversation). chatMessages typed `unknown[]`
+  // here to avoid pulling the AI SDK's UIMessage type into store.ts
+  // (kept generic so chat-col can also push into this slice if we ever
+  // unify the / shell into the same architecture).
+  chatMessages: unknown[];
+  chatStatus: 'submitted' | 'streaming' | 'ready' | 'error' | 'unknown';
+  chatError: { message: string } | null;
+  setChatMessages: (m: unknown[]) => void;
+  setChatStatus: (s: 'submitted' | 'streaming' | 'ready' | 'error' | 'unknown') => void;
+  setChatError: (e: { message: string } | null) => void;
+
   // Auth
   userAuth: UserAuth | null;
   setUserAuth: (a: UserAuth | null) => void;
@@ -341,6 +370,16 @@ let eventCounter = 0;
 export const useSendero = create<SenderoState>(set => ({
   showWorkflow: true,
   dark: false,
+
+  hostReady: false,
+  setHostReady: hostReady => set({ hostReady }),
+
+  chatMessages: [],
+  chatStatus: 'unknown',
+  chatError: null,
+  setChatMessages: chatMessages => set({ chatMessages }),
+  setChatStatus: chatStatus => set({ chatStatus }),
+  setChatError: chatError => set({ chatError }),
 
   userAuth: null,
   setUserAuth: userAuth => set({ userAuth, traveler: travelerFromAuth(userAuth) }),
