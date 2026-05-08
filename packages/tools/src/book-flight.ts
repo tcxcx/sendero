@@ -1629,15 +1629,13 @@ async function settleTravelerUsdcToTreasury(args: {
   });
   if (!evmDcw?.address) return null;
 
-  const { resolvePlatformTreasuryDestination } = await import('./platform-treasury');
-  const senderoTreasury = await resolvePlatformTreasuryDestination('arc');
-  if (!senderoTreasury) {
+  const senderoRecipient = process.env.TREASURY_VIEM_ADDRESS;
+  if (!senderoRecipient) {
     console.warn(
-      '[book_flight] no live Arc SuperOrgTreasury — refusing to settle traveler reimbursement'
+      '[book_flight] TREASURY_VIEM_ADDRESS unset — refusing to settle (would lose money)'
     );
     return null;
   }
-  const senderoRecipient = senderoTreasury.address;
 
   // Lazy import avoids pulling the full unified-gateway module into
   // the cold path of every book_flight invocation that doesn't end up
@@ -1655,8 +1653,6 @@ async function settleTravelerUsdcToTreasury(args: {
     travelerUserId: args.travelerUserId,
     amountUsdc: args.amountUsdc,
     recipient: senderoRecipient,
-    treasuryId: senderoTreasury.treasuryId,
-    treasuryNetwork: senderoTreasury.network,
     note: 'tenant markup share is Phase H v2 — not wired yet',
   });
 
