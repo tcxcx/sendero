@@ -10,7 +10,8 @@
     "./templates": "./src/templates.ts",
     "./trip-event-templates": "./src/trip-event-templates.ts",
     "./otp": "./src/otp.ts",
-    "./security-alerts": "./src/security-alerts.ts"
+    "./security-alerts": "./src/security-alerts.ts",
+    "./event-kinds": "./src/event-kinds.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

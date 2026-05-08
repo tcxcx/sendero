@@ -3330,6 +3330,92 @@ model SecurityAlert {
   @@map("security_alerts")
 }
 
+/// Phase C-2 — cross-channel notification dispatch correlation row.
+///
+/// One row per logical event-channel-recipient triple. Idempotency via
+/// the (tenantId, dedupKey, channelKind) UNIQUE constraint: when both
+/// the legacy direct-call site and the new dispatcher fire during the
+/// migration cutover (parallel-fire-with-dedupKey pattern, locked in
+/// /plan-eng-review E5), the second insert errors and the dispatcher
+/// drops the duplicate.
+///
+/// This row is an envelope/correlation only. Per-channel delivery
+/// status stays in existing tables (WhatsAppOutboundMessage,
+/// MeterEvent, SecurityAlert, Trip.events) — codex outside-voice #2
+/// flagged that adding a 3rd audit seam would duplicate infra.
+model NotificationDispatch {
+  id            String   @id @default(cuid())
+  tenantId      String
+  /// 'agent_tool' | 'webhook' | 'workflow' | 'manual'
+  sourceKind    String
+  /// Stable id from the originating call site (handoff id, booking id,
+  /// thread id, etc). Lets ops trace back from a duplicate row to the
+  /// fire path that produced it.
+  sourceId      String
+  /// 'handoff.requested' | 'booking.confirmed' | 'mention.received' in
+  /// v1. Discriminated union extends in v2 (security/platform/OTP).
+  eventKind     String
+  /// sha256(eventKind + sourceId + recipientId + channelKind). Both
+  /// the dispatcher AND the retrofitted direct-call sites compute the
+  /// SAME key so the UNIQUE constraint catches the dupe.
+  dedupKey      String
+  /// 'slack' | 'whatsapp' | 'liveblocks_bell' | 'email' | 'sms' | 'push'
+  /// (sms/push admitted from v1 even though no adapters; codex #10).
+  channelKind   String
+  /// JSON array of recipient descriptors at dispatch time. Frozen.
+  recipients    Json
+  /// JSON snapshot of the user's prefs at send time. Survives later
+  /// pref toggles so old audit rows stay coherent (locked E4).
+  snapshotPrefs Json
+  /// 'sent' | 'skipped_dupe' | 'skipped_pref' | 'failed' | 'failed_all_channels'.
+  /// 'failed_all_channels' fires from the fallback chain terminal
+  /// state (Sendero customer-support Slack post per E7).
+  status        String
+  /// 'user_xxx' (Clerk id) | 'system' | 'webhook:duffel' | 'workflow:run-id'.
+  /// Audit trail for cross-tenant/auth boundaries (locked E6).
+  triggeredBy   String
+  dispatchedAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([tenantId, dedupKey, channelKind])
+  @@index([tenantId, eventKind, dispatchedAt])
+  @@index([tenantId, sourceKind, sourceId])
+  @@map("notification_dispatch")
+}
+
+/// Phase C-2 — per-user notification channel preferences.
+///
+/// One row per (userId, tenantId, eventKind). `channels` is a Postgres
+/// text[] of enabled channels for that event kind. Empty array = "no
+/// notifications for this event"; missing row = tenant default applies.
+///
+/// Locked schema shape per /plan-eng-review E3: text[] over junction
+/// table. Atomic update, simpler queries for the common path
+/// ("which channels for user X event Y?"). Junction table revisited
+/// only when admin queries like "all users with Slack disabled" become
+/// frequent.
+///
+/// userId is the Clerk user id (string), not a Sendero User FK — this
+/// table is queried both for in-tenant org members and for tenant-
+/// admin defaults. No back-relation to User to keep cascade behavior
+/// predictable.
+model UserNotificationPref {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String
+  /// 'handoff.requested' | 'booking.confirmed' | 'mention.received'
+  eventKind String
+  /// Empty = "no notifications for this event." Missing row = tenant
+  /// default. Order is irrelevant; uniqueness via (userId, tenantId,
+  /// eventKind) below.
+  channels  String[]
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([userId, tenantId, eventKind])
+  @@index([tenantId, eventKind])
+  @@map("user_notification_pref")
+}
+
 /// MoonPay buy-widget transaction state. One row per checkout MoonPay
 /// reports via webhook. `transaction.created` inserts; `transaction.updated`
 /// mutates `status` + `failureReason`. Indexed by user for `/me/wallet`
