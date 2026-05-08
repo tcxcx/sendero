@@ -10,6 +10,12 @@
  * inFlight + awaiting today, settled-30d count + fare, median
  * agent response. The inline grid is suppressed via `hideKpiStrip`
  * on the page-level MetaInboxLive.
+ *
+ * Scoped (?tripId=…) mode renders null — the workspace strip is a
+ * roll-up over all trips, so it would be confusing alongside a
+ * single trip's conversation. `default.tsx` already returns null for
+ * the soft-nav fallback; this guard handles direct navigation +
+ * deep-links where searchParams are populated.
  */
 
 import { loadConsoleKpis } from '@/lib/console-kpis';
@@ -17,7 +23,14 @@ import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
-export default async function KpisSlot() {
+interface KpisSlotProps {
+  searchParams: Promise<{ tripId?: string }>;
+}
+
+export default async function KpisSlot({ searchParams }: KpisSlotProps) {
+  const params = await searchParams;
+  if (params.tripId) return null;
+
   const { tenant } = await requireCurrentTenant();
   const kpis = await loadConsoleKpis(tenant.id);
 

@@ -29,7 +29,13 @@ export function WorkflowLog() {
   const treasury = useSendero(s => s.treasury);
 
   // Stable per-mount run id so the header doesn't flicker every render.
-  const runId = useMemo(() => `wf_${Math.random().toString(36).slice(2, 10)}`, []);
+  // Generated client-side only — Math.random() during SSR diverged from
+  // the client value and produced a hydration mismatch on scoped trip
+  // routes that include the workflow log.
+  const [runId, setRunId] = useState<string>('wf_…');
+  useEffect(() => {
+    setRunId(`wf_${Math.random().toString(36).slice(2, 10)}`);
+  }, []);
 
   const [runtime, setRuntime] = useState<Runtime | null>(null);
   useEffect(() => {

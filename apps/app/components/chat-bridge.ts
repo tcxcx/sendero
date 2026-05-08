@@ -20,16 +20,31 @@ type Send = (text: string) => void;
 type Note = (text: string) => void;
 
 let registered: Send | null = null;
+let registeredKey: unknown = null;
 let registeredNote: Note | null = null;
+let registeredNoteKey: unknown = null;
 
-export function registerChatBridge(send: Send): void {
-  if (registered && registered !== send && process.env.NODE_ENV !== 'production') {
+/**
+ * Register the active chat surface's send handler.
+ *
+ * The optional `key` is the underlying reference-stable identity (e.g.
+ * useChat's `sendMessage`) that the wrapper closes over. Without a key,
+ * callers like `(text) => sendMessage({ text })` create a fresh closure
+ * every render — the equality check would always fail and the duplicate-
+ * registration warning would spam in dev. The key lets us detect a *real*
+ * surface swap (different useChat instance) versus a benign re-register
+ * from the same surface during normal renders.
+ */
+export function registerChatBridge(send: Send, key?: unknown): void {
+  const sameSurface = key !== undefined && registeredKey === key;
+  if (registered && !sameSurface && registered !== send && process.env.NODE_ENV !== 'production') {
     console.warn(
       '[chat-bridge] sendMessage already registered — last write wins. ' +
         'Mount one chat surface at a time (chat-col OR meta-inbox-live).'
     );
   }
   registered = send;
+  registeredKey = key ?? send;
 }
 
 export function sendViaChat(text: string): boolean {
@@ -49,11 +64,18 @@ export function sendViaChat(text: string): boolean {
  * Returns false when no chat is mounted (storybook, install/slack);
  * the caller's direct-API path remains the only effect in that case.
  */
-export function registerChatNote(note: Note): void {
-  if (registeredNote && registeredNote !== note && process.env.NODE_ENV !== 'production') {
+export function registerChatNote(note: Note, key?: unknown): void {
+  const sameSurface = key !== undefined && registeredNoteKey === key;
+  if (
+    registeredNote &&
+    !sameSurface &&
+    registeredNote !== note &&
+    process.env.NODE_ENV !== 'production'
+  ) {
     console.warn('[chat-bridge] noteToChat already registered — last write wins.');
   }
   registeredNote = note;
+  registeredNoteKey = key ?? note;
 }
 
 export function noteToChat(text: string): boolean {

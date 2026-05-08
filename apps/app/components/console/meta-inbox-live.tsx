@@ -248,9 +248,10 @@ export function MetaInboxLive({
 
   // Expose `sendMessage` to Stage SearchForm + quick-command surfaces
   // through a module-level singleton. `sendMessage` is reference-
-  // stable across renders (memoized inside useChat), so re-registering
-  // every render is idempotent and a hook-free path is safe here.
-  registerChatBridge((text: string) => sendMessage({ text }));
+  // stable across renders (memoized inside useChat); we pass it as the
+  // key so re-registers from the same surface skip the duplicate-
+  // registration warning even though the wrapper closure is fresh.
+  registerChatBridge((text: string) => sendMessage({ text }), sendMessage);
 
   // HoldCard / FundCard call noteToChat() AFTER a direct API call
   // succeeds. Synthetic system message keeps the chat history
@@ -264,7 +265,7 @@ export function MetaInboxLive({
         parts: [{ type: 'text' as const, text }],
       },
     ]);
-  });
+  }, setMessages);
 
   // Pump every tool call into the SenderoApp store so:
   //   · Stage renders the right artifact (offer cards / hold card /
