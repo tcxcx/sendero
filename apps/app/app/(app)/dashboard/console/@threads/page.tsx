@@ -14,7 +14,6 @@
  */
 
 import { InboxRail } from '@/components/console/inbox-rail';
-import { asChannelKey, CHANNELS } from '@/components/console/channels';
 import { loadConsoleTrips } from '@/lib/console-trips';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -33,15 +32,6 @@ export default async function ThreadsSlot({ searchParams }: ThreadsSlotProps) {
   // Active row resolution mirrors the previous in-MetaInbox behavior:
   // the scoped trip wins, otherwise the freshest trip is highlighted.
   const activeTripId = scopedTripId ?? trips[0]?.id ?? null;
-  const focused = scopedTripId ? trips.find(t => t.id === scopedTripId) : null;
-  const scopedChannel = focused ? CHANNELS[asChannelKey(focused.channel)] : undefined;
 
-  return (
-    <InboxRail
-      trips={trips}
-      activeTripId={activeTripId}
-      scopedTripId={scopedTripId}
-      scopedChannel={scopedChannel}
-    />
-  );
+  return <InboxRail trips={trips} activeTripId={activeTripId} scopedTripId={scopedTripId} />;
 }

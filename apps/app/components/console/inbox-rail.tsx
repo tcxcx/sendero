@@ -26,15 +26,20 @@ import { useQueryState } from 'nuqs';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { TripRail, type TripRowData, type TripState } from './trip-rail';
-import type { CHANNELS } from './channels';
 
 const STORAGE_KEY = 'sendero.console.inboxRail.expanded';
 
+// `scopedChannel` was declared on the original prop interface (carrying a
+// CHANNELS lookup for the scoped trip) but never read inside the component.
+// Server→client serialization fails because CHANNELS entries hold an `icon`
+// React component (a function), so passing it from the @threads server
+// component to this client component throws "Functions cannot be passed
+// directly to Client Components" the moment any ?tripId= URL renders.
+// Dropped to fix the regression.
 interface InboxRailProps {
   trips: TripRowData[];
   activeTripId: string | null;
   scopedTripId: string | null;
-  scopedChannel?: ReturnType<typeof CHANNELS extends Record<string, infer V> ? () => V : never>;
 }
 
 export function InboxRail(props: InboxRailProps) {

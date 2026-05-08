@@ -312,7 +312,6 @@ export function MetaInbox({
               trips={trips}
               activeTripId={focused?.id ?? null}
               scopedTripId={scopedTripId}
-              scopedChannel={isTrip ? channel : undefined}
             />
           ) : null}
 
