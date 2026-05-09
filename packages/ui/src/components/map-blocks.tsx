@@ -4,14 +4,7 @@ import { Activity, MapPin, Navigation, Radio, Route } from 'lucide-react';
 
 import { Badge } from './badge';
 import { Card, CardContent, CardHeader, CardTitle } from './card';
-import {
-  Map,
-  MapArc,
-  MapControls,
-  MapMarker,
-  MarkerContent,
-  MarkerTooltip,
-} from './ui/map';
+import { Map, MapArc, MapControls, MapMarker, MarkerContent, MarkerTooltip } from './ui/map';
 
 export type SenderoMapPoint = {
   id: string;

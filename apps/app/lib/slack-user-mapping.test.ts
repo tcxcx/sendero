@@ -83,17 +83,15 @@ const prismaStub = {
         return state.bindings.get(k) ?? null;
       }
     ),
-    create: mock(
-      async (args: { data: SlackUserBindingRow }) => {
-        const k = bindingKey(args.data.tenantId, args.data.slackTeamId, args.data.slackUserId);
-        if (state.bindings.has(k)) {
-          // Mimic Prisma P2002.
-          throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
-        }
-        state.bindings.set(k, { ...args.data });
-        return args.data;
+    create: mock(async (args: { data: SlackUserBindingRow }) => {
+      const k = bindingKey(args.data.tenantId, args.data.slackTeamId, args.data.slackUserId);
+      if (state.bindings.has(k)) {
+        // Mimic Prisma P2002.
+        throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
       }
-    ),
+      state.bindings.set(k, { ...args.data });
+      return args.data;
+    }),
     update: mock(
       async (args: {
         where: {
@@ -123,19 +121,17 @@ const prismaStub = {
       if (args.where.id) return state.usersById.get(args.where.id) ?? null;
       return null;
     }),
-    create: mock(
-      async (args: { data: { email: string; source: string }; select?: unknown }) => {
-        if (state.usersByEmail.has(args.data.email)) {
-          // Mimic Prisma P2002 on User.email unique.
-          throw Object.assign(new Error('Unique constraint failed on email'), { code: 'P2002' });
-        }
-        const id = `usr_${state.nextUserSeq++}`;
-        const row: UserRow = { id, email: args.data.email, source: args.data.source };
-        state.usersById.set(id, row);
-        state.usersByEmail.set(row.email, row);
-        return { id, email: row.email, source: row.source };
+    create: mock(async (args: { data: { email: string; source: string }; select?: unknown }) => {
+      if (state.usersByEmail.has(args.data.email)) {
+        // Mimic Prisma P2002 on User.email unique.
+        throw Object.assign(new Error('Unique constraint failed on email'), { code: 'P2002' });
       }
-    ),
+      const id = `usr_${state.nextUserSeq++}`;
+      const row: UserRow = { id, email: args.data.email, source: args.data.source };
+      state.usersById.set(id, row);
+      state.usersByEmail.set(row.email, row);
+      return { id, email: row.email, source: row.source };
+    }),
   },
   channelIdentity: {
     upsert: mock(
@@ -182,12 +178,16 @@ const prismaStub = {
           if (!row.userId) return false;
           const user = state.usersById.get(row.userId);
           const active = user?.memberships?.some(
-            membership => membership.tenantId === args.where.tenantId && membership.status === 'active'
+            membership =>
+              membership.tenantId === args.where.tenantId && membership.status === 'active'
           );
           const wallet = user?.wallets?.some(w => w.provisioner === 'dcw');
           return Boolean(active && (wallet || user?.gatewaySigner));
         })
-        .map(row => ({ userId: row.userId, user: row.userId ? state.usersById.get(row.userId) : null }))
+        .map(row => ({
+          userId: row.userId,
+          user: row.userId ? state.usersById.get(row.userId) : null,
+        }))
     ),
   },
 };

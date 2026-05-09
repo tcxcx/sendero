@@ -71,9 +71,7 @@ interface SlackUsersInfoLike {
   } | null;
 }
 
-export async function resolveSenderoUser(
-  args: ResolveSenderoUserArgs
-): Promise<ResolvedSlackUser> {
+export async function resolveSenderoUser(args: ResolveSenderoUserArgs): Promise<ResolvedSlackUser> {
   const { tenantId, slackTeamId, slackUserId, botToken, fallbackUserId } = args;
 
   try {
