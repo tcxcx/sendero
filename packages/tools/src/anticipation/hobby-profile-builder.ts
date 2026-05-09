@@ -119,11 +119,16 @@ export type HobbyProfileBuilderResult =
   | {
       status: 'production_refused';
       message: string;
+    }
+  | {
+      status: 'unknown_user';
+      message: string;
     };
 
 // ── Deps (testability) ──────────────────────────────────────────────
 
 export interface HobbyProfileBuilderDeps {
+  userExists(userId: string): Promise<boolean>;
   findEntry(
     userId: string,
     key: string
@@ -148,6 +153,10 @@ export interface HobbyProfileBuilderDeps {
 }
 
 export const dbDependencies: HobbyProfileBuilderDeps = {
+  async userExists(userId) {
+    const row = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    return row !== null;
+  },
   async findEntry(userId, key) {
     const row = await prisma.travelerTasteEntry.findUnique({
       where: { userId_key: { userId, key } },
@@ -297,6 +306,17 @@ export async function runHobbyProfileBuilder(
   const tenantId = ctx!.traveler!.tenantId!;
   const userId = ctx?.traveler?.userId ?? input.travelerId;
 
+  // Pre-flight user-existence check. Without this, prisma upsert below
+  // fails with `traveler_taste_entries_userId_fkey` and crashes the agent
+  // turn. Soft-status lets the orchestrator skip taste capture for stale
+  // userIds (operator console seeds, expired sessions) without blowing up.
+  if (!(await deps.userExists(userId))) {
+    return {
+      status: 'unknown_user',
+      message: `Traveler ${userId} not found in users table — taste capture skipped.`,
+    };
+  }
+
   // Normalize all signals into uniform shape. Explicit prefs land at
   // confidence='high' (the user said it themselves); inferred signals
   // carry their declared confidence.
@@ -399,7 +419,6 @@ export const hobbyProfileBuilderTool: ToolDef<HobbyProfileBuilderInput, HobbyPro
      * See packages/tools/src/types.ts ToolDef.experimental for what
      * this flag means today vs after PR-A1 lands the registry filter.
      */
-    experimental: true,
     description:
       "Build or update the traveler's taste graph from explicit preferences and inferred signals (chat mentions, saved places, prior bookings, feedback). Use whenever the traveler expresses or implies a preference — 'I love specialty coffee', 'always look for cheap Michelin', 'find me a beautiful date spot'. Returns the full TravelerTasteGraph snapshot + lists of new/updated keys + an overall confidence. Priority escalates but never downgrades on repeat signals. Custom hobby strings are slugged automatically when no canonical key matches. **Privacy:** never infer sensitive traits (orientation, religion, health). Travel-relevant prefs only.",
     inputSchema,

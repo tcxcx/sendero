@@ -457,7 +457,6 @@ async function runBusinessDressCodeBrief(
 const businessDressCodeBriefTool: ToolDef = {
   name: 'business_dress_code_brief',
   internal: true,
-  experimental: true,
   description:
     "Recommend clothing for a business meeting based on country + city + industry + meeting type + climate. Pure curated tables; explicit 'verify with host' guardrail in output. Use when traveler asks 'what should I wear to my meeting in <city>'.",
   inputSchema: dressCodeInput,
@@ -771,7 +770,6 @@ async function runExpensePolicyChecker(
 const expensePolicyCheckerTool: ToolDef = {
   name: 'expense_policy_checker',
   internal: true,
-  experimental: true,
   description:
     "Check proposed expenses against company travel policy. Pure rules-based — caller passes expenses[] + policy{flightCabin, flightCapUsd, hotelPerNightUsd, mealPerDayUsd, ...}. Returns per-line verdict (within / over / requires_approval / not_allowed) + trip total. Use BEFORE the traveler books anything that's borderline.",
   inputSchema: expensePolicyInput,
@@ -844,7 +842,6 @@ async function runReceiptCollectionAssistant(
 const receiptCollectionAssistantTool: ToolDef = {
   name: 'receipt_collection_assistant',
   internal: true,
-  experimental: true,
   description:
     'Track which trip bookings still need receipts attached. Returns per-row suggested action for each missing receipt. Use as a pre-expense-report step — agent can chase the traveler proactively in the days after a trip.',
   inputSchema: receiptInput,
@@ -1191,7 +1188,6 @@ async function runMeetingCommutePlanner(
 const meetingCommutePlannerTool: ToolDef = {
   name: 'meeting_commute_planner',
   internal: true,
-  experimental: true,
   description:
     'Calculate when to leave for a meeting. Pure heuristic — uses curated city rush-hour buffers + safety buffer. Compose with Routes API output by passing `drivingKm`. Use when traveler asks "what time should I leave for my <time> meeting".',
   inputSchema: commutePlannerInput,

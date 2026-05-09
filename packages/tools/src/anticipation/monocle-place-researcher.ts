@@ -427,7 +427,6 @@ export const monoclePlaceResearcherTool: ToolDef<
 > = {
   name: 'monocle_place_researcher',
   internal: true,
-  experimental: true,
   description:
     "Deep-research a single place and return a structured 'Monocle take' — verdict, vibe tags, signature items, guide mentions, who it's for, who it isn't, fineprint, and (when category is given) a budget estimate. Composes Vertex direct grounding (with AI Gateway fallback) + canonical Places metadata + `budget_estimator`. Use when the traveler asks 'is X actually any good', 'is Y overrated', 'tell me about Z place'. Reserve for the moment of truth — two grounded LLM calls per invocation, so don't loop.",
   inputSchema,

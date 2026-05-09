@@ -363,7 +363,6 @@ export async function runDatePerfumeAdvisor(
 const datePerfumeAdvisorTool: ToolDef<DatePerfumeAdvisorInput, DatePerfumeAdvisorResult> = {
   name: 'date_perfume_advisor',
   internal: true,
-  experimental: true,
   description:
     "Suggest a fragrance profile (family, notes, intent) for a date based on time-of-day + vibe + climate + budget tier. Returns spray count + application tip + the 'discovery, not announcement' guardrail. Pure tool, no external API.",
   inputSchema: perfumeInput,
@@ -464,7 +463,6 @@ export async function runDateGameTips(
 const dateGameTipsTool: ToolDef<DateGameTipsInput, DateGameTipsResult> = {
   name: 'date_game_tips',
   internal: true,
-  experimental: true,
   description:
     'Give tasteful, respectful, confidence-building date tips. Returns four bucketed lists — confidence, conversation, timing, graceful exit — plus a consent-aware guardrail line. Strict policy: no manipulation, no pickup-artist tactics, no pressure, no gender stereotypes. Pure tool, no external API.',
   inputSchema: gameTipsInput,
@@ -644,7 +642,6 @@ export async function runDatePlanBuilder(
 const datePlanBuilderTool: ToolDef<DatePlanBuilderInput, DatePlanBuilderResult> = {
   name: 'date_plan_builder',
   internal: true,
-  experimental: true,
   description:
     "Compose a multi-stop date plan from caller-supplied candidates. Each candidate has a name + category + optional pre-classified `role` (opener / anchor / second_move / exit). The tool buckets, picks the best per role, and emits a structured timeline with rationale + fallback guidance ('if energy fades, drop the second_move'). Use after sourcing candidates via `cheap_michelin_finder` / `wine_bar_finder` / `monocle_place_researcher`.",
   inputSchema: planBuilderInput,

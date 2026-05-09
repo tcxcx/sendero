@@ -350,7 +350,6 @@ export async function runWorkFromCafeRanker(
 export const workFromCafeRankerTool: ToolDef<WorkFromCafeRankerInput, WorkFromCafeRankerResult> = {
   name: 'work_from_cafe_ranker',
   internal: true,
-  experimental: true,
   description:
     "Rank cafes for laptop / remote-work sessions. Two modes: pass-through (give it a list from `specialty_coffee_finder`) or fresh discovery (give it a city, it'll run the finder first). Re-scores on wifi mentions, outlets, laptop / remote-work / co-working keywords, quiet / spacious cues, opening hours, plus penalties for very-expensive (likely turnover) and hyper-popular (likely crowded) cafes. Returns each shop with `workFriendlyScore` + `combinedScore` (0.6 × work + 0.4 × specialty). Use when the traveler asks 'where can I work from with my laptop', 'café para trabajar', 'remote-friendly café in <city>'.",
   inputSchema,

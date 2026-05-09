@@ -397,7 +397,6 @@ export const specialtyCoffeeFinderTool: ToolDef<
 > = {
   name: 'specialty_coffee_finder',
   internal: true,
-  experimental: true,
   description:
     "Find specialty coffee shops in a city, ranked by editorial × quality signal. Composes the curated CSE (Sprudge / 50 Best Coffee / Monocle / Eater / Time Out / etc.) with Google Places (New) canonical metadata. Folds traveler taste graph when travelerId is given. Use when the traveler asks for 'specialty coffee', 'tercera ola', 'third wave coffee', 'where should I get coffee in <city>'. For laptop / work-friendly ranking, follow up with `work_from_cafe_ranker`.",
   inputSchema,

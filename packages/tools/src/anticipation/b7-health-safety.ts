@@ -557,7 +557,6 @@ const EMERGENCY_NUMBERS: Record<string, EmergencyCard> = {
 const emergencyNumbersCardTool: ToolDef = {
   name: 'emergency_numbers_card',
   internal: true,
-  experimental: true,
   description:
     'Local emergency numbers + tourist police + consulate notes for ~40 countries. Pure curated table. Use whenever traveler arrives in a new country — pair with `embassy_consulate_locator` for the diplomatic-side info.',
   inputSchema: emergencyInput,
@@ -661,7 +660,6 @@ type SafeRouteInput = z.infer<typeof safeRouteInput>;
 const safeRouteHomeTool: ToolDef = {
   name: 'safe_route_home',
   internal: true,
-  experimental: true,
   description:
     "Recommend a safer route + mode home at night. Pure heuristic — caller passes from/to area scores + distance + hour + group size + phone state. Returns mode (walk / shared taxi / arranged ride) + concrete tips. Use when traveler asks 'how do I get back to my hotel' late at night.",
   inputSchema: safeRouteInput,
@@ -838,7 +836,6 @@ const CURATED_NEIGHBORHOODS: CuratedNeighborhood[] = [
 const areaAfterDarkCheckTool: ToolDef = {
   name: 'area_after_dark_check',
   internal: true,
-  experimental: true,
   description:
     "Evaluate after-dark suitability of a city neighborhood. Returns rating ('safe' / 'mostly_safe' / 'caution' / 'avoid') + notes. Curated table for ~30 high-traffic neighborhoods; CSE fallback for everything else. Compose with `safe_route_home` and `date_route_safety_check`.",
   inputSchema: areaCheckInput,

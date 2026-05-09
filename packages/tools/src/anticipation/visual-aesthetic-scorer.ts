@@ -282,7 +282,6 @@ export const visualAestheticScorerTool: ToolDef<
 > = {
   name: 'visual_aesthetic_scorer',
   internal: true,
-  experimental: true,
   description:
     'Score how beautiful / tasteful a place looks from accessible images via Vertex multimodal vision (Gemini 3 flash). Returns aesthetic score 0-1 + tags from a strict taxonomy (warm_lighting, natural_light, minimal, old_world, japanese_clean, editorial, romantic, cozy, design_forward, beautiful_counter, good_plating, lush_greenery, rooftop_view, generic, touristy, fluorescent, crowded, soulless, instagram_trap) + warnings + confidence. Pass 3-6 publicly-fetchable image URLs (Places photos pre-resolved, official websites, user-supplied). Compose with `budget_estimator` via `beauty_budget_ranker` for taste-per-dollar ranking.',
   inputSchema,

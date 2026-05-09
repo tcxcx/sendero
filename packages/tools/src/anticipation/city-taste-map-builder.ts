@@ -228,7 +228,6 @@ export const cityTasteMapBuilderTool: ToolDef<CityTasteMapBuilderInput, CityTast
   {
     name: 'city_taste_map_builder',
     internal: true,
-    experimental: true,
     description:
       "Build a personalized taste map for a city in ONE call — flagship HP2 orchestrator. Composes `foodie_shortlist_builder` + `work_from_cafe_ranker` + `professional_networking_scanner` based on the requested `categories`. Returns layered output + a `topMoveToday` the agent quotes immediately. Use when traveler asks 'build my <city> map', 'I'm landing in <city>, what should I do', 'plan my Tokyo week', 'arrival pack for <city>'.",
     inputSchema,

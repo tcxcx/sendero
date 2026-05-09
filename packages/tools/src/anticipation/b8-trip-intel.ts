@@ -120,7 +120,6 @@ type OpportunityInput = z.infer<typeof opportunityInput>;
 const tripOpportunityRankerTool: ToolDef = {
   name: 'trip_opportunity_ranker',
   internal: true,
-  experimental: true,
   description:
     'Rank a list of opportunities (events, attractions, classes, walks) by traveler fit + budget + time + weather. Pure scorer — caller passes opportunities[] + traveler hobbies + budget + hours available. Returns ranked list with reasons.',
   inputSchema: opportunityInput,
@@ -213,7 +212,6 @@ type GapDetectorInput = z.infer<typeof gapDetectorInput>;
 const itineraryGapDetectorTool: ToolDef = {
   name: 'itinerary_gap_detector',
   internal: true,
-  experimental: true,
   description:
     "Detect empty time windows in a traveler's itinerary that exceed a min gap (default 2h). Returns gap[] with start/end + duration. Compose with `micro_itinerary_builder` to fill them.",
   inputSchema: gapDetectorInput,
@@ -355,7 +353,6 @@ type LayoverInput = z.infer<typeof layoverInput>;
 const layoverCityEscapeTool: ToolDef = {
   name: 'layover_city_escape',
   internal: true,
-  experimental: true,
   description:
     'Decide if a traveler can leave the airport during a layover. Pure rules — checks duration / visa / bag status / typical airport→downtown time. Returns canEscape boolean + recommended max-stay duration + tips.',
   inputSchema: layoverInput,
@@ -436,7 +433,6 @@ type FirstDayInput = z.infer<typeof firstDayInput>;
 const firstDaySoftPlanTool: ToolDef = {
   name: 'first_day_soft_plan',
   internal: true,
-  experimental: true,
   description:
     'Build a gentle arrival-day plan based on flight duration + jet-lag direction + local arrival time. Pure logic + Places nearby for one café anchor. Use after `book_flight` to give the traveler a recovery-friendly first day.',
   inputSchema: firstDayInput,
@@ -515,7 +511,6 @@ type LastDayInput = z.infer<typeof lastDayInput>;
 const lastDayCheckoutPlanTool: ToolDef = {
   name: 'last_day_checkout_plan',
   internal: true,
-  experimental: true,
   description:
     'Plan the gap between hotel checkout and flight. Pure logic — surfaces luggage-storage need, recommends one anchor, calculates buffer. Pair with `luggage_storage_finder` when checkout-flight gap is more than ~3h.',
   inputSchema: lastDayInput,
@@ -652,7 +647,6 @@ type PacingInput = z.infer<typeof pacingInput>;
 const tripPacingOptimizerTool: ToolDef = {
   name: 'trip_pacing_optimizer',
   internal: true,
-  experimental: true,
   description:
     'Detect over-packed days and suggest pacing adjustments. Pure analysis — flags days with >3 high-intensity events, recommends spacing or moving items. Use to sanity-check itineraries before locking them.',
   inputSchema: pacingInput,
@@ -817,7 +811,6 @@ type GroupReconcilerInput = z.infer<typeof groupReconcilerInput>;
 const groupPreferenceReconcilerTool: ToolDef = {
   name: 'group_preference_reconciler',
   internal: true,
-  experimental: true,
   description:
     'Reconcile group preferences into consensus tier + ambience + dietary intersection + top shared activities. Pure analysis. Use as input to `foodie_shortlist_builder` / `city_taste_map_builder` for groups of 2+.',
   inputSchema: groupReconcilerInput,
@@ -998,7 +991,6 @@ type ContextualInput = z.infer<typeof contextualInput>;
 const tripContextualRecommenderTool: ToolDef = {
   name: 'trip_contextual_recommender',
   internal: true,
-  experimental: true,
   description:
     "Recommend from situation, not category — pure heuristic that infers vibe + intensity from the traveler's free-text context, then composes the right downstream tool. Use as the catch-all 'I don't know what I want, surprise me' surface.",
   inputSchema: contextualInput,

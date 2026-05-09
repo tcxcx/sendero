@@ -68,7 +68,7 @@ const inputSchema = z.object({
 export type TasteFeedbackLoopInput = z.infer<typeof inputSchema>;
 
 export interface TasteFeedbackLoopResult {
-  status: 'ok' | 'production_refused' | 'unavailable';
+  status: 'ok' | 'production_refused' | 'unavailable' | 'unknown_user';
   message: string;
   signalsWritten?: number;
   newPreferences?: string[];
@@ -176,6 +176,9 @@ export async function runTasteFeedbackLoop(
 
   if (r.status === 'production_refused') {
     return { status: 'production_refused', message: r.message };
+  }
+  if (r.status === 'unknown_user') {
+    return { status: 'unknown_user', message: r.message };
   }
 
   return {

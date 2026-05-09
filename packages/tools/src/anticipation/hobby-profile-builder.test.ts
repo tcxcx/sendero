@@ -48,6 +48,9 @@ function makeDeps(): {
     >(),
   };
   const deps: HobbyProfileBuilderDeps = {
+    async userExists(_userId) {
+      return true;
+    },
     async findEntry(_userId, key) {
       const e = state.entries.get(key);
       return e ? { priority: e.priority, notes: e.notes } : null;

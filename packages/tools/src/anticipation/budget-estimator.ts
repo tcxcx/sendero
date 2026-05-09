@@ -430,7 +430,6 @@ function formatMoneyTalk(
 export const budgetEstimatorTool: ToolDef<BudgetEstimatorInput, BudgetEstimatorResult> = {
   name: 'budget_estimator',
   internal: true,
-  experimental: true,
   description:
     'Estimate per-person spend at a place BEFORE recommending it. Always returns a range, never a fake exact number. Composes category baseline + Places `priceLevel` + city cost index + optional Michelin price band + free-text price mentions. Use as a middleware step inside foodie / date / coffee rankers — call once per candidate, fold the `budgetTier` into ranking. The `moneyTalk` field is a one-line phrasing the agent can quote directly to the traveler.',
   inputSchema,

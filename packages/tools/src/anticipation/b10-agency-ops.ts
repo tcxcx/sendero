@@ -701,7 +701,6 @@ type MarginGuardInput = z.infer<typeof marginGuardInput>;
 const agencyMarginGuardTool: ToolDef = {
   name: 'agency_margin_guard',
   internal: true,
-  experimental: true,
   description:
     'Check that a proposed price meets agency margin policy. Pure rules — flags markups below floor / above ceiling / negative margin / missing minimum-margin. Compose before quotes go to clients.',
   inputSchema: marginGuardInput,

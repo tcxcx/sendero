@@ -329,7 +329,6 @@ async function runMarketDayFinder(
 const marketDayFinderTool: ToolDef = {
   name: 'market_day_finder',
   internal: true,
-  experimental: true,
   description:
     'Find market days in a city — flea / farmers / antique / craft / design. Curated table for top 15 cities; CSE fallback for everywhere else. Use when traveler asks "what market is happening this weekend in <city>".',
   inputSchema: marketDayInput,
@@ -541,7 +540,6 @@ async function runGiftRecommender(
 const giftRecommenderTool: ToolDef = {
   name: 'gift_recommender',
   internal: true,
-  experimental: true,
   description:
     'Suggest local gifts to bring back from a country, by budget tier + recipient (client / partner / family / friend / host_family / colleague / self). Pure curated tables for ~10 most-traveled countries; generic suggestions for the rest. Use when traveler asks "what should I bring back from <country>".',
   inputSchema: giftInput,
@@ -687,7 +685,6 @@ async function runPharmacyProductMapper(
 const pharmacyProductMapperTool: ToolDef = {
   name: 'pharmacy_product_mapper',
   internal: true,
-  experimental: true,
   description:
     'Map a common pharmacy product (ibuprofen / acetaminophen / antihistamine / sunscreen / etc.) to its local-language name + dominant brand + OTC status, for ~10 common destinations. Pure curated table. Use when traveler asks "what\'s ibuprofen called in <country>".',
   inputSchema: pharmacyInput,
@@ -794,7 +791,6 @@ async function runElectronicsAdapterChecker(
 const electronicsAdapterCheckerTool: ToolDef = {
   name: 'electronics_adapter_checker',
   internal: true,
-  experimental: true,
   description:
     "Check plug type + voltage between traveler's home country and destination. Returns whether adapter and/or voltage converter is needed, with a plain-English recommendation. Pure curated table covering 24 common destinations. Use when traveler asks 'do I need an adapter for <country>'.",
   inputSchema: adapterInput,

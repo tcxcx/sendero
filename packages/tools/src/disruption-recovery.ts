@@ -601,7 +601,6 @@ interface InsuranceClaimPacket {
 const buildInsuranceClaimPacketTool: ToolDef = {
   name: 'build_insurance_claim_packet',
   internal: true,
-  experimental: true,
   description:
     'Bundle a structured insurance-claim packet from the trip + disruption + airline-response facts. Pure tool — does NOT submit the claim, just produces the narrative + evidence checklist + amount. Compose AFTER airline path is exhausted (whether refunded partially or rejected entirely). The amountClaimedUsd is `paidNonRefundable - refundOffered - creditOffered`.',
   inputSchema: insuranceClaimInput,
@@ -967,7 +966,6 @@ async function runTripDisruptionRecovery(
 const tripDisruptionRecoveryTool: ToolDef = {
   name: 'trip_disruption_recovery',
   internal: true,
-  experimental: true,
   description:
     "Orchestrate the full recovery workflow when a traveler can't take a booked trip — bereavement, serious illness, legal hold, military orders, natural disaster, visa denied, or voluntary. Composes `classify_disruption_situation` + `display_offer_conditions` + Duffel voluntary refund/change + `research_compassionate_exception_policy` + `build_insurance_claim_packet` + `request_human_handoff` into ONE chain the agent can execute step by step. Returns the chain + classification + likely outcome — does NOT execute the side-effecting steps (cancel/change). Compose this AS THE FIRST move when the traveler messages 'we can't go anymore' / 'mi abuelo no puede viajar'.",
   inputSchema: recoveryInput,
@@ -1034,7 +1032,6 @@ type CaseFileRendererInput = z.infer<typeof caseFileRendererInput>;
 const recoveryCaseFileRendererTool: ToolDef = {
   name: 'recovery_case_file_renderer',
   internal: true,
-  experimental: true,
   description:
     "Render a structured disruption case file as Slack blocks / email / plain text for ops handoff. Pure formatter. Use as the FINAL step before `request_human_handoff` so the operator inherits a complete picture: traveler, booking, airline, what was attempted, what's missing, what the airline said, what comes next.",
   inputSchema: caseFileRendererInput,

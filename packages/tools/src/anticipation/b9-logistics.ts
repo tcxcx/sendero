@@ -808,7 +808,6 @@ type LayoverViabilityInput = z.infer<typeof layoverViabilityInput>;
 const layoverViabilityCheckerTool: ToolDef = {
   name: 'layover_viability_checker',
   internal: true,
-  experimental: true,
   description:
     'Assess whether a layover is viable. Pure rules: minimum-connection-time-style heuristic considering immigration, bag recheck, terminal change, domestic/international mix. Returns viable / risky / not_viable + buffer minutes.',
   inputSchema: layoverViabilityInput,
@@ -972,7 +971,6 @@ const ALT_AIRPORT_TABLE: Record<
 const nearbyAirportAlternativeResearcherTool: ToolDef = {
   name: 'nearby_airport_alternative_researcher',
   internal: true,
-  experimental: true,
   description:
     "List nearby alternate airports for a primary airport, with rough description + tradeoff. Curated table for ~10 city-pairs. Use when traveler asks 'is there a closer airport to <city>'.",
   inputSchema: altAirportInput,

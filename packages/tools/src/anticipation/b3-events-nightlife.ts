@@ -883,7 +883,6 @@ async function runVenueNearbyPlanBuilder(
 const venueNearbyPlanBuilderTool: ToolDef = {
   name: 'venue_nearby_plan_builder',
   internal: true,
-  experimental: true,
   description:
     'Given a venue + event time, propose dinner-before + drinks-after + route notes. Composes Places nearby searches around the venue. Use when traveler bought a ticket and asks "where should we eat before <show>" / "drinks after <concert>".',
   inputSchema: venueNearbyInput,

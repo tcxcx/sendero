@@ -489,7 +489,6 @@ async function runTicketResaleRiskChecker(
 const ticketResaleRiskCheckerTool: ToolDef = {
   name: 'ticket_resale_risk_checker',
   internal: true,
-  experimental: true,
   description:
     'Evaluate resale-ticket risk on a URL + asking price. Pure heuristic — checks reseller against a trusted-host list, flags extreme markup or suspicious cheap pricing, surfaces sport-specific gotchas (football transfer-app rules, etc.), recommends safe payment methods. Use BEFORE the traveler hits "buy" on a non-Ticketmaster listing.',
   inputSchema: resaleInput,
@@ -678,7 +677,6 @@ async function runMatchPostponementMonitor(
 const matchPostponementMonitorTool: ToolDef = {
   name: 'match_postponement_monitor',
   internal: true,
-  experimental: true,
   description:
     'Detect fixture changes — caller passes original kickoff + latest known kickoff/venue/status from a fresh `lookup_match_fixtures` call. Returns `changed` flag + delta + guidance. Pure — schedule polling externally (Sendero scheduler) and feed into this tool.',
   inputSchema: postponementInput,
@@ -795,7 +793,6 @@ async function runFanGroupCoordinationTool(
 const fanGroupCoordinationToolTool: ToolDef = {
   name: 'fan_group_coordination_tool',
   internal: true,
-  experimental: true,
   description:
     'Coordinate group fan travel — aggregate per-member origin / budget tier / seat preference into a consensus + recommendations. Pure DB-only. Use when the traveler is leading a group of 4+ fans on a trip and wants a "how do we agree" briefing.',
   inputSchema: fanGroupInput,

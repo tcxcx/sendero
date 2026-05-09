@@ -131,7 +131,6 @@ export async function runBeautyBudgetRanker(
 export const beautyBudgetRankerTool: ToolDef<BeautyBudgetRankerInput, BeautyBudgetRankerResult> = {
   name: 'beauty_budget_ranker',
   internal: true,
-  experimental: true,
   description:
     'Rank candidates by beauty-per-dollar. Pure composer — caller passes candidates already decorated by `visual_aesthetic_scorer` (aesthetic 0-1) and `budget_estimator` (typical spend USD). Score = aesthetic^1.2 / (1 + log10(typicalSpend+1)), with optional budget-cap penalty (×0.4 over 1.25× cap) and preferred-tier tilt (×1.1). Use as the final sort step inside foodie / date / coffee / hotel / shop discovery.',
   inputSchema,
