@@ -26,14 +26,28 @@ interface UserRow {
   id: string;
   email: string;
   source: string;
+  wallets?: Array<{ id: string; provisioner?: string }>;
+  gatewaySigner?: { userId: string } | null;
+  memberships?: Array<{ tenantId: string; status: string }>;
+}
+
+interface ChannelIdentityRow {
+  id: string;
+  tenantId: string;
+  kind: string;
+  externalUserId: string;
+  userId: string | null;
+  metadata: Record<string, unknown>;
 }
 
 const state = {
   bindings: new Map<string, SlackUserBindingRow>(),
   usersById: new Map<string, UserRow>(),
   usersByEmail: new Map<string, UserRow>(),
+  channelIdentities: new Map<string, ChannelIdentityRow>(),
   /** Counter used to generate unique User.id values from create calls. */
   nextUserSeq: 1,
+  nextChannelIdentitySeq: 1,
   /** Set by individual tests to control the Slack stub. */
   slackUsersInfo: mock(async (_args: { user: string }) => ({
     ok: true,
@@ -42,6 +56,7 @@ const state = {
   createSlackClient: mock((_token: string) => ({
     users: { info: state.slackUsersInfo as unknown as (a: { user: string }) => unknown },
   })),
+  ensureTravelerWallet: mock(async (_args: { userId: string }) => ({ walletId: 'wallet_test' })),
 };
 
 function bindingKey(tenantId: string, slackTeamId: string, slackUserId: string): string {
@@ -79,6 +94,28 @@ const prismaStub = {
         return args.data;
       }
     ),
+    update: mock(
+      async (args: {
+        where: {
+          tenantId_slackTeamId_slackUserId: {
+            tenantId: string;
+            slackTeamId: string;
+            slackUserId: string;
+          };
+        };
+        data: { senderoUserId: string };
+      }) => {
+        const k = bindingKey(
+          args.where.tenantId_slackTeamId_slackUserId.tenantId,
+          args.where.tenantId_slackTeamId_slackUserId.slackTeamId,
+          args.where.tenantId_slackTeamId_slackUserId.slackUserId
+        );
+        const row = state.bindings.get(k);
+        if (!row) throw new Error('binding_not_found');
+        row.senderoUserId = args.data.senderoUserId;
+        return row;
+      }
+    ),
   },
   user: {
     findUnique: mock(async (args: { where: { email?: string; id?: string } }) => {
@@ -100,11 +137,67 @@ const prismaStub = {
       }
     ),
   },
+  channelIdentity: {
+    upsert: mock(
+      async (args: {
+        where: {
+          tenantId_kind_externalUserId: {
+            tenantId: string;
+            kind: string;
+            externalUserId: string;
+          };
+        };
+        create: {
+          tenantId: string;
+          kind: string;
+          externalUserId: string;
+          userId: string;
+          metadata: Record<string, unknown>;
+        };
+        update: { userId: string; metadata: Record<string, unknown> };
+      }) => {
+        const key = `${args.where.tenantId_kind_externalUserId.tenantId}::${args.where.tenantId_kind_externalUserId.kind}::${args.where.tenantId_kind_externalUserId.externalUserId}`;
+        const existing = state.channelIdentities.get(key);
+        if (existing) {
+          existing.userId = args.update.userId;
+          existing.metadata = args.update.metadata;
+          return { id: existing.id };
+        }
+        const row = {
+          id: `ci_${state.nextChannelIdentitySeq++}`,
+          tenantId: args.create.tenantId,
+          kind: args.create.kind,
+          externalUserId: args.create.externalUserId,
+          userId: args.create.userId,
+          metadata: args.create.metadata,
+        };
+        state.channelIdentities.set(key, row);
+        return { id: row.id };
+      }
+    ),
+    findMany: mock(async (args: { where: { tenantId: string; kind: string } }) =>
+      [...state.channelIdentities.values()]
+        .filter(row => row.tenantId === args.where.tenantId && row.kind === args.where.kind)
+        .filter(row => {
+          if (!row.userId) return false;
+          const user = state.usersById.get(row.userId);
+          const active = user?.memberships?.some(
+            membership => membership.tenantId === args.where.tenantId && membership.status === 'active'
+          );
+          const wallet = user?.wallets?.some(w => w.provisioner === 'dcw');
+          return Boolean(active && (wallet || user?.gatewaySigner));
+        })
+        .map(row => ({ userId: row.userId, user: row.userId ? state.usersById.get(row.userId) : null }))
+    ),
+  },
 };
 
 mock.module('@sendero/database', () => ({ prisma: prismaStub }));
 mock.module('@sendero/slack', () => ({
   createSlackClient: state.createSlackClient,
+}));
+mock.module('@sendero/tools/ensure-traveler-wallet', () => ({
+  ensureTravelerWallet: state.ensureTravelerWallet,
 }));
 
 // Now import the unit under test (after mocks are installed).
@@ -124,14 +217,20 @@ beforeEach(() => {
   state.bindings.clear();
   state.usersById.clear();
   state.usersByEmail.clear();
+  state.channelIdentities.clear();
   state.nextUserSeq = 1;
+  state.nextChannelIdentitySeq = 1;
   // Reset stub call counters.
   state.slackUsersInfo.mockClear();
   state.createSlackClient.mockClear();
   prismaStub.slackUserBinding.findUnique.mockClear();
   prismaStub.slackUserBinding.create.mockClear();
+  prismaStub.slackUserBinding.update.mockClear();
   prismaStub.user.findUnique.mockClear();
   prismaStub.user.create.mockClear();
+  prismaStub.channelIdentity.upsert.mockClear();
+  prismaStub.channelIdentity.findMany.mockClear();
+  state.ensureTravelerWallet.mockClear();
   // Default Slack stub returns a generic user with no email.
   state.slackUsersInfo.mockImplementation(async () => ({
     ok: true,
@@ -171,6 +270,7 @@ describe('resolveSenderoUser', () => {
       senderoUserId: 'usr_cached',
       email: 'cached@acme.com',
       provisional: false,
+      channelIdentityId: 'ci_1',
     });
     expect(state.slackUsersInfo).not.toHaveBeenCalled();
     expect(prismaStub.user.create).not.toHaveBeenCalled();
@@ -277,6 +377,7 @@ describe('resolveSenderoUser', () => {
         senderoUserId: FALLBACK,
         email: null,
         provisional: false,
+        channelIdentityId: 'ci_1',
       });
     } finally {
       console.warn = origWarn;
@@ -284,6 +385,58 @@ describe('resolveSenderoUser', () => {
     expect(warnSpy).toHaveBeenCalled();
     // No binding written on the failure path.
     expect(state.bindings.size).toBe(0);
+  });
+
+  test('cache hit rebases a walletless Slack user to the tenant WhatsApp wallet user', async () => {
+    const slackUser: UserRow = {
+      id: 'usr_slack_walletless',
+      email: 'slack@acme.com',
+      source: 'native',
+    };
+    const whatsappUser: UserRow = {
+      id: 'usr_whatsapp_wallet',
+      email: 'wa-user@acme.com',
+      source: 'native',
+      wallets: [{ id: 'wallet_1', provisioner: 'dcw' }],
+      gatewaySigner: { userId: 'usr_whatsapp_wallet' },
+      memberships: [{ tenantId: T, status: 'active' }],
+    };
+    state.usersById.set(slackUser.id, slackUser);
+    state.usersByEmail.set(slackUser.email, slackUser);
+    state.usersById.set(whatsappUser.id, whatsappUser);
+    state.usersByEmail.set(whatsappUser.email, whatsappUser);
+    state.channelIdentities.set(`${T}::whatsapp::+15551234567`, {
+      id: 'ci_whatsapp',
+      tenantId: T,
+      kind: 'whatsapp',
+      externalUserId: '+15551234567',
+      userId: whatsappUser.id,
+      metadata: {},
+    });
+    state.bindings.set(bindingKey(T, TEAM, SLACK_USER), {
+      tenantId: T,
+      slackTeamId: TEAM,
+      slackUserId: SLACK_USER,
+      senderoUserId: slackUser.id,
+      email: slackUser.email,
+    });
+
+    const out = await resolveSenderoUser({
+      tenantId: T,
+      slackTeamId: TEAM,
+      slackUserId: SLACK_USER,
+      botToken: TOKEN,
+      fallbackUserId: FALLBACK,
+    });
+
+    expect(out.senderoUserId).toBe(whatsappUser.id);
+    expect(state.bindings.get(bindingKey(T, TEAM, SLACK_USER))?.senderoUserId).toBe(
+      whatsappUser.id
+    );
+    const slackIdentity = state.channelIdentities.get(`${T}::slack::${SLACK_USER}`);
+    expect(slackIdentity?.userId).toBe(whatsappUser.id);
+    expect(slackIdentity?.metadata.canonicalizedFromUserId).toBe(slackUser.id);
+    expect(state.ensureTravelerWallet).toHaveBeenCalledWith({ userId: whatsappUser.id });
   });
 
   test('idempotency: parallel resolves with same args do not create two bindings', async () => {

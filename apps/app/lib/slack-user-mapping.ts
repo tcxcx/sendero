@@ -27,8 +27,9 @@
  * context for ops triage; they are NOT thrown.
  */
 
-import { prisma } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
 import { createSlackClient } from '@sendero/slack';
+import { ensureTravelerWallet } from '@sendero/tools/ensure-traveler-wallet';
 
 export interface ResolvedSlackUser {
   /** Sendero User.id whose row should appear on `meter_events.userId`. */
@@ -37,6 +38,8 @@ export interface ResolvedSlackUser {
   email: string | null;
   /** True iff this resolver call auto-created the User row (step 4). */
   provisional: boolean;
+  /** ChannelIdentity row that anchors this Slack member in Sendero. */
+  channelIdentityId: string | null;
 }
 
 export interface ResolveSenderoUserArgs {
@@ -82,10 +85,31 @@ export async function resolveSenderoUser(
       select: { senderoUserId: true, email: true },
     });
     if (existing) {
+      const originalUserId = existing.senderoUserId;
+      const senderoUserId = await resolveCanonicalChannelUser({
+        tenantId,
+        currentUserId: originalUserId,
+        email: existing.email,
+      });
+      if (senderoUserId !== originalUserId) {
+        await prisma.slackUserBinding.update({
+          where: { tenantId_slackTeamId_slackUserId: { tenantId, slackTeamId, slackUserId } },
+          data: { senderoUserId },
+        });
+      }
+      const channelIdentityId = await ensureSlackTravelerContext({
+        tenantId,
+        slackTeamId,
+        slackUserId,
+        senderoUserId,
+        email: existing.email,
+        canonicalizedFromUserId: senderoUserId !== originalUserId ? originalUserId : undefined,
+      });
       return {
-        senderoUserId: existing.senderoUserId,
+        senderoUserId,
         email: existing.email,
         provisional: false,
+        channelIdentityId,
       };
     }
 
@@ -168,22 +192,194 @@ export async function resolveSenderoUser(
         select: { senderoUserId: true, email: true },
       });
       if (reread) {
+        const originalUserId = reread.senderoUserId;
+        const senderoUserId = await resolveCanonicalChannelUser({
+          tenantId,
+          currentUserId: originalUserId,
+          email: reread.email,
+        });
+        if (senderoUserId !== originalUserId) {
+          await prisma.slackUserBinding.update({
+            where: { tenantId_slackTeamId_slackUserId: { tenantId, slackTeamId, slackUserId } },
+            data: { senderoUserId },
+          });
+        }
+        const channelIdentityId = await ensureSlackTravelerContext({
+          tenantId,
+          slackTeamId,
+          slackUserId,
+          senderoUserId,
+          email: reread.email,
+          canonicalizedFromUserId: senderoUserId !== originalUserId ? originalUserId : undefined,
+        });
         return {
-          senderoUserId: reread.senderoUserId,
+          senderoUserId,
           email: reread.email,
           provisional: false,
+          channelIdentityId,
         };
       }
       // Re-read failed — propagate to outer catch.
       throw err;
     }
 
-    return { senderoUserId, email, provisional };
+    const originalUserId = senderoUserId;
+    const canonicalUserId = await resolveCanonicalChannelUser({
+      tenantId,
+      currentUserId: originalUserId,
+      email,
+    });
+    if (canonicalUserId !== originalUserId) {
+      await prisma.slackUserBinding.update({
+        where: { tenantId_slackTeamId_slackUserId: { tenantId, slackTeamId, slackUserId } },
+        data: { senderoUserId: canonicalUserId },
+      });
+    }
+    const channelIdentityId = await ensureSlackTravelerContext({
+      tenantId,
+      slackTeamId,
+      slackUserId,
+      senderoUserId: canonicalUserId,
+      email,
+      canonicalizedFromUserId: canonicalUserId !== originalUserId ? originalUserId : undefined,
+    });
+
+    return { senderoUserId: canonicalUserId, email, provisional, channelIdentityId };
   } catch (err) {
     console.warn(
       `[slack-user-mapping] resolver failed; falling back to install authedUser tenant=${tenantId} slackTeam=${slackTeamId} slackUser=${slackUserId}`,
       err
     );
-    return { senderoUserId: fallbackUserId, email: null, provisional: false };
+    const channelIdentityId = await ensureSlackTravelerContext({
+      tenantId,
+      slackTeamId,
+      slackUserId,
+      senderoUserId: fallbackUserId,
+      email: null,
+      fallback: true,
+    }).catch(contextErr => {
+      console.warn('[slack-user-mapping] fallback channel identity failed', {
+        tenantId,
+        slackTeamId,
+        slackUserId,
+        error: contextErr instanceof Error ? contextErr.message : String(contextErr),
+      });
+      return null;
+    });
+    return { senderoUserId: fallbackUserId, email: null, provisional: false, channelIdentityId };
   }
+}
+
+async function ensureSlackTravelerContext(args: {
+  tenantId: string;
+  slackTeamId: string;
+  slackUserId: string;
+  senderoUserId: string;
+  email: string | null;
+  fallback?: boolean;
+  canonicalizedFromUserId?: string;
+}): Promise<string | null> {
+  const metadata = {
+    slackTeamId: args.slackTeamId,
+    email: args.email,
+    source: 'slack_user_binding',
+    ...(args.fallback ? { fallback: true } : {}),
+    ...(args.canonicalizedFromUserId
+      ? {
+          canonicalizedFromUserId: args.canonicalizedFromUserId,
+          canonicalizationReason: 'tenant_whatsapp_wallet_identity',
+        }
+      : {}),
+  } satisfies Prisma.InputJsonObject;
+
+  const identity = await prisma.channelIdentity.upsert({
+    where: {
+      tenantId_kind_externalUserId: {
+        tenantId: args.tenantId,
+        kind: 'slack',
+        externalUserId: args.slackUserId,
+      },
+    },
+    create: {
+      tenantId: args.tenantId,
+      kind: 'slack',
+      externalUserId: args.slackUserId,
+      userId: args.senderoUserId,
+      metadata,
+    },
+    update: {
+      userId: args.senderoUserId,
+      metadata,
+    },
+    select: { id: true },
+  });
+
+  await ensureTravelerWallet({ userId: args.senderoUserId }).catch(err => {
+    console.warn('[slack-user-mapping] wallet ensure failed (non-fatal)', {
+      tenantId: args.tenantId,
+      slackTeamId: args.slackTeamId,
+      slackUserId: args.slackUserId,
+      senderoUserId: args.senderoUserId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+
+  return identity.id;
+}
+
+async function resolveCanonicalChannelUser(args: {
+  tenantId: string;
+  currentUserId: string;
+  email: string | null;
+}): Promise<string> {
+  const current = await prisma.user.findUnique({
+    where: { id: args.currentUserId },
+    select: {
+      id: true,
+      wallets: { select: { id: true }, take: 1 },
+      gatewaySigner: { select: { userId: true } },
+    },
+  });
+  if (!current) return args.currentUserId;
+  if ((current.wallets?.length ?? 0) > 0 || current.gatewaySigner) return args.currentUserId;
+
+  const identities = await prisma.channelIdentity.findMany({
+    where: {
+      tenantId: args.tenantId,
+      kind: 'whatsapp',
+      userId: { not: null },
+      user: {
+        memberships: { some: { tenantId: args.tenantId, status: 'active' } },
+        OR: [{ wallets: { some: { provisioner: 'dcw' } } }, { gatewaySigner: { isNot: null } }],
+      },
+    },
+    select: {
+      userId: true,
+      user: {
+        select: {
+          id: true,
+          email: true,
+          wallets: { select: { id: true }, take: 1 },
+          gatewaySigner: { select: { userId: true } },
+        },
+      },
+    },
+  });
+
+  const candidates = new Map<string, NonNullable<(typeof identities)[number]['user']>>();
+  for (const identity of identities) {
+    if (identity.userId && identity.user) candidates.set(identity.userId, identity.user);
+  }
+  if (candidates.size !== 1) return args.currentUserId;
+  const [candidate] = [...candidates.values()];
+  if (!candidate || candidate.id === args.currentUserId) return args.currentUserId;
+
+  console.info('[slack-user-mapping] canonicalized Slack user to tenant WhatsApp wallet identity', {
+    tenantId: args.tenantId,
+    fromUserId: args.currentUserId,
+    toUserId: candidate.id,
+    slackEmail: args.email,
+    canonicalEmail: candidate.email,
+  });
+  return candidate.id;
 }
