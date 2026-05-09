@@ -689,8 +689,8 @@ async function resolveOutboundClient(
     phoneNumberId: install.phoneNumberId,
     accessToken,
     apiBaseUrl: baseUrl,
-    onSent: event =>
-      prisma.whatsAppOutboundMessage
+    onSent: event => {
+      void prisma.whatsAppOutboundMessage
         .create({
           data: {
             tenantId,
@@ -717,7 +717,8 @@ async function resolveOutboundClient(
             wamid: event.wamid,
             error: err instanceof Error ? err.message : String(err),
           });
-        }),
+        });
+    },
   });
   return { client, recipient };
 }
