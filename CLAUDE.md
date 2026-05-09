@@ -161,6 +161,41 @@ Solana parity for Arc lives in two Anchor programs deployed to **sol-devnet**. T
 
 **Cluster pin**: SDK defaults to `https://api.devnet.solana.com`. Override via `SENDERO_SOLANA_RPC_URL`. `sol-mainnet` deploys are gated behind the same testnet-beta → mainnet flip as Arc; do not deploy until billing tiers + scopes are finalized.
 
+## Tenant primaryChain — cascade invariant
+
+`Tenant.primaryChain` (`'arc' | 'sol'`, defaults `'arc'`) is a tenant-wide commitment. Picked once at onboarding; locks the entire settlement stack for that tenant. **No tool may silently fall back to Arc when a `'sol'` tenant invokes it.**
+
+**Picked at onboarding by:**
+- `/onboarding/corporate` — `<select name="primaryChain">` writes the field on Tenant upsert (server action, before Slack OAuth).
+- `/onboarding/agency` — same selector (added with this section).
+- `/onboarding/consumer` — N/A (consumers inherit chain from the tenant they join).
+- Generic `/onboarding` (Clerk-direct) — falls through to Prisma column default `'arc'`. Customers needing Sol must use `/onboarding/corporate` or `/onboarding/agency`. Post-default flip requires support + zero on-chain state.
+
+**What cascades when `primaryChain === 'sol'`:**
+
+| Surface | Arc | Solana |
+|---|---|---|
+| Treasury wallet | Circle MSCA (provisionTenantWallet) | Squads V4 + DCWs (provisionTenantSolanaTreasury) |
+| Booking escrow | SenderoGuestEscrow.sol | sendero_guest_escrow Anchor program |
+| `prefund / reserve / commit / cancel` | `encode*` viem calls | `build*Ix` from `@sendero/guest/solana` |
+| `confirm_booking` | commitBookingV2 (vendor + agency + fee) | commit_booking + deferred markup at settle |
+| Trip stamps (`mint_stamp`) | SenderoStamps ERC-1155 (thirdweb) | Metaplex Core asset |
+| Identity (`provision_identity`) | ERC-8004 IdentityRegistry | Metaplex Agent Registry |
+| Reputation (`give_feedback`) | ERC-8004 ReputationRegistry | **Deferred** — typed refusal `GIVE_FEEDBACK_SOL_DEFERRED` until Metaplex feedback ix lands in `@sendero/metaplex` |
+| Traveler-pay reimbursement (book_flight settle) | `Arc_Testnet` toChainKey → Arc superadmin treasury | `Sol_Devnet` toChainKey → Solana superadmin treasury |
+
+**Resolver:** `resolveTenantPrimaryChain(ctx)` in `packages/tools/src/guest-escrow.ts` (also inlined in `cancel-booking.ts`, `give-feedback.ts`, etc.). Reads `Tenant.primaryChain` once per call; defaults `'arc'` only when no tenantId is in context (sandbox/test bench).
+
+**Forbidden patterns:**
+- Calling `@sendero/arc/identity` or any Arc-specific encoder without first checking `tenant.primaryChain`. The `give_feedback` Sol gate is the canonical example: throw a typed `GIVE_FEEDBACK_SOL_DEFERRED` error rather than silently submit on Arc.
+- Defaulting to `'arc'` when a tenant lookup fails for an authenticated request. Treat that as a fail-closed error, not "fall back to Arc".
+- Running an Arc-only sweeper against rows with `chain='sol'` (and vice versa). Sweepers must filter on `chain` matching their target.
+
+**Verifying a new tool respects the invariant** (do this for every new on-chain surface):
+1. Does the tool make a chain-touching call (escrow, settlement, NFT, identity, reputation)? → must branch on `tenant.primaryChain`.
+2. Is there a Solana adapter for the equivalent action? → wire the `'sol'` branch.
+3. If no adapter yet → throw a typed `*_SOL_DEFERRED` error with `agentInstruction`. Do NOT default to Arc.
+
 ## API keys
 
 Clerk's native API keys (GA 2026-04-17). Clerk mints/hashes/revokes.

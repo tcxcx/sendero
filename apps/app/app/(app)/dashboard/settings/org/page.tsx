@@ -29,8 +29,12 @@ export default async function OrganizationSettingsPage() {
             </div>
             <p className="text-sm text-muted-foreground">
               {tenant.primaryChain === 'sol'
-                ? 'This tenant chose Solana as its primary chain. Arc Circle provisioning is gated; Solana provisioning (Squads V4 + DCWs) lands in Phase 3.x.'
-                : 'Retry Circle wallet provisioning if onboarding completed without a tenant treasury wallet.'}
+                ? 'This tenant settles on Solana. Treasury (Squads V4), booking escrow (sendero_guest_escrow), trip stamps (Metaplex Core), identity (Metaplex Agent Registry), and traveler-pay reimbursement all route to the Solana superadmin treasury.'
+                : 'This tenant settles on Arc. Treasury (Circle MSCA), booking escrow (SenderoGuestEscrow), trip stamps (SenderoStamps ERC-1155), identity (ERC-8004), and traveler-pay reimbursement all route to the Arc superadmin treasury.'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Primary chain is chosen at onboarding and locks the entire stack. To switch, contact
+              support — flipping requires zero on-chain state and superadmin re-provisioning.
             </p>
           </div>
           {tenant.primaryChain === 'sol' ? null : (

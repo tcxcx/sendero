@@ -13,6 +13,7 @@ import { buildInstallUrl, DEFAULT_BOT_SCOPES } from '@sendero/slack';
 import { redirect } from 'next/navigation';
 
 import { signSlackState } from '@/lib/slack-oauth-state';
+import { ensurePrimaryChainProvisioned } from '@/lib/provision-tenant-on-chain-choice';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,7 +55,18 @@ async function installCorporate(formData: FormData): Promise<void> {
       primaryChain,
       metadata: { kind: 'corporate' },
     },
-    select: { id: true },
+    select: { id: true, clerkOrgId: true },
+  });
+
+  // Cascade trigger: kick off chain-matching treasury + identity
+  // provisioning as part of the onboarding step so the tenant lands on
+  // Slack-install with their wallet already in flight. Errors are
+  // logged but never block — the retry-{arc,sol}-wallet-provision
+  // crons cover the long tail.
+  await ensurePrimaryChainProvisioned({
+    tenantId: tenant.id,
+    clerkOrgId: tenant.clerkOrgId,
+    primaryChain,
   });
 
   const state = signSlackState(tenant.id);
@@ -122,7 +134,7 @@ export default async function CorporateOnboardingPage({ searchParams }: Props) {
           <span>Primary chain</span>
           <select name="primaryChain" defaultValue="arc" style={inputStyle}>
             <option value="arc">Arc — Circle MSCA + USDC settlement (default)</option>
-            <option value="sol">Solana — Squads V4 + USDC SPL (Phase 3.x preview)</option>
+            <option value="sol">Solana — Squads V4 + USDC SPL</option>
           </select>
           <span
             style={{
@@ -133,8 +145,9 @@ export default async function CorporateOnboardingPage({ searchParams }: Props) {
               color: '#888',
             }}
           >
-            Solana tenants reserve their primary-chain intent now; full provisioning lands in Phase
-            3.x (cron sweeper + Squads multisig + Solana DCWs).
+            Locks the entire stack — treasury wallet, booking escrow, trip stamps, identity, and
+            traveler-pay reimbursement all settle on the chosen chain. Pick once; flip requires zero
+            on-chain state and admin involvement.
           </span>
         </label>
         <button type="submit" style={submitStyle}>
