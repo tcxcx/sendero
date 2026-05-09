@@ -286,7 +286,6 @@ export const crowdLevelPredictorTool: ToolDef<CrowdLevelPredictorInput, CrowdLev
   {
     name: 'crowd_level_predictor',
     internal: true,
-    experimental: true,
     description:
       "Estimate crowd / demand pressure for a city + date window via PredictHQ. Returns `crowdLevel` ('low'/'moderate'/'high'/'extreme'), peak local-rank, total predicted attendance, and the top demand drivers (concerts, conferences, festivals, sports, holidays). Use when the traveler asks 'is <city> busy that week', 'will hotels be expensive', 'should I shift dates', 'why is everything sold out'. Compose with `mainstream_event_discovery` to surface specific tickets a traveler can buy.",
     inputSchema,

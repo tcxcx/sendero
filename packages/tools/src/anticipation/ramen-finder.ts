@@ -138,7 +138,6 @@ export async function runRamenFinder(
 export const ramenFinderTool: ToolDef<RamenFinderInput, RamenFinderResult> = {
   name: 'ramen_finder',
   internal: true,
-  experimental: true,
   description:
     "Find serious ramen counters in a city. Composes Tabelog / Eater / Time Out / ramenadventures editorial via CSE with Places (New) hits. Optional `style` filter — 'tonkotsu', 'shoyu', 'miso', 'shio', 'tsukemen', 'tantanmen', 'vegan'. Use when traveler asks 'ramen <city>', 'serious ramen', 'best tonkotsu', 'donde comer ramen en <ciudad>'.",
   inputSchema,

@@ -348,7 +348,6 @@ function recommendedPathFor(kind: DisruptionKind, hoursToDeparture: number | nul
 const classifyDisruptionTool: ToolDef = {
   name: 'classify_disruption_situation',
   internal: true,
-  experimental: true,
   description:
     'Classify a free-text disruption description (traveler / family chat / ops note) into a `DisruptionKind` + suggested recovery path order + required documentation. Pure rules-based; the matched evidence string is returned for auditability. Use this as the FIRST step of `trip_disruption_recovery` when the agent receives a "we can\'t travel" message.',
   inputSchema: classifyInput,

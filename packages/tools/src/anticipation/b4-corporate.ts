@@ -132,7 +132,6 @@ async function runClientDinnerRecommender(
 const clientDinnerRecommenderTool: ToolDef = {
   name: 'client_dinner_recommender',
   internal: true,
-  experimental: true,
   description:
     "Find restaurants for client dinners — composes `cheap_michelin_finder` (with `filter='all'` for premium / splurge) tilted by tone (classic_steakhouse / modern_tasting / understated_local / safe_international / celebratory). Use when traveler asks 'where for a client dinner in <city>', 'cena con cliente <ciudad>'.",
   inputSchema: clientDinnerInput,

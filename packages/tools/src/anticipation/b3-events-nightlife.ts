@@ -100,7 +100,6 @@ const CULTURE_TYPES = new Set([
 const culturalAttractionsFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'cultural_attractions_finder',
   internal: true,
-  experimental: true,
   description:
     'Find museums, galleries, monuments, cultural landmarks. Editorial via Atlas Obscura / Lonely Planet / Monocle / NatGeo + Places (museum / monument / historical_landmark / archaeological_site). Use for "what to see in <city>", "monumentos <ciudad>", "must-see culture".',
   inputSchema: baseInput,
@@ -329,7 +328,6 @@ type NightlifeFitInput = z.infer<typeof nightlifeFitInput>;
 const nightlifeFitFinderTool: ToolDef<NightlifeFitInput, FinderResult> = {
   name: 'nightlife_fit_finder',
   internal: true,
-  experimental: true,
   description:
     "Find bars / jazz clubs / rooftops / speakeasies / lounges / clubs by `fit`. Editorial via Resident Advisor / Punch / Monocle / 50 Best Bars + Places. Use when traveler asks 'cocktail bar <city>', 'rooftop bar', 'jazz club <city>', 'club techno <city>'.",
   inputSchema: nightlifeFitInput,
@@ -985,7 +983,6 @@ async function runRainyDayPlanFinder(
 const rainyDayPlanFinderTool: ToolDef = {
   name: 'rainy_day_plan_finder',
   internal: true,
-  experimental: true,
   description:
     'Find indoor plans when weather is bad. Composes Places searches across museum / bookstore / specialty coffee / theater / mall categories, ranks by review weight, returns 3-5 anchors + pacing notes for the requested hour budget. Use when `trip_weather_brief` reports rain / heavy snow / extreme heat.',
   inputSchema: rainyDayInput,

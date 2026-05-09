@@ -49,7 +49,6 @@ interface CityPulse {
 const cityPulseBriefTool: ToolDef = {
   name: 'city_pulse_brief',
   internal: true,
-  experimental: true,
   description:
     'Daily city brief — composes `crowd_level_predictor` (events) with weather + holidays metadata. Returns crowdLevel + topDrivers + notable events count + avoid zones for the next N days. Pair with `trip_weather_brief` for full picture.',
   inputSchema: pulseInput,
@@ -581,7 +580,6 @@ type LuggageStorageInput = z.infer<typeof luggageStorageInput>;
 const luggageStorageFinderTool: ToolDef = {
   name: 'luggage_storage_finder',
   internal: true,
-  experimental: true,
   description:
     'Find luggage lockers + storage services near a city center / station / specific area. Places + name filter (Bounce / LuggageHero / Stasher / lockers / station storage). Use during last-day or layover planning.',
   inputSchema: luggageStorageInput,

@@ -257,7 +257,6 @@ export async function runDateBudgetOptimizer(
 const dateBudgetOptimizerTool: ToolDef<DateBudgetOptimizerInput, DateBudgetOptimizerResult> = {
   name: 'date_budget_optimizer',
   internal: true,
-  experimental: true,
   description:
     'Translate a desired date vibe + budget tier into a curated list of move templates (opener / anchor / second_move / exit) with expected spend envelopes. Pure — no external API. Pass to `date_plan_builder` to compose into a real plan with specific places via `cheap_michelin_finder` / `wine_bar_finder` / etc. Splurge tier surfaces only when both have explicitly chosen it.',
   inputSchema: budgetOptimizerInput,

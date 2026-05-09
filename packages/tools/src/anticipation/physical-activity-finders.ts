@@ -111,7 +111,6 @@ const RUN_TYPES = new Set([
 const runningRouteFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'running_route_finder',
   internal: true,
-  experimental: true,
   description:
     'Find safe + scenic running routes near a hotel / current location. Editorial via Strava routes / Runner\'s World / Alltrails / city travel sections + Places. Use when traveler asks "running route <city>", "where can I run", "scenic run", "morning run from my hotel".',
   inputSchema: baseInput,
@@ -155,7 +154,6 @@ const GYM_TYPES = new Set(['gym', 'fitness_center', 'health_club', 'sports_compl
 const gymDayPassFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'gym_day_pass_finder',
   internal: true,
-  experimental: true,
   description:
     'Find gyms with day-pass options near hotel / current location. Composes ClassPass / Gympass / Wellhub editorial via CSE + Places "gym" type filter. Use when traveler asks "day pass gym <city>", "drop-in gym", "where can I work out today".',
   inputSchema: baseInput,
@@ -251,7 +249,6 @@ const HIKE_TYPES = new Set([
 const hikingDayTripFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'hiking_day_trip_finder',
   internal: true,
-  experimental: true,
   description:
     'Find day-hike + nature-escape options near a city. Composes Alltrails / Wikiloc / Hiking Project / Outside editorial with Places (parks, natural features, hiking_area). Use when traveler asks "day hike <city>", "hiking near <city>", "nature escape from <city>", "trekking de un día".',
   inputSchema: baseInput,

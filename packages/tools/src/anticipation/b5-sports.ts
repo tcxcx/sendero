@@ -584,7 +584,6 @@ async function runSportsBarFinder(
 const sportsBarFinderTool: ToolDef = {
   name: 'sports_bar_finder',
   internal: true,
-  experimental: true,
   description:
     'Find bars to watch a match in a city — filtered by sport (football/NFL/NBA/F1/etc.). Places-only with sport-keyword tilt + name/editorial filter. Use when traveler asks "where to watch the game in <city>" / "ver el partido en <ciudad>".',
   inputSchema: sportsBarInput,

@@ -702,7 +702,6 @@ const transitTicketingShape = z.object({
 const publicTransitTicketingBriefTool: ToolDef = {
   name: 'public_transit_ticketing_brief',
   internal: true,
-  experimental: true,
   description:
     'Explain how public transit ticketing works for a city — primary mode, payment methods (contactless, IC card, mobile), ticket types (single, day pass, weekly), the right app or smart card to load, fare example. Vertex-grounded.',
   inputSchema: transitTicketingInput,
@@ -1076,7 +1075,6 @@ type TripBudgetInput = z.infer<typeof tripBudgetInput>;
 const tripBudgetResearcherTool: ToolDef = {
   name: 'trip_budget_researcher',
   internal: true,
-  experimental: true,
   description:
     'Estimate total trip daily spend for a city + style + duration. Composes `budget_estimator` across baseline categories (cafe, mid_restaurant, casual_restaurant, bar, ground_transport). Returns daily + total range.',
   inputSchema: tripBudgetInput,
@@ -1166,7 +1164,6 @@ const paymentAcceptanceShape = z.object({
 const localPaymentAcceptanceBriefTool: ToolDef = {
   name: 'local_payment_acceptance_brief',
   internal: true,
-  experimental: true,
   description:
     'Explain cash + card + local wallet acceptance in a country. Vertex-grounded. Returns whether contactless is the norm, whether cash is still needed, which local wallets to consider (Pix / Alipay / WeChat / Mercado Pago), ATM availability, tip norms.',
   inputSchema: paymentAcceptanceInput,
@@ -1322,7 +1319,6 @@ type MedicalAccessInput = z.infer<typeof medicalAccessInput>;
 const medicalAccessBriefTool: ToolDef = {
   name: 'medical_access_brief',
   internal: true,
-  experimental: true,
   description:
     'Quick medical access brief — emergency numbers + nearest private clinic (Places) + nearest 24h pharmacy. Composes `clinic_finder` + `pharmacy_24h_finder` + `emergency_numbers_card`. Use after arrival as part of the safety pack.',
   inputSchema: medicalAccessInput,

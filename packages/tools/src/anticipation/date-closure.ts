@@ -128,7 +128,6 @@ export async function runDateProfileBuilder(
 const dateProfileBuilderTool: ToolDef<DateProfileBuilderInput, DateProfileBuilderResult> = {
   name: 'date_profile_builder',
   internal: true,
-  experimental: true,
   description:
     "Capture / update the traveler's dating preferences — budget tier, vibe, ambience, formality, dietary restrictions, things to avoid. Sibling of `hobby_profile_builder` but scoped to date-planning. Pure DB-only (in-process for v0.1, promotes to a `DateProfile` Postgres row in v0.2). Strict policy: never persist sensitive romantic / sexual traits — only travel-relevant preferences.",
   inputSchema: dateProfileInput,
@@ -464,7 +463,6 @@ export async function runDateSecondMoveFinder(
 const dateSecondMoveFinderTool: ToolDef<DateSecondMoveFinderInput, DateSecondMoveFinderResult> = {
   name: 'date_second_move_finder',
   internal: true,
-  experimental: true,
   description:
     "Find the optional 'second move' for a date — wine bar / cocktail / dessert / walk / viewpoint / music / bookstore / late coffee, near a known anchor. Composes existing finders by kind. Use after the anchor is chosen and the first half of the date has gone well; never auto-suggest if the traveler hasn't asked.",
   inputSchema: secondMoveInput,

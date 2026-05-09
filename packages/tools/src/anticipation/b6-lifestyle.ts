@@ -106,7 +106,6 @@ const SHOPPING_TYPES = new Set([
 const shoppingDistrictBriefTool: ToolDef<BaseInput, FinderResult> = {
   name: 'shopping_district_brief',
   internal: true,
-  experimental: true,
   description:
     "Find shopping districts / streets / neighborhoods in a city — e.g. 'Marais Paris', 'Aoyama Tokyo', 'Palermo Soho'. CSE editorial via Monocle / Wallpaper / Business of Fashion + Places. Use when traveler asks 'best shopping in <city>', 'compras <ciudad>'.",
   inputSchema: baseInput,
@@ -158,7 +157,6 @@ const DESIGNER_TYPES = new Set([
 const localDesignerFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'local_designer_finder',
   internal: true,
-  experimental: true,
   description:
     'Find local designer / boutique / concept stores. Editorial via Monocle / Wallpaper / Dezeen / Business of Fashion + Places. Use when traveler asks "boutiques <city>", "concept store", "diseño independiente <ciudad>".',
   inputSchema: baseInput,
@@ -846,7 +844,6 @@ async function placesFinder(
 const luggageRepairFinderTool: ToolDef = {
   name: 'luggage_repair_finder',
   internal: true,
-  experimental: true,
   description:
     'Find luggage repair shops + urgent fix locations. Places-only with name/editorial filter ("luggage", "suitcase", "leather repair"). Use when traveler asks "luggage repair <city>", "broken zipper" mid-trip.',
   inputSchema: baseInput,
@@ -863,7 +860,6 @@ const luggageRepairFinderTool: ToolDef = {
 const laundryServiceFinderTool: ToolDef = {
   name: 'laundry_service_finder',
   internal: true,
-  experimental: true,
   description:
     'Find laundry + pickup-and-delivery laundry services in a city. Places-only with name filter (lavandería / laundromat / dry cleaner). Use when traveler asks "laundry near my hotel <city>".',
   inputSchema: baseInput,
@@ -880,7 +876,6 @@ const laundryServiceFinderTool: ToolDef = {
 const tailorUrgentFinderTool: ToolDef = {
   name: 'tailor_urgent_finder',
   internal: true,
-  experimental: true,
   description:
     'Find tailor shops + urgent alterations. Places + name filter. Use when traveler needs to hem a suit before a meeting / fix a tear before a wedding.',
   inputSchema: baseInput,
@@ -897,7 +892,6 @@ const tailorUrgentFinderTool: ToolDef = {
 const vintageThriftFinderTool: ToolDef = {
   name: 'vintage_thrift_finder',
   internal: true,
-  experimental: true,
   description:
     'Find vintage + thrift shops. Places + filter on second-hand / thrift / vintage / rastro / segunda mano. Use when traveler asks "vintage <city>", "thrift store <city>".',
   inputSchema: baseInput,
@@ -914,7 +908,6 @@ const vintageThriftFinderTool: ToolDef = {
 const craftBeerFinderTool: ToolDef = {
   name: 'craft_beer_finder',
   internal: true,
-  experimental: true,
   description:
     'Find craft taprooms + breweries + beer events. Places + filter on brewery / taproom / cervecería. Use when traveler asks "craft beer <city>", "taproom <city>", "cervecería artesanal".',
   inputSchema: baseInput,
@@ -986,7 +979,6 @@ async function runPersonalShopperLight(
 const personalShopperLightTool: ToolDef = {
   name: 'personal_shopper_light',
   internal: true,
-  experimental: true,
   description:
     "Build a half-day shopping route for a city — composes `shopping_district_brief` + `local_designer_finder` into one ordered route with pacing note. Use when traveler asks 'plan my shopping afternoon in <city>', 'shopping route <city>'.",
   inputSchema: personalShopperInput,

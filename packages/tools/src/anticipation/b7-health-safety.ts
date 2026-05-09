@@ -113,7 +113,6 @@ const baseJsonProps = {
 const clinicFinderTool: ToolDef = {
   name: 'clinic_finder',
   internal: true,
-  experimental: true,
   description:
     'Find clinics, private hospitals, urgent care in a city. Places-only with health-keyword filter. Use when traveler is sick on a trip and needs care without a full ER visit. ALWAYS pair with `emergency_numbers_card` for life-threatening situations.',
   inputSchema: cityInput,
@@ -132,7 +131,6 @@ const clinicFinderTool: ToolDef = {
 const pharmacy24hFinderTool: ToolDef = {
   name: 'pharmacy_24h_finder',
   internal: true,
-  experimental: true,
   description:
     'Find 24-hour pharmacies in a city. Places + name filter (24h / 24 horas / overnight / nocturna). Use when traveler needs medication outside business hours.',
   inputSchema: cityInput,

@@ -787,7 +787,6 @@ Rules:
 const agenticResearchPlannerTool: ToolDef = {
   name: 'agentic_research_planner',
   internal: true,
-  experimental: true,
   description:
     "Given a traveler intent, plan an ordered tool chain via Vertex / AI Gateway. Returns `plan[]` with toolName + rationale + inputs description, plus `expectedConfidence` and a `fallbackIfFails` recommendation. Use when the traveler asks something complex (e.g. 'plan my Tokyo week') and the agent needs to compose multiple tools.",
   inputSchema: agenticResearchPlannerInput,
