@@ -34,7 +34,15 @@
  *   { error, message, tool? }   on failure — agent surfaces to user
  */
 
-const DEFAULT_TIMEOUT_MS = 25000;
+// 28s sits just under Cloudflare's ~30s per-subrequest hard ceiling
+// (standard Workers plan). Bumping past 30s is a no-op — CF kills the
+// upstream fetch() regardless of our AbortSignal. Tools that genuinely
+// need >30s (exhibition_calendar_researcher, scam_risk_brief,
+// vat_refund_researcher — all heavy Vertex grounded calls) need
+// Vertex result caching or an async/streaming pattern, not a longer
+// timeout here. 28s gives Sendero a one-shot at returning before CF
+// pre-empts; 25s was leaving ~5s on the table for warm tool runs.
+const DEFAULT_TIMEOUT_MS = 28000;
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {

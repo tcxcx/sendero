@@ -1217,7 +1217,6 @@ const invoiceTaxShape = z.object({
 const invoiceTaxRequirementsResearcherTool: ToolDef = {
   name: 'invoice_tax_requirements_researcher',
   internal: true,
-  experimental: true,
   description:
     "Research what's required on a corporate invoice in a country (hotel / restaurant / transport / general). Vertex-grounded. Returns expected format, tax-id requirement (CUIT / NIF / VAT-ID / etc.), reverse-charge applicability, retention period, gotchas.",
   inputSchema: invoiceTaxInput,
@@ -1394,7 +1393,6 @@ const communicationsShape = z.object({
 const communicationsResearcherTool: ToolDef = {
   name: 'communications_researcher',
   internal: true,
-  experimental: true,
   description:
     'Research local cellular networks + eSIM support + coverage + roaming + WiFi norms in a country. Vertex-grounded. Pair with `search_esim` to actually buy a plan.',
   inputSchema: communicationsInput,
@@ -1447,7 +1445,6 @@ const cultProtocolShape = z.object({
 const culturalProtocolBriefTool: ToolDef = {
   name: 'cultural_protocol_brief',
   internal: true,
-  experimental: true,
   description:
     'Practical cultural / etiquette guidance for a country + context (general / meal / host_home / public / shopping). Vertex-grounded. Different from `local_business_protocol_brief` (B4) which is business-meeting-specific.',
   inputSchema: cultProtocolInput,
@@ -1508,7 +1505,6 @@ const liveNewsShape = z.object({
 const liveNewsTripRiskScannerTool: ToolDef = {
   name: 'live_news_trip_risk_scanner',
   internal: true,
-  experimental: true,
   description:
     'Scan recent news (last N days) for risks affecting a trip — protests, strikes, weather events, political instability, security incidents. Vertex-grounded against Reuters / AP / local English-language press.',
   inputSchema: liveNewsInput,

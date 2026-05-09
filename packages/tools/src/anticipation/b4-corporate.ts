@@ -612,7 +612,6 @@ ${sources
 const localBusinessProtocolBriefTool: ToolDef = {
   name: 'local_business_protocol_brief',
   internal: true,
-  experimental: true,
   description:
     'Practical business etiquette — greetings, card exchange, punctuality, gifts, toasts, taboos — for a country + meeting context. Vertex-grounded research with Gateway fallback. Use when traveler asks "Japan business protocol", "how do I greet in Korea", "qué llevar a una cena en China".',
   inputSchema: protocolInput,
