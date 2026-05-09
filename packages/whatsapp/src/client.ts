@@ -469,13 +469,23 @@ export class WhatsAppClient {
     if (opts?.footer) {
       interactive.footer = { text: opts.footer };
     }
-    return this.request('/messages', {
+    const result = await this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'interactive',
       interactive,
     });
+    const wamid = extractWamid(result);
+    if (wamid) {
+      await this.fireAudit({
+        wamid,
+        kind: 'interactive',
+        recipientId: to,
+        preview: truncatePreview(body),
+      });
+    }
+    return result;
   }
 
   async getMediaUrl(mediaId: string): Promise<string> {

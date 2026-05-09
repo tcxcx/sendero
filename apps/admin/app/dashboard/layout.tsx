@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
+
 import { UserButton } from '@clerk/nextjs';
 
+import { AdminCommandPalette } from '@/components/admin-command-palette';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { WalletConnectButton } from '@/components/solana/wallet-button';
 import { SolanaWalletProvider } from '@/components/solana/wallet-provider';
@@ -31,6 +33,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               <SidebarTrigger />
               <Separator orientation="vertical" className="h-6 lg:hidden" />
               <div className="flex-1" />
+              <AdminCommandPalette />
               <WalletConnectButton />
               <ThemeModeToggle />
               <UserButton />
