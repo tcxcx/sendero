@@ -123,9 +123,11 @@ export default async function ActiveTripsMapPage() {
 
 function MapMetric({ label, value }: { label: string; value: number }) {
   return (
-    <Card className="shadow-sm">
+    <Card className="border-[color:var(--ink)] shadow-sm">
       <CardContent className="p-4">
-        <div className="text-2xl font-semibold">{value.toLocaleString()}</div>
+        <div className="text-2xl font-semibold text-[color:var(--ink)]">
+          {value.toLocaleString()}
+        </div>
         <div className="text-sm text-muted-foreground">{label}</div>
       </CardContent>
     </Card>

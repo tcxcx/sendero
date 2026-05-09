@@ -142,9 +142,11 @@ export default async function AdminMapsPage() {
 
 function MapMetric({ label, value }: { label: string; value: number }) {
   return (
-    <Card>
+    <Card className="border-[color:var(--ink)]">
       <CardContent className="p-4">
-        <div className="text-2xl font-semibold">{value.toLocaleString()}</div>
+        <div className="text-2xl font-semibold text-[color:var(--ink)]">
+          {value.toLocaleString()}
+        </div>
         <div className="text-sm text-[color:var(--color-muted-foreground)]">{label}</div>
       </CardContent>
     </Card>
