@@ -44,7 +44,7 @@ import {
 } from '@/components/chat-bridge';
 import { useSendero } from '@/components/store';
 import { useChatStoreSync } from '@/components/use-chat-store-sync';
-import { useChatModel } from '@/hooks/use-chat-model';
+import { CHAT_MODEL_STORAGE_KEY, useChatModel } from '@/hooks/use-chat-model';
 
 const SURFACE_KEY = 'console';
 
@@ -75,7 +75,10 @@ export function ConsoleChatHost() {
           channel: 'web' as const,
           tripId: scopedTripId ?? undefined,
           chatSessionId,
-          model: chatModel,
+          model:
+            typeof window === 'undefined'
+              ? chatModel
+              : window.localStorage.getItem(CHAT_MODEL_STORAGE_KEY) || chatModel,
         }),
       }),
     [scopedTripId, chatSessionId, chatModel]

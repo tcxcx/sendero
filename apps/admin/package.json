@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p ${ADMIN_PORT:-3013}",
+    "dev": "next dev -p ${ADMIN_PORT:-3011}",
     "build": "next build",
-    "start": "next start -p ${ADMIN_PORT:-3013}",
+    "start": "next start -p ${ADMIN_PORT:-3011}",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit"
   },
@@ -15,6 +15,8 @@
     "@radix-ui/react-avatar": "^1.1.11",
     "@sendero/database": "workspace:*",
     "@sendero/env": "workspace:*",
+    "@sendero/location": "workspace:*",
+    "@sendero/ui": "workspace:*",
     "@solana/spl-token": "^0.4.13",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-react": "^0.15.39",
@@ -43,6 +45,7 @@
     "@types/node": "^22.9.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "react-grab": "^0.1.32",
     "tailwindcss": "^4.2.4",
     "typescript": "^5.8.3"
   }

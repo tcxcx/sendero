@@ -30,23 +30,11 @@ export async function fanoutLiveblocksWebhookEvent(event: WebhookEvent): Promise
   }
 
   if (isOperatorRelevant(event)) {
-    // Wrap defensively — a transient Liveblocks API error (e.g. room
-    // not yet created) must not block the parallel dispatcher path
-    // below. Found by /qa story 3 on a synthesized webhook payload
-    // whose room didn't exist on the Liveblocks side.
-    try {
-      await triggerSupportAgentNotification({
-        roomId,
-        event,
-        tenantId: parsed.tenantId,
-      });
-    } catch (err) {
-      console.warn('[liveblocks-webhook-fanout] support-agent bell failed (non-fatal)', {
-        roomId,
-        eventType: event.type,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+    await triggerSupportAgentNotification({
+      roomId,
+      event,
+      tenantId: parsed.tenantId,
+    });
   }
 
   // Phase C-2 — mention.received fan-out. Liveblocks fires the bell

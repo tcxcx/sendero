@@ -85,6 +85,7 @@
     "@sendero/kapso": "workspace:*",
     "@sendero/langfuse": "workspace:*",
     "@sendero/llms": "workspace:*",
+    "@sendero/location": "workspace:*",
     "@sendero/locale": "workspace:*",
     "@sendero/multisig": "workspace:*",
     "@sendero/nanopayments": "workspace:*",

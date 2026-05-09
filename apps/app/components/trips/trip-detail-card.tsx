@@ -15,6 +15,7 @@
 import type { Booking, Prisma, Trip } from '@sendero/database';
 
 import { TripPresenceFocus } from '@/components/collaboration/presence-focus';
+import { RequestBookingPaymentButton } from '@/components/trips/request-booking-payment-button';
 import { SettleHoldButton } from '@/components/trips/settle-hold-button';
 import { formatDateTime, objectFromJson, stringFromJson } from '@/lib/format';
 
@@ -56,31 +57,44 @@ export function TripDetailCard({ trip }: { trip: TripWithBookings }) {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {flightBookings.map((b, i) => (
-                <div key={b.id}>
-                  <FlightBlock booking={b} />
-                  {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
-                    <div style={{ marginTop: 10 }}>
-                      <SettleHoldButton
-                        tripId={trip.id}
-                        bookingId={b.id}
-                        amountUsd={b.totalUsd.toString()}
+              {flightBookings.map((b, i) => {
+                const paymentRequest = bookingPaymentRequest(b);
+                return (
+                  <div key={b.id}>
+                    <FlightBlock booking={b} />
+                    {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 8,
+                        }}
+                      >
+                        {paymentRequest ? (
+                          <RequestBookingPaymentButton {...paymentRequest} />
+                        ) : null}
+                        <SettleHoldButton
+                          tripId={trip.id}
+                          bookingId={b.id}
+                          amountUsd={b.totalUsd.toString()}
+                        />
+                      </div>
+                    ) : null}
+                    {i < flightBookings.length - 1 ? (
+                      <hr
+                        aria-hidden
+                        style={{
+                          border: 0,
+                          height: 1,
+                          background: 'var(--hairline-color-soft)',
+                          marginTop: 14,
+                        }}
                       />
-                    </div>
-                  ) : null}
-                  {i < flightBookings.length - 1 ? (
-                    <hr
-                      aria-hidden
-                      style={{
-                        border: 0,
-                        height: 1,
-                        background: 'var(--hairline-color-soft)',
-                        marginTop: 14,
-                      }}
-                    />
-                  ) : null}
-                </div>
-              ))}
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -105,20 +119,33 @@ export function TripDetailCard({ trip }: { trip: TripWithBookings }) {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {hotelBookings.map(b => (
-                <div key={b.id}>
-                  <StayBlock booking={b} />
-                  {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
-                    <div style={{ marginTop: 10 }}>
-                      <SettleHoldButton
-                        tripId={trip.id}
-                        bookingId={b.id}
-                        amountUsd={b.totalUsd.toString()}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+              {hotelBookings.map(b => {
+                const paymentRequest = bookingPaymentRequest(b);
+                return (
+                  <div key={b.id}>
+                    <StayBlock booking={b} />
+                    {b.status === 'pending' && Number(b.totalUsd.toString()) > 0 ? (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 8,
+                        }}
+                      >
+                        {paymentRequest ? (
+                          <RequestBookingPaymentButton {...paymentRequest} />
+                        ) : null}
+                        <SettleHoldButton
+                          tripId={trip.id}
+                          bookingId={b.id}
+                          amountUsd={b.totalUsd.toString()}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -324,6 +351,17 @@ function Stat({ label, value, mono }: { label: string; value: string; mono?: boo
       </div>
     </div>
   );
+}
+
+function bookingPaymentRequest(booking: Booking) {
+  const orderId = booking.duffelOrderId ?? booking.externalId;
+  if (!orderId) return null;
+  return {
+    orderId,
+    bookingReference: booking.pnr ?? orderId.slice(0, 10),
+    amount: booking.totalUsd.toString(),
+    currency: 'USD',
+  };
 }
 
 interface AncillaryEntry {

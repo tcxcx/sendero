@@ -19,9 +19,8 @@
  * tool is exclusively a demo aide.
  */
 
-import { z } from 'zod';
-
 import { mintStamp, STAMP_NEW_TOKEN_ID } from '@sendero/arc/identity';
+import { z } from 'zod';
 
 import type { ToolDef } from './types';
 
@@ -44,21 +43,13 @@ interface DemoMintResult {
   reason?: string;
 }
 
-const PLACEHOLDER_IPFS =
-  'ipfs://bafkreigp4i5cjz5fhhk7m4ksuc4s7olqbofmybhnlxkk3ev4qcrr5xkfeu';
+const PLACEHOLDER_IPFS = 'ipfs://bafkreigp4i5cjz5fhhk7m4ksuc4s7olqbofmybhnlxkk3ev4qcrr5xkfeu';
 
-function resolveTreasuryRecipient(): `0x${string}` | null {
-  const candidates = [
-    process.env.SENDERO_TREASURY_ADDRESS,
-    process.env.CIRCLE_TREASURY_ADDRESS,
-    process.env.SENDERO_PROVIDER_ADDRESS,
-  ];
-  for (const addr of candidates) {
-    if (typeof addr === 'string' && /^0x[0-9a-fA-F]{40}$/.test(addr)) {
-      return addr.toLowerCase() as `0x${string}`;
-    }
-  }
-  return null;
+async function resolveTreasuryRecipient(): Promise<`0x${string}` | null> {
+  const { resolvePlatformTreasuryDestination } = await import('./platform-treasury');
+  const treasury = await resolvePlatformTreasuryDestination('arc');
+  if (!treasury || !/^0x[0-9a-fA-F]{40}$/.test(treasury.address)) return null;
+  return treasury.address.toLowerCase() as `0x${string}`;
 }
 
 export const demoMintBoardingPassTool: ToolDef<z.infer<typeof demoMintInput>, DemoMintResult> = {
@@ -75,7 +66,7 @@ export const demoMintBoardingPassTool: ToolDef<z.infer<typeof demoMintInput>, De
       caption: { type: 'string' },
     },
   },
-  async handler(input) {
+  async handler(_input) {
     if (process.env.NEXT_PUBLIC_DEMO_TRIP_ENABLED !== 'true') {
       return {
         status: 'demo_mode_disabled',
@@ -86,7 +77,7 @@ export const demoMintBoardingPassTool: ToolDef<z.infer<typeof demoMintInput>, De
 
     const treasuryWalletId = process.env.CIRCLE_TREASURY_WALLET_ID;
     const contractAddress = process.env.SENDERO_STAMPS_ADDRESS as `0x${string}` | undefined;
-    const recipient = resolveTreasuryRecipient();
+    const recipient = await resolveTreasuryRecipient();
     const explorerBase = process.env.ARC_EXPLORER_URL || 'https://testnet.arcscan.app';
 
     if (!treasuryWalletId || !contractAddress || !recipient) {

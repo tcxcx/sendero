@@ -269,7 +269,6 @@
         "TREASURY_PRIVATE_KEY",
         "ARC_ESCROW_ADDRESS",
         "APP_PORT",
-        "ADMIN_PORT",
         "MARKETING_PORT",
         "HELP_PORT",
         "DOCS_PORT",

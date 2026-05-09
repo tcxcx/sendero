@@ -61,10 +61,8 @@
     "@sendero/slack": "*",
     "@sendero/vault": "*",
     "@sendero/whatsapp": "*",
-    "@solana/web3.js": "^1.98.4",
     "@vercel/blob": "^2.3.3",
     "ai": "*",
-    "bs58": "^6.0.0",
     "viem": "*",
     "zod": "*"
   }

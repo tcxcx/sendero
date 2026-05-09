@@ -351,6 +351,17 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
           Email delivery was not confirmed: {result.invite.error ?? 'not configured'}.
         </p>
       ) : null}
+      {result.channelInvite ? (
+        <p
+          className={
+            result.channelInvite.sent
+              ? 'rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-700'
+              : 'rounded-md bg-muted p-3 text-sm text-muted-foreground'
+          }
+        >
+          <ChannelInviteStatus invite={result.channelInvite} />
+        </p>
+      ) : null}
       <details
         className="rounded-[var(--radius-md)] p-3 text-xs"
         style={{ border: 'var(--hairline-soft)' }}
@@ -363,6 +374,19 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
       <Button onClick={onDone}>Done</Button>
     </div>
   );
+}
+
+function ChannelInviteStatus({
+  invite,
+}: {
+  invite:
+    | { sent: true; channel: 'whatsapp' | 'slack' }
+    | { sent: false; reason: string; channel?: 'whatsapp' | 'slack' };
+}) {
+  if ('reason' in invite) {
+    return <>Channel delivery was not confirmed: {invite.reason}.</>;
+  }
+  return <>Claim link sent in {invite.channel}.</>;
 }
 
 function shortAddr(addr: string): string {

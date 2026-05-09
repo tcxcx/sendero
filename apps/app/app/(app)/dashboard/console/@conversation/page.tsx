@@ -14,6 +14,7 @@
  */
 
 import { ConsoleConversation } from '@/components/console/console-conversation';
+import { currentOrgPlanTier } from '@/lib/billing-plan';
 import { loadFocusedTrip } from '@/lib/console-trip-focused';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
@@ -28,10 +29,11 @@ export default async function ConversationSlot({ searchParams }: ConversationSlo
   const scopedTripId = params.tripId ?? null;
   const { tenant } = await requireCurrentTenant();
 
-  const { conversation, traveler, holdExpires, channelKind } = await loadFocusedTrip(
-    tenant.id,
-    scopedTripId
-  );
+  const [focused, planTier] = await Promise.all([
+    loadFocusedTrip(tenant.id, scopedTripId),
+    currentOrgPlanTier(),
+  ]);
+  const { conversation, traveler, holdExpires, channelKind } = focused;
 
   return (
     <ConsoleConversation
@@ -40,6 +42,7 @@ export default async function ConversationSlot({ searchParams }: ConversationSlo
       traveler={traveler}
       holdExpires={holdExpires}
       focusedChannelKind={channelKind}
+      planTier={planTier}
     />
   );
 }

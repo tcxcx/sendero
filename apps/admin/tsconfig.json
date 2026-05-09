@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@sendero/location/*": [
+        "../../packages/location/src/*"
       ]
     }
   },
@@ -33,9 +36,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
     ".next-turbo/types/**/*.ts",
-    ".next-turbo/dev/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next-turbo/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

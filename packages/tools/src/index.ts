@@ -7,6 +7,11 @@ import { getActiveTripTool } from './get-active-trip';
 import { getTripBriefTool } from './get-trip-brief';
 import { reportKnowledgeGapTool } from './report-knowledge-gap';
 import { listAvailableToolsTool } from './list-available-tools';
+import { trackFlightTool } from './track-flight';
+import { flightDisruptionsBriefTool } from './flight-disruptions-brief';
+import { nearbyAirportsLiveTool } from './nearby-airports-live';
+import { placesSearchTool } from './places-search';
+import { placeDetailsTool } from './place-details';
 import { inspectMyWhatsappChannelTool } from './inspect-my-whatsapp';
 import { inspectMySlackChannelTool } from './inspect-my-slack';
 import { startTravelerWhatsappConversationTool } from './start-traveler-whatsapp-conversation';
@@ -1255,6 +1260,15 @@ export const toolList: ToolDef[] = [
   sendFlowMessageTool,
   requestLocationTool,
   requestPhoneNumberTool,
+  // x402-outbound external-data tools — settle USDC outbound from
+  // treasury via `packages/tools/src/x402-fetch.ts`. Production keys
+  // only; sandbox callers refuse to spend real USDC. Per-tenant 24h
+  // cap $1, platform 24h cap $5, host allowlist gated.
+  trackFlightTool,
+  flightDisruptionsBriefTool,
+  nearbyAirportsLiveTool,
+  placesSearchTool,
+  placeDetailsTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */

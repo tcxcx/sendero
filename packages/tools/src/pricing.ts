@@ -101,6 +101,20 @@ export const TOOL_PRICING: Record<string, string> = {
   // settlement-tier per-call rate ($1.00 micro) to mirror confirm_booking.
   get_tenant_pricing_policy: '0.0005',
   activate_tenant_pricing_policy: '1.00',
+
+  // x402-outbound tools — Sendero pays the third-party USDC cost from
+  // treasury and recovers it via this inbound tenant charge. Markup is
+  // ~2.5x the outbound price to cover gas, facilitator overhead, and
+  // platform margin. Each call settles two MeterEvent rows: the inbound
+  // (tenant→Sendero) here, and the outbound (Sendero→bazaar) tagged
+  // `x402_outbound` in metadata by `x402-fetch.ts`. Admin billing
+  // rolls margin = inbound − outbound per tool. See
+  // `packages/tools/src/x402-fetch.ts` for caps + allowlist.
+  track_flight: '0.025',
+  flight_disruptions_brief: '0.05',
+  nearby_airports_live: '0.02',
+  places_search: '0.025',
+  place_details: '0.025',
 };
 
 /** USDC has 6 decimals on every chain. */

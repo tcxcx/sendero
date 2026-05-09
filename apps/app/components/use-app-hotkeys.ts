@@ -66,6 +66,7 @@ export const HOTKEY_MANIFEST: HotkeyEntry[] = [
   { kind: 'nav', combo: 'g c', label: 'Agent console', href: '/dashboard/console' },
   { kind: 'nav', combo: 'g i', label: 'Trip inbox', href: '/dashboard/inbox' },
   { kind: 'nav', combo: 'g t', label: 'Trips', href: '/dashboard/trips' },
+  { kind: 'nav', combo: 'g r', label: 'Active trips map', href: '/dashboard/trips/map' },
   { kind: 'nav', combo: 'g v', label: 'Invoices', href: '/dashboard/billing/invoices' },
   // Plans live inside Clerk's OrganizationProfile modal (opened from the
   // PlanTeaser on /dashboard). No standalone route — the hotkey lands on

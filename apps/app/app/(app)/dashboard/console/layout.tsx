@@ -90,8 +90,8 @@ export default function ConsoleLayout({
 
           {/* @context — right aside, ≥lg only. */}
           <aside
-            className="hidden w-[18rem] shrink-0 border-l border-[color:var(--surface-border,rgba(0,0,0,0.08))] bg-[color:var(--surface-raised,#fff)]/40 lg:flex lg:flex-col"
-            aria-label="Trip context"
+            className="console-right-aside hidden w-[18rem] shrink-0 border-l border-[color:var(--surface-border,rgba(0,0,0,0.08))] bg-[color:var(--surface-raised,#fff)]/40 empty:hidden lg:flex lg:flex-col lg:empty:hidden"
+            aria-label="Console side panel"
           >
             {context}
           </aside>

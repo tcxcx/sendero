@@ -75,6 +75,7 @@ import {
   resolveSegment,
   resolveTenantPlan,
 } from '@/lib/agent-auth';
+import { resolveChatModel } from '@/lib/agent-models';
 import { makeCreditAwareMeterStore } from '@/lib/credit-store';
 import { resolvePayer, PayerResolutionError } from '@sendero/tools/lib/resolve-payer';
 import type { MeterPayerType } from '@sendero/database';
@@ -443,12 +444,18 @@ export async function POST(req: NextRequest) {
   const vertexProjectEnv = process.env.GOOGLE_CLOUD_PROJECT;
   const vertexLocationEnv = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
   let modelHandle: ReturnType<typeof resolveModel> = null;
-  // Operator-picked model wins when the gateway is up — gateway slug
-  // strings flow straight into streamText (AI SDK auto-routes via
-  // AI_GATEWAY_API_KEY). Direct Vertex / direct providers stay as the
-  // server-default fallback below if the operator didn't pick one.
-  if (body.model && process.env.AI_GATEWAY_API_KEY) {
-    modelHandle = body.model;
+  // Operator-picked model wins only after the same plan gate used by
+  // /api/chat. The picker is a UX affordance; this server check is the
+  // enforcement point for direct POSTs and channel-driven sessions.
+  if (body.model) {
+    const resolved = resolveChatModel(body.model, resolvePlan(planTier), {
+      source:
+        channel === 'web' || channel === 'slack' || channel === 'whatsapp' ? channel : 'api',
+    });
+    if ('locked' in resolved) {
+      return NextResponse.json(resolved.locked, { status: 403 });
+    }
+    modelHandle = resolved.model;
   }
   if (!modelHandle && vertexProjectEnv) {
     let googleAuthOptions: Parameters<typeof createVertex>[0]['googleAuthOptions'];

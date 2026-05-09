@@ -1,20 +1,20 @@
 'use client';
 
 import * as React from 'react';
+
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { provisionArcMultisigIntent } from '@/lib/treasury/provision-arc';
 
+import { ApproverAddressFields } from './approver-address-fields';
+
 /**
- * Arc Circle MSCA provisioning form (Phase 7.5 intent mode).
- *
- * Submits to a server action that persists a `SuperOrgTreasury` row
- * with status `'intent'`. The actual on-chain MSCA deploy (Phase
- * 7.5.x) replaces the placeholder address + flips status to `live`.
+ * Arc treasury onboarding form.
  */
 export function ArcProvisionForm() {
   const [pending, setPending] = React.useState(false);
+  const [addressesValid, setAddressesValid] = React.useState(false);
   const [result, setResult] = React.useState<
     | null
     | { ok: true; placeholderAddress: string; threshold: number; members: string[] }
@@ -22,12 +22,12 @@ export function ArcProvisionForm() {
   >(null);
 
   async function handleSubmit(formData: FormData) {
+    if (!addressesValid) return;
     setPending(true);
     setResult(null);
-    const raw = (formData.get('memberAddresses') as string) ?? '';
-    const memberAddresses = raw
-      .split(/\s+/)
-      .map(s => s.trim())
+    const memberAddresses = formData
+      .getAll('memberAddresses')
+      .map(value => String(value).trim())
       .filter(Boolean);
     const threshold = Number(formData.get('threshold') ?? 1);
     const r = await provisionArcMultisigIntent({ memberAddresses, threshold });
@@ -36,21 +36,14 @@ export function ArcProvisionForm() {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <label htmlFor="memberAddresses" className="block text-sm font-medium">
-          Member EVM addresses
-        </label>
-        <textarea
-          id="memberAddresses"
-          name="memberAddresses"
-          rows={4}
-          required
-          className="w-full rounded-md border bg-[color:var(--color-background)] px-3 py-2 font-mono text-xs"
-          placeholder="One 0x-prefixed EVM address per line."
-        />
-      </div>
-      <div className="flex items-center gap-3">
+    <form action={handleSubmit} className="space-y-3">
+      <ApproverAddressFields
+        kind="evm"
+        name="memberAddresses"
+        disabled={pending}
+        onValidityChange={setAddressesValid}
+      />
+      <div className="flex flex-wrap items-center gap-3">
         <label htmlFor="threshold-arc" className="text-sm font-medium">
           Threshold
         </label>
@@ -61,37 +54,32 @@ export function ArcProvisionForm() {
           min={1}
           defaultValue={1}
           required
-          className="w-20 rounded-md border bg-[color:var(--color-background)] px-2 py-1 text-sm"
+          className="h-9 w-20 rounded-md border bg-[color:var(--color-background)] px-2 text-sm"
         />
         <span className="text-xs text-[color:var(--color-muted-foreground)]">
-          signatures required to execute
+          approvals required
         </span>
       </div>
-      <Button type="submit" disabled={pending} className="w-full">
+      <Button type="submit" disabled={pending || !addressesValid} className="w-full">
         {pending ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            Reserving intent…
+            Creating treasury…
           </>
         ) : (
-          'Reserve treasury intent'
+          'Create Arc treasury'
         )}
       </Button>
-      <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-        Intent mode — persists the desired members + threshold. On-chain
-        Circle MSCA deployment lands in Phase 7.5.x (counterfactual address +
-        Gas Station paymaster + bundler glue).
-      </p>
       {result?.ok === true ? (
         <div className="space-y-1 rounded-md border bg-[color:var(--color-muted)] p-3 text-xs">
           <div className="font-medium text-[color:var(--color-foreground)]">
-            Intent reserved ✓
+            Arc treasury setup started
           </div>
           <div>
-            Placeholder: <code className="break-all">{result.placeholderAddress}</code>
+            Reserved address: <code className="break-all">{result.placeholderAddress}</code>
           </div>
           <div>
-            {result.threshold} of {result.members.length} signers
+            {result.threshold} of {result.members.length} approvers
           </div>
         </div>
       ) : null}

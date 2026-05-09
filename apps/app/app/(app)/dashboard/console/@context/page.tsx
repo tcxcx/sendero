@@ -7,8 +7,9 @@
  * see the inbox immediately and the context drawer appears when
  * its data lands.
  *
- * When unscoped (no tripId), renders a tenant-level snapshot
- * instead: recent activity counts + active operator hints.
+ * The right panel is client-switchable: Workspace Pulse, Workflow Log,
+ * or hidden from the footer Tweaks menu. When both panel widgets are
+ * off and a trip is scoped, the trip context remains available here.
  *
  * Phase C-1 — when scoped, also renders <TripComments> below the
  * trip-event drawer. The comments aside relies on the trip-room
@@ -23,6 +24,7 @@
 import { prisma } from '@sendero/database';
 
 import { TripComments } from '@/components/collaboration/trip-comments';
+import { ConsoleRightPanel, type WorkspacePulseData } from '@/components/console/console-right-panel';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 interface Props {
@@ -35,11 +37,69 @@ export default async function ContextSlot(props: Props) {
   const params = await props.searchParams;
   const scopedTripId = params.tripId ?? null;
   const { tenant } = await requireCurrentTenant();
+  const pulse = await getWorkspacePulse(tenant.id);
 
   if (!scopedTripId) {
-    return <UnscopedContext tenantId={tenant.id} />;
+    return (
+      <ConsoleRightPanel pulse={pulse}>
+        <UnscopedContext tenantId={tenant.id} />
+      </ConsoleRightPanel>
+    );
   }
-  return <ScopedTripContext tenantId={tenant.id} tripId={scopedTripId} />;
+  return (
+    <ConsoleRightPanel pulse={pulse}>
+      <ScopedTripContext tenantId={tenant.id} tripId={scopedTripId} />
+    </ConsoleRightPanel>
+  );
+}
+
+const MICRO_USDC = 1_000_000n;
+
+async function getWorkspacePulse(tenantId: string): Promise<WorkspacePulseData> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [tripsUpdated, bookingsCreated, paid, pendingHandoffs, slack, whatsapp, topTools] =
+    await Promise.all([
+      prisma.trip.count({ where: { tenantId, updatedAt: { gte: since } } }),
+      prisma.booking.count({ where: { tenantId, createdAt: { gte: since } } }),
+      prisma.meterEvent.aggregate({
+        where: { tenantId, status: 'paid', at: { gte: since } },
+        _count: { _all: true },
+        _sum: { priceMicroUsdc: true },
+      }),
+      prisma.channelHandoff.count({ where: { tenantId, status: 'pending' } }),
+      prisma.slackInstall.count({ where: { tenantId, revokedAt: null } }),
+      prisma.whatsAppInstall.count({ where: { tenantId, status: 'active' } }),
+      prisma.meterEvent.groupBy({
+        by: ['toolName'],
+        where: { tenantId, status: 'paid', at: { gte: since } },
+        _count: { _all: true },
+        _sum: { priceMicroUsdc: true },
+        orderBy: { _sum: { priceMicroUsdc: 'desc' } },
+        take: 4,
+      }),
+    ]);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    tripsUpdated,
+    bookingsCreated,
+    paidToolCalls: paid._count._all,
+    paidToolUsd: money(paid._sum.priceMicroUsdc),
+    pendingHandoffs,
+    channels: { slack, whatsapp },
+    topTools: topTools.map(row => ({
+      name: row.toolName,
+      calls: row._count._all,
+      usd: money(row._sum.priceMicroUsdc),
+    })),
+  };
+}
+
+function money(value: bigint | number | null | undefined) {
+  const micro = typeof value === 'bigint' ? value : BigInt(value ?? 0);
+  const dollars = micro / MICRO_USDC;
+  const cents = (micro % MICRO_USDC) / 10_000n;
+  return `${dollars.toLocaleString()}.${cents.toString().padStart(2, '0')}`;
 }
 
 async function ScopedTripContext({ tenantId, tripId }: { tenantId: string; tripId: string }) {
@@ -155,48 +215,6 @@ async function ScopedTripContext({ tenantId, tripId }: { tenantId: string; tripI
 }
 
 async function UnscopedContext({ tenantId }: { tenantId: string }) {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [activeTrips, recentBookings] = await Promise.all([
-    prisma.trip.count({
-      where: {
-        tenantId,
-        status: { notIn: ['completed', 'canceled', 'failed'] },
-        updatedAt: { gte: since },
-      },
-    }),
-    prisma.booking.count({
-      where: {
-        tenantId,
-        bookedAt: { gte: since },
-        status: { in: ['confirmed', 'ticketed'] },
-      },
-    }),
-  ]);
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 p-4 text-xs">
-      <header className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--surface-muted,#888)]">
-          Workspace pulse · last 24h
-        </span>
-      </header>
-      <dl className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-0.5 rounded border border-[color:var(--surface-border,rgba(0,0,0,0.08))] bg-[color:var(--surface-raised,#fff)] p-3">
-          <dt className="text-[10px] uppercase tracking-wider text-[color:var(--surface-muted,#888)]">
-            Active trips
-          </dt>
-          <dd className="font-mono text-xl font-semibold tabular-nums">{activeTrips}</dd>
-        </div>
-        <div className="flex flex-col gap-0.5 rounded border border-[color:var(--surface-border,rgba(0,0,0,0.08))] bg-[color:var(--surface-raised,#fff)] p-3">
-          <dt className="text-[10px] uppercase tracking-wider text-[color:var(--surface-muted,#888)]">
-            Bookings
-          </dt>
-          <dd className="font-mono text-xl font-semibold tabular-nums">{recentBookings}</dd>
-        </div>
-      </dl>
-      <p className="text-[11px] text-[color:var(--surface-muted,#888)]">
-        Open a trip from the rail to see its detailed context here.
-      </p>
-    </div>
-  );
+  void tenantId;
+  return null;
 }

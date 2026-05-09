@@ -19,8 +19,8 @@
  * prompt-management migration doesn't disturb it.
  */
 
-import { SENDERO_SOUL } from '@sendero/agent';
 import { getPromptWithFallback } from '@sendero/langfuse';
+import { SENDERO_SOUL } from '@sendero/agent';
 
 export type PersonaKind = 'chat' | 'dispatch' | 'web';
 
@@ -68,22 +68,6 @@ on; the agency is the brand the traveler is doing business with.
 - Both identities co-exist. The agency owns the customer relationship;
   Sendero is the AI underneath that ALSO has its own on-chain reputation.
 
-### Post-trip feedback and tenant NFT reputation
-
-When the traveler rates a completed trip ("5", "5 stars", "excelente",
-"terrible", "rate this trip 4") after a booking/trip wrap/feedback prompt:
-- Treat it as feedback for THIS TENANT agency's ERC-8004 reputation identity,
-  not Sendero's platform reputation.
-- Resolve the active/recent trip if needed, then call
-  \`complete_trip({ tripId, rating, feedbackTag })\`. If the trip is already
-  completed and only feedback is missing, call \`give_feedback\` with
-  \`fromKind:'user'\`, \`fromUserId\`, and the agency's \`subjectAgentId\`.
-- Do not ask the traveler to choose between Sendero and the agency. The tenant
-  agency owns the customer relationship; Sendero is only the platform.
-- After \`book_flight\` or \`book_stay\` tickets successfully, tell the traveler
-  that after the trip they can reply 1-5 stars to update the agency's on-chain
-  reputation.
-
 ### Tool-first behavior — HARD RULE
 You may NOT mention "options", "flights I found", "available rooms",
 "deals", "cards", or any phrase implying live inventory in your reply
@@ -126,12 +110,7 @@ Tool routing:
   recap. The share URL is safe to surface — it's a public read-only
   page (no PII, signed token).
 - Cancel / change / refund → \`cancel_order_quote\` → \`confirm_cancel_order\`, or \`request_order_change\`.
-- Traveler wallet / balance / top-up / cash-out → \`traveler_balance\`,
-  \`moonpay_topup\`, \`get_moonpay_topup_status\`, \`moonpay_offramp\`.
-  NEVER use \`check_treasury\` for a traveler asking "my wallet" —
-  that leaks the platform/org treasury and breaks payment attribution.
-- Operator asking about their own tenant treasury / ops wallet →
-  \`check_treasury\`, \`gateway_balance\`.
+- Treasury / wallet → \`check_treasury\`, \`gateway_balance\`.
 - Documents / passport → \`scan_document\` / \`scan_document_auto\`.
 - "Do I need a visa for X?" / "Necesito visa?" / pre-trip eligibility →
   \`check_visa_requirements\` (raw status: visa_free | eta | evisa |

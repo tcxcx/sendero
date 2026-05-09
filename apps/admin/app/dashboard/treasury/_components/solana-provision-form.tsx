@@ -1,21 +1,20 @@
 'use client';
 
 import * as React from 'react';
+
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { provisionSolanaMultisig } from '@/lib/treasury/provision-solana';
 
+import { ApproverAddressFields } from './approver-address-fields';
+
 /**
- * Solana multisig provisioning form. Submits to a server action that
- * calls Squads V4 `multisigCreateV2`. Inputs are intentionally
- * minimal — paste pubkeys (one per line) and pick a threshold. The
- * platform hot wallet is auto-appended as a Vote-only signer
- * server-side; threshold is calibrated against the human signers
- * only.
+ * Solana treasury onboarding form.
  */
 export function SolanaProvisionForm() {
   const [pending, setPending] = React.useState(false);
+  const [addressesValid, setAddressesValid] = React.useState(false);
   const [result, setResult] = React.useState<
     | null
     | { ok: true; multisigAddress: string; vaultAddress: string; txSignature: string }
@@ -23,12 +22,12 @@ export function SolanaProvisionForm() {
   >(null);
 
   async function handleSubmit(formData: FormData) {
+    if (!addressesValid) return;
     setPending(true);
     setResult(null);
-    const raw = (formData.get('memberPubkeys') as string) ?? '';
-    const memberPubkeys = raw
-      .split(/\s+/)
-      .map(s => s.trim())
+    const memberPubkeys = formData
+      .getAll('memberPubkeys')
+      .map(value => String(value).trim())
       .filter(Boolean);
     const threshold = Number(formData.get('threshold') ?? 1);
     const r = await provisionSolanaMultisig({ memberPubkeys, threshold });
@@ -37,24 +36,14 @@ export function SolanaProvisionForm() {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <label
-          htmlFor="memberPubkeys"
-          className="block text-sm font-medium"
-        >
-          Member pubkeys
-        </label>
-        <textarea
-          id="memberPubkeys"
-          name="memberPubkeys"
-          rows={4}
-          required
-          className="w-full rounded-md border bg-[color:var(--color-background)] px-3 py-2 font-mono text-xs"
-          placeholder="One Solana pubkey per line. The platform hot wallet is auto-appended as a Vote-only signer."
-        />
-      </div>
-      <div className="flex items-center gap-3">
+    <form action={handleSubmit} className="space-y-3">
+      <ApproverAddressFields
+        kind="solana"
+        name="memberPubkeys"
+        disabled={pending}
+        onValidityChange={setAddressesValid}
+      />
+      <div className="flex flex-wrap items-center gap-3">
         <label htmlFor="threshold" className="text-sm font-medium">
           Threshold
         </label>
@@ -65,32 +54,32 @@ export function SolanaProvisionForm() {
           min={1}
           defaultValue={1}
           required
-          className="w-20 rounded-md border bg-[color:var(--color-background)] px-2 py-1 text-sm"
+          className="h-9 w-20 rounded-md border bg-[color:var(--color-background)] px-2 text-sm"
         />
         <span className="text-xs text-[color:var(--color-muted-foreground)]">
-          signatures required to execute
+          approvals required
         </span>
       </div>
-      <Button type="submit" disabled={pending} className="w-full">
+      <Button type="submit" disabled={pending || !addressesValid} className="w-full">
         {pending ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            Provisioning…
+            Creating treasury…
           </>
         ) : (
-          'Provision Solana multisig'
+          'Create Solana treasury'
         )}
       </Button>
       {result?.ok === true ? (
         <div className="space-y-1 rounded-md border bg-[color:var(--color-muted)] p-3 text-xs">
           <div className="font-medium text-[color:var(--color-foreground)]">
-            Provisioned ✓
+            Solana treasury live
           </div>
           <div>
-            Multisig: <code className="break-all">{result.multisigAddress}</code>
+            Governance: <code className="break-all">{result.multisigAddress}</code>
           </div>
           <div>
-            Vault: <code className="break-all">{result.vaultAddress}</code>
+            Funds settle to: <code className="break-all">{result.vaultAddress}</code>
           </div>
           <div>
             Tx:{' '}

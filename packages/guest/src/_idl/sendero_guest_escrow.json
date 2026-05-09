@@ -9,19 +9,8 @@
   "instructions": [
     {
       "name": "claim_trip",
-      "docs": [
-        "Guest claims the trip with a recipient-bound signature + OTP digest."
-      ],
-      "discriminator": [
-        9,
-        140,
-        211,
-        39,
-        76,
-        254,
-        135,
-        200
-      ],
+      "docs": ["Guest claims the trip with a recipient-bound signature + OTP digest."],
+      "discriminator": [9, 140, 211, 39, 76, 254, 135, 200],
       "accounts": [
         {
           "name": "relayer",
@@ -40,19 +29,13 @@
         {
           "name": "_trip_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
           "name": "_otp_hash",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
@@ -63,19 +46,8 @@
     },
     {
       "name": "commit_booking",
-      "docs": [
-        "Operator commits at the actual quoted price ≤ upper_bound."
-      ],
-      "discriminator": [
-        138,
-        181,
-        37,
-        155,
-        46,
-        218,
-        54,
-        155
-      ],
+      "docs": ["Operator commits at the actual quoted price ≤ upper_bound."],
+      "discriminator": [138, 181, 37, 155, 46, 218, 54, 155],
       "accounts": [
         {
           "name": "operator",
@@ -87,10 +59,7 @@
         {
           "name": "_booking_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
@@ -101,16 +70,7 @@
     },
     {
       "name": "initialize",
-      "discriminator": [
-        175,
-        175,
-        109,
-        31,
-        13,
-        152,
-        155,
-        237
-      ],
+      "discriminator": [175, 175, 109, 31, 13, 152, 155, 237],
       "accounts": [
         {
           "name": "admin",
@@ -131,19 +91,8 @@
     },
     {
       "name": "pre_fund_trip",
-      "docs": [
-        "Buyer pre-funds a trip for a named guest. Trip starts in PreFunded."
-      ],
-      "discriminator": [
-        30,
-        248,
-        158,
-        27,
-        52,
-        173,
-        114,
-        82
-      ],
+      "docs": ["Buyer pre-funds a trip for a named guest. Trip starts in PreFunded."],
+      "discriminator": [30, 248, 158, 27, 52, 173, 114, 82],
       "accounts": [
         {
           "name": "buyer",
@@ -155,10 +104,7 @@
         {
           "name": "_trip_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
@@ -182,16 +128,7 @@
         "- RESERVED + > 1h since reservation → buyer can force-refund",
         "- COMMITTED + > 30min since commit → buyer can force-refund"
       ],
-      "discriminator": [
-        160,
-        80,
-        31,
-        89,
-        219,
-        78,
-        233,
-        67
-      ],
+      "discriminator": [160, 80, 31, 89, 219, 78, 233, 67],
       "accounts": [
         {
           "name": "caller",
@@ -203,30 +140,15 @@
         {
           "name": "_booking_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         }
       ]
     },
     {
       "name": "reserve_booking",
-      "docs": [
-        "Operator reserves an upper-bound amount on a booking before",
-        "quoting Duffel."
-      ],
-      "discriminator": [
-        170,
-        28,
-        99,
-        26,
-        95,
-        11,
-        225,
-        109
-      ],
+      "docs": ["Operator reserves an upper-bound amount on a booking before", "quoting Duffel."],
+      "discriminator": [170, 28, 99, 26, 95, 11, 225, 109],
       "accounts": [
         {
           "name": "operator",
@@ -238,19 +160,13 @@
         {
           "name": "_trip_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
           "name": "_booking_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
@@ -261,20 +177,8 @@
     },
     {
       "name": "settle_booking",
-      "docs": [
-        "Operator settles to vendor payout address after Duffel",
-        "confirmation lands."
-      ],
-      "discriminator": [
-        118,
-        241,
-        41,
-        192,
-        52,
-        160,
-        213,
-        100
-      ],
+      "docs": ["Operator settles to vendor payout address after Duffel", "confirmation lands."],
+      "discriminator": [118, 241, 41, 192, 52, 160, 213, 100],
       "accounts": [
         {
           "name": "operator",
@@ -286,35 +190,20 @@
         {
           "name": "_booking_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         },
         {
           "name": "_duffel_order_ref",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         }
       ]
     },
     {
       "name": "sweep_trip_residual",
-      "discriminator": [
-        179,
-        35,
-        198,
-        77,
-        31,
-        206,
-        190,
-        39
-      ],
+      "discriminator": [179, 35, 198, 77, 31, 206, 190, 39],
       "accounts": [
         {
           "name": "caller",
@@ -326,10 +215,7 @@
         {
           "name": "_trip_id",
           "type": {
-            "array": [
-              "u8",
-              32
-            ]
+            "array": ["u8", 32]
           }
         }
       ]

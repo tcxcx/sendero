@@ -5,11 +5,11 @@
  *
  * For each Trip with `status='completed'` whose latest segment's
  * `arrival_at` is between 24-25h ago AND has not yet emitted a
- * `give_feedback` event, send one canonical channel message through
- * the traveler's primary channel. Replies land back in the same
- * Slack/WhatsApp agent loop and route to `complete_trip` /
- * `give_feedback`, writing feedback to the tenant agency's ERC-8004
- * reputation identity, not Sendero's platform identity.
+ * `give_feedback` event, send a WhatsApp `ACTION_REQUIRED` template
+ * via the Kapso `api_call` workflow trigger. The Kapso agent picks
+ * up the resumed conversation, asks the traveler "rate this trip
+ * 1-5 stars", and the reply is routed to `give_feedback` via the
+ * standard `call_sendero` proxy.
  *
  * Auth: CRON_SECRET via the `authorization: Bearer …` header (Vercel
  * cron injects automatically). 24-25h window ensures the cron firing
@@ -23,9 +23,6 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { type Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
-
-import { dispatchToTraveler } from '@/lib/channel-dispatch';
-import type { ChannelMessage } from '@/lib/channel-render';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,9 +57,7 @@ export async function GET(req: NextRequest) {
   let triggered = 0;
   let skipped = 0;
   for (const trip of candidates) {
-    const events = Array.isArray(trip.events)
-      ? (trip.events as Array<Record<string, unknown>>)
-      : [];
+    const events = Array.isArray(trip.events) ? (trip.events as Array<Record<string, unknown>>) : [];
     const alreadyAsked = events.some(
       e =>
         typeof e.kind === 'string' &&
@@ -77,10 +72,22 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    const fired = await dispatchFeedbackPrompt({
+    // Find the traveler's WhatsApp identity. Skip silently when the
+    // trip wasn't WhatsApp-driven (web/Slack/API channels handle
+    // their own feedback flow elsewhere).
+    const identity = await prisma.channelIdentity.findFirst({
+      where: { tenantId: trip.tenantId, userId: trip.travelerId, kind: 'whatsapp' },
+      select: { externalUserId: true },
+    });
+    if (!identity?.externalUserId) {
+      skipped++;
+      continue;
+    }
+
+    const fired = await fireKapsoFeedbackTrigger({
       tenantId: trip.tenantId,
       tripId: trip.id,
-      travelerUserId: trip.travelerId,
+      travelerPhone: identity.externalUserId,
     });
     if (fired) {
       triggered++;
@@ -94,54 +101,20 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Send the rating prompt through the canonical traveler channel. That
- * keeps Slack and WhatsApp behavior aligned and makes the operator
- * console preview match the traveler copy.
- *
- * WhatsApp keeps the old Kapso ACTION_REQUIRED trigger as a fallback
- * for local/sandbox installs that cannot yet send direct channel
- * messages. The primary path is still `dispatchToTraveler`.
+ * POST a Kapso `api_call` trigger to spawn a workflow execution for
+ * this traveler. Kapso's runtime then sends the ACTION_REQUIRED
+ * template ("Rate your trip"); the traveler's reply lands as a
+ * regular WhatsApp inbound and the agent calls `give_feedback` via
+ * `call_sendero` — D3 enum extension makes that reachable.
  *
  * Returns false on any error so the caller can mark the candidate as
  * skipped and re-try on the next cron tick.
  */
-async function dispatchFeedbackPrompt(args: {
+async function fireKapsoFeedbackTrigger(args: {
   tenantId: string;
   tripId: string;
-  travelerUserId: string;
+  travelerPhone: string;
 }): Promise<boolean> {
-  const message: ChannelMessage = {
-    kind: 'card',
-    id: `post_trip_feedback_${args.tripId}`,
-    author: { role: 'agent', name: 'Sendero' },
-    title: 'Rate this trip',
-    body: "How did your agency do on this trip? Reply with 1-5 stars. Your rating updates this agency's on-chain ERC-8004 reputation, not Sendero's platform reputation.",
-    bullets: ['5 = excellent', '3 = okay', '1 = needs attention'],
-    createdAt: new Date().toISOString(),
-  };
-
-  const sent = await dispatchToTraveler({
-    tenantId: args.tenantId,
-    tripId: args.tripId,
-    travelerUserId: args.travelerUserId,
-    message,
-  });
-  if (sent.sent === true) return true;
-
-  const identity = await prisma.channelIdentity.findFirst({
-    where: { tenantId: args.tenantId, userId: args.travelerUserId, kind: 'whatsapp' },
-    select: { externalUserId: true },
-  });
-  if (!identity?.externalUserId) {
-    console.warn('[cron/post-trip-feedback] no traveler channel', {
-      tenantId: args.tenantId,
-      tripId: args.tripId,
-      reason: sent.reason,
-      detail: sent.detail,
-    });
-    return false;
-  }
-
   const apiKey = env.kapsoApiKey();
   const workflowId = env.kapsoTenantWorkflowId();
   if (!apiKey || !workflowId) {
@@ -167,7 +140,7 @@ async function dispatchFeedbackPrompt(args: {
           trigger_type: 'api_call',
           input: {
             kind: 'post_trip_feedback',
-            travelerPhone: identity.externalUserId,
+            travelerPhone: args.travelerPhone,
             tripId: args.tripId,
             tenantId: args.tenantId,
           },

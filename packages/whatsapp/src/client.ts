@@ -9,8 +9,6 @@
  * and constructs a client per request.
  */
 
-import { createHash } from 'node:crypto';
-
 export interface WhatsAppClientConfig {
   phoneNumberId: string;
   accessToken: string;
@@ -133,31 +131,6 @@ export class WhatsAppClient {
       });
   }
 
-  private resolveAuditMessageId(args: {
-    response: unknown;
-    kind: string;
-    recipientId: string;
-    seed: unknown;
-  }): string | null {
-    const wamid = extractWamid(args.response);
-    if (wamid) return wamid;
-    if (!this.apiBaseUrl.includes('kapso.ai')) return null;
-
-    const hash = createHash('sha256')
-      .update(
-        JSON.stringify({
-          phoneNumberId: this.phoneNumberId,
-          kind: args.kind,
-          recipientId: args.recipientId,
-          seed: args.seed,
-          response: args.response ?? null,
-        })
-      )
-      .digest('hex')
-      .slice(0, 32);
-    return `kapso:${hash}`;
-  }
-
   /**
    * Retries on transient failure: 5xx (Meta-side outages) and 429
    * (rate limit). 4xx errors bubble immediately — those are caller
@@ -254,20 +227,14 @@ export class WhatsAppClient {
   }
 
   async sendText(to: string, text: string) {
-    const payload = {
+    const result = await this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'text',
       text: { body: text },
-    };
-    const result = await this.request('/messages', payload);
-    const wamid = this.resolveAuditMessageId({
-      response: result,
-      kind: 'text',
-      recipientId: to,
-      seed: payload,
     });
+    const wamid = extractWamid(result);
     if (wamid) {
       await this.fireAudit({
         wamid,
@@ -299,14 +266,9 @@ export class WhatsAppClient {
    */
   async send(payload: unknown) {
     const result = await this.request('/messages', payload);
-    const meta = inspectPayload(payload);
-    const wamid = this.resolveAuditMessageId({
-      response: result,
-      kind: meta.kind,
-      recipientId: meta.recipientId,
-      seed: payload,
-    });
+    const wamid = extractWamid(result);
     if (wamid) {
+      const meta = inspectPayload(payload);
       await this.fireAudit({
         wamid,
         kind: meta.kind,
@@ -372,7 +334,7 @@ export class WhatsAppClient {
       index?: number;
     }>;
   }) {
-    const payload = {
+    const result = await this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: args.to,
@@ -382,14 +344,8 @@ export class WhatsAppClient {
         language: { code: args.languageCode },
         components: args.components ?? [],
       },
-    };
-    const result = await this.request('/messages', payload);
-    const wamid = this.resolveAuditMessageId({
-      response: result,
-      kind: 'template',
-      recipientId: args.to,
-      seed: payload,
     });
+    const wamid = extractWamid(result);
     if (wamid) {
       const firstBodyParam = args.components
         ?.find(c => c.type === 'body')
@@ -450,20 +406,14 @@ export class WhatsAppClient {
     if (opts?.footer) {
       interactive.footer = { text: opts.footer };
     }
-    const payload = {
+    const result = await this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'interactive',
       interactive,
-    };
-    const result = await this.request('/messages', payload);
-    const wamid = this.resolveAuditMessageId({
-      response: result,
-      kind: 'interactive',
-      recipientId: to,
-      seed: payload,
     });
+    const wamid = extractWamid(result);
     if (wamid) {
       await this.fireAudit({
         wamid,
@@ -519,29 +469,13 @@ export class WhatsAppClient {
     if (opts?.footer) {
       interactive.footer = { text: opts.footer };
     }
-    const payload = {
+    return this.request('/messages', {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to,
       type: 'interactive',
       interactive,
-    };
-    const result = await this.request('/messages', payload);
-    const wamid = this.resolveAuditMessageId({
-      response: result,
-      kind: 'interactive',
-      recipientId: to,
-      seed: payload,
     });
-    if (wamid) {
-      await this.fireAudit({
-        wamid,
-        kind: 'interactive',
-        recipientId: to,
-        preview: truncatePreview(body),
-      });
-    }
-    return result;
   }
 
   async getMediaUrl(mediaId: string): Promise<string> {

@@ -253,8 +253,12 @@ function encodeArgs(values: ArgValue[]): Uint8Array {
 
 /** Anchor sighash discriminators (from IDL). */
 const DISCRIMINATORS = {
-  preFundTrip: new Uint8Array(IDL_JSON.instructions.find(i => i.name === 'pre_fund_trip')!.discriminator),
-  claimTrip: new Uint8Array(IDL_JSON.instructions.find(i => i.name === 'claim_trip')!.discriminator),
+  preFundTrip: new Uint8Array(
+    IDL_JSON.instructions.find(i => i.name === 'pre_fund_trip')!.discriminator
+  ),
+  claimTrip: new Uint8Array(
+    IDL_JSON.instructions.find(i => i.name === 'claim_trip')!.discriminator
+  ),
   reserveBooking: new Uint8Array(
     IDL_JSON.instructions.find(i => i.name === 'reserve_booking')!.discriminator
   ),
@@ -348,7 +352,9 @@ export interface BuildClaimTripIxsArgs {
 
 /** Build [Ed25519 sibling ix, claim_trip ix]. Both go in the same tx,
  *  in order; the program reads the sibling at index 0. */
-export function buildClaimTripIxs(args: BuildClaimTripIxsArgs): [TransactionInstruction, TransactionInstruction] {
+export function buildClaimTripIxs(
+  args: BuildClaimTripIxsArgs
+): [TransactionInstruction, TransactionInstruction] {
   const programId = args.programId ?? SENDERO_GUEST_ESCROW_PROGRAM_ID;
   const [config] = deriveConfigPda(programId);
   const [trip] = deriveTripPda(args.tripId, programId);

@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { SignOutButton } from '@clerk/nextjs';
+import { redirect } from 'next/navigation';
 
-import { getPlatformRoles } from '@/lib/access';
+import { SignOutControl } from '@/components/sign-out-control';
+import { getPlatformRoles, pickHomeRoute } from '@/lib/access';
 
 /**
  * Hit when:
@@ -19,6 +20,8 @@ export default async function UnauthorizedPage() {
   const user = userId ? await currentUser() : null;
   const email = user?.primaryEmailAddress?.emailAddress ?? null;
   const roles = await getPlatformRoles();
+  const home = roles.length > 0 ? await pickHomeRoute() : null;
+  if (home) redirect(home);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center gap-6 px-6 py-12 text-center">
@@ -59,14 +62,7 @@ export default async function UnauthorizedPage() {
         >
           Try a different account
         </Link>
-        <SignOutButton>
-          <button
-            type="button"
-            className="rounded-md bg-[color:var(--color-fg)] px-4 py-2 text-sm font-medium text-[color:var(--color-bg)]"
-          >
-            Sign out
-          </button>
-        </SignOutButton>
+        <SignOutControl />
       </div>
     </main>
   );

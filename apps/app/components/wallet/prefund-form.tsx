@@ -84,8 +84,8 @@ export function PrefundForm({
     >
       <div className="t-meta">Pre-fund this traveler</div>
       <div className="t-body ink-70" style={{ fontSize: 12, lineHeight: 1.5 }}>
-        Credits the traveler's unified balance directly from the platform treasury via{' '}
-        <span className="t-mono">kit.depositFor</span>. No traveler signature required.
+        Debits this org's Gateway balance and materializes USDC to the traveler's Arc wallet. No
+        platform treasury shortcut.
       </div>
       <div className="t-mono ink-60" style={{ fontSize: 11 }}>
         Destination: {travelerAddress.slice(0, 12)}…{travelerAddress.slice(-6)} on Arc Testnet
@@ -227,10 +227,10 @@ function ResultBanner({ result }: { result: PrefundActionResult }) {
       </div>
     );
   }
-  if (result.kind === 'treasury_missing') {
+  if (result.kind === 'gateway_missing') {
     return (
       <div className="t-mono ink-60" style={{ fontSize: 11 }}>
-        TREASURY_PRIVATE_KEY not configured — set it in .env.local and reload.
+        Tenant Gateway is not provisioned yet. Run Gateway provisioning for this org and retry.
       </div>
     );
   }

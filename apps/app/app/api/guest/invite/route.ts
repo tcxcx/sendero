@@ -25,6 +25,7 @@ import { prisma } from '@sendero/database';
 import { notifier } from '@sendero/notifications';
 
 import { getTenantNotificationEmail } from '@/lib/tenant-notification-email';
+import { dispatchToTraveler } from '@/lib/channel-dispatch';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -94,6 +95,8 @@ export async function POST(req: NextRequest) {
   const safeResult = result as {
     tripId: string;
     budgetUsdc: string;
+    guestLink: string;
+    claimCode?: string | null;
     expiresAt?: string;
     escrowAddress?: string;
     claimPubKey20?: string;
@@ -225,6 +228,74 @@ export async function POST(req: NextRequest) {
         }
       : null;
 
+  let channelInvite:
+    | { sent: true; channel: 'whatsapp' | 'slack' }
+    | { sent: false; reason: string; channel?: 'whatsapp' | 'slack' }
+    | null = null;
+  if (boundUser) {
+    const dispatch = await dispatchToTraveler({
+      tenantId: tenant.id,
+      tripId: safeResult.tripId,
+      travelerUserId: boundUser.id,
+      message: {
+        kind: 'card',
+        id: `guest_claim_${safeResult.tripId}_${Date.now()}`,
+        author: { role: 'agent', name: tenant.displayName },
+        title: 'Your prepaid trip is ready',
+        body:
+          `${tenant.displayName} created a prepaid Sendero trip for you. ` +
+          'Open the claim link, claim the escrow, then keep booking here.',
+        bullets: [
+          `Budget: ${safeResult.budgetUsdc} USDC`,
+          `Trip: ${body.tripSummary ?? body.guestEmail}`,
+          safeResult.expiresAt ? `Expires: ${new Date(Number(safeResult.expiresAt) * 1000).toISOString()}` : null,
+          safeResult.claimCode ? 'A 6-digit claim code is required.' : null,
+        ].filter((line): line is string => Boolean(line)),
+        ctas: [
+          {
+            label: 'Claim prepaid trip',
+            kind: 'open_link',
+            href: safeResult.guestLink,
+            emphasis: 'primary',
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      },
+    });
+    if ('reason' in dispatch) {
+      channelInvite = { sent: false, reason: dispatch.reason, channel: dispatch.channel };
+    } else {
+      channelInvite = { sent: true, channel: dispatch.channel };
+    }
+
+    if (dispatch.sent) {
+      const current = await prisma.trip.findUnique({
+        where: { id: safeResult.tripId },
+        select: { metadata: true },
+      });
+      const metadata =
+        current?.metadata && typeof current.metadata === 'object' && !Array.isArray(current.metadata)
+          ? (current.metadata as Record<string, unknown>)
+          : {};
+      await prisma.trip.update({
+        where: { id: safeResult.tripId },
+        data: {
+          metadata: {
+            ...metadata,
+            linkChannel: dispatch.channel,
+            invite: {
+              ...((metadata.invite && typeof metadata.invite === 'object'
+                ? metadata.invite
+                : {}) as Record<string, unknown>),
+              channelOk: true,
+              channel: dispatch.channel,
+            },
+          },
+        },
+      });
+    }
+  }
+
   capture({
     event: 'guest_invite_issued',
     distinctId: userId,
@@ -261,5 +332,5 @@ export async function POST(req: NextRequest) {
     }
   })();
 
-  return NextResponse.json({ ...result, boundTraveler });
+  return NextResponse.json({ ...result, boundTraveler, channelInvite });
 }

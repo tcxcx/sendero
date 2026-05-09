@@ -58,6 +58,7 @@ interface BootstrapResponse {
 export function ConsoleTripRoomBridge({ children }: { children: ReactNode }) {
   const [tripId] = useQueryState('tripId');
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   // Keep the in-flight request id so a stale response doesn't clobber
   // a fresh one (rapid trip switching). Each fetch increments; only
   // the most recent fetch's response sets state.
@@ -66,6 +67,7 @@ export function ConsoleTripRoomBridge({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!tripId) {
       setBootstrap(null);
+      setBootstrapError(null);
       return;
     }
     // If we already have bootstrap for this tripId, skip the fetch.
@@ -73,6 +75,7 @@ export function ConsoleTripRoomBridge({ children }: { children: ReactNode }) {
 
     const myId = ++requestId.current;
     const controller = new AbortController();
+    setBootstrapError(null);
 
     void (async () => {
       try {
@@ -86,19 +89,18 @@ export function ConsoleTripRoomBridge({ children }: { children: ReactNode }) {
         if (myId !== requestId.current) return; // stale
         if (!r.ok) {
           const text = await r.text().catch(() => '');
+          setBootstrapError(`Trip room bootstrap failed (${r.status}).`);
           console.warn(
             '[console-trip-room-bridge] bootstrap fetch non-ok:',
             r.status,
             text.slice(0, 200)
           );
-          // Render children without provider — presence-focus calls
-          // no-op (their existing behavior), TripComments wouldn't
-          // render at all in the @context slot.
           return;
         }
         const json = (await r.json()) as BootstrapResponse;
         if (myId !== requestId.current) return;
         if (!json.roomId || !json.initialPresence) {
+          setBootstrapError('Trip room bootstrap returned a malformed payload.');
           console.warn('[console-trip-room-bridge] bootstrap returned malformed payload');
           return;
         }
@@ -110,6 +112,7 @@ export function ConsoleTripRoomBridge({ children }: { children: ReactNode }) {
       } catch (err) {
         if (myId !== requestId.current) return;
         if ((err as Error).name === 'AbortError') return;
+        setBootstrapError('Trip room bootstrap failed.');
         console.warn('[console-trip-room-bridge] bootstrap fetch failed:', err);
       }
     })();
@@ -124,8 +127,19 @@ export function ConsoleTripRoomBridge({ children }: { children: ReactNode }) {
   }, [tripId]);
 
   // No tripId → render children unchanged.
-  if (!tripId || !bootstrap || bootstrap.tripId !== tripId) {
+  if (!tripId) {
     return <>{children}</>;
+  }
+
+  // A scoped trip renders TripComments in the @context slot. Hold the
+  // slot tree until the trip room provider is mounted, otherwise
+  // Liveblocks hooks throw before the bootstrap request resolves.
+  if (!bootstrap || bootstrap.tripId !== tripId) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-1 items-center justify-center p-6 text-xs text-[color:var(--surface-muted,#888)]">
+        {bootstrapError ?? 'Connecting trip workspace...'}
+      </div>
+    );
   }
 
   return (

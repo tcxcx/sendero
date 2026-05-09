@@ -43,9 +43,8 @@ import {
   type ChatModelCogs,
   type ChatModelProvider,
   isModelAllowedByCap,
-  PLANS,
-  type PlanTier,
-} from '@sendero/billing';
+} from '@sendero/billing/cogs';
+import { PLANS, type PlanTier } from '@sendero/billing/plans';
 import { ProviderIcon, type ProviderSlug } from '@sendero/icons/providers';
 
 import { Badge } from '@/components/ui/badge';

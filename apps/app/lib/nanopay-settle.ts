@@ -18,12 +18,7 @@ import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
 import { microUsdcToDecimal } from '@/lib/gateway-balance-math';
-
-export function senderoTreasuryAddress(): Address {
-  const a = process.env.SENDERO_TREASURY_ADDRESS;
-  if (!a) throw new Error('SENDERO_TREASURY_ADDRESS not configured');
-  return a as Address;
-}
+import { requirePlatformTreasuryDestination } from '@/lib/platform-treasury';
 
 function domainForAllocationChain(chainName: string | undefined): number | null {
   if (!chainName) return null;
@@ -122,7 +117,6 @@ export function makeBatchStore(): BatchStore {
  * than silently routing Sol-tenant funds through the Arc Gateway.
  */
 export function makeSettleFn(): SettleFn {
-  const to = senderoTreasuryAddress();
   return async ({ totalMicroUsdc, tenantId }) => {
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -133,6 +127,8 @@ export function makeSettleFn(): SettleFn {
         `[nanopay-settle] tenant ${tenantId} is Solana-primary; settle pipeline must use makeSolanaSettleFn (Phase 6.x.y).`
       );
     }
+    const destination = await requirePlatformTreasuryDestination('arc', 'nanopay-settle');
+    const to = destination.address as Address;
     const amount = microUsdcToDecimal(totalMicroUsdc);
     const toChain = GATEWAY_CHAINS.Arc_Testnet;
     const log = await prisma.gatewayTransferLog.create({
@@ -226,12 +222,10 @@ export function makeSolanaSettleFn(): SettleFn {
       );
     }
 
-    const senderoSolTreasury = process.env.SENDERO_SOLANA_TREASURY_ADDRESS;
-    if (!senderoSolTreasury) {
-      throw new Error(
-        '[nanopay-settle:sol] SENDERO_SOLANA_TREASURY_ADDRESS not set — Sol settle path needs a destination address.'
-      );
-    }
+    const senderoSolTreasury = await requirePlatformTreasuryDestination(
+      'sol',
+      'nanopay-settle:sol'
+    );
 
     const tokenId =
       treasury.chain === 'SOL'
@@ -252,14 +246,13 @@ export function makeSolanaSettleFn(): SettleFn {
     const response = await circle.createTransaction({
       walletId: treasury.circleWalletId,
       tokenId,
-      destinationAddress: senderoSolTreasury,
+      destinationAddress: senderoSolTreasury.address,
       amount: [amount],
       fee: { type: 'level', config: { feeLevel: 'MEDIUM' as never } },
       refId: `nanopay-${tenantId}-${Date.now()}`,
     } as never);
 
-    const transactionId =
-      (response.data as { id?: string } | undefined)?.id ?? '';
+    const transactionId = (response.data as { id?: string } | undefined)?.id ?? '';
     if (!transactionId) {
       throw new Error(
         `[nanopay-settle:sol] Circle createTransaction returned no transactionId for tenant ${tenantId}.`

@@ -117,9 +117,7 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
       <DeliveryProgressMap
         title="Trip route"
         route={route}
-        progressLabel={
-          route?.detail ?? 'Route geography appears here after the trip has booking segments.'
-        }
+        progressLabel={route?.detail ?? 'Route geography appears here after the trip has booking segments.'}
       />
 
       <TripDetailCard trip={trip} />

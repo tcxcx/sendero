@@ -7,12 +7,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-import { cogsForModel } from '@sendero/billing';
+import { cogsForModel } from '@sendero/billing/cogs';
 
 import { tierDots } from '@/components/chat/chat-model-trigger';
 import { useChatModel } from '@/hooks/use-chat-model';
 
-import { WorkflowVisibilityToggle } from './console/workflow-visibility-toggle';
 import { DigitTicker, SmoothNumber } from './footer-numbers';
 import { useSendero } from './store';
 import { useMeterStream, useMeterSummary } from './use-meter';
@@ -76,16 +75,6 @@ export function WorkflowLog() {
     <div className="col">
       <div className="col-head">
         <span className="title">Workflow</span>
-      </div>
-      <div
-        style={{
-          padding: '8px 14px',
-          borderBottom: '1px solid var(--hairline-color-soft)',
-          display: 'flex',
-          justifyContent: 'flex-end',
-        }}
-      >
-        <WorkflowVisibilityToggle layout="inline" />
       </div>
       <div className="col-body log">
         <WorkflowGraph workflow={workflow} />

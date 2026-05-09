@@ -27,9 +27,8 @@
  * context for ops triage; they are NOT thrown.
  */
 
-import { type Prisma, prisma } from '@sendero/database';
+import { prisma } from '@sendero/database';
 import { createSlackClient } from '@sendero/slack';
-import { ensureTravelerWallet } from '@sendero/tools/ensure-traveler-wallet';
 
 export interface ResolvedSlackUser {
   /** Sendero User.id whose row should appear on `meter_events.userId`. */
@@ -38,8 +37,6 @@ export interface ResolvedSlackUser {
   email: string | null;
   /** True iff this resolver call auto-created the User row (step 4). */
   provisional: boolean;
-  /** ChannelIdentity row that anchors this Slack member in Sendero. */
-  channelIdentityId: string | null;
 }
 
 export interface ResolveSenderoUserArgs {
@@ -85,18 +82,10 @@ export async function resolveSenderoUser(
       select: { senderoUserId: true, email: true },
     });
     if (existing) {
-      const channelIdentityId = await ensureSlackTravelerContext({
-        tenantId,
-        slackTeamId,
-        slackUserId,
-        senderoUserId: existing.senderoUserId,
-        email: existing.email,
-      });
       return {
         senderoUserId: existing.senderoUserId,
         email: existing.email,
         provisional: false,
-        channelIdentityId,
       };
     }
 
@@ -179,104 +168,22 @@ export async function resolveSenderoUser(
         select: { senderoUserId: true, email: true },
       });
       if (reread) {
-        const channelIdentityId = await ensureSlackTravelerContext({
-          tenantId,
-          slackTeamId,
-          slackUserId,
-          senderoUserId: reread.senderoUserId,
-          email: reread.email,
-        });
         return {
           senderoUserId: reread.senderoUserId,
           email: reread.email,
           provisional: false,
-          channelIdentityId,
         };
       }
       // Re-read failed — propagate to outer catch.
       throw err;
     }
 
-    const channelIdentityId = await ensureSlackTravelerContext({
-      tenantId,
-      slackTeamId,
-      slackUserId,
-      senderoUserId,
-      email,
-    });
-
-    return { senderoUserId, email, provisional, channelIdentityId };
+    return { senderoUserId, email, provisional };
   } catch (err) {
     console.warn(
       `[slack-user-mapping] resolver failed; falling back to install authedUser tenant=${tenantId} slackTeam=${slackTeamId} slackUser=${slackUserId}`,
       err
     );
-    const channelIdentityId = await ensureSlackTravelerContext({
-      tenantId,
-      slackTeamId,
-      slackUserId,
-      senderoUserId: fallbackUserId,
-      email: null,
-      fallback: true,
-    }).catch(contextErr => {
-      console.warn('[slack-user-mapping] fallback channel identity failed', {
-        tenantId,
-        slackTeamId,
-        slackUserId,
-        error: contextErr instanceof Error ? contextErr.message : String(contextErr),
-      });
-      return null;
-    });
-    return { senderoUserId: fallbackUserId, email: null, provisional: false, channelIdentityId };
+    return { senderoUserId: fallbackUserId, email: null, provisional: false };
   }
-}
-
-async function ensureSlackTravelerContext(args: {
-  tenantId: string;
-  slackTeamId: string;
-  slackUserId: string;
-  senderoUserId: string;
-  email: string | null;
-  fallback?: boolean;
-}): Promise<string | null> {
-  const metadata = {
-    slackTeamId: args.slackTeamId,
-    email: args.email,
-    source: 'slack_user_binding',
-    ...(args.fallback ? { fallback: true } : {}),
-  } satisfies Prisma.InputJsonObject;
-
-  const identity = await prisma.channelIdentity.upsert({
-    where: {
-      tenantId_kind_externalUserId: {
-        tenantId: args.tenantId,
-        kind: 'slack',
-        externalUserId: args.slackUserId,
-      },
-    },
-    create: {
-      tenantId: args.tenantId,
-      kind: 'slack',
-      externalUserId: args.slackUserId,
-      userId: args.senderoUserId,
-      metadata,
-    },
-    update: {
-      userId: args.senderoUserId,
-      metadata,
-    },
-    select: { id: true },
-  });
-
-  await ensureTravelerWallet({ userId: args.senderoUserId }).catch(err => {
-    console.warn('[slack-user-mapping] wallet ensure failed (non-fatal)', {
-      tenantId: args.tenantId,
-      slackTeamId: args.slackTeamId,
-      slackUserId: args.slackUserId,
-      senderoUserId: args.senderoUserId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  });
-
-  return identity.id;
 }

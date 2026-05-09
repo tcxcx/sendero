@@ -40,6 +40,10 @@ const DASHBOARD_PAGE_COPY: Record<string, Copy> = {
     title: 'Trips',
     description: 'Active and recent bookings across every channel.',
   },
+  '/dashboard/trips/map': {
+    title: 'Active trips map',
+    description: 'Live traveler destinations and route context for in-flight operations.',
+  },
   '/dashboard/handoff': {
     title: 'Internal handoff',
     description: 'Human decisions from WhatsApp, Slack, and web in one operator queue.',

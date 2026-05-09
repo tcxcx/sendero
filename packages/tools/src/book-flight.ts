@@ -78,61 +78,13 @@ const inputSchema = z.object({
   tripId: z.string().optional(),
   /**
    * Literal traveler confirmation text from the current channel turn.
-   * Required for WhatsApp ticketing so "confirmar hold" cannot be
-   * misread as permission to pay Duffel and ticket the booking.
+   * Required on WhatsApp for ticketing. "confirmar hold" is not a
+   * ticketing confirmation; the phrase must mention the charged amount.
    */
   confirmationText: z.string().optional(),
 });
 
 type BookFlightInput = z.infer<typeof inputSchema>;
-
-function validateWhatsAppTicketingConfirmation(
-  input: BookFlightInput,
-  ctx?: ToolContext
-):
-  | { ok: true }
-  | {
-      ok: false;
-      response: {
-        status: 'ticketing_confirmation_required';
-        requiredPhrase: string;
-        message: string;
-      };
-    } {
-  // Web/operator flows can use their own explicit UI affordances. The
-  // WhatsApp agent is plain text + tool calls, so the tool must enforce
-  // the ticketing boundary itself.
-  if (!ctx?.traveler?.phone) return { ok: true };
-
-  const text = (input.confirmationText ?? '').trim();
-  const normalized = text
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '');
-  const requiredPhrase = 'Confirmar ticketing <amount> USDC';
-
-  const mentionsTicketing =
-    /\b(ticket|ticketing|emitir|emite|emision|comprar|compra|pagar|pago|debitar|cobrar|charge|pay)\b/.test(
-      normalized
-    );
-  const mentionsHoldOnly =
-    /\b(hold|reserva|reservar|solo hold|only hold|sin cobro|no cobres|no ticket|no ticketing|no pagar|no payment)\b/.test(
-      normalized
-    );
-  const mentionsAmount = /\b\d+([.,]\d{1,2})?\b/.test(normalized) || /\busdc\b/.test(normalized);
-
-  if (mentionsTicketing && !mentionsHoldOnly && mentionsAmount) return { ok: true };
-
-  return {
-    ok: false,
-    response: {
-      status: 'ticketing_confirmation_required',
-      requiredPhrase,
-      message:
-        'I can keep the fare on hold, but I need explicit permission before ticketing and charging USDC. Reply with the exact ticketing confirmation, including the amount, when you want me to pay and issue the ticket.',
-    },
-  };
-}
 
 export const bookFlightTool: ToolDef = {
   name: 'book_flight',
@@ -185,11 +137,16 @@ export const bookFlightTool: ToolDef = {
       confirmationText: {
         type: 'string',
         description:
-          'Literal traveler confirmation text from the current turn. WhatsApp ticketing requires an explicit ticketing/payment confirmation, not hold-only copy.',
+          'Literal in-this-turn traveler confirmation. WhatsApp ticketing requires a phrase like "Confirmar ticketing 140 USDC"; hold-only language is rejected.',
       },
     },
   },
   async handler(input: BookFlightInput, ctx?: ToolContext) {
+    const whatsappTicketingGate = validateWhatsAppTicketingConfirmation(input, ctx);
+    if (!whatsappTicketingGate.ok) {
+      return whatsappTicketingGate.response;
+    }
+
     // Hard gate — `travelerPhone` MUST be passed on the proxy so we can
     // resolve a real Sendero User. Without it, `ctx.traveler.userId`
     // falls through to a `svc:<keyId>` service-account placeholder and
@@ -203,9 +160,6 @@ export const bookFlightTool: ToolDef = {
           'Cannot book — no traveler resolved on this turn. Pass `travelerPhone` (E.164) on `call_sendero` so the booking can be charged to a real wallet.',
       };
     }
-
-    const whatsappConfirmation = validateWhatsAppTicketingConfirmation(input, ctx);
-    if (whatsappConfirmation.ok === false) return whatsappConfirmation.response;
 
     // Auth gate — bookings require a real Clerk-backed identity so the
     // traveler can claim wallet, NFTs, and trip history persistently.
@@ -711,10 +665,8 @@ export const bookFlightTool: ToolDef = {
       }
     }
 
-    // Settle USDC from traveler → logged-in org Gateway wallet. The
-    // Duffel ticket has been paid from the Sendero pool first, but the
-    // tenant's operating wallet is the durable business ledger target;
-    // do not shortcut through the platform treasury.
+    // Settle USDC from traveler → tenant treasury. The Duffel ticket
+    // has been paid from the Sendero pool; this rebalances the books.
     // Fire-and-forget: a Gateway burn-mint failure must not unticket
     // a confirmed booking. The settlement tx hash is stamped on the
     // booking row out-of-band so the agent can surface it on the next
@@ -722,7 +674,7 @@ export const bookFlightTool: ToolDef = {
     let usdcSettlement: { settlementTxHash: string; explorerUrl: string } | null = null;
     if (travelerUserRowId && hold.totalCurrency === 'USD' && ctx?.traveler?.tenantId) {
       try {
-        usdcSettlement = await settleTravelerUsdcToTenantGateway({
+        usdcSettlement = await settleTravelerUsdcToTreasury({
           travelerUserId: travelerUserRowId,
           tenantId: ctx.traveler.tenantId,
           amountUsdc: hold.totalAmount,
@@ -927,6 +879,68 @@ export const bookFlightTool: ToolDef = {
     };
   },
 };
+
+function validateWhatsAppTicketingConfirmation(
+  input: BookFlightInput,
+  ctx?: ToolContext
+):
+  | { ok: true }
+  | {
+      ok: false;
+      response: {
+        status: 'ticketing_confirmation_required';
+        message: string;
+        requiredPhrase: string;
+      };
+    } {
+  // Only the WhatsApp runtime has shown ambiguity between hold-only
+  // language and ticketing confirmation. In-app/operator flows keep
+  // their existing confirmation gates.
+  if (!ctx?.traveler?.phone) return { ok: true };
+
+  const confirmation = input.confirmationText?.trim() ?? '';
+  const normalized = confirmation.toLowerCase();
+  const hasHoldOnlyLanguage =
+    /\b(hold|hold-only|solo hold|sin cobro|no cobres|no cobrar|no ticket|no ticketing|sin ticket|solo reserva)\b/i.test(
+      confirmation
+    );
+  const mentionsMoney = /(?:\b\d+(?:[.,]\d{1,2})?\s*(?:usd|usdc)\b|\$\s*\d+(?:[.,]\d{1,2})?)/i.test(
+    confirmation
+  );
+  const confirmsTicketing =
+    /\b(confirmar|confirmo|confirm|ticketing|emitir|emiti|book|comprar|pagar)\b/i.test(
+      confirmation
+    );
+
+  if (!confirmation || hasHoldOnlyLanguage || !mentionsMoney || !confirmsTicketing) {
+    return {
+      ok: false,
+      response: {
+        status: 'ticketing_confirmation_required',
+        requiredPhrase: 'Confirmar ticketing <amount> USDC',
+        message:
+          'I will not ticket this flight from hold-only language. Ask the traveler to reply with “Confirmar ticketing <amount> USDC” before calling book_flight.',
+      },
+    };
+  }
+
+  // Prevent a model from stuffing a stale confirm-card label while the
+  // current user text was "confirmar hold"; the caller must pass the
+  // literal current-turn confirmation.
+  if (normalized.includes('confirmar hold') || normalized.includes('confirm hold')) {
+    return {
+      ok: false,
+      response: {
+        status: 'ticketing_confirmation_required',
+        requiredPhrase: 'Confirmar ticketing <amount> USDC',
+        message:
+          '“Confirmar hold” is a hold-only instruction, not permission to ticket or debit a wallet.',
+      },
+    };
+  }
+
+  return { ok: true };
+}
 
 /**
  * Create the Trip + Booking rows so the post-ticketing fan-out has an
@@ -1633,56 +1647,75 @@ async function assertTravelerHasUsdc(args: {
 }
 
 /**
- * Burn-mint USDC from the traveler's Gateway balance onto the tenant's
- * org Gateway wallet. Branches on `tenant.primaryChain` so Solana
- * tenants settle on Sol_Devnet via their Solana DCW + Solana treasury
- * destination, and Arc tenants stay on Arc_Testnet. This keeps booking
- * settlement tenant-scoped: the logged-in org receives the funds, not
- * the global Sendero/admin treasury.
+ * Burn-mint USDC from the traveler's Gateway signer onto the tenant's
+ * Gateway signer (same chain — Arc Testnet). The traveler's funds
+ * "follow" their booking onto the tenant's treasury. Same-chain
+ * burn-mints settle in seconds via Gateway's API.
+ *
+ * Gateway requires a source chain that has the depositor's USDC. We
+ * pick the chain with the largest balance for the traveler.
  */
-async function settleTravelerUsdcToTenantGateway(args: {
+async function settleTravelerUsdcToTreasury(args: {
   travelerUserId: string;
   tenantId: string;
   amountUsdc: string;
 }): Promise<{ settlementTxHash: string; explorerUrl: string } | null> {
-  const SOL_DEVNET_CHAIN_ID = 5;
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: args.tenantId },
-    select: { primaryChain: true },
-  });
-  const primaryChain = tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
+  // ── Settlement recipient flip (Phase H billing v1.5, 2026-05-04) ──
+  // Why: book_flight pays Duffel out of Sendero's Duffel pool first
+  // (`payFromBalance`). The traveler's USDC settlement MUST reimburse
+  // Sendero for that draw — otherwise we're underwater on every sale.
+  //
+  // Pre-flip the recipient was `tenantSigner.address` (the per-tenant
+  // gateway-signer EOA). Net P&L per booking: Sendero −$Duffel cost +
+  // ~5% take = catastrophic loss. Today's flip: recipient =
+  // TREASURY_VIEM_ADDRESS (Sendero platform treasury) so the full
+  // Duffel cost reimbursement lands where we paid from.
+  //
+  // What this means for the tenant: until tenant markup is wired
+  // (`Tenant.markupConfig` → quote-time price-up + a SECOND transfer
+  // to the tenant gateway-signer for the markup leg), the tenant
+  // earns $0 on the booking. That's correct — the booking IS at
+  // Duffel cost, and Sendero is the only entity at risk on the float.
+  //
+  // ── Follow-up: Phase H v2 (markup + tenant share) ──
+  // 1. `book_flight` quote-time: read TenantPricingPolicy → return
+  //    fareToTraveler = duffelCost + markup; agent confirm card shows
+  //    breakdown ("Total: $161 (fare $140 + service $21)").
+  // 2. Settlement here splits:
+  //      cost           → Sendero (reimburse) — this is the current
+  //                        recipient
+  //      markup × (1-take) → tenant gateway-signer EOA  ← new transfer
+  //      markup × take    → Sendero (custom fee carve)
+  // 3. Booking row already has columns for this snapshot
+  //    (`costMicroUsdc`, `markupMicroUsdc`, `markupBps`,
+  //    `senderoTakeMicroUsdc`).
+  //
+  // The take-rate-via-customFee logic from the v1 commit is intentionally
+  // dropped here because it's the wrong shape: when recipient =
+  // Sendero, carving a fee FROM Sendero TO Sendero is a no-op; the
+  // carve belongs on the tenant-markup leg in v2.
 
-  // Resolve the right traveler DCW for the tenant's chain.
-  const dcw = await prisma.wallet.findFirst({
+  const SOL_DEVNET_CHAIN_ID = 5;
+  const evmDcw = await prisma.wallet.findFirst({
     where: {
       userId: args.travelerUserId,
       provisioner: 'dcw',
-      ...(primaryChain === 'sol'
-        ? { chainId: SOL_DEVNET_CHAIN_ID }
-        : { NOT: { chainId: SOL_DEVNET_CHAIN_ID } }),
+      NOT: { chainId: SOL_DEVNET_CHAIN_ID },
     },
     orderBy: { createdAt: 'asc' },
     select: { address: true },
   });
-  if (!dcw?.address) {
-    console.warn('[book_flight] no traveler DCW for tenant chain — refusing to settle', {
-      tenantId: args.tenantId,
-      primaryChain,
-    });
-    return null;
-  }
+  if (!evmDcw?.address) return null;
 
-  const destination = await resolveTenantGatewaySettlementDestination(
-    args.tenantId,
-    primaryChain
-  );
-  if (!destination) {
-    console.warn('[book_flight] no tenant Gateway settlement destination — refusing to settle', {
-      tenantId: args.tenantId,
-      primaryChain,
-    });
+  const { resolvePlatformTreasuryDestination } = await import('./platform-treasury');
+  const senderoTreasury = await resolvePlatformTreasuryDestination('arc');
+  if (!senderoTreasury) {
+    console.warn(
+      '[book_flight] no live Arc SuperOrgTreasury — refusing to settle traveler reimbursement'
+    );
     return null;
   }
+  const senderoRecipient = senderoTreasury.address;
 
   // Lazy import avoids pulling the full unified-gateway module into
   // the cold path of every book_flight invocation that doesn't end up
@@ -1690,75 +1723,30 @@ async function settleTravelerUsdcToTenantGateway(args: {
   const { circleWalletsPrincipal, spend } = await import('@sendero/circle');
 
   const principal = circleWalletsPrincipal({
-    address: dcw.address,
+    address: evmDcw.address,
     label: `traveler:${args.travelerUserId}:settle`,
   });
   if (!principal) return null;
 
-  console.log('[book_flight] settling traveler funds to tenant Gateway wallet', {
+  console.log('[book_flight] settling (cost-reimbursement to Sendero)', {
     tenantId: args.tenantId,
     travelerUserId: args.travelerUserId,
     amountUsdc: args.amountUsdc,
-    primaryChain,
-    recipient: destination.address,
-    destinationSource: destination.source,
+    recipient: senderoRecipient,
+    treasuryId: senderoTreasury.treasuryId,
+    treasuryNetwork: senderoTreasury.network,
+    note: 'tenant markup share is Phase H v2 — not wired yet',
   });
 
-  const toChainKey = primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
   const result = await spend({
     sources: [{ principal }],
-    toChainKey,
-    recipient: destination.address,
+    toChainKey: 'Arc_Testnet',
+    recipient: senderoRecipient,
     amount: args.amountUsdc,
   });
 
   return {
     settlementTxHash: result.txHash,
-    explorerUrl:
-      result.explorerUrl ??
-      (primaryChain === 'sol'
-        ? `https://explorer.solana.com/tx/${result.txHash}?cluster=devnet`
-        : `https://testnet.arcscan.app/tx/${result.txHash}`),
+    explorerUrl: result.explorerUrl ?? `https://testnet.arcscan.app/tx/${result.txHash}`,
   };
-}
-
-async function resolveTenantGatewaySettlementDestination(
-  tenantId: string,
-  primaryChain: 'arc' | 'sol' = 'arc'
-): Promise<{ address: string; source: 'tenant_gateway_config' | 'tenant_circle_treasury' } | null> {
-  // Arc tenants honor the optional TenantGatewayConfig override
-  // (manual EVM Gateway depositor address) before falling back to the
-  // tenant's Circle treasury wallet. Solana tenants skip the override
-  // path because the config column is EVM-shaped.
-  if (primaryChain === 'arc') {
-    const cfg = await prisma.tenantGatewayConfig.findUnique({
-      where: { tenantId },
-      select: { evmDepositorAddress: true },
-    });
-    if (cfg?.evmDepositorAddress) {
-      return {
-        address: cfg.evmDepositorAddress.toLowerCase(),
-        source: 'tenant_gateway_config',
-      };
-    }
-  }
-
-  const chains =
-    primaryChain === 'sol'
-      ? ['SOL-DEVNET', 'SOL']
-      : ['arc-testnet', 'arc-mainnet'];
-
-  const wallet = await prisma.circleWallet.findFirst({
-    where: { tenantId, kind: 'treasury', chain: { in: chains } },
-    orderBy: { createdAt: 'desc' },
-    select: { address: true },
-  });
-  if (wallet?.address) {
-    // Solana addresses are case-sensitive base58; only lowercase EVM hex.
-    const address =
-      primaryChain === 'sol' ? wallet.address : wallet.address.toLowerCase();
-    return { address, source: 'tenant_circle_treasury' };
-  }
-
-  return null;
 }

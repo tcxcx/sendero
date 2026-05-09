@@ -37,7 +37,7 @@ import {
   MarkupStrategyNotSupportedV1,
   type BookingKind,
   type BookingPolicySnapshot,
-} from '@sendero/billing';
+} from '@sendero/billing/markup';
 
 import { Card } from '@/components/ui/card';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';

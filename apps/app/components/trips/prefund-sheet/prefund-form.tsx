@@ -52,6 +52,10 @@ export type PrefundResult = {
   claimCode?: string | null;
   onchainCalls: PrefundOnchainCall[];
   invite?: { ok?: boolean; skipped?: boolean; error?: string };
+  channelInvite?:
+    | { sent: true; channel: 'whatsapp' | 'slack' }
+    | { sent: false; reason: string; channel?: 'whatsapp' | 'slack' }
+    | null;
   boundTraveler?: BoundTraveler | null;
 };
 

@@ -62,7 +62,7 @@ function stampExperimentalSpan(toolName: string): void {
 
 export function toAiSdkTool(def: ToolDef, ctx: ToolContext = {}) {
   const schema = def.jsonSchema
-    ? jsonSchema(def.jsonSchema as Parameters<typeof jsonSchema>[0])
+    ? jsonSchema(normalizeJsonSchema(def.jsonSchema) as Parameters<typeof jsonSchema>[0])
     : (def.inputSchema as any);
   const isExperimental = def.experimental === true;
   return tool({
@@ -73,6 +73,23 @@ export function toAiSdkTool(def: ToolDef, ctx: ToolContext = {}) {
       return def.handler(input, ctx);
     },
   });
+}
+
+function normalizeJsonSchema<T>(schema: T): T {
+  if (Array.isArray(schema)) return schema.map(normalizeJsonSchema) as T;
+  if (!schema || typeof schema !== 'object') return schema;
+
+  const input = schema as Record<string, unknown>;
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    normalized[key] = normalizeJsonSchema(value);
+  }
+
+  if (normalized.type === 'array' && normalized.items === undefined) {
+    normalized.items = { type: 'object', additionalProperties: true };
+  }
+
+  return normalized as T;
 }
 
 export function buildAiSdkTools(defs: ToolDef[], ctx: ToolContext = {}): ToolSet {

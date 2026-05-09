@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 
+import { CheckCircle2, CircleDashed, Landmark } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -13,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { requirePlatformRole } from '@/lib/access';
 import { getArcTreasury } from '@/lib/treasury/provision-arc';
 import { getSolanaTreasury } from '@/lib/treasury/provision-solana';
+
 import { ArcDeployButton } from './_components/arc-deploy-button';
 import { ArcDeriveButton } from './_components/arc-derive-button';
 import { ArcInstallMultisigButton } from './_components/arc-install-multisig-button';
@@ -23,42 +26,125 @@ import { SolanaProposeForm } from './_components/solana-propose-form';
 import { SolanaProvisionForm } from './_components/solana-provision-form';
 
 /**
- * Treasury landing — superadmin-only by per-page guard. Two cards,
- * one per chain. Phase 7.4 wired Solana (live, Squads V4); Phase 7.5
- * wires Arc in **intent mode** (form + persistence; on-chain deploy
- * lands in 7.5.x).
+ * Treasury landing — superadmin-only by per-page guard. This page is
+ * the operational onboarding surface for Sendero's platform treasury:
+ * create the treasury, finish chain setup, then use the live
+ * addresses as settlement destinations.
  */
 export default async function TreasuryPage() {
   const guard = await requirePlatformRole(['superadmin']);
   if (!guard.ok) redirect('/unauthorized');
 
   const [sol, arc] = await Promise.all([getSolanaTreasury(), getArcTreasury()]);
+  const arcReady = Boolean(arc?.status === 'live' && arc.platformOwnerRemovedAt);
+  const solReady = Boolean(sol?.status === 'live');
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Treasury</h1>
-        <p className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
-          Sendero&apos;s dual-chain multisig treasury. Provision, sign, execute.
-        </p>
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-sm font-medium text-[color:var(--color-muted-foreground)]">
+            <Landmark className="h-4 w-4" />
+            Treasury
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight">Settlement destinations</h1>
+          <p className="max-w-2xl text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+            Configure the governed addresses that receive Sendero platform funds.
+          </p>
+        </div>
+        <Card className="shadow-none">
+          <CardContent className="space-y-2 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">Routing</span>
+              <StatusPill tone={arcReady || solReady ? 'success' : 'muted'}>
+                {arcReady || solReady ? 'Live' : 'Setup'}
+              </StatusPill>
+            </div>
+            <div className="space-y-2 text-xs text-[color:var(--color-muted-foreground)]">
+              <RoutingLine
+                label="Arc"
+                value={arc?.status === 'live' ? arc.vaultAddress : 'Finish Arc setup'}
+                ready={arc?.status === 'live'}
+              />
+              <RoutingLine
+                label="Solana"
+                value={sol?.status === 'live' ? sol.vaultAddress : 'Provision Solana vault'}
+                ready={solReady}
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {sol ? <SolanaTreasuryCard treasury={sol} /> : <SolanaProvisionCard />}
         {arc ? <ArcTreasuryCard treasury={arc} /> : <ArcProvisionCard />}
       </div>
-
-      <p className="text-xs text-[color:var(--color-muted-foreground)]">
-        Phase 7.4 ships live Solana provisioning (Squads V4 on devnet). Phase 7.5 ships Arc in{' '}
-        <strong>intent mode</strong> via <code>@sendero/multisig</code>; on-chain Circle MSCA deploy
-        lands in 7.5.x (counterfactual address + Gas Station paymaster + bundler glue). See{' '}
-        <code>docs/specs/sendero-admin-app.md</code>.
-      </p>
     </div>
   );
 }
 
-// ──────────────────── Solana — provisioned ────────────────────
+function StatusPill({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: 'success' | 'warning' | 'muted';
+}) {
+  const className =
+    tone === 'success'
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+      : tone === 'warning'
+        ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+        : 'border-[color:var(--color-border)] bg-[color:var(--color-secondary)] text-[color:var(--color-secondary-foreground)]';
+  return (
+    <span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function RoutingLine({ label, value, ready }: { label: string; value: string; ready: boolean }) {
+  return (
+    <div className="grid grid-cols-[4rem_1fr] gap-2">
+      <span className="font-medium text-[color:var(--color-foreground)]">{label}</span>
+      <span className={ready ? 'break-all font-mono' : ''}>{value}</span>
+    </div>
+  );
+}
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <>
+      <dt className="text-[color:var(--color-muted-foreground)]">{label}</dt>
+      <dd className="min-w-0">{children}</dd>
+    </>
+  );
+}
+
+function TxRow({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="rounded-md border bg-[color:var(--color-muted)] px-3 py-2 text-[11px]">
+      <span className="font-medium text-[color:var(--color-muted-foreground)]">{label}: </span>
+      <span className="break-all font-mono">{value}</span>
+    </div>
+  );
+}
+
+function SetupStep({ done, title }: { done: boolean; title: string }) {
+  const Icon = done ? CheckCircle2 : CircleDashed;
+  return (
+    <div className="flex items-center gap-2">
+      <Icon
+        className={`h-3.5 w-3.5 ${done ? 'text-emerald-600' : 'text-[color:var(--color-muted-foreground)]'}`}
+      />
+      <span className="text-xs text-[color:var(--color-muted-foreground)]">{title}</span>
+    </div>
+  );
+}
+
+// Solana — provisioned
 
 function SolanaTreasuryCard({
   treasury,
@@ -68,30 +154,31 @@ function SolanaTreasuryCard({
   const members = Array.isArray(treasury.members) ? (treasury.members as string[]) : [];
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-5 pb-3">
         <div className="flex items-baseline justify-between">
-          <CardTitle>Solana</CardTitle>
+          <CardTitle className="text-base">Solana</CardTitle>
           <span className="rounded-full bg-[color:var(--color-secondary)] px-2 py-0.5 text-xs font-medium uppercase tracking-wider">
             {treasury.network}
           </span>
         </div>
-        <CardDescription>
-          Squads V4 multisig vault. Owns Anchor program upgrade authority + Sendero Solana treasury
-          USDC.
-        </CardDescription>
+        <CardDescription>Solana-side settlement vault.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 p-5 pt-0">
         <dl className="grid grid-cols-[7rem_1fr] gap-y-2 text-sm">
-          <dt className="text-[color:var(--color-muted-foreground)]">Status</dt>
-          <dd className="font-medium uppercase tracking-wide">{treasury.status}</dd>
-          <dt className="text-[color:var(--color-muted-foreground)]">Multisig</dt>
-          <dd className="break-all font-mono text-xs">{treasury.multisigAddress}</dd>
-          <dt className="text-[color:var(--color-muted-foreground)]">Vault</dt>
-          <dd className="break-all font-mono text-xs">{treasury.vaultAddress}</dd>
-          <dt className="text-[color:var(--color-muted-foreground)]">Threshold</dt>
-          <dd className="font-medium">
-            {treasury.threshold} of {members.length} signers
-          </dd>
+          <DetailRow label="Status">
+            <StatusPill tone={treasury.status === 'live' ? 'success' : 'warning'}>
+              {treasury.status === 'live' ? 'Ready for settlement' : treasury.status}
+            </StatusPill>
+          </DetailRow>
+          <DetailRow label="Treasury vault">
+            <span className="break-all font-mono text-xs">{treasury.vaultAddress}</span>
+          </DetailRow>
+          <DetailRow label="Governance">
+            <span className="break-all font-mono text-xs">{treasury.multisigAddress}</span>
+          </DetailRow>
+          <DetailRow label="Approvals">
+            {treasury.threshold} of {members.length} approvers
+          </DetailRow>
         </dl>
         {treasury.provisioningTxRef ? (
           <div className="text-xs">
@@ -119,41 +206,37 @@ function SolanaTreasuryCard({
 
         <SolanaProposeForm treasuryId={treasury.id} />
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-2">
+      <CardFooter className="flex-col items-stretch gap-2 p-5 pt-0">
         <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-          Vote / execute via your connected Solana wallet (Phase 7.6.x). Status pills above mirror
-          the on-chain proposal PDA after each tx confirms.
+          Connected-wallet approval and execution are available for Solana treasury proposals.
         </p>
       </CardFooter>
     </Card>
   );
 }
 
-// ──────────────────── Solana — not yet provisioned ────────────────────
+// Solana — not yet provisioned
 
 function SolanaProvisionCard() {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-5 pb-3">
         <div className="flex items-baseline justify-between">
-          <CardTitle>Solana</CardTitle>
+          <CardTitle className="text-base">Solana</CardTitle>
           <span className="text-xs uppercase tracking-wider text-[color:var(--color-muted-foreground)]">
             SOL-DEV
           </span>
         </div>
-        <CardDescription>
-          Provision a Squads V4 multisig vault. Will own Anchor program upgrade authority + Sendero
-          Solana treasury USDC + agent NFT custody.
-        </CardDescription>
+        <CardDescription>Create the settlement vault.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-5 pt-0">
         <SolanaProvisionForm />
       </CardContent>
     </Card>
   );
 }
 
-// ──────────────────── Arc — provisioned (intent or live) ────────────────────
+// Arc — provisioned
 
 function ArcTreasuryCard({
   treasury,
@@ -168,99 +251,98 @@ function ArcTreasuryCard({
   const platformOwnerRemoved = Boolean(treasury.platformOwnerRemovedAt);
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-5 pb-3">
         <div className="flex items-baseline justify-between">
-          <CardTitle>Arc</CardTitle>
+          <CardTitle className="text-base">Arc</CardTitle>
           <span className="rounded-full bg-[color:var(--color-secondary)] px-2 py-0.5 text-xs font-medium uppercase tracking-wider">
             {treasury.network}
           </span>
         </div>
-        <CardDescription>
-          Circle MSCA weighted multisig. Will own SenderoGuestEscrow + AgenticCommerce upgrade roles
-          + Arc treasury USDC + Sendero canonical agent NFT.
-        </CardDescription>
+        <CardDescription>Arc platform settlement account.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 p-5 pt-0">
         <dl className="grid grid-cols-[7rem_1fr] gap-y-2 text-sm">
-          <dt className="text-[color:var(--color-muted-foreground)]">Status</dt>
-          <dd className="font-medium uppercase tracking-wide">{treasury.status}</dd>
-          <dt className="text-[color:var(--color-muted-foreground)]">
-            {isIntent ? 'Placeholder' : 'MSCA'}
-          </dt>
-          <dd className="break-all font-mono text-xs">{treasury.multisigAddress}</dd>
-          <dt className="text-[color:var(--color-muted-foreground)]">Threshold</dt>
-          <dd className="font-medium">
-            {treasury.threshold} of {members.length} signers
-          </dd>
+          <DetailRow label="Status">
+            <StatusPill
+              tone={
+                isLive && platformOwnerRemoved
+                  ? 'success'
+                  : isLive || isPending
+                    ? 'warning'
+                    : 'muted'
+              }
+            >
+              {isIntent
+                ? 'Reserved'
+                : isPending
+                  ? 'Address ready'
+                  : isLive && platformOwnerRemoved
+                    ? 'Ready for settlement'
+                    : isLive && multisigInstalled
+                      ? 'Recovery signer active'
+                      : 'Deploy complete'}
+            </StatusPill>
+          </DetailRow>
+          <DetailRow label={isIntent ? 'Reserved address' : 'Treasury address'}>
+            <span className="break-all font-mono text-xs">{treasury.multisigAddress}</span>
+          </DetailRow>
+          <DetailRow label="Approvals">
+            {treasury.threshold} of {members.length} approvers
+          </DetailRow>
         </dl>
+        <div className="grid gap-2 rounded-md border bg-[color:var(--color-muted)] p-3 sm:grid-cols-2">
+          <SetupStep done={!isIntent} title="Address" />
+          <SetupStep done={isLive} title="Activated" />
+          <SetupStep done={multisigInstalled} title="Policy" />
+          <SetupStep done={platformOwnerRemoved} title="Self-custody" />
+        </div>
         {isIntent ? (
-          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            Intent reserved with a placeholder address. Click below to derive the real Circle MSCA
-            counterfactual address.
+          <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+            The treasury is reserved. Continue to generate the real Arc address that will receive
+            platform settlement.
           </p>
         ) : null}
         {isPending ? (
-          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            Counterfactual address derived. Click below to submit the deploy userOp via Circle&apos;s
-            bundler — Gas Station sponsors gas. Multi-owner weighted multisig install ships next
-            (Phase 7.5.x.yy).
+          <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+            The Arc treasury address is ready. Deploy it next so settlement can route funds to this
+            address.
           </p>
         ) : null}
         {isLive ? (
           <>
-            <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+            <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
               {!multisigInstalled
-                ? 'MSCA deployed with the Sendero platform EOA as bootstrap owner. Click below to install the form-configured members + threshold via updateMultisigWeights.'
+                ? 'The Arc treasury is deployed. Install the approval policy so approvers control treasury operations.'
                 : platformOwnerRemoved
-                  ? `MSCA in full self-custody. ${members.length} member(s) at threshold ${treasury.threshold}; the Sendero platform recovery signer was removed.`
-                  : `MSCA deployed and multi-owner weighted multisig installed. ${members.length} member(s) at threshold ${treasury.threshold}; the Sendero platform EOA stays as a recovery signer (remove below for full self-custody).`}
+                  ? `Arc treasury is in full self-custody with ${members.length} approver(s) at threshold ${treasury.threshold}.`
+                  : `Approval policy is installed for ${members.length} approver(s) at threshold ${treasury.threshold}. Remove the recovery signer when the team is ready for full self-custody.`}
             </p>
-            {treasury.provisioningTxRef ? (
-              <div className="text-[11px]">
-                <span className="text-[color:var(--color-muted-foreground)]">Deploy: </span>
-                <span className="break-all font-mono">{treasury.provisioningTxRef}</span>
-              </div>
-            ) : null}
-            {treasury.multisigInstallTxRef ? (
-              <div className="text-[11px]">
-                <span className="text-[color:var(--color-muted-foreground)]">Install: </span>
-                <span className="break-all font-mono">{treasury.multisigInstallTxRef}</span>
-              </div>
-            ) : null}
-            {treasury.platformOwnerRemovalTxRef ? (
-              <div className="text-[11px]">
-                <span className="text-[color:var(--color-muted-foreground)]">
-                  Self-custody:{' '}
-                </span>
-                <span className="break-all font-mono">{treasury.platformOwnerRemovalTxRef}</span>
-              </div>
-            ) : null}
+            <TxRow label="Deploy" value={treasury.provisioningTxRef} />
+            <TxRow label="Install policy" value={treasury.multisigInstallTxRef} />
+            <TxRow label="Self-custody" value={treasury.platformOwnerRemovalTxRef} />
           </>
         ) : null}
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex-col items-stretch gap-2 p-5 pt-0">
         {isIntent ? (
           <ArcDeriveButton treasuryId={treasury.id} status={treasury.status} />
         ) : isPending ? (
           <ArcDeployButton treasuryId={treasury.id} status={treasury.status} />
         ) : isLive && !multisigInstalled ? (
-          <ArcInstallMultisigButton
-            treasuryId={treasury.id}
-            alreadyInstalled={multisigInstalled}
-          />
+          <ArcInstallMultisigButton treasuryId={treasury.id} alreadyInstalled={multisigInstalled} />
         ) : isLive && multisigInstalled && !platformOwnerRemoved ? (
           <div className="flex flex-col gap-2 w-full">
             <ArcRemovePlatformButton
               treasuryId={treasury.id}
               alreadyRemoved={platformOwnerRemoved}
             />
-            <Button variant="outline" disabled className="w-full" title="Phase 7.6">
-              Sign / Execute proposals (Phase 7.6)
+            <Button variant="outline" disabled className="w-full" title="Coming next">
+              Sign and execute proposals
             </Button>
           </div>
         ) : (
-          <Button variant="outline" disabled className="w-full" title="Phase 7.6">
-            Sign / Execute proposals (Phase 7.6)
+          <Button variant="outline" disabled className="w-full" title="Coming next">
+            Sign and execute proposals
           </Button>
         )}
       </CardFooter>
@@ -268,25 +350,21 @@ function ArcTreasuryCard({
   );
 }
 
-// ──────────────────── Arc — not yet provisioned ────────────────────
+// Arc — not yet provisioned
 
 function ArcProvisionCard() {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-5 pb-3">
         <div className="flex items-baseline justify-between">
-          <CardTitle>Arc</CardTitle>
+          <CardTitle className="text-base">Arc</CardTitle>
           <span className="text-xs uppercase tracking-wider text-[color:var(--color-muted-foreground)]">
             ARC-TESTNET
           </span>
         </div>
-        <CardDescription>
-          Reserve a Circle MSCA weighted multisig intent. Will own SenderoGuestEscrow +
-          AgenticCommerce upgrade roles + Arc treasury USDC + Sendero canonical agent NFT once
-          deployed (Phase 7.5.x).
-        </CardDescription>
+        <CardDescription>Create the platform settlement account.</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-5 pt-0">
         <ArcProvisionForm />
       </CardContent>
     </Card>

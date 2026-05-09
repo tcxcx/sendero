@@ -57,6 +57,7 @@ import {
   resolveSegment,
   resolveTenantPlan,
 } from '@/lib/agent-auth';
+import { resolveChatModel } from '@/lib/agent-models';
 import { currentOrgPlan } from '@/lib/billing-plan';
 import {
   chatPricingBreakdown,
@@ -65,6 +66,7 @@ import {
   type ChatUsage,
 } from '@/lib/chat-pricing';
 import { preflight } from '@sendero/billing/meter';
+import { resolvePlan } from '@sendero/billing/plans';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -174,13 +176,18 @@ async function probeModel(pick: Picked): Promise<{ ok: true } | { ok: false; err
   try {
     const providerOptions =
       typeof pick.model === 'string' ? buildProviderOptions(pick.tier) : undefined;
-    await generateText({
-      model: pick.model,
-      prompt: 'ok',
-      maxOutputTokens: 16,
-      maxRetries: 0,
-      providerOptions,
-    });
+    await Promise.race([
+      generateText({
+        model: pick.model,
+        prompt: 'ok',
+        maxOutputTokens: 16,
+        maxRetries: 0,
+        providerOptions,
+      }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Model probe timed out after 12s')), 12_000);
+      }),
+    ]);
     return { ok: true };
   } catch (err) {
     return { ok: false, err };
@@ -326,12 +333,23 @@ export async function POST(req: NextRequest) {
   const requestedTier: ModelTier = body.tier ?? 'fast';
   const cascade = pickModelCascade(requestedTier);
   // Operator-picked model trumps the default cascade head when valid.
-  // Stays a string (gateway slug) — direct-provider fallbacks are still
-  // appended so a gateway outage doesn't kill the chat.
-  if (body.model && gatewayConfigured() && Date.now() >= gatewayBrokenUntil) {
+  // Server-side validation is mandatory: the UI hides locked models,
+  // but a caller can still POST any model id by hand. Keep fallback
+  // candidates after the chosen model so provider outages don't kill
+  // the chat turn.
+  if (body.model && Date.now() >= gatewayBrokenUntil) {
+    const plan = await currentOrgPlan().catch(async () =>
+      tenantId ? resolvePlan(await resolveTenantPlan(tenantId)) : resolvePlan('free')
+    );
+    const resolved = resolveChatModel(body.model, plan, {
+      source: channel === 'web' || channel === 'slack' || channel === 'whatsapp' ? channel : 'api',
+    });
+    if ('locked' in resolved) {
+      return NextResponse.json(resolved.locked, { status: 403 });
+    }
     cascade.unshift({
-      model: body.model,
-      label: `gateway:${body.model}`,
+      model: resolved.model,
+      label: typeof resolved.model === 'string' ? `gateway:${resolved.modelId}` : `direct:${resolved.modelId}`,
       tier: requestedTier,
     });
   }

@@ -33,9 +33,11 @@ import { useRouter } from 'next/navigation';
 
 import type { UIMessage } from 'ai';
 import { useQueryState } from 'nuqs';
+import type { PlanTier } from '@sendero/billing/plans';
 import { toast } from '@sendero/ui/sonner';
 
 import { sendViaChat } from '@/components/chat-bridge';
+import { ChatModelTrigger } from '@/components/chat/chat-model-trigger';
 import {
   TripPresenceMountFocus,
   useTripPresenceFocus,
@@ -65,6 +67,8 @@ interface ConsoleConversationProps {
   holdExpires: string | null;
   /** Channel kind of the focused trip (used for optimistic post + composer tinting). */
   focusedChannelKind: string | null;
+  /** Current org plan tier, used to keep the model picker plan-gated. */
+  planTier: PlanTier;
 }
 
 export function ConsoleConversation({
@@ -73,6 +77,7 @@ export function ConsoleConversation({
   traveler,
   holdExpires,
   focusedChannelKind,
+  planTier,
 }: ConsoleConversationProps) {
   const router = useRouter();
   const [activeCs] = useQueryState('cs');
@@ -231,12 +236,19 @@ export function ConsoleConversation({
         />
       ) : null}
 
-      <ChannelHeader
-        channel={focusedChannel}
-        traveler={isTrip ? (traveler?.name ?? undefined) : undefined}
-        tripId={isTrip ? (scopedTripId ?? undefined) : undefined}
-        hold={isTrip ? holdExpires : null}
-      />
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <ChannelHeader
+            channel={focusedChannel}
+            traveler={isTrip ? (traveler?.name ?? undefined) : undefined}
+            tripId={isTrip ? (scopedTripId ?? undefined) : undefined}
+            hold={isTrip ? holdExpires : null}
+          />
+        </div>
+        <div style={{ flexShrink: 0 }}>
+          <ChatModelTrigger tier={planTier} />
+        </div>
+      </div>
 
       <div
         style={{

@@ -362,7 +362,7 @@ export function ErrorBanner() {
 import { useMeterSummary } from './use-meter';
 import { DigitTicker, SmoothNumber } from './footer-numbers';
 
-// Dev/demo telemetry strip — block ticker, treasury balance, meter
+// Dev/demo telemetry strip — block ticker, org Gateway balance, meter
 // rate. Useful when shaking out flows locally; visual noise + a
 // surface for stale data in prod. NODE_ENV is inlined at build time
 // so the entire branch tree-shakes out of the prod bundle.
@@ -420,7 +420,7 @@ export function FooterRail() {
       </div>
       <div className="group">
         <span>
-          treasury{' '}
+          org gateway{' '}
           <strong style={{ color: 'var(--text)' }}>
             {treasuryAddr ? `${treasuryAddr.slice(0, 6)}…${treasuryAddr.slice(-4)}` : '—'}
           </strong>

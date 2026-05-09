@@ -119,18 +119,19 @@ export function SidebarMenuItem({
 
 interface SidebarMenuButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isActive?: boolean;
+  size?: 'default' | 'lg';
   /** Render as a `<span>` instead of `<button>` so consumers can wrap
    *  in a `<Link>`. The clickable surface is the parent in that case. */
   asChild?: boolean;
 }
 
 export const SidebarMenuButton = React.forwardRef<HTMLElement, SidebarMenuButtonProps>(
-  ({ className, isActive, asChild, children, ...props }, ref) => {
+  ({ className, isActive, size = 'default', asChild, children, ...props }, ref) => {
     if (asChild) {
       return (
         <span
           ref={ref as React.Ref<HTMLSpanElement>}
-          className={cn(menuItemClasses(isActive), className)}
+          className={cn(menuItemClasses(isActive, size), className)}
         >
           {children}
         </span>
@@ -140,7 +141,7 @@ export const SidebarMenuButton = React.forwardRef<HTMLElement, SidebarMenuButton
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         type="button"
-        className={cn(menuItemClasses(isActive), className)}
+        className={cn(menuItemClasses(isActive, size), className)}
         {...props}
       >
         {children}
@@ -150,9 +151,10 @@ export const SidebarMenuButton = React.forwardRef<HTMLElement, SidebarMenuButton
 );
 SidebarMenuButton.displayName = 'SidebarMenuButton';
 
-function menuItemClasses(isActive?: boolean): string {
+function menuItemClasses(isActive?: boolean, size: 'default' | 'lg' = 'default'): string {
   return cn(
     'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+    size === 'lg' && 'min-h-12',
     isActive
       ? 'bg-[color:var(--color-sidebar-accent)] text-[color:var(--color-sidebar-accent-foreground)]'
       : 'hover:bg-[color:var(--color-sidebar-accent)] hover:text-[color:var(--color-sidebar-accent-foreground)]'

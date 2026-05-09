@@ -17,6 +17,7 @@ import {
   Inbox,
   KeyRound,
   Landmark,
+  MapIcon,
   MessageCircle,
   Plane,
   ScanLine,
@@ -56,6 +57,12 @@ const NAV_ROUTES: NavRoute[] = [
     icon: Inbox,
   },
   { title: 'Trips', href: '/dashboard/trips', keywords: 'trips itineraries bookings', icon: Plane },
+  {
+    title: 'Active trips map',
+    href: '/dashboard/trips/map',
+    keywords: 'map active trips routes travelers geography',
+    icon: MapIcon,
+  },
   {
     title: 'Invoices',
     href: '/dashboard/billing/invoices',

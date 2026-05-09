@@ -40,7 +40,6 @@ import {
   parseStayBookingAction,
   type StayResolvedSubject,
 } from '@/lib/slack-stay-actions';
-import { resolveSenderoUser } from '@/lib/slack-user-mapping';
 import { toolList, bookStay } from '@sendero/tools';
 import { findWorkflow, resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflows';
 
@@ -248,7 +247,23 @@ async function handleFanoutButtonTap(
     return;
   }
 
-  const binding = await resolveSlackInteractionUser(install, payload.user.id);
+  const slackUserId = payload.user.id;
+  // Resolve sendero user id via SlackUserBinding.
+  const binding = await prisma.slackUserBinding.findFirst({
+    where: {
+      tenantId: install.tenantId,
+      slackTeamId: install.teamId,
+      slackUserId,
+    },
+    select: { senderoUserId: true },
+  });
+  if (!binding) {
+    console.warn('[slack/interactions] no SlackUserBinding for tap', {
+      slackUserId,
+      tenantId: install.tenantId,
+    });
+    return;
+  }
 
   const result = await routeFanoutCtaTap({
     value,
@@ -283,7 +298,22 @@ async function handleAncillaryPickerTap(
   const raw = action.selected_option?.value ?? action.value ?? '';
   if (!raw) return;
 
-  const binding = await resolveSlackInteractionUser(install, payload.user.id);
+  const { prisma } = await import('@sendero/database');
+  const binding = await prisma.slackUserBinding.findFirst({
+    where: {
+      tenantId: install.tenantId,
+      slackTeamId: install.teamId,
+      slackUserId: payload.user.id,
+    },
+    select: { senderoUserId: true },
+  });
+  if (!binding) {
+    console.warn('[slack/interactions] no SlackUserBinding for ancillary tap', {
+      slackUserId: payload.user.id,
+      tenantId: install.tenantId,
+    });
+    return;
+  }
 
   const result = await routeSlackAncillaryTap({
     actionId: action.action_id,
@@ -303,20 +333,6 @@ async function handleAncillaryPickerTap(
       });
     }
   }
-}
-
-async function resolveSlackInteractionUser(
-  install: SlackInstallRow,
-  slackUserId: string
-): Promise<{ senderoUserId: string }> {
-  const resolved = await resolveSenderoUser({
-    tenantId: install.tenantId,
-    slackTeamId: install.teamId,
-    slackUserId,
-    botToken: install.botToken,
-    fallbackUserId: install.authedUserId,
-  });
-  return { senderoUserId: resolved.senderoUserId };
 }
 
 async function handleApprovalAction(
@@ -507,7 +523,43 @@ async function handleStayBookingAction(
   // by the agent (auto-provisioned in `slack-user-mapping.ts`); a
   // missing binding usually means the org admin hasn't been onboarded
   // yet, not that the booking should silently proceed.
-  const binding = await resolveSlackInteractionUser(install, payload.user.id);
+  const binding = await prisma.slackUserBinding.findFirst({
+    where: {
+      tenantId: install.tenantId,
+      slackTeamId: install.teamId,
+      slackUserId: payload.user.id,
+    },
+    select: { senderoUserId: true },
+  });
+  if (!binding) {
+    console.warn('[slack/interactions] no SlackUserBinding for stay confirm', {
+      slackUserId: payload.user.id,
+      tenantId: install.tenantId,
+    });
+    if (payload.channel && payload.message) {
+      const client = createSlackClient(install.botToken);
+      await updateMessage(client, {
+        channel: payload.channel.id,
+        ts: payload.message.ts,
+        blocks: buildStayResolvedBlocks(
+          { hotelName: 'Hotel quote' },
+          'failed',
+          payload.user.id,
+          'Your Slack account is not linked to a Sendero user yet. Sign in to Sendero first and try again.'
+        ),
+      });
+    }
+    try {
+      await respondToInteraction(payload.response_url, {
+        text: 'Your Slack account is not linked to a Sendero user yet. Sign in to Sendero first.',
+        response_type: 'ephemeral',
+        replace_original: false,
+      });
+    } catch {
+      // already logged above
+    }
+    return;
+  }
 
   // confirm — actually run book_stay.
   try {

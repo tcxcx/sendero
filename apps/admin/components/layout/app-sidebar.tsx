@@ -1,14 +1,15 @@
 'use client';
 
-import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
   CircleDollarSign,
-  FileText,
   HardDriveDownload,
   Heart,
+  LayoutDashboard,
+  MapIcon,
+  Plus,
   ScanLine,
   ShieldCheck,
   TrendingUp,
@@ -26,7 +27,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { OrgSwitcher } from './org-switcher';
 
 interface NavItem {
   href: string;
@@ -40,6 +43,12 @@ interface NavItem {
 }
 
 const NAV: readonly NavItem[] = [
+  {
+    href: '/dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    allowed: ['superadmin', 'sales', 'eng', 'support', 'finance'],
+  },
   {
     href: '/dashboard/treasury',
     label: 'Treasury',
@@ -65,7 +74,6 @@ const NAV: readonly NavItem[] = [
     label: 'Billing',
     icon: CircleDollarSign,
     allowed: ['superadmin', 'finance'],
-    phaseTag: '7.7',
   },
   {
     href: '/dashboard/pipeline',
@@ -79,7 +87,12 @@ const NAV: readonly NavItem[] = [
     label: 'Tenants',
     icon: Users,
     allowed: ['superadmin', 'sales', 'support'],
-    phaseTag: '7.7',
+  },
+  {
+    href: '/dashboard/maps',
+    label: 'Maps',
+    icon: MapIcon,
+    allowed: ['superadmin', 'sales', 'eng', 'support', 'finance'],
   },
   {
     href: '/dashboard/agents',
@@ -113,20 +126,31 @@ export function AppSidebar({ roles }: { roles: readonly PlatformRole[] }) {
 
   return (
     <Sidebar>
-      <SidebarHeader>
-        <Link href="/" className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-[color:var(--color-primary)]" />
-          <span className="text-sm font-semibold tracking-tight">Sendero Admin</span>
-        </Link>
+      <SidebarHeader className="h-auto px-3 py-3">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <OrgSwitcher />
+          </div>
+          <Button
+            asChild
+            variant="outline"
+            className="h-10 shrink-0 gap-1.5 rounded-lg px-2 text-xs"
+          >
+            <Link href="/dashboard/orgs/new" aria-label="New vertical org">
+              <Plus className="h-3.5 w-3.5" />
+              New Org
+            </Link>
+          </Button>
+        </div>
       </SidebarHeader>
       <SidebarContent>
-        <div className="mb-3 rounded-md border bg-[color:var(--color-background)] px-3 py-2 text-xs">
-          <span className="text-[color:var(--color-muted-foreground)]">role(s) · </span>
-          <span className="font-medium">{roles.join(', ')}</span>
-        </div>
+        <SidebarSectionLabel>Overview</SidebarSectionLabel>
         <SidebarMenu>
           {visible.map(item => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isActive =
+              item.href === '/dashboard'
+                ? pathname === item.href
+                : pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return (
               <SidebarMenuItem key={item.href}>
@@ -154,10 +178,24 @@ export function AppSidebar({ roles }: { roles: readonly PlatformRole[] }) {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
-        <p className="text-[10px] uppercase tracking-wider text-[color:var(--color-muted-foreground)]">
-          Internal · do not share
-        </p>
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-[color:var(--color-primary)]" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-medium">Sendero Admin</p>
+            <p className="truncate text-[10px] text-[color:var(--color-muted-foreground)]">
+              {roles.join(', ')}
+            </p>
+          </div>
+        </div>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+function SidebarSectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 px-3 text-xs font-medium text-[color:var(--color-muted-foreground)]">
+      {children}
+    </p>
   );
 }

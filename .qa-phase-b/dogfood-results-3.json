@@ -1,0 +1,373 @@
+{
+  "ranAt": "2026-05-08T21:23:49.952Z",
+  "results": [
+    {
+      "category": "hotels",
+      "prompt": "DEVMODE search hotels in Mendoza Argentina for two adults, check-in 2026-05-15, check-out 2026-05-17. Then immediately call list_stay_rates on the first result.",
+      "expected": [
+        "search_hotels",
+        "list_stay_rates"
+      ],
+      "toolsCalled": [
+        "search_hotels",
+        "list_stay_rates"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 88798,
+      "errors": [],
+      "text": "I have pulled the hotels for Mendoza from May 15 to May 17, and retrieved the room rates for the Hualta Hotel Mendoza. \n\nThe most affordable option starts at $322.24 USD for a non-refundable Twin Room"
+    },
+    {
+      "category": "hotels",
+      "prompt": "DEVMODE find a hotel in Mendoza for tomorrow, get the room rate matrix, then quote_stay on the cheapest rate.",
+      "expected": [
+        "search_hotels",
+        "list_stay_rates",
+        "quote_stay"
+      ],
+      "toolsCalled": [
+        "search_hotels",
+        "list_stay_rates",
+        "quote_stay"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 97877,
+      "errors": [],
+      "text": "I have completed the sequence you requested for the Mendoza hotel search for tomorrow:\n\n1. **`search_hotels`**: Found the Sheraton Mendoza Hotel, Hualta Hotel Mendoza, and Hilton Mendoza starting arou"
+    },
+    {
+      "category": "hotels",
+      "prompt": "DEVMODE go all the way: search a hotel in Mendoza for 2026-05-20 to 2026-05-22 for two adults, list rates, quote the cheapest, then book_stay it for traveler +5491112345678. Use whatever quoteId you get.",
+      "expected": [
+        "search_hotels",
+        "list_stay_rates",
+        "quote_stay",
+        "book_stay"
+      ],
+      "toolsCalled": [
+        "search_hotels",
+        "list_stay_rates",
+        "quote_stay",
+        "book_stay"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 94068,
+      "errors": [],
+      "text": ""
+    },
+    {
+      "category": "ancillaries",
+      "prompt": "DEVMODE search flights EZE to MDZ for 2026-05-20, 1 passenger, premium economy. Then call list_flight_ancillaries on the first offer.",
+      "expected": [
+        "search_flights",
+        "list_flight_ancillaries"
+      ],
+      "toolsCalled": [
+        "search_flights",
+        "list_flight_ancillaries"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 25343,
+      "errors": [],
+      "text": "I have completed the sequence you requested for the EZE to MDZ flight search on 2026-05-20:\n\n1. **`search_flights`**: Found three premium economy options, starting with a nonstop Duffel Airways flight"
+    },
+    {
+      "category": "ancillaries",
+      "prompt": "DEVMODE search flights EZE to MDZ for 2026-05-20, premium economy. List ancillaries on the cheapest offer, then select_seat 14A and add_baggage 1 piece.",
+      "expected": [
+        "search_flights",
+        "list_flight_ancillaries",
+        "select_seat",
+        "add_baggage"
+      ],
+      "toolsCalled": [
+        "search_flights",
+        "list_flight_ancillaries",
+        "select_seat",
+        "add_baggage"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 45099,
+      "errors": [],
+      "text": "I have completed the sequence you requested for the DEVMODE test:\n\n1. **`search_flights`**: Searched EZE to MDZ for 2026-05-20 in premium economy. Found 3 options; the cheapest is a Duffel Airways fli"
+    },
+    {
+      "category": "settle",
+      "prompt": "DEVMODE call confirm_booking with bookingId=bk_test_smoke, supplierAmountUsdc=300, supplierName=Duffel for traveler +5491112345678.",
+      "expected": [
+        "confirm_booking"
+      ],
+      "toolsCalled": [
+        "confirm_booking",
+        "confirm_booking",
+        "find_resolved_gap",
+        "report_knowledge_gap"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 41181,
+      "errors": [],
+      "text": ""
+    },
+    {
+      "category": "settle",
+      "prompt": "DEVMODE issue a settle_split for bookingId=bk_test_settle with supplier 60bps, agency 30bps, sendero 10bps on a 500 USDC booking.",
+      "expected": [
+        "settle_split"
+      ],
+      "toolsCalled": [
+        "settle_split"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 19747,
+      "errors": [],
+      "text": "The DEVMODE `settle_split` execution returned an error indicating that the Arc platform treasury is not yet provisioned. You'll need to complete the Sendero admin treasury setup before funds can be se"
+    },
+    {
+      "category": "wallet-retry",
+      "prompt": "DEVMODE call check_treasury and tell me the corporate USDC + EURC balance on Arc.",
+      "expected": [
+        "check_treasury"
+      ],
+      "toolsCalled": [
+        "check_treasury"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 15092,
+      "errors": [],
+      "text": "The corporate treasury balance on Arc is currently **0 USDC** and **0 EURC**."
+    },
+    {
+      "category": "wallet-retry",
+      "prompt": "DEVMODE call quote_fx for converting 1000 USD to ARS for a booking.",
+      "expected": [
+        "quote_fx"
+      ],
+      "toolsCalled": [
+        "currency_convert"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 20407,
+      "errors": [],
+      "text": "`quote_fx` is specifically designed for cross-currency settlements and only supports converting *to* USDC, USD, or EURC, so it can't target ARS. \n\nI tried using our standard ECB reference rate tool (`"
+    },
+    {
+      "category": "concierge-retry",
+      "prompt": "DEVMODE produce a polished restaurant_route_card for Don Belgrano in Mendoza, route from Park Hyatt.",
+      "expected": [
+        "restaurant_route_card"
+      ],
+      "toolsCalled": [
+        "restaurant_route_card",
+        "places_search",
+        "restaurant_route_card",
+        "web_search"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 46556,
+      "errors": [],
+      "text": ""
+    },
+    {
+      "category": "visa-retry",
+      "prompt": "DEVMODE call check_travel_eligibility for an upcoming trip to Mendoza.",
+      "expected": [
+        "check_travel_eligibility"
+      ],
+      "toolsCalled": [
+        "check_travel_eligibility"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 36041,
+      "errors": [],
+      "text": "The eligibility check returned a warning because we don't have a passport or nationality on file. Which passport are you traveling on, and what month does it expire?"
+    },
+    {
+      "category": "trips-retry",
+      "prompt": "DEVMODE call get_trip_brief on my most active trip, give me a recap of flights and stays.",
+      "expected": [
+        "get_trip_brief"
+      ],
+      "toolsCalled": [
+        "get_active_trip"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 11502,
+      "errors": [],
+      "text": "I don't see an active trip on file for you right now. Where are you headed, and for how many days?"
+    },
+    {
+      "category": "flights",
+      "prompt": "DEVMODE call cancel_order_quote for order ord_test_xyz to see refund eligibility.",
+      "expected": [
+        "cancel_order_quote"
+      ],
+      "toolsCalled": [
+        "cancel_order_quote"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 12710,
+      "errors": [],
+      "text": "It looks like that order ID (`ord_test_xyz`) doesn't exist in the system, so I couldn't pull the cancellation quote. Are you sure that's the right order number?"
+    },
+    {
+      "category": "flights",
+      "prompt": "DEVMODE list my airline credits — call list_airline_credits.",
+      "expected": [
+        "list_airline_credits"
+      ],
+      "toolsCalled": [
+        "list_airline_credits"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 14361,
+      "errors": [],
+      "text": "You have one available airline credit. It's for 50.00 USD on American Airlines, and it expires in April 2027."
+    },
+    {
+      "category": "flights",
+      "prompt": "DEVMODE call request_order_change for order ord_test_xyz proposing a new outbound on 2026-05-25.",
+      "expected": [
+        "request_order_change"
+      ],
+      "toolsCalled": [],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 15100,
+      "errors": [],
+      "text": "I'll need a few more details to request that change. Could you provide the origin, destination, and the specific slice ID you want to remove from the order?"
+    },
+    {
+      "category": "identity",
+      "prompt": "DEVMODE create a passenger named Maria Fernandez (mariafernandez+test@example.com) for inbox testing.",
+      "expected": [
+        "create_passenger"
+      ],
+      "toolsCalled": [
+        "create_passenger"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 10113,
+      "errors": [],
+      "text": "Maria has been added to the passenger list. If she'd like to link a specific channel, just let me know if she prefers WhatsApp or Slack, and her number or member ID."
+    },
+    {
+      "category": "wallet",
+      "prompt": "DEVMODE call sweep_dcw_to_gateway to push USDC from the traveler DCW back to gateway.",
+      "expected": [
+        "sweep_dcw_to_gateway"
+      ],
+      "toolsCalled": [],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 6166,
+      "errors": [],
+      "text": "To sweep the funds, I'll need a couple more details. What's the amount of USDC you'd like to sweep, and which chain is it currently on (e.g., Base_Sepolia, Arc_Testnet, Ethereum_Sepolia)?"
+    },
+    {
+      "category": "rep",
+      "prompt": "DEVMODE call submit_validation_response with verdict=approved for validation request val_test_xyz.",
+      "expected": [
+        "submit_validation_response"
+      ],
+      "toolsCalled": [],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 7857,
+      "errors": [],
+      "text": "To submit the validation response, I'll need a couple more details. What is the tag for this validation and the validator's wallet address?"
+    },
+    {
+      "category": "docs",
+      "prompt": "DEVMODE call ensure_flight_customer to keep my traveler synced with the supplier identity layer.",
+      "expected": [
+        "ensure_flight_customer"
+      ],
+      "toolsCalled": [],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 8509,
+      "errors": [],
+      "text": "To sync the traveler, I'll need a few details. Could you provide their email address, given name, family name, and phone number?"
+    },
+    {
+      "category": "wallet",
+      "prompt": "DEVMODE call swap_and_bridge — bridge 50 USDC from Polygon mainnet into Arc Testnet.",
+      "expected": [
+        "swap_and_bridge"
+      ],
+      "toolsCalled": [],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 14205,
+      "errors": [],
+      "text": "To run the `swap_and_bridge` flow, I need to know which token you want to swap the USDC into once it reaches Arc Testnet (USDC or EURC). \n\nIf you just want to bridge the USDC without swapping, I can r"
+    },
+    {
+      "category": "concierge",
+      "prompt": "DEVMODE call broadcast_to_group_trip on group gtr_test1 with template trip_intake_v3.",
+      "expected": [
+        "broadcast_to_group_trip"
+      ],
+      "toolsCalled": [],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 20104,
+      "errors": [],
+      "text": "To send the broadcast, I'll also need the `whatsappTemplateId` associated with the \"trip_intake_v3\" template. What is the ID?"
+    }
+  ],
+  "summary": {
+    "prompts": 21,
+    "passed": 21,
+    "failed": 0,
+    "toolsHit": [
+      "add_baggage",
+      "book_stay",
+      "cancel_order_quote",
+      "check_travel_eligibility",
+      "check_treasury",
+      "confirm_booking",
+      "create_passenger",
+      "currency_convert",
+      "find_resolved_gap",
+      "get_active_trip",
+      "list_airline_credits",
+      "list_flight_ancillaries",
+      "list_stay_rates",
+      "places_search",
+      "quote_stay",
+      "report_knowledge_gap",
+      "restaurant_route_card",
+      "search_flights",
+      "search_hotels",
+      "select_seat",
+      "settle_split",
+      "web_search"
+    ],
+    "expectedMissed": [
+      "quote_fx",
+      "get_trip_brief",
+      "request_order_change",
+      "sweep_dcw_to_gateway",
+      "submit_validation_response",
+      "ensure_flight_customer",
+      "swap_and_bridge",
+      "broadcast_to_group_trip"
+    ]
+  }
+}

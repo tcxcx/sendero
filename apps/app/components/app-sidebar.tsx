@@ -14,6 +14,7 @@ import {
   Home,
   Inbox,
   Landmark,
+  MapIcon,
   MessageCircle,
   Minus,
   Plane,
@@ -66,6 +67,7 @@ const sections: NavSection[] = [
       { title: 'Passport', url: '/dashboard/passport', icon: ShieldCheck },
       { title: 'Trip inboxes', url: '/dashboard/inbox', icon: Inbox },
       { title: 'Trips', url: '/dashboard/trips', icon: Plane },
+      { title: 'Active trips map', url: '/dashboard/trips/map', icon: MapIcon },
     ],
   },
   {

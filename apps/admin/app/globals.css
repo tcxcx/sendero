@@ -1,66 +1,38 @@
-@import 'tailwindcss';
+@import "tailwindcss";
+@import "../../../packages/ui/src/themes/sendero.css";
+@import "../../../packages/ui/src/themes/zen.css";
 
-/* shadcn-style design tokens. Light theme on :root, dark theme on
- * `.dark`. `next-themes` toggles the class on <html>. Tokens are
- * deliberately minimal — Phase 7.3 ports the shell, not the full
- * design system. Polish lands incrementally. */
+/* Tailwind token fallbacks. Runtime platform themes live in @sendero/ui. */
 
 @theme {
-  --color-border: hsl(214 32% 91%);
-  --color-input: hsl(214 32% 91%);
-  --color-ring: hsl(222 84% 4%);
-  --color-background: hsl(0 0% 100%);
-  --color-foreground: hsl(222 84% 5%);
-  --color-primary: hsl(222 47% 11%);
-  --color-primary-foreground: hsl(210 40% 98%);
-  --color-secondary: hsl(210 40% 96%);
-  --color-secondary-foreground: hsl(222 47% 11%);
-  --color-muted: hsl(210 40% 96%);
-  --color-muted-foreground: hsl(215 16% 47%);
-  --color-accent: hsl(210 40% 96%);
-  --color-accent-foreground: hsl(222 47% 11%);
+  --color-border: hsl(33 35% 76%);
+  --color-input: hsl(33 35% 76%);
+  --color-ring: hsl(11 66% 53%);
+  --color-background: hsl(32 53% 86%);
+  --color-foreground: hsl(0 0% 4%);
+  --color-primary: hsl(11 66% 53%);
+  --color-primary-foreground: hsl(33 100% 96%);
+  --color-secondary: hsl(34 61% 90%);
+  --color-secondary-foreground: hsl(0 0% 4%);
+  --color-muted: hsl(34 51% 88%);
+  --color-muted-foreground: hsl(0 0% 45%);
+  --color-accent: hsl(34 51% 88%);
+  --color-accent-foreground: hsl(0 0% 4%);
   --color-destructive: hsl(0 72% 51%);
-  --color-destructive-foreground: hsl(210 40% 98%);
-  --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(222 84% 5%);
-  --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(222 84% 5%);
-  --color-sidebar: hsl(0 0% 98%);
-  --color-sidebar-foreground: hsl(240 5% 26%);
-  --color-sidebar-border: hsl(220 13% 91%);
-  --color-sidebar-accent: hsl(240 5% 96%);
-  --color-sidebar-accent-foreground: hsl(240 6% 10%);
-  --radius: 0.5rem;
+  --color-destructive-foreground: hsl(33 100% 96%);
+  --color-card: hsl(34 61% 90%);
+  --color-card-foreground: hsl(0 0% 4%);
+  --color-popover: hsl(34 61% 90%);
+  --color-popover-foreground: hsl(0 0% 4%);
+  --color-sidebar: hsl(34 51% 88%);
+  --color-sidebar-foreground: hsl(222 37% 19%);
+  --color-sidebar-border: hsl(33 35% 76%);
+  --color-sidebar-accent: hsl(33 100% 96%);
+  --color-sidebar-accent-foreground: hsl(0 0% 4%);
+  --radius: 0.25rem;
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
-}
-
-.dark {
-  --color-border: hsl(217 33% 18%);
-  --color-input: hsl(217 33% 18%);
-  --color-ring: hsl(213 27% 84%);
-  --color-background: hsl(222 84% 5%);
-  --color-foreground: hsl(210 40% 98%);
-  --color-primary: hsl(210 40% 98%);
-  --color-primary-foreground: hsl(222 47% 11%);
-  --color-secondary: hsl(217 33% 18%);
-  --color-secondary-foreground: hsl(210 40% 98%);
-  --color-muted: hsl(217 33% 18%);
-  --color-muted-foreground: hsl(215 20% 65%);
-  --color-accent: hsl(217 33% 18%);
-  --color-accent-foreground: hsl(210 40% 98%);
-  --color-destructive: hsl(0 63% 31%);
-  --color-destructive-foreground: hsl(210 40% 98%);
-  --color-card: hsl(222 84% 5%);
-  --color-card-foreground: hsl(210 40% 98%);
-  --color-popover: hsl(222 84% 5%);
-  --color-popover-foreground: hsl(210 40% 98%);
-  --color-sidebar: hsl(222 47% 7%);
-  --color-sidebar-foreground: hsl(210 40% 92%);
-  --color-sidebar-border: hsl(217 33% 18%);
-  --color-sidebar-accent: hsl(217 33% 14%);
-  --color-sidebar-accent-foreground: hsl(210 40% 98%);
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
 @layer base {

@@ -145,6 +145,8 @@ export interface WorkflowEvent {
   t: string;
 }
 
+export type ConsoleRightPanelMode = 'pulse' | 'workflow' | 'hidden';
+
 export type BookingStatus =
   | 'idle'
   | 'searching'
@@ -244,6 +246,7 @@ export interface ChannelDiagnostic {
 interface SenderoState {
   // Settings
   showWorkflow: boolean;
+  consoleRightPanelMode: ConsoleRightPanelMode;
   dark: boolean;
 
   // Phase B-γ — true while the active chat surface (ConsoleChatHost on
@@ -319,6 +322,7 @@ interface SenderoState {
 
   // Actions
   setShowWorkflow: (v: boolean) => void;
+  setConsoleRightPanelMode: (v: ConsoleRightPanelMode) => void;
   setDark: (v: boolean) => void;
 
   setSearch: (s: SearchParams) => void;
@@ -368,7 +372,8 @@ function travelerFromAuth(auth: UserAuth | null): Traveler {
 let eventCounter = 0;
 
 export const useSendero = create<SenderoState>(set => ({
-  showWorkflow: true,
+  showWorkflow: false,
+  consoleRightPanelMode: 'pulse',
   dark: false,
 
   hostReady: false,
@@ -441,7 +446,10 @@ export const useSendero = create<SenderoState>(set => ({
 
   workflow: [],
 
-  setShowWorkflow: showWorkflow => set({ showWorkflow }),
+  setShowWorkflow: showWorkflow =>
+    set({ showWorkflow, consoleRightPanelMode: showWorkflow ? 'workflow' : 'hidden' }),
+  setConsoleRightPanelMode: consoleRightPanelMode =>
+    set({ consoleRightPanelMode, showWorkflow: consoleRightPanelMode === 'workflow' }),
   setDark: dark => {
     if (typeof document !== 'undefined') {
       document.documentElement.classList.toggle('dark', dark);
@@ -523,11 +531,14 @@ export function hydrateFromStorage() {
     if (!raw) return;
     const p = JSON.parse(raw) as Partial<{
       showWorkflow: boolean;
+      consoleRightPanelMode: ConsoleRightPanelMode;
       dark: boolean;
     }>;
     const dark = p.dark ?? false;
+    const consoleRightPanelMode = p.consoleRightPanelMode ?? 'pulse';
     useSendero.setState({
-      showWorkflow: p.showWorkflow ?? true,
+      showWorkflow: consoleRightPanelMode === 'workflow',
+      consoleRightPanelMode,
       dark,
     });
     document.documentElement.classList.toggle('dark', dark);
@@ -544,6 +555,7 @@ export function subscribePersist() {
         'sendero:settings',
         JSON.stringify({
           showWorkflow: state.showWorkflow,
+          consoleRightPanelMode: state.consoleRightPanelMode,
           dark: state.dark,
         })
       );

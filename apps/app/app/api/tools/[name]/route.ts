@@ -32,13 +32,12 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { filterPublicTools, toolList, tools as toolMap } from '@sendero/tools';
+import { tools as toolMap, filterPublicTools, toolList } from '@sendero/tools';
 import type { ToolContext } from '@sendero/tools/types';
 
-import { resolveTravelerByPhone } from '@/lib/agent-traveler-resolver';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
-import { logKapsoToolBridgeWebhookAudit } from '@/lib/whatsapp-audit';
+import { resolveTravelerByPhone } from '@/lib/agent-traveler-resolver';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -69,10 +68,6 @@ interface ToolBody {
    * was authoritative before this hop.
    */
   _slackSenderoUserId?: string;
-  whatsapp_context?: {
-    conversation?: Record<string, unknown>;
-    messages?: Array<Record<string, unknown>>;
-  };
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ name: string }> }) {
@@ -164,12 +159,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
       { status: 400 }
     );
   }
-  void logKapsoToolBridgeWebhookAudit({
-    tenantId: tenantId!,
-    body,
-    toolName: name,
-    travelerPhone: body.travelerPhone ?? null,
-  });
 
   // 5. resolve traveler — when the caller passed `travelerPhone`
   //    (Kapso WhatsApp proxy always does), upsert the
@@ -210,6 +199,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
 
   // 6. build context — same shape `/api/agent/dispatch` uses so the
   //    handler experience is identical regardless of caller.
+  //
+  //    For shared-secret callers we OMIT `caller` (matches dispatch +
+  //    chat). Tools that gate on `caller.effectiveKeyType` (e.g.
+  //    `confirm_booking`'s testnet-beta downgrade) already fail-closed
+  //    to sandbox semantics on absent caller, so the safety net stays.
+  //    Tools that need to spend Sendero treasury on third-party APIs
+  //    (e.g. `track_flight` via x402) treat absent caller as trusted
+  //    internal infra. See `packages/tools/src/x402-fetch.ts` gate.
   const ctx: ToolContext = {
     traveler: {
       tenantId: tenantId!,
@@ -220,11 +217,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
       ...(resolvedIsPlaceholder !== undefined ? { isPlaceholder: resolvedIsPlaceholder } : {}),
     },
     ...(resolvedChannelIdentityId ? { channelIdentityId: resolvedChannelIdentityId } : {}),
-    caller: {
-      scopes: grantedScopes,
-      keyType,
-      effectiveKeyType,
-    },
+    ...(apiKey
+      ? {
+          caller: {
+            scopes: grantedScopes,
+            keyType,
+            effectiveKeyType,
+          },
+        }
+      : {}),
   };
 
   // 7. validate input via the tool's zod schema BEFORE invoking the

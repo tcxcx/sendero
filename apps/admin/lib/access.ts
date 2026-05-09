@@ -57,13 +57,7 @@
 
 import { auth } from '@clerk/nextjs/server';
 
-const ALL_ROLES: readonly PlatformRole[] = [
-  'superadmin',
-  'sales',
-  'eng',
-  'support',
-  'finance',
-];
+const ALL_ROLES: readonly PlatformRole[] = ['superadmin', 'sales', 'eng', 'support', 'finance'];
 
 /**
  * Per-role landing page. Order is priority — first match wins in
@@ -90,6 +84,7 @@ export const PLATFORM_ROUTES: Record<string, readonly PlatformRole[]> = {
   '/dashboard/contracts': ['superadmin', 'eng'],
   '/dashboard/payouts': ['superadmin', 'finance'],
   '/dashboard/billing': ['superadmin', 'finance'],
+  '/dashboard/orgs': ['superadmin'],
   '/dashboard/pipeline': ['superadmin', 'sales'],
   '/dashboard/tenants': ['superadmin', 'sales', 'support'],
   '/dashboard/agents': ['superadmin', 'eng'],
