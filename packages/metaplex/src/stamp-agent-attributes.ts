@@ -34,13 +34,69 @@
  *   provisioning hook, the retry sweeper, or both.
  */
 
-import { addPlugin, fetchAsset } from '@metaplex-foundation/mpl-core';
+import { addPlugin, safeFetchAssetV1, type AssetV1 } from '@metaplex-foundation/mpl-core';
 import {
   publicKey as toPublicKey,
+  type PublicKey,
   type TransactionBuilderSendAndConfirmOptions,
+  type Umi,
 } from '@metaplex-foundation/umi';
 
 import { getUmi } from './_umi';
+
+/**
+ * Poll the cluster until the asset's V1 account is visible, then
+ * return it. Only used for our idempotency check — the asset's own
+ * plugins (Attributes, AgentIdentity) are deserialized into the V1
+ * by mpl-core's hooked types, so we don't need the higher-level
+ * `fetchAsset` (which would re-fetch and re-race the visibility
+ * window).
+ *
+ * Why this exists: when the caller mints + registers an asset via
+ * `mintAndRegisterAgentIdentity` with `commitment: 'confirmed'`, the
+ * tx is confirmed by the cluster but the next RPC call may hit a
+ * stale slot — `safeFetchAssetV1` returns null until the slot
+ * propagates. Public devnet RPC takes 1-3s for this on a typical
+ * mint, longer under load.
+ *
+ * Caps at 30 attempts × 1s = 30s. Beyond that, returns null —
+ * caller treats as "asset not visible yet" and the cron sweeper
+ * retries on the next pass.
+ */
+async function fetchAssetWithVisibilityWait(
+  umi: Umi,
+  assetPk: PublicKey,
+  opts: { maxAttempts?: number; intervalMs?: number; debug?: boolean } = {}
+): Promise<AssetV1 | null> {
+  const maxAttempts = opts.maxAttempts ?? 30;
+  const intervalMs = opts.intervalMs ?? 1000;
+  const debug = opts.debug ?? process.env.SENDERO_METAPLEX_STAMP_DEBUG === '1';
+  const start = Date.now();
+  for (let i = 0; i < maxAttempts; i++) {
+    // Pin commitment to 'confirmed' so we follow the same visibility
+    // contract the upstream mintAndSubmitAgent submitted under. The
+    // default Umi RPC commitment can be 'finalized' which lags
+    // 'confirmed' by ~13s on public devnet.
+    const v1 = await safeFetchAssetV1(umi, assetPk, { commitment: 'confirmed' });
+    if (v1) {
+      if (debug) {
+        console.log(
+          `[stampAgentRegistryAttributes] asset visible after ${Date.now() - start}ms (attempt ${i + 1})`
+        );
+      }
+      return v1;
+    }
+    if (i < maxAttempts - 1) {
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+  }
+  if (debug) {
+    console.warn(
+      `[stampAgentRegistryAttributes] asset not visible after ${Date.now() - start}ms; deferring stamp to sweeper`
+    );
+  }
+  return null;
+}
 
 export interface StampAgentRegistryAttributesInput {
   /** Existing Core asset address (from mintCoreAgentIdentity result). */
@@ -60,8 +116,15 @@ export interface StampAgentRegistryAttributesInput {
 }
 
 export interface StampAgentRegistryAttributesResult {
-  status: 'stamped' | 'already_stamped';
-  /** Tx signature when status='stamped'; null when status='already_stamped'. */
+  /**
+   * - `stamped`: the call wrote the Attributes plugin in this run.
+   * - `already_stamped`: a prior run wrote it; sentinel detected.
+   * - `deferred`: the asset wasn't yet visible to the RPC after the
+   *   slot-visibility poll timed out. Caller should retry (the cron
+   *   sweeper picks these up on the next pass).
+   */
+  status: 'stamped' | 'already_stamped' | 'deferred';
+  /** Tx signature when status='stamped'; null otherwise. */
   signature: string | null;
   assetAddress: string;
 }
@@ -88,7 +151,17 @@ export async function stampAgentRegistryAttributes(
   // Idempotency check — read the asset's current plugin state. If
   // an Attributes plugin with our sentinel key is already present,
   // we've already stamped this tenant; skip the on-chain call.
-  const asset = await fetchAsset(umi, assetPk);
+  //
+  // Polls safeFetchAssetV1 with `confirmed` commitment until the V1
+  // account is visible (the cluster confirms the upstream mint, but
+  // the public devnet RPC takes 1-3s to propagate the new slot).
+  // Returns null when the asset still isn't visible after 30s — we
+  // bail out as `deferred` so the caller (or the cron sweeper) can
+  // retry on the next pass instead of blowing up the stamp path.
+  const asset = await fetchAssetWithVisibilityWait(umi, assetPk);
+  if (!asset) {
+    return { status: 'deferred', signature: null, assetAddress: input.assetAddress };
+  }
   const attrs = asset.attributes?.attributeList ?? [];
   const alreadyStamped = attrs.some(
     a => a.key === SENDERO_SCHEMA_KEY && a.value === SENDERO_SCHEMA_VERSION

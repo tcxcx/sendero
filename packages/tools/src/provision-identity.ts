@@ -23,11 +23,7 @@
  */
 
 import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
-import {
-  AGENT_REGISTRY_PROGRAM_ID,
-  mintAndRegisterAgentIdentity,
-  stampAgentRegistryAttributes,
-} from '@sendero/metaplex';
+import { AGENT_REGISTRY_PROGRAM_ID, mintAndRegisterAgentIdentity } from '@sendero/metaplex';
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
@@ -175,22 +171,15 @@ async function ensureOrgIdentitySolana(args: {
     where: { kind: 'org', tenantId: args.tenantId, chain: 'sol' },
   });
   if (existing && existing.status === 'minted' && existing.agentId) {
-    // Phase 4.x.y.zz — backfill attributes on rows that were minted
-    // in 4.x.y.z (Core asset only). Idempotent: skips if already
-    // stamped on-chain. Best-effort; non-fatal so the cached path
-    // doesn't degrade if the stamp call fails.
-    void stampAgentRegistryAttributes({
-      assetAddress: existing.agentId,
-      tenantId: args.tenantId,
-      name: args.displayName,
-      metadataUri: existing.metadataUri,
-    }).catch(err => {
-      console.warn('[ensureOrgIdentitySolana] cached-row attribute backfill failed (non-fatal)', {
-        tenantId: args.tenantId,
-        assetAddress: existing.agentId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
+    // Attribute-stamp backfill is no longer wired: the Attributes
+    // plugin was the Phase 4.x.y.zz interim layer for when the
+    // formal mpl-agent-identity SDK wasn't pinned. Now that
+    // mintAndRegisterAgentIdentity creates a proper agent_identity
+    // PDA atomically with the mint, the Attributes plugin would
+    // collide with the AgentIdentity ExternalPluginAdapter
+    // (mpl-core's AddPlugin panics with "index out of bounds"
+    // when an external plugin already exists on the asset).
+    //
     // Backfill registration: cached rows minted via the legacy
     // two-step flow (Core asset only, no agent_identity PDA) cannot
     // be retroactively registered — the registry program rejects
@@ -286,30 +275,15 @@ async function ensureOrgIdentitySolana(args: {
     throw err;
   }
 
-  // Stamp Agent Registry attributes on the freshly-minted asset for
-  // 3rd-party indexer hints (registryStatus='registered'). Best-effort:
-  // the on-chain agent_identity PDA is now the source of truth; this
-  // attribute is a discoverability convenience.
-  try {
-    await stampAgentRegistryAttributes({
-      assetAddress: result.assetAddress,
-      tenantId: args.tenantId,
-      name: args.displayName,
-      metadataUri,
-    });
-  } catch (err) {
-    console.warn('[ensureOrgIdentitySolana] post-mint attribute stamp failed (non-fatal)', {
-      tenantId: args.tenantId,
-      assetAddress: result.assetAddress,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
   // The atomic mintAndRegisterAgentIdentity above already created the
-  // on-chain agent_identity PDA. The two-step legacy flow
-  // (mintCoreAgentIdentity → registerCoreAgentIdentity) is removed
-  // because a plain Core asset gets rejected at the registry's
-  // PDA-derivation check.
+  // on-chain agent_identity PDA. The Attributes-plugin stamp from
+  // the older flow is dropped — it conflicted with the AgentIdentity
+  // ExternalPluginAdapter the registry attaches (mpl-core's AddPlugin
+  // panics with "index out of bounds" when external plugins are
+  // present), and was redundant once the formal registry record
+  // exists. The legacy two-step mint flow (mintCoreAgentIdentity →
+  // registerCoreAgentIdentity) is also removed because a plain Core
+  // asset gets rejected at the registry's PDA-derivation check.
 
   const minted = await prisma.onchainIdentity.update({
     where: { id: pending.id },
