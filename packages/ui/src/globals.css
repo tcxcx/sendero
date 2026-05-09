@@ -122,4 +122,13 @@
   .maplibregl-popup-tip {
     @apply hidden!;
   }
+  .maplibregl-map,
+  .maplibregl-canvas-container,
+  .maplibregl-canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .maplibregl-canvas {
+    display: block;
+  }
 }

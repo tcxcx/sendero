@@ -216,12 +216,13 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const container = containerRef.current;
     const initialStyle =
       resolvedTheme === "dark" ? mapStyles.dark : mapStyles.light;
     currentStyleRef.current = initialStyle;
 
     const map = new MapLibreGL.Map({
-      container: containerRef.current,
+      container,
       style: initialStyle,
       renderWorldCopies: false,
       attributionControl: {
@@ -256,8 +257,16 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     map.on("move", handleMove);
     setMapInstance(map);
 
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => map.resize())
+        : null;
+    resizeObserver?.observe(container);
+    requestAnimationFrame(() => map.resize());
+
     return () => {
       clearStyleTimeout();
+      resizeObserver?.disconnect();
       map.off("load", loadHandler);
       map.off("styledata", styleDataHandler);
       map.off("move", handleMove);

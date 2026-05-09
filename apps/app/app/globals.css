@@ -3269,3 +3269,25 @@ hr.rule {
 .reputation-stat-trigger:focus-visible .wr-stat-k {
   color: #fdfbf7;
 }
+
+.maplibregl-map,
+.maplibregl-canvas-container,
+.maplibregl-canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.maplibregl-canvas {
+  display: block;
+}
+
+.maplibregl-popup-content {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.maplibregl-popup-tip {
+  display: none !important;
+}
