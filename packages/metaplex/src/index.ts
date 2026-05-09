@@ -40,6 +40,11 @@ export {
   type RegisterIdentityResult,
 } from './register-identity';
 export {
+  mintAndRegisterAgentIdentity,
+  type MintAndRegisterAgentInput,
+  type MintAndRegisterAgentResult,
+} from './mint-and-register-agent';
+export {
   describeTenantAgentRegistration,
   AGENT_REGISTRY_PROGRAM_ID,
   type RegisterTenantAgentInput,

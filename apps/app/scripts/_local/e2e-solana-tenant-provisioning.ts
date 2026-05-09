@@ -98,6 +98,12 @@ async function main(): Promise<void> {
   } catch (err) {
     identityError = err instanceof Error ? err.message : String(err);
     console.warn('[provision] ensureOrgIdentity failed (non-fatal):', identityError);
+    if (err instanceof Error && err.stack) {
+      console.warn('[provision] stack:\n', err.stack);
+    }
+    if (err instanceof Error && 'cause' in err && err.cause) {
+      console.warn('[provision] cause:', err.cause);
+    }
   }
 
   console.log('[provision] result:', {
@@ -170,9 +176,13 @@ async function main(): Promise<void> {
   console.log(`   - Tenant: ${tenant.id} (slug=${slug}, primaryChain=sol)`);
   console.log(`   - Treasury: ${wallet.address} on ${wallet.chain}`);
   console.log(
-    `   - Identity: ${identity ? `chain=${identity.chain} status=${identity.status}` : 'NOT WRITTEN'}`
+    `   - Identity: ${identity ? `chain=${identity.chain} status=${identity.status} agentId=${identity.holderAddress.slice(0, 8)}…` : 'NOT WRITTEN'}`
   );
 
+  if (process.env.SKIP_CLEANUP === '1') {
+    console.log(`\n[skip-cleanup] tenant ${slug} kept for inspection.`);
+    return;
+  }
   await cleanup(slug);
 }
 

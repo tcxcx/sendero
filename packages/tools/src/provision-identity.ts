@@ -25,8 +25,7 @@
 import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
 import {
   AGENT_REGISTRY_PROGRAM_ID,
-  mintCoreAgentIdentity,
-  registerCoreAgentIdentity,
+  mintAndRegisterAgentIdentity,
   stampAgentRegistryAttributes,
 } from '@sendero/metaplex';
 import { prisma } from '@sendero/database';
@@ -192,22 +191,18 @@ async function ensureOrgIdentitySolana(args: {
         error: err instanceof Error ? err.message : String(err),
       });
     });
-    // Phase 4.x.y.zzz — backfill formal Agent Registry record on
-    // cached rows. Idempotent: registerCoreAgentIdentity returns
-    // status='already_registered' when the on-chain PDA exists.
-    void registerCoreAgentIdentity({
-      assetAddress: existing.agentId,
-      agentRegistrationUri: existing.metadataUri,
-    }).catch(err => {
+    // Backfill registration: cached rows minted via the legacy
+    // two-step flow (Core asset only, no agent_identity PDA) cannot
+    // be retroactively registered — the registry program rejects
+    // assets that weren't created via the Agent API. Operators with
+    // such rows must re-mint via the atomic path. Logged once per
+    // call so the gap is visible in ops dashboards.
+    if (existing.mintTxHash) {
       console.warn(
-        '[ensureOrgIdentitySolana] cached-row registry backfill failed (non-fatal)',
-        {
-          tenantId: args.tenantId,
-          assetAddress: existing.agentId,
-          error: err instanceof Error ? err.message : String(err),
-        }
+        '[ensureOrgIdentitySolana] cached row may have been minted via legacy flow — registry record may be absent. Re-mint via atomic mintAndRegisterAgentIdentity if registry attestation is missing.',
+        { tenantId: args.tenantId, assetAddress: existing.agentId }
       );
-    });
+    }
     return {
       status: 'cached',
       identityId: existing.id,
@@ -266,9 +261,17 @@ async function ensureOrgIdentitySolana(args: {
         },
       });
 
+  // Phase 4.x.y.z* — atomic mint + register via the Metaplex Agent
+  // API. The previous two-step flow (createCoreAsset →
+  // registerIdentityV1) was hitting `InvalidCoreAsset (0x4)` because
+  // a plain Core asset doesn't carry the AgentIdentity plugin state
+  // the registry program expects. mintAndRegisterAgentIdentity
+  // submits a single API-built tx that creates the asset AND
+  // registers the agent identity record in one transaction — verified
+  // by the e2e at apps/app/scripts/_local/e2e-solana-tenant-provisioning.ts.
   let result: { assetAddress: string; signature: string };
   try {
-    result = await mintCoreAgentIdentity({
+    result = await mintAndRegisterAgentIdentity({
       tenantId: args.tenantId,
       name: args.displayName,
       ownerPubkey: treasury.address,
@@ -283,11 +286,10 @@ async function ensureOrgIdentitySolana(args: {
     throw err;
   }
 
-  // Phase 4.x.y.zz — stamp Agent Registry attributes on the freshly-
-  // minted Core asset. Best-effort: a stamp failure does NOT block the
-  // mint from being recorded. The backfill path on the cached branch
-  // (above) re-attempts the stamp on subsequent ensureOrgIdentity
-  // calls — so a transient RPC failure here just gets retried later.
+  // Stamp Agent Registry attributes on the freshly-minted asset for
+  // 3rd-party indexer hints (registryStatus='registered'). Best-effort:
+  // the on-chain agent_identity PDA is now the source of truth; this
+  // attribute is a discoverability convenience.
   try {
     await stampAgentRegistryAttributes({
       assetAddress: result.assetAddress,
@@ -303,24 +305,11 @@ async function ensureOrgIdentitySolana(args: {
     });
   }
 
-  // Phase 4.x.y.zzz — formal Agent Registry record submission via
-  // mpl-agent-registry's registerIdentityV1. Creates the on-chain
-  // agent_identity PDA + AgentIdentity plugin (with Transfer/Update/
-  // Execute lifecycle hooks) on the same Core asset. Best-effort
-  // for the same reason — the cached-row backfill retries on
-  // subsequent calls.
-  try {
-    await registerCoreAgentIdentity({
-      assetAddress: result.assetAddress,
-      agentRegistrationUri: metadataUri,
-    });
-  } catch (err) {
-    console.warn('[ensureOrgIdentitySolana] post-mint registry submit failed (non-fatal)', {
-      tenantId: args.tenantId,
-      assetAddress: result.assetAddress,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // The atomic mintAndRegisterAgentIdentity above already created the
+  // on-chain agent_identity PDA. The two-step legacy flow
+  // (mintCoreAgentIdentity → registerCoreAgentIdentity) is removed
+  // because a plain Core asset gets rejected at the registry's
+  // PDA-derivation check.
 
   const minted = await prisma.onchainIdentity.update({
     where: { id: pending.id },
