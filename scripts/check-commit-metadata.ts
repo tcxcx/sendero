@@ -18,8 +18,13 @@
 //
 //   QA-Trace:      https://github.com/<org>/<repo>/actions/runs/<id>
 //                  https://blob.vercel-storage.com/<id>/playwright-trace.zip
+//                  https://explorer.solana.com/tx/<sig>?cluster=devnet
+//                  https://testnet.arcscan.app/tx/<hash>
 //     Allowlist: github.com (path must contain /actions/runs/),
-//                blob.vercel-storage.com, *.public.blob.vercel-storage.com
+//                blob.vercel-storage.com, *.public.blob.vercel-storage.com,
+//                explorer.solana.com (path must contain /tx/ or /address/),
+//                solscan.io (path must contain /tx/ or /account/),
+//                testnet.arcscan.app + arcscan.app (path must contain /tx/ or /address/)
 //
 //   QA-Screenshot: https://abc.public.blob.vercel-storage.com/scan-pass.png
 //     Allowlist: blob.vercel-storage.com, *.blob.vercel-storage.com
@@ -186,9 +191,31 @@ function validateQaTrailer(t: QaTrailer): { ok: true } | { ok: false; reason: st
     ) {
       return { ok: true };
     }
+    // Blockchain explorers — for on-chain code, the live tx receipt is
+    // the strongest verifiable artifact (more authoritative than any
+    // CI URL). Path must point at a tx or account/address page so the
+    // trailer is meaningfully verifiable post-hoc.
+    if (host === 'explorer.solana.com' || host === 'solscan.io') {
+      if (!/\/(tx|account|address)\//.test(parsed.pathname)) {
+        return {
+          ok: false,
+          reason: `QA-Trace ${host} URL must include /tx/<sig> or /address/<pubkey> (got ${parsed.pathname})`,
+        };
+      }
+      return { ok: true };
+    }
+    if (host === 'arcscan.app' || hostMatchesSuffix(host, '.arcscan.app')) {
+      if (!/\/(tx|address)\//.test(parsed.pathname)) {
+        return {
+          ok: false,
+          reason: `QA-Trace ${host} URL must include /tx/<hash> or /address/<addr> (got ${parsed.pathname})`,
+        };
+      }
+      return { ok: true };
+    }
     return {
       ok: false,
-      reason: `QA-Trace host not allowlisted (${host}); expected github.com/.../actions/runs/, blob.vercel-storage.com, or *.blob.vercel-storage.com`,
+      reason: `QA-Trace host not allowlisted (${host}); expected github.com/.../actions/runs/, *.blob.vercel-storage.com, explorer.solana.com/tx/, solscan.io/tx/, or *.arcscan.app/tx/`,
     };
   }
 
