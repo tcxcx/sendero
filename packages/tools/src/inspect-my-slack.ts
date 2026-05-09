@@ -87,7 +87,12 @@ export interface InspectMySlackResult {
   message: string;
   install: SlackInstallSummary;
   activity?: SlackActivityCounters;
-  identities?: { boundUsers: number };
+  identities?: {
+    boundUsers: number;
+    channelIdentities: number;
+    usersWithGatewaySigner: number;
+    usersWithDcwWallet: number;
+  };
   trips?: { activeLinked: number };
   recentInbound?: SlackMessagePreview[];
   recentOutbound?: SlackMessagePreview[];
@@ -135,7 +140,16 @@ export async function runInspectMySlack(
   const includePreviews = input.includePreviews === true;
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-  const [install, recentTrips, meteredReplies, boundUsers, activeTripsCount] = await Promise.all([
+  const [
+    install,
+    recentTrips,
+    meteredReplies,
+    boundUsers,
+    channelIdentities,
+    usersWithGatewaySigner,
+    usersWithDcwWallet,
+    activeTripsCount,
+  ] = await Promise.all([
     // Tenants can have multiple Slack installs (Grid). Pick the most-
     // recently-active live row first, fall back to revoked for the
     // status surface.
@@ -159,6 +173,16 @@ export async function runInspectMySlack(
       },
     }),
     prisma.slackUserBinding.count({ where: { tenantId } }),
+    prisma.channelIdentity.count({ where: { tenantId, kind: 'slack' } }),
+    prisma.userGatewaySigner.count({
+      where: { user: { slackUserBindings: { some: { tenantId } } } },
+    }),
+    prisma.wallet.count({
+      where: {
+        provisioner: 'dcw',
+        user: { slackUserBindings: { some: { tenantId } } },
+      },
+    }),
     prisma.trip.count({
       where: {
         tenantId,
@@ -260,10 +284,20 @@ export async function runInspectMySlack(
 
   const result: InspectMySlackResult = {
     status: 'ok',
-    message: buildHumanSummary(installSummary, activity, boundUsers),
+    message: buildHumanSummary(installSummary, activity, {
+      boundUsers,
+      channelIdentities,
+      usersWithGatewaySigner,
+      usersWithDcwWallet,
+    }),
     install: installSummary,
     activity,
-    identities: { boundUsers },
+    identities: {
+      boundUsers,
+      channelIdentities,
+      usersWithGatewaySigner,
+      usersWithDcwWallet,
+    },
     trips: { activeLinked: activeTripsCount },
   };
 
@@ -280,7 +314,12 @@ export async function runInspectMySlack(
 function buildHumanSummary(
   install: SlackInstallSummary,
   activity: SlackActivityCounters,
-  boundUsers: number
+  identities: {
+    boundUsers: number;
+    channelIdentities: number;
+    usersWithGatewaySigner: number;
+    usersWithDcwWallet: number;
+  }
 ): string {
   if (!install.exists) {
     return `Slack is NOT installed for this tenant. Visit /dashboard/channels/slack to start the OAuth install.`;
@@ -290,7 +329,7 @@ function buildHumanSummary(
   }
   return `Slack active in workspace ${install.teamName ?? install.teamId}${
     install.isEnterpriseInstall ? ' (Enterprise Grid)' : ''
-  }. Last ${activity.hours}h: ${activity.inboundMessages} inbound · ${activity.agentReplies} agent replies. ${boundUsers} user(s) bound.`;
+  }. Last ${activity.hours}h: ${activity.inboundMessages} inbound · ${activity.agentReplies} agent replies. ${identities.boundUsers} user(s) bound · ${identities.usersWithGatewaySigner} Gateway signer(s) · ${identities.usersWithDcwWallet} DCW wallet row(s).`;
 }
 
 // Prisma includes `slackBindings` on User but the type may not surface

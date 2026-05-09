@@ -1,0 +1,385 @@
+{
+  "address": "9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8",
+  "metadata": {
+    "name": "sendero_guest_escrow",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Solana port of SenderoGuestEscrow.sol — pre-funded guest-link travel escrow"
+  },
+  "instructions": [
+    {
+      "name": "claim_trip",
+      "docs": [
+        "Guest claims the trip with a recipient-bound signature + OTP digest."
+      ],
+      "discriminator": [
+        9,
+        140,
+        211,
+        39,
+        76,
+        254,
+        135,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "relayer",
+          "docs": [
+            "Sendero relayer pays rent + sends the tx. The actual",
+            "authorization comes from the Ed25519 sibling instruction."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "instructions_sysvar"
+        }
+      ],
+      "args": [
+        {
+          "name": "_trip_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "_otp_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "_recipient_signature",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
+      "name": "commit_booking",
+      "docs": [
+        "Operator commits at the actual quoted price ≤ upper_bound."
+      ],
+      "discriminator": [
+        138,
+        181,
+        37,
+        155,
+        46,
+        218,
+        54,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "operator",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_booking_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "_quoted_price",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "_operator",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "pre_fund_trip",
+      "docs": [
+        "Buyer pre-funds a trip for a named guest. Trip starts in PreFunded."
+      ],
+      "discriminator": [
+        30,
+        248,
+        158,
+        27,
+        52,
+        173,
+        114,
+        82
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_trip_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "_amount",
+          "type": "u64"
+        },
+        {
+          "name": "_claim_pubkey",
+          "type": "pubkey"
+        },
+        {
+          "name": "_expiry",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "refund_booking",
+      "docs": [
+        "Buyer or operator refunds. Conditions per Solidity:",
+        "- RESERVED + > 1h since reservation → buyer can force-refund",
+        "- COMMITTED + > 30min since commit → buyer can force-refund"
+      ],
+      "discriminator": [
+        160,
+        80,
+        31,
+        89,
+        219,
+        78,
+        233,
+        67
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_booking_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "reserve_booking",
+      "docs": [
+        "Operator reserves an upper-bound amount on a booking before",
+        "quoting Duffel."
+      ],
+      "discriminator": [
+        170,
+        28,
+        99,
+        26,
+        95,
+        11,
+        225,
+        109
+      ],
+      "accounts": [
+        {
+          "name": "operator",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_trip_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "_booking_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "_upper_bound",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "settle_booking",
+      "docs": [
+        "Operator settles to vendor payout address after Duffel",
+        "confirmation lands."
+      ],
+      "discriminator": [
+        118,
+        241,
+        41,
+        192,
+        52,
+        160,
+        213,
+        100
+      ],
+      "accounts": [
+        {
+          "name": "operator",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_booking_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "_duffel_order_ref",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "sweep_trip_residual",
+      "discriminator": [
+        179,
+        35,
+        198,
+        77,
+        31,
+        206,
+        190,
+        39
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "_trip_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidTrip",
+      "msg": "Trip does not exist"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidBooking",
+      "msg": "Booking does not exist"
+    },
+    {
+      "code": 6002,
+      "name": "WrongStatus",
+      "msg": "Trip/Booking is not in the required state for this action"
+    },
+    {
+      "code": 6003,
+      "name": "Unauthorized",
+      "msg": "Caller is not authorized"
+    },
+    {
+      "code": 6004,
+      "name": "Expired",
+      "msg": "Trip has expired"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidClaimSignature",
+      "msg": "Claim signature did not verify against the embedded pubkey"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidOtp",
+      "msg": "OTP hash did not match"
+    },
+    {
+      "code": 6007,
+      "name": "QuoteExceedsBound",
+      "msg": "Quoted price exceeds upper bound"
+    },
+    {
+      "code": 6008,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient escrow balance"
+    }
+  ]
+}

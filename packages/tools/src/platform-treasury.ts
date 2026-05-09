@@ -43,6 +43,11 @@ export interface PlatformTreasuryDestination {
  *
  * Returns null when neither the admin panel nor the env var have a
  * value — the caller MUST refuse to settle in that case.
+ *
+ * For Solana, fall back to `SENDERO_SOLANA_TREASURY_ADDRESS` env var
+ * (matches `apps/app/lib/nanopay-settle.ts::makeSolanaSettleFn`) so
+ * dev environments without an admin-panel-provisioned Squads vault
+ * still settle to a known wallet.
  */
 export async function resolvePlatformTreasuryDestination(
   chain: PlatformTreasuryChain
@@ -88,8 +93,35 @@ export async function resolvePlatformTreasuryDestination(
       };
     }
   }
-  // No Solana env-var fallback — Solana platform settlements should
-  // always come through admin-panel-provisioned vaults.
+
+  if (chain === 'sol') {
+    const envAddress = process.env.SENDERO_SOLANA_TREASURY_ADDRESS;
+    if (envAddress) {
+      return {
+        address: envAddress,
+        treasuryId: null,
+        network: 'sol-devnet',
+        source: 'env',
+      };
+    }
+  }
 
   return null;
+}
+
+/**
+ * Resolve the platform treasury for a tenant. Reads `Tenant.primaryChain`
+ * to pick between Arc and Solana. Use this from settle paths that need
+ * to honor the tenant's chain selection (book-flight settlement,
+ * commission splits, etc.).
+ */
+export async function resolveTenantPlatformTreasury(
+  tenantId: string
+): Promise<PlatformTreasuryDestination | null> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { primaryChain: true },
+  });
+  const chain: PlatformTreasuryChain = tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
+  return resolvePlatformTreasuryDestination(chain);
 }

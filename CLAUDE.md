@@ -132,6 +132,62 @@ Env: `SENDERO_STAMPS_ADDRESS`, `SENDERO_STAMPS_CONTRACT_ID`, `SENDERO_STAMPS_DEP
 
 `scripts/verify-deployments.ts` encodes `expect` per contract. Add new addresses there on every deploy.
 
+## Solana Anchor program deployment runbook (devnet)
+
+Two programs under `contracts/programs-solana/`:
+
+| Program | Program ID | Purpose |
+|---|---|---|
+| `sendero_guest_escrow` | `9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8` | Pre-fund / claim / reserve / commit / settle / refund / sweep — Solana port of SenderoGuestEscrow.sol |
+| `agentic_commerce` | `4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9` | AI-agent job lifecycle (create/fund/complete/refund). Solana-only. |
+
+**Re-deploys MUST run all three steps in order. Skipping the IDL refresh = TS adapters out of sync = silent decoder drift.**
+
+```
+1. cd contracts/programs-solana
+2. anchor build
+3. solana program deploy target/deploy/sendero_guest_escrow.so \
+     --program-id target/deploy/sendero_guest_escrow-keypair.json \
+     -u devnet
+4. solana program deploy target/deploy/agentic_commerce.so \
+     --program-id target/deploy/agentic_commerce-keypair.json \
+     -u devnet
+5. cp target/idl/sendero_guest_escrow.json ../../packages/guest/src/_idl/
+6. cp target/types/sendero_guest_escrow.ts ../../packages/guest/src/_idl/
+7. solana program show 9NHw47G…tjUL8 -u devnet  # verify deploy slot bumped
+```
+
+After step 4: top up the deploy keypair (`/Users/$USER/.config/solana/id.json`) when balance dips below 4 SOL — each redeploy burns ~2.5 SOL on devnet. Faucet at https://faucet.solana.com/ when rate-limited via CLI.
+
+**ABI gotcha:** Anchor sighash discriminators in `packages/guest/src/_idl/` MUST match the deployed program. After every `anchor build`, re-vendor the IDL (steps 5-6) or instructions will fail with `InstructionDiscriminatorMismatch`.
+
+**Env required in apps/app + apps/edge:**
+- `SENDERO_SOLANA_PLATFORM_PRIVATE_KEY` — base58 platform keypair (gas station + relayer)
+- `SENDERO_SOLANA_OPERATOR_ADDRESS` — pubkey that signs reserve_booking / commit_booking / settle_booking / refund_booking ix
+- `SENDERO_SOLANA_TREASURY_ADDRESS` — fallback platform-treasury destination for sol-primary tenants
+- `SENDERO_SOLANA_RPC_URL` — defaults to `api.devnet.solana.com`
+- `CIRCLE_USDC_SOL_DEVNET_TOKEN_ID` / `CIRCLE_USDC_SOL_TOKEN_ID` — Circle DCW token id for SPL transfers
+
+**Programs as deployed today (devnet):**
+
+| Program | ProgramData | Authority | Last deploy |
+|---|---|---|---|
+| sendero_guest_escrow | HmVQDv1BpJgF7XcVs1TxNrLHBpREQe7HVatRKdTqMgQz | 4EZgQyZN36gQsyzVUU7itVEmLzxcjTKkYtcZxEaVuP9W | 2026-05-08 (slot 461049877) |
+| agentic_commerce | 3h9q4RYqGR8P3uJuZwdaY59DL6a7KSHuRCc4waLNioKS | 4EZgQyZN36gQsyzVUU7itVEmLzxcjTKkYtcZxEaVuP9W | 2026-05-08 (slot 461056692) |
+
+**TS adapter** at `packages/guest/src/solana.ts` wraps the IDL with instruction builders for `pre_fund_trip`, `claim_trip`, `reserve_booking`, `commit_booking`, `settle_booking`, `refund_booking`. Sub-export `@sendero/guest/solana`.
+
+**Tools that branch on `Tenant.primaryChain`** (read this before adding new tools that touch escrow):
+- `prefund_trip` — buyer Solana DCW signs the pre_fund_trip ix
+- `reserve_booking` — operator signs reserve_booking ix
+- `commit_booking` — operator signs commit_booking ix; `tripId` arg required on Solana
+- `confirm_booking` — emits commit_booking ix on Solana (single-amount; markup math stays in TS metadata until v2 commitBookingV2 port)
+- `cancel_booking` — operator signs refund_booking ix
+- `mint_stamp` — chain branch via Metaplex Core (`mintCoreTripStamp`)
+- `provision-identity` — `ensureOrgIdentitySolana` for Agent Registry
+- `book-flight` — settles via Sol_Devnet Gateway when tenant primaryChain='sol'
+- `nanopay-settle` — `makeSolanaSettleFn` for sol-primary tenants
+
 ## API keys
 
 Clerk's native API keys (GA 2026-04-17). Clerk mints/hashes/revokes.

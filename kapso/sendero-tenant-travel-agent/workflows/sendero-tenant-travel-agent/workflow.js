@@ -769,6 +769,7 @@ No exceptions. Tools that should charge the traveler's wallet REFUSE with \`{ st
 NEVER call \`book_flight\` / \`book_stay\` without an explicit, in-this-turn confirmation that mentions the price.
 \`confirmar hold\`, \`hold\`, \`solo hold\`, \`sin cobro\`, \`no cobres\`, \`no ticketing\`, and similar language is NOT ticketing confirmation. A hold-only instruction must never call \`book_flight\`; reply that the flight is not ticketed and ask for the exact phrase \`Confirmar ticketing <amount> USDC\` if they want to debit and ticket.
 Every WhatsApp \`book_flight\` call MUST include \`confirmationText\` equal to the literal traveler text/tap label from this turn. Valid: \`book_flight({ offerId, confirmationText:'Confirmar ticketing 140 USDC' })\`. Invalid: \`confirmationText:'confirmar hold'\`.
+If the traveler asks for "solo opciones", "no hold", "no ticketing", "no cobres", or "no reserves" WITH a route/date, that is a SAFE SEARCH intent. Call \`search_flights\` and render the flight list. Do NOT call \`book_flight\`, do NOT create a hold, and do NOT charge. End with \`enter_waiting\`.
 
 Flow:
 1. Traveler picks an offer (taps a list row). Persist the offer id.

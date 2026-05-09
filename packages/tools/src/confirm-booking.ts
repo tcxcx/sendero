@@ -247,7 +247,7 @@ export interface ConfirmBookingDeps {
       externalId: string;
       metadata: Record<string, unknown> | null;
     };
-    tenant: { id: string; clerkOrgId: string | null };
+    tenant: { id: string; clerkOrgId: string | null; primaryChain: 'arc' | 'sol' };
     policy: {
       version: number;
       markupConfig: MarkupConfig;
@@ -378,7 +378,11 @@ export function dbDependencies(): ConfirmBookingDeps {
           externalId: booking.externalId ?? '',
           metadata: (booking.metadata as Record<string, unknown> | null) ?? null,
         },
-        tenant: { id: booking.tenant.id, clerkOrgId: booking.tenant.clerkOrgId ?? null },
+        tenant: {
+          id: booking.tenant.id,
+          clerkOrgId: booking.tenant.clerkOrgId ?? null,
+          primaryChain: (booking.tenant.primaryChain as 'arc' | 'sol' | undefined) === 'sol' ? 'sol' : 'arc',
+        },
         policy: {
           version: policy.version,
           markupConfig: policy.markupConfig as MarkupConfig,
@@ -555,7 +559,18 @@ export interface ConfirmBookingOutput {
     version: number;
     senderoTakeBehavior: 'add_to_customer' | 'deduct_from_markup';
   };
-  onchainCall: { to: string; data: string; value: string };
+  /** Arc: encoded EVM call. Null on Solana tenants. */
+  onchainCall: { to: string; data: string; value: string } | null;
+  /** Solana: anchor program instruction(s). Null on Arc tenants. */
+  onchainInstructions:
+    | Array<{
+        programId: string;
+        accounts: Array<{ pubkey: string; isSigner: boolean; isWritable: boolean }>;
+        data: string;
+      }>
+    | null;
+  /** Tenant primary chain — agent uses this to know which payload to submit. */
+  chain: 'arc' | 'sol';
   meter: { priceMicroUsdc: string };
 }
 
@@ -730,23 +745,85 @@ export async function runConfirmBooking(
     ...(payerType ? { provisionedBy: payerType } : {}),
   });
 
-  // Encode commitBookingV2. Three amounts, three recipients (vendor +
-  // agency + operator-via-fee).
-  const escrow = resolveEscrow(input.escrowAddress);
-  const data = encodeFunctionData({
-    abi: SENDERO_GUEST_ESCROW_ABI,
-    functionName: 'commitBookingV2',
-    args: [
-      input.bookingId as Hex,
-      breakdown.costMicroUsdc, // vendorAmount
-      breakdown.senderoTakeMicroUsdc, // feeAmount
-      breakdown.markupMicroUsdc, // agencyAmount
-      input.vendorAddress as Address,
-      ctx.agencyAddress,
-      input.itineraryHash as Hex,
-      input.itineraryCID,
-    ],
-  });
+  // Encode commitBookingV2 / sendero_guest_escrow.commit_booking. The
+  // chain choice is driven by `ctx.tenant.primaryChain`. On Arc we get
+  // the 3-recipient `commitBookingV2` (vendor + agency + Sendero
+  // take). The Solana program's v1 commit takes a single quoted price;
+  // the markup/fee splits are still computed in TS + persisted to
+  // Booking.metadata, just not embedded on-chain on Solana for v1.
+  // Phase 6.x will port commitBookingV2 to a Solana ix variant.
+  let encodedCommit:
+    | { kind: 'arc'; to: Address; data: Hex }
+    | {
+        kind: 'sol';
+        programId: string;
+        accounts: Array<{ pubkey: string; isSigner: boolean; isWritable: boolean }>;
+        data: string;
+      };
+
+  if (ctx.tenant.primaryChain === 'sol') {
+    if (!input.tripId) {
+      throw new Error(
+        'confirm_booking(sol): tripId is required on Solana — pass it through from book_flight context.'
+      );
+    }
+    const [{ PublicKey }, solana, bs58Mod] = await Promise.all([
+      import('@solana/web3.js'),
+      import('@sendero/guest/solana'),
+      import('bs58'),
+    ]);
+    const bs58 = bs58Mod.default;
+
+    const operatorEnv = process.env.SENDERO_SOLANA_OPERATOR_ADDRESS;
+    if (!operatorEnv) {
+      throw new Error('confirm_booking(sol): SENDERO_SOLANA_OPERATOR_ADDRESS env var not set');
+    }
+    const operator = new PublicKey(operatorEnv);
+
+    const tripIdBytes = input.tripId.startsWith('0x')
+      ? new Uint8Array(Buffer.from(input.tripId.slice(2), 'hex'))
+      : bs58.decode(input.tripId);
+    const bookingIdBytes = input.bookingId.startsWith('0x')
+      ? new Uint8Array(Buffer.from(input.bookingId.slice(2), 'hex'))
+      : bs58.decode(input.bookingId);
+
+    const ix = solana.buildCommitBookingIx({
+      operator,
+      tripId: tripIdBytes,
+      bookingId: bookingIdBytes,
+      // v1: full customer total on-chain. Markup/fee splits live in
+      // Booking.metadata + meter event. Phase 6.x adds the 3-amount ix.
+      quotedPrice: breakdown.customerTotalMicroUsdc,
+    });
+
+    encodedCommit = {
+      kind: 'sol',
+      programId: ix.programId.toBase58(),
+      accounts: ix.keys.map(k => ({
+        pubkey: k.pubkey.toBase58(),
+        isSigner: k.isSigner,
+        isWritable: k.isWritable,
+      })),
+      data: Buffer.from(ix.data).toString('base64'),
+    };
+  } else {
+    const escrow = resolveEscrow(input.escrowAddress);
+    const data = encodeFunctionData({
+      abi: SENDERO_GUEST_ESCROW_ABI,
+      functionName: 'commitBookingV2',
+      args: [
+        input.bookingId as Hex,
+        breakdown.costMicroUsdc, // vendorAmount
+        breakdown.senderoTakeMicroUsdc, // feeAmount
+        breakdown.markupMicroUsdc, // agencyAmount
+        input.vendorAddress as Address,
+        ctx.agencyAddress,
+        input.itineraryHash as Hex,
+        input.itineraryCID,
+      ],
+    });
+    encodedCommit = { kind: 'arc', to: escrow, data };
+  }
 
   // Meter — Sendero take + per-call x402 fee. Sandbox / testnet-beta
   // routes to `status: 'sandbox'` so `NanopayBatch` skips it; production
@@ -795,7 +872,21 @@ export async function runConfirmBooking(
       version: snapshot.policyVersion,
       senderoTakeBehavior: snapshot.senderoTakeBehavior,
     },
-    onchainCall: { to: escrow, data, value: '0' },
+    onchainCall:
+      encodedCommit.kind === 'arc'
+        ? { to: encodedCommit.to, data: encodedCommit.data, value: '0' }
+        : null,
+    onchainInstructions:
+      encodedCommit.kind === 'sol'
+        ? [
+            {
+              programId: encodedCommit.programId,
+              accounts: encodedCommit.accounts,
+              data: encodedCommit.data,
+            },
+          ]
+        : null,
+    chain: ctx.tenant.primaryChain,
     meter: { priceMicroUsdc: meterMicro.toString() },
   };
 }

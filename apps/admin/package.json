@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p ${ADMIN_PORT:-3011}",
+    "dev": "next dev -p ${ADMIN_PORT:-3013}",
     "build": "next build",
-    "start": "next start -p ${ADMIN_PORT:-3011}",
+    "start": "next start -p ${ADMIN_PORT:-3013}",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit"
   },

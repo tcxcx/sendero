@@ -1634,7 +1634,9 @@ async function assertTravelerHasUsdc(args: {
 
 /**
  * Burn-mint USDC from the traveler's Gateway balance onto the tenant's
- * org Gateway wallet (same chain — Arc Testnet). This keeps booking
+ * org Gateway wallet. Branches on `tenant.primaryChain` so Solana
+ * tenants settle on Sol_Devnet via their Solana DCW + Solana treasury
+ * destination, and Arc tenants stay on Arc_Testnet. This keeps booking
  * settlement tenant-scoped: the logged-in org receives the funds, not
  * the global Sendero/admin treasury.
  */
@@ -1644,21 +1646,40 @@ async function settleTravelerUsdcToTenantGateway(args: {
   amountUsdc: string;
 }): Promise<{ settlementTxHash: string; explorerUrl: string } | null> {
   const SOL_DEVNET_CHAIN_ID = 5;
-  const evmDcw = await prisma.wallet.findFirst({
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: args.tenantId },
+    select: { primaryChain: true },
+  });
+  const primaryChain = tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
+
+  // Resolve the right traveler DCW for the tenant's chain.
+  const dcw = await prisma.wallet.findFirst({
     where: {
       userId: args.travelerUserId,
       provisioner: 'dcw',
-      NOT: { chainId: SOL_DEVNET_CHAIN_ID },
+      ...(primaryChain === 'sol'
+        ? { chainId: SOL_DEVNET_CHAIN_ID }
+        : { NOT: { chainId: SOL_DEVNET_CHAIN_ID } }),
     },
     orderBy: { createdAt: 'asc' },
     select: { address: true },
   });
-  if (!evmDcw?.address) return null;
+  if (!dcw?.address) {
+    console.warn('[book_flight] no traveler DCW for tenant chain — refusing to settle', {
+      tenantId: args.tenantId,
+      primaryChain,
+    });
+    return null;
+  }
 
-  const destination = await resolveTenantGatewaySettlementDestination(args.tenantId);
+  const destination = await resolveTenantGatewaySettlementDestination(
+    args.tenantId,
+    primaryChain
+  );
   if (!destination) {
     console.warn('[book_flight] no tenant Gateway settlement destination — refusing to settle', {
       tenantId: args.tenantId,
+      primaryChain,
     });
     return null;
   }
@@ -1669,7 +1690,7 @@ async function settleTravelerUsdcToTenantGateway(args: {
   const { circleWalletsPrincipal, spend } = await import('@sendero/circle');
 
   const principal = circleWalletsPrincipal({
-    address: evmDcw.address,
+    address: dcw.address,
     label: `traveler:${args.travelerUserId}:settle`,
   });
   if (!principal) return null;
@@ -1678,51 +1699,65 @@ async function settleTravelerUsdcToTenantGateway(args: {
     tenantId: args.tenantId,
     travelerUserId: args.travelerUserId,
     amountUsdc: args.amountUsdc,
+    primaryChain,
     recipient: destination.address,
     destinationSource: destination.source,
   });
 
+  const toChainKey = primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
   const result = await spend({
     sources: [{ principal }],
-    toChainKey: 'Arc_Testnet',
+    toChainKey,
     recipient: destination.address,
     amount: args.amountUsdc,
   });
 
   return {
     settlementTxHash: result.txHash,
-    explorerUrl: result.explorerUrl ?? `https://testnet.arcscan.app/tx/${result.txHash}`,
+    explorerUrl:
+      result.explorerUrl ??
+      (primaryChain === 'sol'
+        ? `https://explorer.solana.com/tx/${result.txHash}?cluster=devnet`
+        : `https://testnet.arcscan.app/tx/${result.txHash}`),
   };
 }
 
 async function resolveTenantGatewaySettlementDestination(
-  tenantId: string
+  tenantId: string,
+  primaryChain: 'arc' | 'sol' = 'arc'
 ): Promise<{ address: string; source: 'tenant_gateway_config' | 'tenant_circle_treasury' } | null> {
-  const cfg = await prisma.tenantGatewayConfig.findUnique({
-    where: { tenantId },
-    select: { evmDepositorAddress: true },
-  });
-  if (cfg?.evmDepositorAddress) {
-    return {
-      address: cfg.evmDepositorAddress.toLowerCase(),
-      source: 'tenant_gateway_config',
-    };
+  // Arc tenants honor the optional TenantGatewayConfig override
+  // (manual EVM Gateway depositor address) before falling back to the
+  // tenant's Circle treasury wallet. Solana tenants skip the override
+  // path because the config column is EVM-shaped.
+  if (primaryChain === 'arc') {
+    const cfg = await prisma.tenantGatewayConfig.findUnique({
+      where: { tenantId },
+      select: { evmDepositorAddress: true },
+    });
+    if (cfg?.evmDepositorAddress) {
+      return {
+        address: cfg.evmDepositorAddress.toLowerCase(),
+        source: 'tenant_gateway_config',
+      };
+    }
   }
 
+  const chains =
+    primaryChain === 'sol'
+      ? ['SOL-DEVNET', 'SOL']
+      : ['arc-testnet', 'arc-mainnet'];
+
   const wallet = await prisma.circleWallet.findFirst({
-    where: {
-      tenantId,
-      kind: 'treasury',
-      chain: { in: ['arc-testnet', 'arc-mainnet'] },
-    },
+    where: { tenantId, kind: 'treasury', chain: { in: chains } },
     orderBy: { createdAt: 'desc' },
     select: { address: true },
   });
   if (wallet?.address) {
-    return {
-      address: wallet.address.toLowerCase(),
-      source: 'tenant_circle_treasury',
-    };
+    // Solana addresses are case-sensitive base58; only lowercase EVM hex.
+    const address =
+      primaryChain === 'sol' ? wallet.address : wallet.address.toLowerCase();
+    return { address, source: 'tenant_circle_treasury' };
   }
 
   return null;

@@ -32,15 +32,13 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { prisma } from '@sendero/database';
 import { filterPublicTools, toolList, tools as toolMap } from '@sendero/tools';
 import type { ToolContext } from '@sendero/tools/types';
 
 import { resolveTravelerByPhone } from '@/lib/agent-traveler-resolver';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
-
-import crypto from 'node:crypto';
+import { logKapsoToolBridgeWebhookAudit } from '@/lib/whatsapp-audit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -166,7 +164,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
       { status: 400 }
     );
   }
-  void logKapsoToolBridgeWebhookAudit({ tenantId: tenantId!, body, toolName: name });
+  void logKapsoToolBridgeWebhookAudit({
+    tenantId: tenantId!,
+    body,
+    toolName: name,
+    travelerPhone: body.travelerPhone ?? null,
+  });
 
   // 5. resolve traveler — when the caller passed `travelerPhone`
   //    (Kapso WhatsApp proxy always does), upsert the
@@ -287,43 +290,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
       { error: 'tool_failed', tool: name, errName, code, message },
       { status: 500 }
     );
-  }
-}
-
-async function logKapsoToolBridgeWebhookAudit(args: {
-  tenantId: string;
-  body: ToolBody;
-  toolName: string;
-}): Promise<void> {
-  const context = args.body.whatsapp_context;
-  if (!context) return;
-  const messages = Array.isArray(context.messages) ? context.messages : [];
-  const raw = JSON.stringify({
-    toolName: args.toolName,
-    conversation: context.conversation ?? null,
-    messages,
-  });
-  try {
-    await prisma.whatsAppWebhookEvent.create({
-      data: {
-        tenantId: args.tenantId,
-        signatureValid: true,
-        replayWindowOk: null,
-        payloadHash: crypto.createHash('sha256').update(raw).digest('hex'),
-        messageCount: messages.length,
-        identityChangeCount: 0,
-        statusUpdateCount: 0,
-        droppedReplayCount: 0,
-        droppedDuplicateCount: 0,
-        dispatchedCount: 1,
-        traceId: `kapso_tool:${args.toolName}`,
-      },
-    });
-  } catch (err) {
-    console.error('[api/tools] Kapso WhatsApp audit insert failed', {
-      tool: args.toolName,
-      error: err instanceof Error ? err.message : String(err),
-    });
   }
 }
 

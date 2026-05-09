@@ -30,6 +30,7 @@ export const OUTBOUND_SOURCES = [
   'broadcast',
   'channel_notify',
   'tool_call',
+  'kapso_tool_call',
 ] as const;
 
 export type OutboundSource = (typeof OUTBOUND_SOURCES)[number];
@@ -135,6 +136,71 @@ export async function logWebhookEvent(args: {
 }
 
 /**
+ * Kapso owns the live WhatsApp conversation for the tenant travel
+ * agent, so Sendero may not receive the raw Meta inbound webhook on
+ * that path. Every Kapso `call_sendero` request still crosses
+ * `/api/tools/[name]`; logging a bridge row here gives operators a
+ * local audit trail for live WhatsApp turns without requiring Kapso to
+ * mirror the whole webhook envelope.
+ */
+export async function logKapsoToolBridgeWebhookAudit(args: {
+  tenantId: string;
+  toolName: string;
+  travelerPhone?: string | null;
+  body: {
+    input?: Record<string, unknown>;
+    tripId?: string;
+    channelIdentityId?: string;
+    whatsapp_context?: {
+      conversation?: Record<string, unknown>;
+      messages?: Array<Record<string, unknown>>;
+    };
+  };
+}): Promise<void> {
+  const context = args.body.whatsapp_context;
+  if (!context && !args.travelerPhone) return;
+
+  const messages = Array.isArray(context?.messages) ? context.messages : [];
+  const rawEnvelope = sanitizeKapsoToolEnvelope({
+    toolName: args.toolName,
+    travelerPhone: args.travelerPhone ?? null,
+    tripId: args.body.tripId ?? null,
+    channelIdentityId: args.body.channelIdentityId ?? null,
+    conversation: context?.conversation ?? null,
+    messages,
+    input: args.body.input ?? {},
+  });
+  const rawBody = JSON.stringify(rawEnvelope);
+
+  try {
+    await prisma.whatsAppWebhookEvent.create({
+      data: {
+        tenantId: args.tenantId,
+        receivedAt: new Date(),
+        signatureValid: true,
+        replayWindowOk: null,
+        payloadHash: crypto.createHash('sha256').update(rawBody).digest('hex'),
+        messageCount: messages.length > 0 ? messages.length : args.travelerPhone ? 1 : 0,
+        identityChangeCount: 0,
+        statusUpdateCount: 0,
+        droppedReplayCount: 0,
+        droppedDuplicateCount: 0,
+        dispatchedCount: 1,
+        durationMs: null,
+        traceId: `kapso_tool:${args.toolName}`,
+        rawEnvelope: rawEnvelope as never,
+      },
+    });
+  } catch (err) {
+    console.error('[whatsapp-audit] Kapso tool bridge insert failed', {
+      tool: args.toolName,
+      tenantId: args.tenantId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
  * Audit one external API call to Kapso or Meta.
  *
  * Called from the WhatsAppClient `request()` retry loop and the Kapso
@@ -200,6 +266,28 @@ export function logMetaCall(args: Omit<Parameters<typeof logApiCall>[0], 'target
 
 function truncate(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
+}
+
+function sanitizeKapsoToolEnvelope(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeKapsoToolEnvelope);
+  if (!value || typeof value !== 'object') return value;
+
+  const out: Record<string, unknown> = {};
+  for (const [key, inner] of Object.entries(value)) {
+    const normalized = key.toLowerCase();
+    if (
+      normalized.includes('token') ||
+      normalized.includes('secret') ||
+      normalized.includes('privatekey') ||
+      normalized.includes('apikey') ||
+      normalized.includes('authorization')
+    ) {
+      out[key] = '[redacted]';
+      continue;
+    }
+    out[key] = sanitizeKapsoToolEnvelope(inner);
+  }
+  return out;
 }
 
 /**

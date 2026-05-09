@@ -26,6 +26,7 @@ import { WhatsAppClient } from '@sendero/whatsapp';
 import { z } from 'zod';
 
 import type { ToolContext, ToolDef } from './types';
+import { logWhatsAppToolOutbound } from './whatsapp-audit';
 
 const buttonSchema = z.object({
   id: z
@@ -690,36 +691,12 @@ async function resolveOutboundClient(
     accessToken,
     apiBaseUrl: baseUrl,
     onSent: event => {
-      void prisma.whatsAppOutboundMessage
-        .create({
-          data: {
-            tenantId,
-            wamid: event.wamid,
-            phoneNumberId: install.phoneNumberId,
-            recipientId: event.recipientId,
-            kind: event.kind,
-            source: 'tool_call',
-            ...(event.templateName ? { templateName: event.templateName } : {}),
-            ...(event.preview ? { preview: event.preview } : {}),
-            traceId: `tool:${ctx?.caller?.keyType ?? 'unknown'}`,
-            deliveryStatus: 'sent',
-          },
-        })
-        .catch(err => {
-          if (
-            err &&
-            typeof err === 'object' &&
-            'code' in err &&
-            (err as { code: string }).code === 'P2002'
-          ) {
-            return;
-          }
-          console.error('[whatsapp-interactive] outbound audit insert failed', {
-            tenantId,
-            wamid: event.wamid,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
+      void logWhatsAppToolOutbound({
+        tenantId,
+        phoneNumberId: install.phoneNumberId,
+        event,
+        traceId: `tool:${ctx?.caller?.keyType ?? 'unknown'}`,
+      });
     },
   });
   return { client, recipient };
