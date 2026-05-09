@@ -26,7 +26,8 @@
       "!lib-deprecated",
       "!apps/docs/.source",
       "!apps/storybook/storybook-static",
-      "!packages/database/prisma/migrations"
+      "!packages/database/prisma/migrations",
+      "!apps/kapso-functions/**/graph.json"
     ]
   },
   "assist": {
