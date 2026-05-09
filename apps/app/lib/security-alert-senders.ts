@@ -29,12 +29,6 @@ async function sendEmail(to: string, subject: string, body: string): Promise<Ale
     return { ok: false, error: 'email_not_configured' };
   }
   try {
-    // `resend` is a transitive dep via `@sendero/notifications`. We
-    // import it dynamically so this module is buildable when the
-    // package isn't on the classpath. tsc can't see the types
-    // without adding `resend` to apps/app/package.json — the runtime
-    // works regardless because Next bundles transitives.
-    // @ts-expect-error -- transitive dep, no direct types in this app
     const { Resend } = await import('resend');
     const client = new Resend(apiKey);
     const result = await client.emails.send({
@@ -243,10 +237,7 @@ async function sendWhatsapp(
         to,
         templateName: tpl.name,
         languageCode: tpl.defaultLocale,
-        components: buildSecurityAlertComponents(
-          subject.slice(0, 60),
-          body.slice(0, 1024)
-        ),
+        components: buildSecurityAlertComponents(subject.slice(0, 60), body.slice(0, 1024)),
       });
       const wamid = (result as { messages?: Array<{ id?: string }> })?.messages?.[0]?.id;
       if (!wamid) {

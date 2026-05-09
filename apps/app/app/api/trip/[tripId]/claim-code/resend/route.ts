@@ -27,18 +27,20 @@
  *      is NEVER in the response body or in any log line.
  */
 
-import crypto from 'node:crypto';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
+
 import { prisma } from '@sendero/database';
 import {
   generateOtpPreimage,
   otpClaimCodeHash,
   selectOtpChannel,
 } from '@sendero/notifications/otp';
+import { z } from 'zod';
 
 import { getRedis } from '@/lib/redis';
 import { verifyResendAuthToken } from '@/lib/resend-auth';
+
+import crypto from 'node:crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -376,10 +378,6 @@ async function dispatchOtp(
       return { ok: false, failureReason: 'email_not_configured' };
     }
     try {
-      // Dynamic import keeps this module buildable when @sendero/notifications
-      // (and its transitive `resend` dep) is missing from the classpath —
-      // same pattern used in `apps/app/lib/security-alert-senders.ts`.
-      // @ts-expect-error -- transitive dep, no direct types in this app
       const { Resend } = await import('resend');
       const client = new Resend(apiKey);
       const html = [
@@ -437,12 +435,8 @@ async function dispatchOtp(
     if (!accessToken || !phoneNumberId) {
       return { ok: false, failureReason: 'whatsapp_not_configured' };
     }
-    const {
-      WhatsAppClient,
-      SENDERO_TEMPLATES,
-      buildOtpComponents,
-      isOutsideSessionWindowError,
-    } = await import('@sendero/whatsapp');
+    const { WhatsAppClient, SENDERO_TEMPLATES, buildOtpComponents, isOutsideSessionWindowError } =
+      await import('@sendero/whatsapp');
     const client = new WhatsAppClient({
       phoneNumberId,
       accessToken,

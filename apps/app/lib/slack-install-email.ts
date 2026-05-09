@@ -72,9 +72,6 @@ export async function sendSlackInstallReceivedEmail(
   ].join('\n');
 
   try {
-    // Same dynamic-import dance as security-alert-senders so this
-    // module compiles without `resend` listed as a direct dep.
-    // @ts-expect-error -- transitive dep, no direct types in this app
     const { Resend } = await import('resend');
     const client = new Resend(apiKey);
     const replyTo = process.env.SENDERO_EMAIL_REPLY_TO ?? from;
