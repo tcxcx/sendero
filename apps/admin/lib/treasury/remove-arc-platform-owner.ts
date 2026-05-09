@@ -26,23 +26,17 @@
  * the proposal-execution flow in Phase 7.6).
  */
 
-import {
-  createPublicClient,
-  encodeFunctionData,
-  type Address,
-  type Hex,
-} from 'viem';
+import { createPublicClient, encodeFunctionData, http, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arcTestnet } from 'viem/chains';
 import { createBundlerClient } from 'viem/account-abstraction';
-import {
-  toCircleSmartAccount,
-  toModularTransport,
-} from '@circle-fin/modular-wallets-core';
+import { toCircleSmartAccount, toModularTransport } from '@circle-fin/modular-wallets-core';
 
 import { prisma } from '@sendero/database';
 
 import { requirePlatformRole } from '@/lib/access';
+import { createArcUserOperationFeesEstimator } from '@/lib/treasury/arc-userop-fees';
+import { ensureCircleServerRuntime } from '@/lib/treasury/circle-server-runtime';
 
 export interface RemoveArcPlatformOwnerInput {
   treasuryId: string;
@@ -58,7 +52,6 @@ export type RemoveArcPlatformOwnerResult =
     }
   | { ok: false; error: string };
 
-const ARC_MIN_PRIORITY_FEE_PER_GAS = 1_000_000_000n;
 const DEFAULT_CIRCLE_CLIENT_URL = 'https://modular-sdk.circle.com/v1/rpc/w3s/buidl';
 
 const UPDATE_MULTISIG_WEIGHTS_ABI = [
@@ -135,17 +128,18 @@ export async function removeArcPlatformOwner(
   }
 
   const clientKey =
-    process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY ??
-    process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_KEY;
+    process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY ?? process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_KEY;
   if (!clientKey) return { ok: false, error: 'NEXT_PUBLIC_CIRCLE_CLIENT_KEY required.' };
   const clientUrl =
     process.env.NEXT_PUBLIC_CIRCLE_CLIENT_URL ??
     process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_URL ??
     DEFAULT_CIRCLE_CLIENT_URL;
+  const rpcUrl = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
 
   const owner = privateKeyToAccount(bootstrapPrivateKey);
+  ensureCircleServerRuntime();
   const modular = toModularTransport(`${clientUrl}/arcTestnet`, clientKey);
-  const publicClient = createPublicClient({ chain: arcTestnet, transport: modular });
+  const publicClient = createPublicClient({ chain: arcTestnet, transport: http(rpcUrl) });
 
   const account = await toCircleSmartAccount({
     client: publicClient,
@@ -172,10 +166,7 @@ export async function removeArcPlatformOwner(
     transport: modular,
     paymaster: true,
     userOperation: {
-      estimateFeesPerGas: async () => ({
-        maxFeePerGas: ARC_MIN_PRIORITY_FEE_PER_GAS * 2n,
-        maxPriorityFeePerGas: ARC_MIN_PRIORITY_FEE_PER_GAS,
-      }),
+      estimateFeesPerGas: createArcUserOperationFeesEstimator(publicClient),
     },
   });
 

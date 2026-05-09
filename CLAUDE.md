@@ -132,6 +132,35 @@ Env: `SENDERO_STAMPS_ADDRESS`, `SENDERO_STAMPS_CONTRACT_ID`, `SENDERO_STAMPS_DEP
 
 `scripts/verify-deployments.ts` encodes `expect` per contract. Add new addresses there on every deploy.
 
+## Solana Anchor program runbook (devnet)
+
+Solana parity for Arc lives in two Anchor programs deployed to **sol-devnet**. Tenants whose `Tenant.primaryChain === 'sol'` route prefund/reserve/commit/settle through these instead of the Arc EVM contracts. Identity + NFT stamping reuses Metaplex (one program covers Identity/Reputation/Validation; MPL Core covers stamps).
+
+| Program | Address | Role |
+|---|---|---|
+| `sendero_guest_escrow` | `9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8` | Solana port of SenderoGuestEscrow.sol — prefund/claim/reserve/commit/settle/refund/sweep parity. |
+| `agentic_commerce` | `4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9` | AI-agent job lifecycle (create/fund/complete/refund) — Solana-native, no Arc twin. |
+| Metaplex Core (external) | `CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d` | Trip-stamp NFT minting — Solana parity for SenderoStamps. `mintCoreTripStamp` mints BoardingPass / SettlementReceipt / TripPassport. |
+| Metaplex Agent Registry (external) | `1DREGFgysWYxLnRnKQnwrxnJQeSMk2HmGaC6whw2B2p` | Solana equivalent of ERC-8004 Identity + Reputation + Validation. `provision-identity` mints org agent here on tenant create. |
+
+**Authority**: both Sendero programs sign with the same upgrade authority pubkey held in `SENDERO_SOLANA_PLATFORM_PRIVATE_KEY` (also funds DCW gas via JIT-drip — see "Solana gas abstraction"). Authority drift is the audit's #1 alert.
+
+**Re-deploy flow** (Anchor):
+
+```
+1. cd contracts-solana/<program> && anchor build
+2. anchor deploy --provider.cluster devnet --program-keypair target/deploy/<program>-keypair.json
+3. anchor idl init --provider.cluster devnet --filepath target/idl/<program>.json <program-id>
+4. cp target/idl/<program>.json packages/guest/idl/  (or matching consumer pkg)
+5. bun apps/admin/scripts/verify-solana-programs.ts  (or hit /dashboard/contracts?chain=sol → Refresh)
+```
+
+**TS adapter source of truth**: `packages/guest/src/solana.ts` exports the ix builders consumed by `prefund_trip / reserve_booking / commit_booking` Solana branches in `packages/tools/src/guest-escrow.ts`. Keep IDL + adapter in lockstep.
+
+**Audit surface**: `apps/admin/lib/contracts/audit-solana.ts` reads ProgramData via `BPFLoaderUpgradeab1e…` owner, slices the layout (4-byte discriminator + 8-byte slot + 1-byte authority Option tag + 32-byte authority pubkey), compares vs `expectedAuthority` in registry. External programs (`ownership: 'external'`) skip authority check — a live ProgramData fetch is enough.
+
+**Cluster pin**: SDK defaults to `https://api.devnet.solana.com`. Override via `SENDERO_SOLANA_RPC_URL`. `sol-mainnet` deploys are gated behind the same testnet-beta → mainnet flip as Arc; do not deploy until billing tiers + scopes are finalized.
+
 ## API keys
 
 Clerk's native API keys (GA 2026-04-17). Clerk mints/hashes/revokes.

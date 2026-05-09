@@ -35,14 +35,13 @@
  * configured AFTER deploy via the multisig plugin install.
  */
 
-import { createPublicClient, http, type Address, type Hex } from 'viem';
+import { type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arcTestnet } from 'viem/chains';
-import { toCircleSmartAccount } from '@circle-fin/modular-wallets-core';
 
 import { prisma } from '@sendero/database';
 
 import { requirePlatformRole } from '@/lib/access';
+import { computeArcMscaAddress } from '@/lib/treasury/compute-arc-msca-address';
 
 export interface DeriveArcMscaInput {
   treasuryId: string;
@@ -92,31 +91,21 @@ export async function deriveArcMscaCounterfactual(
     };
   }
 
-  const rpcUrl = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
-
+  // Pure CREATE2 derivation — no RPC, no `window`. Server-safe.
+  // Replaces Circle SDK's `toCircleSmartAccount` (browser-bound via
+  // WebAuthn imports). Result matches the SDK byte-for-byte for EOA
+  // owners. See `compute-arc-msca-address.ts` for the math.
   const owner = privateKeyToAccount(bootstrapPrivateKey);
-  const client = createPublicClient({
-    chain: arcTestnet,
-    transport: http(rpcUrl, { retryCount: 3, timeout: 15_000 }),
-  });
-
-  let account: Awaited<ReturnType<typeof toCircleSmartAccount>>;
+  let counterfactualAddress: Address;
   try {
-    account = await toCircleSmartAccount({
-      client,
-      owner,
-      // Stable wallet name — derives a deterministic salt so the
-      // counterfactual address is reproducible across calls.
-      name: `sendero-arc-treasury-${input.treasuryId}`,
-    });
+    const computed = computeArcMscaAddress({ owner: owner.address });
+    counterfactualAddress = computed.address;
   } catch (err) {
     return {
       ok: false,
-      error: `toCircleSmartAccount failed: ${err instanceof Error ? err.message : String(err)}`,
+      error: `computeArcMscaAddress failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-
-  const counterfactualAddress = account.address;
   const previousAddress = treasury.multisigAddress;
 
   // Idempotent: if the row already has the correct address + status,

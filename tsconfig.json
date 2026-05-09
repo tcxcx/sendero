@@ -84,6 +84,7 @@
       "@sendero/webhooks": ["./packages/webhooks/src/index.ts"],
       "@sendero/webhooks/*": ["./packages/webhooks/src/*"],
       "@sendero/guest": ["./packages/guest/src/index.ts"],
+      "@sendero/guest/solana": ["./packages/guest/src/solana.ts"],
       "@sendero/sherpa": ["./packages/sherpa/src/index.ts"],
       "@sendero/sherpa/*": ["./packages/sherpa/src/*"],
       "@sendero/ocr": ["packages/ocr/src/index.ts"],

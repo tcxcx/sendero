@@ -143,7 +143,7 @@ export const bookFlightTool: ToolDef = {
   },
   async handler(input: BookFlightInput, ctx?: ToolContext) {
     const whatsappTicketingGate = validateWhatsAppTicketingConfirmation(input, ctx);
-    if (!whatsappTicketingGate.ok) {
+    if (whatsappTicketingGate.ok === false) {
       return whatsappTicketingGate.response;
     }
 
@@ -1696,22 +1696,36 @@ async function settleTravelerUsdcToTreasury(args: {
   // carve belongs on the tenant-markup leg in v2.
 
   const SOL_DEVNET_CHAIN_ID = 5;
-  const evmDcw = await prisma.wallet.findFirst({
+
+  // Resolve tenant.primaryChain — flips DCW selection + Gateway
+  // toChainKey + treasury destination to the matching chain in lockstep.
+  // Defaults to 'arc' when the tenant row is missing primaryChain
+  // (legacy rows pre-Phase H Solana parity).
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: args.tenantId },
+    select: { primaryChain: true },
+  });
+  const primaryChain: 'arc' | 'sol' =
+    (tenant as { primaryChain?: string | null } | null)?.primaryChain === 'sol' ? 'sol' : 'arc';
+
+  const dcw = await prisma.wallet.findFirst({
     where: {
       userId: args.travelerUserId,
       provisioner: 'dcw',
-      NOT: { chainId: SOL_DEVNET_CHAIN_ID },
+      ...(primaryChain === 'sol'
+        ? { chainId: SOL_DEVNET_CHAIN_ID }
+        : { NOT: { chainId: SOL_DEVNET_CHAIN_ID } }),
     },
     orderBy: { createdAt: 'asc' },
     select: { address: true },
   });
-  if (!evmDcw?.address) return null;
+  if (!dcw?.address) return null;
 
   const { resolvePlatformTreasuryDestination } = await import('./platform-treasury');
-  const senderoTreasury = await resolvePlatformTreasuryDestination('arc');
+  const senderoTreasury = await resolvePlatformTreasuryDestination(primaryChain);
   if (!senderoTreasury) {
     console.warn(
-      '[book_flight] no live Arc SuperOrgTreasury — refusing to settle traveler reimbursement'
+      `[book_flight] no live ${primaryChain.toUpperCase()} SuperOrgTreasury — refusing to settle traveler reimbursement`
     );
     return null;
   }
@@ -1723,15 +1737,19 @@ async function settleTravelerUsdcToTreasury(args: {
   const { circleWalletsPrincipal, spend } = await import('@sendero/circle');
 
   const principal = circleWalletsPrincipal({
-    address: evmDcw.address,
+    address: dcw.address,
     label: `traveler:${args.travelerUserId}:settle`,
   });
   if (!principal) return null;
+
+  const toChainKey = primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
 
   console.log('[book_flight] settling (cost-reimbursement to Sendero)', {
     tenantId: args.tenantId,
     travelerUserId: args.travelerUserId,
     amountUsdc: args.amountUsdc,
+    primaryChain,
+    toChainKey,
     recipient: senderoRecipient,
     treasuryId: senderoTreasury.treasuryId,
     treasuryNetwork: senderoTreasury.network,
@@ -1740,13 +1758,18 @@ async function settleTravelerUsdcToTreasury(args: {
 
   const result = await spend({
     sources: [{ principal }],
-    toChainKey: 'Arc_Testnet',
+    toChainKey,
     recipient: senderoRecipient,
     amount: args.amountUsdc,
   });
 
+  const explorerFallback =
+    primaryChain === 'sol'
+      ? `https://explorer.solana.com/tx/${result.txHash}?cluster=devnet`
+      : `https://testnet.arcscan.app/tx/${result.txHash}`;
+
   return {
     settlementTxHash: result.txHash,
-    explorerUrl: result.explorerUrl ?? `https://testnet.arcscan.app/tx/${result.txHash}`,
+    explorerUrl: result.explorerUrl ?? explorerFallback,
   };
 }

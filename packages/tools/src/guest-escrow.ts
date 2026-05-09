@@ -40,11 +40,35 @@ import {
   signClaim,
   toUsdcMicro,
 } from '@sendero/guest';
+import { prisma } from '@sendero/database';
 import { createNotifier, notificationsConfigured } from '@sendero/notifications';
 import type { Address, Hex } from 'viem';
 import { z } from 'zod';
 
-import type { ToolDef } from './types';
+import type { ToolContext, ToolDef } from './types';
+
+/** Read `Tenant.primaryChain` from ToolContext. Defaults to 'arc' when
+ *  the context doesn't carry a tenantId (e.g. unauthenticated / sandbox
+ *  test bench) — preserves Arc-as-default behavior. */
+async function resolveTenantPrimaryChain(ctx: ToolContext | undefined): Promise<'arc' | 'sol'> {
+  const tenantId = ctx?.traveler?.tenantId;
+  if (!tenantId) return 'arc';
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { primaryChain: true },
+  });
+  return tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
+}
+
+/** JSON-serializable shape of a Solana TransactionInstruction so the
+ *  Sendero relayer / Circle DCW signer can rebuild + sign it client-
+ *  side. Mirrors the EncodedCall pattern on Arc. */
+interface SerializedSolanaIx {
+  programId: string;
+  accounts: Array<{ pubkey: string; isSigner: boolean; isWritable: boolean }>;
+  /** Base64-encoded data buffer. */
+  data: string;
+}
 
 // ─── Shared input helpers ───────────────────────────────────────────
 
@@ -144,8 +168,12 @@ export const prefundTripTool: ToolDef = {
       tripSummary: { type: 'string', description: 'Short route summary for email copy.' },
     },
   },
-  async handler(input) {
+  async handler(input, ctx) {
     const parsed = prefundInput.parse(input);
+    const primaryChain = await resolveTenantPrimaryChain(ctx);
+    if (primaryChain === 'sol') {
+      return prefundTripSolana(parsed, ctx);
+    }
     const escrow = resolveEscrow(parsed.escrowAddress);
     const budget = toUsdcMicro(parsed.budgetUsdc);
     const expiresAt = BigInt(Math.floor(Date.now() / 1000)) + BigInt(parsed.expiresInDays * 86400);
@@ -436,8 +464,12 @@ export const reserveBookingTool: ToolDef = {
       escrowAddress: { type: 'string' },
     },
   },
-  async handler(input) {
+  async handler(input, ctx) {
     const parsed = reserveInput.parse(input);
+    const primaryChain = await resolveTenantPrimaryChain(ctx);
+    if (primaryChain === 'sol') {
+      return reserveBookingSolana(parsed);
+    }
     const escrow = resolveEscrow(parsed.escrowAddress);
     const bookingId = (parsed.bookingId as Hex | undefined) ?? generateBookingId();
     const upperBound = toUsdcMicro(parsed.upperBoundUsdc);
@@ -471,6 +503,13 @@ const commitInput = z.object({
   itineraryHash: hex32.describe('keccak256 of the confirmed itinerary JSON.'),
   itineraryCID: z.string().default(''),
   escrowAddress: hex20.optional(),
+  /** Solana-only: parent tripId (hex32 or base58). Arc reads it from
+   *  the booking row; on Solana the ix needs both for PDA derivation. */
+  tripId: z.string().optional(),
+  /** Solana-only: vendor's Solana pubkey (base58). The Anchor commit
+   *  ix takes vendor as a Pubkey arg, persisted on Booking.vendor and
+   *  used at settle time as the destination of the vendor leg. */
+  vendorSolanaAddress: z.string().optional(),
 });
 
 export const commitBookingTool: ToolDef = {
@@ -491,8 +530,12 @@ export const commitBookingTool: ToolDef = {
       escrowAddress: { type: 'string' },
     },
   },
-  async handler(input) {
+  async handler(input, ctx) {
     const parsed = commitInput.parse(input);
+    const primaryChain = await resolveTenantPrimaryChain(ctx);
+    if (primaryChain === 'sol') {
+      return commitBookingSolana(parsed);
+    }
     const escrow = resolveEscrow(parsed.escrowAddress);
     const vendorAmount = toUsdcMicro(parsed.vendorAmountUsdc);
     const feeAmount = toUsdcMicro(parsed.feeAmountUsdc);
@@ -516,6 +559,219 @@ export const commitBookingTool: ToolDef = {
     };
   },
 };
+
+// ─── Solana branches (prefund / reserve / commit) ──────────────────
+
+async function prefundTripSolana(
+  parsed: z.infer<typeof prefundInput>,
+  ctx: ToolContext | undefined
+): Promise<Record<string, unknown>> {
+  const [
+    { PublicKey },
+    {
+      buildPreFundTripIx,
+      generateClaimKeypairSolana,
+      generateTripIdSolana,
+      SENDERO_GUEST_ESCROW_PROGRAM_ID,
+      SOLANA_USDC_MINT_DEVNET,
+    },
+    bs58Mod,
+  ] = await Promise.all([
+    import('@solana/web3.js'),
+    import('@sendero/guest/solana'),
+    import('bs58'),
+  ]);
+  const bs58 = bs58Mod.default;
+
+  const tenantId = ctx?.traveler?.tenantId;
+  if (!tenantId) {
+    throw new Error('prefund_trip(sol): tenant context required to resolve buyer wallet');
+  }
+  const buyerWallet = await prisma.circleWallet.findFirst({
+    where: { tenantId, kind: 'treasury', chain: { in: ['SOL-DEVNET', 'SOL'] } },
+    orderBy: { createdAt: 'desc' },
+    select: { address: true },
+  });
+  if (!buyerWallet?.address) {
+    throw new Error(
+      `prefund_trip(sol): tenant ${tenantId} has no Solana treasury CircleWallet — provision via /onboarding/corporate first.`
+    );
+  }
+  const buyer = new PublicKey(buyerWallet.address);
+  const tripIdBytes = generateTripIdSolana();
+  const claimKeypair = generateClaimKeypairSolana();
+  const budgetMicro = toUsdcMicro(parsed.budgetUsdc);
+  const expiresAt = BigInt(Math.floor(Date.now() / 1000)) + BigInt(parsed.expiresInDays * 86400);
+  const expectedOtpHash = new Uint8Array(32);
+
+  const ix = buildPreFundTripIx({
+    buyer,
+    tripId: tripIdBytes,
+    amount: budgetMicro,
+    claimPubkey: claimKeypair.publicKey,
+    expiry: expiresAt,
+    expectedOtpHash,
+    paymentMint: SOLANA_USDC_MINT_DEVNET,
+  });
+
+  const origin = resolveLinkOrigin(parsed.linkOrigin);
+  const tripIdB58 = bs58.encode(tripIdBytes);
+  const guestLink = `${origin}/g#t=${tripIdB58}&k=${bs58.encode(
+    claimKeypair.secretKey.slice(0, 32)
+  )}&c=sol`;
+
+  return {
+    chain: 'sol' as const,
+    tripId: tripIdB58,
+    budgetUsdc: parsed.budgetUsdc,
+    budgetMicro: budgetMicro.toString(),
+    expiresAt: expiresAt.toString(),
+    programId: SENDERO_GUEST_ESCROW_PROGRAM_ID.toBase58(),
+    guestLink,
+    claimPubKey: claimKeypair.publicKey.toBase58(),
+    require2fa: parsed.require2fa,
+    claimCode: null,
+    codeNonce: null,
+    invite: null,
+    onchainInstructions: [
+      {
+        programId: ix.programId.toBase58(),
+        accounts: ix.keys.map(k => ({
+          pubkey: k.pubkey.toBase58(),
+          isSigner: k.isSigner,
+          isWritable: k.isWritable,
+        })),
+        data: Buffer.from(ix.data).toString('base64'),
+      } satisfies SerializedSolanaIx,
+    ],
+    note: 'Sign + submit the ix via the buyer Solana DCW (Circle createTransaction). DM the guestLink to the traveler.',
+  };
+}
+
+async function reserveBookingSolana(
+  parsed: z.infer<typeof reserveInput>
+): Promise<Record<string, unknown>> {
+  const [
+    { PublicKey },
+    { buildReserveBookingIx, generateBookingIdSolana, SENDERO_GUEST_ESCROW_PROGRAM_ID },
+    bs58Mod,
+  ] = await Promise.all([
+    import('@solana/web3.js'),
+    import('@sendero/guest/solana'),
+    import('bs58'),
+  ]);
+  const bs58 = bs58Mod.default;
+  const operatorEnv = process.env.SENDERO_SOLANA_OPERATOR_ADDRESS;
+  if (!operatorEnv) {
+    throw new Error('reserve_booking(sol): SENDERO_SOLANA_OPERATOR_ADDRESS env var not set');
+  }
+  const operator = new PublicKey(operatorEnv);
+
+  const tripIdBytes = parsed.tripId.startsWith('0x')
+    ? new Uint8Array(Buffer.from(parsed.tripId.slice(2), 'hex'))
+    : bs58.decode(parsed.tripId);
+  if (tripIdBytes.length !== 32) {
+    throw new Error('reserve_booking(sol): tripId must decode to 32 bytes');
+  }
+  const bookingIdBytes = parsed.bookingId
+    ? parsed.bookingId.startsWith('0x')
+      ? new Uint8Array(Buffer.from(parsed.bookingId.slice(2), 'hex'))
+      : bs58.decode(parsed.bookingId)
+    : generateBookingIdSolana();
+  const upperBound = toUsdcMicro(parsed.upperBoundUsdc);
+
+  const ix = buildReserveBookingIx({
+    operator,
+    tripId: tripIdBytes,
+    bookingId: bookingIdBytes,
+    upperBound,
+  });
+
+  return {
+    chain: 'sol' as const,
+    tripId: bs58.encode(tripIdBytes),
+    bookingId: bs58.encode(bookingIdBytes),
+    upperBoundMicro: upperBound.toString(),
+    programId: SENDERO_GUEST_ESCROW_PROGRAM_ID.toBase58(),
+    onchainInstructions: [
+      {
+        programId: ix.programId.toBase58(),
+        accounts: ix.keys.map(k => ({
+          pubkey: k.pubkey.toBase58(),
+          isSigner: k.isSigner,
+          isWritable: k.isWritable,
+        })),
+        data: Buffer.from(ix.data).toString('base64'),
+      } satisfies SerializedSolanaIx,
+    ],
+    note: 'Submit via the Sendero Solana operator wallet.',
+  };
+}
+
+async function commitBookingSolana(
+  parsed: z.infer<typeof commitInput>
+): Promise<Record<string, unknown>> {
+  const [{ PublicKey }, { buildCommitBookingIx, SENDERO_GUEST_ESCROW_PROGRAM_ID }, bs58Mod] =
+    await Promise.all([import('@solana/web3.js'), import('@sendero/guest/solana'), import('bs58')]);
+  const bs58 = bs58Mod.default;
+
+  if (!parsed.tripId) {
+    throw new Error('commit_booking(sol): tripId is required on Solana for trip-PDA derivation');
+  }
+  const operatorEnv = process.env.SENDERO_SOLANA_OPERATOR_ADDRESS;
+  if (!operatorEnv) {
+    throw new Error('commit_booking(sol): SENDERO_SOLANA_OPERATOR_ADDRESS env var not set');
+  }
+  const operator = new PublicKey(operatorEnv);
+
+  const tripIdBytes = parsed.tripId.startsWith('0x')
+    ? new Uint8Array(Buffer.from(parsed.tripId.slice(2), 'hex'))
+    : bs58.decode(parsed.tripId);
+  const bookingIdBytes = parsed.bookingId.startsWith('0x')
+    ? new Uint8Array(Buffer.from(parsed.bookingId.slice(2), 'hex'))
+    : bs58.decode(parsed.bookingId);
+  if (tripIdBytes.length !== 32 || bookingIdBytes.length !== 32) {
+    throw new Error('commit_booking(sol): tripId and bookingId must each decode to 32 bytes');
+  }
+
+  if (!parsed.vendorSolanaAddress) {
+    throw new Error(
+      'commit_booking(sol): vendorSolanaAddress required — Solana commit_booking takes a Pubkey vendor (the EVM vendorAddress is ignored on this chain).'
+    );
+  }
+  const vendorAmount = toUsdcMicro(parsed.vendorAmountUsdc);
+  const feeAmount = toUsdcMicro(parsed.feeAmountUsdc);
+  const ix = buildCommitBookingIx({
+    operator,
+    tripId: tripIdBytes,
+    bookingId: bookingIdBytes,
+    vendorAmount,
+    feeAmount,
+    vendor: new PublicKey(parsed.vendorSolanaAddress),
+  });
+
+  return {
+    chain: 'sol' as const,
+    tripId: bs58.encode(tripIdBytes),
+    bookingId: bs58.encode(bookingIdBytes),
+    vendorAmountMicro: vendorAmount.toString(),
+    feeAmountMicro: feeAmount.toString(),
+    vendorSolana: parsed.vendorSolanaAddress,
+    programId: SENDERO_GUEST_ESCROW_PROGRAM_ID.toBase58(),
+    onchainInstructions: [
+      {
+        programId: ix.programId.toBase58(),
+        accounts: ix.keys.map(k => ({
+          pubkey: k.pubkey.toBase58(),
+          isSigner: k.isSigner,
+          isWritable: k.isWritable,
+        })),
+        data: Buffer.from(ix.data).toString('base64'),
+      } satisfies SerializedSolanaIx,
+    ],
+    note: 'Submit via the Sendero Solana operator wallet. settle_booking finalizes after Duffel ticketing.',
+  };
+}
 
 // ─── log_agent_action ──────────────────────────────────────────────
 

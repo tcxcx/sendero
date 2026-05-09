@@ -339,19 +339,35 @@ export function buildPreFundTripIx(args: BuildPreFundTripArgs): TransactionInstr
 export interface BuildClaimTripIxsArgs {
   relayer: PublicKey;
   tripId: Uint8Array;
-  /** sha256 of the OTP — must match what the buyer pre-funded with. */
-  otpHash: Uint8Array;
-  /** Already-signed Ed25519 signature of `claimMessageSolana(...)`. */
+  /** Pre-image of the OTP — the program SHA-256s this and compares to
+   *  the buyer's `expected_otp_hash` set at prefund time. Variable
+   *  length; encoded as a Borsh `Vec<u8>`. */
+  otpPreimage: Uint8Array;
+  /** Wallet of the guest who is binding this trip. Becomes
+   *  `Trip.guest_claimant` on success. */
+  guestClaimant: PublicKey;
+  /** Already-signed Ed25519 signature over `claimMessageSolana(...)`,
+   *  produced by the holder of `Trip.claim_pubkey`. */
   recipientSignature: Uint8Array;
-  /** Public key of the claim keypair (matches `Trip.claim_pubkey`). */
+  /** Pubkey of the claim keypair — must equal `Trip.claim_pubkey`. */
   claimPubkey: PublicKey;
-  /** The same message bytes that produced `recipientSignature`. */
+  /** Same bytes that produced `recipientSignature` — the program
+   *  recomputes the canonical message and Ed25519-verifies the
+   *  sibling at instruction-index 0. */
   claimMessage: Uint8Array;
   programId?: PublicKey;
 }
 
-/** Build [Ed25519 sibling ix, claim_trip ix]. Both go in the same tx,
- *  in order; the program reads the sibling at index 0. */
+/** Build [Ed25519 sibling ix, claim_trip ix]. Submit BOTH in the same
+ *  transaction with the sibling at index 0 — claim_trip's handler
+ *  reads `instructions_sysvar.load_instruction_at_checked(0, ...)` and
+ *  rejects anything else there. Suppress any preceding ComputeBudget
+ *  ix on this transaction.
+ *
+ *  Args layout matches the program: (trip_id, otp_preimage as Vec<u8>,
+ *  guest_claimant). Verified end-to-end against the deployed program
+ *  by `apps/admin/scripts/_local/e2e-solana-lifecycle.ts`.
+ */
 export function buildClaimTripIxs(
   args: BuildClaimTripIxsArgs
 ): [TransactionInstruction, TransactionInstruction] {
@@ -369,8 +385,8 @@ export function buildClaimTripIxs(
     DISCRIMINATORS.claimTrip,
     encodeArgs([
       { kind: 'bytes32', value: args.tripId },
-      { kind: 'bytes32', value: args.otpHash },
-      { kind: 'bytes', value: args.recipientSignature },
+      { kind: 'bytes', value: args.otpPreimage },
+      { kind: 'pubkey', value: args.guestClaimant },
     ])
   );
 
@@ -429,11 +445,19 @@ export interface BuildCommitBookingArgs {
   operator: PublicKey;
   tripId: Uint8Array;
   bookingId: Uint8Array;
-  /** Final quoted price (≤ upperBound), in micro-USDC. */
-  quotedPrice: bigint;
+  /** Vendor (supplier) leg in micro-USDC. */
+  vendorAmount: bigint;
+  /** Sendero/operator fee leg in micro-USDC. */
+  feeAmount: bigint;
+  /** Vendor pubkey — recipient of the vendor leg at settle time. */
+  vendor: PublicKey;
   programId?: PublicKey;
 }
 
+/** Build commit_booking. Args order matches the program:
+ *  (trip_id, booking_id, vendor_amount, fee_amount, vendor).
+ *  Verified against the deployed program by the lifecycle e2e at
+ *  apps/admin/scripts/_local/e2e-solana-lifecycle.ts. */
 export function buildCommitBookingIx(args: BuildCommitBookingArgs): TransactionInstruction {
   const programId = args.programId ?? SENDERO_GUEST_ESCROW_PROGRAM_ID;
   const [config] = deriveConfigPda(programId);
@@ -443,8 +467,11 @@ export function buildCommitBookingIx(args: BuildCommitBookingArgs): TransactionI
   const data = joinIxData(
     DISCRIMINATORS.commitBooking,
     encodeArgs([
+      { kind: 'bytes32', value: args.tripId },
       { kind: 'bytes32', value: args.bookingId },
-      { kind: 'u64', value: args.quotedPrice },
+      { kind: 'u64', value: args.vendorAmount },
+      { kind: 'u64', value: args.feeAmount },
+      { kind: 'pubkey', value: args.vendor },
     ])
   );
 
@@ -483,6 +510,7 @@ export function buildSettleBookingIx(args: BuildSettleBookingArgs): TransactionI
   const data = joinIxData(
     DISCRIMINATORS.settleBooking,
     encodeArgs([
+      { kind: 'bytes32', value: args.tripId },
       { kind: 'bytes32', value: args.bookingId },
       { kind: 'bytes32', value: args.duffelOrderRef },
     ])
@@ -517,9 +545,14 @@ export function buildRefundBookingIx(args: BuildRefundBookingArgs): TransactionI
   const [trip] = deriveTripPda(args.tripId, programId);
   const [booking] = deriveBookingPda(args.bookingId, programId);
 
+  // refund_booking takes (trip_id, booking_id). The deployed program
+  // rejects single-arg calls — verified by the lifecycle e2e.
   const data = joinIxData(
     DISCRIMINATORS.refundBooking,
-    encodeArgs([{ kind: 'bytes32', value: args.bookingId }])
+    encodeArgs([
+      { kind: 'bytes32', value: args.tripId },
+      { kind: 'bytes32', value: args.bookingId },
+    ])
   );
 
   return {

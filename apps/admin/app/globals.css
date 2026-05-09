@@ -2,37 +2,71 @@
 @import "../../../packages/ui/src/themes/sendero.css";
 @import "../../../packages/ui/src/themes/zen.css";
 
-/* Tailwind token fallbacks. Runtime platform themes live in @sendero/ui. */
+/* Tailwind v4 token registration that PASSES THROUGH the active
+ * platform theme's CSS variables. The platform theme files
+ * (sendero.css / zen.css) declare `--background`, `--foreground`,
+ * etc. at `:root[data-platform-theme="..."]`. ThemeProvider stamps
+ * `data-platform-theme="zen"` (default) on <html>. Without `inline`,
+ * Tailwind's `@theme` would inline the values at build time and
+ * defeat the runtime theme switch. With `@theme inline + var(...)`,
+ * `bg-background` etc. resolve to whatever the active platform
+ * theme has set, so `setPlatformTheme('sendero')` flips colors live.
+ */
 
-@theme {
-  --color-border: hsl(33 35% 76%);
-  --color-input: hsl(33 35% 76%);
-  --color-ring: hsl(11 66% 53%);
-  --color-background: hsl(32 53% 86%);
-  --color-foreground: hsl(0 0% 4%);
-  --color-primary: hsl(11 66% 53%);
-  --color-primary-foreground: hsl(33 100% 96%);
-  --color-secondary: hsl(34 61% 90%);
-  --color-secondary-foreground: hsl(0 0% 4%);
-  --color-muted: hsl(34 51% 88%);
-  --color-muted-foreground: hsl(0 0% 45%);
-  --color-accent: hsl(34 51% 88%);
-  --color-accent-foreground: hsl(0 0% 4%);
-  --color-destructive: hsl(0 72% 51%);
-  --color-destructive-foreground: hsl(33 100% 96%);
-  --color-card: hsl(34 61% 90%);
-  --color-card-foreground: hsl(0 0% 4%);
-  --color-popover: hsl(34 61% 90%);
-  --color-popover-foreground: hsl(0 0% 4%);
-  --color-sidebar: hsl(34 51% 88%);
-  --color-sidebar-foreground: hsl(222 37% 19%);
-  --color-sidebar-border: hsl(33 35% 76%);
-  --color-sidebar-accent: hsl(33 100% 96%);
-  --color-sidebar-accent-foreground: hsl(0 0% 4%);
+@theme inline {
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-sidebar: var(--sidebar, var(--background));
+  --color-sidebar-foreground: var(--sidebar-foreground, var(--foreground));
+  --color-sidebar-border: var(--sidebar-border, var(--border));
+  --color-sidebar-accent: var(--sidebar-accent, var(--accent));
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground, var(--accent-foreground));
   --radius: 0.25rem;
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Hard fallback when the platform theme hasn't loaded yet (e.g.,
+ * pre-hydration FOUC, or someone pinning data-platform-theme to an
+ * unknown value). Uses the zen palette since that's the default. */
+:root {
+  --background: oklch(0.9195 0.0169 88.003);
+  --foreground: hsl(222 47% 11%);
+  --card: oklch(0.953 0.0156 86.4257);
+  --card-foreground: hsl(222 47% 11%);
+  --popover: oklch(0.953 0.0156 86.4257);
+  --popover-foreground: hsl(222 47% 11%);
+  --primary: hsl(11 66% 53%);
+  --primary-foreground: hsl(33 100% 96%);
+  --secondary: oklch(0.8647 0.0201 87.5232);
+  --secondary-foreground: hsl(222 47% 11%);
+  --muted: oklch(0.834 0.0232 87.163);
+  --muted-foreground: oklch(0.4688 0.0136 84.5932);
+  --accent: oklch(0.9169 0.0175 99.616);
+  --accent-foreground: hsl(222 47% 11%);
+  --destructive: oklch(0.5771 0.2152 27.325);
+  --destructive-foreground: oklch(1 0 0);
+  --border: hsl(33 35% 76%);
+  --input: hsl(33 35% 76%);
+  --ring: hsl(11 66% 53%);
 }
 
 @layer base {
@@ -46,5 +80,27 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+  }
+
+  .maplibregl-map,
+  .maplibregl-canvas-container,
+  .maplibregl-canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .maplibregl-canvas {
+    display: block;
+  }
+
+  .maplibregl-popup-content {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .maplibregl-popup-tip {
+    display: none !important;
   }
 }

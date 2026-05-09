@@ -109,6 +109,17 @@ export async function resolvePlatformTreasuryDestination(
   return null;
 }
 
+export async function requirePlatformTreasuryDestination(
+  chain: PlatformTreasuryChain,
+  context: string
+): Promise<PlatformTreasuryDestination> {
+  const destination = await resolvePlatformTreasuryDestination(chain);
+  if (!destination) {
+    throw new Error(`platform_treasury_destination_missing:${context}:${chain}`);
+  }
+  return destination;
+}
+
 /**
  * Resolve the platform treasury for a tenant. Reads `Tenant.primaryChain`
  * to pick between Arc and Solana. Use this from settle paths that need

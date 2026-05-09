@@ -247,7 +247,14 @@ export interface ConfirmBookingDeps {
       externalId: string;
       metadata: Record<string, unknown> | null;
     };
-    tenant: { id: string; clerkOrgId: string | null };
+    tenant: {
+      id: string;
+      clerkOrgId: string | null;
+      /** Chain discriminator: 'arc' = EVM commitBookingV2 path,
+       *  'sol' = Anchor commit_booking ix path. Read from
+       *  Tenant.primaryChain at confirm-time; defaults to 'arc'. */
+      primaryChain: 'arc' | 'sol';
+    };
     policy: {
       version: number;
       markupConfig: MarkupConfig;
@@ -378,7 +385,14 @@ export function dbDependencies(): ConfirmBookingDeps {
           externalId: booking.externalId ?? '',
           metadata: (booking.metadata as Record<string, unknown> | null) ?? null,
         },
-        tenant: { id: booking.tenant.id, clerkOrgId: booking.tenant.clerkOrgId ?? null },
+        tenant: {
+          id: booking.tenant.id,
+          clerkOrgId: booking.tenant.clerkOrgId ?? null,
+          primaryChain:
+            (booking.tenant as { primaryChain?: string | null }).primaryChain === 'sol'
+              ? 'sol'
+              : 'arc',
+        },
         policy: {
           version: policy.version,
           markupConfig: policy.markupConfig as MarkupConfig,
@@ -490,6 +504,10 @@ const confirmBookingInput = z.object({
   itineraryCID: z.string().default('').describe('Optional IPFS CID for the itinerary plaintext.'),
   // Vendor payout address (supplier's on-chain wallet).
   vendorAddress: hex20,
+  // Solana-only: vendor's Solana pubkey (base58). Required when
+  // tenant.primaryChain === 'sol' since Anchor commit_booking encodes
+  // vendor as a Pubkey, not an EVM hex address.
+  vendorSolanaAddress: z.string().optional(),
   // Escrow override for tests / multi-env deploys.
   escrowAddress: hex20.optional(),
   // ── Caller context (set server-side, not by the LLM) ──
@@ -538,7 +556,7 @@ const confirmBookingInput = z.object({
 
 export type ConfirmBookingInput = z.infer<typeof confirmBookingInput>;
 
-export interface ConfirmBookingOutput {
+export interface ConfirmBookingOutputBase {
   bookingId: string;
   breakdown: {
     costMicroUsdc: string;
@@ -555,9 +573,27 @@ export interface ConfirmBookingOutput {
     version: number;
     senderoTakeBehavior: 'add_to_customer' | 'deduct_from_markup';
   };
-  onchainCall: { to: string; data: string; value: string };
   meter: { priceMicroUsdc: string };
 }
+
+export type ConfirmBookingOutput =
+  | (ConfirmBookingOutputBase & {
+      chain: 'arc';
+      onchainCall: { to: string; data: string; value: string };
+    })
+  | (ConfirmBookingOutputBase & {
+      chain: 'sol';
+      programId: string;
+      onchainInstructions: Array<{
+        programId: string;
+        accounts: Array<{ pubkey: string; isSigner: boolean; isWritable: boolean }>;
+        data: string;
+      }>;
+      /** Solana commit_booking takes a single quoted price (cost + fee).
+       *  The agency markup is settled separately at `settle_booking`
+       *  time via the trip-vault sweep, not in the commit ix. */
+      note: string;
+    });
 
 function resolveEscrow(override?: string | null): Address {
   const addr =
@@ -730,23 +766,88 @@ export async function runConfirmBooking(
     ...(payerType ? { provisionedBy: payerType } : {}),
   });
 
-  // Encode commitBookingV2. Three amounts, three recipients (vendor +
-  // agency + operator-via-fee).
-  const escrow = resolveEscrow(input.escrowAddress);
-  const data = encodeFunctionData({
-    abi: SENDERO_GUEST_ESCROW_ABI,
-    functionName: 'commitBookingV2',
-    args: [
-      input.bookingId as Hex,
-      breakdown.costMicroUsdc, // vendorAmount
-      breakdown.senderoTakeMicroUsdc, // feeAmount
-      breakdown.markupMicroUsdc, // agencyAmount
-      input.vendorAddress as Address,
-      ctx.agencyAddress,
-      input.itineraryHash as Hex,
-      input.itineraryCID,
-    ],
-  });
+  // Encode the commit. Branches on tenant.primaryChain — Arc emits
+  // commitBookingV2 (three amounts, three recipients); Solana emits the
+  // Anchor commit_booking ix taking (vendor_amount, fee_amount, vendor).
+  // The agency markup leg is settled separately at settle_booking time
+  // on Solana (the program doesn't have a v2 commit with three amounts).
+  let solanaEncoded: {
+    programId: string;
+    instructions: ConfirmBookingOutput extends { onchainInstructions: infer I } ? I : never;
+  } | null = null;
+  let arcEncoded: { to: string; data: string; value: string } | null = null;
+
+  if (ctx.tenant.primaryChain === 'sol') {
+    const [{ PublicKey }, { buildCommitBookingIx, SENDERO_GUEST_ESCROW_PROGRAM_ID }, bs58Mod] =
+      await Promise.all([
+        import('@solana/web3.js'),
+        import('@sendero/guest/solana'),
+        import('bs58'),
+      ]);
+    const bs58 = bs58Mod.default;
+    const operatorEnv = process.env.SENDERO_SOLANA_OPERATOR_ADDRESS;
+    if (!operatorEnv) {
+      throw new Error('confirm_booking(sol): SENDERO_SOLANA_OPERATOR_ADDRESS env var not set');
+    }
+    const operator = new PublicKey(operatorEnv);
+    const tripIdHex = (input.tripId ?? '').replace(/^0x/, '');
+    if (tripIdHex.length !== 64) {
+      throw new Error(
+        'confirm_booking(sol): tripId is required (hex32) for trip-PDA derivation on Solana'
+      );
+    }
+    const tripIdBytes = new Uint8Array(Buffer.from(tripIdHex, 'hex'));
+    const bookingIdBytes = new Uint8Array(Buffer.from(input.bookingId.slice(2), 'hex'));
+    // input.vendorAddress is hex20 (EVM); on Solana the agent must
+    // pass a Solana pubkey via input.vendorSolanaAddress. Without it
+    // we have no recipient for the vendor leg at settle time.
+    const vendorSolanaB58 = (input as { vendorSolanaAddress?: string }).vendorSolanaAddress;
+    if (!vendorSolanaB58) {
+      throw new Error(
+        'confirm_booking(sol): vendorSolanaAddress required — Solana commit_booking encodes vendor as a Pubkey, not an EVM address'
+      );
+    }
+    const ix = buildCommitBookingIx({
+      operator,
+      tripId: tripIdBytes,
+      bookingId: bookingIdBytes,
+      vendorAmount: breakdown.costMicroUsdc,
+      feeAmount: breakdown.senderoTakeMicroUsdc,
+      vendor: new PublicKey(vendorSolanaB58),
+    });
+    solanaEncoded = {
+      programId: SENDERO_GUEST_ESCROW_PROGRAM_ID.toBase58(),
+      instructions: [
+        {
+          programId: ix.programId.toBase58(),
+          accounts: ix.keys.map(k => ({
+            pubkey: k.pubkey.toBase58(),
+            isSigner: k.isSigner,
+            isWritable: k.isWritable,
+          })),
+          data: Buffer.from(ix.data).toString('base64'),
+        },
+      ] as never,
+    };
+    void bs58;
+  } else {
+    const escrow = resolveEscrow(input.escrowAddress);
+    const data = encodeFunctionData({
+      abi: SENDERO_GUEST_ESCROW_ABI,
+      functionName: 'commitBookingV2',
+      args: [
+        input.bookingId as Hex,
+        breakdown.costMicroUsdc, // vendorAmount
+        breakdown.senderoTakeMicroUsdc, // feeAmount
+        breakdown.markupMicroUsdc, // agencyAmount
+        input.vendorAddress as Address,
+        ctx.agencyAddress,
+        input.itineraryHash as Hex,
+        input.itineraryCID,
+      ],
+    });
+    arcEncoded = { to: escrow, data, value: '0' };
+  }
 
   // Meter — Sendero take + per-call x402 fee. Sandbox / testnet-beta
   // routes to `status: 'sandbox'` so `NanopayBatch` skips it; production
@@ -778,7 +879,7 @@ export async function runConfirmBooking(
       : {}),
   });
 
-  return {
+  const baseOutput: ConfirmBookingOutputBase = {
     bookingId: ctx.booking.id,
     breakdown: {
       costMicroUsdc: breakdown.costMicroUsdc.toString(),
@@ -795,8 +896,28 @@ export async function runConfirmBooking(
       version: snapshot.policyVersion,
       senderoTakeBehavior: snapshot.senderoTakeBehavior,
     },
-    onchainCall: { to: escrow, data, value: '0' },
     meter: { priceMicroUsdc: meterMicro.toString() },
+  };
+
+  if (solanaEncoded) {
+    return {
+      ...baseOutput,
+      chain: 'sol',
+      programId: solanaEncoded.programId,
+      onchainInstructions: solanaEncoded.instructions as never,
+      note:
+        'Submit via the Sendero Solana operator wallet. Agency markup leg ' +
+        '(breakdown.markupMicroUsdc) settles separately at settle_booking ' +
+        'time — Solana commit_booking takes a single quoted price.',
+    };
+  }
+  if (!arcEncoded) {
+    throw new Error('confirm_booking: encoder produced no output (chain branch escaped)');
+  }
+  return {
+    ...baseOutput,
+    chain: 'arc',
+    onchainCall: arcEncoded,
   };
 }
 

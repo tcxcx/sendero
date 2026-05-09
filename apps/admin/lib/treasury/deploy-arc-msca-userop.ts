@@ -33,14 +33,13 @@ import { createPublicClient, http, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arcTestnet } from 'viem/chains';
 import { createBundlerClient } from 'viem/account-abstraction';
-import {
-  toCircleSmartAccount,
-  toModularTransport,
-} from '@circle-fin/modular-wallets-core';
+import { toCircleSmartAccount, toModularTransport } from '@circle-fin/modular-wallets-core';
 
 import { prisma } from '@sendero/database';
 
 import { requirePlatformRole } from '@/lib/access';
+import { createArcUserOperationFeesEstimator } from '@/lib/treasury/arc-userop-fees';
+import { ensureCircleServerRuntime } from '@/lib/treasury/circle-server-runtime';
 
 export interface DeployArcMscaInput {
   treasuryId: string;
@@ -57,12 +56,9 @@ export type DeployArcMscaResult =
     }
   | { ok: false; error: string };
 
-const ARC_MIN_PRIORITY_FEE_PER_GAS = 1_000_000_000n;
 const DEFAULT_CIRCLE_CLIENT_URL = 'https://modular-sdk.circle.com/v1/rpc/w3s/buidl';
 
-export async function deployArcMscaUserOp(
-  input: DeployArcMscaInput
-): Promise<DeployArcMscaResult> {
+export async function deployArcMscaUserOp(input: DeployArcMscaInput): Promise<DeployArcMscaResult> {
   const guard = await requirePlatformRole(['superadmin']);
   if (!guard.ok) {
     return { ok: false, error: 'Not authorized — superadmin only.' };
@@ -98,8 +94,7 @@ export async function deployArcMscaUserOp(
     };
   }
   const clientKey =
-    process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY ??
-    process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_KEY;
+    process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY ?? process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_KEY;
   if (!clientKey) {
     return {
       ok: false,
@@ -114,10 +109,11 @@ export async function deployArcMscaUserOp(
   const rpcUrl = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
 
   const owner = privateKeyToAccount(bootstrapPrivateKey);
+  ensureCircleServerRuntime();
   const modular = toModularTransport(`${clientUrl}/arcTestnet`, clientKey);
   const publicClient = createPublicClient({
     chain: arcTestnet,
-    transport: modular,
+    transport: http(rpcUrl),
   });
 
   let account: Awaited<ReturnType<typeof toCircleSmartAccount>>;
@@ -169,13 +165,7 @@ export async function deployArcMscaUserOp(
     transport: modular,
     paymaster: true,
     userOperation: {
-      // Arc Testnet bundler precheck: maxPriorityFeePerGas >= 1 gwei.
-      // viem's default estimate returns sub-gwei values that get
-      // rejected. Override to the chain's documented floor.
-      estimateFeesPerGas: async () => ({
-        maxFeePerGas: ARC_MIN_PRIORITY_FEE_PER_GAS * 2n,
-        maxPriorityFeePerGas: ARC_MIN_PRIORITY_FEE_PER_GAS,
-      }),
+      estimateFeesPerGas: createArcUserOperationFeesEstimator(publicClient),
     },
   });
 

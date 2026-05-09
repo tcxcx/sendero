@@ -25,23 +25,17 @@
  * on success. Re-running on an installed row returns immediately.
  */
 
-import {
-  createPublicClient,
-  encodeFunctionData,
-  type Address,
-  type Hex,
-} from 'viem';
+import { createPublicClient, encodeFunctionData, http, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arcTestnet } from 'viem/chains';
 import { createBundlerClient } from 'viem/account-abstraction';
-import {
-  toCircleSmartAccount,
-  toModularTransport,
-} from '@circle-fin/modular-wallets-core';
+import { toCircleSmartAccount, toModularTransport } from '@circle-fin/modular-wallets-core';
 
 import { prisma } from '@sendero/database';
 
 import { requirePlatformRole } from '@/lib/access';
+import { createArcUserOperationFeesEstimator } from '@/lib/treasury/arc-userop-fees';
+import { ensureCircleServerRuntime } from '@/lib/treasury/circle-server-runtime';
 
 export interface InstallArcMultisigInput {
   treasuryId: string;
@@ -58,7 +52,6 @@ export type InstallArcMultisigResult =
     }
   | { ok: false; error: string };
 
-const ARC_MIN_PRIORITY_FEE_PER_GAS = 1_000_000_000n;
 const DEFAULT_CIRCLE_CLIENT_URL = 'https://modular-sdk.circle.com/v1/rpc/w3s/buidl';
 
 // Same ABI shape as `@sendero/multisig`'s userop-builder. Inlined
@@ -140,8 +133,7 @@ export async function installArcMultisig(
     };
   }
   const clientKey =
-    process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY ??
-    process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_KEY;
+    process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY ?? process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_KEY;
   if (!clientKey) {
     return { ok: false, error: 'NEXT_PUBLIC_CIRCLE_CLIENT_KEY required.' };
   }
@@ -149,10 +141,12 @@ export async function installArcMultisig(
     process.env.NEXT_PUBLIC_CIRCLE_CLIENT_URL ??
     process.env.NEXT_PUBLIC_CIRCLE_MODULAR_CLIENT_URL ??
     DEFAULT_CIRCLE_CLIENT_URL;
+  const rpcUrl = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
 
   const owner = privateKeyToAccount(bootstrapPrivateKey);
+  ensureCircleServerRuntime();
   const modular = toModularTransport(`${clientUrl}/arcTestnet`, clientKey);
-  const publicClient = createPublicClient({ chain: arcTestnet, transport: modular });
+  const publicClient = createPublicClient({ chain: arcTestnet, transport: http(rpcUrl) });
 
   const account = await toCircleSmartAccount({
     client: publicClient,
@@ -180,13 +174,7 @@ export async function installArcMultisig(
   const installCallData = encodeFunctionData({
     abi: UPDATE_MULTISIG_WEIGHTS_ABI,
     functionName: 'updateMultisigWeights',
-    args: [
-      members,
-      weights,
-      [],
-      [],
-      BigInt(treasury.threshold),
-    ],
+    args: [members, weights, [], [], BigInt(treasury.threshold)],
   });
 
   const bundlerClient = createBundlerClient({
@@ -194,10 +182,7 @@ export async function installArcMultisig(
     transport: modular,
     paymaster: true,
     userOperation: {
-      estimateFeesPerGas: async () => ({
-        maxFeePerGas: ARC_MIN_PRIORITY_FEE_PER_GAS * 2n,
-        maxPriorityFeePerGas: ARC_MIN_PRIORITY_FEE_PER_GAS,
-      }),
+      estimateFeesPerGas: createArcUserOperationFeesEstimator(publicClient),
     },
   });
 

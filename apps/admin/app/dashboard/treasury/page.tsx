@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 
-import { CheckCircle2, CircleDashed, Landmark } from 'lucide-react';
+import { CheckCircle2, CircleDashed, ExternalLink, Landmark, ScanLine } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -80,6 +81,15 @@ export default async function TreasuryPage() {
         {sol ? <SolanaTreasuryCard treasury={sol} /> : <SolanaProvisionCard />}
         {arc ? <ArcTreasuryCard treasury={arc} /> : <ArcProvisionCard />}
       </div>
+
+      <Link
+        href="/dashboard/contracts"
+        className="inline-flex items-center gap-2 self-start rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/40 px-3 py-2 text-sm font-medium hover:bg-[color:var(--color-secondary)]"
+      >
+        <ScanLine className="h-4 w-4" />
+        Audit deployed contracts
+        <ExternalLink className="h-3.5 w-3.5 opacity-60" />
+      </Link>
     </div>
   );
 }
