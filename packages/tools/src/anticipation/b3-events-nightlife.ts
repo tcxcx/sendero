@@ -764,7 +764,6 @@ async function runLastMinuteTicketsFinder(
 const lastMinuteTicketsFinderTool: ToolDef<LastMinuteInput, EventListResult> = {
   name: 'last_minute_tickets_finder',
   internal: true,
-  experimental: true,
   description:
     'Find events with available tickets in the next N hours (default 24). Composes `mainstream_event_discovery` with a tight time window + on-sale filter. Use when traveler asks "tonight\'s events <city>", "last-minute tickets", "tickets tonight <city>".',
   inputSchema: lastMinuteInput,
