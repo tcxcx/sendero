@@ -195,7 +195,6 @@ const YOGA_TYPES = new Set(['yoga_studio', 'gym', 'fitness_center', 'health_club
 const yogaPilatesClassFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'yoga_pilates_class_finder',
   internal: true,
-  experimental: true,
   description:
     'Find drop-in yoga + pilates + wellness classes. Composes ClassPass / Mindbody + Yoga Journal editorial with Places. Use when traveler asks "yoga class <city>", "pilates drop-in", "wellness studio", "clase de yoga <ciudad>".',
   inputSchema: baseInput,

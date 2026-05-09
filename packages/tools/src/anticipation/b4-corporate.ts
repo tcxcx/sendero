@@ -1068,7 +1068,6 @@ async function runCorporateTravelRiskDigest(
 const corporateTravelRiskDigestTool: ToolDef = {
   name: 'corporate_travel_risk_digest',
   internal: true,
-  experimental: true,
   description:
     'Daily risk digest for travel teams — top 3-5 specific risks (protests, strikes, weather, security advisories, transit) + official advisory level + recommendations. Vertex-grounded research with Gateway fallback. Compose with `crowd_level_predictor` for full city-pulse picture.',
   inputSchema: riskDigestInput,
