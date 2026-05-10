@@ -26,10 +26,22 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { type Prisma, prisma } from '@sendero/database';
 import { env } from '@sendero/env';
-import { KapsoClient, parseProjectEvent, verifyKapsoSignature } from '@sendero/kapso';
+import {
+  KapsoClient,
+  parseProjectEvent,
+  type ParsedKapsoProjectEvent,
+  type ParsedMessageReceivedEvent,
+  verifyKapsoSignature,
+} from '@sendero/kapso';
 import { notifyOperatorHandoff, roomIdForSupportCase } from '@sendero/collaboration/server';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
+import {
+  appendTripEvent,
+  newTripEventId,
+  resolveActiveTripForChannelIdentity,
+} from '@/lib/trip-events';
+import { notifyTripEvent } from '@/lib/trip-events-notify';
 import { webhookEventStore } from '@/lib/webhook-events';
 import { ensureTenantWhatsAppFlows } from '@/lib/whatsapp-flow-registry';
 import { isMetaMockPhoneNumber, META_MOCK_PHONE_NUMBER_MESSAGE } from '@/lib/whatsapp-mock-number';
@@ -69,11 +81,15 @@ export async function POST(req: NextRequest) {
 
   // Per-event-kind dedup id. `phone_number.created` keys on
   // `(customerId, phoneNumberId)`; workflow events key on
-  // `(executionId, phoneNumberId)` so retries collapse cleanly.
+  // `(executionId, phoneNumberId)`; message-received uses the wamid
+  // (Meta's authoritative dedup key for the inbound message). All so
+  // retries collapse cleanly.
   const externalId =
     event.kind === 'phone_number.created'
       ? `${event.kind}:${event.customerId}:${event.phoneNumberId}`
-      : `${event.kind}:${event.executionId ?? 'noid'}:${event.phoneNumberId ?? 'nophone'}`;
+      : isKapsoMessageEvent(event)
+        ? `${event.kind}:${event.wamid ?? event.customerPhone ?? 'noid'}`
+        : `${event.kind}:${event.executionId ?? 'noid'}:${event.phoneNumberId ?? 'nophone'}`;
   const result = await processDurableWebhook({
     provider: 'kapso',
     externalId,
@@ -105,14 +121,19 @@ interface DispatchResult {
   tenantId?: string;
 }
 
-async function dispatchKapsoEvent(
-  event: import('@sendero/kapso').ParsedKapsoProjectEvent
-): Promise<DispatchResult> {
+function isKapsoMessageEvent(event: ParsedKapsoProjectEvent): event is ParsedMessageReceivedEvent {
+  return event.kind === 'whatsapp.message.received' || event.kind === 'whatsapp.message.sent';
+}
+
+async function dispatchKapsoEvent(event: ParsedKapsoProjectEvent): Promise<DispatchResult> {
   if (event.kind === 'workflow.execution.handoff') {
     return dispatchWorkflowHandoff(event);
   }
   if (event.kind === 'workflow.execution.failed') {
     return dispatchWorkflowFailed(event);
+  }
+  if (isKapsoMessageEvent(event)) {
+    return dispatchMessageReceived(event);
   }
   return dispatchPhoneNumberCreated(event);
 }
@@ -517,4 +538,151 @@ async function dispatchWorkflowFailed(event: {
   // Future: persist to a `WorkflowExecutionFailure` table for the ops
   // dashboard digest. For now the warn line lets operators grep logs.
   return { matched: true, tenantId: install.tenantId };
+}
+
+/**
+ * `whatsapp.message.received` — inbound traveler message lands on a
+ * Kapso-managed WhatsApp number. Sendero appends an `inbox_reply`
+ * event with `direction: 'inbound'` to the active trip's ledger so
+ * the operator console's `@conversation` pane shows both sides of
+ * the conversation. Without this handler, only outbound writes
+ * (operator-typed + agent welcomes) would surface.
+ *
+ * Resolution chain:
+ *   phoneNumberId → WhatsAppInstall → tenantId
+ *   customerPhone → ChannelIdentity (kind='whatsapp') in tenant
+ *   ChannelIdentity → active Trip (most recent, non-terminal)
+ *
+ * If any link is missing, we still return matched:true (so the dedup
+ * row is recorded) but skip the ledger write. Caller log lines tell
+ * ops which step short-circuited.
+ */
+async function dispatchMessageReceived(event: {
+  kind: 'whatsapp.message.received' | 'whatsapp.message.sent';
+  direction: 'inbound' | 'outbound';
+  phoneNumberId: string | null;
+  customerId: string | null;
+  customerPhone: string | null;
+  conversationId: string | null;
+  wamid: string | null;
+  messageType: string | null;
+  text: string | null;
+  timestamp: number | null;
+}): Promise<DispatchResult> {
+  if (!event.phoneNumberId) {
+    console.warn('[webhooks/kapso] message.received missing phoneNumberId', { event });
+    return { matched: false };
+  }
+  const install = await prisma.whatsAppInstall.findFirst({
+    where: { phoneNumberId: event.phoneNumberId, status: 'active' },
+    select: { tenantId: true },
+  });
+  if (!install) {
+    console.warn('[webhooks/kapso] message.received no active install', {
+      phoneNumberId: event.phoneNumberId,
+    });
+    return { matched: false };
+  }
+  const tenantId = install.tenantId;
+
+  if (!event.customerPhone) {
+    console.warn('[webhooks/kapso] message.received missing customerPhone — skipping trip write', {
+      tenantId,
+      phoneNumberId: event.phoneNumberId,
+    });
+    return { matched: true, tenantId };
+  }
+
+  // Resolve the WhatsApp ChannelIdentity for this traveler in this
+  // tenant. Match on `externalUserId` (E.164) — the canonical key for
+  // pre-BSUID identities. If not found, the traveler isn't onboarded
+  // yet; record matched:true so dedup sticks but skip the ledger write.
+  const ci = await prisma.channelIdentity.findFirst({
+    where: {
+      tenantId,
+      kind: 'whatsapp',
+      OR: [
+        { externalUserId: event.customerPhone },
+        { externalUserId: event.customerPhone.replace(/^\+/, '') },
+      ],
+    },
+    select: { id: true },
+  });
+  if (!ci) {
+    console.warn('[webhooks/kapso] message.received no channel identity', {
+      tenantId,
+      customerPhone: event.customerPhone,
+    });
+    return { matched: true, tenantId };
+  }
+
+  const tripId = await resolveActiveTripForChannelIdentity({
+    tenantId,
+    channelIdentityId: ci.id,
+  });
+  if (!tripId) {
+    console.warn('[webhooks/kapso] message.received no active trip', {
+      tenantId,
+      channelIdentityId: ci.id,
+    });
+    return { matched: true, tenantId };
+  }
+
+  // Build the inbox_reply event. Non-text messages (image, location,
+  // etc.) get a placeholder body + `messageType` so future renderers
+  // can branch. wamid is Meta's authoritative dedup key — we already
+  // used it for `processDurableWebhook` upstream, so a duplicate
+  // delivery never reaches this point.
+  const createdAt =
+    event.timestamp && event.timestamp > 0
+      ? new Date(event.timestamp * 1000).toISOString()
+      : new Date().toISOString();
+  const body = event.text ?? `[${event.messageType ?? 'non-text'} message]`;
+  const eventId = event.wamid ?? newTripEventId('inbox');
+  const direction = event.direction === 'outbound' ? 'outbound' : 'inbound';
+  const appended = await appendTripEvent({
+    tripId,
+    tenantId,
+    event: {
+      id: eventId,
+      kind: direction === 'outbound' ? 'agent_reply' : 'inbox_reply',
+      direction,
+      channel: 'whatsapp',
+      createdAt,
+      text: body,
+      author: {
+        kind: direction === 'outbound' ? 'agent' : 'traveler',
+        ...(direction === 'inbound' ? { waId: event.customerPhone } : {}),
+      },
+      ...(event.wamid ? { wamid: event.wamid } : {}),
+      ...(event.messageType ? { messageType: event.messageType } : {}),
+    },
+  });
+  if (!appended) {
+    console.warn('[webhooks/kapso] message.received append failed', {
+      tenantId,
+      tripId,
+      wamid: event.wamid,
+    });
+    return { matched: true, tenantId };
+  }
+
+  // Realtime fanout — same path as outbound writes. Lets the
+  // `@conversation` pane's SSE pick up the new message without
+  // refresh.
+  await notifyTripEvent({
+    tenantId,
+    tripId,
+    entry: {
+      id: eventId,
+      kind: direction === 'outbound' ? 'agent_reply' : 'inbox_reply',
+      direction,
+      channel: 'whatsapp',
+      createdAt,
+    },
+  }).catch(() => {
+    /* fail-soft — the row is in DB; SSE will replay on reconnect */
+  });
+
+  return { matched: true, tenantId };
 }

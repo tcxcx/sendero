@@ -54,6 +54,131 @@ describe('parseProjectEvent', () => {
     expect(event?.verifiedName).toBe('Sendero Travel');
   });
 
+  it('extracts root v2 whatsapp.message.received payload fields', () => {
+    const event = parseProjectEvent({
+      message: {
+        id: 'wamid.123',
+        timestamp: '1730092800',
+        type: 'text',
+        text: { body: 'Hello' },
+        kapso: {
+          direction: 'inbound',
+          status: 'received',
+          content: 'Hello',
+        },
+      },
+      conversation: {
+        id: 'conv_123',
+        phone_number: '+15551234567',
+        phone_number_id: '123456789012345',
+      },
+      is_new_conversation: true,
+      phone_number_id: '123456789012345',
+    });
+
+    expect(event).toEqual({
+      kind: 'whatsapp.message.received',
+      direction: 'inbound',
+      phoneNumberId: '123456789012345',
+      customerId: null,
+      customerPhone: '+15551234567',
+      conversationId: 'conv_123',
+      wamid: 'wamid.123',
+      messageType: 'text',
+      text: 'Hello',
+      timestamp: 1730092800,
+    });
+  });
+
+  it('extracts buffered v2 whatsapp.message.received payload fields', () => {
+    const event = parseProjectEvent({
+      type: 'whatsapp.message.received',
+      data: [
+        {
+          message: {
+            id: 'wamid.outbound',
+            timestamp: '1730092799',
+            type: 'text',
+            text: { body: 'Bot echo' },
+            kapso: { direction: 'outbound', content: 'Bot echo' },
+          },
+          conversation: {
+            id: 'conv_123',
+            phone_number: '15551234567',
+            phone_number_id: '123456789012345',
+          },
+          phone_number_id: '123456789012345',
+        },
+        {
+          message: {
+            id: 'wamid.inbound',
+            timestamp: '1730092800',
+            type: 'text',
+            text: { body: 'Buffered hello' },
+            kapso: { direction: 'inbound', content: 'Buffered hello' },
+          },
+          conversation: {
+            id: 'conv_123',
+            phone_number: '+15551234567',
+            phone_number_id: '123456789012345',
+          },
+          phone_number_id: '123456789012345',
+        },
+      ],
+    });
+
+    expect(event).toEqual({
+      kind: 'whatsapp.message.received',
+      direction: 'inbound',
+      phoneNumberId: '123456789012345',
+      customerId: null,
+      customerPhone: '+15551234567',
+      conversationId: 'conv_123',
+      wamid: 'wamid.inbound',
+      messageType: 'text',
+      text: 'Buffered hello',
+      timestamp: 1730092800,
+    });
+  });
+
+  it('extracts outbound v2 whatsapp.message.sent payload fields', () => {
+    const event = parseProjectEvent({
+      type: 'whatsapp.message.sent',
+      data: {
+        message: {
+          id: 'wamid.sent',
+          timestamp: '1730092860',
+          type: 'text',
+          text: { body: 'On my way' },
+          kapso: {
+            direction: 'outbound',
+            status: 'sent',
+            content: 'On my way',
+          },
+        },
+        conversation: {
+          id: 'conv_123',
+          phone_number: '15551234567',
+          phone_number_id: '123456789012345',
+        },
+        phone_number_id: '123456789012345',
+      },
+    });
+
+    expect(event).toEqual({
+      kind: 'whatsapp.message.sent',
+      direction: 'outbound',
+      phoneNumberId: '123456789012345',
+      customerId: null,
+      customerPhone: '+15551234567',
+      conversationId: 'conv_123',
+      wamid: 'wamid.sent',
+      messageType: 'text',
+      text: 'On my way',
+      timestamp: 1730092860,
+    });
+  });
+
   it('returns null for unknown events', () => {
     const event = parseProjectEvent({ type: 'whatsapp.something_else', data: {} });
     expect(event).toBeNull();

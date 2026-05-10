@@ -329,3 +329,96 @@ export const WorkflowFailedEvent = z.object({
     .passthrough(),
 });
 export type WorkflowFailedEvent = z.infer<typeof WorkflowFailedEvent>;
+
+/**
+ * `whatsapp.message.received` — fired when an inbound traveler message
+ * arrives on a Kapso-managed WhatsApp number. Sendero subscribes so the
+ * trip ledger captures the inbound side of the conversation (without
+ * this, only outbound messages — which Sendero writes itself — surface
+ * in the operator console).
+ *
+ * The payload nests Meta's raw message envelope under `data.message` —
+ * we project only what the trip ledger needs (wamid, text body, type,
+ * timestamp). Other fields (image, location, etc.) are passthrough'd so
+ * future handlers can branch on `type`.
+ */
+export const MessageReceivedEvent = z.object({
+  type: z.literal('whatsapp.message.received'),
+  data: z
+    .object({
+      phone_number_id: z.string().optional(),
+      customer_id: z.string().optional(),
+      customer_phone: z.string().optional(),
+      customer_phone_number: z.string().optional(),
+      conversation_id: z.string().optional(),
+      whatsapp_conversation_id: z.string().optional(),
+      message: z
+        .object({
+          id: z.string().optional(),
+          wamid: z.string().optional(),
+          type: z.string().optional(),
+          timestamp: z.union([z.string(), z.number()]).optional(),
+          text: z
+            .object({
+              body: z.string().optional(),
+            })
+            .passthrough()
+            .optional(),
+          body: z.string().optional(),
+        })
+        .passthrough()
+        .optional(),
+      // Some Kapso payloads flatten `text`/`body` to the top level
+      // instead of nesting under `message`. Tolerate both.
+      text: z
+        .object({
+          body: z.string().optional(),
+        })
+        .passthrough()
+        .optional(),
+      body: z.string().optional(),
+      message_id: z.string().optional(),
+      wamid: z.string().optional(),
+      message_type: z.string().optional(),
+    })
+    .passthrough(),
+});
+export type MessageReceivedEvent = z.infer<typeof MessageReceivedEvent>;
+
+export const MessageReceivedV2Event = z
+  .object({
+    phone_number_id: z.string().optional(),
+    message: z
+      .object({
+        id: z.string().optional(),
+        wamid: z.string().optional(),
+        type: z.string().optional(),
+        timestamp: z.union([z.string(), z.number()]).optional(),
+        text: z
+          .object({
+            body: z.string().optional(),
+          })
+          .passthrough()
+          .optional(),
+        body: z.string().optional(),
+        kapso: z
+          .object({
+            content: z.string().optional(),
+            direction: z.string().optional(),
+          })
+          .passthrough()
+          .optional(),
+      })
+      .passthrough(),
+    conversation: z
+      .object({
+        id: z.string().optional(),
+        phone_number: z.string().optional(),
+        phone_number_id: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    is_new_conversation: z.boolean().optional(),
+  })
+  .passthrough();
+export type MessageReceivedV2Event = z.infer<typeof MessageReceivedV2Event>;
