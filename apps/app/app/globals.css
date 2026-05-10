@@ -2657,12 +2657,21 @@ hr.rule {
   --breakpoint-lg: 64rem;
   --breakpoint-xl: 80rem;
   --breakpoint-2xl: 96rem;
+  --animate-orbit: orbit calc(var(--duration)*1s) linear infinite;
+  @keyframes orbit {
+  0% {
+    transform: rotate(calc(var(--angle) * 1deg)) translateY(calc(var(--radius) * 1px)) rotate(calc(var(--angle) * -1deg));
+    }
+  100% {
+    transform: rotate(calc(var(--angle) * 1deg + 360deg)) translateY(calc(var(--radius) * 1px)) rotate(calc((var(--angle) * -1deg) - 360deg));
+    }
+  }
 }
 
 /* =====================================================
    Dialog controls (Deposit · Send · Swap · Bridge)
    Shared `dlg-*` classes consumed by all treasury dialogs.
-   Previously lived in <style jsx global> but Turbopack's
+   Previously lived in \3c style jsx global> but Turbopack's
    SWC plugin does not inline variable template literals
    into the styled-jsx output — the rules never landed in
    the DOM. Hoisted here so every dialog gets them for free

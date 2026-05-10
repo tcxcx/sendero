@@ -2,15 +2,17 @@
  * POST /api/dev/complete-org-provisioning
  *
  * Local development only. Mirrors the `organization.created` Clerk webhook
- * path when Clerk cannot reach localhost (no tunnel on /api/webhooks/clerk).
- * Branches on `tenant.primaryChain`:
- *   - 'arc' → provisionTenantWallet (Circle MSCA on Arc)
- *   - 'sol' → provisionTenantSolanaTreasury (Squads V4 + DCWs) + ensureOrgIdentity
+ * path when Clerk cannot reach localhost (no tunnel on /api/webhooks/clerk),
+ * AND serves as the deploy endpoint for the chain-select onboarding step.
  *
- * The Tenant row's primaryChain is whatever the upsert wrote — for orgs
- * coming through the Clerk OrganizationList path (no chain selector), it
- * defaults to 'arc'. To exercise the Solana branch in dev, set the row's
- * primaryChain to 'sol' first via psql or a server action.
+ * Body: `{ primaryChain?: 'sol' | 'arc' }` — optional, defaults to 'sol'
+ * (per the onboarding spec — Sendero is Solana-first now). The Tenant row
+ * is upserted with the chosen chain BEFORE branching, so the user's
+ * selection is what drives provisioning regardless of any prior default.
+ *
+ * Branches on `tenant.primaryChain` (post-upsert):
+ *   - 'arc' → provisionTenantWallet (Circle MSCA on Arc) + ensureOrgIdentity
+ *   - 'sol' → provisionTenantSolanaTreasury (Squads V4 + DCWs) + ensureOrgIdentity
  */
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { provisionTenantWallet } from '@sendero/circle';
@@ -22,7 +24,15 @@ import { type NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(_req: NextRequest) {
+function parsePrimaryChain(input: unknown): 'sol' | 'arc' {
+  if (typeof input === 'string') {
+    if (input === 'sol' || input === 'arc') return input;
+  }
+  // Spec default: Solana-first onboarding.
+  return 'sol';
+}
+
+export async function POST(req: NextRequest) {
   if (process.env.NODE_ENV === 'production') {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
@@ -32,11 +42,27 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  // Body is optional — legacy callers (the old "Run provisioning without
+  // webhook" button) don't send one. Defaults to 'sol' so the chain-select
+  // flow's Solana-first default holds even if the client races the body.
+  let body: unknown = null;
+  try {
+    body = await req.json();
+  } catch {
+    body = null;
+  }
+  const primaryChain = parsePrimaryChain(
+    (body as { primaryChain?: unknown } | null)?.primaryChain
+  );
+
   const client = await clerkClient();
   const org = await client.organizations.getOrganization({ organizationId: orgId });
   const name = org.name;
   const slug = org.slug ?? orgId;
 
+  // Upsert with the chosen primaryChain on BOTH create and update, so a
+  // user who previously hit the page (defaulting to arc) and now picks
+  // sol gets their Tenant row flipped before provisioning fires.
   const tenant = await prisma.tenant.upsert({
     where: { clerkOrgId: orgId },
     create: {
@@ -44,8 +70,9 @@ export async function POST(_req: NextRequest) {
       slug,
       displayName: name,
       billingTier: 'free',
+      primaryChain,
     },
-    update: { slug, displayName: name },
+    update: { slug, displayName: name, primaryChain },
   });
 
   if (tenant.primaryChain === 'sol') {
@@ -95,6 +122,17 @@ export async function POST(_req: NextRequest) {
     tenantId: tenant.id,
     clerkOrgId: orgId,
   });
+
+  // Best-effort identity intent for Arc parity. Failure is non-fatal —
+  // the retry-identity-provision sweeper picks pending rows up.
+  try {
+    await ensureOrgIdentity({ tenantId: tenant.id });
+  } catch (err) {
+    console.warn('[dev/complete-org-provisioning] arc identity failed (non-fatal)', {
+      tenantId: tenant.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   await client.organizations.updateOrganization(orgId, {
     publicMetadata: {
