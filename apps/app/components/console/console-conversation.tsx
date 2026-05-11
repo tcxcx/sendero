@@ -67,6 +67,12 @@ interface ConsoleConversationProps {
   holdExpires: string | null;
   /** Channel kind of the focused trip (used for optimistic post + composer tinting). */
   focusedChannelKind: string | null;
+  /**
+   * All channel identities bound to the focused trip's traveler. Header
+   * surfaces one chip per identity so dual-channel travelers (e.g. Slack
+   * + WhatsApp) see both at a glance.
+   */
+  focusedChannels?: Array<{ kind: string; handle: string | null }>;
   /** Current org plan tier, used to keep the model picker plan-gated. */
   planTier: PlanTier;
 }
@@ -77,6 +83,7 @@ export function ConsoleConversation({
   traveler,
   holdExpires,
   focusedChannelKind,
+  focusedChannels,
   planTier,
 }: ConsoleConversationProps) {
   const router = useRouter();
@@ -240,6 +247,7 @@ export function ConsoleConversation({
         <div style={{ flex: 1, minWidth: 0 }}>
           <ChannelHeader
             channel={focusedChannel}
+            channels={isTrip ? focusedChannels : undefined}
             traveler={isTrip ? (traveler?.name ?? undefined) : undefined}
             tripId={isTrip ? (scopedTripId ?? undefined) : undefined}
             hold={isTrip ? holdExpires : null}

@@ -55,11 +55,20 @@ export async function generateMetadata({
       title: stamp.name,
       description: stamp.caption,
     },
-    other: {
-      'eth:nft:contract': stamp.contract,
-      'eth:nft:token_id': stamp.tokenId,
-      'eth:nft:chain': 'arc-testnet',
-    },
+    // EIP-7572 only applies to EVM NFTs. Sol stamps (Metaplex Core)
+    // need the `solana:` namespace so unfurlers don't mistakenly treat
+    // the base58 mint address as an EVM contract.
+    other:
+      stamp.chain === 'sol'
+        ? {
+            'solana:asset:address': stamp.contract,
+            'solana:asset:cluster': 'devnet',
+          }
+        : {
+            'eth:nft:contract': stamp.contract,
+            'eth:nft:token_id': stamp.tokenId,
+            'eth:nft:chain': 'arc-testnet',
+          },
     robots: { index: true, follow: true },
   };
 }
@@ -69,13 +78,22 @@ export default async function StampPage({ params }: { params: Promise<PageParams
   const stamp = await loadStampForOg(tokenId);
   if (!stamp) notFound();
 
-  const arcscanUrl = `https://testnet-explorer.arc.com/token/${stamp.contract}?a=${stamp.tokenId}`;
+  // Per-chain explorer URL. Arc routes the ERC-1155 token detail page
+  // on the Arc explorer; Sol routes to the asset address on Solana
+  // Explorer (devnet during testnet beta — flips with mainnet promote).
+  const explorerUrl =
+    stamp.chain === 'sol'
+      ? `https://explorer.solana.com/address/${stamp.contract}?cluster=devnet`
+      : `https://testnet-explorer.arc.com/token/${stamp.contract}?a=${stamp.tokenId}`;
+  const explorerName = stamp.chain === 'sol' ? 'Solana Explorer' : 'Arcscan';
+  const eyebrow = stamp.chain === 'sol' ? 'Sendero · Solana' : 'Sendero · Arc';
+  const networkName = stamp.chain === 'sol' ? 'Solana Devnet' : 'Arc Testnet';
   const ipfsHttp = stamp.ipfsUri.replace(/^ipfs:\/\//, 'https://ipfs.io/ipfs/');
 
   return (
     <main className="mx-auto flex min-h-screen max-w-[860px] flex-col gap-10 px-6 py-16 text-foreground">
       <header className="flex flex-col gap-2">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendero × Arc</p>
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{eyebrow}</p>
         <h1 className="font-display text-3xl">{stamp.name}</h1>
         {stamp.tenantDisplayName ? (
           <p className="text-sm text-muted-foreground">Issued by {stamp.tenantDisplayName}</p>
@@ -119,12 +137,12 @@ export default async function StampPage({ params }: { params: Promise<PageParams
 
       <nav className="flex flex-wrap gap-3 text-sm">
         <Link
-          href={arcscanUrl}
+          href={explorerUrl}
           target="_blank"
           rel="noreferrer"
           className="rounded-md border border-border px-3 py-2 text-foreground hover:bg-muted"
         >
-          View on Arcscan
+          View on {explorerName}
         </Link>
         <Link
           href={ipfsHttp}
@@ -143,7 +161,7 @@ export default async function StampPage({ params }: { params: Promise<PageParams
       </nav>
 
       <footer className="mt-auto pt-8 text-xs text-muted-foreground">
-        Sendero — corporate travel on Arc.
+        Sendero — corporate travel on {networkName}.
       </footer>
     </main>
   );

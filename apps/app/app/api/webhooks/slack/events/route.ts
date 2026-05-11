@@ -18,6 +18,7 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 import {
+  createSlackClient,
   deriveTenantKey,
   isUrlVerificationChallenge,
   type SlackEventEnvelope,
@@ -25,18 +26,24 @@ import {
 } from '@sendero/slack';
 
 import { makeCapStore, makeMeterStore, makeSessionStore, resolveSegment } from '@/lib/agent-stores';
+import { loadPausedAgentWorkflow, resumeAgentWorkflow } from '@/lib/agent-workflow-session';
 import { newTraceId } from '@/lib/api-errors';
+import { toSlackMrkdwn } from '@/lib/channel-render/channels/slack';
+import { runSlackAgentTurn, slackWorkflowChannelIdentityId } from '@/lib/slack-agent';
+import { logSlackWebhookEvent, type SlackWebhookDispatchStatus } from '@/lib/slack-audit';
 import { acquireThreadLock, claimSlackEvent, releaseThreadLock } from '@/lib/slack-dedup-lock';
-import { runSlackAgentTurn } from '@/lib/slack-agent';
 import { fetchSlackFilesAsAttachments } from '@/lib/slack-media';
-import { isThreadSubscribed } from '@/lib/slack-thread-subscription';
+import { isThreadSubscribed, markThreadSubscribed } from '@/lib/slack-thread-subscription';
 import { resolveSenderoUser } from '@/lib/slack-user-mapping';
+import { resolveActiveTripForUser } from '@/lib/trip-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const receivedAt = new Date();
+  const startedAt = Date.now();
   const signingSecret = env.slackSigningSecret();
   if (!signingSecret) {
     return NextResponse.json(
@@ -46,6 +53,41 @@ export async function POST(req: NextRequest) {
   }
 
   const rawBody = await req.text();
+  const auditEarlyWebhook = (args: {
+    dispatchStatus: SlackWebhookDispatchStatus;
+    dispatchError: string;
+    signatureValid: boolean;
+    replayWindowOk?: boolean | null;
+  }) =>
+    after(() => {
+      const partial = parseSlackEnvelopeForAudit(rawBody);
+      const ev = partial.envelope?.event;
+      const eventType = (ev?.type as string | undefined) ?? null;
+      const eventSubtype = (ev?.subtype as string | undefined) ?? null;
+      const channelId = (ev?.channel as string | undefined) ?? null;
+      const userId = (ev?.user as string | undefined) ?? null;
+      const threadTs = (ev?.thread_ts as string | undefined) ?? (ev?.ts as string | undefined);
+      const messageCount = eventType === 'message' || eventType === 'app_mention' ? 1 : 0;
+      return logSlackWebhookEvent({
+        tenantId: null,
+        receivedAt,
+        rawBody,
+        teamId: partial.teamId ?? 'unknown',
+        enterpriseId: partial.enterpriseId ?? null,
+        eventId: partial.envelope?.event_id ?? null,
+        eventType,
+        eventSubtype,
+        channelId,
+        threadTs,
+        slackUserId: userId,
+        signatureValid: args.signatureValid,
+        replayWindowOk: args.replayWindowOk ?? null,
+        messageCount,
+        dispatchStatus: args.dispatchStatus,
+        dispatchError: args.dispatchError,
+        durationMs: Date.now() - startedAt,
+      });
+    });
   const verify = verifySlackSignature(
     rawBody,
     {
@@ -55,6 +97,12 @@ export async function POST(req: NextRequest) {
     { signingSecret }
   );
   if (verify.ok === false) {
+    auditEarlyWebhook({
+      dispatchStatus: 'failed',
+      dispatchError: verify.reason,
+      signatureValid: false,
+      replayWindowOk: verify.reason === 'timestamp_out_of_range' ? false : null,
+    });
     return NextResponse.json({ error: verify.reason }, { status: 401 });
   }
 
@@ -62,6 +110,12 @@ export async function POST(req: NextRequest) {
   try {
     envelope = JSON.parse(rawBody) as SlackEventEnvelope;
   } catch {
+    auditEarlyWebhook({
+      dispatchStatus: 'failed',
+      dispatchError: 'invalid_json',
+      signatureValid: true,
+      replayWindowOk: true,
+    });
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
@@ -72,6 +126,12 @@ export async function POST(req: NextRequest) {
 
   const { enterpriseId, teamId } = deriveTenantKey(envelope);
   if (!teamId) {
+    auditEarlyWebhook({
+      dispatchStatus: 'unknown_install',
+      dispatchError: 'missing_team_id',
+      signatureValid: true,
+      replayWindowOk: true,
+    });
     return NextResponse.json({ error: 'missing_team_id' }, { status: 400 });
   }
 
@@ -85,6 +145,12 @@ export async function POST(req: NextRequest) {
   // 404 (not 200) when the install is unknown so onboarding misconfig is
   // visible in Slack's webhook delivery dashboard.
   if (!install) {
+    auditEarlyWebhook({
+      dispatchStatus: 'unknown_install',
+      dispatchError: 'unknown_install',
+      signatureValid: true,
+      replayWindowOk: true,
+    });
     return NextResponse.json({ error: 'unknown_install' }, { status: 404 });
   }
 
@@ -92,10 +158,60 @@ export async function POST(req: NextRequest) {
   // envelope. Guards against malformed payloads where `team_id` was
   // satisfied by a partial match while the canonical fields disagree.
   if (install.teamId !== teamId || (install.enterpriseId ?? null) !== (enterpriseId ?? null)) {
+    auditEarlyWebhook({
+      dispatchStatus: 'failed',
+      dispatchError: 'install_mismatch',
+      signatureValid: true,
+      replayWindowOk: true,
+    });
     return NextResponse.json({ error: 'install_mismatch' }, { status: 403 });
   }
 
   const ev = envelope.event;
+  const eventType = (ev?.type as string | undefined) ?? null;
+  const eventSubtype = (ev?.subtype as string | undefined) ?? null;
+  const channelType = (ev?.channel_type as string | undefined) ?? null;
+  const channelId = (ev?.channel as string | undefined) ?? null;
+  const userId = (ev?.user as string | undefined) ?? null;
+  const text = (ev?.text as string | undefined) ?? '';
+  const threadTs = (ev?.thread_ts as string | undefined) ?? (ev?.ts as string | undefined);
+  const messageCount = eventType === 'message' || eventType === 'app_mention' ? 1 : 0;
+  const auditWebhook = (args: {
+    dispatchStatus: SlackWebhookDispatchStatus;
+    dispatchError?: string | null;
+    droppedDuplicateCount?: number;
+    droppedBusyCount?: number;
+    dispatchedCount?: number;
+    traceId?: string | null;
+    persistRaw?: boolean;
+  }) =>
+    after(() =>
+      logSlackWebhookEvent({
+        tenantId: install.tenantId,
+        receivedAt,
+        rawBody,
+        teamId: install.teamId,
+        enterpriseId: install.enterpriseId ?? null,
+        eventId: envelope.event_id ?? null,
+        eventType,
+        eventSubtype,
+        channelId,
+        threadTs,
+        slackUserId: userId,
+        signatureValid: true,
+        replayWindowOk: true,
+        messageCount,
+        droppedDuplicateCount: args.droppedDuplicateCount ?? 0,
+        droppedBusyCount: args.droppedBusyCount ?? 0,
+        dispatchedCount: args.dispatchedCount ?? 0,
+        dispatchStatus: args.dispatchStatus,
+        dispatchError: args.dispatchError ?? null,
+        durationMs: Date.now() - startedAt,
+        traceId: args.traceId ?? null,
+        persistRaw: args.persistRaw ?? false,
+        rawEnvelope: envelope,
+      })
+    );
 
   // Lifecycle events that retire the install. `tokens_revoked` fires
   // when a Slack admin revokes the bot token (per-user or workspace);
@@ -105,7 +221,7 @@ export async function POST(req: NextRequest) {
   // events for this install will keep landing here (Slack doesn't
   // un-subscribe immediately) but every handler downstream treats a
   // non-null revokedAt as "do nothing".
-  const lifecycleType = (ev?.type as string | undefined) ?? null;
+  const lifecycleType = eventType;
   if (lifecycleType === 'tokens_revoked' || lifecycleType === 'app_uninstalled') {
     if (install.revokedAt === null) {
       await prisma.slackInstall.update({
@@ -119,6 +235,7 @@ export async function POST(req: NextRequest) {
         installId: install.id,
       });
     }
+    auditWebhook({ dispatchStatus: 'revoked' });
     return NextResponse.json({ ok: true });
   }
 
@@ -126,13 +243,9 @@ export async function POST(req: NextRequest) {
   // Slack's subscription propagates. Drop them quietly so we don't
   // burn agent turns or hit the dead bot token.
   if (install.revokedAt !== null) {
+    auditWebhook({ dispatchStatus: 'revoked' });
     return NextResponse.json({ ok: true, dropped: 'install_revoked' });
   }
-
-  const channelId = (ev?.channel as string | undefined) ?? null;
-  const userId = (ev?.user as string | undefined) ?? null;
-  const text = (ev?.text as string | undefined) ?? '';
-  const threadTs = (ev?.thread_ts as string | undefined) ?? (ev?.ts as string | undefined);
 
   // Event-type filter — only dispatch the agent on events the operator
   // actually addressed Sendero in. Without this, every `channel_rename`,
@@ -151,9 +264,6 @@ export async function POST(req: NextRequest) {
   //
   // Bot-authored messages are skipped to avoid self-reply loops
   // (`subtype === 'bot_message'` or `user matches install.botUserId`).
-  const eventType = (ev?.type as string | undefined) ?? null;
-  const eventSubtype = (ev?.subtype as string | undefined) ?? null;
-  const channelType = (ev?.channel_type as string | undefined) ?? null;
   const isBotEcho = userId === install.botUserId || eventSubtype === 'bot_message';
   // Slack inserts the bot user-id literally into mention text as
   // `<@U…>`. Cheap to detect without a tokenizer.
@@ -201,6 +311,10 @@ export async function POST(req: NextRequest) {
       teamId: install.teamId,
       eventId: envelope.event_id,
     });
+    auditWebhook({
+      dispatchStatus: 'skipped',
+      dispatchError: isBotEcho ? 'bot_echo' : 'not_agent_input',
+    });
     return NextResponse.json({ ok: true });
   }
 
@@ -217,6 +331,7 @@ export async function POST(req: NextRequest) {
       eventId: envelope.event_id,
       teamId: install.teamId,
     });
+    auditWebhook({ dispatchStatus: 'duplicate', droppedDuplicateCount: 1 });
     return NextResponse.json({ ok: true, duplicate: true });
   }
 
@@ -231,6 +346,11 @@ export async function POST(req: NextRequest) {
     console.log('[slack/events] thread busy, dropping concurrent event', {
       eventId: envelope.event_id,
       subjectKey,
+    });
+    auditWebhook({
+      dispatchStatus: 'busy',
+      droppedBusyCount: 1,
+      traceId: subjectKey,
     });
     return NextResponse.json({ ok: true, dropped: 'thread_busy' });
   }
@@ -252,6 +372,12 @@ export async function POST(req: NextRequest) {
   // We pull them off here so the file fetch happens inside `after()`
   // (auth'd download is slow) and the route still acks within Slack's 3s.
   const rawFiles = Array.isArray(ev?.files) ? (ev?.files as unknown[]) : [];
+  auditWebhook({
+    dispatchStatus: 'dispatched',
+    dispatchedCount: 1,
+    traceId,
+    persistRaw: true,
+  });
 
   // Defer the agent turn past the ack — Slack only needs `{ ok: true }`
   // within 3s; the LLM call can take much longer on cold paths. The Slack
@@ -267,20 +393,35 @@ export async function POST(req: NextRequest) {
       // event has no `user.id` (system events, channel-renames, etc.) we
       // fall back to the install admin's userId — there's no message author
       // to resolve.
-      const resolvedSenderoUserId = userId
-        ? (
-            await resolveSenderoUser({
-              tenantId: install.tenantId,
-              slackTeamId: install.teamId,
-              slackUserId: userId,
-              botToken: install.botToken,
-              // meter_events.userId is FK'd to User.id — the resolver MUST
-              // return a non-null id even on total failure. authedUserId is
-              // the install admin's id, so it's a known-good User row.
-              fallbackUserId: install.authedUserId,
-            })
-          ).senderoUserId
-        : install.authedUserId;
+      const resolvedSlackUser = userId
+        ? await resolveSenderoUser({
+            tenantId: install.tenantId,
+            slackTeamId: install.teamId,
+            slackUserId: userId,
+            botToken: install.botToken,
+            // meter_events.userId is FK'd to User.id — the resolver MUST
+            // return a non-null id even on total failure. authedUserId is
+            // the install admin's id, so it's a known-good User row.
+            fallbackUserId: install.authedUserId,
+          })
+        : null;
+      const resolvedSenderoUserId = resolvedSlackUser?.senderoUserId ?? install.authedUserId;
+      const workflowChannelIdentityId = slackWorkflowChannelIdentityId({
+        teamId: install.teamId,
+        channelId,
+        threadTs,
+      });
+
+      const resumed = await tryResumePausedWorkflow({
+        install: install as unknown as Parameters<typeof runSlackAgentTurn>[0]['install'],
+        channelId,
+        threadTs,
+        channelIdentityId: workflowChannelIdentityId,
+        userId: resolvedSenderoUserId,
+        slackUserId: userId,
+        userInput: text,
+      });
+      if (resumed) return;
 
       // Fetch any inline file shares with the bot token. Slack's
       // url_private requires Authorization, so we download here and pass
@@ -303,6 +444,8 @@ export async function POST(req: NextRequest) {
         channelId,
         userId,
         senderoUserId: resolvedSenderoUserId,
+        channelIdentityId: workflowChannelIdentityId,
+        traceId,
         ...(attachments.length ? { attachments } : {}),
         // Model intentionally omitted — slack-agent resolves via the
         // canonical Sendero policy: Gateway-first (Gemini-first cascade
@@ -352,4 +495,105 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Resume a paused traveler workflow before dispatching a fresh LLM turn.
+ * This mirrors the Kapso/WhatsApp path: persisted workflow state owns the
+ * next inbound message until the workflow completes or fails.
+ */
+async function tryResumePausedWorkflow(args: {
+  install: Parameters<typeof runSlackAgentTurn>[0]['install'];
+  channelId: string;
+  threadTs: string;
+  channelIdentityId: string;
+  userId: string;
+  slackUserId: string | null;
+  userInput: string;
+}): Promise<boolean> {
+  try {
+    const paused = await loadPausedAgentWorkflow({
+      tenantId: args.install.tenantId,
+      channel: 'slack',
+      channelIdentityId: args.channelIdentityId,
+    });
+    if (!paused) return false;
+
+    const tripId = await resolveActiveTripForUser({
+      tenantId: args.install.tenantId,
+      userId: args.userId,
+    });
+    const snapshot = await resumeAgentWorkflow({
+      tenantId: args.install.tenantId,
+      paused,
+      userInput: args.userInput,
+      toolCtx: {
+        traveler: {
+          tenantId: args.install.tenantId,
+          userId: args.userId,
+        },
+        channelIdentityId: args.channelIdentityId,
+      },
+      channel: 'slack',
+      channelIdentityId: args.channelIdentityId,
+      userId: args.userId,
+      ...(tripId ? { tripId } : {}),
+    });
+
+    const reply =
+      snapshot.pausePrompt ||
+      (snapshot.status === 'completed'
+        ? `Done. ${paused.def.label} finished - anything else I can help with?`
+        : 'Sorry, that step did not complete. Tell me what you want to try next, or reply `operator` and I will route it to a person.');
+
+    const slack = createSlackClient(args.install.botToken);
+    const posted = await slack.chat.postMessage({
+      channel: args.channelId,
+      thread_ts: args.threadTs,
+      text: toSlackMrkdwn(reply),
+      mrkdwn: true,
+      unfurl_links: false,
+    });
+
+    if (posted.ts) {
+      void markThreadSubscribed({
+        teamId: args.install.teamId,
+        channelId: args.channelId,
+        threadTs: args.threadTs,
+      });
+    }
+    return true;
+  } catch (err) {
+    console.error('[slack/events] paused-workflow resume failed', {
+      teamId: args.install.teamId,
+      channelId: args.channelId,
+      threadTs: args.threadTs,
+      slackUserId: args.slackUserId,
+      channelIdentityId: args.channelIdentityId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
+}
+
+function parseSlackEnvelopeForAudit(rawBody: string): {
+  envelope: SlackEventEnvelope | null;
+  teamId: string | null;
+  enterpriseId: string | null;
+} {
+  try {
+    const envelope = JSON.parse(rawBody) as SlackEventEnvelope;
+    const { teamId, enterpriseId } = deriveTenantKey(envelope);
+    return {
+      envelope,
+      teamId: teamId ?? null,
+      enterpriseId: enterpriseId ?? null,
+    };
+  } catch {
+    return {
+      envelope: null,
+      teamId: null,
+      enterpriseId: null,
+    };
+  }
 }

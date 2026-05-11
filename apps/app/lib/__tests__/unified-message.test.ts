@@ -248,6 +248,46 @@ describe('eventsToUnifiedMessages', () => {
     expect(out[0]!.id).toBe('evt-0');
   });
 
+  test('dedupes exact provider replay events before rendering', () => {
+    const replay = {
+      id: 'wamid.same',
+      kind: 'inbox_reply',
+      direction: 'inbound',
+      channel: 'whatsapp',
+      text: 'same inbound replay',
+      createdAt: '2026-05-10T23:28:50.000Z',
+      author: { kind: 'traveler', waId: '+593980668984' },
+    };
+
+    const out = eventsToUnifiedMessages([replay, replay]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0]!.id).toBe('wamid.same');
+  });
+
+  test('suffixes ids when different events share a provider id', () => {
+    const out = eventsToUnifiedMessages([
+      {
+        id: 'wamid.same',
+        kind: 'inbox_reply',
+        direction: 'inbound',
+        channel: 'whatsapp',
+        text: 'first',
+        createdAt: '2026-05-10T23:28:50.000Z',
+      },
+      {
+        id: 'wamid.same',
+        kind: 'agent_reply',
+        direction: 'outbound',
+        channel: 'whatsapp',
+        text: 'second',
+        createdAt: '2026-05-10T23:28:55.000Z',
+      },
+    ]);
+
+    expect(out.map(m => m.id)).toEqual(['wamid.same', 'wamid.same#2']);
+  });
+
   test('handoff_requested: rendered as internal system_note from agent', () => {
     const out = eventsToUnifiedMessages([
       {

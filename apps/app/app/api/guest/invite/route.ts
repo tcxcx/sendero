@@ -65,25 +65,12 @@ export async function POST(req: NextRequest) {
   // soft credential boundary. Buyer can opt out by passing require2fa=false.
   const require2fa = body.require2fa ?? true;
 
-  let result: Awaited<ReturnType<typeof prefundTripTool.handler>>;
-  try {
-    result = await prefundTripTool.handler({
-      budgetUsdc: body.budgetUsdc,
-      guestEmail: body.guestEmail,
-      guestName: body.guestName,
-      buyerName: body.buyerName,
-      tripSummary: body.tripSummary,
-      expiresInDays: body.expiresInDays ?? 30,
-      require2fa,
-      ...(body.linkOrigin ? { linkOrigin: body.linkOrigin } : {}),
-    });
-  } catch (err) {
-    return NextResponse.json(
-      { error: 'prefund_failed', message: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
-    );
-  }
-
+  // Resolve tenant + user FIRST so we can hand the prefund tool a
+  // proper ToolContext. Without this, the tool's `resolveTenantPrimaryChain`
+  // call falls back to 'arc' (because `ctx?.traveler?.tenantId` is
+  // undefined) and Sol-primary tenants get the wrong chain's on-chain
+  // calls. Reading the tenant + user is cheap (~10ms) and the rest of
+  // the route already needs them.
   const tenant = await prisma.tenant.findUnique({ where: { clerkOrgId: orgId } });
   if (!tenant) {
     return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
@@ -92,6 +79,31 @@ export async function POST(req: NextRequest) {
     where: { clerkUserId: userId },
     select: { id: true },
   });
+
+  let result: Awaited<ReturnType<typeof prefundTripTool.handler>>;
+  try {
+    result = await prefundTripTool.handler(
+      {
+        budgetUsdc: body.budgetUsdc,
+        guestEmail: body.guestEmail,
+        guestName: body.guestName,
+        buyerName: body.buyerName,
+        tripSummary: body.tripSummary,
+        expiresInDays: body.expiresInDays ?? 30,
+        require2fa,
+        ...(body.linkOrigin ? { linkOrigin: body.linkOrigin } : {}),
+      },
+      // ToolContext — traveler.tenantId routes prefund to Sol/Arc per
+      // `Tenant.primaryChain`. `userId` lets downstream audit + DCW
+      // resolvers attribute the call to the operator who triggered it.
+      { traveler: { tenantId: tenant.id, userId: user?.id } }
+    );
+  } catch (err) {
+    return NextResponse.json(
+      { error: 'prefund_failed', message: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
+  }
   const safeResult = result as {
     tripId: string;
     budgetUsdc: string;
@@ -99,10 +111,23 @@ export async function POST(req: NextRequest) {
     claimCode?: string | null;
     expiresAt?: string;
     escrowAddress?: string;
+    /** Arc shape — 20-byte address-style claim pubkey (`bytes20`). */
     claimPubKey20?: string;
+    /** Sol shape — full 32-byte Ed25519 pubkey, base58. The /api/guest/claim
+     *  route uses this to fail-fast on Sol claims with a malformed
+     *  fragment before broadcasting. */
+    claimPubKey?: string;
+    /** Solana program id when the trip was prefunded on Sol. */
+    programId?: string;
     require2fa?: boolean;
     invite?: { ok?: boolean; skipped?: boolean; error?: string };
-    onchainCalls?: Array<unknown>;
+    onchainCalls?: Array<{ to: string; data: string; value: string }>;
+    onchainInstructions?: Array<{
+      programId: string;
+      accounts: Array<{ pubkey: string; isSigner: boolean; isWritable: boolean }>;
+      data: string;
+    }>;
+    chain?: 'arc' | 'sol';
   };
 
   // Stamp `linkChannel` so the OTP resend route can prefer a DIFFERENT
@@ -154,9 +179,20 @@ export async function POST(req: NextRequest) {
         },
         escrow: {
           fundingStatus: 'pending_onchain_submission',
-          address: safeResult.escrowAddress ?? null,
+          chain: safeResult.chain ?? 'arc',
+          address: safeResult.escrowAddress ?? safeResult.programId ?? null,
+          // Arc: 20-byte claim pubkey address. Sol: full base58 Ed25519
+          // pubkey. The /api/guest/claim route reads `claimPubKey` to
+          // verify Sol claim secrets before broadcasting on-chain.
           claimPubKey20: safeResult.claimPubKey20 ?? null,
-          onchainCallCount: safeResult.onchainCalls?.length ?? 0,
+          claimPubKey: safeResult.claimPubKey ?? null,
+          // Persist the on-chain calls / ixs so the buyer-side
+          // "Fund with Sendero" button at `/api/trips/prefund/fund` can
+          // submit them server-side without the buyer signing anything.
+          onchainCalls: safeResult.onchainCalls ?? null,
+          onchainInstructions: safeResult.onchainInstructions ?? null,
+          onchainCallCount:
+            safeResult.onchainCalls?.length ?? safeResult.onchainInstructions?.length ?? 0,
         },
       },
     },
@@ -178,9 +214,20 @@ export async function POST(req: NextRequest) {
         },
         escrow: {
           fundingStatus: 'pending_onchain_submission',
-          address: safeResult.escrowAddress ?? null,
+          chain: safeResult.chain ?? 'arc',
+          address: safeResult.escrowAddress ?? safeResult.programId ?? null,
+          // Arc: 20-byte claim pubkey address. Sol: full base58 Ed25519
+          // pubkey. The /api/guest/claim route reads `claimPubKey` to
+          // verify Sol claim secrets before broadcasting on-chain.
           claimPubKey20: safeResult.claimPubKey20 ?? null,
-          onchainCallCount: safeResult.onchainCalls?.length ?? 0,
+          claimPubKey: safeResult.claimPubKey ?? null,
+          // Persist the on-chain calls / ixs so the buyer-side
+          // "Fund with Sendero" button at `/api/trips/prefund/fund` can
+          // submit them server-side without the buyer signing anything.
+          onchainCalls: safeResult.onchainCalls ?? null,
+          onchainInstructions: safeResult.onchainInstructions ?? null,
+          onchainCallCount:
+            safeResult.onchainCalls?.length ?? safeResult.onchainInstructions?.length ?? 0,
         },
       },
     },

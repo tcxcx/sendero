@@ -3,16 +3,18 @@
  * Adds branded nav header + footer without requiring a Clerk session.
  * Root layout already provides <html> + <body> + font vars — this layer
  * only wraps children with chrome.
+ *
+ * The layout is shared across Arc and Solana agent profiles, so its
+ * copy stays chain-agnostic — the child page renders chain-specific
+ * registry names, networks, and explorer URLs once it knows which
+ * agent it's displaying.
  */
 
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { env } from '@sendero/env';
-
 export default function AgentsLayout({ children }: { children: ReactNode }) {
-  const explorerUrl = env.arcExplorerUrl();
   return (
     <>
       <style>{`
@@ -161,7 +163,7 @@ export default function AgentsLayout({ children }: { children: ReactNode }) {
                 className="agents-layout-mark"
                 aria-hidden="true"
               />
-              <span className="agents-layout-brand-text">Sendero · Arc</span>
+              <span className="agents-layout-brand-text">Sendero</span>
             </Link>
 
             {/* Nav links */}
@@ -196,17 +198,9 @@ export default function AgentsLayout({ children }: { children: ReactNode }) {
         <footer className="agents-layout-footer" aria-label="Sendero footer">
           <div className="agents-layout-footer-inner">
             <span className="agents-layout-footer-label">
-              Sendero · Arc — ERC-8004 · Arc Testnet
+              Sendero — multi-chain agent identity (Arc + Solana)
             </span>
             <nav className="agents-layout-footer-links" aria-label="Footer links">
-              <Link
-                href={explorerUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="agents-layout-footer-link"
-              >
-                Arcscan
-              </Link>
               <Link
                 href="https://docs.sendero.travel"
                 target="_blank"

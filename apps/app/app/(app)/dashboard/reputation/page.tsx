@@ -24,7 +24,7 @@ export default async function ReputationPage() {
     return (
       <main className="mx-auto flex w-full max-w-[860px] flex-col gap-6 px-6 pt-2 pb-8">
         <header className="flex flex-col gap-1">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendero × Arc</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{tenant.primaryChain === 'sol' ? 'Sendero × Solana' : 'Sendero × Arc'}</p>
           <h1 className="font-display text-3xl">Your reputation</h1>
         </header>
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 px-6 py-12 text-center">
@@ -46,8 +46,9 @@ export default async function ReputationPage() {
         <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendero × Arc</p>
         <h1 className="font-display text-3xl">Your reputation</h1>
         <p className="text-sm text-muted-foreground">
-          Aggregated from on-chain ERC-8004 ReputationRegistry events. Updates via Circle Event
-          Monitor → webhook within seconds of each rating.
+          {tenant.primaryChain === 'sol'
+            ? 'Aggregated from Metaplex Agent Registry rating events on Solana. Updates within seconds of each rating.'
+            : 'Aggregated from on-chain ERC-8004 ReputationRegistry events. Updates via Circle Event Monitor → webhook within seconds of each rating.'}
         </p>
       </header>
 

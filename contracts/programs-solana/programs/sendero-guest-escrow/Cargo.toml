@@ -20,3 +20,8 @@ idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 [dependencies]
 anchor-lang = "0.31.1"
 anchor-spl = "0.31.1"
+# Embeds a `.security.txt` ELF section so explorers (Solana Explorer,
+# SolanaFM, Solscan) render contact + audit + source-code links on the
+# program page. Standard across the Solana ecosystem; matches the Arc
+# `securityContact` annotation on the Solidity twin.
+solana-security-txt = "1.1"

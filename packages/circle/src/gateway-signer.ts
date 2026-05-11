@@ -42,6 +42,7 @@
 
 import { prisma } from '@sendero/database';
 import { decrypt, encrypt } from '@sendero/encryption';
+import bs58 from 'bs58';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import type { Hex, PrivateKeyAccount } from 'viem';
 
@@ -516,4 +517,237 @@ function isUniqueConstraintError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const e = err as { code?: unknown };
   return e.code === 'P2002';
+}
+
+// ── Solana self-custody signer ────────────────────────────────────────
+
+/**
+ * Per-tenant self-custody Solana keypair used as the Gateway depositor +
+ * burn-intent signer on Solana.
+ *
+ * Why self-custody on Sol when EVM is also self-custody, and Circle DCWs
+ * exist for everything else? Because Circle's Wallets API only exposes
+ * `signTransactions` for Sol DCWs — not raw `signMessage`/`signMessages`/
+ * `secretKey`. App Kit's `gateway.v1.signBurnIntents` step signs raw
+ * burn-intent bytes off-chain, hits the Sol adapter, and bails with
+ * "Signer does not support any known signing method". A `@solana/kit`
+ * `KeyPairSigner` derived from a stored private key exposes
+ * `signMessages` natively, which App Kit's `signSolanaIntentGroup`
+ * happily consumes.
+ *
+ * Trade-offs: lose Circle custody for Sol gateway funds (matches the EVM
+ * self-custody pattern we already run for `TenantGatewaySigner`) and
+ * lose Circle Gas Station on Sol (never available there — we already
+ * JIT-drip via `ensureSolanaGas` from the platform hot wallet).
+ */
+export interface TenantSolanaGatewaySigner {
+  /** Base58 Solana pubkey. Stable across calls for the same tenant. */
+  address: string;
+  /** Base58 64-byte secret key — feeds `createSolanaKitAdapterFromPrivateKey`. */
+  privateKey: string;
+  /** KEK version the underlying ciphertext was decrypted under. */
+  kekVersion: number;
+}
+
+interface SolanaCacheEntry {
+  signer: TenantSolanaGatewaySigner;
+  expiresAt: number;
+}
+
+const solanaSignerCache = new Map<string, SolanaCacheEntry>();
+
+function solanaCacheGet(tenantId: string): TenantSolanaGatewaySigner | null {
+  const entry = solanaSignerCache.get(tenantId);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    solanaSignerCache.delete(tenantId);
+    return null;
+  }
+  return entry.signer;
+}
+
+function solanaCacheSet(tenantId: string, signer: TenantSolanaGatewaySigner): void {
+  solanaSignerCache.set(tenantId, { signer, expiresAt: Date.now() + SIGNER_CACHE_TTL_MS });
+}
+
+export function invalidateTenantSolanaSignerCache(tenantId: string): void {
+  solanaSignerCache.delete(tenantId);
+}
+
+/**
+ * Generate a fresh Solana keypair via `@solana/web3.js`, return both the
+ * base58 pubkey and the base58 secret key. Done in a helper so the import
+ * stays lazy (web3.js is heavy and only the cold path needs it).
+ */
+async function generateSolanaKeypair(): Promise<{ address: string; privateKey: string }> {
+  const { Keypair } = await import('@solana/web3.js');
+  const kp = Keypair.generate();
+  return {
+    address: kp.publicKey.toBase58(),
+    privateKey: bs58.encode(kp.secretKey),
+  };
+}
+
+/**
+ * Verify a decrypted base58 secret key derives the stored pubkey.
+ * Fails loudly on mismatch — KEK drift or row tamper.
+ */
+async function deriveSolanaAddress(privateKeyBase58: string): Promise<string> {
+  const { Keypair } = await import('@solana/web3.js');
+  const secret = bs58.decode(privateKeyBase58);
+  if (secret.length !== 64) {
+    throw new Error(
+      `Solana secret key length mismatch — expected 64 bytes, got ${secret.length}`
+    );
+  }
+  const kp = Keypair.fromSecretKey(secret);
+  return kp.publicKey.toBase58();
+}
+
+interface DecryptSolanaArgs {
+  tenantId: string;
+  address: string;
+  encryptedPrivateKey: string;
+  kekVersion: number;
+  caller?: GatewaySignerCallerContext;
+}
+
+async function decryptSolanaSigner(
+  args: DecryptSolanaArgs
+): Promise<TenantSolanaGatewaySigner> {
+  const plaintext = await decrypt({
+    ciphertext: args.encryptedPrivateKey,
+    purpose: 'gateway-signer',
+    contextId: `sol:${args.tenantId}`,
+    kekVersion: args.kekVersion,
+  });
+  const derivedAddress = await deriveSolanaAddress(plaintext);
+  if (derivedAddress !== args.address) {
+    throw new Error(
+      `Solana gateway signer key mismatch for tenant:${args.tenantId}: stored address ` +
+        `${args.address} but decrypted key derives ${derivedAddress}. ` +
+        `KEK rotation gap or row tamper — refusing to sign with the wrong key.`
+    );
+  }
+  void writeAuditLog({
+    tenantId: args.tenantId,
+    userId: null,
+    kekVersion: args.kekVersion,
+    caller: args.caller,
+    contextSuffix: 'decrypt:solana',
+  });
+  return {
+    address: args.address,
+    privateKey: plaintext,
+    kekVersion: args.kekVersion,
+  };
+}
+
+/**
+ * Returns the tenant's Solana Gateway keypair, generating a fresh one
+ * on first call. Idempotent on `tenantId`; concurrent first-time calls
+ * race on the unique constraint and the loser re-reads.
+ */
+export async function getOrCreateTenantSolanaSigner(
+  tenantId: string,
+  options?: GetGatewaySignerOptions
+): Promise<TenantSolanaGatewaySigner> {
+  if (!tenantId) {
+    throw new Error('getOrCreateTenantSolanaSigner: tenantId required');
+  }
+
+  const cached = solanaCacheGet(tenantId);
+  if (cached) return cached;
+
+  const existing = await prisma.tenantSolanaGatewaySigner.findUnique({
+    where: { tenantId },
+  });
+  if (existing) {
+    const signer = await decryptSolanaSigner({
+      tenantId,
+      address: existing.address,
+      encryptedPrivateKey: existing.encryptedPrivateKey,
+      kekVersion: existing.kekVersion,
+      caller: options?.caller,
+    });
+    solanaCacheSet(tenantId, signer);
+    return signer;
+  }
+
+  const { address, privateKey } = await generateSolanaKeypair();
+  const { ciphertext, kekVersion } = await encrypt({
+    plaintext: privateKey,
+    purpose: 'gateway-signer',
+    contextId: `sol:${tenantId}`,
+  });
+
+  try {
+    await prisma.tenantSolanaGatewaySigner.create({
+      data: {
+        tenantId,
+        address,
+        encryptedPrivateKey: ciphertext,
+        kekVersion,
+      },
+    });
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      const winner = await prisma.tenantSolanaGatewaySigner.findUnique({
+        where: { tenantId },
+      });
+      if (winner) {
+        const signer = await decryptSolanaSigner({
+          tenantId,
+          address: winner.address,
+          encryptedPrivateKey: winner.encryptedPrivateKey,
+          kekVersion: winner.kekVersion,
+          caller: options?.caller,
+        });
+        solanaCacheSet(tenantId, signer);
+        return signer;
+      }
+    }
+    throw err;
+  }
+
+  void writeAuditLog({
+    tenantId,
+    userId: null,
+    kekVersion,
+    caller: options?.caller,
+    contextSuffix: 'create:solana',
+  });
+
+  const signer: TenantSolanaGatewaySigner = { address, privateKey, kekVersion };
+  solanaCacheSet(tenantId, signer);
+  return signer;
+}
+
+/**
+ * Read-only variant — null if the Sol signer has not been provisioned
+ * yet. Use in code paths that should fail closed (e.g. balance reads
+ * before any Sol op has run).
+ */
+export async function getTenantSolanaSigner(
+  tenantId: string,
+  options?: GetGatewaySignerOptions
+): Promise<TenantSolanaGatewaySigner | null> {
+  if (!tenantId) {
+    throw new Error('getTenantSolanaSigner: tenantId required');
+  }
+  const cached = solanaCacheGet(tenantId);
+  if (cached) return cached;
+  const row = await prisma.tenantSolanaGatewaySigner.findUnique({
+    where: { tenantId },
+  });
+  if (!row) return null;
+  const signer = await decryptSolanaSigner({
+    tenantId,
+    address: row.address,
+    encryptedPrivateKey: row.encryptedPrivateKey,
+    kekVersion: row.kekVersion,
+    caller: options?.caller,
+  });
+  solanaCacheSet(tenantId, signer);
+  return signer;
 }

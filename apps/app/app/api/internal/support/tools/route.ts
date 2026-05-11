@@ -357,8 +357,9 @@ function verifiedSupportContext(body: SupportToolBody): VerifiedSupportContext |
 async function resolveTenant(body: SupportToolBody) {
   const phoneNumberId = trustedPhoneNumberIdFromContext(body);
   if (phoneNumberId) {
-    const install = await prisma.whatsAppInstall.findUnique({
-      where: { phoneNumberId },
+    const install = await prisma.whatsAppInstall.findFirst({
+      where: { phoneNumberId, status: 'active' },
+      orderBy: { updatedAt: 'desc' },
       include: { tenant: true },
     });
     if (install?.tenant) return install.tenant;

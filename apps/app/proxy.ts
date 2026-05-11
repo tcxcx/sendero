@@ -66,6 +66,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/cli/login', // CLI login gateway — bounces unauthenticated users to /sign-in, then redirects to mint-key
   '/downloads/(.*)', // public artifact downloads (e.g. sendero.mcpb for Claude Desktop)
   '/api/guest/claimed', // guest submits post-claim; no session yet
+  '/api/guest/claim', // guest self-serve claim from /g; verifies via email match against trip
   '/api/waitlist/precheck', // email lookup for waitlist toast + redirect (no session)
   '/.well-known/workflow/(.*)', // WDK worker invocation surface — local queue (`@workflow/world-local`) and Vercel queue both POST signed payloads here. Clerk redirect kept enqueued runs stuck at `pending` because the worker handler was never reachable. Auth happens inside the handler via WDK signature checks.
 ]);

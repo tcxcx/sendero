@@ -19,11 +19,21 @@ import type { Prisma } from '@sendero/database';
 
 import type { TripRowData, TripState } from '@/components/console/trip-rail';
 import { stringFromJson } from '@/lib/format';
+import {
+  buildSendableTravelerChannels,
+  selectSendableTravelerChannel,
+} from '@/lib/sendable-traveler-channels';
 
 export async function loadConsoleTrips(
   tenantId: string,
   scopedTripId: string | null
 ): Promise<TripRowData[]> {
+  const activeSlackInstalls = await prisma.slackInstall.findMany({
+    where: { tenantId, revokedAt: null },
+    select: { teamId: true },
+  });
+  const activeSlackTeamIds = new Set(activeSlackInstalls.map(install => install.teamId));
+
   const recentTrips = await prisma.trip.findMany({
     where: { tenantId },
     orderBy: { updatedAt: 'desc' },
@@ -39,13 +49,20 @@ export async function loadConsoleTrips(
         select: {
           displayName: true,
           email: true,
-          channelIdentities: { select: { kind: true }, take: 1 },
+          channelIdentities: {
+            where: { tenantId },
+            select: { kind: true },
+          },
+          slackUserBindings: {
+            where: { tenantId },
+            select: { slackTeamId: true, slackUserId: true },
+          },
         },
       },
     },
   });
 
-  const trips: TripRowData[] = recentTrips.map(t => mapToRow(t));
+  const trips: TripRowData[] = recentTrips.map(t => mapToRow(t, activeSlackTeamIds));
 
   // Deep-link to a trip outside the 12-most-recent slice: backfill
   // the row so the rail shows the currently-focused trip even when
@@ -65,12 +82,19 @@ export async function loadConsoleTrips(
           select: {
             displayName: true,
             email: true,
-            channelIdentities: { select: { kind: true }, take: 1 },
+            channelIdentities: {
+              where: { tenantId },
+              select: { kind: true },
+            },
+            slackUserBindings: {
+              where: { tenantId },
+              select: { slackTeamId: true, slackUserId: true },
+            },
           },
         },
       },
     });
-    if (focused) trips.unshift(mapToRow(focused));
+    if (focused) trips.unshift(mapToRow(focused, activeSlackTeamIds));
   }
 
   return trips;
@@ -87,16 +111,17 @@ type TripQueryRow = {
     displayName: string | null;
     email: string | null;
     channelIdentities: Array<{ kind: string }>;
+    slackUserBindings: Array<{ slackTeamId: string; slackUserId: string }>;
   } | null;
 };
 
-function mapToRow(t: TripQueryRow): TripRowData {
+function mapToRow(t: TripQueryRow, activeSlackTeamIds: Set<string>): TripRowData {
   const intent =
     t.intent && typeof t.intent === 'object' ? (t.intent as Record<string, unknown>) : {};
   const route =
     intent.origin && intent.destination ? `${intent.origin} → ${intent.destination}` : '—';
   const tail = lastEventBody(t.events) ?? stringFromJson(t.metadata, 'tripSummary', '');
-  const channel = t.traveler?.channelIdentities[0]?.kind ?? 'web';
+  const channel = pickRailChannel(t.traveler, activeSlackTeamIds);
   return {
     id: t.id,
     who: t.traveler?.displayName ?? t.traveler?.email ?? 'Traveler',
@@ -107,6 +132,22 @@ function mapToRow(t: TripQueryRow): TripRowData {
     body: tail || 'No activity yet',
     channel,
   };
+}
+
+function pickRailChannel(
+  traveler: TripQueryRow['traveler'],
+  activeSlackTeamIds: Set<string>
+): string {
+  if (!traveler) return 'web';
+  return (
+    selectSendableTravelerChannel(
+      buildSendableTravelerChannels({
+        channelIdentities: traveler.channelIdentities,
+        slackUserBindings: traveler.slackUserBindings,
+        activeSlackTeamIds,
+      })
+    ) ?? 'web'
+  );
 }
 
 function tripStateFromStatus(status: string): TripState {

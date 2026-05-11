@@ -1,5 +1,5 @@
 /**
- * Server-side loader for the public ERC-8004 agent profile pages.
+ * Server-side loader for the public on-chain agent profile pages.
  * Reads from `OnchainIdentity.cached*` (sub-50ms) and joins the most-
  * recent N feedback rows so the page renders in one round-trip.
  *
@@ -23,6 +23,13 @@ import { loadMirroredReputation } from '@/lib/reputation-mirror';
 export interface AgentProfile {
   kind: 'org' | 'user' | 'sendero';
   subjectId: string;
+  /**
+   * Settlement chain for the displayed identity row. Drives every
+   * "View on …" link, registry name, and chain label on the public
+   * profile. For org profiles, Tenant.primaryChain picks the displayed
+   * row when both Arc and Sol identities exist.
+   */
+  chain: 'arc' | 'sol';
   agentId: string | null;
   contract: string;
   holderAddress: string;
@@ -67,22 +74,18 @@ export async function loadAgentProfileFresh(args: {
   const mirror = await loadMirroredReputation(args);
   if (!mirror) return null;
 
-  // Pick a "primary" identity row for the contract/holder shown on
-  // the page. Preference: arc → sol. Phase 5 single-chain Arc rows
-  // hit the arc branch; new Sol-only tenants render the sol row.
-  const primary = mirror.perChain.arc ?? mirror.perChain.sol;
-  if (!primary) return null;
-
   // Display name comes from tenant/user — read it independently
   // (the mirror doesn't carry it; identity rows are FK-joined to
   // Tenant/User but we want a single read regardless of chain).
   let displayName: string;
+  let tenantPrimaryChain: 'arc' | 'sol' | null = null;
   if (args.kind === 'org') {
     const tenant = await prisma.tenant.findUnique({
       where: { id: args.subjectId },
-      select: { displayName: true },
+      select: { displayName: true, primaryChain: true },
     });
     displayName = tenant?.displayName ?? `Tenant ${args.subjectId}`;
+    tenantPrimaryChain = tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
   } else {
     const user = await prisma.user.findUnique({
       where: { id: args.subjectId },
@@ -90,6 +93,15 @@ export async function loadAgentProfileFresh(args: {
     });
     displayName = user?.displayName ?? user?.email ?? `Traveler ${args.subjectId}`;
   }
+
+  const primaryChain: 'arc' | 'sol' =
+    tenantPrimaryChain && mirror.perChain[tenantPrimaryChain]
+      ? tenantPrimaryChain
+      : mirror.perChain.arc
+        ? 'arc'
+        : 'sol';
+  const primary = mirror.perChain[primaryChain];
+  if (!primary) return null;
 
   // Recent feedback + validations span all chains for this subject.
   // ReputationFeedback FK is OnchainIdentity.id, so we query for the
@@ -132,6 +144,7 @@ export async function loadAgentProfileFresh(args: {
   return {
     kind: args.kind,
     subjectId: args.subjectId,
+    chain: primaryChain,
     agentId: primary.agentId,
     contract: primary.contract,
     holderAddress: primary.holderAddress,
@@ -231,6 +244,9 @@ export async function loadSenderoAgentProfileFresh(): Promise<AgentProfile | nul
   return {
     kind: 'sendero',
     subjectId: agentId,
+    // Sendero's primary platform agent lives on Arc ERC-8004; the
+    // workspace-level chip routes per tenant chain in its own loader.
+    chain: 'arc',
     agentId,
     contract: indexed?.contract ?? IDENTITY_REGISTRY,
     holderAddress: indexed?.holderAddress ?? providerAddress,
@@ -239,7 +255,7 @@ export async function loadSenderoAgentProfileFresh(): Promise<AgentProfile | nul
     displayName: identity?.metadata?.name ?? 'Sendero Travel Agent',
     description:
       identity?.metadata?.description ??
-      'Sendero primary AI travel agent. Books, settles, and records reputation on Arc-Testnet.',
+      'Sendero primary AI travel agent. Books, settles, and records reputation on Arc Testnet.',
     tokenURI: identity?.tokenURI ?? null,
     mintedAt: indexed?.mintedAt?.toISOString() ?? null,
     stars: reputation?.stars ?? indexed?.cachedStars ?? null,

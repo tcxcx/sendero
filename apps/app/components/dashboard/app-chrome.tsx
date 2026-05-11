@@ -17,7 +17,6 @@ import { DepositDialog } from '@/components/deposit-dialog';
 import { GlobalCommandPalette } from '@/components/global-command-palette';
 import { SendDialog } from '@/components/send-dialog';
 import { hydrateFromStorage } from '@/components/store';
-import { SwapDialog } from '@/components/swap-dialog';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { useAppHotkeys } from '@/components/use-app-hotkeys';
 import { useArcChainStream } from '@/components/use-arc-chain-stream';
@@ -87,7 +86,6 @@ export function AppChrome({
         </SidebarProvider>
       </TooltipProvider>
       <AppShellFooter />
-      <SwapDialog />
       <SendDialog />
       <BridgeDialog />
       <DepositDialog />

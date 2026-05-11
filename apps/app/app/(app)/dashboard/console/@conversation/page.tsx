@@ -33,7 +33,7 @@ export default async function ConversationSlot({ searchParams }: ConversationSlo
     loadFocusedTrip(tenant.id, scopedTripId),
     currentOrgPlanTier(),
   ]);
-  const { conversation, traveler, holdExpires, channelKind } = focused;
+  const { conversation, traveler, holdExpires, channelKind, channels } = focused;
 
   return (
     <ConsoleConversation
@@ -42,6 +42,7 @@ export default async function ConversationSlot({ searchParams }: ConversationSlo
       traveler={traveler}
       holdExpires={holdExpires}
       focusedChannelKind={channelKind}
+      focusedChannels={channels}
       planTier={planTier}
     />
   );

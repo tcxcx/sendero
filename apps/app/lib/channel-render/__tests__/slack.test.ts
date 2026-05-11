@@ -21,10 +21,9 @@ process.env.NEXT_PUBLIC_APP_URL = '';
  * Run: bun test apps/app/lib/channel-render/__tests__/slack.test.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-
-import { renderForSlack } from '../channels/slack';
+import { renderForSlack, toSlackMrkdwn } from '../channels/slack';
 import { fixtures } from './__fixtures__/messages';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 const FROZEN = new Date('2026-04-25T10:00:00.000Z');
 let originalNow: typeof Date.now;
@@ -54,6 +53,16 @@ afterAll(() => {
 });
 
 describe('renderForSlack', () => {
+  test('toSlackMrkdwn converts agent markdown for direct Slack replies', () => {
+    const out = toSlackMrkdwn(
+      'Tienes **$314.87 USDC** en tu wallet.\n- Arc Testnet\n[Recargar](https://pay.example.com)'
+    );
+    expect(out).toContain('*$314.87 USDC*');
+    expect(out).toContain('• Arc Testnet');
+    expect(out).toContain('<https://pay.example.com|Recargar>');
+    expect(out).not.toContain('**');
+  });
+
   test('text', async () => {
     const out = await renderForSlack(fixtures.text());
     expect(out).toMatchSnapshot();

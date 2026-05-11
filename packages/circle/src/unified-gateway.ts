@@ -42,6 +42,10 @@ import { AppKit } from '@circle-fin/app-kit';
 import { BridgeKit } from '@circle-fin/bridge-kit';
 import * as bridgeChains from '@circle-fin/bridge-kit/chains';
 import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
+import {
+  type SolanaKitAdapter,
+  createSolanaKitAdapterFromPrivateKey,
+} from '@circle-fin/adapter-solana-kit';
 import type { ViemAdapter } from '@circle-fin/adapter-viem-v2';
 import bs58 from 'bs58';
 import type { Address } from 'viem';
@@ -117,6 +121,13 @@ export type Principal =
   | {
       kind: 'circle-wallets';
       adapter: ReturnType<typeof createCircleWalletsAdapter>;
+      address: string;
+      label: string;
+    }
+  | {
+      kind: 'solana-kit';
+      adapter: SolanaKitAdapter;
+      /** Base58 Solana pubkey derived from the underlying private key. */
       address: string;
       label: string;
     };
@@ -201,6 +212,31 @@ export function circleWalletsPrincipal(args: {
     adapter,
     address: args.address,
     label: args.label ?? `dcw:${args.address}`,
+  };
+}
+
+/**
+ * Self-custody Solana principal backed by a base58 secret key. Built
+ * via `createSolanaKitAdapterFromPrivateKey` — the resulting
+ * `SolanaKitAdapter` wraps a `KeyPairSigner` that exposes `signMessages`,
+ * which App Kit's `gateway.v1.signBurnIntents` needs.
+ *
+ * Why this exists alongside `circleWalletsPrincipal`: Circle DCW Sol
+ * signers only implement `signTransactions`. Burn-intent signing for
+ * Gateway is a raw-message signature, so App Kit aborts with "Signer
+ * does not support any known signing method". `KeyPairSigner` from
+ * `@solana/kit` natively does both.
+ */
+export function solanaSelfCustodyPrincipal(args: {
+  privateKey: string;
+  address: string;
+  label?: string;
+}): Principal {
+  return {
+    kind: 'solana-kit',
+    adapter: createSolanaKitAdapterFromPrivateKey({ privateKey: args.privateKey }),
+    address: args.address,
+    label: args.label ?? `solana-self-custody:${args.address}`,
   };
 }
 
@@ -345,6 +381,18 @@ export interface SpendArgs {
   toChainKey: GatewayChainKey;
   /** Adapter that signs the destination mint. Defaults to `sources[0].principal.adapter`. */
   toAdapter?: SpendSource['principal']['adapter'];
+  /**
+   * Destination-side wallet address bound to `toAdapter`. Required when
+   * `toAdapter` is a Circle Wallets (developer-controlled) adapter —
+   * Circle's fleet adapter needs the specific DCW address to know
+   * which wallet signs the destination mint, otherwise it throws
+   * "Address is required for developer-controlled adapters". When
+   * omitted, falls back to the legacy heuristic in `buildSpendParams`.
+   *
+   * Ignored when `useForwarder: true` — the forwarder submits the mint
+   * itself and no destination adapter is involved.
+   */
+  toAccount?: string;
   /** Recipient on the destination chain. */
   recipient: string;
   /** Human-decimal amount (e.g. "10.50"). */
@@ -354,6 +402,18 @@ export interface SpendArgs {
   allocations?: Array<{ amount: string; chain: string }>;
   /** Optional custom fee carved from the spend. Defaults to "no fee". */
   customFee?: CustomFee;
+  /**
+   * When true, Circle's Forwarding Service submits the destination
+   * mint instead of a locally-signed transaction. Drops the need for
+   * a destination adapter / DCW entirely — the SDK's `to` block
+   * becomes `{ chain, recipientAddress, useForwarder: true }`.
+   *
+   * Source-side burn signing is unaffected — sources still build and
+   * sign burn intents the normal way (EVM EIP-712, Solana raw-message
+   * via `signMessages`). Fees include a `forwardingFee` carved from
+   * the spend; see Circle's "How Unified Balance fees work" doc.
+   */
+  useForwarder?: boolean;
 }
 
 export interface SpendResult {
@@ -374,6 +434,11 @@ function buildSpendFrom(args: SpendArgs) {
       allocations: args.allocations,
     };
     if (first.kind === 'circle-wallets') base.address = first.address;
+    // `solana-kit` is a user-controlled adapter (private-key derived).
+    // The SDK auto-resolves the address from the key and EXPLICITLY
+    // rejects an explicit `address` field with:
+    //   "Address should not be provided for user-controlled adapters."
+    // So we omit it — same shape as viem.
     return base;
   }
   return args.sources.map(s => {
@@ -383,6 +448,9 @@ function buildSpendFrom(args: SpendArgs) {
     // explicitly rejects circle-wallets sources without it:
     // "Address is required for developer-controlled adapters."
     if (s.principal.kind === 'circle-wallets') base.address = s.principal.address;
+    // `solana-kit` (private-key derived) is user-controlled — address
+    // resolves automatically from the key and must NOT be passed in.
+    // Same treatment as viem.
     // viem (single-wallet) doesn't need address; sourceAccount is the
     // delegate-spending hook (signing for another address's balance).
     if (s.sourceAccount) base.sourceAccount = s.sourceAccount;
@@ -395,20 +463,35 @@ function buildSpendParams(args: SpendArgs) {
     throw new Error('unifiedGateway.spend: at least one source is required.');
   }
   const firstPrincipal = args.sources[0].principal;
-  const toAdapter = args.toAdapter ?? firstPrincipal.adapter;
-  // Circle Wallets adapter on the destination side ALSO needs `address`
-  // — it's the DCW the adapter uses as the signing context on the
-  // destination chain (distinct from `recipientAddress` which is the
-  // actual receiver). Same pattern desk-v1's BridgeKit wrapper uses.
-  // For viem (single-wallet) the field is harmless; we omit it to
-  // match the docs example shape exactly.
-  const toCtx: Record<string, unknown> = {
-    adapter: toAdapter,
-    chain: unifiedBalanceChainName(args.toChainKey),
-    recipientAddress: args.recipient,
-  };
-  if (firstPrincipal.kind === 'circle-wallets' && !args.toAdapter) {
-    toCtx.address = firstPrincipal.address;
+  let toCtx: Record<string, unknown>;
+  if (args.useForwarder) {
+    // Forwarder-only `to` shape (per Circle's "Use Forwarding Service"
+    // doc): no adapter, no address — just chain + recipientAddress +
+    // useForwarder. The Forwarding Service submits the mint with its
+    // own relayer wallet, so we don't need a destination DCW or any
+    // gas at the destination.
+    toCtx = {
+      chain: unifiedBalanceChainName(args.toChainKey),
+      recipientAddress: args.recipient,
+      useForwarder: true,
+    };
+  } else {
+    const toAdapter = args.toAdapter ?? firstPrincipal.adapter;
+    // Circle Wallets adapter on the destination side ALSO needs
+    // `address` — it's the DCW the adapter uses as the signing context
+    // on the destination chain (distinct from `recipientAddress` which
+    // is the actual receiver). For viem (single-wallet) the field is
+    // harmless; we omit it to match the docs example shape exactly.
+    toCtx = {
+      adapter: toAdapter,
+      chain: unifiedBalanceChainName(args.toChainKey),
+      recipientAddress: args.recipient,
+    };
+    if (args.toAccount) {
+      toCtx.address = args.toAccount;
+    } else if (firstPrincipal.kind === 'circle-wallets' && !args.toAdapter) {
+      toCtx.address = firstPrincipal.address;
+    }
   }
   const params: Record<string, unknown> = {
     from: buildSpendFrom(args),
@@ -428,20 +511,35 @@ function buildSpendParams(args: SpendArgs) {
 }
 
 export async function spend(args: SpendArgs): Promise<SpendResult> {
-  // Top up SOL on every Solana source — `kit.unifiedBalance.spend`
-  // burns on each source chain, and the Solana-side burn needs SOL
-  // gas. JIT-funds in parallel, fail-soft.
+  // Top up SOL on every Solana source AND on the Sol destination
+  // (when applicable). `kit.unifiedBalance.spend` does two on-chain
+  // signing operations on Sol: the source burn and the destination
+  // mint. Both pay gas. The destination mint also pays ~0.00204 SOL
+  // rent when the recipient's USDC ATA doesn't exist yet — without
+  // lamports, App Kit fails with "Insufficient SOL to create
+  // Associated Token Account". JIT-funds in parallel, fail-soft.
+  const solGasTargets = new Set<string>();
+  for (const s of args.sources) {
+    const principal = s.principal;
+    if (principal.kind === 'solana-kit') {
+      solGasTargets.add(principal.address);
+    } else if (
+      principal.kind === 'circle-wallets' &&
+      !principal.address.startsWith('0x')
+    ) {
+      solGasTargets.add(principal.address);
+    }
+  }
+  // Destination side — the Sol DCW that signs the mint ix needs SOL
+  // both to sign and (when the recipient's ATA doesn't yet exist) to
+  // pay ATA-creation rent.
+  if (args.toAccount && !args.toAccount.startsWith('0x')) {
+    solGasTargets.add(args.toAccount);
+  }
   await Promise.all(
-    args.sources.map(s => {
-      const principal = s.principal;
-      if (principal.kind !== 'circle-wallets') return Promise.resolve();
-      // Heuristic: top up if the source chain key looks Solana-shaped
-      // via the source allocation (when explicit allocations were
-      // given) or principal address (Solana base58 vs EVM 0x-hex).
-      const isSolanaPrincipal = !principal.address.startsWith('0x');
-      if (!isSolanaPrincipal) return Promise.resolve();
-      return ensureSolanaGas({ address: principal.address }).then(() => undefined);
-    })
+    [...solGasTargets].map(addr =>
+      ensureSolanaGas({ address: addr }).then(() => undefined)
+    )
   );
   const result = (await appKit().unifiedBalance.spend(buildSpendParams(args) as never)) as {
     txHash: string;

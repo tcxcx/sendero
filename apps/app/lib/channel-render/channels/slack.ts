@@ -26,7 +26,9 @@
  */
 
 import { buildApprovalBlocks } from '@sendero/slack';
+
 import { buildShareImageUrl } from '@/lib/og/share-url';
+
 import { INSTALL_INSTRUCTIONS } from '../install-instructions';
 import type {
   ChannelCta,
@@ -44,8 +46,8 @@ import type {
   ChannelRenderer,
   ChannelStayBilling,
   ChannelStayBusinessDetails,
-  ChannelStayCondition,
   ChannelStayCancellationEntry,
+  ChannelStayCondition,
   RenderedForChannel,
 } from '../types';
 
@@ -753,7 +755,7 @@ function ctaToButton(cta: ChannelCta): Record<string, unknown> {
 //   - inline `_italic_` already valid mrkdwn; markdown italic
 //     `*italic*` collides with bold and is left alone
 //   - tables, footnotes, blockquotes beyond a single `> `
-function toSlackMrkdwn(input: string): string {
+export function toSlackMrkdwn(input: string): string {
   let s = input;
   s = s.replace(/\*\*(.+?)\*\*/g, '*$1*');
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<$2|$1>');
@@ -764,7 +766,7 @@ function toSlackMrkdwn(input: string): string {
 // Plain-text fallback for the top-level `text` field. Strips the
 // mrkdwn markers added above plus any link syntax so screen readers
 // and notification previews get a clean string.
-function stripMrkdwn(input: string): string {
+export function stripMrkdwn(input: string): string {
   let s = input;
   s = s.replace(/<([^|>]+)\|([^>]+)>/g, '$2');
   s = s.replace(/\*([^*]+)\*/g, '$1');

@@ -25,11 +25,20 @@ import {
 import { prefundTraveler, type PrefundResult } from '@/lib/transfer-spend/prefund';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
+// Circle Gateway's Solana domain id — Sendero stamps Sol DCW rows with
+// this synthetic chainId.
+const SOL_DEVNET_GATEWAY_DOMAIN = 5;
 
 const InputSchema = z.object({
   travelerId: z.string().min(1),
   amount: z.string().regex(/^\d+(\.\d{1,6})?$/),
-  sourceChain: z.string().min(1).default('Arc_Testnet'),
+  /**
+   * Optional override. When omitted, the action defaults to the
+   * tenant's primaryChain — Sol tenants prefund onto Sol DCWs, Arc
+   * tenants onto Arc Testnet. Operators can still pass an explicit
+   * chain key to force cross-chain prefund.
+   */
+  sourceChain: z.string().min(1).optional(),
   /**
    * Optional booking the operator wants to also deliver a pay link
    * for (Step 5). When set, after a successful prefund we issue +
@@ -82,11 +91,22 @@ export async function prefundTravelerAction(input: {
     return { kind: 'rejected', code: 'no_traveler', message: 'Traveler not found in this tenant.' };
   }
 
+  // Pick the DCW chain based on the tenant's primaryChain when the
+  // operator hasn't overridden it. A Sol tenant defaults to the Sol
+  // Devnet DCW row (chainId 5); Arc tenants default to Arc Testnet.
+  const effectiveSourceChain =
+    parsed.sourceChain ?? (tenant.primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet');
+  const walletChainId =
+    effectiveSourceChain === 'Sol_Devnet'
+      ? SOL_DEVNET_GATEWAY_DOMAIN
+      : ARC_TESTNET_CHAIN_ID;
+  const walletChainLabel = effectiveSourceChain === 'Sol_Devnet' ? 'Solana Devnet' : 'Arc Testnet';
+
   const wallet = await prisma.wallet.findFirst({
     where: {
       userId: traveler.id,
       provisioner: 'dcw',
-      chainId: ARC_TESTNET_CHAIN_ID,
+      chainId: walletChainId,
     },
     select: { address: true },
   });
@@ -94,8 +114,7 @@ export async function prefundTravelerAction(input: {
     return {
       kind: 'rejected',
       code: 'no_traveler_wallet',
-      message:
-        'Traveler has no DCW wallet on Arc yet — wallets are provisioned at hold. Trigger a booking first.',
+      message: `Traveler has no DCW wallet on ${walletChainLabel} yet — wallets are provisioned at hold. Trigger a booking first.`,
     };
   }
 
@@ -125,7 +144,7 @@ export async function prefundTravelerAction(input: {
     travelerUserId: traveler.id,
     travelerAddress: wallet.address,
     amount: parsed.amount,
-    sourceChain: parsed.sourceChain,
+    sourceChain: effectiveSourceChain,
   });
 
   // Best-effort link delivery — only when the prefund actually moved

@@ -19,6 +19,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@sendero/database';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
+const SOL_DEVNET_GATEWAY_DOMAIN = 5;
 
 const KIND_LABELS: Record<string, string> = {
   BoardingPass: 'Boarding Pass',
@@ -49,14 +50,21 @@ export default async function StampsCollectionPage() {
     select: {
       id: true,
       wallets: {
-        where: { provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
-        select: { address: true },
+        where: {
+          provisioner: 'dcw',
+          chainId: { in: [ARC_TESTNET_CHAIN_ID, SOL_DEVNET_GATEWAY_DOMAIN] },
+        },
+        select: { address: true, chainId: true },
       },
     },
   });
   if (!user) redirect('/onboarding');
 
-  const addresses = user.wallets.map(w => w.address.toLowerCase());
+  // Arc EVM addresses are case-insensitive, so we lowercase them. Solana
+  // base58 pubkeys ARE case-sensitive — preserve the original casing.
+  const addresses = user.wallets.map(w =>
+    w.chainId === SOL_DEVNET_GATEWAY_DOMAIN ? w.address : w.address.toLowerCase()
+  );
 
   // Pull ownerships either by FK (preferred — webhook resolved owner →
   // user) or by the raw address list (fallback — webhook arrived
@@ -111,11 +119,12 @@ export default async function StampsCollectionPage() {
   return (
     <main className="mx-auto flex w-full max-w-[1080px] flex-col gap-8 px-6 pt-2 pb-8">
       <header className="flex flex-col gap-1">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendero × Arc</p>
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendero · Trip stamps</p>
         <h1 className="font-display text-3xl">Your trip stamps</h1>
         <p className="text-sm text-muted-foreground">
-          NFT collectibles minted to your travel wallet on Arc-Testnet — one for every confirmed
-          flight, settled invoice, and completed trip.
+          NFT collectibles minted to your travel wallet — one for every confirmed flight, settled
+          invoice, and completed trip. Arc tenants mint via SenderoStamps; Solana tenants mint via
+          Metaplex Core.
         </p>
       </header>
 

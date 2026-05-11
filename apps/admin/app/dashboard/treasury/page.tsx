@@ -3,7 +3,6 @@ import Link from 'next/link';
 
 import { CheckCircle2, CircleDashed, ExternalLink, Landmark, ScanLine } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -16,12 +15,10 @@ import { Separator } from '@/components/ui/separator';
 import { requirePlatformRole } from '@/lib/access';
 import { getArcTreasury } from '@/lib/treasury/provision-arc';
 import { getSolanaTreasury } from '@/lib/treasury/provision-solana';
+import { getTreasuryUsdcBalance, type TreasuryBalance } from '@/lib/treasury/treasury-balance';
 
-import { ArcDeployButton } from './_components/arc-deploy-button';
-import { ArcDeriveButton } from './_components/arc-derive-button';
-import { ArcInstallMultisigButton } from './_components/arc-install-multisig-button';
+import { ArcProposeForm } from './_components/arc-propose-form';
 import { ArcProvisionForm } from './_components/arc-provision-form';
-import { ArcRemovePlatformButton } from './_components/arc-remove-platform-button';
 import { ProposalList } from './_components/proposal-list';
 import { SolanaProposeForm } from './_components/solana-propose-form';
 import { SolanaProvisionForm } from './_components/solana-provision-form';
@@ -37,8 +34,16 @@ export default async function TreasuryPage() {
   if (!guard.ok) redirect('/unauthorized');
 
   const [sol, arc] = await Promise.all([getSolanaTreasury(), getArcTreasury()]);
-  const arcReady = Boolean(arc?.status === 'live' && arc.platformOwnerRemovedAt);
+  const arcReady = Boolean(arc?.status === 'live' && arc.multisigInstalledAt);
   const solReady = Boolean(sol?.status === 'live');
+
+  // Fetch live USDC balances for any provisioned treasury so the
+  // cards can render the "how much is held from sales" figure.
+  // Fail-soft per helper — bad RPCs render "—" instead of a 500.
+  const [arcBalance, solBalance] = await Promise.all([
+    arc ? getTreasuryUsdcBalance(arc) : Promise.resolve(null),
+    sol ? getTreasuryUsdcBalance(sol) : Promise.resolve(null),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -78,8 +83,8 @@ export default async function TreasuryPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {sol ? <SolanaTreasuryCard treasury={sol} /> : <SolanaProvisionCard />}
-        {arc ? <ArcTreasuryCard treasury={arc} /> : <ArcProvisionCard />}
+        {sol ? <SolanaTreasuryCard treasury={sol} balance={solBalance} /> : <SolanaProvisionCard />}
+        {arc ? <ArcTreasuryCard treasury={arc} balance={arcBalance} /> : <ArcProvisionCard />}
       </div>
 
       <Link
@@ -132,6 +137,32 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+function UsdcBalanceValue({ balance }: { balance: TreasuryBalance | null }) {
+  if (!balance) {
+    return <span className="text-[color:var(--color-muted-foreground)]">—</span>;
+  }
+  if (balance.status === 'error') {
+    return (
+      <span
+        className="text-[color:var(--color-muted-foreground)]"
+        title={balance.error ?? 'RPC read failed'}
+      >
+        — <span className="text-[10px]">read failed</span>
+      </span>
+    );
+  }
+  return (
+    <span className="tabular-nums">
+      {balance.formatted} <span className="text-xs text-[color:var(--color-muted-foreground)]">USDC</span>
+      {balance.status === 'uninitialized' ? (
+        <span className="ml-1 text-[10px] text-[color:var(--color-muted-foreground)]">
+          · token account not yet initialized
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function TxRow({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
   return (
@@ -158,8 +189,10 @@ function SetupStep({ done, title }: { done: boolean; title: string }) {
 
 function SolanaTreasuryCard({
   treasury,
+  balance,
 }: {
   treasury: NonNullable<Awaited<ReturnType<typeof getSolanaTreasury>>>;
+  balance: TreasuryBalance | null;
 }) {
   const members = Array.isArray(treasury.members) ? (treasury.members as string[]) : [];
   return (
@@ -179,6 +212,9 @@ function SolanaTreasuryCard({
             <StatusPill tone={treasury.status === 'live' ? 'success' : 'warning'}>
               {treasury.status === 'live' ? 'Ready for settlement' : treasury.status}
             </StatusPill>
+          </DetailRow>
+          <DetailRow label="USDC balance">
+            <UsdcBalanceValue balance={balance} />
           </DetailRow>
           <DetailRow label="Treasury vault">
             <span className="break-all font-mono text-xs">{treasury.vaultAddress}</span>
@@ -211,6 +247,7 @@ function SolanaTreasuryCard({
             multisigAddress={treasury.multisigAddress}
             threshold={treasury.threshold}
             members={members}
+            chain="sol"
           />
         </div>
 
@@ -250,15 +287,16 @@ function SolanaProvisionCard() {
 
 function ArcTreasuryCard({
   treasury,
+  balance,
 }: {
   treasury: NonNullable<Awaited<ReturnType<typeof getArcTreasury>>>;
+  balance: TreasuryBalance | null;
 }) {
   const members = Array.isArray(treasury.members) ? (treasury.members as string[]) : [];
   const isIntent = treasury.status === 'intent';
   const isPending = treasury.status === 'pending';
   const isLive = treasury.status === 'live';
   const multisigInstalled = Boolean(treasury.multisigInstalledAt);
-  const platformOwnerRemoved = Boolean(treasury.platformOwnerRemovedAt);
   return (
     <Card>
       <CardHeader className="p-5 pb-3">
@@ -275,7 +313,7 @@ function ArcTreasuryCard({
           <DetailRow label="Status">
             <StatusPill
               tone={
-                isLive && platformOwnerRemoved
+                isLive && multisigInstalled
                   ? 'success'
                   : isLive || isPending
                     ? 'warning'
@@ -286,25 +324,27 @@ function ArcTreasuryCard({
                 ? 'Reserved'
                 : isPending
                   ? 'Address ready'
-                  : isLive && platformOwnerRemoved
+                  : isLive && multisigInstalled
                     ? 'Ready for settlement'
-                    : isLive && multisigInstalled
-                      ? 'Recovery signer active'
-                      : 'Deploy complete'}
+                    : 'Deploy complete'}
             </StatusPill>
           </DetailRow>
           <DetailRow label={isIntent ? 'Reserved address' : 'Treasury address'}>
             <span className="break-all font-mono text-xs">{treasury.multisigAddress}</span>
           </DetailRow>
+          {isLive ? (
+            <DetailRow label="USDC balance">
+              <UsdcBalanceValue balance={balance} />
+            </DetailRow>
+          ) : null}
           <DetailRow label="Approvals">
             {treasury.threshold} of {members.length} approvers
           </DetailRow>
         </dl>
-        <div className="grid gap-2 rounded-md border bg-[color:var(--color-muted)] p-3 sm:grid-cols-2">
+        <div className="grid gap-2 rounded-md border bg-[color:var(--color-muted)] p-3 sm:grid-cols-3">
           <SetupStep done={!isIntent} title="Address" />
           <SetupStep done={isLive} title="Activated" />
           <SetupStep done={multisigInstalled} title="Policy" />
-          <SetupStep done={platformOwnerRemoved} title="Self-custody" />
         </div>
         {isIntent ? (
           <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
@@ -323,38 +363,44 @@ function ArcTreasuryCard({
             <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
               {!multisigInstalled
                 ? 'The Arc treasury is deployed. Install the approval policy so approvers control treasury operations.'
-                : platformOwnerRemoved
-                  ? `Arc treasury is in full self-custody with ${members.length} approver(s) at threshold ${treasury.threshold}.`
-                  : `Approval policy is installed for ${members.length} approver(s) at threshold ${treasury.threshold}. Remove the recovery signer when the team is ready for full self-custody.`}
+                : `Approval policy is installed for ${members.length} approver(s) at threshold ${treasury.threshold}. Circle recovery signer kept as a backup.`}
             </p>
             <TxRow label="Deploy" value={treasury.provisioningTxRef} />
             <TxRow label="Install policy" value={treasury.multisigInstallTxRef} />
-            <TxRow label="Self-custody" value={treasury.platformOwnerRemovalTxRef} />
+          </>
+        ) : null}
+        {isLive && multisigInstalled ? (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Proposals</h3>
+              <ProposalList
+                treasuryId={treasury.id}
+                multisigAddress={treasury.multisigAddress}
+                threshold={treasury.threshold}
+                members={members}
+                chain="arc"
+              />
+            </div>
+            <ArcProposeForm treasuryId={treasury.id} />
           </>
         ) : null}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2 p-5 pt-0">
-        {isIntent ? (
-          <ArcDeriveButton treasuryId={treasury.id} status={treasury.status} />
-        ) : isPending ? (
-          <ArcDeployButton treasuryId={treasury.id} status={treasury.status} />
-        ) : isLive && !multisigInstalled ? (
-          <ArcInstallMultisigButton treasuryId={treasury.id} alreadyInstalled={multisigInstalled} />
-        ) : isLive && multisigInstalled && !platformOwnerRemoved ? (
-          <div className="flex flex-col gap-2 w-full">
-            <ArcRemovePlatformButton
-              treasuryId={treasury.id}
-              alreadyRemoved={platformOwnerRemoved}
-            />
-            <Button variant="outline" disabled className="w-full" title="Coming next">
-              Sign and execute proposals
-            </Button>
-          </div>
-        ) : (
-          <Button variant="outline" disabled className="w-full" title="Coming next">
-            Sign and execute proposals
-          </Button>
-        )}
+        {/*
+         * Lifecycle runs end-to-end from `ArcProvisionForm` — operator
+         * clicks one "Create Arc treasury" button and the form chains:
+         *   provision → derive → deploy → install. The Circle bootstrap
+         * EOA stays as a weight=1 recovery owner; that's a Circle
+         * modular-wallet contract behavior, not a finishing step.
+         *
+         * Approve/Reject/Execute UI for Arc proposals ships next —
+         * needs MetaMask signing + bundler userOp submit. Until then
+         * the propose form persists callData for the eventual signer.
+         */}
+        <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+          Connected-wallet approval and execution land next for Arc proposals.
+        </p>
       </CardFooter>
     </Card>
   );

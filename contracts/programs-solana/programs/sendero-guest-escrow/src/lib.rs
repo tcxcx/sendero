@@ -52,6 +52,23 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 declare_id!("9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8");
 
+// security.txt — surfaces in Solana Explorer / SolanaFM / Solscan on
+// the program page so reviewers, security researchers, and integrators
+// can find contact + source + audit links without leaving the explorer.
+// Matches the `securityContact` annotation on the Arc Solidity twin.
+// `no-entrypoint` skips the macro during the IDL build (where there's
+// no entrypoint to attach the ELF section to).
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "Sendero Guest Escrow",
+    project_url: "https://sendero.travel",
+    contacts: "email:security@sendero.travel,link:https://sendero.travel/security,twitter:@senderotravel",
+    policy: "https://sendero.travel/security/policy",
+    preferred_languages: "en,es,pt",
+    source_code: "https://github.com/criptopoeta/sendero/tree/main/contracts/programs-solana/programs/sendero-guest-escrow",
+    auditors: "Unaudited — testnet beta. Mainnet promotion gated on third-party audit."
+}
+
 const CONFIG_SEED: &[u8] = b"config";
 const TRIP_SEED: &[u8] = b"trip";
 const BOOKING_SEED: &[u8] = b"booking";

@@ -21,6 +21,28 @@ import { buildBoardingPassImageUrl } from '@/lib/og/boarding-pass-url';
 import type { BoardingPassCardProps } from '@/lib/og/boarding-pass-card';
 
 const ARC_TX_EXPLORER = 'https://testnet.arcscan.app/tx';
+const SOL_TX_EXPLORER = 'https://explorer.solana.com/tx';
+const SOL_EXPLORER_DEVNET_QS = '?cluster=devnet';
+
+/**
+ * Pick the right block-explorer URL for a settlement tx based on the
+ * booking's settlement chain. Solana base58 signatures route to Solana
+ * Explorer (devnet for testnet-beta, mainnet later); Arc 0x hashes
+ * route to Arcscan. The chain is read from settlement metadata first,
+ * falling back to the booking's tenant.primaryChain.
+ */
+function buildSettlementExplorerUrl(
+  txHash: string,
+  chain: 'arc' | 'sol'
+): { href: string; label: string } {
+  if (chain === 'sol') {
+    return {
+      href: `${SOL_TX_EXPLORER}/${txHash}${SOL_EXPLORER_DEVNET_QS}`,
+      label: 'View on Solana Explorer',
+    };
+  }
+  return { href: `${ARC_TX_EXPLORER}/${txHash}`, label: 'View on Arcscan' };
+}
 
 interface SendBoardingPassArgs {
   bookingId: string;
@@ -48,6 +70,7 @@ export async function sendBoardingPassImageToTraveler(
         segments: true,
         metadata: true,
         createdAt: true,
+        tenant: { select: { primaryChain: true } },
         trip: {
           select: {
             travelerId: true,
@@ -113,8 +136,13 @@ export async function sendBoardingPassImageToTraveler(
     const meta = (booking.metadata ?? {}) as Record<string, unknown>;
     const usdcSettlement =
       meta.usdcSettlement && typeof meta.usdcSettlement === 'object'
-        ? (meta.usdcSettlement as { settlementTxHash?: string })
+        ? (meta.usdcSettlement as { settlementTxHash?: string; chain?: 'arc' | 'sol' })
         : null;
+    // Settlement chain: prefer the explicit value stamped on the
+    // settlement metadata; fall back to booking.tenant.primaryChain so
+    // legacy rows still render correct explorer URLs.
+    const settlementChain: 'arc' | 'sol' =
+      usdcSettlement?.chain === 'sol' || booking.tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
 
     const totalUsdc = booking.totalUsd ? booking.totalUsd.toString() : '—';
     const departureDate = departAt
@@ -148,9 +176,11 @@ export async function sendBoardingPassImageToTraveler(
       return { ok: false, reason: 'og_signing_secret_unset' };
     }
 
-    const settlementLink = usdcSettlement?.settlementTxHash
-      ? `${ARC_TX_EXPLORER}/${usdcSettlement.settlementTxHash}`
+    const explorerLink = usdcSettlement?.settlementTxHash
+      ? buildSettlementExplorerUrl(usdcSettlement.settlementTxHash, settlementChain)
       : null;
+    const settlementLink = explorerLink?.href ?? null;
+    const settlementLabel = explorerLink?.label ?? 'View on Arcscan';
 
     const result = await dispatchToTraveler({
       tripId: booking.tripId,
@@ -161,14 +191,17 @@ export async function sendBoardingPassImageToTraveler(
         id: randomUUID(),
         author: { role: 'agent', name: 'Sendero' },
         title: `🎫 Boarding pass · ${payload.pnr}`,
-        body: `${payload.origin} → ${payload.destination} · ${payload.departureDate} ${payload.departureTime}${settlementLink ? `\n🔗 ${settlementLink}` : ''}`,
+        // Body keeps the route info only — the explorer URL is exposed
+        // ONLY via the CTA button below. Prior code repeated the URL in
+        // body + bullets + ctas, which the WhatsApp adapter rendered as
+        // three identical links per message.
+        body: `${payload.origin} → ${payload.destination} · ${payload.departureDate} ${payload.departureTime}`,
         imageUrl,
-        bullets: settlementLink ? [settlementLink] : undefined,
         ...(settlementLink
           ? {
               ctas: [
                 {
-                  label: 'View on Arcscan',
+                  label: settlementLabel,
                   kind: 'open_link',
                   href: settlementLink,
                   emphasis: 'secondary',

@@ -17,7 +17,12 @@ import { OrbitingCircles } from '@/components/ui/orbiting-circles';
  * orbit and the wallet's chain badges read as the same product.
  */
 
-const OUTER_RING = ['Ethereum_Sepolia', 'Base_Sepolia', 'Optimism_Sepolia', 'Arbitrum_Sepolia'] as const;
+const OUTER_RING = [
+  'Ethereum_Sepolia',
+  'Base_Sepolia',
+  'Optimism_Sepolia',
+  'Arbitrum_Sepolia',
+] as const;
 const INNER_RING = ['Sol_Devnet', 'Arc_Testnet', 'Avalanche_Fuji', 'Polygon_Amoy_Testnet'] as const;
 
 export function UnifiedBalanceOrbit() {

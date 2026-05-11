@@ -126,6 +126,19 @@ export const createPassengerTool: ToolDef<Input, CreatePassengerResult> = {
         `create_passenger: channel='${channel}' requires externalUserId (WhatsApp E.164 phone or Slack member id).`
       );
     }
+    const slackInstall =
+      channel === 'slack'
+        ? await prisma.slackInstall.findFirst({
+            where: { tenantId, revokedAt: null },
+            orderBy: { installedAt: 'desc' },
+            select: { teamId: true },
+          })
+        : null;
+    if (channel === 'slack' && !slackInstall) {
+      throw new Error(
+        'create_passenger: cannot attach Slack because this tenant has no active Slack install.'
+      );
+    }
 
     // Idempotent on email — User.email is UNIQUE. Update the optional
     // fields if a row already exists; otherwise insert.
@@ -185,6 +198,28 @@ export const createPassengerTool: ToolDef<Input, CreatePassengerResult> = {
         select: { id: true },
       });
       channelIdentityId = ci.id;
+      if (channel === 'slack' && slackInstall) {
+        await prisma.slackUserBinding.upsert({
+          where: {
+            tenantId_slackTeamId_slackUserId: {
+              tenantId,
+              slackTeamId: slackInstall.teamId,
+              slackUserId: input.externalUserId,
+            },
+          },
+          create: {
+            tenantId,
+            slackTeamId: slackInstall.teamId,
+            slackUserId: input.externalUserId,
+            senderoUserId: userId,
+            email: input.email,
+          },
+          update: {
+            senderoUserId: userId,
+            email: input.email,
+          },
+        });
+      }
     }
 
     const followUp =

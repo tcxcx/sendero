@@ -165,8 +165,22 @@ interface Traveler {
 }
 
 export interface UserAuth {
-  /** Passkey-derived MSCA address on Arc Testnet. */
-  address: `0x${string}`;
+  /**
+   * Tenant settlement-chain wallet address.
+   * - For `chain: 'arc'`: Circle MSCA `0x…` hex.
+   * - For `chain: 'sol'`: Squads V4 vault base58.
+   * Widened from `0x${string}` so Sol tenants don't get coerced to the
+   * zero-address placeholder. Consumers that need a hex address must
+   * gate on `chain === 'arc'` first.
+   */
+  address: string;
+  /**
+   * Settlement chain this tenant operates on. Drives which UI shells
+   * surface (Arc gateway / Sol Squads vault), wallet copy strings, and
+   * the missing-wallet banner. Defaults to `'arc'` for backwards
+   * compatibility with rows seeded before the cascade landed.
+   */
+  chain?: 'arc' | 'sol';
   displayName: string;
   email: string;
   /** E.164 phone — required by Duffel for hold orders. */

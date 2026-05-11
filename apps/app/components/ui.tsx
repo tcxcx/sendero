@@ -373,13 +373,14 @@ export function FooterRail() {
   const holdOrder = useSendero(s => s.holdOrder);
   const settlementPhase = useSendero(s => s.settlement.phase);
   const onChainSettlement = useSendero(s => s.onChainSettlement);
+  const userAuth = useSendero(s => s.userAuth);
+  const isSolTenant = userAuth?.chain === 'sol';
   const { summary: meter } = useMeterSummary(1500);
 
   if (!SHOW_FOOTER_RAIL) return null;
 
   const treasuryAddr = treasury?.treasuryAddress ?? null;
   const usdc = treasury?.balances.find(b => b.symbol === 'USDC');
-  const eurc = treasury?.balances.find(b => b.symbol === 'EURC');
   const block = treasury?.arc?.blockNumber ?? '—';
 
   const escrowLabel = onChainSettlement
@@ -392,20 +393,32 @@ export function FooterRail() {
     <div className="footer-rail">
       <div className="group">
         <span>
-          <strong>CIRCLE</strong> · Arc L2
+          <strong>CIRCLE</strong> · {isSolTenant ? 'Solana' : 'Arc L2'}
         </span>
         <span>·</span>
         <span>
-          block{' '}
+          {isSolTenant ? 'cluster' : 'block'}{' '}
           <strong style={{ color: 'var(--ink)' }}>
-            #{block === '—' ? '—' : <DigitTicker value={block} />}
+            {isSolTenant ? (
+              'devnet'
+            ) : block === '—' ? (
+              '#—'
+            ) : (
+              <>#<DigitTicker value={block} /></>
+            )}
           </strong>
         </span>
         <span>·</span>
         <span>
           gas{' '}
-          <strong title="USDC is Arc's native gas token (1 nUSDC = 1e-9 USDC)">
-            {treasury?.arc?.gasPrice ? (
+          <strong
+            title={
+              isSolTenant
+                ? 'Solana settlement charges are paid in nano-USDC via Circle Gateway → Squads V4.'
+                : "USDC is Arc's native gas token (1 nUSDC = 1e-9 USDC)"
+            }
+          >
+            {!isSolTenant && treasury?.arc?.gasPrice ? (
               <SmoothNumber
                 value={Number(treasury.arc.gasPrice) / 1e9}
                 precision={4}
@@ -438,21 +451,6 @@ export function FooterRail() {
               />
             ) : (
               '— USDC'
-            )}
-          </strong>
-        </span>
-        <span>·</span>
-        <span>
-          <strong style={{ color: 'var(--eurc)' }}>
-            {eurc ? (
-              <SmoothNumber
-                value={Number(eurc.amount)}
-                precision={2}
-                suffix=" EURC"
-                cadence="calm"
-              />
-            ) : (
-              '— EURC'
             )}
           </strong>
         </span>

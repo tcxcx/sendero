@@ -1,48 +1,57 @@
 'use client';
 
 /**
- * BridgeDialog — bridge USDC INTO Arc Testnet from any supported chain
- * via Circle App Kit (CCTP). State lives in
- * `?bridge=open&fromChain=Ethereum_Sepolia&amount=1.00`.
+ * BridgeDialog — move USDC between chains inside the unified Gateway
+ * balance.
+ *
+ * The user picks WHERE funds should land. App Kit auto-allocates
+ * the source from across the tenant's pool (Arc + Sol + every
+ * Gateway-enabled EVM bridge chain) — the sweep already pushed
+ * incoming deposits into that pool, so source-side liquidity is
+ * implicit. State lives in `?bridge=open&toChain=Arc_Testnet&amount=1.00`.
  */
 
 import { useState } from 'react';
 
-import {
-  ARC_BRIDGE_SOURCES,
-  type ArcBridgeSource,
-  bridgeChainLabel,
-} from '@sendero/arc/bridge-chains';
 import { BlockchainIcon, TokenIcon } from '@sendero/icons';
 import { useQueryState } from 'nuqs';
 
+import { useSendero } from '@/components/store';
+
 import { DialogShell } from './dialog-shell';
 
-const SUPPORTED_GATEWAY_BRIDGE_SOURCES = new Set<ArcBridgeSource>([
-  'Ethereum_Sepolia',
-  'Base_Sepolia',
-  'Polygon_Amoy_Testnet',
-  'Avalanche_Fuji',
-  'Arbitrum_Sepolia',
-  'Optimism_Sepolia',
-]);
+const DESTINATION_CHAINS = [
+  { id: 'Arc_Testnet', label: 'Arc Testnet' },
+  { id: 'Sol_Devnet', label: 'Solana Devnet' },
+  { id: 'Ethereum_Sepolia', label: 'Ethereum Sepolia' },
+  { id: 'Base_Sepolia', label: 'Base Sepolia' },
+  { id: 'Avalanche_Fuji', label: 'Avalanche Fuji' },
+  { id: 'Arbitrum_Sepolia', label: 'Arbitrum Sepolia' },
+  { id: 'Optimism_Sepolia', label: 'Optimism Sepolia' },
+  { id: 'Polygon_Amoy_Testnet', label: 'Polygon Amoy' },
+] as const;
+
+type DestinationChainId = (typeof DESTINATION_CHAINS)[number]['id'];
+
+function chainLabel(id: DestinationChainId): string {
+  return DESTINATION_CHAINS.find(c => c.id === id)?.label ?? id;
+}
 
 export function BridgeDialog() {
+  const tenantChain = useSendero(s => s.userAuth?.chain);
+  const defaultChain: DestinationChainId =
+    tenantChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
+
   const [bridge, setBridge] = useQueryState('bridge');
-  const [fromChain, setFromChain] = useQueryState('fromChain', {
-    defaultValue: 'Ethereum_Sepolia',
+  const [toChain, setToChain] = useQueryState('bridgeToChain', {
+    defaultValue: defaultChain,
   });
-  const [amount, setAmount] = useQueryState('amount', { defaultValue: '1' });
+  const [amount, setAmount] = useQueryState('bridgeAmount', { defaultValue: '1' });
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<
-    Array<{
-      name: string;
-      state: string;
-      txHash?: string;
-      explorerUrl?: string;
-    }>
+    Array<{ name: string; state: string; txHash?: string; explorerUrl?: string }>
   >([]);
 
   const open = bridge === 'open';
@@ -53,7 +62,7 @@ export function BridgeDialog() {
     setBusy(false);
   };
 
-  const chain = (fromChain as ArcBridgeSource) || 'Ethereum_Sepolia';
+  const dest = (toChain as DestinationChainId) || 'Arc_Testnet';
   const amt = amount || '';
   const amtNum = Number(amt);
   const valid = Number.isFinite(amtNum) && amtNum > 0 && amtNum <= 1000;
@@ -67,7 +76,7 @@ export function BridgeDialog() {
       const res = await fetch('/api/bridge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromChain: chain, amount: amt }),
+        body: JSON.stringify({ destinationChain: dest, amount: amt }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -84,74 +93,32 @@ export function BridgeDialog() {
   return (
     <DialogShell
       open={open}
-      title="Bridge · → Arc Testnet"
-      subtitle="AppKit Unified Balance · cross-chain"
+      title="Bridge"
+      subtitle="Move funds between chains in your unified balance"
       onClose={close}
     >
       <p className="dlg-sub">
-        Moves USDC from your unified balance into Arc Testnet. AppKit selects available Gateway
-        liquidity across supported chains, then mints to the settlement address.
+        Pick where you want USDC to land. App Kit pulls liquidity from any chain in your unified
+        balance and mints on the destination. No source picker — the sweep keeps the pool
+        topped up.
       </p>
 
-      {/* Live route visualization — updates as chain selection changes */}
-      <div className="br-route">
-        <div className="br-route-end">
-          <BlockchainIcon chain={chain} size={20} />
-          <span className="br-route-label">{bridgeChainLabel(chain)}</span>
-        </div>
-        <svg className="br-arrow" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-          <path
-            d="M5 12h14m0 0l-5-5m5 5l-5 5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <div className="br-route-end">
-          <BlockchainIcon chain="Arc_Testnet" size={20} />
-          <span className="br-route-label">Arc Testnet</span>
-        </div>
-        <span className="br-token-pill">
-          <TokenIcon token="USDC" size={13} />
-          <span>USDC</span>
-        </span>
-      </div>
-
       <div className="dlg-row">
-        <span className="dlg-label">Source preference · Unified Balance</span>
-        <div className="br-chain-grid" role="radiogroup" aria-label="Source chain">
-          {ARC_BRIDGE_SOURCES.map(id => {
-            const selected = id === chain;
-            const supported = SUPPORTED_GATEWAY_BRIDGE_SOURCES.has(id);
-            return (
-              <button
-                key={id}
-                type="button"
-                className={`br-chain-card ${selected ? 'selected' : ''} ${supported ? '' : 'disabled'}`}
-                role="radio"
-                aria-checked={selected}
-                disabled={!supported}
-                onClick={() => {
-                  if (supported) setFromChain(id);
-                }}
-              >
-                <BlockchainIcon chain={id} size={18} />
-                <span>{bridgeChainLabel(id)}</span>
-                {!supported && <em>soon</em>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="dlg-row">
-        <span className="dlg-label">Destination</span>
-        <div className="br-destination-card">
-          <BlockchainIcon chain="Arc_Testnet" size={18} />
-          <span>Arc Testnet</span>
-          <em>default Gateway settlement rail</em>
+        <span className="dlg-label">Destination chain</span>
+        <div className="br-select-wrap">
+          <BlockchainIcon chain={dest} size={16} />
+          <select
+            className="dlg-select br-chain-select"
+            value={dest}
+            onChange={e => setToChain(e.target.value)}
+            aria-label="Destination chain"
+          >
+            {DESTINATION_CHAINS.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -210,7 +177,7 @@ export function BridgeDialog() {
         {busy ? (
           <>
             <span className="dlg-spinner" aria-hidden="true" />
-            <span>Signing + mint…</span>
+            <span>Bridging…</span>
           </>
         ) : (
           <>
@@ -225,124 +192,39 @@ export function BridgeDialog() {
               />
             </svg>
             <span>
-              Bridge {amt || '0'} USDC · {bridgeChainLabel(chain)} → Arc
+              Bridge {amt || '0'} USDC → {chainLabel(dest)}
             </span>
           </>
         )}
       </button>
 
       <style jsx>{`
-        .br-route {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px 12px;
-          border: 1px solid var(--border);
-          background: var(--bg-elev);
-        }
-        .br-route-end {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          flex: 1;
-          min-width: 0;
-        }
-        .br-route-label {
-          font-family: var(--font-mono);
-          font-size: 10px;
-          letter-spacing: 0.06em;
-          color: var(--text);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .br-arrow {
-          color: var(--text-faint);
-          flex-shrink: 0;
-        }
-        .br-token-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          font-family: var(--font-mono);
-          font-size: 9.5px;
-          letter-spacing: 0.1em;
-          color: var(--text-dim);
-          padding: 2px 7px;
-          border: 1px solid var(--border);
-          background: var(--bg);
-          flex-shrink: 0;
-        }
-        .br-chain-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 8px;
+        .br-select-wrap {
+          position: relative;
           width: 100%;
         }
-        .br-chain-card,
-        .br-destination-card {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          min-width: 0;
-          border: 1px solid var(--border);
-          background: var(--bg-elev);
-          color: var(--text);
-          padding: 10px 11px;
-          font-family: var(--font-mono);
-          font-size: 10.5px;
-          letter-spacing: 0.05em;
-          text-align: left;
+        .br-select-wrap > :global(svg) {
+          position: absolute;
+          left: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          pointer-events: none;
+          z-index: 1;
         }
-        .br-chain-card {
-          cursor: pointer;
-          transition:
-            border-color 140ms ease,
-            background-color 140ms ease,
-            color 140ms ease;
-        }
-        .br-chain-card:hover,
-        .br-chain-card.selected {
-          border-color: var(--ink);
-          background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
-          color: var(--ink);
-        }
-        .br-chain-card.disabled {
-          cursor: not-allowed;
-          color: var(--text-faint);
-          background: color-mix(in oklab, var(--bg-elev) 70%, var(--bg));
-        }
-        .br-chain-card.disabled:hover {
-          border-color: var(--border);
-          color: var(--text-faint);
-          background: color-mix(in oklab, var(--bg-elev) 70%, var(--bg));
-        }
-        .br-chain-card span,
-        .br-destination-card span {
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .br-chain-card em {
-          margin-left: auto;
-          color: var(--text-faint);
-          font-size: 8px;
-          font-style: normal;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
-        }
-        .br-destination-card {
-          width: 100%;
-          border-color: color-mix(in oklab, var(--ink) 30%, var(--border));
-        }
-        .br-destination-card em {
-          margin-left: auto;
-          color: var(--text-dim);
-          font-style: normal;
-          font-size: 9px;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
+        .br-chain-select {
+          padding-left: 36px;
+          appearance: none;
+          -webkit-appearance: none;
+          background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+            linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+          background-position:
+            calc(100% - 18px) 50%,
+            calc(100% - 13px) 50%;
+          background-size:
+            5px 5px,
+            5px 5px;
+          background-repeat: no-repeat;
+          padding-right: 32px;
         }
         .br-amount-row {
           display: flex;
@@ -361,18 +243,6 @@ export function BridgeDialog() {
           grid-template-columns: auto 1fr auto;
           gap: 8px;
           align-items: center;
-        }
-        @media (max-width: 560px) {
-          .br-chain-grid {
-            grid-template-columns: 1fr;
-          }
-          .br-destination-card {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-          .br-destination-card em {
-            margin-left: 0;
-          }
         }
       `}</style>
     </DialogShell>

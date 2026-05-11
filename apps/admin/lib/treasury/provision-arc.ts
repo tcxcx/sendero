@@ -125,11 +125,25 @@ export async function provisionArcMultisigIntent(
   };
 }
 
-/** Read the latest non-failed Arc treasury for the dashboard. */
+/**
+ * Read the most "advanced" non-failed Arc treasury for the dashboard.
+ *
+ * Status precedence beats recency: a completed `live` row must win
+ * over a stray `intent` row that the form created from a duplicate
+ * submit. Without this, a re-fired POST overwrites the visible
+ * treasury with a placeholder address and the page renders as
+ * Reserved even though a working MSCA already exists.
+ *
+ * Within the same status, newest wins.
+ */
 export async function getArcTreasury() {
-  const row = await prisma.superOrgTreasury.findFirst({
+  const rows = await prisma.superOrgTreasury.findMany({
     where: { chain: 'arc', status: { not: 'failed' } },
     orderBy: { createdAt: 'desc' },
   });
-  return row;
+  if (rows.length === 0) return null;
+  const rank = (status: string) => (status === 'live' ? 2 : status === 'pending' ? 1 : 0);
+  return rows.reduce((best, candidate) =>
+    rank(candidate.status) > rank(best.status) ? candidate : best
+  );
 }

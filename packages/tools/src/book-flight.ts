@@ -27,6 +27,23 @@ import {
 } from './lib/trip-ancillaries';
 import type { ToolContext, ToolDef } from './types';
 import crypto from 'node:crypto';
+import { appendFileSync } from 'node:fs';
+
+// DEV-ONLY debug sink: book_flight has TWO silent-failure paths
+// (`usdc settlement failed (non-fatal)` and `booking persistence failed
+// (non-fatal)`) that print warns to stdout. The Ponder indexer dumps
+// thousands of lines into the same dev terminal, drowning these out.
+// Writing to a stable file lets us tail it cleanly during dogfooding.
+// Guarded so it can never run in production.
+function debugAppend(label: string, payload: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === 'production') return;
+  try {
+    const line = `${new Date().toISOString()} ${label} ${JSON.stringify(payload)}\n`;
+    appendFileSync('/tmp/sendero-book-flight.log', line);
+  } catch {
+    /* never block book_flight on a debug-sink error */
+  }
+}
 
 const serviceSchema = z.object({
   id: z.string().min(1),
@@ -586,6 +603,17 @@ export const bookFlightTool: ToolDef = {
             `Hold *${hold.bookingReference}* is good for ~30 minutes — reply "confirm" once you've topped up.`,
         };
       }
+      if (ctx?.traveler?.tenantId) {
+        const { resolveTenantPlatformTreasury } = await import('./platform-treasury');
+        const destination = await resolveTenantPlatformTreasury(ctx.traveler.tenantId);
+        if (!destination) {
+          return {
+            status: 'settlement_destination_missing',
+            message:
+              'Cannot ticket this flight yet — this tenant has no live platform treasury destination for its primary chain, so the traveler wallet cannot be debited safely. Configure the treasury destination and retry.',
+          };
+        }
+      }
     }
 
     let paymentStatus: string;
@@ -680,9 +708,20 @@ export const bookFlightTool: ToolDef = {
           amountUsdc: hold.totalAmount,
         });
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errStack = err instanceof Error ? err.stack : undefined;
         console.warn('[book_flight] usdc settlement failed (non-fatal)', {
           orderId: hold.orderId,
-          error: err instanceof Error ? err.message : String(err),
+          error: errMsg,
+        });
+        debugAppend('[settle-failed]', {
+          orderId: hold.orderId,
+          travelerUserId: travelerUserRowId,
+          tenantId: ctx?.traveler?.tenantId,
+          amount: hold.totalAmount,
+          currency: hold.totalCurrency,
+          error: errMsg,
+          stack: errStack,
         });
       }
     }
@@ -720,9 +759,21 @@ export const bookFlightTool: ToolDef = {
         persistedBookingId = persisted.bookingId;
         persistedTripId = persisted.tripId;
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errStack = err instanceof Error ? err.stack : undefined;
         console.warn('[book_flight] booking persistence failed (non-fatal)', {
           orderId: hold.orderId,
-          error: err instanceof Error ? err.message : String(err),
+          error: errMsg,
+        });
+        debugAppend('[persist-failed]', {
+          orderId: hold.orderId,
+          travelerUserId: travelerUserRowId,
+          tenantId: ctx?.traveler?.tenantId,
+          pnr: hold.bookingReference,
+          amount: hold.totalAmount,
+          currency: hold.totalCurrency,
+          error: errMsg,
+          stack: errStack,
         });
       }
     }
@@ -1708,19 +1759,54 @@ async function settleTravelerUsdcToTreasury(args: {
   const primaryChain: 'arc' | 'sol' =
     (tenant as { primaryChain?: string | null } | null)?.primaryChain === 'sol' ? 'sol' : 'arc';
 
-  const dcw = await prisma.wallet.findFirst({
+  // Phase H+ multi-source settle: gather EVERY DCW the traveler has and
+  // pass each as a Gateway source. Without this, a Sol-primaryChain
+  // tenant whose traveler holds USDC only on Arc gets
+  // `BALANCE_INSUFFICIENT_TOKEN` from Circle App Kit's
+  // `assertFullyAllocated` (Gateway can't auto-allocate across chains
+  // it wasn't given sources for). With it, Gateway burns from any
+  // source chain with balance and mints on `toChainKey` via CCTP.
+  const dcws = await prisma.wallet.findMany({
     where: {
       userId: args.travelerUserId,
       provisioner: 'dcw',
-      ...(primaryChain === 'sol'
-        ? { chainId: SOL_DEVNET_CHAIN_ID }
-        : { NOT: { chainId: SOL_DEVNET_CHAIN_ID } }),
     },
     orderBy: { createdAt: 'asc' },
-    select: { address: true },
+    select: { address: true, chainId: true },
   });
-  if (!dcw?.address) return null;
+  if (dcws.length === 0) return null;
 
+  // Lazy import avoids pulling the full unified-gateway module into
+  // the cold path of every book_flight invocation that doesn't end up
+  // settling (insufficient_funds, tenant_pay_unsupported, etc.).
+  const { circleWalletsPrincipal, spend } = await import('@sendero/circle');
+
+  const toChainKey = primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
+
+  // Destination resolution. Two distinct paths:
+  //
+  // 1) Arc primaryChain — use the SuperOrgTreasury vault address as
+  //    `recipient` directly. App Kit's first source (an EVM viem-
+  //    adapter principal) supplies both the burn AND mint signing
+  //    contexts since both chains share EVM signing. Same logic as
+  //    pre-Phase H.
+  //
+  // 2) Sol primaryChain — Circle App Kit's Sol Gateway program checks
+  //    that the signing DCW context OWNS the destination ATA (Anchor
+  //    error 6027 InvalidDestinationTokenAccount when it doesn't).
+  //    Squads vault PDAs are off-curve and can't own a DCW-signable
+  //    ATA in the App Kit pattern. The working pattern (see
+  //    `spendTenantUnifiedUsd` in `packages/circle/src/unified-balance.ts`):
+  //    bind `toAdapter` + `toAccount` to the tenant's Sol DCW (Circle-
+  //    managed, signs `gatewayMint`, owns its own ATA) and set
+  //    `recipient` to that SAME DCW. The DCW's adapter is `circle-
+  //    wallets` — App Kit's destination address-resolution skips the
+  //    viem chain-lookup that breaks on `solana-kit` adapters.
+  //
+  //    Funds land in the tenant Sol DCW; a separate sweep (off-cycle,
+  //    batched) moves DCW → multisig vault PDA. The SuperOrgTreasury
+  //    row's vaultAddress is preserved as the eventual destination
+  //    but isn't the immediate spend recipient.
   const { resolvePlatformTreasuryDestination } = await import('./platform-treasury');
   const senderoTreasury = await resolvePlatformTreasuryDestination(primaryChain);
   if (!senderoTreasury) {
@@ -1729,44 +1815,164 @@ async function settleTravelerUsdcToTreasury(args: {
     );
     return null;
   }
-  const senderoRecipient = senderoTreasury.address;
 
-  // Lazy import avoids pulling the full unified-gateway module into
-  // the cold path of every book_flight invocation that doesn't end up
-  // settling (insufficient_funds, tenant_pay_unsupported, etc.).
-  const { circleWalletsPrincipal, spend } = await import('@sendero/circle');
+  // Sol primaryChain note (architectural constraint): Circle App Kit's
+  // `gatewayMint` Anchor program (`gateway.v1.gatewayMint`) requires
+  // the signing DCW context to OWN the destination ATA. Setting
+  // `recipient = SuperOrgTreasury.vaultAddress` directly (e.g. an
+  // approver wallet, Squads vault PDA, or pre-derived multisig ATA)
+  // when `toAccount = tenant ops DCW` trips `AnchorError 6027:
+  // InvalidDestinationTokenAccount`. Verified in dogfood — the
+  // comment in `unified-balance.ts:366-368` about "external recipient
+  // fallback" doesn't hold on the Sol side. So for Sol we land funds
+  // in the tenant ops DCW (which the signer owns), THEN do a Circle
+  // DCW SPL transfer downstream to push them to the configured
+  // platform treasury. The sweep is wired below; if it fails the
+  // funds are still recoverable from the DCW.
+  let recipient: string;
+  let toAdapter: Awaited<ReturnType<typeof circleWalletsPrincipal>>['adapter'] | undefined;
+  let toAccount: string | undefined;
+  let solSweepDestination: string | null = null;
+  let solSweepWalletId: string | null = null;
+  if (primaryChain === 'sol') {
+    const tenantSolDcw = await prisma.circleWallet.findFirst({
+      where: { tenantId: args.tenantId, chain: 'SOL-DEVNET', kind: 'operations' },
+      select: { address: true, circleWalletId: true },
+    });
+    if (!tenantSolDcw?.address) {
+      console.warn(
+        '[book_flight] Sol-primaryChain settle: no tenant Sol operations DCW — provision one before settling'
+      );
+      return null;
+    }
+    const destPrincipal = circleWalletsPrincipal({
+      address: tenantSolDcw.address,
+      label: `tenant:${args.tenantId}:settle-dest:sol`,
+    });
+    if (!destPrincipal) return null;
+    recipient = tenantSolDcw.address;
+    toAdapter = destPrincipal.adapter;
+    toAccount = tenantSolDcw.address;
+    // Defer the sweep to AFTER spend() succeeds. Capture both the
+    // configured destination (vaultAddress) and the source walletId
+    // (Circle's internal DCW id we'll need to call createTransaction).
+    if (senderoTreasury.address !== tenantSolDcw.address) {
+      solSweepDestination = senderoTreasury.address;
+      solSweepWalletId = tenantSolDcw.circleWalletId ?? null;
+    }
+  } else {
+    recipient = senderoTreasury.address;
+  }
 
-  const principal = circleWalletsPrincipal({
-    address: dcw.address,
-    label: `traveler:${args.travelerUserId}:settle`,
-  });
-  if (!principal) return null;
+  // Build sources. Only the traveler's DCWs that can actually sign
+  // their chain's burns get included. Circle DCW EVM principals
+  // implement what App Kit needs for EVM burns (viem adapter — full
+  // `signMessage` support). Sol DCWs do NOT implement `signMessages`
+  // for raw burn-intent signing, so including the traveler's Sol DCW
+  // as a source would abort App Kit with "Signer does not support
+  // any known signing method" if it ever tried to allocate from Sol.
+  // We deliberately exclude the Sol DCW from sources — the traveler's
+  // Arc balance is the burn pool, and Gateway burns from there + mints
+  // on Sol via CCTP.
+  const seenAddrs = new Set<string>();
+  const sources: Array<{ principal: ReturnType<typeof circleWalletsPrincipal> }> = [];
+  for (const w of dcws) {
+    if (!w.address || seenAddrs.has(w.address)) continue;
+    if (primaryChain === 'sol' && w.chainId === SOL_DEVNET_CHAIN_ID) continue;
+    seenAddrs.add(w.address);
+    const p = circleWalletsPrincipal({
+      address: w.address,
+      label: `traveler:${args.travelerUserId}:settle:chain${w.chainId}`,
+    });
+    if (p) sources.push({ principal: p });
+  }
+  if (sources.length === 0) return null;
 
-  const toChainKey = primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
-
-  console.log('[book_flight] settling (cost-reimbursement to Sendero)', {
+  console.log('[book_flight] settling (cost-reimbursement to Sendero, multi-source)', {
     tenantId: args.tenantId,
     travelerUserId: args.travelerUserId,
     amountUsdc: args.amountUsdc,
     primaryChain,
     toChainKey,
-    recipient: senderoRecipient,
-    treasuryId: senderoTreasury.treasuryId,
-    treasuryNetwork: senderoTreasury.network,
-    note: 'tenant markup share is Phase H v2 — not wired yet',
+    sourceAddresses: Array.from(seenAddrs),
+    sourceCount: sources.length,
+    recipient,
+    toAccount: toAccount ?? '(fallback to first source)',
+    note:
+      primaryChain === 'sol'
+        ? 'sol destination: funds land in tenant Sol operations DCW. Separate sweep cron moves DCW → Squads vault PDA — TODO. Tenant markup share is Phase H v2.'
+        : 'tenant markup share is Phase H v2 — not wired yet',
   });
 
+  // `useForwarder: false` for Sol destinations (Circle's Forwarding
+  // Service doesn't support Solana as a destination today). For Arc
+  // we leave the flag unset; App Kit's default behavior signs the
+  // mint locally via the first source's adapter.
   const result = await spend({
-    sources: [{ principal }],
+    sources,
     toChainKey,
-    recipient: senderoRecipient,
+    recipient,
+    ...(toAdapter ? { toAdapter } : {}),
+    ...(toAccount ? { toAccount } : {}),
+    ...(primaryChain === 'sol' ? { useForwarder: false } : {}),
     amount: args.amountUsdc,
   });
 
   const explorerFallback =
     primaryChain === 'sol'
-      ? `https://explorer.solana.com/tx/${result.txHash}?cluster=devnet`
+      ? `https://solscan.io/tx/${result.txHash}?cluster=devnet`
       : `https://testnet.arcscan.app/tx/${result.txHash}`;
+
+  // Sol primaryChain second leg: sweep from tenant Sol operations DCW
+  // to the configured platform treasury address. Fire-and-forget at
+  // the typing level — if this fails the funds are still safe in the
+  // DCW and a periodic sweep cron picks them up. We still await so
+  // the response can carry the sweep tx hash when it lands first
+  // turn.
+  if (primaryChain === 'sol' && solSweepDestination && solSweepWalletId) {
+    try {
+      const { transferUsdcFromCircleWallet, resolveUsdcTokenId } = await import(
+        '@sendero/circle/dcw-transfer'
+      );
+      const sweep = await transferUsdcFromCircleWallet({
+        walletId: solSweepWalletId,
+        destinationAddress: solSweepDestination,
+        amount: args.amountUsdc,
+        tokenId: resolveUsdcTokenId('sol-devnet'),
+        refId: `book_flight:settle:${args.tenantId}:${Date.now()}`,
+      });
+      console.log('[book_flight] sol settle sweep kicked off', {
+        sweepTransactionId: sweep.transactionId,
+        sweepState: sweep.state,
+        from: toAccount,
+        to: solSweepDestination,
+        amount: args.amountUsdc,
+      });
+      debugAppend('[sweep-kicked]', {
+        sweepTransactionId: sweep.transactionId,
+        sweepState: sweep.state,
+        from: toAccount,
+        to: solSweepDestination,
+        amount: args.amountUsdc,
+        gatewayTxHash: result.txHash,
+      });
+    } catch (sweepErr) {
+      console.warn('[book_flight] sol settle sweep failed (non-fatal — funds in tenant DCW)', {
+        error: sweepErr instanceof Error ? sweepErr.message : String(sweepErr),
+        from: toAccount,
+        to: solSweepDestination,
+        amount: args.amountUsdc,
+      });
+      debugAppend('[sweep-failed]', {
+        error: sweepErr instanceof Error ? sweepErr.message : String(sweepErr),
+        stack: sweepErr instanceof Error ? sweepErr.stack : undefined,
+        from: toAccount,
+        to: solSweepDestination,
+        amount: args.amountUsdc,
+        gatewayTxHash: result.txHash,
+      });
+    }
+  }
 
   return {
     settlementTxHash: result.txHash,

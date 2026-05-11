@@ -7,30 +7,30 @@ import { Button } from '@sendero/ui/button';
 const IS_DEV = process.env.NODE_ENV === 'development';
 
 const ARC_PHASES = [
-  { code: '01', label: 'Circle wallet set created' },
-  { code: '02', label: 'MSCA deployed on Arc Testnet' },
-  { code: '03', label: 'ERC-8004 identity anchored' },
-  { code: '04', label: 'Webhook acknowledgement' },
+  { code: '01', label: 'Creating your treasury wallet' },
+  { code: '02', label: 'Setting up your agency identity' },
+  { code: '03', label: 'Wiring up notifications' },
+  { code: '04', label: 'Almost ready' },
 ] as const;
 
 const SOL_PHASES = [
-  { code: '01', label: 'Squads V4 vault provisioned' },
-  { code: '02', label: 'Solana DCWs minted on devnet' },
-  { code: '03', label: 'Metaplex Agent Registry attestation' },
-  { code: '04', label: 'Workspace handoff' },
+  { code: '01', label: 'Creating your treasury wallet' },
+  { code: '02', label: 'Setting up your agency identity' },
+  { code: '03', label: 'Wiring up notifications' },
+  { code: '04', label: 'Almost ready' },
 ] as const;
 
 const CHAIN_META = {
   arc: {
-    eyebrow: 'Arc treasury · minting',
-    chainLabel: 'arc-testnet',
-    lede: 'Circle is provisioning your treasury wallet on Arc Testnet and signalling Sendero via webhook. This usually takes a few seconds.',
+    eyebrow: 'Setting things up',
+    chainLabel: 'Arc',
+    lede: 'Building your workspace. This takes a few seconds.',
     phases: ARC_PHASES,
   },
   sol: {
-    eyebrow: 'Solana treasury · minting',
-    chainLabel: 'sol-devnet',
-    lede: 'Sendero is provisioning your Squads V4 vault, JIT-funding it for gas, and minting the Metaplex Agent Registry attestation. This usually takes a few seconds.',
+    eyebrow: 'Setting things up',
+    chainLabel: 'Solana',
+    lede: 'Building your workspace. This takes a few seconds.',
     phases: SOL_PHASES,
   },
 } as const;
@@ -69,7 +69,7 @@ export function ProvisioningWaitScreen({
             {meta.eyebrow}
           </span>
           <h1 className="provisioning-title">
-            Minting
+            Spinning up
             <span className="provisioning-title__org"> {organizationName}</span>
             <span className="provisioning-title__period">.</span>
           </h1>
@@ -92,7 +92,7 @@ export function ProvisioningWaitScreen({
 
         <footer className="provisioning-meta">
           <span className="provisioning-meta__row">
-            <span>tenant</span>
+            <span>workspace</span>
             <span className="provisioning-meta__value">{organizationName}</span>
           </span>
           <span className="provisioning-meta__row">
@@ -100,30 +100,17 @@ export function ProvisioningWaitScreen({
             <span className="provisioning-meta__value">{meta.chainLabel}</span>
           </span>
           <span className="provisioning-meta__row">
-            <span>listener</span>
-            <span className="provisioning-meta__value">
-              {polling ? 'awaiting webhook' : 'idle'} · t+{formatElapsed(elapsed)}
-            </span>
+            <span>elapsed</span>
+            <span className="provisioning-meta__value">{formatElapsed(elapsed)}</span>
           </span>
         </footer>
 
         {stuck ? (
           <aside className="provisioning-notice" role="status">
-            <span className="provisioning-notice__tag">Diagnostic</span>
-            <h2 className="provisioning-notice__title">
-              Webhook hasn’t reached this dev server yet
-            </h2>
+            <span className="provisioning-notice__tag">Taking longer than usual</span>
+            <h2 className="provisioning-notice__title">This is taking a moment.</h2>
             <p>
-              <code>onboardingComplete</code> is set by the{' '}
-              <code>organization.created</code> webhook — Clerk calls{' '}
-              <code>/api/webhooks/clerk</code>, Sendero provisions Circle, and updates this org.
-              Clerk cannot POST to localhost unless you expose it (e.g. ngrok) and point the
-              dashboard webhook at <code>https://&lt;tunnel&gt;/api/webhooks/clerk</code>.
-            </p>
-            <p className="provisioning-notice__hint">
-              In the terminal running <code>next dev</code> you should see{' '}
-              <code>[webhooks/clerk] organization.created</code> when delivery succeeds. No log line
-              means the webhook never arrived.
+              We're still working on it. Try the button below to retry, or refresh the page.
             </p>
           </aside>
         ) : null}
@@ -138,7 +125,7 @@ export function ProvisioningWaitScreen({
               onClick={onRunDevComplete}
               className="provisioning-dev__button"
             >
-              {completing ? 'Provisioning…' : 'Run provisioning without webhook'}
+              {completing ? 'Setting up…' : 'Retry setup'}
             </Button>
             {devHint ? <p className="provisioning-dev__hint">{devHint}</p> : null}
           </div>
@@ -157,7 +144,7 @@ export function ProvisioningWaitScreen({
         .provisioning-card {
           position: relative;
           width: 100%;
-          max-width: 560px;
+          max-width: 640px;
           padding: clamp(28px, 4vw, 44px);
           background: var(--surface-floating, #fdfbf7);
           border: 1px solid var(--hairline-color, #d8c1a7);
@@ -243,10 +230,10 @@ export function ProvisioningWaitScreen({
 
         .provisioning-lede {
           margin: 0;
-          max-width: 46ch;
-          color: color-mix(in oklab, var(--midnight, #1f2a44) 78%, transparent);
-          font-size: 0.9375rem;
-          line-height: 1.55;
+          max-width: 50ch;
+          color: color-mix(in oklab, var(--midnight, #1f2a44) 70%, transparent);
+          font-size: 0.8125rem;
+          line-height: 1.5;
         }
 
         .provisioning-manifest {

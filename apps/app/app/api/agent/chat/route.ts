@@ -405,6 +405,8 @@ export async function POST(req: NextRequest) {
   }
 
   const tools = buildAiSdkTools(scopedTools, {
+    ...(body.tripId ? { tripId: body.tripId } : {}),
+    surface: 'agent_chat_stream',
     traveler: { userId, tenantId },
     ...(apiKey
       ? {

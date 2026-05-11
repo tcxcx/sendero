@@ -32,6 +32,14 @@ interface Props {
   defaultAmount?: string;
   /** Pending bookings on this traveler's open trips. Empty = top-up only. */
   pendingBookings?: PendingBookingOption[];
+  /**
+   * Settlement chain label rendered in the help copy (e.g. "Arc Testnet"
+   * or "Solana Devnet"). The wallet page already resolves the right
+   * label via `unifiedBalanceChainForWallet(chainId)` — passing it
+   * through here keeps the form chain-aware without re-deriving from
+   * the address shape.
+   */
+  chainLabel?: string;
 }
 
 const NO_BOOKING_VALUE = '';
@@ -41,6 +49,7 @@ export function PrefundForm({
   travelerAddress,
   defaultAmount = '50',
   pendingBookings = [],
+  chainLabel = 'Arc Testnet',
 }: Props) {
   const [pending, startTransition] = useTransition();
   const [amount, setAmount] = useState(defaultAmount);
@@ -84,11 +93,11 @@ export function PrefundForm({
     >
       <div className="t-meta">Pre-fund this traveler</div>
       <div className="t-body ink-70" style={{ fontSize: 12, lineHeight: 1.5 }}>
-        Debits this org's Gateway balance and materializes USDC to the traveler's Arc wallet. No
-        platform treasury shortcut.
+        Debits this org's Gateway balance and materializes USDC to the traveler's settlement wallet.
+        No platform treasury shortcut.
       </div>
       <div className="t-mono ink-60" style={{ fontSize: 11 }}>
-        Destination: {travelerAddress.slice(0, 12)}…{travelerAddress.slice(-6)} on Arc Testnet
+        Destination: {travelerAddress.slice(0, 12)}…{travelerAddress.slice(-6)} on {chainLabel}
       </div>
 
       {pendingBookings.length > 0 ? (

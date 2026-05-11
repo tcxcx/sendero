@@ -26,6 +26,8 @@ interface Runtime {
 export function WorkflowLog() {
   const workflow = useSendero(s => s.workflow);
   const treasury = useSendero(s => s.treasury);
+  const userAuth = useSendero(s => s.userAuth);
+  const chainKind: 'arc' | 'sol' = userAuth?.chain ?? 'arc';
 
   // Stable per-mount run id so the header doesn't flicker every render.
   // Generated client-side only — Math.random() during SSR diverged from
@@ -105,7 +107,14 @@ export function WorkflowLog() {
             />
           ) : null}
           <Row k="tools" v={toolLabel} />
-          <Row k="chain" v={`Arc L2 · ${treasury?.arc?.chainId ?? '—'}`} />
+          <Row
+            k="chain"
+            v={
+              chainKind === 'sol'
+                ? 'Solana · Devnet'
+                : `Arc L2 · ${treasury?.arc?.chainId ?? '—'}`
+            }
+          />
           <Row
             k="block"
             v={
@@ -163,9 +172,13 @@ export function WorkflowLog() {
         <div className="log-group">
           <div
             className="log-head"
-            title="USDC is Arc's native gas token. Per-call charges are paid in nano-USDC (1 nUSDC = 1e-9 USDC)."
+            title={
+              chainKind === 'sol'
+                ? 'Per-call charges paid in nano-USDC. Solana settles via Circle Gateway → Squads V4.'
+                : "USDC is Arc's native gas token. Per-call charges are paid in nano-USDC (1 nUSDC = 1e-9 USDC)."
+            }
           >
-            <span className="name">▸ gas · nanopayments · arc</span>
+            <span className="name">▸ gas · nanopayments · {chainKind === 'sol' ? 'sol' : 'arc'}</span>
             <span className="dur">
               {meterSummary
                 ? `${meterSummary.paidCalls}p / ${meterSummary.rejectedCalls}r`
@@ -212,7 +225,15 @@ export function WorkflowLog() {
                 modelLabel
               )}
             </span>
-            <span title="Total USDC paid as Arc gas (nUSDC = nano-USDC)">arc paid (nUSDC)</span>
+            <span
+              title={
+                chainKind === 'sol'
+                  ? 'Total USDC paid as Solana settlement gas (nUSDC = nano-USDC)'
+                  : 'Total USDC paid as Arc gas (nUSDC = nano-USDC)'
+              }
+            >
+              {chainKind === 'sol' ? 'sol paid (nUSDC)' : 'arc paid (nUSDC)'}
+            </span>
             <span
               style={{
                 color: 'var(--usdc)',
@@ -319,7 +340,11 @@ export function WorkflowLog() {
             lineHeight: 1.6,
           }}
         >
-          <div>{'// powered by Circle Nanopayments + Arc L2'}</div>
+          <div>
+            {chainKind === 'sol'
+              ? '// powered by Circle Nanopayments + Solana'
+              : '// powered by Circle Nanopayments + Arc L2'}
+          </div>
           <div>{'// x402 batched settlement · duffel hold-then-pay'}</div>
           <div>{'// ─────────────────────────────'}</div>
         </div>

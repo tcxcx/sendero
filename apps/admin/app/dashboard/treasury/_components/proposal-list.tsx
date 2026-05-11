@@ -5,6 +5,16 @@ import { listTreasuryProposals } from '@/lib/treasury/propose-solana';
 import { ProposalActions } from './proposal-actions';
 
 /**
+ * Explorer URLs differ by chain. Solana uses the public Solana
+ * Explorer; Arc-testnet uses Arcscan. The list component renders for
+ * either chain, so the URL builder lives here.
+ */
+function txExplorerUrl(chain: 'sol' | 'arc', tx: string) {
+  if (chain === 'sol') return `https://explorer.solana.com/tx/${tx}?cluster=devnet`;
+  return `https://testnet.arcscan.net/tx/${tx}`;
+}
+
+/**
  * Server Component — renders the list of TreasuryProposal rows for a
  * given treasury, newest first. Each row mounts <ProposalActions />
  * (Phase 7.6.x) which surfaces Approve / Reject / Execute buttons
@@ -21,11 +31,18 @@ export async function ProposalList({
   multisigAddress,
   threshold,
   members,
+  chain,
 }: {
   treasuryId: string;
   multisigAddress: string;
   threshold: number;
   members: string[];
+  /**
+   * Drives explorer URL templates + whether ProposalActions renders.
+   * Approve/Reject/Execute on Arc is Phase 7.6.x — until then the Arc
+   * branch just lists rows without action buttons.
+   */
+  chain: 'sol' | 'arc';
 }) {
   const rows = await listTreasuryProposals(treasuryId);
   if (rows.length === 0) {
@@ -77,7 +94,7 @@ export async function ProposalList({
             <div className="mt-1.5 flex items-center gap-3 text-[11px]">
               {row.proposalTxRef ? (
                 <a
-                  href={`https://explorer.solana.com/tx/${row.proposalTxRef}?cluster=devnet`}
+                  href={txExplorerUrl(chain, row.proposalTxRef)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 underline"
@@ -88,7 +105,7 @@ export async function ProposalList({
               ) : null}
               {row.executedTxRef ? (
                 <a
-                  href={`https://explorer.solana.com/tx/${row.executedTxRef}?cluster=devnet`}
+                  href={txExplorerUrl(chain, row.executedTxRef)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 underline"
@@ -98,13 +115,15 @@ export async function ProposalList({
                 </a>
               ) : null}
             </div>
-            <ProposalActions
-              proposalId={row.id}
-              multisigAddress={multisigAddress}
-              txIndex={row.txIndex}
-              status={row.status}
-              members={members}
-            />
+            {chain === 'sol' ? (
+              <ProposalActions
+                proposalId={row.id}
+                multisigAddress={multisigAddress}
+                txIndex={row.txIndex}
+                status={row.status}
+                members={members}
+              />
+            ) : null}
           </li>
         );
       })}

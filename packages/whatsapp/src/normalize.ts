@@ -24,18 +24,17 @@ export function isValidE164(candidate: string): boolean {
 }
 
 /**
- * Strip Markdown + cap emoji budget for WhatsApp display.
+ * Convert agent Markdown-lite into WhatsApp's native chat formatting
+ * and cap emoji budget for WhatsApp display.
+ *
  * Meta's chat renderer supports a subset of Markdown (*bold*, _italic_,
- * ~strike~, ```code```) that differs from standard — we flatten to plain
- * text and optionally split to stay under the 4096-char body limit.
+ * ~strike~, ```code```) that differs from standard Markdown. Keep the
+ * supported shapes native and flatten the unsupported ones so travelers
+ * never see raw `**bold**`, headings, or `[label](url)` syntax.
  */
 export function formatForWhatsApp(text: string, opts: { maxChars?: number } = {}): string[] {
   const maxChars = opts.maxChars ?? 4096;
-  const stripped = text
-    .replace(/\*\*([^*]+)\*\*/g, '*$1*') // Markdown **bold** → WA *bold*
-    .replace(/__([^_]+)__/g, '_$1_')
-    .replace(/`([^`]+)`/g, '$1')
-    .trim();
+  const stripped = toWhatsAppMarkdown(text).trim();
   if (stripped.length <= maxChars) return [stripped];
 
   const chunks: string[] = [];
@@ -49,4 +48,16 @@ export function formatForWhatsApp(text: string, opts: { maxChars?: number } = {}
   }
   if (remaining) chunks.push(remaining);
   return chunks;
+}
+
+export function toWhatsAppMarkdown(text: string): string {
+  return text
+    .replace(/```(?:\w+)?\n?([\s\S]*?)```/g, '$1')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/^#{1,6}\s+(.+)$/gm, '*$1*')
+    .replace(/\*\*([^*\n][\s\S]*?[^*\n])\*\*/g, '*$1*')
+    .replace(/__([^_\n][\s\S]*?[^_\n])__/g, '*$1*')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^[\t ]*[-*][\t ]+/gm, '- ')
+    .replace(/^[\t ]*>\s?/gm, '');
 }

@@ -27,7 +27,7 @@
 import { Prisma, prisma } from '@sendero/database';
 import { parseUnits } from 'viem';
 
-import { GATEWAY_CHAINS, isEvmChain } from './gateway';
+import { GATEWAY_CHAINS, isEvmChain, isSolanaChain } from './gateway';
 import {
   circleWalletsPrincipal,
   deposit as unifiedDeposit,
@@ -172,12 +172,28 @@ export async function sweepChain(args: SweepChainArgs): Promise<SweepResult> {
   // and the DCW IS their depositor.
   const config = await prisma.tenantGatewayConfig.findUnique({
     where: { tenantId },
-    select: { evmDepositorAddress: true },
+    select: { evmDepositorAddress: true, solanaDepositorAddress: true },
   });
+  // Pick the canonical depositor for this chain. EVM tenants have an
+  // EOA gateway-signer (`evmDepositorAddress`) that's distinct from
+  // every per-chain DCW; Sol tenants have a `solanaDepositorAddress`
+  // that today resolves to the Sol ops DCW itself but may diverge in
+  // future configs (e.g. dedicated Sol gateway signer separate from
+  // the DCW). When the depositor differs from the DCW, we use
+  // `depositFor` so the balance lands on the canonical depositor —
+  // the address the wallet UI / unified-balance API queries.
+  const isEvm = isEvmChain(chain);
+  const isSol = isSolanaChain(chain);
+  const evmDepositor = config?.evmDepositorAddress ?? null;
+  const solDepositor = config?.solanaDepositorAddress ?? null;
   const useDepositFor =
-    isEvmChain(chain) &&
-    config?.evmDepositorAddress &&
-    config.evmDepositorAddress.toLowerCase() !== opsDcwAddress.toLowerCase();
+    (isEvm && evmDepositor && evmDepositor.toLowerCase() !== opsDcwAddress.toLowerCase()) ||
+    (isSol && solDepositor && solDepositor !== opsDcwAddress);
+  const depositAccount = useDepositFor
+    ? isEvm
+      ? (evmDepositor as string)
+      : (solDepositor as string)
+    : opsDcwAddress;
 
   try {
     console.log('[gateway-sweep] dispatching deposit', {
@@ -185,7 +201,7 @@ export async function sweepChain(args: SweepChainArgs): Promise<SweepResult> {
       chainKey,
       opsDcwAddress,
       depositMode: useDepositFor ? 'depositFor' : 'deposit',
-      depositAccount: useDepositFor ? config?.evmDepositorAddress : opsDcwAddress,
+      depositAccount,
       amount,
     });
     const { txHash: depositTxHash } = useDepositFor
@@ -193,7 +209,7 @@ export async function sweepChain(args: SweepChainArgs): Promise<SweepResult> {
           principal,
           chainKey,
           amount,
-          depositAccount: config!.evmDepositorAddress,
+          depositAccount,
         })
       : await unifiedDeposit({
           principal,

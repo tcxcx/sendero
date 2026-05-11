@@ -38,6 +38,34 @@ import { requirePlatformRole } from '@/lib/access';
 import { createArcUserOperationFeesEstimator } from '@/lib/treasury/arc-userop-fees';
 import { ensureCircleServerRuntime } from '@/lib/treasury/circle-server-runtime';
 
+// Inlined: matches packages/multisig/src/constants.ts::WEIGHTED_WEBAUTHN_MULTISIG_PLUGIN_ADDRESS.
+const WEIGHTED_WEBAUTHN_MULTISIG_PLUGIN_ADDRESS: Address =
+  '0x0000000C984AFf541D6cE86Bb697e68ec57873C8';
+
+const OWNERSHIP_INFO_ABI = [
+  {
+    inputs: [{ name: 'account', type: 'address' }],
+    name: 'ownershipInfoOf',
+    outputs: [
+      { name: 'ownerAddresses', type: 'bytes30[]' },
+      {
+        name: 'ownersData',
+        type: 'tuple[]',
+        components: [
+          { name: 'weight', type: 'uint256' },
+          { name: 'credType', type: 'uint8' },
+          { name: 'addr', type: 'address' },
+          { name: 'publicKeyX', type: 'uint256' },
+          { name: 'publicKeyY', type: 'uint256' },
+        ],
+      },
+      { name: 'thresholdWeight', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
 export interface RemoveArcPlatformOwnerInput {
   treasuryId: string;
 }
@@ -153,6 +181,38 @@ export async function removeArcPlatformOwner(
     };
   }
 
+  // Idempotency: read on-chain owners. If bootstrap is already absent or
+  // its weight is 0, just stamp the DB and return. Prevents
+  // updateMultisigWeights from reverting on already-removed state
+  // during a retry after a partial DB write.
+  try {
+    const info = await publicClient.readContract({
+      address: WEIGHTED_WEBAUTHN_MULTISIG_PLUGIN_ADDRESS,
+      abi: OWNERSHIP_INFO_ABI,
+      functionName: 'ownershipInfoOf',
+      args: [account.address],
+    });
+    const ownersData = info[1];
+    const platformLower = platformAddress.toLowerCase();
+    const platformOwner = ownersData.find(o => o.addr.toLowerCase() === platformLower);
+    const platformAlreadyRemoved = !platformOwner || platformOwner.weight === 0n;
+    if (platformAlreadyRemoved) {
+      await prisma.superOrgTreasury.update({
+        where: { id: treasury.id },
+        data: { platformOwnerRemovedAt: new Date() },
+      });
+      return {
+        ok: true,
+        treasuryId: treasury.id,
+        userOpHash: (treasury.platformOwnerRemovalTxRef ?? '0x') as Hex,
+        platformAddress,
+        alreadyRemoved: true,
+      };
+    }
+  } catch {
+    // Read failure — fall through to the userOp.
+  }
+
   // Encode updateMultisigWeights with platformAddress at weight=0.
   // Threshold stays the same (already validated reachable above).
   const removalCallData = encodeFunctionData({
@@ -172,9 +232,14 @@ export async function removeArcPlatformOwner(
 
   let userOpHash: Hex;
   try {
+    // Pass `callData` directly (raw plugin call), NOT `calls`. Same
+    // reason as install-arc-multisig.ts: Circle's WeightedWebauthnMultisig
+    // plugin only implements `userOpValidationFunction`. Wrapping in
+    // viem's `calls` produces an `execute()` outer call that hits
+    // `runtimeValidationFunction` → NotImplemented → revert.
     userOpHash = await bundlerClient.sendUserOperation({
       account,
-      calls: [{ to: account.address, value: 0n, data: removalCallData }],
+      callData: removalCallData,
     });
   } catch (err) {
     return {

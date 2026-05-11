@@ -3,10 +3,11 @@
 /**
  * WalletDropdown — identity trigger + balance card dropdown.
  *
- * Panel design: centered token icon, big balance, four circular actions
- * (Deposit · Send · Swap · Bridge). Token selector toggles between USDC
- * and EURC. Each action button opens a nuqs-driven dialog (state lives
- * in the URL, so deep-links and hotkeys work).
+ * Panel design: centered USDC mark, unified balance, three circular
+ * actions (Deposit · Send · Bridge). Sendero is USDC-only — the
+ * unified Gateway pool is the single source of funds. Each action
+ * button opens a nuqs-driven dialog (state lives in the URL, so
+ * deep-links and hotkeys work).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -21,8 +22,6 @@ import { useIsMac } from './hooks/use-is-mac';
 import { logout } from '@sendero/circle/modular-wallets';
 import { TokenIcon } from '@sendero/icons';
 
-type Token = 'USDC' | 'EURC';
-
 export function WalletDropdown() {
   const isMac = useIsMac();
   const userAuth = useSendero(s => s.userAuth);
@@ -33,30 +32,47 @@ export function WalletDropdown() {
 
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [selected, setSelected] = useState<Token>('USDC');
   const [usdc, setUsdc] = useState<bigint | null>(null);
-  const [eurc, setEurc] = useState<bigint | null>(null);
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   // Dialog query state (nuqs). These open on button click; the dialog
   // components themselves read the same keys to render/hide.
   const [, setSend] = useQueryState('send');
-  const [, setSwap] = useQueryState('swap');
   const [, setBridge] = useQueryState('bridge');
   const [, setDeposit] = useQueryState('deposit');
 
-  // Zero-address means `organization.publicMetadata.arcWalletAddress`
-  // hasn't been stamped yet (Clerk webhook pending or Circle provision
-  // failed). The trigger renders a "provisioning" state below; we skip
-  // balance fetching entirely to avoid 404s.
-  const isZeroAddress = !!userAuth && /^0x0+$/i.test(userAuth.address);
+  // Zero-address means the chain-appropriate wallet hasn't been stamped
+  // yet (Clerk webhook pending or provision failed). For Arc that's
+  // `0x000…0`; for Sol the canonical "no address" placeholder is the
+  // base58 system program id (`111…1`). The trigger renders a
+  // "provisioning" state below; we skip balance fetching entirely to
+  // avoid 404s. Sol tenants' settlement wallet lives off the Circle
+  // unified-balance path — the Send/Swap/Bridge dialogs still fire on
+  // the Arc-side gateway abstraction (per platform spec), so the
+  // balance fetch only runs when we have an Arc-shaped address.
+  const isArcChain = userAuth?.chain !== 'sol';
+  const isZeroAddress =
+    !!userAuth &&
+    (isArcChain ? /^0x0+$/i.test(userAuth.address) : userAuth.address === '11111111111111111111111111111111');
+  const chainLabel = isArcChain ? 'Arc' : 'Solana';
 
   // Balance authority is the Circle webhook → CircleWallet cached
   // columns. One-shot GET primes the panel, then SSE keeps it live.
   // No viem polling — the browser never reads RPC directly.
+  //
+  // Sol-primary tenants don't hit this path: the route is Arc-only
+  // (Wallet rows keyed by 0x EVM addresses) and Sol base58 is
+  // case-sensitive (lower-casing the address breaks lookups in any
+  // future Sol-aware route too). The unified-balance section in the
+  // dropdown body already surfaces the canonical balance for Sol
+  // tenants — see `unified-balance-section.tsx` headline.
   useEffect(() => {
     if (!userAuth || isZeroAddress) return;
+    if (!isArcChain) return;
+    // Arc EVM addresses are case-insensitive per EIP-55; lowercasing
+    // is the canonical lookup form. For Sol we'd preserve case but
+    // the route doesn't serve Sol balances anyway (gated above).
     const address = userAuth.address.toLowerCase();
     const encoded = encodeURIComponent(address);
 
@@ -66,7 +82,6 @@ export function WalletDropdown() {
       .then(json => {
         if (cancelled || !json) return;
         setUsdc(BigInt(json.usdc ?? '0'));
-        setEurc(BigInt(json.eurc ?? '0'));
       })
       .catch(() => {
         /* stream will deliver first value anyway */
@@ -75,9 +90,8 @@ export function WalletDropdown() {
     const es = new EventSource(`/api/wallet/balance/stream?address=${encoded}`);
     const onBalance = (ev: MessageEvent) => {
       try {
-        const { usdc, eurc } = JSON.parse(ev.data) as { usdc: string; eurc: string };
+        const { usdc } = JSON.parse(ev.data) as { usdc: string };
         setUsdc(BigInt(usdc));
-        setEurc(BigInt(eurc));
       } catch {
         /* malformed event */
       }
@@ -92,7 +106,7 @@ export function WalletDropdown() {
       es.removeEventListener('bye', onBye);
       es.close();
     };
-  }, [userAuth]);
+  }, [userAuth, isArcChain, isZeroAddress]);
 
   useEffect(() => {
     if (!open) return;
@@ -157,18 +171,16 @@ export function WalletDropdown() {
     v === null
       ? '—'
       : Number(formatUnits(v, 6)).toLocaleString('en-US', {
-          minimumFractionDigits: selected === 'USDC' ? 0 : 2,
+          minimumFractionDigits: 0,
           maximumFractionDigits: 2,
         });
 
-  const selectedBalance = selected === 'USDC' ? usdc : eurc;
   const walletTitle = `${organization?.name ?? 'Workspace'} Wallet`;
 
-  const openAction = (which: 'deposit' | 'send' | 'swap' | 'bridge') => {
+  const openAction = (which: 'deposit' | 'send' | 'bridge') => {
     setOpen(false);
     if (which === 'deposit') setDeposit('open');
     if (which === 'send') setSend('open');
-    if (which === 'swap') setSwap('open');
     if (which === 'bridge') setBridge('open');
   };
 
@@ -197,7 +209,7 @@ export function WalletDropdown() {
           )}
           <span className="wd-trigger-body">
             <span className="wd-name">{userAuth.displayName}</span>
-            <span className="wd-addr">{isZeroAddress ? 'provisioning wallet…' : short}</span>
+            <span className="wd-addr">{isZeroAddress ? `provisioning ${chainLabel.toLowerCase()} wallet…` : short}</span>
           </span>
           <span className={`wd-chev ${open ? 'open' : ''}`} aria-hidden="true">
             ▾
@@ -217,7 +229,7 @@ export function WalletDropdown() {
             <div className="wd-id-body">
               <span className="wd-id-name">{userAuth.displayName}</span>
               <span className="wd-id-role">
-                {isZeroAddress ? 'Provisioning Arc wallet…' : userAuth.email || 'no email'}
+                {isZeroAddress ? `Provisioning ${chainLabel} wallet…` : userAuth.email || 'no email'}
               </span>
             </div>
           </div>
@@ -233,26 +245,11 @@ export function WalletDropdown() {
                 borderTop: '1px solid var(--border)',
               }}
             >
-              Your Arc wallet is still being provisioned. This normally completes within a few
-              seconds of org creation. Balances will load automatically once the Circle webhook
-              lands.
+              Your {chainLabel} settlement wallet is still being provisioned. This normally
+              completes within a few seconds of org creation. Balances will load automatically
+              once the Circle webhook lands.
             </div>
           )}
-
-          {/* Token switcher */}
-          <div className="wd-tabs">
-            {(['USDC', 'EURC'] as Token[]).map(t => (
-              <button
-                key={t}
-                type="button"
-                className={`wd-tab ${selected === t ? 'sel' : ''}`}
-                onClick={() => setSelected(t)}
-              >
-                <span className={`wd-tab-dot wd-${t.toLowerCase()}`} />
-                {t}
-              </button>
-            ))}
-          </div>
 
           <div className="wd-service-title">
             <span>{walletTitle}</span>
@@ -261,15 +258,15 @@ export function WalletDropdown() {
           {/* Balance card — the screenshot shape */}
           <div className="wd-balance-card">
             <div className="wd-service-kicker">Business Wallet Service</div>
-            <div className={`wd-coin wd-coin-${selected.toLowerCase()}`}>
-              <TokenIcon token={selected} size={88} />
+            <div className="wd-coin wd-coin-usdc">
+              <TokenIcon token="USDC" size={88} />
             </div>
             <div className="wd-amount">
-              {selected === 'USDC' && !isZeroAddress ? (
+              {!isZeroAddress ? (
                 <UnifiedBalanceSection chrome="inline" />
               ) : (
                 <>
-                  {fmt(selectedBalance)} <span className="wd-amount-unit">{selected}</span>
+                  {fmt(usdc)} <span className="wd-amount-unit">USDC</span>
                 </>
               )}
             </div>
@@ -286,12 +283,6 @@ export function WalletDropdown() {
                 label="Send"
                 hint={isMac ? '⌘⇧S' : 'Ctrl+Shift+S'}
                 onClick={() => openAction('send')}
-              />
-              <ActionCircle
-                icon={<Icon name="swap" />}
-                label="Swap"
-                hint={isMac ? '⌘⇧W' : 'Ctrl+Shift+W'}
-                onClick={() => openAction('swap')}
               />
               <ActionCircle
                 icon={<Icon name="bridge" />}
@@ -320,9 +311,8 @@ export function WalletDropdown() {
                       { cache: 'no-store' }
                     );
                     if (!r.ok) return;
-                    const json = (await r.json()) as { usdc?: string; eurc?: string };
+                    const json = (await r.json()) as { usdc?: string };
                     if (json.usdc) setUsdc(BigInt(json.usdc));
-                    if (json.eurc) setEurc(BigInt(json.eurc));
                   }}
                   aria-label="refresh balance"
                 >
@@ -661,9 +651,9 @@ export function WalletDropdown() {
           margin-left: 2px;
         }
         .wd-actions {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 10px;
+          display: flex;
+          justify-content: center;
+          gap: 24px;
           width: 100%;
           padding-top: 4px;
         }
@@ -841,7 +831,7 @@ function ActionCircle({
   );
 }
 
-function Icon({ name }: { name: 'deposit' | 'send' | 'swap' | 'bridge' }) {
+function Icon({ name }: { name: 'deposit' | 'send' | 'bridge' }) {
   const style: React.CSSProperties = {
     width: 18,
     height: 18,
@@ -865,15 +855,6 @@ function Icon({ name }: { name: 'deposit' | 'send' | 'swap' | 'bridge' }) {
         <svg viewBox="0 0 24 24" style={style}>
           <path d="M22 2L11 13" />
           <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-        </svg>
-      );
-    case 'swap':
-      return (
-        <svg viewBox="0 0 24 24" style={style}>
-          <path d="M7 4v16" />
-          <path d="M4 7l3-3 3 3" />
-          <path d="M17 20V4" />
-          <path d="M20 17l-3 3-3-3" />
         </svg>
       );
     case 'bridge':

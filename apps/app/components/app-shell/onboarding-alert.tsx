@@ -2,13 +2,19 @@
 
 /**
  * OnboardingAlert — a header strip that surfaces when the signed-in
- * user's org doesn't have an Arc wallet yet (i.e. organization
- * publicMetadata.arcWalletAddress is missing or still the placeholder).
+ * user's org doesn't have a settlement wallet bound for its chosen chain
+ * (Arc → `arcWalletAddress`, Sol → `solTreasuryAddress`).
  *
  * Without a real wallet, on-chain settlement, USDC payments, and
  * boarding-pass NFT mints all silently fail. This alert is the canonical
  * way to surface that gap — it explains what's missing in plain language
  * and routes the user straight to the onboarding flow that fixes it.
+ *
+ * Chain-aware: a Sol tenant with `solTreasuryAddress` set never sees this
+ * banner (correct — their settlement wallet is provisioned). An Arc
+ * tenant still gates on `arcWalletAddress`. Without this branch, Sol
+ * tenants saw the banner permanently because Arc address is absent by
+ * design.
  *
  * The alert hydrates from Clerk org metadata (same source as
  * ClerkWalletBridge) so it reflects the org you've actually selected, not
@@ -23,14 +29,20 @@ import { Button } from '@sendero/ui/button';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-const PLACEHOLDER_ADDRESS = '0x1111111111111111111111111111111111111111';
+const ARC_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const ARC_PLACEHOLDER_ADDRESS = '0x1111111111111111111111111111111111111111';
+const SOL_ZERO_ADDRESS = '11111111111111111111111111111111';
 const DISMISS_COOKIE = 'sendero.onboarding.alert.dismissed';
 
-function isMissingWallet(addr: string | null | undefined): boolean {
+function isMissingArcWallet(addr: string | null | undefined): boolean {
   if (!addr) return true;
   const lower = addr.toLowerCase();
-  return lower === ZERO_ADDRESS || lower === PLACEHOLDER_ADDRESS;
+  return lower === ARC_ZERO_ADDRESS || lower === ARC_PLACEHOLDER_ADDRESS;
+}
+
+function isMissingSolWallet(addr: string | null | undefined): boolean {
+  if (!addr) return true;
+  return addr === SOL_ZERO_ADDRESS;
 }
 
 function readCookie(name: string): string | null {
@@ -58,10 +70,21 @@ export function OnboardingAlert() {
 
   if (!userLoaded || !orgLoaded || !isSignedIn || !organization) return null;
 
-  const arcAddressRaw = organization.publicMetadata?.arcWalletAddress;
-  const arcAddress = typeof arcAddressRaw === 'string' ? arcAddressRaw : null;
-  if (!isMissingWallet(arcAddress)) return null;
+  const meta = organization.publicMetadata as
+    | {
+        primaryChain?: 'arc' | 'sol';
+        arcWalletAddress?: string;
+        solTreasuryAddress?: string;
+      }
+    | undefined;
+  const chain: 'arc' | 'sol' = meta?.primaryChain === 'sol' ? 'sol' : 'arc';
+  const missing =
+    chain === 'sol'
+      ? isMissingSolWallet(typeof meta?.solTreasuryAddress === 'string' ? meta.solTreasuryAddress : null)
+      : isMissingArcWallet(typeof meta?.arcWalletAddress === 'string' ? meta.arcWalletAddress : null);
+  if (!missing) return null;
   if (dismissed) return null;
+  const chainLabel = chain === 'sol' ? 'Solana' : 'Arc';
 
   const onDismiss = () => {
     writeCookie(DISMISS_COOKIE, '1');
@@ -77,10 +100,10 @@ export function OnboardingAlert() {
             Finish setting up your wallet
           </AlertTitle>
           <AlertDescription className="text-[12px] leading-relaxed text-muted-foreground">
-            Your org doesn&apos;t have an Arc wallet bound yet. Until it does, you can&apos;t pay
-            for bookings in USDC, settle escrow on-chain, or mint boarding-pass NFTs. The
-            agent will skip those steps silently, which is why your demo runs stop short.
-            One-time setup, takes about 30 seconds.
+            Your org doesn&apos;t have a {chainLabel} settlement wallet bound yet. Until it
+            does, you can&apos;t pay for bookings in USDC, settle escrow on-chain, or mint
+            boarding-pass NFTs. The agent will skip those steps silently, which is why your
+            demo runs stop short. One-time setup, takes about 30 seconds.
           </AlertDescription>
         </div>
         <div className="flex shrink-0 items-center gap-2">

@@ -1,20 +1,26 @@
 'use client';
 
 /**
- * SendDialog — same-chain USDC / EURC transfer from the Sendero treasury.
- * State lives in `?send=open&token=USDC&to=0x...&amount=1.00`.
+ * SendDialog — USDC transfer from the unified Gateway balance.
+ * State lives in `?send=open&to=…&amount=1.00&toChain=Arc_Testnet`.
+ *
+ * Sendero is USDC-only — the unified Gateway pool is the single
+ * source of funds. App Kit auto-allocates across every Gateway-enabled
+ * chain (Arc, Sol, EVM bridge chains) to satisfy the spend.
+ *
+ * Destination chain is user-selectable (same selector as BridgeDialog).
+ * Recipient validation switches between EVM hex (0x…40) and Sol base58.
  */
 
 import { useEffect, useState } from 'react';
 
-import { TokenIcon } from '@sendero/icons';
+import { BlockchainIcon } from '@sendero/icons';
 import { useQueryState } from 'nuqs';
 
 import { decimalUsdcToMicro, microUsdcToDecimal } from '@/lib/gateway-balance-math';
+import { useSendero } from '@/components/store';
 
 import { DialogShell } from './dialog-shell';
-
-type Token = 'USDC' | 'EURC';
 
 interface GatewayBalanceSnapshot {
   grandTotal?: string;
@@ -26,6 +32,37 @@ interface GatewayBalanceSnapshot {
 }
 
 const ESTIMATED_GATEWAY_SEND_FEE_MICRO = 1_000n; // 0.001000 USDC
+
+const DESTINATION_CHAINS = [
+  { id: 'Arc_Testnet', label: 'Arc Testnet', family: 'evm' as const },
+  { id: 'Sol_Devnet', label: 'Solana Devnet', family: 'sol' as const },
+  { id: 'Ethereum_Sepolia', label: 'Ethereum Sepolia', family: 'evm' as const },
+  { id: 'Base_Sepolia', label: 'Base Sepolia', family: 'evm' as const },
+  { id: 'Avalanche_Fuji', label: 'Avalanche Fuji', family: 'evm' as const },
+  { id: 'Arbitrum_Sepolia', label: 'Arbitrum Sepolia', family: 'evm' as const },
+  { id: 'Optimism_Sepolia', label: 'Optimism Sepolia', family: 'evm' as const },
+  { id: 'Polygon_Amoy_Testnet', label: 'Polygon Amoy', family: 'evm' as const },
+] as const;
+
+type DestinationChainId = (typeof DESTINATION_CHAINS)[number]['id'];
+type ChainFamily = 'evm' | 'sol';
+
+function chainFamily(id: DestinationChainId): ChainFamily {
+  return DESTINATION_CHAINS.find(c => c.id === id)?.family ?? 'evm';
+}
+
+function chainLabel(id: DestinationChainId): string {
+  return DESTINATION_CHAINS.find(c => c.id === id)?.label ?? id;
+}
+
+const EVM_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+// Sol base58 (Bitcoin alphabet) — 32-byte pubkey encodes to 32–44 chars
+const SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+function isValidRecipient(addr: string, family: ChainFamily): boolean {
+  if (family === 'sol') return SOL_ADDRESS_RE.test(addr);
+  return EVM_ADDRESS_RE.test(addr);
+}
 
 function parseMicro(value: string | undefined | null): bigint {
   try {
@@ -39,19 +76,17 @@ function trimUsdcDecimal(value: string): string {
   return value.replace(/\.?0+$/, '');
 }
 
-function money(value: string | undefined | null): string {
-  const amount = Number(value || '0');
-  return amount.toLocaleString('en-US', {
-    minimumFractionDigits: amount === 0 ? 2 : 2,
-    maximumFractionDigits: 6,
-  });
-}
-
 export function SendDialog() {
+  const tenantChain = useSendero(s => s.userAuth?.chain);
+  const defaultChain: DestinationChainId =
+    tenantChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
+
   const [send, setSend] = useQueryState('send');
-  const [token, setToken] = useQueryState('token', { defaultValue: 'USDC' });
-  const [to, setTo] = useQueryState('to', { defaultValue: '' });
-  const [amount, setAmount] = useQueryState('amount', { defaultValue: '1' });
+  const [to, setTo] = useQueryState('sendTo', { defaultValue: '' });
+  const [amount, setAmount] = useQueryState('sendAmount', { defaultValue: '1' });
+  const [toChain, setToChain] = useQueryState('sendToChain', {
+    defaultValue: defaultChain,
+  });
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +106,8 @@ export function SendDialog() {
     setBusy(false);
   };
 
-  const tok = (token as Token) || 'USDC';
+  const dest = (toChain as DestinationChainId) || 'Arc_Testnet';
+  const family = chainFamily(dest);
   const toAddr = (to || '').trim();
   const amt = amount || '';
   const amtNum = Number(amt);
@@ -81,13 +117,13 @@ export function SendDialog() {
     spendableMicro > ESTIMATED_GATEWAY_SEND_FEE_MICRO
       ? spendableMicro - ESTIMATED_GATEWAY_SEND_FEE_MICRO
       : 0n;
-  const overSpendable = tok === 'USDC' && balance && amountMicro > maxSendMicro;
-  const validTo = /^0x[a-fA-F0-9]{40}$/.test(toAddr);
+  const overSpendable = balance && amountMicro > maxSendMicro;
+  const validTo = isValidRecipient(toAddr, family);
   const validAmt = Number.isFinite(amtNum) && amtNum > 0 && amtNum <= 10_000 && !overSpendable;
   const valid = validTo && validAmt;
 
   useEffect(() => {
-    if (!open || tok !== 'USDC') return;
+    if (!open) return;
     let cancelled = false;
     setBalanceError(null);
     fetch('/api/gateway/balance', { cache: 'no-store' })
@@ -107,10 +143,10 @@ export function SendDialog() {
     return () => {
       cancelled = true;
     };
-  }, [open, tok]);
+  }, [open]);
 
   const useMax = () => {
-    if (tok !== 'USDC' || maxSendMicro <= 0n) return;
+    if (maxSendMicro <= 0n) return;
     setAmount(trimUsdcDecimal(microUsdcToDecimal(maxSendMicro)));
   };
 
@@ -123,7 +159,12 @@ export function SendDialog() {
       const res = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: tok, to: toAddr, amount: amt }),
+        body: JSON.stringify({
+          token: 'USDC',
+          to: toAddr,
+          amount: amt,
+          destinationChain: dest,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -141,83 +182,45 @@ export function SendDialog() {
     }
   };
 
+  const recipientPlaceholder = family === 'sol' ? '7EqQdEUL…wJeK' : '0xabcd…1234';
+  const recipientHint = family === 'sol' ? 'Recipient (Solana base58)' : 'Recipient (0x…40 hex)';
+
   return (
     <DialogShell open={open} title="Send" subtitle="Unified Balance" onClose={close}>
       <p className="dlg-sub">
-        {tok === 'USDC'
-          ? 'Send from your unified USDC balance. AppKit can source USDC across supported Gateway chains and mint it to the recipient on Arc Testnet.'
-          : 'Send EURC from the current Arc wallet balance. EURC is not pooled into Gateway yet.'}
+        Send USDC from your unified balance. App Kit pulls liquidity from any chain in your
+        Gateway pool (Arc, Sol, every EVM bridge chain) and mints on the destination.
       </p>
 
-      {tok === 'USDC' ? (
-        <div className="snd-balance-panel">
-          <div className="snd-balance-head">
-            <span>Unified Balance</span>
-            <strong>
-              {balance ? `$${money(balance.spendableAvailable ?? balance.available)}` : '—'}
-            </strong>
-          </div>
-          <div className="snd-balance-grid">
-            <span>Current tracked</span>
-            <strong>${money(balance?.grandTotal ?? balance?.available)}</strong>
-            <span>Estimated fee</span>
-            <strong>
-              ${trimUsdcDecimal(microUsdcToDecimal(ESTIMATED_GATEWAY_SEND_FEE_MICRO))}
-            </strong>
-            <span>Max transferable</span>
-            <strong>${trimUsdcDecimal(microUsdcToDecimal(maxSendMicro))}</strong>
-          </div>
-          {(parseMicro(balance?.pendingCreditTotal) > 0n ||
-            parseMicro(balance?.opsStagingTotal) > 0n ||
-            parseMicro(balance?.unsupportedSourceTotal) > 0n) && (
-            <div className="snd-balance-grid snd-balance-muted">
-              <span>Finalizing</span>
-              <strong>${money(balance?.pendingCreditTotal)}</strong>
-              <span>Ops staging</span>
-              <strong>${money(balance?.opsStagingTotal)}</strong>
-              <span>Not spendable yet</span>
-              <strong>${money(balance?.unsupportedSourceTotal)}</strong>
-            </div>
-          )}
-          {balanceError && <div className="snd-balance-error">{balanceError}</div>}
-        </div>
-      ) : (
-        <div className="snd-balance-panel">
-          <div className="snd-balance-head">
-            <span>Arc wallet balance</span>
-            <strong>EURC</strong>
-          </div>
-          <div className="snd-balance-note">
-            EURC sends directly from the Arc wallet service. Unified Gateway pooling is USDC-only.
-          </div>
-        </div>
-      )}
+      {balanceError && <div className="snd-balance-error">{balanceError}</div>}
 
       <div className="dlg-row">
-        <span className="dlg-label">Token</span>
-        <div className="dlg-segmented">
-          {(['USDC', 'EURC'] as Token[]).map(t => (
-            <button
-              key={t}
-              type="button"
-              className={`dlg-seg-btn ${tok === t ? 'sel' : ''}`}
-              onClick={() => setToken(t)}
-            >
-              <TokenIcon token={t} size={13} />
-              {t}
-            </button>
-          ))}
+        <span className="dlg-label">Destination chain</span>
+        <div className="snd-select-wrap">
+          <BlockchainIcon chain={dest} size={16} />
+          <select
+            className="dlg-select snd-chain-select"
+            value={dest}
+            onChange={e => setToChain(e.target.value)}
+            aria-label="Destination chain"
+          >
+            {DESTINATION_CHAINS.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       <div className="dlg-row">
-        <span className="dlg-label">Recipient (0x…40)</span>
+        <span className="dlg-label">{recipientHint}</span>
         <input
           className="dlg-input"
           style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
           value={toAddr}
           onChange={e => setTo(e.target.value)}
-          placeholder="0xabcd...1234"
+          placeholder={recipientPlaceholder}
           spellCheck={false}
         />
       </div>
@@ -225,16 +228,14 @@ export function SendDialog() {
       <div className="dlg-row">
         <div className="snd-label-row">
           <span className="dlg-label">Amount</span>
-          {tok === 'USDC' && (
-            <button
-              type="button"
-              className="snd-max"
-              onClick={useMax}
-              disabled={!balance || maxSendMicro <= 0n}
-            >
-              Max
-            </button>
-          )}
+          <button
+            type="button"
+            className="snd-max"
+            onClick={useMax}
+            disabled={!balance || maxSendMicro <= 0n}
+          >
+            Max
+          </button>
         </div>
         <div className="snd-amount-wrap">
           <input
@@ -245,7 +246,7 @@ export function SendDialog() {
             onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
             placeholder="0.00"
           />
-          <span>{tok}</span>
+          <span>USDC</span>
         </div>
       </div>
 
@@ -288,74 +289,58 @@ export function SendDialog() {
               />
             </svg>
             <span>
-              Send {amt || '0'} {tok} →{' '}
-              {validTo ? `${toAddr.slice(0, 6)}…${toAddr.slice(-4)}` : '—'}
+              Send {amt || '0'} USDC →{' '}
+              {validTo
+                ? `${toAddr.slice(0, 6)}…${toAddr.slice(-4)} on ${chainLabel(dest)}`
+                : chainLabel(dest)}
             </span>
           </>
         )}
       </button>
 
       <style jsx>{`
-        .snd-balance-panel {
-          border: 1px solid var(--border);
-          background: color-mix(in oklab, var(--bg-elev) 100%, transparent);
-          padding: 10px 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
+        .snd-select-wrap {
+          position: relative;
+          width: 100%;
         }
-        .snd-balance-head {
-          display: flex;
-          align-items: baseline;
-          justify-content: space-between;
-          gap: 12px;
-          color: var(--text);
+        .snd-select-wrap > :global(svg) {
+          position: absolute;
+          left: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          pointer-events: none;
+          z-index: 1;
         }
-        .snd-balance-head span,
-        .snd-label-row {
-          font-family: var(--font-mono);
-          font-size: 10px;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: var(--text-faint);
+        .snd-chain-select {
+          padding-left: 36px;
+          appearance: none;
+          -webkit-appearance: none;
+          background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+            linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+          background-position:
+            calc(100% - 18px) 50%,
+            calc(100% - 13px) 50%;
+          background-size:
+            5px 5px,
+            5px 5px;
+          background-repeat: no-repeat;
+          padding-right: 32px;
         }
-        .snd-balance-head strong {
-          font-family: var(--font-mono);
-          font-size: 20px;
-          font-weight: 500;
-          color: var(--text);
-        }
-        .snd-balance-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 5px 12px;
-          font-family: var(--font-mono);
-          font-size: 10px;
-          color: var(--text-dim);
-        }
-        .snd-balance-grid strong {
-          color: var(--text);
-          font-weight: 500;
-          text-align: right;
-        }
-        .snd-balance-muted {
-          border-top: 1px solid var(--border);
-          padding-top: 8px;
-        }
-        .snd-balance-note,
         .snd-balance-error {
           font-family: var(--font-mono);
           font-size: 10px;
           line-height: 1.45;
-          color: var(--text-faint);
-        }
-        .snd-balance-error {
           color: var(--danger, #ef4444);
         }
         .snd-label-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          font-family: var(--font-mono);
+          font-size: 10px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--text-faint);
         }
         .snd-max {
           border: 1px solid var(--border);

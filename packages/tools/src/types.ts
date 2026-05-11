@@ -14,6 +14,10 @@ export interface JsonSchemaObject {
 }
 
 export interface ToolContext {
+  /** Active Trip.id for this tool turn, when the caller is scoped to a trip. */
+  tripId?: string;
+  /** Human-readable caller surface for observability (`web_console_chat`, `whatsapp_kapso`, etc.). */
+  surface?: string;
   /** Signed-in traveler identity, forwarded from the chat POST body. */
   traveler?: {
     name?: string;

@@ -214,23 +214,36 @@ async function dispatchPhoneNumberCreated(event: {
     });
   }
 
-  await prisma.whatsAppInstall.update({
-    where: { id: install.id },
-    data: {
-      status: 'active',
-      phoneNumberId: event.phoneNumberId,
-      businessAccountId: event.businessAccountId ?? undefined,
-      displayPhoneNumber: event.displayPhoneNumber ?? undefined,
-      businessDisplayName: event.verifiedName ?? undefined,
-      kapsoConnectionId: event.phoneNumberId,
-      lastHealthyAt: new Date(),
-      lastErrorMessage: null,
-      metadata: mergeJsonObject(install.metadata, {
-        tenantWorkflow: activation,
-        tenantFlows,
-      }),
-    },
-  });
+  await prisma.$transaction([
+    prisma.whatsAppInstall.updateMany({
+      where: {
+        id: { not: install.id },
+        status: 'active',
+        OR: [{ phoneNumberId: event.phoneNumberId }, { kapsoConnectionId: event.phoneNumberId }],
+      },
+      data: {
+        status: 'disabled',
+        lastErrorMessage: 'WhatsApp number rebound to another workspace.',
+      },
+    }),
+    prisma.whatsAppInstall.update({
+      where: { id: install.id },
+      data: {
+        status: 'active',
+        phoneNumberId: event.phoneNumberId,
+        businessAccountId: event.businessAccountId ?? undefined,
+        displayPhoneNumber: event.displayPhoneNumber ?? undefined,
+        businessDisplayName: event.verifiedName ?? undefined,
+        kapsoConnectionId: event.phoneNumberId,
+        lastHealthyAt: new Date(),
+        lastErrorMessage: null,
+        metadata: mergeJsonObject(install.metadata, {
+          tenantWorkflow: activation,
+          tenantFlows,
+        }),
+      },
+    }),
+  ]);
 
   console.log('[webhooks/kapso] install activated', {
     tenantId: install.tenantId,
@@ -323,7 +336,8 @@ async function dispatchWorkflowHandoff(event: {
   }
 
   const install = await prisma.whatsAppInstall.findFirst({
-    where: { phoneNumberId: event.phoneNumberId, status: { not: 'disabled' } },
+    where: { phoneNumberId: event.phoneNumberId, status: 'active' },
+    orderBy: { updatedAt: 'desc' },
     select: { tenantId: true },
   });
   if (!install) {
@@ -521,7 +535,8 @@ async function dispatchWorkflowFailed(event: {
     return { matched: false };
   }
   const install = await prisma.whatsAppInstall.findFirst({
-    where: { phoneNumberId: event.phoneNumberId },
+    where: { phoneNumberId: event.phoneNumberId, status: 'active' },
+    orderBy: { updatedAt: 'desc' },
     select: { tenantId: true },
   });
   if (!install) {
@@ -575,6 +590,7 @@ async function dispatchMessageReceived(event: {
   }
   const install = await prisma.whatsAppInstall.findFirst({
     where: { phoneNumberId: event.phoneNumberId, status: 'active' },
+    orderBy: { updatedAt: 'desc' },
     select: { tenantId: true },
   });
   if (!install) {

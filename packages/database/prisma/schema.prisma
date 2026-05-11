@@ -353,6 +353,8 @@ model Tenant {
   chatSessions                 ChatSession[]
   slackInstalls                SlackInstall[]
   slackUserBindings            SlackUserBinding[]
+  slackWebhookEvents           SlackWebhookEvent[]
+  slackAgentEvents             SlackAgentEvent[]
   whatsappInstall              WhatsAppInstall?
   whatsappFlowRegistrations    WhatsAppFlowRegistration[]
   whatsappOutbound             WhatsAppOutboundMessage[]
@@ -382,6 +384,7 @@ model Tenant {
   otpDeliveryAttempts          OtpDeliveryAttempt[]
   securityAlerts               SecurityAlert[]
   gatewaySigner                TenantGatewaySigner?
+  solanaGatewaySigner          TenantSolanaGatewaySigner?
   gatewayConfig                TenantGatewayConfig?
   gatewayDeposits              GatewayDepositLog[]
   gatewayTransfers             GatewayTransferLog[]
@@ -817,6 +820,7 @@ model Trip {
   reputationFeedback ReputationFeedback[]
   chatSessions       ChatSession[]        @relation("ChatSessionTrip")
   channelHandoffs    ChannelHandoff[]
+  slackAgentEvents   SlackAgentEvent[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
@@ -1242,6 +1246,33 @@ model TenantGatewaySigner {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tenant_gateway_signers")
+}
+
+/// Per-tenant self-custody Solana keypair used as the Gateway depositor
+/// + burn-intent signer on Solana. Replaces the Circle DCW Sol signer
+/// because Circle's `toSolanaSigner` only implements `signTransactions`
+/// — App Kit's `gateway.v1.signBurnIntents` needs `signMessage`/
+/// `signMessages`, which `@solana/kit`'s `KeyPairSigner` provides.
+///
+/// Address is the base58 pubkey. Ciphertext plaintext is the base58
+/// 64-byte secret key (full keypair, what `@solana/web3.js` Keypair
+/// emits as `secretKey` then base58-encodes). Decrypt + re-derive
+/// matches the same shape as `TenantGatewaySigner` for EVM.
+model TenantSolanaGatewaySigner {
+  tenantId            String   @id
+  /// Base58 Solana pubkey derived from the encrypted secret key. Stable
+  /// across calls. Verified on decrypt to detect KEK drift / corruption.
+  address             String   @unique
+  /// Base64-encoded ciphertext envelope from @sendero/encryption.
+  /// Plaintext is the base58 64-byte secret key (Keypair.secretKey).
+  encryptedPrivateKey String
+  kekVersion          Int      @default(1)
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_solana_gateway_signers")
 }
 
 /// Per-tenant Circle Gateway configuration — which chains are enabled,
@@ -1846,10 +1877,10 @@ model WhatsAppInstall {
   kapsoCustomerId     String    @unique
   /// Kapso's internal connection id for the WhatsApp number. Distinct
   /// from Meta's `phone_number_id` — Kapso exposes both.
-  kapsoConnectionId   String?   @unique
+  kapsoConnectionId   String?
   businessDisplayName String?
   /// Meta Graph API id — used for outbound sends + webhook routing.
-  phoneNumberId       String?   @unique
+  phoneNumberId       String?
   /// Meta WABA id — used when creating / submitting templates.
   businessAccountId   String?
   displayPhoneNumber  String?
@@ -1870,6 +1901,9 @@ model WhatsAppInstall {
 
   @@index([tenantId, status])
   @@index([phoneNumberId])
+  @@index([kapsoConnectionId])
+  @@unique([tenantId, phoneNumberId])
+  @@unique([tenantId, kapsoConnectionId])
   @@map("whatsapp_installs")
 }
 
@@ -2016,6 +2050,85 @@ model WhatsAppOutboundMessage {
   @@index([tenantId, source])
   @@index([groupTripId, broadcastId])
   @@map("whatsapp_outbound_messages")
+}
+
+/// Audit row for every Slack Events API webhook delivery.
+///
+/// Mirrors `WhatsAppWebhookEvent`: inserted fail-soft after routing
+/// decisions so operators can answer "did Slack send us the event, did
+/// we dispatch it, or did we skip/dedupe/drop it?" without grepping logs.
+model SlackWebhookEvent {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()::text"))
+  tenantId              String?  @map("tenant_id")
+  receivedAt            DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  teamId                String   @map("team_id")
+  enterpriseId          String?  @map("enterprise_id")
+  eventId               String?  @map("event_id")
+  eventType             String?  @map("event_type")
+  eventSubtype          String?  @map("event_subtype")
+  channelId             String?  @map("channel_id")
+  threadTs              String?  @map("thread_ts")
+  slackUserId           String?  @map("slack_user_id")
+  signatureValid        Boolean  @map("signature_valid")
+  replayWindowOk        Boolean? @map("replay_window_ok")
+  messageCount          Int      @default(0) @map("message_count")
+  droppedDuplicateCount Int      @default(0) @map("dropped_duplicate_count")
+  droppedBusyCount      Int      @default(0) @map("dropped_busy_count")
+  dispatchedCount       Int      @default(0) @map("dispatched_count")
+  dispatchStatus        String   @default("processed") @map("dispatch_status")
+  dispatchError         String?  @map("dispatch_error")
+  durationMs            Int?     @map("duration_ms")
+  traceId               String?  @map("trace_id")
+  payloadHash           String?  @map("payload_hash")
+  rawEnvelope           Json?    @map("raw_envelope")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, receivedAt(sort: Desc)])
+  @@index([traceId])
+  @@index([eventId])
+  @@index([teamId, channelId, threadTs, receivedAt(sort: Desc)])
+  @@map("slack_webhook_events")
+}
+
+/// Append-only Slack agent/tool timeline.
+///
+/// One row per important turn transition: placeholder post, step update,
+/// tool start/finish/failure/slow warning, final post. This is the Slack
+/// parity surface for WhatsApp/Kapso execution monitoring: a stuck
+/// thread will show the last tool that started even if the serverless
+/// function is killed before `runAgentTurn` returns.
+model SlackAgentEvent {
+  id            String   @id @default(dbgenerated("gen_random_uuid()::text"))
+  tenantId      String   @map("tenant_id")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  traceId       String?  @map("trace_id")
+  eventId       String?  @map("event_id")
+  turnId        String?  @map("turn_id")
+  teamId        String   @map("team_id")
+  enterpriseId  String?  @map("enterprise_id")
+  channelId     String   @map("channel_id")
+  threadTs      String   @map("thread_ts")
+  slackUserId   String?  @map("slack_user_id")
+  senderoUserId String?  @map("sendero_user_id")
+  tripId        String?  @map("trip_id")
+  sequence      Int      @default(0)
+  kind          String
+  toolName      String?  @map("tool_name")
+  ok            Boolean?
+  durationMs    Int?     @map("duration_ms")
+  statusText    String?  @map("status_text")
+  errorMessage  String?  @map("error_message")
+  metadata      Json?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trip   Trip?  @relation(fields: [tripId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([traceId, sequence])
+  @@index([teamId, channelId, threadTs, createdAt(sort: Desc)])
+  @@index([kind, createdAt(sort: Desc)])
+  @@map("slack_agent_events")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -3,14 +3,14 @@
     "sendero-prefetch-trip": {
       "files": {
         "functions/sendero-prefetch-trip/function.yaml": "5ee8d2d5db491dc63ba000c47b02639692503c6968279ba07ac62e2d68e7304f",
-        "functions/sendero-prefetch-trip/index.js": "c478e90d87063166dbe46dffa92d2dceb07f5478b81a119e5f93868cd425aab6"
+        "functions/sendero-prefetch-trip/index.js": "175cf89b8ad7b11a64f7e6bcbec8946564da4ea4616b23efa6d497109553bf9a"
       },
       "id": "53609563-eb44-422d-a4f2-5fad2c44cea9",
-      "lastDeployedAt": "2026-05-05T17:09:54-04:00",
-      "lockVersion": 5,
+      "lastDeployedAt": "2026-05-10T20:44:40-04:00",
+      "lockVersion": 9,
       "slug": "sendero-prefetch-trip",
       "status": "deployed",
-      "updatedAt": "2026-05-05T17:09:54-04:00"
+      "updatedAt": "2026-05-10T20:44:41-04:00"
     },
     "sendero-tenant-travel-create-handoff": {
       "files": {
@@ -159,14 +159,14 @@
     "sendero-tool-call": {
       "files": {
         "functions/sendero-tool-call/function.yaml": "680a2c6e4348a01fcd51a8a060a0aea59d63217bd1f45ffcf05041aba2bec1a7",
-        "functions/sendero-tool-call/index.js": "964d818d04c78456b3e2733d4c4ed6c2a0561f636f60bd937318cd7890ee0fd8"
+        "functions/sendero-tool-call/index.js": "7cd97e60261b1795881b04e0611442d3885f31b024fed98639d7b5af875d4a10"
       },
       "id": "ea58a082-14e2-4ad4-9064-8cc270509b7f",
-      "lastDeployedAt": "2026-05-02T19:59:27-04:00",
-      "lockVersion": 6,
+      "lastDeployedAt": "2026-05-10T20:44:40-04:00",
+      "lockVersion": 12,
       "slug": "sendero-tool-call",
       "status": "deployed",
-      "updatedAt": "2026-05-02T19:59:27-04:00"
+      "updatedAt": "2026-05-10T20:44:40-04:00"
     },
     "sendero-whatsapp-support-ask-team-question": {
       "files": {
@@ -317,26 +317,26 @@
   "workflows": {
     "sendero-tenant-travel-agent": {
       "files": {
-        "workflows/sendero-tenant-travel-agent/definition.json": "63d44c28160c8e8bfc1f5c521e28fba3faa741b58496e14fc8bde644e0223051",
+        "workflows/sendero-tenant-travel-agent/definition.json": "604ba6dd65521310070dd5eb31b2d30e9e0f33caec260d581a9996ca2217475e",
         "workflows/sendero-tenant-travel-agent/workflow.yaml": "e2f6cb5ac3b9bf4b5c069aa387208702617bf735cd0f1413815a0f559f82d3ae"
       },
       "generatedSource": {
-        "hash": "cf2e92a0bcd15e01035116d45cbd0364235b9409021ecaad7772ea8656310662",
+        "hash": "9b52cc91f2c14d56b2612babd272180d42be22f0ea4bab3e5a3a2c22255665ed",
         "path": "workflows/sendero-tenant-travel-agent/workflow.js"
       },
       "id": "325dbf4b-1d92-4260-89df-d17e38e1b314",
-      "lockVersion": 161,
+      "lockVersion": 181,
       "slug": "sendero-tenant-travel-agent",
       "sourceFile": {
-        "hash": "11a1f95b48cd9635582df416c12599abc4a08610e36743405b5456cf9021e2f3",
+        "hash": "1db6c29589746000ba0803ac97dc5e2f06a11f96025a88b356959360f0dfab28",
         "path": "workflows/sendero-tenant-travel-agent/workflow.js"
       },
       "status": "active",
-      "updatedAt": "2026-05-06T01:54:49-04:00"
+      "updatedAt": "2026-05-10T21:25:39-04:00"
     },
     "sendero-whatsapp-support-agent": {
       "files": {
-        "workflows/sendero-whatsapp-support-agent/definition.json": "2e13a50d59260a2510d224ed4891db5609b54c0d53ee9bb285282d292408adb5",
+        "workflows/sendero-whatsapp-support-agent/definition.json": "37992672ed3d948f040d655fc52fee5fe861c9a2a7775147acc140d9d0a14d0a",
         "workflows/sendero-whatsapp-support-agent/workflow.yaml": "3738dd6fa9c7da283ce2404de9fa644f069b15114afda6c51a0e7f1161554f8e"
       },
       "generatedSource": {

@@ -117,7 +117,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
         <h1 className="t-h1">{label}</h1>
         <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
           Tenant-pre-funded unified balance + transfer history. Funds posted here flow into the
-          traveler's spend authority on every Arc booking.
+          traveler's spend authority on every booking.
         </p>
       </div>
 
@@ -129,7 +129,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
             className="sd-card-flat"
             style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
           >
-            <div className="t-meta">DCW · Arc Testnet</div>
+            <div className="t-meta">DCW · {wallet.chainId === 5 ? 'Solana Devnet' : 'Arc Testnet'}</div>
             <div className="t-mono ink-70" style={{ fontSize: 12, marginTop: 4 }}>
               {wallet.address}
             </div>
@@ -169,6 +169,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
               travelerId={id}
               travelerAddress={wallet.address}
               defaultAmount="50"
+              chainLabel={wallet.chainId === 5 ? 'Solana Devnet' : 'Arc Testnet'}
               pendingBookings={pendingBookings.map(b => ({
                 id: b.id,
                 kind: b.kind,

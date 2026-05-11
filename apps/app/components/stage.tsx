@@ -384,6 +384,8 @@ function HoldCard({
   paying: boolean;
   onPay: () => void;
 }) {
+  const userAuth = useSendero(s => s.userAuth);
+  const settleChainLabel = userAuth?.chain === 'sol' ? 'Solana' : 'Arc';
   const deadline = holdOrder.paymentRequiredBy ? new Date(holdOrder.paymentRequiredBy) : null;
   const [requesting, setRequesting] = useState<'whatsapp' | 'slack' | null>(null);
 
@@ -452,7 +454,7 @@ function HoldCard({
             {requesting === 'slack' ? 'Sending…' : 'Request payment · Slack'}
           </button>
           <button className="btn primary" disabled={paying} onClick={onPay}>
-            {paying ? 'Settling on Arc…' : 'Pay from org Gateway balance →'}
+            {paying ? `Settling on ${settleChainLabel}…` : 'Pay from org Gateway balance →'}
           </button>
         </div>
       )}

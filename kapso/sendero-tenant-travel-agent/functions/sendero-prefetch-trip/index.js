@@ -101,6 +101,37 @@ function mergeProfileVars(result) {
   };
 }
 
+function asString(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    const text = asString(value);
+    if (text) return text;
+  }
+  return null;
+}
+
+function resolvePhoneNumberId(body) {
+  const context = body?.execution_context?.context || {};
+  const conversation = body?.whatsapp_context?.conversation || {};
+  return firstString(
+    body?.phoneNumberId,
+    body?.phone_number_id,
+    conversation.phoneNumberId,
+    conversation.phone_number_id,
+    conversation.whatsappPhoneNumberId,
+    conversation.whatsapp_phone_number_id,
+    conversation.whatsapp_config?.phoneNumberId,
+    conversation.whatsapp_config?.phone_number_id,
+    context.phoneNumberId,
+    context.phone_number_id,
+    context.whatsappPhoneNumberId,
+    context.whatsapp_phone_number_id
+  );
+}
+
 async function handler(request, env) {
   if (request.method !== 'POST') {
     return jsonResponse(emptyVars('sendero_error', 'method_not_allowed'), 405);
@@ -139,11 +170,13 @@ async function handler(request, env) {
     travelerPhone: phone,
     input: {},
   };
+  const phoneNumberId = resolvePhoneNumberId(body);
+  if (phoneNumberId) forwardBody.phoneNumberId = phoneNumberId;
   if (env.SENDERO_API_KEY) {
     headers['X-API-Key'] = env.SENDERO_API_KEY;
-  } else if (env.SENDERO_DISPATCH_SECRET && env.SENDERO_TENANT_ID) {
+  } else if (env.SENDERO_DISPATCH_SECRET && (phoneNumberId || env.SENDERO_TENANT_ID)) {
     headers['x-sendero-dispatch-secret'] = env.SENDERO_DISPATCH_SECRET;
-    forwardBody.tenantId = env.SENDERO_TENANT_ID;
+    if (!phoneNumberId) forwardBody.tenantId = env.SENDERO_TENANT_ID;
   } else {
     return jsonResponse(emptyVars('sendero_error', 'auth_env_missing'));
   }

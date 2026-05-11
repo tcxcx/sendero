@@ -16,25 +16,23 @@
  * dev-gated.
  */
 
-import { z } from 'zod';
-import { generateText, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
-
 import { searchText } from '@sendero/google-places';
 import { cseSearch } from '@sendero/web-search';
+import { generateObject, generateText } from 'ai';
+import { z } from 'zod';
 
 import { assertDevOnlyToolAllowed } from '../dev-gate';
 import type { ToolContext, ToolDef } from '../types';
-
-import { runEventbriteEventDiscovery } from './eventbrite-event-discovery';
-import { runMainstreamEventDiscovery } from './mainstream-event-discovery';
 import {
-  liveFinderDeps,
-  runGroundedFinder,
   type GroundedFinderConfig,
   type GroundedShopHit,
+  liveFinderDeps,
+  runGroundedFinder,
 } from './_grounded-place-finder';
+import { runEventbriteEventDiscovery } from './eventbrite-event-discovery';
+import { runMainstreamEventDiscovery } from './mainstream-event-discovery';
 
 const baseInput = z.object({
   city: z.string().min(1).max(120),
@@ -219,7 +217,9 @@ Rules: never invent prices. Use null when a field isn't reliably reported.`;
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+        google_search: (vertex
+          ? vertex.tools.googleSearch({})
+          : google.tools.googleSearch({})) as any,
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -543,7 +543,9 @@ ${sources
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+        google_search: (vertex
+          ? vertex.tools.googleSearch({})
+          : google.tools.googleSearch({})) as any,
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),

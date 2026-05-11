@@ -12,18 +12,16 @@
  * All experimental + internal + dev-gated.
  */
 
-import { z } from 'zod';
-import { generateText, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
-
 import { searchText } from '@sendero/google-places';
 import { cseSearch } from '@sendero/web-search';
+import { generateObject, generateText } from 'ai';
+import { z } from 'zod';
 
 import { assertDevOnlyToolAllowed } from '../dev-gate';
-import type { ToolContext, ToolDef } from '../types';
-
 import { lookupMatchFixturesTool } from '../lookup-match-fixtures';
+import type { ToolContext, ToolDef } from '../types';
 import { runMainstreamEventDiscovery } from './mainstream-event-discovery';
 
 const VERTEX_MODEL_ID = 'gemini-3-flash-preview';
@@ -322,7 +320,9 @@ ${sources
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
+        google_search: (vertex
+          ? vertex.tools.googleSearch({})
+          : google.tools.googleSearch({})) as any,
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),

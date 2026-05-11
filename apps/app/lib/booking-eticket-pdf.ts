@@ -19,10 +19,10 @@
  *   - No `eTicketDocumentUrl` on row → skip silently. Sandbox carriers
  *     don't always return a document; the trip still works for
  *     PNR-only retrieval.
- *   - No WhatsApp identity → log + skip.
- *   - Install disabled / missing token → skip.
- *   - WhatsApp `send_document_message` 4xx/5xx → log; user already
- *     has the PNR + Satori card on the thread.
+ *   - No traveler channel → log + skip.
+ *   - WhatsApp install disabled / missing token → skip.
+ *   - Channel send 4xx/5xx → log; user already has the PNR + Satori
+ *     boarding-pass card on the thread.
  */
 
 import { prisma } from '@sendero/database';
@@ -30,6 +30,7 @@ import { env } from '@sendero/env';
 import { WhatsAppClient } from '@sendero/whatsapp';
 
 import type { FanoutSurfaceResult } from '@/lib/booking-boarding-pass';
+import { dispatchToTraveler, resolvePrimaryTravelerChannel } from '@/lib/channel-dispatch';
 import { withTypingHeartbeat } from '@/lib/typing-heartbeat';
 
 interface SendEticketArgs {
@@ -65,15 +66,66 @@ export async function sendEticketPdfToTraveler(
       return { ok: false, reason: 'no_traveler_on_booking' };
     }
 
+    const filename = `eticket-${booking.pnr ?? args.bookingId}.pdf`;
+    const caption =
+      `📄 Tu e-ticket · *${booking.pnr ?? ''}*\nGuardalo o presentalo en el counter del aeropuerto.`.trim();
+
+    const primaryChannel = await resolvePrimaryTravelerChannel({
+      tenantId: args.tenantId,
+      travelerUserId: booking.trip.travelerId,
+    });
+
+    if (primaryChannel === 'slack') {
+      const result = await dispatchToTraveler({
+        tenantId: args.tenantId,
+        travelerUserId: booking.trip.travelerId,
+        message: {
+          kind: 'card',
+          id: `eticket_${args.bookingId}`,
+          author: { role: 'agent', name: 'Sendero' },
+          title: `Flight ticket · ${booking.pnr ?? 'Confirmed'}`,
+          body:
+            `Your airline e-ticket PDF is ready.\n\n` +
+            `Keep this with your boarding pass and present it at the airport if requested.`,
+          bullets: [
+            `PNR: ${booking.pnr ?? args.bookingId}`,
+            `Traveler: ${
+              booking.trip.traveler?.displayName ?? booking.trip.traveler?.email ?? 'Traveler'
+            }`,
+          ],
+          ctas: [
+            {
+              label: 'Open e-ticket PDF',
+              kind: 'open_link',
+              href: booking.eTicketDocumentUrl,
+              emphasis: 'primary',
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        },
+        forceChannel: 'slack',
+      });
+      if (result.sent === false) {
+        console.warn('[eticket-pdf] slack dispatch skipped', {
+          bookingId: args.bookingId,
+          reason: result.reason,
+          detail: result.detail,
+        });
+        return { ok: false, reason: `dispatch_${result.reason}`, detail: result.detail };
+      }
+      return { ok: true, detail: { channel: result.channel, filename } };
+    }
+
     const identity = await prisma.channelIdentity.findFirst({
       where: { tenantId: args.tenantId, userId: booking.trip.travelerId, kind: 'whatsapp' },
       select: { externalUserId: true },
     });
     if (!identity?.externalUserId) {
-      console.warn('[eticket-pdf] no whatsapp identity for traveler', {
+      console.warn('[eticket-pdf] no traveler channel for e-ticket', {
         bookingId: args.bookingId,
+        primaryChannel,
       });
-      return { ok: false, reason: 'no_whatsapp_identity' };
+      return { ok: false, reason: 'no_traveler_channel' };
     }
 
     const install = await prisma.whatsAppInstall.findUnique({
@@ -95,10 +147,6 @@ export async function sendEticketPdfToTraveler(
       accessToken,
       apiBaseUrl,
     });
-
-    const filename = `eticket-${booking.pnr ?? args.bookingId}.pdf`;
-    const caption =
-      `📄 Tu e-ticket · *${booking.pnr ?? ''}*\nGuardalo o presentalo en el counter del aeropuerto.`.trim();
 
     const response = await withTypingHeartbeat(
       { tenantId: args.tenantId, externalUserId: identity.externalUserId },

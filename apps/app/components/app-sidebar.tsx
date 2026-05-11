@@ -129,6 +129,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             <OrganizationSwitcher
               hidePersonal={false}
               afterSelectOrganizationUrl="/dashboard"
+              createOrganizationMode="navigation"
+              createOrganizationUrl="/onboarding/create"
               afterCreateOrganizationUrl="/onboarding"
               appearance={{
                 elements: {

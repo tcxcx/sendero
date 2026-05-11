@@ -11,6 +11,9 @@
  * Run: `bun test apps/app/lib/__tests__/slack-step-status.test.ts`
  */
 
+import { isPublicTool, toolList } from '@sendero/tools';
+
+import { KEPT_SLACK_TOOLS, MUTATING_SLACK_TOOLS } from '../slack-agent-tools';
 import { describe, expect, test } from 'bun:test';
 
 // Match the helper in slack-agent.ts. Keep this in sync — the test
@@ -121,5 +124,43 @@ describe('renderStepStatus', () => {
       'Partial answer so far.'
     );
     expect(out).toBe('Partial answer so far.\n\n_…_');
+  });
+});
+
+describe('Slack tool exposure', () => {
+  test('only read-only Slack tools are exposed to the agent', () => {
+    expect(KEPT_SLACK_TOOLS).toEqual([
+      'slack_read_channel',
+      'slack_read_thread',
+      'slack_read_user_profile',
+    ]);
+  });
+
+  test('write tools stay hidden until generic Slack write approval resume is wired', () => {
+    expect(MUTATING_SLACK_TOOLS).toContain('slack_send_message');
+    expect(MUTATING_SLACK_TOOLS).toContain('slack_schedule_message');
+    for (const tool of MUTATING_SLACK_TOOLS) {
+      expect((KEPT_SLACK_TOOLS as readonly string[]).includes(tool)).toBe(false);
+    }
+  });
+
+  test('traveler lifecycle tools stay available on Slack while internal admin tools are hidden', () => {
+    const publicNames = new Set(toolList.filter(isPublicTool).map(tool => tool.name));
+    for (const name of [
+      'search_flights',
+      'book_flight',
+      'traveler_balance',
+      'moonpay_topup',
+      'get_moonpay_topup_status',
+      'get_trip_brief',
+      'book_esim',
+    ]) {
+      expect(publicNames).toContain(name);
+    }
+    expect(publicNames).toContain('check_treasury');
+    expect(publicNames).not.toContain('gateway_balance');
+    expect(publicNames).not.toContain('treasury_balance');
+    expect(publicNames).not.toContain('inspect_my_slack_channel');
+    expect(publicNames).not.toContain('list_available_tools');
   });
 });

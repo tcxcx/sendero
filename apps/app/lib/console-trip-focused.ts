@@ -20,6 +20,10 @@
 
 import { prisma } from '@sendero/database';
 
+import {
+  buildSendableTravelerChannels,
+  selectSendableTravelerChannel,
+} from '@/lib/sendable-traveler-channels';
 import { eventsToUnifiedMessages, type UnifiedMessage } from '@/lib/unified-message';
 
 export interface FocusedTripData {
@@ -33,6 +37,12 @@ export interface FocusedTripData {
   pendingBooking: { id: string; totalUsd: string } | null;
   /** Primary channel kind of the trip's traveler; used to tint the composer. */
   channelKind: string | null;
+  /**
+   * Sendable channel destinations bound to the traveler. Header chips render
+   * one entry per destination so a dual-channel traveler surfaces both in the
+   * console header. Empty when traveler is null.
+   */
+  channels: Array<{ kind: string; handle: string | null }>;
 }
 
 export async function loadFocusedTrip(
@@ -56,6 +66,7 @@ export async function loadFocusedTrip(
       holdExpires: null,
       pendingBooking: null,
       channelKind: null,
+      channels: [],
     };
   }
 
@@ -63,11 +74,30 @@ export async function loadFocusedTrip(
     where: { id: scopedTripId, tenantId },
     select: {
       events: true,
+      channelBindings: true,
       traveler: {
         select: {
           displayName: true,
           email: true,
-          channelIdentities: { select: { kind: true }, take: 1 },
+          channelIdentities: {
+            where: { tenantId },
+            select: {
+              kind: true,
+              externalUserId: true,
+              businessScopedUserId: true,
+              username: true,
+              tenantId: true,
+            },
+            // No `take` — we want every bound channel so the header
+            // can surface multi-channel travelers (e.g. Slack + WhatsApp).
+          },
+          slackUserBindings: {
+            where: { tenantId },
+            select: {
+              slackTeamId: true,
+              slackUserId: true,
+            },
+          },
         },
       },
     },
@@ -80,13 +110,33 @@ export async function loadFocusedTrip(
       holdExpires: null,
       pendingBooking: null,
       channelKind: null,
+      channels: [],
     };
   }
 
   const conversation = eventsToUnifiedMessages(focused.events);
   const name = focused.traveler?.displayName ?? focused.traveler?.email ?? 'Traveler';
   const traveler = { name, initials: initials(name) };
-  const channelKind = focused.traveler?.channelIdentities[0]?.kind ?? 'web';
+  const currentTenantSlackBindings = focused.traveler?.slackUserBindings ?? [];
+  let activeSlackTeamIds = new Set<string>();
+  if (currentTenantSlackBindings.length > 0) {
+    const activeSlackInstalls = await prisma.slackInstall.findMany({
+      where: {
+        tenantId,
+        revokedAt: null,
+        teamId: { in: currentTenantSlackBindings.map(binding => binding.slackTeamId) },
+      },
+      select: { teamId: true },
+    });
+    activeSlackTeamIds = new Set(activeSlackInstalls.map(install => install.teamId));
+  }
+  const channels = buildSendableTravelerChannels({
+    channelIdentities: focused.traveler?.channelIdentities ?? [],
+    slackUserBindings: currentTenantSlackBindings,
+    activeSlackTeamIds,
+  });
+  const bindings = (focused.channelBindings ?? null) as { primary?: string } | null;
+  const channelKind = selectSendableTravelerChannel(channels, bindings?.primary) ?? 'web';
 
   const earliestPending = await prisma.booking.findFirst({
     where: { tripId: scopedTripId, tenantId, status: 'pending' },
@@ -102,7 +152,7 @@ export async function loadFocusedTrip(
     };
   }
 
-  return { conversation, traveler, holdExpires: null, pendingBooking, channelKind };
+  return { conversation, traveler, holdExpires: null, pendingBooking, channelKind, channels };
 }
 
 function initials(name: string): string {

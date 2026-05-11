@@ -41,10 +41,12 @@ export const execMintFirst = async (args: {
   const result = await mintStampTool.handler({
     kind: args.ctx.kind,
     primaryKey: args.ctx.primaryKey,
+    chain: args.ctx.chain,
     to: args.to,
     uri: args.uri,
     tenantSlug: args.ctx.tenant.slug,
     quantity: 1,
+    tenantId: args.ctx.tenant.tenantId,
     tripId: args.ctx.trip.tripId,
     bookingId: args.ctx.booking?.bookingId,
     travelerId: args.ctx.travelers[0]?.userId,
@@ -77,10 +79,12 @@ export const execMintExtend = async (args: {
   return mintStampTool.handler({
     kind: args.ctx.kind,
     primaryKey: args.ctx.primaryKey,
+    chain: args.ctx.chain,
     to: args.to,
     uri: '',
     tenantSlug: args.ctx.tenant.slug,
     quantity: 1,
     existingTokenId: args.existingTokenId,
+    tenantId: args.ctx.tenant.tenantId,
   });
 };

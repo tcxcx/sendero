@@ -38,9 +38,9 @@ await Promise.all(Object.values(FUNCTION_SLUGS).map(validateFunction));
 
 process.env.WHATSAPP_PHONE_NUMBER_ID ||= 'pn_validate';
 const workflowModule = await import(
-  `${pathToFileURL(resolve(root, 'workflows/sendero-tenant-travel-agent/workflow.ts')).href}?t=${Date.now()}`
+  `${pathToFileURL(resolve(root, 'workflows/sendero-tenant-travel-agent/workflow.js')).href}?t=${Date.now()}`
 );
-const workflow = workflowModule.buildWorkflow();
+const workflow = workflowModule.default;
 const validation = workflow.validate();
 if (validation.errors?.length) {
   throw new Error(`workflow validation failed: ${validation.errors.join(', ')}`);

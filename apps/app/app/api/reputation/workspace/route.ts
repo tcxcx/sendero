@@ -40,11 +40,22 @@ export async function GET() {
     }
   }
 
-  const explorerUrl = env.arcExplorerUrl();
+  // Pick the explorer URL by tenant chain. Arc tenants → Arcscan;
+  // Sol tenants → Solana Explorer (devnet during testnet beta). The
+  // contract field on the org agent profile is whatever the chain's
+  // identity registry returned: an EVM `0x` for Arc ERC-8004, a base58
+  // program/asset id for Sol Metaplex Agent Registry.
+  const chain: 'arc' | 'sol' = tenant.primaryChain === 'sol' ? 'sol' : 'arc';
+  const contractUrl = profile?.contract
+    ? chain === 'sol'
+      ? `https://explorer.solana.com/address/${profile.contract}?cluster=devnet`
+      : `${env.arcExplorerUrl()}/address/${profile.contract}`
+    : null;
 
   return NextResponse.json({
     subjectId: tenant.id,
     displayName: tenant.displayName,
+    chain,
     status: profile?.status ?? 'pending',
     agentId: profile?.agentId ?? null,
     contract: profile?.contract ?? null,
@@ -59,6 +70,6 @@ export async function GET() {
     validations: profile?.validations ?? [],
     provisioning,
     publicUrl: `/agents/org/${tenant.id}`,
-    contractUrl: profile?.contract ? `${explorerUrl}/address/${profile.contract}` : null,
+    contractUrl,
   });
 }

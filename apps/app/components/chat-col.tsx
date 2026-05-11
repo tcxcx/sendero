@@ -197,14 +197,7 @@ export function ChatCol() {
             s.logEvent({
               group: 'treasury',
               bullet: 'active',
-              text: 'readBalances(USDC, EURC)',
-              t: clock(),
-            });
-          } else if (toolName === 'swap_tokens') {
-            s.logEvent({
-              group: 'treasury.swap',
-              bullet: 'active',
-              text: `swap(<span class="v">${toolInput.amount} ${toolInput.fromToken} → ${toolInput.toToken}</span>)`,
+              text: 'readBalances(USDC)',
               t: clock(),
             });
           } else if (toolName === 'send_tokens') {
@@ -219,13 +212,6 @@ export function ChatCol() {
               group: 'treasury.bridge',
               bullet: 'active',
               text: `bridge(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc)`,
-              t: clock(),
-            });
-          } else if (toolName === 'swap_and_bridge') {
-            s.logEvent({
-              group: 'treasury.swap-bridge',
-              bullet: 'active',
-              text: `bridge+swap(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc → ${toolInput.targetToken ?? 'EURC'})`,
               t: clock(),
             });
           } else if (toolName === 'restaurant_route_card') {
@@ -587,8 +573,8 @@ function AgentWelcome({
           <span style={{ color: 'var(--ink)' }}>agent</span>
         </div>
         <div className="msg-text">
-          Hi {traveler.split(' ')[0]}. I can search flights, hold the seat, and settle in USDC or
-          EURC on Arc L2. Where to?
+          Hi {traveler.split(' ')[0]}. I can search flights, hold the seat, and settle in USDC on
+          your workspace's settlement chain (Arc or Solana). Where to?
         </div>
         <div className="msg-suggestions">
           <button

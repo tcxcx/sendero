@@ -942,11 +942,12 @@ async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<s
   // through the Kapso setup link, so the phoneNumberId → tenant mapping
   // lives on the `whatsapp_installs` table.
   if (phoneNumberId) {
-    const install = await prisma.whatsAppInstall.findUnique({
-      where: { phoneNumberId },
+    const install = await prisma.whatsAppInstall.findFirst({
+      where: { phoneNumberId, status: 'active' },
+      orderBy: { updatedAt: 'desc' },
       select: { tenantId: true, status: true },
     });
-    if (install && install.status !== 'disabled') return install.tenantId;
+    if (install) return install.tenantId;
   }
   // Dev-mode last-resort fallback — leave unset in production.
   return env.whatsappDefaultTenantId();

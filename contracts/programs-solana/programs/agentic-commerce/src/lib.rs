@@ -47,6 +47,19 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 declare_id!("4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9");
 
+// security.txt — see sibling `sendero-guest-escrow` for rationale.
+// Embedded ELF section so explorers render contact + audit + source.
+#[cfg(not(feature = "no-entrypoint"))]
+solana_security_txt::security_txt! {
+    name: "Sendero Agentic Commerce",
+    project_url: "https://sendero.travel",
+    contacts: "email:security@sendero.travel,link:https://sendero.travel/security,twitter:@senderotravel",
+    policy: "https://sendero.travel/security/policy",
+    preferred_languages: "en,es,pt",
+    source_code: "https://github.com/criptopoeta/sendero/tree/main/contracts/programs-solana/programs/agentic-commerce",
+    auditors: "Unaudited — testnet beta. Mainnet promotion gated on third-party audit."
+}
+
 const BPS_DENOMINATOR: u16 = 10_000;
 /// Mirrors Solidity's `expiredAt <= block.timestamp + 5 minutes` guard.
 const MIN_EXPIRY_LEAD: i64 = 5 * 60;

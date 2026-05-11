@@ -45,7 +45,7 @@ import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { makeCreditAwareMeterStore } from '@/lib/credit-store';
 import { resolvePlan } from '@sendero/billing/plans';
 import { resolvePayer, PayerResolutionError } from '@sendero/tools/lib/resolve-payer';
-import type { MeterPayerType } from '@sendero/database';
+import { prisma, type MeterPayerType } from '@sendero/database';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
@@ -311,7 +311,25 @@ export async function POST(req: NextRequest) {
           }),
         ]
       : surfacedTools;
-  const scopedTools = filterToolsByScopes(channelToolList, grantedScopes);
+  // Hide Arc-only tools from Sol tenants. Tools that branch internally
+  // on tenant.primaryChain (book-flight, mint-stamp, etc.) stay visible;
+  // only tools that physically can't operate on a Sol tenant (e.g.
+  // bridge_to_arc) are stripped. Mirrors the MCP server's filter.
+  const ARC_ONLY_TOOL_NAMES = new Set<string>([
+    'bridge_to_arc',
+    'faucet_drip',
+    'swap_and_bridge',
+  ]);
+  const tenantForChain = await prisma.tenant.findUnique({
+    where: { id: body.tenantId },
+    select: { primaryChain: true },
+  });
+  const tenantChain: 'arc' | 'sol' = tenantForChain?.primaryChain === 'sol' ? 'sol' : 'arc';
+  const chainFilteredTools =
+    tenantChain === 'sol'
+      ? channelToolList.filter(t => !ARC_ONLY_TOOL_NAMES.has(t.name))
+      : channelToolList;
+  const scopedTools = filterToolsByScopes(chainFilteredTools, grantedScopes);
 
   // Narrow the zod-inferred shape to the AgentMediaAttachment contract —
   // (toolCtx assembly + buildAiSdkTools call moved below the payer

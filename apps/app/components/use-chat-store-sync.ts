@@ -4,7 +4,7 @@
  * Shared "useChat → useSendero" dispatch.
  *
  * Maps every tool call streaming through `useChat` (search_flights,
- * book_flight, search_hotels, check_treasury, swap/send/bridge…) into
+ * book_flight, search_hotels, check_treasury, send/bridge…) into
  * the SenderoApp zustand store so:
  *
  *   - Stage renders the right artifact (offer cards / hold card /
@@ -127,14 +127,7 @@ export function useChatStoreSync(messages: readonly unknown[]) {
             s.logEvent({
               group: 'treasury',
               bullet: 'active',
-              text: 'readBalances(USDC, EURC)',
-              t: clock(),
-            });
-          } else if (toolName === 'swap_tokens') {
-            s.logEvent({
-              group: 'treasury.swap',
-              bullet: 'active',
-              text: `swap(<span class="v">${toolInput.amount} ${toolInput.fromToken} → ${toolInput.toToken}</span>)`,
+              text: 'readBalances(USDC)',
               t: clock(),
             });
           } else if (toolName === 'send_tokens') {
@@ -149,13 +142,6 @@ export function useChatStoreSync(messages: readonly unknown[]) {
               group: 'treasury.bridge',
               bullet: 'active',
               text: `bridge(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc)`,
-              t: clock(),
-            });
-          } else if (toolName === 'swap_and_bridge') {
-            s.logEvent({
-              group: 'treasury.swap-bridge',
-              bullet: 'active',
-              text: `bridge+swap(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc → ${toolInput.targetToken ?? 'EURC'})`,
               t: clock(),
             });
           } else {
@@ -234,21 +220,12 @@ export function useChatStoreSync(messages: readonly unknown[]) {
               t: clock(),
             });
           } else if (
-            (toolName === 'swap_tokens' ||
-              toolName === 'send_tokens' ||
-              toolName === 'bridge_to_arc' ||
-              toolName === 'swap_and_bridge') &&
+            (toolName === 'send_tokens' || toolName === 'bridge_to_arc') &&
             (output.txHash || output.state)
           ) {
             refreshTreasury();
             const group =
-              toolName === 'swap_tokens'
-                ? 'treasury.swap'
-                : toolName === 'send_tokens'
-                  ? 'treasury.send'
-                  : toolName === 'bridge_to_arc'
-                    ? 'treasury.bridge'
-                    : 'treasury.swap-bridge';
+              toolName === 'send_tokens' ? 'treasury.send' : 'treasury.bridge';
             s.updateLastEvent(group, { bullet: 'done' });
             s.logEvent({
               group,

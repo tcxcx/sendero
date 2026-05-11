@@ -101,6 +101,29 @@ export async function provisionSolanaMultisig(
 
   const connection = new Connection(SOL_DEVNET_RPC, 'confirmed');
 
+  // Squads V4 `multisigCreateV2` requires the program's `treasury`
+  // pubkey — that's the protocol fee recipient, derived from the
+  // global `ProgramConfig` account. NOT a caller-controlled address.
+  // Earlier code passed `creator.publicKey` here which surfaced as
+  // "Invalid account provided" (program checks treasury matches
+  // programConfig.treasury). Dropping the field entirely surfaces as
+  // "Cannot read properties of undefined (reading 'toBase58')" because
+  // the SDK assumes the field is present and calls `.toBase58()` on it.
+  let configTreasury: PublicKey;
+  try {
+    const [programConfigPda] = multisig.getProgramConfigPda({});
+    const programConfig = await multisig.accounts.ProgramConfig.fromAccountAddress(
+      connection,
+      programConfigPda
+    );
+    configTreasury = programConfig.treasury;
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Failed to fetch Squads ProgramConfig treasury: ${(err as Error).message}. Verify Squads V4 is deployed on this RPC (${SOL_DEVNET_RPC}).`,
+    };
+  }
+
   // Sanity check: the founder needs lamports to pay rent + tx fees.
   // Squads multisig creation costs ~0.005 SOL; platform wallet runbook
   // says ≥1 SOL on devnet. Hard-fail here with a clear message instead
@@ -149,7 +172,7 @@ export async function provisionSolanaMultisig(
       members: memberConfigs,
       timeLock: 0,
       rentCollector: null,
-      treasury: creator.publicKey, // refunds rent on close (Squads convention)
+      treasury: configTreasury, // from ProgramConfig.treasury — protocol fee recipient
     });
   } catch (err) {
     return {

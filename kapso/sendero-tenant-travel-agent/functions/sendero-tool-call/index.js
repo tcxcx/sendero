@@ -58,6 +58,40 @@ function requireEnv(value, name) {
   return value;
 }
 
+function asString(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    const text = asString(value);
+    if (text) return text;
+  }
+  return null;
+}
+
+function resolvePhoneNumberId(raw, body) {
+  const context = raw?.execution_context?.context || raw?.input?.execution_context?.context || {};
+  const conversation = raw?.whatsapp_context?.conversation || raw?.input?.whatsapp_context?.conversation || {};
+  const input = body?.input || {};
+  return firstString(
+    body?.phoneNumberId,
+    body?.phone_number_id,
+    input.phoneNumberId,
+    input.phone_number_id,
+    conversation.phoneNumberId,
+    conversation.phone_number_id,
+    conversation.whatsappPhoneNumberId,
+    conversation.whatsapp_phone_number_id,
+    conversation.whatsapp_config?.phoneNumberId,
+    conversation.whatsapp_config?.phone_number_id,
+    context.phoneNumberId,
+    context.phone_number_id,
+    context.whatsappPhoneNumberId,
+    context.whatsapp_phone_number_id
+  );
+}
+
 async function handler(request, env) {
   if (request.method !== 'POST') {
     return jsonResponse({ error: 'method_not_allowed' }, 405);
@@ -103,17 +137,19 @@ async function handler(request, env) {
     ...(body.travelerPhone ? { travelerPhone: body.travelerPhone } : {}),
     ...(body.tripId ? { tripId: body.tripId } : {}),
   };
+  const phoneNumberId = resolvePhoneNumberId(raw, body);
+  if (phoneNumberId) forwardBody.phoneNumberId = phoneNumberId;
   if (env.SENDERO_API_KEY) {
     headers['X-API-Key'] = env.SENDERO_API_KEY;
-  } else if (env.SENDERO_DISPATCH_SECRET && env.SENDERO_TENANT_ID) {
+  } else if (env.SENDERO_DISPATCH_SECRET && (phoneNumberId || env.SENDERO_TENANT_ID)) {
     headers['x-sendero-dispatch-secret'] = env.SENDERO_DISPATCH_SECRET;
-    forwardBody.tenantId = env.SENDERO_TENANT_ID;
+    if (!phoneNumberId) forwardBody.tenantId = env.SENDERO_TENANT_ID;
   } else {
     return jsonResponse(
       {
         error: 'env_missing',
         message:
-          'Set SENDERO_API_KEY (production) or SENDERO_DISPATCH_SECRET + SENDERO_TENANT_ID (sandbox).',
+          'Set SENDERO_API_KEY (production) or SENDERO_DISPATCH_SECRET plus phoneNumberId/SENDERO_TENANT_ID (sandbox).',
       },
       500
     );

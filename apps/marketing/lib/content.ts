@@ -381,7 +381,7 @@ const EN_US: MarketingContent = {
       {
         label: 'Trip passport',
         title: 'An AI guide there. A stamped souvenir at the end.',
-        body: 'Sendero rides along through the trip — then mints a personalized on-chain souvenir on Arc. Traceable, collectible, yours.',
+        body: 'Sendero rides along through the trip — then mints a personalized on-chain souvenir on the tenant’s chain (Arc or Solana). Traceable, collectible, yours.',
         image: '/brand/generated/symbol-collage.png',
         alt: 'Sendero illustrated stamp collage representing the on-chain trip passport souvenir.',
       },
@@ -562,7 +562,7 @@ const EN_US: MarketingContent = {
           '1 workspace',
           'Sandbox API key',
           'Baseline nanopayment pricing',
-          'Agent console + Arc testnet',
+          'Agent console + Arc + Solana testnets',
         ],
         cta: { label: 'Start free', href: '/dashboard' },
       },
@@ -632,7 +632,7 @@ const ES_MX: MarketingContent = {
     agents: 'Para agentes IA',
   },
   hero: {
-    eyebrow: 'En vivo en Circle Arc',
+    eyebrow: 'En vivo en Circle Arc + Solana',
     title: 'Infraestructura de viajes para la era de los agentes IA.',
     subtitle: 'Reservas, escrow prepagado, liquidación en USDC y soporte — en un solo hilo.',
     primaryCta: { label: 'Empezar gratis', href: '/dashboard' },
@@ -640,7 +640,7 @@ const ES_MX: MarketingContent = {
   },
   proof: {
     items: [
-      'En vivo en Circle Arc',
+      'En vivo en Circle Arc + Solana',
       'Liquidación USDC + EURC',
       'MCP + x402 nativo',
       'WhatsApp + Slack + web',
@@ -711,7 +711,7 @@ const ES_MX: MarketingContent = {
               ? 'Reservas, aprobaciones, recibos, facturas, límites, soporte y llamadas — inspeccionables.'
               : item.label === 'Open route'
                 ? 'Recordatorios, cambios, recibos, soporte, reembolsos y conciliación — hasta cerrar.'
-                : 'Sendero te acompaña durante el viaje y al cierre acuña un souvenir on-chain personalizado en Arc. Trazable, coleccionable, tuyo.',
+                : 'Sendero te acompaña durante el viaje y al cierre acuña un souvenir on-chain personalizado en Arc o Solana. Trazable, coleccionable, tuyo.',
     })),
   },
   story: {
@@ -848,7 +848,7 @@ const PT_BR: MarketingContent = {
     agents: 'Para agentes IA',
   },
   hero: {
-    eyebrow: 'No ar na Circle Arc',
+    eyebrow: 'No ar na Circle Arc + Solana',
     title: 'Infraestrutura de viagens para a era dos agentes IA.',
     subtitle: 'Reservas, escrow pré-pago, liquidação em USDC e suporte — em um único fio.',
     primaryCta: { label: 'Começar grátis', href: '/dashboard' },
@@ -856,7 +856,7 @@ const PT_BR: MarketingContent = {
   },
   proof: {
     items: [
-      'No ar na Circle Arc',
+      'No ar na Circle Arc + Solana',
       'Liquidação USDC + EURC',
       'MCP + x402 nativo',
       'WhatsApp + Slack + web',
@@ -927,7 +927,7 @@ const PT_BR: MarketingContent = {
               ? 'Reservas, aprovações, recibos, notas, limites, suporte e chamadas — inspecionáveis.'
               : item.label === 'Open route'
                 ? 'Lembretes, mudanças, recibos, suporte, reembolsos e reconciliação — até fechar.'
-                : 'Sendero te acompanha durante a viagem e no fim cunha um souvenir on-chain personalizado na Arc. Rastreável, colecionável, seu.',
+                : 'Sendero te acompanha durante a viagem e no fim cunha um souvenir on-chain personalizado na Arc ou Solana. Rastreável, colecionável, seu.',
     })),
   },
   story: {

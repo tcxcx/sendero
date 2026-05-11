@@ -17,7 +17,7 @@ export interface SendSlackDirectArgs {
 
 export async function sendSlackDirect(args: SendSlackDirectArgs): Promise<string> {
   const install = await prisma.slackInstall.findFirst({
-    where: { tenantId: args.tenantId },
+    where: { tenantId: args.tenantId, revokedAt: null },
     select: { botToken: true },
     orderBy: { installedAt: 'desc' },
   });

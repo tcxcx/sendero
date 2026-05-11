@@ -81,9 +81,10 @@ export interface UnifiedMessage {
  */
 export function eventsToUnifiedMessages(events: Prisma.JsonValue): UnifiedMessage[] {
   if (!Array.isArray(events)) return [];
-  return events
+  const mapped = events
     .map((raw, i): UnifiedMessage | null => mapOneEvent(raw, i))
     .filter((m): m is UnifiedMessage => m !== null);
+  return normalizeMessageIds(mapped);
 }
 
 function mapOneEvent(raw: unknown, idx: number): UnifiedMessage | null {
@@ -265,6 +266,40 @@ function mapOneEvent(raw: unknown, idx: number): UnifiedMessage | null {
 
 function pickString(v: unknown): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+function normalizeMessageIds(messages: UnifiedMessage[]): UnifiedMessage[] {
+  const seenFingerprints = new Set<string>();
+  const seenIds = new Map<string, number>();
+  const out: UnifiedMessage[] = [];
+
+  for (const message of messages) {
+    const fingerprint = messageFingerprint(message);
+    if (seenFingerprints.has(fingerprint)) continue;
+    seenFingerprints.add(fingerprint);
+
+    const count = seenIds.get(message.id) ?? 0;
+    seenIds.set(message.id, count + 1);
+    out.push(count === 0 ? message : { ...message, id: `${message.id}#${count + 1}` });
+  }
+
+  return out;
+}
+
+function messageFingerprint(message: UnifiedMessage): string {
+  return JSON.stringify({
+    id: message.id,
+    at: message.at,
+    channel: message.channel,
+    direction: message.direction,
+    kind: message.kind,
+    author: message.author,
+    body: message.body,
+    toolName: message.toolName,
+    toolArgs: message.toolArgs,
+    rows: message.rows,
+    status: message.status,
+  });
 }
 
 function pickDirection(v: unknown): Direction | undefined {

@@ -12,7 +12,8 @@
 
 import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildMcpCatalog, type McpToolEntry } from '@sendero/tools/adapters/mcp';
-import type { ToolContext } from '@sendero/tools/types';
+import type { ToolContext, ToolDef } from '@sendero/tools/types';
+import { prisma } from '@sendero/database';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
@@ -23,6 +24,33 @@ import type { ResolvedApiKey } from '@/lib/api-key-auth';
 // console agent at /api/chat consumes the canonical registry directly
 // and sees everything; only outward-facing surfaces filter.
 const PUBLIC_TOOLS = filterPublicTools(toolList);
+
+/**
+ * Tools that only make sense for Arc-primary tenants. Hidden from the
+ * MCP catalog when the calling tenant.primaryChain === 'sol'. Each
+ * tool can also gate at handler-time (and most do, e.g. give-feedback
+ * returns a typed `_SOL_DEFERRED` error), but pre-filtering here keeps
+ * agents from even seeing Arc-only surfaces in their tool list.
+ *
+ * Keep this list narrow — only tools that physically can't operate on
+ * a Sol tenant. Tools that branch internally on primaryChain (book-flight,
+ * confirm-booking, mint-stamp, etc.) stay visible because they DO work
+ * for both chains.
+ */
+const ARC_ONLY_TOOLS = new Set<string>([
+  'bridge_to_arc',
+  // Circle faucet doesn't drip USDC on Sol-Devnet — Sol tenants would get a
+  // Zod parse error on the 0x regex even if exposed. Hide outright.
+  'faucet_drip',
+  // Treasury rebalance composed tool — App Kit + viem (Arc-only).
+  // Operator-only anyway; pre-filter for safety.
+  'swap_and_bridge',
+]);
+
+function filterToolsByChain(tools: ToolDef[], chain: 'arc' | 'sol'): ToolDef[] {
+  if (chain === 'arc') return tools;
+  return tools.filter(t => !ARC_ONLY_TOOLS.has(t.name));
+}
 
 // Tools/list is identity-free (names + schemas only), so a single
 // module-level catalog built with no context serves every discovery.
@@ -134,7 +162,7 @@ function allowedOrigin(origin: string): string | null {
   return allowlist.includes(origin) ? origin : null;
 }
 
-function buildRequestCatalog(resolved: ResolvedApiKey): Record<string, McpToolEntry> {
+async function buildRequestCatalog(resolved: ResolvedApiKey): Promise<Record<string, McpToolEntry>> {
   const ctx: ToolContext = {
     traveler: {
       tenantId: resolved.tenantId,
@@ -153,7 +181,16 @@ function buildRequestCatalog(resolved: ResolvedApiKey): Record<string, McpToolEn
       effectiveKeyType: resolved.effectiveKeyType,
     },
   };
-  return buildMcpCatalog(PUBLIC_TOOLS, ctx);
+  // Hide Arc-only tools from Sol tenants so their agents don't even
+  // see surfaces that can't possibly work. Tools that branch internally
+  // (book-flight etc.) stay visible.
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: resolved.tenantId },
+    select: { primaryChain: true },
+  });
+  const chain: 'arc' | 'sol' = tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
+  const tools = filterToolsByChain(PUBLIC_TOOLS, chain);
+  return buildMcpCatalog(tools, ctx);
 }
 
 export const mcpApp = new Hono()
@@ -203,7 +240,7 @@ export const mcpApp = new Hono()
     // Per-request catalog bound to the caller's tenant. Every tool
     // handler now receives `ctx.traveler.tenantId` and MUST prefer it
     // over any tenantId passed in args (handler responsibility).
-    const catalog = buildRequestCatalog(resolved);
+    const catalog = await buildRequestCatalog(resolved);
 
     const body = (await c.req.json()) as JsonRpcRequest | JsonRpcRequest[];
     const batch = Array.isArray(body) ? body : [body];

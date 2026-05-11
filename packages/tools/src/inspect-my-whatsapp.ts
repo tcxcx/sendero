@@ -77,6 +77,7 @@ export interface WhatsappActivityCounters {
 export interface WhatsappOutboundCounters {
   hours: number;
   total: number;
+  agentRepliesInTripEvents: number;
   delivered: number;
   read: number;
   failed: number;
@@ -157,7 +158,7 @@ export async function runInspectMyWhatsapp(
   const includePreviews = input.includePreviews === true;
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-  const [install, webhookAggRaw, outboundRows, apiLogs, identityCounts, activeTripsCount] =
+  const [install, webhookAggRaw, outboundRows, apiLogs, identityCounts, activeTripsCount, recentTrips] =
     await Promise.all([
       prisma.whatsAppInstall.findUnique({ where: { tenantId } }),
       prisma.whatsAppWebhookEvent.findMany({
@@ -204,6 +205,12 @@ export async function runInspectMyWhatsapp(
           },
         },
       }),
+      prisma.trip.findMany({
+        where: { tenantId },
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+        select: { events: true },
+      }),
     ]);
 
   const installSummary: WhatsappInstallSummary = install
@@ -239,9 +246,13 @@ export async function runInspectMyWhatsapp(
     dispatchedToAgent: webhookAggRaw.reduce((acc, r) => acc + r.dispatchedCount, 0),
   };
 
+  const tripEventPreviews = collectWhatsappTripEventPreviews(recentTrips, since);
+  const agentRepliesInTripEvents = tripEventPreviews.filter(r => r.direction === 'outbound').length;
+
   const outbound: WhatsappOutboundCounters = {
     hours,
     total: outboundRows.length,
+    agentRepliesInTripEvents,
     delivered: outboundRows.filter(r => r.deliveryStatus === 'delivered').length,
     read: outboundRows.filter(r => r.deliveryStatus === 'read').length,
     failed: outboundRows.filter(r => r.deliveryStatus === 'failed').length,
@@ -289,44 +300,29 @@ export async function runInspectMyWhatsapp(
   };
 
   if (includePreviews) {
-    result.recentOutbound = outboundRows.slice(0, 5).map(r => ({
+    const auditedOutbound = outboundRows.slice(0, 10).map(r => ({
       at: r.sentAt.toISOString(),
       preview: (r.preview ?? '').slice(0, 200),
       kind: r.kind,
       source: r.source,
       status: r.deliveryStatus,
     }));
-    // Inbound previews live in `Trip.events` (kind: 'inbox_reply',
-    // direction: 'inbound', channel: 'whatsapp'). Pull the most-recent
-    // 5 across this tenant's trips. Bounded scan — `take: 30` is enough
-    // to find 5 inbound after filtering operator/agent rows.
-    const recentTrips = await prisma.trip.findMany({
-      where: { tenantId },
-      orderBy: { updatedAt: 'desc' },
-      take: 12,
-      select: { events: true },
-    });
-    const inboundPreviews: WhatsappMessagePreview[] = [];
-    for (const t of recentTrips) {
-      if (!Array.isArray(t.events)) continue;
-      for (const raw of t.events) {
-        if (!raw || typeof raw !== 'object') continue;
-        const evt = raw as Record<string, unknown>;
-        if (evt.channel !== 'whatsapp') continue;
-        if (evt.direction !== 'inbound') continue;
-        if (typeof evt.text !== 'string') continue;
-        const at = typeof evt.createdAt === 'string' ? evt.createdAt : null;
-        if (!at) continue;
-        inboundPreviews.push({
-          at,
-          preview: evt.text.slice(0, 200),
-        });
-        if (inboundPreviews.length >= 30) break;
-      }
-      if (inboundPreviews.length >= 30) break;
-    }
-    inboundPreviews.sort((a, b) => (a.at < b.at ? 1 : -1));
-    result.recentInbound = inboundPreviews.slice(0, 5);
+    const tripOutbound = tripEventPreviews
+      .filter(r => r.direction === 'outbound')
+      .map(r => ({
+        at: r.at,
+        preview: r.preview,
+        kind: r.kind,
+        source: 'trip_events',
+        status: 'recorded',
+      }));
+    result.recentOutbound = [...auditedOutbound, ...tripOutbound]
+      .sort((a, b) => (a.at < b.at ? 1 : -1))
+      .slice(0, 5);
+    result.recentInbound = tripEventPreviews
+      .filter(r => r.direction === 'inbound')
+      .map(({ direction: _direction, ...r }) => r)
+      .slice(0, 5);
   }
 
   return result;
@@ -356,6 +352,35 @@ function buildHumanSummary(
   const errRate =
     api.total > 0 ? `${Math.round((api.errored / api.total) * 100)}% errored` : 'no calls';
   return `WhatsApp active on ${install.displayPhoneNumber}. Last ${inbound.hours}h: ${inbound.inboundMessages} inbound · ${outbound.total} outbound (${outbound.failed} failed) · API ${api.total} calls (${errRate}).`;
+}
+
+function collectWhatsappTripEventPreviews(
+  trips: Array<{ events: unknown }>,
+  since: Date
+): Array<WhatsappMessagePreview & { direction: 'inbound' | 'outbound' }> {
+  const previews: Array<WhatsappMessagePreview & { direction: 'inbound' | 'outbound' }> = [];
+  for (const t of trips) {
+    if (!Array.isArray(t.events)) continue;
+    for (const raw of t.events) {
+      if (!raw || typeof raw !== 'object') continue;
+      const evt = raw as Record<string, unknown>;
+      if (evt.channel !== 'whatsapp') continue;
+      if (evt.direction !== 'inbound' && evt.direction !== 'outbound') continue;
+      if (typeof evt.text !== 'string') continue;
+      const at = typeof evt.createdAt === 'string' ? evt.createdAt : null;
+      if (!at) continue;
+      if (new Date(at).getTime() < since.getTime()) continue;
+      previews.push({
+        at,
+        direction: evt.direction,
+        preview: evt.text.slice(0, 200),
+        kind: typeof evt.kind === 'string' ? evt.kind : undefined,
+        source: 'trip_events',
+      });
+    }
+  }
+  previews.sort((a, b) => (a.at < b.at ? 1 : -1));
+  return previews.slice(0, 30);
 }
 
 export const inspectMyWhatsappChannelTool: ToolDef<

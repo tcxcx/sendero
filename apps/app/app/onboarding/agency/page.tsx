@@ -166,9 +166,7 @@ export default async function AgencyOnboardingPage({ searchParams }: Props) {
               color: '#888',
             }}
           >
-            Locks the entire stack — treasury wallet, booking escrow, trip stamps, identity, and
-            traveler-pay reimbursement all settle on the chosen chain. Pick once; flip requires zero
-            on-chain state and admin involvement.
+            Locks the entire stack — treasury wallet, booking escrow, trip stamps, identity, and traveler-pay reimbursement all settle on the chosen chain. Pick once; flip requires zero on-chain state and admin involvement. Your travelers will always see a unified balance on their end; this chain abstraction is never exposed to end users.
           </span>
         </label>
         <button type="submit" style={submitStyle}>

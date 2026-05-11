@@ -25,7 +25,12 @@ export interface StampTenantBrand {
 export interface StampTraveler {
   /** Sendero User.id — mirrors NftStamp.travelerId. */
   userId: string;
-  /** DCW recipient address (`0x…40`). */
+  /**
+   * DCW recipient address for the StampContext.chain — `0x…40` for
+   * arc, base58 pubkey for sol. Picked by `loadStampContext` based
+   * on `tenant.primaryChain` so downstream steps never have to chain-
+   * switch.
+   */
   address: string;
   /** Display name for the manifest. */
   displayName: string | null;
@@ -72,6 +77,14 @@ export interface StampContext {
   primaryKey: string;
   /** ipfs://<manifestCid> source-of-truth URI; computed mid-workflow. */
   uri?: string;
+  /**
+   * Tenant.primaryChain — picked once at loadStampContext, threaded
+   * through every stamp step so `mint_stamp` routes to the right
+   * chain (`arc` → SenderoStamps ERC-1155 / `sol` → Metaplex Core).
+   * `travelers[].address` is the matching chain's wallet (EVM 0x for
+   * arc, base58 for sol).
+   */
+  chain: 'arc' | 'sol';
 }
 
 /**

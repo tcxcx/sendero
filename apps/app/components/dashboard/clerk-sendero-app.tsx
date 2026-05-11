@@ -13,25 +13,33 @@
  * workspace branch renders with the real MSCA treasury address.
  *
  * Design notes:
- * - `address` comes from `organization.publicMetadata.arcWalletAddress`,
- *   stamped by the Clerk webhook after `provisionTenantWallet` resolves.
- *   While provisioning is in-flight (or the svix retry hasn't caught up)
- *   `arcWalletAddress` is absent — we seed `0x0000…` and re-seed via
- *   effect deps when the metadata arrives.
+ * - `address` is chain-aware: Arc tenants get `arcWalletAddress`
+ *   (Circle MSCA `0x…`), Sol tenants get `solTreasuryAddress` (Squads V4
+ *   vault base58). Stamped by the Clerk webhook after the corresponding
+ *   provision tool resolves. While provisioning is in-flight (or the svix
+ *   retry hasn't caught up) the address is absent — we seed a chain-shaped
+ *   placeholder and re-seed via effect deps when the metadata arrives.
  * - `email`/`phone` are populated from Clerk primary identifiers. When
  *   phone is missing, `<ProfileGate>` inside `SenderoApp` prompts the
  *   user — that's the right UX for operators who haven't added a phone
  *   yet since Duffel hold orders require one.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { useOrganization, useUser } from '@clerk/nextjs';
 
 import { SenderoApp } from '@/components/sendero-app';
 import { useSendero } from '@/components/store';
 
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
+const ARC_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
+const SOL_ZERO_ADDRESS = '11111111111111111111111111111111' as const;
+
+interface GatewayDepositRow {
+  chain: string;
+  kind: 'evm' | 'solana';
+  address: string | null;
+}
 
 export function ClerkSenderoApp() {
   const { user, isLoaded: userLoaded, isSignedIn } = useUser();
@@ -39,23 +47,64 @@ export function ClerkSenderoApp() {
   const setUserAuth = useSendero(s => s.setUserAuth);
   const currentAuth = useSendero(s => s.userAuth);
 
-  const arcAddressRaw = organization?.publicMetadata?.arcWalletAddress;
-  const arcAddress =
-    typeof arcAddressRaw === 'string' && arcAddressRaw.startsWith('0x')
-      ? (arcAddressRaw as `0x${string}`)
-      : ZERO_ADDRESS;
+  const meta = organization?.publicMetadata as
+    | {
+        primaryChain?: 'arc' | 'sol';
+        arcWalletAddress?: string;
+        solTreasuryAddress?: string;
+      }
+    | undefined;
+  const chain: 'arc' | 'sol' = meta?.primaryChain === 'sol' ? 'sol' : 'arc';
+
+  // Mirror the canonical bridge: surface the Gateway depositor wallet
+  // (the unified-balance entry that manages the treasury) instead of the
+  // per-chain settlement address. See `clerk-wallet-bridge.tsx` for the
+  // full rationale.
+  const [gatewayAddress, setGatewayAddress] = useState<string | null>(null);
+  useEffect(() => {
+    if (!orgLoaded || !isSignedIn || !organization) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch('/api/gateway/deposit-info', { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = (await res.json()) as { usdc?: GatewayDepositRow[] };
+        const rowKey = chain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
+        const row = json.usdc?.find(r => r.chain === rowKey);
+        if (!cancelled && row?.address) setGatewayAddress(row.address);
+      } catch {
+        /* gateway not provisioned yet */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [organization, orgLoaded, isSignedIn, chain]);
+
+  const fallbackAddress =
+    chain === 'sol'
+      ? typeof meta?.solTreasuryAddress === 'string' && meta.solTreasuryAddress.length > 0
+        ? meta.solTreasuryAddress
+        : SOL_ZERO_ADDRESS
+      : typeof meta?.arcWalletAddress === 'string' && meta.arcWalletAddress.startsWith('0x')
+        ? meta.arcWalletAddress
+        : ARC_ZERO_ADDRESS;
+  const address = gatewayAddress ?? fallbackAddress;
 
   useEffect(() => {
     if (!userLoaded || !orgLoaded || !isSignedIn || !user) return;
-    // Re-seed when address transitions zero → real (webhook caught up).
-    if (currentAuth?.email && currentAuth.address === arcAddress) return;
+    // Re-seed when address transitions zero → real (webhook caught up)
+    // or chain flips (rare — onboarding only, but cheap to handle).
+    if (currentAuth?.email && currentAuth.address === address && currentAuth.chain === chain)
+      return;
     setUserAuth({
-      address: arcAddress,
+      address,
+      chain,
       displayName: user.fullName || user.firstName || 'Operator',
       email: user.primaryEmailAddress?.emailAddress ?? '',
       phone: user.primaryPhoneNumber?.phoneNumber ?? '',
     });
-  }, [userLoaded, orgLoaded, isSignedIn, user, setUserAuth, currentAuth, arcAddress]);
+  }, [userLoaded, orgLoaded, isSignedIn, user, setUserAuth, currentAuth, address, chain]);
 
   if (!userLoaded) {
     return (

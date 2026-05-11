@@ -25,9 +25,13 @@ export default async function OrganizationsPage() {
       _count: {
         select: {
           memberships: true,
-          slackInstalls: true,
           whatsappFlowRegistrations: true,
         },
+      },
+      slackInstalls: {
+        where: { revokedAt: null },
+        take: 1,
+        select: { id: true },
       },
       whatsappInstall: {
         select: { status: true },
@@ -38,7 +42,7 @@ export default async function OrganizationsPage() {
   const channelCount = tenants.reduce(
     (sum, tenant) =>
       sum +
-      (tenant._count.slackInstalls > 0 ? 1 : 0) +
+      (tenant.slackInstalls.length > 0 ? 1 : 0) +
       (tenant.whatsappInstall?.status === 'active' ? 1 : 0),
     0
   );
@@ -111,7 +115,7 @@ export default async function OrganizationsPage() {
                   <td className="px-4 py-3 capitalize">{tenant.billingTier}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
-                      <Pill active={tenant._count.slackInstalls > 0}>Slack</Pill>
+                      <Pill active={tenant.slackInstalls.length > 0}>Slack</Pill>
                       <Pill active={tenant.whatsappInstall?.status === 'active'}>WhatsApp</Pill>
                       <Pill active={tenant._count.whatsappFlowRegistrations > 0}>Flows</Pill>
                     </div>

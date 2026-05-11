@@ -69,7 +69,7 @@ export async function resolveChannelForTrip(tripId: string): Promise<ResolvedCha
       tenant: {
         select: {
           metadata: true,
-          slackInstalls: { take: 1, select: { id: true } },
+          slackInstalls: { where: { revokedAt: null }, take: 1, select: { id: true } },
           whatsappInstall: { select: { id: true, status: true, phoneNumberId: true } },
         },
       },
@@ -149,7 +149,7 @@ export async function sendShareOnTrip(
           whatsappInstall: {
             select: { phoneNumberId: true, status: true, webhookSecret: true },
           },
-          slackInstalls: { take: 1 },
+          slackInstalls: { where: { revokedAt: null }, take: 1 },
         },
       },
       traveler: { select: { email: true, phone: true } },
@@ -189,7 +189,7 @@ async function inferTenantDefault(tenantId: string): Promise<ChannelKind> {
     where: { id: tenantId },
     select: {
       whatsappInstall: { select: { status: true } },
-      slackInstalls: { take: 1, select: { id: true } },
+      slackInstalls: { where: { revokedAt: null }, take: 1, select: { id: true } },
     },
   });
   if (tenant?.whatsappInstall?.status === 'active') return 'whatsapp';

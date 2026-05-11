@@ -57,9 +57,18 @@ export default function OnboardingPage() {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ primaryChain: chain }),
         });
-        const body = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean };
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          ok?: boolean;
+          stage?: string;
+          message?: string;
+          stack?: string;
+        };
         if (!res.ok) {
-          const msg = body.error ?? res.statusText ?? 'Request failed';
+          // Prefer the specific error from the route's catch block
+          // (`message` + `stage`) over the generic `error` envelope.
+          const detail = body.message ?? body.error ?? res.statusText ?? 'Request failed';
+          const msg = body.stage ? `[${body.stage}] ${detail}` : detail;
           setDeployError(msg);
           // Drop back to the chain-select screen so the user can retry
           // without losing their pick.

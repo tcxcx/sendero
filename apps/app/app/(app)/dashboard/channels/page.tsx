@@ -16,7 +16,7 @@ export default async function ChannelsPage() {
     where: { id: tenant.id },
     select: {
       whatsappInstall: { select: { status: true } },
-      slackInstalls: { take: 1, select: { id: true } },
+      slackInstalls: { where: { revokedAt: null }, take: 1, select: { id: true } },
     },
   });
 

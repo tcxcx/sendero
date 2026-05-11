@@ -164,7 +164,7 @@ export async function runInspectMySlack(
         tenantId,
         status: { notIn: ['completed', 'canceled', 'failed'] },
         traveler: {
-          slackUserBindings: { some: {} },
+          slackUserBindings: { some: { tenantId } },
         },
       },
     }),

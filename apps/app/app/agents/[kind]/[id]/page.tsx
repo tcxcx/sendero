@@ -23,12 +23,19 @@ interface PageParams {
   id: string;
 }
 
-const KIND_DESCRIPTION: Record<string, string> = {
-  sendero:
-    'Primary Sendero AI travel agent — books, settles, and records reputation on Arc-Testnet.',
-  org: 'Travel agency on the Sendero protocol — settles bookings on Arc-Testnet.',
-  user: 'Sendero traveler with an on-chain identity on Arc-Testnet.',
-};
+function descriptionForKind(kind: string, chain: 'arc' | 'sol'): string {
+  const network = chain === 'sol' ? 'Solana Devnet' : 'Arc Testnet';
+  switch (kind) {
+    case 'sendero':
+      return `Primary Sendero AI travel agent — books, settles, and records reputation on ${network}.`;
+    case 'org':
+      return `Travel agency on the Sendero protocol — settles bookings on ${network}.`;
+    case 'user':
+      return `Sendero traveler with an on-chain identity on ${network}.`;
+    default:
+      return `Sendero agent on ${network}.`;
+  }
+}
 
 const KIND_LABEL: Record<string, string> = {
   sendero: 'Primary Agent',
@@ -48,6 +55,19 @@ async function loadPublicProfile(kind: string, id: string) {
 function shortenAddress(addr: string, front = 8, back = 6): string {
   if (addr.length <= front + back + 2) return addr;
   return `${addr.slice(0, front)}…${addr.slice(-back)}`;
+}
+
+/**
+ * Render an agent identifier compactly. Arc ERC-8004 agent ids are
+ * decimal token ids (e.g. "2286") and stay full-length. Sol Metaplex
+ * Agent Registry ids are 32–44 char base58 mint addresses — too long
+ * to render inline next to a "#" prefix; truncated like a wallet
+ * address so the chip + identity field don't overflow.
+ */
+function shortenAgentId(id: string): string {
+  if (/^\d+$/.test(id)) return id;
+  if (id.length <= 14) return id;
+  return shortenAddress(id, 6, 4);
 }
 
 function formatDate(iso: string): string {
@@ -90,26 +110,38 @@ export async function generateMetadata({
   if (!profile) return { title: 'Agent not found · Sendero' };
 
   const url = `https://app.sendero.travel/agents/${kind}/${id}`;
+  const networkLabel = profile.chain === 'sol' ? 'Solana Devnet' : 'Arc Testnet';
   const title = profile.stars
     ? `${profile.displayName} · ${profile.stars.toFixed(1)}★ on Sendero`
     : `${profile.displayName} · Sendero`;
   const description =
     profile.feedbackCount > 0
-      ? `${profile.stars?.toFixed(2) ?? '—'}★ across ${profile.feedbackCount} ratings from ${profile.validatorCount} distinct counterparties on Arc-Testnet.`
-      : KIND_DESCRIPTION[kind];
+      ? `${profile.stars?.toFixed(2) ?? '—'}★ across ${profile.feedbackCount} ratings from ${profile.validatorCount} distinct counterparties on ${networkLabel}.`
+      : descriptionForKind(kind, profile.chain);
+
+  // EIP-7572 metadata only applies to EVM-based NFTs. Sol agents (Metaplex
+  // Agent Registry) use the SPL/Metaplex semantic instead — encode as a
+  // separate `solana:` namespace so unfurlers don't mis-resolve them as
+  // Arc tokens.
+  const nftMetadata: Record<string, string> = profile.agentId
+    ? profile.chain === 'sol'
+      ? {
+          'solana:asset:address': profile.contract,
+          'solana:asset:cluster': 'devnet',
+        }
+      : {
+          'eth:nft:contract': profile.contract,
+          'eth:nft:token_id': profile.agentId,
+          'eth:nft:chain': 'arc-testnet',
+        }
+    : {};
 
   return {
     title,
     description,
     openGraph: { title, description, url, siteName: 'Sendero', type: 'profile' },
     twitter: { card: 'summary', title, description },
-    other: profile.agentId
-      ? {
-          'eth:nft:contract': profile.contract,
-          'eth:nft:token_id': profile.agentId,
-          'eth:nft:chain': 'arc-testnet',
-        }
-      : {},
+    other: nftMetadata,
     robots: { index: true, follow: true },
   };
 }
@@ -120,11 +152,33 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
   const profile = await loadPublicProfile(kind, id);
   if (!profile) notFound();
 
-  const explorerUrl = env.arcExplorerUrl();
-  const contractUrl = `${explorerUrl}/address/${profile.contract}`;
-  const tokenUrl = profile.agentId ? `${explorerUrl}/token/${profile.contract}/${profile.agentId}` : null;
+  // Per-chain URL builders. Arc routes through Arcscan (env-overridable);
+  // Sol routes through Solana Explorer with the devnet cluster query
+  // during testnet beta. Identity registry naming differs per chain too:
+  // ERC-8004 IdentityRegistry on Arc, Metaplex Agent Registry on Sol.
+  const isSolChain = profile.chain === 'sol';
+  const arcExplorer = env.arcExplorerUrl();
+  const contractUrl = isSolChain
+    ? `https://explorer.solana.com/address/${profile.contract}?cluster=devnet`
+    : `${arcExplorer}/address/${profile.contract}`;
+  const tokenUrl = profile.agentId
+    ? isSolChain
+      ? `https://explorer.solana.com/address/${profile.contract}?cluster=devnet`
+      : `${arcExplorer}/token/${profile.contract}/${profile.agentId}`
+    : null;
+  const explorerName = isSolChain ? 'Solana Explorer' : 'Arcscan';
+  const networkLabel = isSolChain ? 'Solana Devnet' : 'Arc Testnet';
+  const identityProtocol = isSolChain ? 'Metaplex Agent Registry' : 'ERC-8004';
+  const identityRegistryName = isSolChain
+    ? 'Metaplex Agent Registry'
+    : 'IdentityRegistry · ERC-8004';
+  // Per-chain transaction explorer base for individual tx hashes.
+  const txExplorerBase = isSolChain
+    ? 'https://explorer.solana.com/tx'
+    : `${arcExplorer}/tx`;
+  const txUrlSuffix = isSolChain ? '?cluster=devnet' : '';
   const isMinted = profile.status === 'minted' && !!profile.agentId;
-  const kindTypeLabel = `${KIND_LABEL[kind]} · ERC-8004 · Arc Testnet`;
+  const kindTypeLabel = `${KIND_LABEL[kind]} · ${identityProtocol} · ${networkLabel}`;
 
   return (
     <>
@@ -648,7 +702,7 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
           <header className="ap-hero">
             <h1 className="ap-hero-name">{profile.displayName}</h1>
             <p className="ap-hero-desc">
-              {profile.description ?? KIND_DESCRIPTION[kind]}
+              {profile.description ?? descriptionForKind(kind, profile.chain)}
             </p>
           </header>
 
@@ -700,12 +754,15 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                         target="_blank"
                         rel="noreferrer"
                         className="ap-chain-field-value-link"
-                        aria-label={`Token #${profile.agentId} on Arcscan`}
+                        title={profile.agentId}
+                        aria-label={`Token #${profile.agentId} on ${explorerName}`}
                       >
-                        #{profile.agentId}
+                        #{shortenAgentId(profile.agentId)}
                       </Link>
                     ) : (
-                      <span className="ap-chain-field-value">#{profile.agentId}</span>
+                      <span className="ap-chain-field-value" title={profile.agentId}>
+                        #{shortenAgentId(profile.agentId)}
+                      </span>
                     )
                   ) : (
                     <span className="ap-chain-field-value" style={{ opacity: 0.35, fontStyle: 'italic' }}>
@@ -745,11 +802,11 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                     rel="noreferrer"
                     className="ap-chain-field-value-link"
                     title={profile.contract}
-                    aria-label={`IdentityRegistry contract on Arcscan`}
+                    aria-label={`${identityRegistryName} contract on ${explorerName}`}
                   >
                     {shortenAddress(profile.contract, 6, 4)}
                   </Link>
-                  <div className="ap-chain-field-sub">IdentityRegistry · ERC-8004</div>
+                  <div className="ap-chain-field-sub">{identityRegistryName}</div>
                 </div>
 
                 {/* Holder */}
@@ -777,8 +834,10 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                 {/* Chain */}
                 <div className="ap-chain-field">
                   <div className="ap-chain-field-label">Network</div>
-                  <span className="ap-chain-field-value">Arc Testnet</span>
-                  <div className="ap-chain-field-sub">ERC-8004 · Reputation-aware identity</div>
+                  <span className="ap-chain-field-value">{networkLabel}</span>
+                  <div className="ap-chain-field-sub">
+                    {identityProtocol} · Reputation-aware identity
+                  </div>
                 </div>
               </div>
 
@@ -801,7 +860,7 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                   rel="noreferrer"
                   className="ap-chain-explorer-btn"
                 >
-                  View on Arcscan
+                  View on {explorerName}
                   <span aria-hidden="true">→</span>
                 </Link>
               </div>
@@ -843,12 +902,12 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                         <span title={r.fromAddress}>{shortenAddress(r.fromAddress, 8, 6)}</span>
                       </div>
                       <Link
-                        href={`${explorerUrl}/tx/${r.txHash}`}
+                        href={`${txExplorerBase}/${r.txHash}${txUrlSuffix}`}
                         target="_blank"
                         rel="noreferrer"
                         className="ap-feedback-tx"
                         title={r.txHash}
-                        aria-label={`View transaction on Arcscan`}
+                        aria-label={`View transaction on ${explorerName}`}
                       >
                         tx {r.txHash.slice(0, 8)}…{r.txHash.slice(-4)}
                       </Link>
@@ -860,7 +919,7 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
             )}
           </section>
 
-          {/* ── 6. ERC-8004 metadata ─────────────────────────── */}
+          {/* ── 6. Identity metadata ─────────────────────────── */}
           <section className="ap-section" aria-labelledby="ap-meta-title">
             <h2 className="ap-section-title" id="ap-meta-title">Agent Metadata</h2>
             <nav className="ap-meta-links" aria-label="Agent metadata links">
@@ -870,7 +929,7 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                 rel="noreferrer"
                 className="ap-meta-btn"
               >
-                ERC-8004 metadata JSON
+                {identityProtocol} metadata JSON
                 <span className="ap-meta-btn-arrow" aria-hidden="true">→</span>
               </Link>
               <Link
@@ -879,7 +938,7 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                 rel="noreferrer"
                 className="ap-meta-btn"
               >
-                View IdentityRegistry on Arcscan
+                View {identityRegistryName} on {explorerName}
                 <span className="ap-meta-btn-arrow" aria-hidden="true">→</span>
               </Link>
             </nav>
@@ -889,8 +948,8 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
           <div className="ap-trust-rail" role="contentinfo">
             <span className="ap-trust-chain-icon" aria-hidden="true">⛓</span>
             <p className="ap-trust-text">
-              Reputation data sourced directly from Arc Testnet (ERC-8004 IdentityRegistry + ReputationRegistry).
-              Not editable post-mint.
+              Reputation data sourced directly from {networkLabel} ({identityRegistryName}
+              {isSolChain ? '' : ' + ReputationRegistry'}). Not editable post-mint.
             </p>
           </div>
 

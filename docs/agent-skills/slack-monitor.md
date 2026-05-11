@@ -7,21 +7,23 @@ description: Arm a live `Monitor` against Slack agent turns so a dogfood session
 
 ## Why this exists
 
-Sendero's Slack flow has **shallow audit infrastructure** compared to WhatsApp — there are no `slack_webhook_events`, `slack_outbound_messages`, or `slack_api_logs` tables. The signals you have are:
+Sendero's Slack flow now has a durable audit path that mirrors the WhatsApp/Kapso operator posture. Use the database audit tables first, then fall back to dev stdout or Langfuse when you need lower-level runtime detail.
 
 | Signal | Source | Granularity |
 |---|---|---|
+| **Webhook delivery row** | `slack_webhook_events` | Every Slack Events API delivery: dispatch/skipped/duplicate/busy/revoked/error |
+| **Agent/tool timeline row** | `slack_agent_events` | Turn lifecycle + tool start/finish/failure/slow + outbound post status |
 | **Per-turn meter row** | `meter_events` rows where `metadata->>'channel' = 'slack'` | One row per agent turn (`chat_reply`) |
 | **Webhook router logs** | dev-server stdout, prefix `[slack/events]` | Every inbound event ack/dedup decision |
 | **Agent turn logs** | dev-server stdout, prefix `[slack.agent]` | Placeholder post, step update, fallback, gateway retries |
 | **Langfuse trace** | `agentType=sendero-slack` | **Full tool sequence + step-by-step latency + errors** — richest source |
 | **Slack DB tables** | `slack_installs`, `slack_user_bindings` | Install status, user → Sendero binding cache |
 
-**Default trap #1:** `meter_events.metadata` for Slack is **minimal** (`turnId`, `channel`, `idempotencyKey` only). It does NOT contain the tool trail. Don't expect it to tell you which tools fired — only that the turn completed.
+**Default trap #1:** `meter_events.metadata` for Slack is **minimal** (`turnId`, `channel`, `idempotencyKey` only). It does NOT contain the tool trail. Use `slack_agent_events` for tool sequence.
 
-**Default trap #2:** there is no `slack_outbound_messages` table. If the agent's `chat.postMessage` call to Slack API fails after a successful turn, the meter row says `status=paid` (the turn billed) but the user never sees the reply. Look for `[slack.agent] placeholder post failed` or `chat.update on placeholder failed` lines in dev stdout.
+**Default trap #2:** Slack still does not have a separate `slack_outbound_messages` table. Outbound success/failure is synthesized inside `slack_agent_events` (`outbound_posted`, `outbound_failed`, `placeholder_failed`, `step_update`).
 
-**Default trap #3:** Slack's webhook ack must respond in ≤3s, so the heavy work runs after `after()`. A turn that started but never wrote a meter row likely hit a runtime error inside `runSlackAgentTurn` after the 200 ack. Check dev stdout for `[slack/events] runSlackAgentTurn failed`.
+**Default trap #3:** Slack's webhook ack must respond in ≤3s, so the heavy work runs after `after()`. A delivery row with `dispatch_status='dispatched'` but no matching `slack_agent_events` means the failure happened after the 200 ack and before/inside `runSlackAgentTurn`.
 
 ## System requirements (pre-flight)
 
@@ -74,7 +76,56 @@ If `revoked_at IS NOT NULL` for the tenant under test → Slack uninstalled the 
 
 Most dogfood sessions need 2–3 of these armed simultaneously.
 
-### Monitor 1 — `meter_events` filtered by `channel=slack`
+### Monitor 1 — canonical Slack audit stream
+
+Primary live monitor. This shows inbound routing and the agent/tool timeline with a shared `trace_id`.
+
+```bash
+export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+DATABASE_URL=$(grep -E '^DATABASE_URL=' /Users/criptopoeta/coding-dojo/sendero/.env.local | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//')
+[ -z "$DATABASE_URL" ] && { echo "ERR: DATABASE_URL missing"; exit 1; }
+SINCE=$(date -u +%Y-%m-%dT%H:%M:%S)
+echo "ARMED slack audit>=$SINCE"
+while true; do
+  WEBHOOKS=$(psql "$DATABASE_URL" -At -F '|' -c "
+    SELECT to_char(received_at AT TIME ZONE 'UTC','HH24:MI:SS'),
+           coalesce(trace_id,'-'),
+           dispatch_status,
+           coalesce(event_type,'-'),
+           coalesce(channel_id,'-'),
+           coalesce(thread_ts,'-'),
+           left(coalesce(dispatch_error,'-'),120)
+      FROM slack_webhook_events
+     WHERE received_at > '${SINCE}'::timestamptz
+     ORDER BY received_at ASC LIMIT 50;" 2>/dev/null || true)
+  [ -n "$WEBHOOKS" ] && while IFS='|' read -r t trace status type channel thread err; do
+    [ -z "$t" ] && continue
+    echo "$t  webhook trace=${trace:0:12} status=$status type=$type channel=$channel thread=$thread err=$err"
+  done <<< "$WEBHOOKS"
+
+  AGENT=$(psql "$DATABASE_URL" -At -F '|' -c "
+    SELECT to_char(created_at AT TIME ZONE 'UTC','HH24:MI:SS'),
+           coalesce(trace_id,'-'),
+           sequence,
+           kind,
+           coalesce(tool_name,'-'),
+           coalesce(ok::text,'-'),
+           coalesce(duration_ms::text,'-'),
+           left(coalesce(status_text,error_message,'-'),160)
+      FROM slack_agent_events
+     WHERE created_at > '${SINCE}'::timestamptz
+     ORDER BY created_at ASC, sequence ASC LIMIT 100;" 2>/dev/null || true)
+  [ -n "$AGENT" ] && while IFS='|' read -r t trace seq kind tool ok ms status; do
+    [ -z "$t" ] && continue
+    echo "$t  agent trace=${trace:0:12} #$seq kind=$kind tool=$tool ok=$ok ms=$ms $status"
+  done <<< "$AGENT"
+
+  [ -n "$WEBHOOKS$AGENT" ] && SINCE=$(date -u +%Y-%m-%dT%H:%M:%S)
+  sleep 2
+done
+```
+
+### Monitor 2 — `meter_events` filtered by `channel=slack`
 
 One row per completed Slack turn. Tells you *that* a turn happened, not *what* tools ran.
 
@@ -106,7 +157,7 @@ while true; do
 done
 ```
 
-### Monitor 2 — dev-server stdout (richest signal)
+### Monitor 3 — dev-server stdout
 
 Tails the apps/app dev process for Slack-related log prefixes. **You CANNOT tail another terminal's stdout from here.** Two options:
 
@@ -136,7 +187,7 @@ tail -F /tmp/sendero-app-dev.log 2>/dev/null \
 - `[slack.agent] gateway failed; retrying direct provider` — AI gateway hiccup; retry kicks in
 - `[slack-dedup-lock] dedup check failed, failing open` — Redis dedup down; expect double-fires
 
-### Monitor 3 — Langfuse traces (richest by far if available)
+### Monitor 4 — Langfuse traces (richest by far if available)
 
 Every Slack agent turn wraps in `traceAgent('sendero-slack', metadata, fn)` and writes to Langfuse. Tools, latency, and errors are all there.
 
@@ -154,9 +205,9 @@ Every Slack agent turn wraps in `traceAgent('sendero-slack', metadata, fn)` and 
 
 There's no clean polling pattern here yet — Langfuse needs API credentials and the trace API is heavier than meter_events. Use this surface for **post-mortem** on a specific stuck turn, not real-time tailing.
 
-### Monitor 4 — `chat.postMessage` outbound success (synthesized)
+### Monitor 5 — `chat.postMessage` outbound success (synthesized)
 
-Sendero doesn't log Slack outbound to a DB table. Approximate by polling Slack's API directly for the latest message in the channel under test, OR ask the user to hit the channel and confirm the bot reply landed. There is no automated tap.
+Sendero doesn't have a dedicated Slack outbound table. Start with `slack_agent_events` (`outbound_posted` / `outbound_failed`). If the timeline is ambiguous, approximate by polling Slack's API directly for the latest message in the channel under test, OR ask the user to hit the channel and confirm the bot reply landed.
 
 For paranoid debugging, add temporary logging in `apps/app/lib/slack-agent.ts` around the `chat.update` / `chat.postMessage` calls. Remove before commit.
 
@@ -165,7 +216,7 @@ For paranoid debugging, add temporary logging in `apps/app/lib/slack-agent.ts` a
 These are the bug families this skill has caught repeatedly. Check them before deep diving.
 
 - **Turn writes meter row but Slack channel shows no reply.** Outbound `chat.postMessage` failed silently after the turn billed. Search dev stdout for `[slack.agent] placeholder post failed` OR `fallback post failed`. Common causes: bot kicked from channel (`channel_not_found`), workspace token revoked between turns (`token_revoked`), Slack rate limit (`ratelimited`).
-- **"🔎 Searching flights…" placeholder, then silence.** Step-streaming `chat.update` failed. The placeholder posts (Tier 4 = 1/sec OK), but a follow-up step update or the final reply hit Slack's Tier 3 cap (50/min for `chat.update`) or got rejected because the message was deleted client-side. Look for `chat.update on placeholder failed`.
+- **"🔎 Searching flights…" placeholder, then silence.** Check `slack_agent_events` for the same `trace_id`. If the last row is `tool_started`, the tool or provider hung/failed. If the last row is `step_update` with no final `outbound_posted`, the final Slack update/post likely failed. Then inspect dev stdout for `chat.update on placeholder failed`.
 - **Approval gate hung.** Booking flows insert a `Booking` row with `status='pending_approval'` and emit a Slack interactive button. If the operator never taps Approve/Reject, the agent waits forever. Check `bookings WHERE status='pending_approval' AND tenantId=...`. Cancel manually if needed: `UPDATE bookings SET status='cancelled' WHERE id=...`.
 - **First-inbound slow (>10s).** Empty `slack_user_bindings` cache forces `slack.users.info` calls + email lookup. Subsequent turns are fast. Not a bug; expected on cold tenant.
 - **Duplicate replies.** Redis dedup is down (`[slack-dedup-lock] dedup check failed`). Slack retries every event 3x. Bring Redis back up.
@@ -173,7 +224,7 @@ These are the bug families this skill has caught repeatedly. Check them before d
 
 ## When monitors stop firing
 
-- **Empty Slack monitor results** → confirm Slack is actually reaching Sendero. Send a test message in the channel; if no inbound row in `meter_events`, the webhook URL is wrong/unreachable. Check `kapso whatsapp webhooks list` is NOT applicable for Slack — Slack uses raw `events_api` URL configured in the Slack app dashboard, NOT Kapso. The URL must be `https://sendero-dev-bufi.ngrok.app/api/webhooks/slack/events`.
+- **Empty Slack monitor results** → confirm Slack is actually reaching Sendero. Send a test message in the channel; if no inbound row in `slack_webhook_events`, the webhook URL is wrong/unreachable or the running app does not include the Slack audit migration/code. Check `kapso whatsapp webhooks list` is NOT applicable for Slack — Slack uses raw `events_api` URL configured in the Slack app dashboard, NOT Kapso. The URL must be `https://sendero-dev-bufi.ngrok.app/api/webhooks/slack/events`.
 - **`[slack/events] inbound` shows but no agent reply** → `runSlackAgentTurn` is throwing. Tail `[slack.agent]` lines for the exception.
 - **Mid-conversation freeze ("🔎 Searching flights…" stays forever)** → step-update failed. Check Slack rate limit headers. Worst case, the placeholder message ts is wrong and `chat.update` is editing the wrong message.
 

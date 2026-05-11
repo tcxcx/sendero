@@ -37,6 +37,40 @@ import { requirePlatformRole } from '@/lib/access';
 import { createArcUserOperationFeesEstimator } from '@/lib/treasury/arc-userop-fees';
 import { ensureCircleServerRuntime } from '@/lib/treasury/circle-server-runtime';
 
+// Inlined to avoid adding @sendero/multisig as an admin dep — same
+// constant as packages/multisig/src/constants.ts::WEIGHTED_WEBAUTHN_MULTISIG_PLUGIN_ADDRESS.
+// Already inlined elsewhere in apps/admin/lib/treasury/compute-arc-msca-address.ts.
+const WEIGHTED_WEBAUTHN_MULTISIG_PLUGIN_ADDRESS: Address =
+  '0x0000000C984AFf541D6cE86Bb697e68ec57873C8';
+
+// Canonical ABI from desk-v1 (smart-wallet.controller.ts). The Circle
+// WeightedWebauthnMultisigPlugin returns (ownerAddresses bytes30[],
+// ownersData OwnerData[], thresholdWeight uint256). We only need
+// ownersData[].addr to detect already-installed EOA owners.
+const OWNERSHIP_INFO_ABI = [
+  {
+    inputs: [{ name: 'account', type: 'address' }],
+    name: 'ownershipInfoOf',
+    outputs: [
+      { name: 'ownerAddresses', type: 'bytes30[]' },
+      {
+        name: 'ownersData',
+        type: 'tuple[]',
+        components: [
+          { name: 'weight', type: 'uint256' },
+          { name: 'credType', type: 'uint8' },
+          { name: 'addr', type: 'address' },
+          { name: 'publicKeyX', type: 'uint256' },
+          { name: 'publicKeyY', type: 'uint256' },
+        ],
+      },
+      { name: 'thresholdWeight', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
 export interface InstallArcMultisigInput {
   treasuryId: string;
 }
@@ -54,27 +88,31 @@ export type InstallArcMultisigResult =
 
 const DEFAULT_CIRCLE_CLIENT_URL = 'https://modular-sdk.circle.com/v1/rpc/w3s/buidl';
 
-// Same ABI shape as `@sendero/multisig`'s userop-builder. Inlined
-// here so the admin app doesn't depend on the desk-v1 helper for
-// a single function. If/when the helper grows multi-signer support,
-// switch to the package export.
-const UPDATE_MULTISIG_WEIGHTS_ABI = [
+// Circle WeightedWebauthnMultisigPlugin — `addOwners` registers NEW
+// owners and atomically updates the threshold. We use this on the
+// freshly-deployed MSCA (which has only the platform-EOA bootstrap
+// owner) to add the form-configured members. Calling
+// `updateMultisigWeights` instead (the earlier code path) reverts
+// because that function can only update EXISTING owners; supplying a
+// new address there fails the "owner-must-exist" guard with no reason
+// string, surfacing as the opaque "execution reverted" we saw.
+const ADD_OWNERS_ABI = [
   {
     inputs: [
-      { name: 'ownersToUpdate', type: 'address[]' },
-      { name: 'newWeightsToUpdate', type: 'uint256[]' },
+      { name: 'ownersToAdd', type: 'address[]' },
+      { name: 'weightsToAdd', type: 'uint256[]' },
       {
-        name: 'publicKeyOwnersToUpdate',
+        name: 'publicKeyOwnersToAdd',
         type: 'tuple[]',
         components: [
           { name: 'x', type: 'uint256' },
           { name: 'y', type: 'uint256' },
         ],
       },
-      { name: 'pubicKeyNewWeightsToUpdate', type: 'uint256[]' },
+      { name: 'publicKeyWeightsToAdd', type: 'uint256[]' },
       { name: 'newThresholdWeight', type: 'uint256' },
     ],
-    name: 'updateMultisigWeights',
+    name: 'addOwners',
     outputs: [],
     stateMutability: 'nonpayable',
     type: 'function',
@@ -160,20 +198,54 @@ export async function installArcMultisig(
     };
   }
 
-  // Encode updateMultisigWeights:
-  //   ownersToUpdate          = members
-  //   newWeightsToUpdate      = [1, 1, ..., 1]
-  //   publicKeyOwnersToUpdate = []   (no WebAuthn owners in this flow)
-  //   pubicKeyNewWeightsToUpdate = []
-  //   newThresholdWeight      = treasury.threshold
+  // Idempotency: read on-chain owners first. If every form-member is
+  // already an owner, treat as installed and short-circuit. addOwners
+  // reverts with an opaque "execution reverted" when an owner already
+  // exists, so without this guard any retry after a partial DB-state
+  // failure deadlocks the lifecycle.
+  try {
+    const info = await publicClient.readContract({
+      address: WEIGHTED_WEBAUTHN_MULTISIG_PLUGIN_ADDRESS,
+      abi: OWNERSHIP_INFO_ABI,
+      functionName: 'ownershipInfoOf',
+      args: [account.address],
+    });
+    const ownersData = info[1];
+    const existingAddrs = new Set(ownersData.map(o => o.addr.toLowerCase()));
+    const allMembersAlreadyOwners = members.every(m => existingAddrs.has(m.toLowerCase()));
+    if (allMembersAlreadyOwners) {
+      await prisma.superOrgTreasury.update({
+        where: { id: treasury.id },
+        data: { multisigInstalledAt: new Date() },
+      });
+      return {
+        ok: true,
+        treasuryId: treasury.id,
+        userOpHash: (treasury.multisigInstallTxRef ?? '0x') as Hex,
+        addedOwners: members,
+        threshold: Number(info[2]),
+        alreadyInstalled: true,
+      };
+    }
+  } catch {
+    // Read failure (RPC blip / plugin not deployed yet) — fall through
+    // to addOwners and let it surface the real revert reason.
+  }
+
+  // Encode addOwners:
+  //   ownersToAdd            = members (NEW addresses to register)
+  //   weightsToAdd           = [1, 1, ..., 1]
+  //   publicKeyOwnersToAdd   = [] (no WebAuthn owners in this flow)
+  //   publicKeyWeightsToAdd  = []
+  //   newThresholdWeight     = treasury.threshold
   //
-  // The platform EOA's weight is preserved (it was set during deploy);
-  // updateMultisigWeights only changes the addresses listed in the
-  // arguments + the threshold.
+  // The platform EOA's weight (set during deploy) is preserved — addOwners
+  // only adds; existing owners aren't touched. The new threshold applies
+  // atomically once the new owners are registered.
   const weights = members.map(() => 1n);
   const installCallData = encodeFunctionData({
-    abi: UPDATE_MULTISIG_WEIGHTS_ABI,
-    functionName: 'updateMultisigWeights',
+    abi: ADD_OWNERS_ABI,
+    functionName: 'addOwners',
     args: [members, weights, [], [], BigInt(treasury.threshold)],
   });
 
@@ -188,9 +260,24 @@ export async function installArcMultisig(
 
   let userOpHash: Hex;
   try {
+    // CRITICAL: pass `callData` directly (raw plugin call), NOT `calls`.
+    //
+    // Circle's WeightedWebauthnMultisigPlugin implements ONLY
+    // `userOpValidationFunction`, not `runtimeValidationFunction`. Wrapping
+    // the plugin call in viem's `calls: [{to, data}]` makes the SDK produce
+    // a userOp with `callData = execute(self, 0, pluginData)` — the MSCA
+    // sees the OUTER selector as `execute()` and routes through the
+    // runtime-validation path → plugin reverts with
+    // `RuntimeValidationFailed → NotImplemented`. Confirmed via direct
+    // simulation (raw revert = 0x6d4fdb09 wrapping 0x84b9b379 = NotImplemented).
+    //
+    // Passing `callData` directly lets the MSCA's fallback dispatch the
+    // plugin function via the userOp-validation path (which IS implemented).
+    // Pattern lifted from desk-v1's submitSmartAccountCallData (which
+    // ships in production for the same Circle plugin).
     userOpHash = await bundlerClient.sendUserOperation({
       account,
-      calls: [{ to: account.address, value: 0n, data: installCallData }],
+      callData: installCallData,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -156,7 +156,7 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
                 : 'mt-0.5 font-mono text-lg tabular-nums'
             }
           >
-            {data ? `$${formatGrandTotal(data.spendableAvailable ?? data.available)}` : '—'}
+            {data ? `$${formatGrandTotal(data.grandTotal)}` : '—'}
           </div>
         </div>
         <HoverCard openDelay={120} closeDelay={80}>
@@ -236,8 +236,17 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
               Unified balance
             </div>
             <div className="mt-1 flex items-end gap-2">
+              {/*
+                Headline shows `grandTotal` — the full available balance
+                across every Gateway-enabled chain (Arc + Sol + EVM
+                bridge chains). The "Spendable" stat below carves out
+                the EVM-spendable subset since today's spend path is
+                viem-only; Sol funds count toward the headline but
+                aren't spendable from the dashboard until the Sol-spend
+                rail ships.
+              */}
               <span className="text-[28px] leading-none font-semibold tracking-[-0.02em] tabular-nums text-black">
-                ${formatGrandTotal(spendableAvailable)}
+                ${formatGrandTotal(data.grandTotal)}
               </span>
               <span className="pb-0.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-black/55">
                 USDC
@@ -253,7 +262,16 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <BalanceStat label="Spendable" value={`$${formatGrandTotal(spendableAvailable)}`} />
+          {/*
+            "Spendable" matches the headline — the entire unified
+            balance is spendable through the agent's settle paths,
+            which branch on tenant.primaryChain (Arc viem on Arc;
+            sendero_guest_escrow Anchor program on Sol). The dashboard's
+            manual Send/Swap/Bridge dialogs are EVM-only today and
+            display a SolDeferredPanel for Sol tenants — that nuance
+            doesn't belong in the headline stat.
+          */}
+          <BalanceStat label="Spendable" value={`$${formatGrandTotal(data.grandTotal)}`} />
           <BalanceStat label="In flight" value={`$${formatGrandTotal(String(inFlightTotal))}`} />
         </div>
       </div>
