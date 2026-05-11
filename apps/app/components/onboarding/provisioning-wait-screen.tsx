@@ -393,7 +393,7 @@ export function ProvisioningWaitScreen({
         }
 
         .provisioning-step[data-status='done'] .provisioning-step__dot {
-          background: color-mix(in oklab, #1f8a4a 85%, transparent);
+          background: var(--ink, #fb542b);
           color: #fff;
         }
 
