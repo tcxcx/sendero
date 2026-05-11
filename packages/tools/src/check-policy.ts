@@ -1,11 +1,27 @@
+import { prisma } from '@sendero/database';
 import { z } from 'zod';
-import type { ToolDef } from './types';
+
+import type { ToolContext, ToolDef } from './types';
 
 /**
- * Pure-function policy check over a travel offer. No external calls,
- * no Duffel, no Arc write — which is why it's priced at $0.0005. In
- * the demo workflow an agent calls it many times (one per candidate
- * offer) and the call count adds up naturally.
+ * Pure-function policy check over a travel offer. Cheap call, no
+ * external network — the LLM hits it once per candidate offer.
+ *
+ * Resolution order (Phase 3 B2B2B):
+ *
+ *   1. Customer-account-scoped Policy row matching
+ *      `(tenantId, customerAccountId)`. Highest specificity — corporate
+ *      employee trips override the tenant default.
+ *   2. Tenant-wide default Policy row `(tenantId, isDefault=true)`.
+ *      Catches direct consumers + TMC employees who aren't bound to a
+ *      CustomerAccount.
+ *   3. Hardcoded demo policies (`vale-corp-2026`, `softtek-mx-2026`,
+ *      `default-corp`). Kept for back-compat with the test bench and
+ *      sandbox callers that hit this tool without a Prisma-seeded row.
+ *
+ * Policy.rules is JSONB. The schema below is enforced via Zod parse;
+ * malformed rows fall through to the hardcoded fallback rather than
+ * crashing the tool turn.
  */
 
 export interface TravelPolicy {
@@ -21,8 +37,8 @@ export interface TravelPolicy {
   fiscalCountry: 'MX' | 'BR' | 'AR' | 'US' | 'GB';
 }
 
-/** Two built-in demo policies. In production these come from a DB. */
-const POLICIES: Record<string, TravelPolicy> = {
+/** Hardcoded fallback policies. Kept for sandbox / test bench parity. */
+const HARDCODED_POLICIES: Record<string, TravelPolicy> = {
   'vale-corp-2026': {
     id: 'vale-corp-2026',
     maxFlightUsd: 4500,
@@ -61,10 +77,35 @@ const POLICIES: Record<string, TravelPolicy> = {
   },
 };
 
+const policyRulesSchema = z.object({
+  maxFlightUsd: z.number(),
+  maxNightUsd: z.number(),
+  intlCabinMinHours: z.number(),
+  intlCabinRequired: z.enum(['business', 'first', 'premium_economy']),
+  domesticCabin: z.enum(['economy', 'premium_economy']),
+  preferredCarriers: z.array(z.string()).default([]),
+  blacklistSuppliers: z.array(z.string()).default([]),
+  requireApproverOverUsd: z.number(),
+  fiscalCountry: z.enum(['MX', 'BR', 'AR', 'US', 'GB']),
+});
+
 const inputSchema = z.object({
-  policyId: z
-    .enum(['vale-corp-2026', 'softtek-mx-2026', 'default-corp'])
-    .describe('Policy identifier (corporate travel ruleset)'),
+  /**
+   * Policy identifier. Can be a hardcoded demo slug (`vale-corp-2026`,
+   * `softtek-mx-2026`, `default-corp`) OR a real `Policy.slug` from
+   * the tenant's seeded policies. Empty string allowed when relying on
+   * customerAccountId / tenant default resolution.
+   */
+  policyId: z.string().describe('Policy slug — demo, tenant-seeded, or empty to use default.').optional().default(''),
+  /**
+   * Optional customer-account scope. When provided, takes precedence
+   * over `policyId` — the resolver looks up the customerAccount-
+   * specific policy first.
+   */
+  customerAccountId: z
+    .string()
+    .optional()
+    .describe('When set, prefer a Policy scoped to this CustomerAccount.'),
   offer: z
     .object({
       kind: z.enum(['flight', 'hotel']),
@@ -78,19 +119,106 @@ const inputSchema = z.object({
     .describe('The offer to check.'),
 });
 
+async function resolvePolicyFromDb(
+  tenantId: string | undefined,
+  customerAccountId: string | undefined,
+  policyId: string
+): Promise<TravelPolicy | null> {
+  if (!tenantId) return null;
+  try {
+    // 1. CustomerAccount-scoped (highest specificity).
+    if (customerAccountId) {
+      const row = await prisma.policy.findFirst({
+        where: { tenantId, customerAccountId },
+        orderBy: [{ version: 'desc' }, { updatedAt: 'desc' }],
+        select: { id: true, slug: true, rules: true },
+      });
+      const parsed = parsePolicyRow(row);
+      if (parsed) return parsed;
+    }
+
+    // 2. Explicit slug match within the tenant (legacy / agent-chosen).
+    if (policyId) {
+      const row = await prisma.policy.findFirst({
+        where: { tenantId, slug: policyId },
+        orderBy: [{ version: 'desc' }, { updatedAt: 'desc' }],
+        select: { id: true, slug: true, rules: true },
+      });
+      const parsed = parsePolicyRow(row);
+      if (parsed) return parsed;
+    }
+
+    // 3. Tenant default.
+    const def = await prisma.policy.findFirst({
+      where: { tenantId, isDefault: true },
+      orderBy: [{ version: 'desc' }, { updatedAt: 'desc' }],
+      select: { id: true, slug: true, rules: true },
+    });
+    return parsePolicyRow(def);
+  } catch (err) {
+    // DB unavailable / migration mid-flight → fall through to hardcoded.
+    console.warn('[check_policy] DB lookup failed (falling back to hardcoded)', {
+      tenantId,
+      customerAccountId,
+      policyId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
+function parsePolicyRow(
+  row: { id: string; slug: string; rules: unknown } | null
+): TravelPolicy | null {
+  if (!row) return null;
+  const parsed = policyRulesSchema.safeParse(row.rules);
+  if (!parsed.success) {
+    console.warn('[check_policy] policy.rules malformed, skipping', {
+      policyId: row.id,
+      slug: row.slug,
+      issues: parsed.error.issues,
+    });
+    return null;
+  }
+  // Zod `.default([])` on the array fields produces values at runtime;
+  // the inferred output marks them optional, so we widen explicitly.
+  return {
+    id: row.slug,
+    maxFlightUsd: parsed.data.maxFlightUsd,
+    maxNightUsd: parsed.data.maxNightUsd,
+    intlCabinMinHours: parsed.data.intlCabinMinHours,
+    intlCabinRequired: parsed.data.intlCabinRequired,
+    domesticCabin: parsed.data.domesticCabin,
+    preferredCarriers: parsed.data.preferredCarriers ?? [],
+    blacklistSuppliers: parsed.data.blacklistSuppliers ?? [],
+    requireApproverOverUsd: parsed.data.requireApproverOverUsd,
+    fiscalCountry: parsed.data.fiscalCountry,
+  };
+}
+
+function resolveHardcoded(policyId: string): TravelPolicy | null {
+  if (!policyId) return HARDCODED_POLICIES['default-corp'] ?? null;
+  return HARDCODED_POLICIES[policyId] ?? null;
+}
+
 export const checkPolicyTool: ToolDef = {
   name: 'check_policy',
   description:
-    'Check a travel offer against a corporate travel policy. Returns { allowed, reasons[], warnings[] }. Cheap — call before every book.',
+    'Check a travel offer against a corporate travel policy. Resolves DB-backed policies (customer-account scope first, tenant default fallback) before falling back to hardcoded demo policies. Returns { allowed, reasons[], warnings[] }. Cheap — call before every book.',
   inputSchema,
   jsonSchema: {
     type: 'object',
-    required: ['policyId', 'offer'],
+    required: ['offer'],
     properties: {
       policyId: {
         type: 'string',
-        enum: Object.keys(POLICIES),
-        description: 'Corporate travel policy identifier.',
+        description:
+          'Policy slug — `vale-corp-2026`, `softtek-mx-2026`, `default-corp`, or any tenant-seeded slug. Optional when customerAccountId is set.',
+      },
+      customerAccountId: {
+        type: 'string',
+        description:
+          'CustomerAccount id. When set, the corporate-scoped policy is used; otherwise the tenant default / hardcoded policy applies.',
       },
       offer: {
         type: 'object',
@@ -110,9 +238,19 @@ export const checkPolicyTool: ToolDef = {
       },
     },
   },
-  async handler(input: any) {
-    const policy = POLICIES[input.policyId];
-    if (!policy) return { allowed: false, reasons: ['unknown_policy'] };
+  async handler(input: any, ctx?: ToolContext) {
+    const tenantId = ctx?.traveler?.tenantId;
+    const customerAccountId: string | undefined = input.customerAccountId;
+    const policyId: string = input.policyId ?? '';
+
+    const policy =
+      (await resolvePolicyFromDb(tenantId, customerAccountId, policyId)) ??
+      resolveHardcoded(policyId);
+
+    if (!policy) {
+      return { allowed: false, reasons: ['unknown_policy'] };
+    }
+
     const offer = input.offer;
     const reasons: string[] = [];
     const warnings: string[] = [];
@@ -159,6 +297,7 @@ export const checkPolicyTool: ToolDef = {
       warnings,
       policy: policy.id,
       fiscalRequirement: policy.fiscalCountry,
+      requiresApprovalAboveUsd: policy.requireApproverOverUsd,
     };
   },
 };
