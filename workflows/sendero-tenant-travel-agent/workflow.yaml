@@ -1,0 +1,8 @@
+definition: definition.json
+name: Sendero Tenant Travel Agent
+slug: sendero-tenant-travel-agent
+status: active
+triggers:
+  - active: true
+    phoneNumberId: "597907523413541"
+    triggerType: inbound_message

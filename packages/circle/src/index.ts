@@ -80,6 +80,7 @@ export {
   removeDelegate,
   removeFund,
   resolveTravelerPrincipal,
+  solanaSelfCustodyPrincipal,
   spend,
   treasuryPrincipal,
   unifiedBalanceChainName,

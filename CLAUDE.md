@@ -29,9 +29,31 @@ WhatsApp/Slack/web agents should help tenant travel teams close deals, plan trip
 - **Paid tenant production:** paid tenants activate their own WhatsApp number after Kapso phone health passes; provisioning attaches the Kapso tenant workflow trigger to that phone number.
 - **Cross-channel continuity:** WhatsApp customer threads, Slack operator threads, web handoff records, and trip events must reconcile around tenant, customer identity, trip id, workflow execution id, and trace id.
 
+## Meta admin: multi-vertical AI agents (apps/admin)
+
+`apps/admin/` is **meta**. It does not exist to "create new orgs in Sendero" — it exists to spin up **multiple vertical AI agents**. Sendero (travel ops) is one of those verticals; the next ones are legal, real-estate, healthcare, etc. Each vertical reuses the same template app shell + channel adapters (WhatsApp, Slack, MCP, web) + settlement rail + billing plumbing. **The only thing that changes per vertical is the tool catalog.**
+
+Hierarchy admin must surface (rollups in this order):
+
+```
+business unit  >  vertical agent (Sendero / legal / …)  >  business (TMC)  >  tenant  >  tool
+```
+
+Rules:
+- No hardcoded `"Sendero"` strings in admin UI — pull from active vertical context. Branding (logo, copy, default agent persona) replaceable per vertical.
+- Tenant/org creation flows ask "which vertical?" first. Vertical → team → user is the auth/permissions tree.
+- Channel tracking parity: every "Slack" surface in admin must have a WhatsApp peer. They are the two production channels; treating Slack as primary is a recurring bug.
+- Empty sidebar items use a **single shared** `<ComingSoonScreen feature="…" />` (location: `apps/admin/components/`). Do not populate placeholder pages with bespoke content — one screen, swapped in until the real feature ships.
+- Billing dashboards: per-tool spend rolls up cleanly to per-tenant → per-business → per-vertical → per-business-unit. Reuse the existing admin graph/stats primitives (founder approves the look).
+- Tool catalog UI is the primary differentiation knob — uploading/swapping/configuring per vertical, not building new app shells.
+
+When in doubt: "does this generalize across verticals?" If not, stop and rebuild the abstraction.
+
 ## Billing & pricing (source: `packages/billing/src/plans.ts`)
 
 Two revenue legs, independent: SaaS MRR (Clerk Billing) + nanopayments (per-call x402, agent wallet pays). Trial skips MRR; nanopay keeps flowing.
+
+**Audience split — do not surface nanopay as the headline price to humans.** TMCs / corporate travel buyers see *only* "monthly platform + included usage + transparent overages" plus the agentic resale model on top (they sell agent capacity to their travelers). x402 nanopayments are the agent-to-agent settlement rail surfaced to **other AI agents calling Sendero via MCP**, not on `/app/billing/plans` or in TMC sales decks. Codex consult 2026-05-08 flagged that exposing both legs to the same buyer reads as "subscription + per-click + transaction tax". Keep nanopay internal to the ledger UI for humans, public for MCP consumers.
 
 | Tier | Slug | Monthly | Annual/mo | Public | Workspaces | Prod keys | Cap | Nano % | Take % |
 |---|---|---|---|---|---|---|---|---|---|
@@ -51,6 +73,8 @@ Two revenue legs, independent: SaaS MRR (Clerk Billing) + nanopayments (per-call
 **Free trial.** Native Clerk, no card (Oct 2025+). Plan: Pro, 14 days. Dashboard: "Require payment method" OFF, trial=14d on Pro. Don't roll custom logic — `has({ plan: 'pro' })` returns true during trial.
 
 **Resolver:** `apps/app/lib/billing-plan.ts` — `currentOrgPlan()`, `currentOrgPlanTier()`, `hasBillingFeature()`, `canCreateAdditionalWorkspace()`. Nanopay discount: `apps/app/app/api/agent/dispatch/route.ts` → `resolveTenantPlan()` + `buildPlanOverrides()` → `runAgentTurn({ pricingOverrides })`. UI: `/app/billing/plans` + `<PlanTeaser />`.
+
+**Default-free tool pricing.** `priceFor(toolName)` in `packages/tools/src/pricing.ts` returns `'0'` (the `DEFAULT_FREE_PRICE` constant) for any tool without a `TOOL_PRICING` entry — it does NOT throw. The edge worker's `requirePayment` middleware (`apps/edge/src/lib/x402-middleware.ts`) short-circuits when price is `'0'`: it logs a `paid` meter row tagged `'free-tier (no TOOL_PRICING entry)'` and skips the 402 dance. Every tool needs a pricing **policy**, but most should be `'0'` until they actually create infra/provider cost worth charging for. Reads, config lookups, balances, explainers → free. External API calls, on-chain writes, composed flows → priced. Don't reflexively fill in 286 prices; price what creates real cost. Codex consult 2026-05-08.
 
 ## Circle wallet balances
 
@@ -107,6 +131,70 @@ Env: `SENDERO_STAMPS_ADDRESS`, `SENDERO_STAMPS_CONTRACT_ID`, `SENDERO_STAMPS_DEP
 - **ERC1967 proxies** (GuestEscrow, ERC-8004) → both proxy + impl verified separately, linked.
 
 `scripts/verify-deployments.ts` encodes `expect` per contract. Add new addresses there on every deploy.
+
+## Solana Anchor program runbook (devnet)
+
+Solana parity for Arc lives in two Anchor programs deployed to **sol-devnet**. Tenants whose `Tenant.primaryChain === 'sol'` route prefund/reserve/commit/settle through these instead of the Arc EVM contracts. Identity + NFT stamping reuses Metaplex (one program covers Identity/Reputation/Validation; MPL Core covers stamps).
+
+| Program | Address | Role |
+|---|---|---|
+| `sendero_guest_escrow` | `9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8` | Solana port of SenderoGuestEscrow.sol — prefund/claim/reserve/commit/settle/refund/sweep parity. |
+| `agentic_commerce` | `4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9` | AI-agent job lifecycle (create/fund/complete/refund) — Solana-native, no Arc twin. |
+| Metaplex Core (external) | `CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d` | Trip-stamp NFT minting — Solana parity for SenderoStamps. `mintCoreTripStamp` mints BoardingPass / SettlementReceipt / TripPassport. |
+| Metaplex Agent Registry (external) | `1DREGFgysWYxLnRnKQnwrxnJQeSMk2HmGaC6whw2B2p` | Solana equivalent of ERC-8004 Identity + Reputation + Validation. `provision-identity` mints org agent here on tenant create. |
+
+**Authority**: both Sendero programs sign with the same upgrade authority pubkey held in `SENDERO_SOLANA_PLATFORM_PRIVATE_KEY` (also funds DCW gas via JIT-drip — see "Solana gas abstraction"). Authority drift is the audit's #1 alert.
+
+**Re-deploy flow** (Anchor):
+
+```
+1. cd contracts-solana/<program> && anchor build
+2. anchor deploy --provider.cluster devnet --program-keypair target/deploy/<program>-keypair.json
+3. anchor idl init --provider.cluster devnet --filepath target/idl/<program>.json <program-id>
+4. cp target/idl/<program>.json packages/guest/idl/  (or matching consumer pkg)
+5. bun apps/admin/scripts/verify-solana-programs.ts  (or hit /dashboard/contracts?chain=sol → Refresh)
+```
+
+**TS adapter source of truth**: `packages/guest/src/solana.ts` exports the ix builders consumed by `prefund_trip / reserve_booking / commit_booking` Solana branches in `packages/tools/src/guest-escrow.ts`. Keep IDL + adapter in lockstep.
+
+**Audit surface**: `apps/admin/lib/contracts/audit-solana.ts` reads ProgramData via `BPFLoaderUpgradeab1e…` owner, slices the layout (4-byte discriminator + 8-byte slot + 1-byte authority Option tag + 32-byte authority pubkey), compares vs `expectedAuthority` in registry. External programs (`ownership: 'external'`) skip authority check — a live ProgramData fetch is enough.
+
+**Cluster pin**: SDK defaults to `https://api.devnet.solana.com`. Override via `SENDERO_SOLANA_RPC_URL`. `sol-mainnet` deploys are gated behind the same testnet-beta → mainnet flip as Arc; do not deploy until billing tiers + scopes are finalized.
+
+## Tenant primaryChain — cascade invariant
+
+`Tenant.primaryChain` (`'arc' | 'sol'`, defaults `'arc'`) is a tenant-wide commitment. Picked once at onboarding; locks the entire settlement stack for that tenant. **No tool may silently fall back to Arc when a `'sol'` tenant invokes it.**
+
+**Picked at onboarding by:**
+- `/onboarding/corporate` — `<select name="primaryChain">` writes the field on Tenant upsert (server action, before Slack OAuth).
+- `/onboarding/agency` — same selector (added with this section).
+- `/onboarding/consumer` — N/A (consumers inherit chain from the tenant they join).
+- Generic `/onboarding` (Clerk-direct) — falls through to Prisma column default `'arc'`. Customers needing Sol must use `/onboarding/corporate` or `/onboarding/agency`. Post-default flip requires support + zero on-chain state.
+
+**What cascades when `primaryChain === 'sol'`:**
+
+| Surface | Arc | Solana |
+|---|---|---|
+| Treasury wallet | Circle MSCA (provisionTenantWallet) | Squads V4 + DCWs (provisionTenantSolanaTreasury) |
+| Booking escrow | SenderoGuestEscrow.sol | sendero_guest_escrow Anchor program |
+| `prefund / reserve / commit / cancel` | `encode*` viem calls | `build*Ix` from `@sendero/guest/solana` |
+| `confirm_booking` | commitBookingV2 (vendor + agency + fee) | commit_booking + deferred markup at settle |
+| Trip stamps (`mint_stamp`) | SenderoStamps ERC-1155 (thirdweb) | Metaplex Core asset |
+| Identity (`provision_identity`) | ERC-8004 IdentityRegistry | Metaplex Agent Registry |
+| Reputation (`give_feedback`) | ERC-8004 ReputationRegistry | **Deferred** — typed refusal `GIVE_FEEDBACK_SOL_DEFERRED` until Metaplex feedback ix lands in `@sendero/metaplex` |
+| Traveler-pay reimbursement (book_flight settle) | `Arc_Testnet` toChainKey → Arc superadmin treasury | `Sol_Devnet` toChainKey → Solana superadmin treasury |
+
+**Resolver:** `resolveTenantPrimaryChain(ctx)` in `packages/tools/src/guest-escrow.ts` (also inlined in `cancel-booking.ts`, `give-feedback.ts`, etc.). Reads `Tenant.primaryChain` once per call; defaults `'arc'` only when no tenantId is in context (sandbox/test bench).
+
+**Forbidden patterns:**
+- Calling `@sendero/arc/identity` or any Arc-specific encoder without first checking `tenant.primaryChain`. The `give_feedback` Sol gate is the canonical example: throw a typed `GIVE_FEEDBACK_SOL_DEFERRED` error rather than silently submit on Arc.
+- Defaulting to `'arc'` when a tenant lookup fails for an authenticated request. Treat that as a fail-closed error, not "fall back to Arc".
+- Running an Arc-only sweeper against rows with `chain='sol'` (and vice versa). Sweepers must filter on `chain` matching their target.
+
+**Verifying a new tool respects the invariant** (do this for every new on-chain surface):
+1. Does the tool make a chain-touching call (escrow, settlement, NFT, identity, reputation)? → must branch on `tenant.primaryChain`.
+2. Is there a Solana adapter for the equivalent action? → wire the `'sol'` branch.
+3. If no adapter yet → throw a typed `*_SOL_DEFERRED` error with `agentInstruction`. Do NOT default to Arc.
 
 ## API keys
 

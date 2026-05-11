@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-import { canonicalSplit, settleCommissionSplit } from '@sendero/nanopayments';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { env } from '@sendero/env';
+import { canonicalSplit, settleCommissionSplit } from '@sendero/nanopayments';
+import { z } from 'zod';
+
+import { resolvePlatformTreasuryDestination } from '@/lib/platform-treasury';
 
 /**
  * POST /api/settle/split
@@ -62,25 +65,38 @@ export async function POST(req: NextRequest) {
   try {
     const raw = await req.json();
 
-    // Fallback defaults for agency/sendero/validator — reuse demo
-    // wallets from env so the demo works without supplying 4 addresses.
-    const providerAddr =
-      process.env.SENDERO_PROVIDER_ADDRESS || '0x2dd43b06e707d45b40790abd5fa6e39403225425';
+    // Agency/validator can still use demo defaults for replay ergonomics. The Sendero
+    // platform fee cannot: it must route to the live admin-provisioned treasury.
+    const platformTreasury = await resolvePlatformTreasuryDestination('arc');
     const validatorAddr =
       process.env.AUX_VALIDATOR_1_ADDRESS || '0x22f7536934d6a00ade239474465b823418dd84bc';
     const agencyAddr =
       process.env.DEMO_CLIENT_ADDRESS || '0x6a5d2a2e56ed5162f5e29fe1179e59f2b07140e7';
 
-    let legs;
+    let legs: Parameters<typeof settleCommissionSplit>[0];
     if ('legs' in (raw ?? {})) {
-      legs = CustomBody.parse(raw).legs;
+      legs = CustomBody.parse(raw).legs.map(leg => ({
+        to: leg.to as `0x${string}`,
+        amount: leg.amount,
+        label: leg.label,
+      }));
     } else {
       const body = CanonicalBody.parse(raw);
+      if (!body.sendero && !platformTreasury) {
+        return NextResponse.json(
+          {
+            error: 'treasury_not_provisioned',
+            message:
+              'No live Arc platform treasury is provisioned. Finish Sendero admin treasury setup before settling the Sendero fee leg.',
+          },
+          { status: 503 }
+        );
+      }
       legs = canonicalSplit({
         gross: body.gross,
         supplier: body.supplier as `0x${string}`,
         agency: (body.agency ?? agencyAddr) as `0x${string}`,
-        sendero: (body.sendero ?? providerAddr) as `0x${string}`,
+        sendero: (body.sendero ?? platformTreasury!.address) as `0x${string}`,
         validator: (body.validator ?? validatorAddr) as `0x${string}`,
         commissionBps: body.commissionBps,
         senderoFeeBps: body.senderoFeeBps,

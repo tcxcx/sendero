@@ -25,6 +25,8 @@ import { SUPPORTED_LOCALES } from '@sendero/locale';
 import { toolList } from '@sendero/tools';
 import { listWorkflows } from '@sendero/workflows';
 
+import { resolvePlatformTreasuryDestination } from '@/lib/platform-treasury';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -231,6 +233,10 @@ async function checkChannels(): Promise<Subsystem> {
 }
 
 async function checkOnchain(): Promise<Subsystem> {
+  const [arcTreasury, solTreasury] = await Promise.all([
+    resolvePlatformTreasuryDestination('arc'),
+    resolvePlatformTreasuryDestination('sol'),
+  ]);
   const checks: Check[] = [
     {
       name: 'arc_rpc',
@@ -263,11 +269,18 @@ async function checkOnchain(): Promise<Subsystem> {
       detail: env.senderoAgentTokenId() ?? 'set SENDERO_AGENT_TOKEN_ID',
     },
     {
-      name: 'sendero_treasury_address',
-      ok: Boolean(process.env.SENDERO_TREASURY_ADDRESS),
+      name: 'arc_platform_treasury',
+      ok: Boolean(arcTreasury),
       detail:
-        process.env.SENDERO_TREASURY_ADDRESS ??
-        'set SENDERO_TREASURY_ADDRESS (nanopay batch settlement destination)',
+        arcTreasury?.address ??
+        'finish Arc treasury setup in the Sendero admin app before settling Arc funds',
+    },
+    {
+      name: 'sol_platform_treasury',
+      ok: Boolean(solTreasury),
+      detail:
+        solTreasury?.address ??
+        'finish Solana treasury setup in the Sendero admin app before settling Solana funds',
     },
     {
       name: 'circle_api',

@@ -1,17 +1,21 @@
 'use client';
 
-import { OrganizationList, useOrganization } from '@clerk/nextjs';
+import { useOrganization } from '@clerk/nextjs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@sendero/ui/button';
+import { ChainSelectScreen } from '@/components/onboarding/chain-select-screen';
+import { ProvisioningWaitScreen } from '@/components/onboarding/provisioning-wait-screen';
+import { WelcomeCardScreen } from '@/components/onboarding/welcome-card-screen';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 const STUCK_POLLS = 15;
 
 type OrganizationMetadata = {
   onboardingComplete?: boolean;
+  primaryChain?: 'arc' | 'sol';
   arcWalletAddress?: string;
+  solTreasuryAddress?: string;
 };
 
 export default function OnboardingPage() {
@@ -21,6 +25,12 @@ export default function OnboardingPage() {
   const [stuck, setStuck] = useState(false);
   const [devHint, setDevHint] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
+  // Chain-select step state. `chosenChain` flips us out of the
+  // ChainSelectScreen view into the ProvisioningWaitScreen view as soon
+  // as the user clicks Deploy. Persists for the lifetime of the page;
+  // a Clerk org-id change resets it (handled in the useEffect below).
+  const [chosenChain, setChosenChain] = useState<'sol' | 'arc' | null>(null);
+  const [deployError, setDeployError] = useState<string | null>(null);
   const pollIndex = useRef(0);
   const orgRef = useRef(organization);
   orgRef.current = organization;
@@ -28,41 +38,81 @@ export default function OnboardingPage() {
   const loggedWaitForOrg = useRef<string | null>(null);
 
   const orgId = organization?.id;
-  const onboardingComplete = Boolean(
-    (organization?.publicMetadata as OrganizationMetadata | undefined)?.onboardingComplete
+  const orgMetadata = organization?.publicMetadata as OrganizationMetadata | undefined;
+  const onboardingComplete = Boolean(orgMetadata?.onboardingComplete);
+
+  // Resolve which chain the wait screen should narrate. Three sources,
+  // in priority order: explicit pick from this session, the Clerk org's
+  // already-stamped chain (post-deploy), or the spec default ('sol').
+  const activeChain: 'sol' | 'arc' = chosenChain ?? orgMetadata?.primaryChain ?? 'sol';
+
+  const deployWithChain = useCallback(
+    async (chain: 'sol' | 'arc') => {
+      setDeployError(null);
+      setCompleting(true);
+      setChosenChain(chain);
+      try {
+        const res = await fetch('/api/dev/complete-org-provisioning', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ primaryChain: chain }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          ok?: boolean;
+          stage?: string;
+          message?: string;
+          stack?: string;
+        };
+        if (!res.ok) {
+          // Prefer the specific error from the route's catch block
+          // (`message` + `stage`) over the generic `error` envelope.
+          const detail = body.message ?? body.error ?? res.statusText ?? 'Request failed';
+          const msg = body.stage ? `[${body.stage}] ${detail}` : detail;
+          setDeployError(msg);
+          // Drop back to the chain-select screen so the user can retry
+          // without losing their pick.
+          setChosenChain(null);
+          if (IS_DEV) {
+            console.error('[onboarding] deploy failed', res.status, body);
+          }
+          return;
+        }
+        if (IS_DEV) {
+          console.log('[onboarding] deploy succeeded', body);
+        }
+        await organization?.reload();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setDeployError(msg);
+        setChosenChain(null);
+        if (IS_DEV) {
+          console.error('[onboarding] deploy threw', e);
+        }
+      } finally {
+        setCompleting(false);
+      }
+    },
+    [organization]
   );
 
-  const runDevComplete = useCallback(async () => {
+  // Legacy "Run provisioning without webhook" button on the wait screen.
+  // Re-uses the deploy endpoint with the active chain — useful when the
+  // first deploy attempt failed mid-flight and we want to retry without
+  // going back to the chain-select step.
+  const runDevComplete = useCallback(() => {
     setDevHint(null);
-    setCompleting(true);
-    try {
-      const res = await fetch('/api/dev/complete-org-provisioning', { method: 'POST' });
-      const body = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean };
-      if (!res.ok) {
-        setDevHint(body.error ?? res.statusText ?? 'Request failed');
-        if (IS_DEV) {
-          console.error('[onboarding] dev complete-org-provisioning failed', res.status, body);
-        }
-        return;
-      }
-      if (IS_DEV) {
-        console.log('[onboarding] dev provisioning completed', body);
-      }
-      await organization?.reload();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+    void deployWithChain(activeChain).catch(err => {
+      const msg = err instanceof Error ? err.message : String(err);
       setDevHint(msg);
-      if (IS_DEV) {
-        console.error('[onboarding] dev complete-org-provisioning', e);
-      }
-    } finally {
-      setCompleting(false);
-    }
-  }, [organization]);
+    });
+  }, [activeChain, deployWithChain]);
 
   useEffect(() => {
     pushedToApp.current = false;
     loggedWaitForOrg.current = null;
+    setChosenChain(null);
+    setDeployError(null);
   }, [orgId]);
 
   useEffect(() => {
@@ -83,7 +133,15 @@ export default function OnboardingPage() {
   }, [onboardingComplete, router]);
 
   useEffect(() => {
+    // Only start the wait-for-webhook polling AFTER the user has picked
+    // a chain (or the org metadata already has one stamped). Pre-pick
+    // we're showing ChainSelectScreen and the polling loop would just
+    // burn cycles waiting for a webhook that won't fire until deploy.
     if (!orgId || onboardingComplete) {
+      return;
+    }
+    if (!chosenChain && !orgMetadata?.primaryChain) {
+      setPolling(false);
       return;
     }
 
@@ -131,70 +189,41 @@ export default function OnboardingPage() {
         });
     }, 2000);
     return () => clearInterval(interval);
-  }, [orgId, onboardingComplete, router]);
+  }, [orgId, onboardingComplete, chosenChain, orgMetadata?.primaryChain]);
 
   if (!isLoaded) {
     return <div className="p-8 text-sm text-neutral-500">Loading…</div>;
   }
 
   if (!organization) {
+    return <WelcomeCardScreen />;
+  }
+
+  // Chain-select step — shown after the Clerk org exists but before the
+  // user has picked a chain (locally or via stamped publicMetadata).
+  // Once they click Deploy, `chosenChain` flips and we render the wait
+  // screen with the chosen chain's copy.
+  if (!chosenChain && !orgMetadata?.primaryChain && !onboardingComplete) {
     return (
-      <main className="mx-auto max-w-xl p-8">
-        <h1 className="text-2xl font-semibold mb-4">Welcome to Sendero</h1>
-        <p className="text-neutral-600 mb-6">Create or select an organization to continue.</p>
-        <OrganizationList
-          hidePersonal
-          afterCreateOrganizationUrl="/onboarding"
-          afterSelectOrganizationUrl="/onboarding"
-        />
-      </main>
+      <ChainSelectScreen
+        organizationName={organization.name}
+        defaultChain="sol"
+        deploying={completing}
+        deployError={deployError}
+        onDeploy={deployWithChain}
+      />
     );
   }
 
   return (
-    <main className="mx-auto max-w-xl p-8 text-center">
-      <h1 className="text-2xl font-semibold mb-4">Provisioning {organization.name}…</h1>
-      <p className="text-neutral-600 mb-6">
-        Setting up your Arc treasury wallet. This takes a few seconds.
-      </p>
-      <div className="animate-pulse text-xs font-mono text-neutral-500">
-        polling {polling ? '●' : '○'}
-      </div>
-
-      {stuck && (
-        <div className="mt-8 text-left text-sm text-neutral-700 space-y-3 rounded-lg border border-amber-200 bg-amber-50/80 p-4">
-          <p className="font-medium text-amber-950">Still waiting? Common cause (local dev)</p>
-          <p>
-            <code className="text-xs">onboardingComplete</code> is set by the{' '}
-            <code className="text-xs">organization.created</code> webhook, which calls Circle and
-            then updates this org in Clerk. <strong>Clerk cannot POST to localhost</strong> unless
-            you expose it (e.g. ngrok) and set the webhook URL in the Clerk dashboard to{' '}
-            <code className="text-xs">https://&lt;tunnel&gt;/api/webhooks/clerk</code>.
-          </p>
-          <p className="text-xs text-neutral-600">
-            Check the terminal running <code>next dev</code>: you should see{' '}
-            <code className="text-xs">[webhooks/clerk] organization.created</code> when it works. No
-            log usually means the webhook never arrived.
-          </p>
-        </div>
-      )}
-
-      {IS_DEV && (
-        <div className="mt-6 space-y-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={completing}
-            onClick={() => void runDevComplete()}
-          >
-            {completing ? 'Provisioning…' : 'Dev: run provisioning without webhook'}
-          </Button>
-          {devHint ? (
-            <p className="text-xs text-red-600 font-mono text-left break-all">{devHint}</p>
-          ) : null}
-        </div>
-      )}
-    </main>
+    <ProvisioningWaitScreen
+      organizationName={organization.name}
+      chain={activeChain}
+      polling={polling}
+      stuck={stuck}
+      completing={completing}
+      devHint={devHint}
+      onRunDevComplete={runDevComplete}
+    />
   );
 }

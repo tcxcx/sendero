@@ -145,6 +145,8 @@ export interface WorkflowEvent {
   t: string;
 }
 
+export type ConsoleRightPanelMode = 'pulse' | 'workflow' | 'hidden';
+
 export type BookingStatus =
   | 'idle'
   | 'searching'
@@ -163,18 +165,132 @@ interface Traveler {
 }
 
 export interface UserAuth {
-  /** Passkey-derived MSCA address on Arc Testnet. */
-  address: `0x${string}`;
+  /**
+   * Tenant settlement-chain wallet address.
+   * - For `chain: 'arc'`: Circle MSCA `0x…` hex.
+   * - For `chain: 'sol'`: Squads V4 vault base58.
+   * Widened from `0x${string}` so Sol tenants don't get coerced to the
+   * zero-address placeholder. Consumers that need a hex address must
+   * gate on `chain === 'arc'` first.
+   */
+  address: string;
+  /**
+   * Settlement chain this tenant operates on. Drives which UI shells
+   * surface (Arc gateway / Sol Squads vault), wallet copy strings, and
+   * the missing-wallet banner. Defaults to `'arc'` for backwards
+   * compatibility with rows seeded before the cascade landed.
+   */
+  chain?: 'arc' | 'sol';
   displayName: string;
   email: string;
   /** E.164 phone — required by Duffel for hold orders. */
   phone: string;
 }
 
+/**
+ * Discriminated union mirroring the inspect_my_{whatsapp,slack}_channel
+ * tool results, kept structurally compatible so the chat-store-sync
+ * helper can drop the result straight in. Keep this loose — the card
+ * tolerates missing fields and renders whatever lands.
+ */
+export interface ChannelDiagnosticInstallSummary {
+  exists: boolean;
+  status: string;
+  identifier?: string | null;
+  hasMetaPhoneNumberId?: boolean;
+  hasKapsoConnection?: boolean;
+  hasMetaWaba?: boolean;
+  scopes?: string[];
+  isEnterpriseInstall?: boolean;
+  defaultChannel?: string | null;
+  routingConfigured?: boolean;
+  lastErrorMessage?: string | null;
+  installedAt?: string | null;
+  updatedAt?: string | null;
+  revokedAt?: string | null;
+}
+
+export interface ChannelDiagnosticActivity {
+  hours: number;
+  inboundMessages?: number;
+  agentReplies?: number;
+  meteredReplies?: number;
+  webhookEvents?: number;
+  outboundTotal?: number;
+  delivered?: number;
+  read?: number;
+  failed?: number;
+  badSignature?: number;
+  droppedReplay?: number;
+  droppedDuplicate?: number;
+  apiTotal?: number;
+  apiOk?: number;
+  apiErrored?: number;
+}
+
+export interface ChannelDiagnosticFailure {
+  at: string;
+  recipient: string;
+  source: string;
+  reason: string;
+}
+
+export interface ChannelDiagnosticPreview {
+  at: string;
+  preview: string;
+  direction?: string;
+  kind?: string;
+  source?: string;
+  status?: string;
+}
+
+export interface ChannelDiagnostic {
+  kind: 'whatsapp' | 'slack';
+  message: string;
+  install: ChannelDiagnosticInstallSummary;
+  activity?: ChannelDiagnosticActivity;
+  identities?: { totalActive?: number; boundUsers?: number };
+  trips?: { activeLinked: number };
+  recentFailures?: ChannelDiagnosticFailure[];
+  recentInbound?: ChannelDiagnosticPreview[];
+  recentOutbound?: ChannelDiagnosticPreview[];
+  refreshedAt: string;
+}
+
 interface SenderoState {
   // Settings
   showWorkflow: boolean;
+  consoleRightPanelMode: ConsoleRightPanelMode;
   dark: boolean;
+
+  // Phase B-γ — true while the active chat surface (ConsoleChatHost on
+  // /dashboard/console, or chat-col on /, or meta-inbox-live on
+  // /dashboard/inbox/[tripId]) has its bridge registration live. The
+  // sibling @conversation slot composer disables submit while false to
+  // close the cold-load race where it could mount and accept input
+  // before the layout-level host's effect ran. Lifecycle-bound: hosts
+  // MUST set true in the same useEffect that registers with the chat-
+  // bridge and false in that effect's cleanup, so StrictMode dev
+  // double-mount doesn't leave it stale (Codex outside-voice #1).
+  hostReady: boolean;
+  setHostReady: (value: boolean) => void;
+
+  // Phase B-γ — Zustand-backed mirror of useChat's messages/status/error
+  // so the @conversation slot can render the AI Elements stream without
+  // owning useChat itself. The ConsoleChatHost (mounted in the console
+  // layout) syncs these via useEffect on every render. Subscribers
+  // re-render on each token, same frequency as today's MetaInboxLive
+  // (the split's win is JS-execution count for sibling slots Stage and
+  // WorkflowLog, not for @conversation). chatMessages typed `unknown[]`
+  // here to avoid pulling the AI SDK's UIMessage type into store.ts
+  // (kept generic so chat-col can also push into this slice if we ever
+  // unify the / shell into the same architecture).
+  chatMessages: unknown[];
+  chatStatus: 'submitted' | 'streaming' | 'ready' | 'error' | 'unknown';
+  chatError: { message: string } | null;
+  setChatMessages: (m: unknown[]) => void;
+  setChatStatus: (s: 'submitted' | 'streaming' | 'ready' | 'error' | 'unknown') => void;
+  setChatError: (e: { message: string } | null) => void;
 
   // Auth
   userAuth: UserAuth | null;
@@ -210,11 +326,17 @@ interface SenderoState {
   // Treasury
   treasury: TreasuryState | null;
 
+  // Channel diagnostic — populated by inspect_my_{whatsapp,slack}_channel
+  // tool results so Stage renders an AI Elements card next to the chat.
+  channelDiagnostic: ChannelDiagnostic | null;
+  setChannelDiagnostic: (d: ChannelDiagnostic | null) => void;
+
   // Workflow log
   workflow: WorkflowEvent[];
 
   // Actions
   setShowWorkflow: (v: boolean) => void;
+  setConsoleRightPanelMode: (v: ConsoleRightPanelMode) => void;
   setDark: (v: boolean) => void;
 
   setSearch: (s: SearchParams) => void;
@@ -264,8 +386,19 @@ function travelerFromAuth(auth: UserAuth | null): Traveler {
 let eventCounter = 0;
 
 export const useSendero = create<SenderoState>(set => ({
-  showWorkflow: true,
+  showWorkflow: false,
+  consoleRightPanelMode: 'pulse',
   dark: false,
+
+  hostReady: false,
+  setHostReady: hostReady => set({ hostReady }),
+
+  chatMessages: [],
+  chatStatus: 'unknown',
+  chatError: null,
+  setChatMessages: chatMessages => set({ chatMessages }),
+  setChatStatus: chatStatus => set({ chatStatus }),
+  setChatError: chatError => set({ chatError }),
 
   userAuth: null,
   setUserAuth: userAuth => set({ userAuth, traveler: travelerFromAuth(userAuth) }),
@@ -322,9 +455,15 @@ export const useSendero = create<SenderoState>(set => ({
 
   treasury: null,
 
+  channelDiagnostic: null,
+  setChannelDiagnostic: channelDiagnostic => set({ channelDiagnostic }),
+
   workflow: [],
 
-  setShowWorkflow: showWorkflow => set({ showWorkflow }),
+  setShowWorkflow: showWorkflow =>
+    set({ showWorkflow, consoleRightPanelMode: showWorkflow ? 'workflow' : 'hidden' }),
+  setConsoleRightPanelMode: consoleRightPanelMode =>
+    set({ consoleRightPanelMode, showWorkflow: consoleRightPanelMode === 'workflow' }),
   setDark: dark => {
     if (typeof document !== 'undefined') {
       document.documentElement.classList.toggle('dark', dark);
@@ -355,6 +494,7 @@ export const useSendero = create<SenderoState>(set => ({
       hotels: [],
       status: 'idle',
       error: null,
+      channelDiagnostic: null,
       workflow: [],
       settlement: {
         phase: 'idle',
@@ -405,11 +545,14 @@ export function hydrateFromStorage() {
     if (!raw) return;
     const p = JSON.parse(raw) as Partial<{
       showWorkflow: boolean;
+      consoleRightPanelMode: ConsoleRightPanelMode;
       dark: boolean;
     }>;
     const dark = p.dark ?? false;
+    const consoleRightPanelMode = p.consoleRightPanelMode ?? 'pulse';
     useSendero.setState({
-      showWorkflow: p.showWorkflow ?? true,
+      showWorkflow: consoleRightPanelMode === 'workflow',
+      consoleRightPanelMode,
       dark,
     });
     document.documentElement.classList.toggle('dark', dark);
@@ -426,6 +569,7 @@ export function subscribePersist() {
         'sendero:settings',
         JSON.stringify({
           showWorkflow: state.showWorkflow,
+          consoleRightPanelMode: state.consoleRightPanelMode,
           dark: state.dark,
         })
       );

@@ -1,187 +1,125 @@
 'use client';
 
 /**
- * Guest claim landing page — end-to-end.
+ * Guest claim landing page — /me-style onboarding.
  *
- * The URL looks like `/g#t=0xTRIP&k=0xCLAIMKEY`. The fragment never
- * reaches the server. This page:
+ * Replaces the prior passkey-MSCA flow with a server-custodied DCW
+ * provisioning pattern (matches WhatsApp travelers):
  *
- *   1. Parses the fragment and shows the trip preview
- *   2. Collects display name + email + phone (required for WA binding)
- *   3. Registers a Modular Wallet passkey on the Sendero domain OR
- *      logs into an existing one
- *   4. Signs the Peanut-style claim with the embedded private key
- *   5. Submits the claimTrip userOp via the MSCA (Circle Paymaster
- *      sponsors gas — no native token required)
- *   6. On confirmation, notifies the server so any paused workflow
- *      waiting on this claim can resume, then redirects into the app
+ *   1. Parse the URL fragment. The fragment never reaches the server
+ *      until we POST it explicitly below.
+ *   2. Guest types the email the buyer addressed the invite to,
+ *      optional display name + phone, and the 6-digit OTP if the
+ *      trip was prefunded with 2FA.
+ *   3. POST to /api/guest/claim with the full fragment + form fields.
+ *      Server verifies email matches the invite, upserts the User,
+ *      provisions a Circle DCW, signs the Peanut-style claim with
+ *      the embedded key, and submits the on-chain claim from the
+ *      DCW (Arc: contractExecution / Sol: Anchor claim_trip).
+ *   4. On success, redirect to /me?welcome=1.
  *
- * The private key stays in the URL fragment and in-memory only.
+ * No passkey, no in-browser private-key handling. The claim secret
+ * still travels in the URL fragment client→server in the POST body —
+ * that's the new trust boundary. Server discards it immediately after
+ * the on-chain submit.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 
-import {
-  isPasskeyConfigured,
-  loginPasskey,
-  passkeyConfigIssue,
-  registerPasskey,
-  restoreFromStorage,
-  sendUserOp,
-  type UserWallet,
-} from '@sendero/circle/modular-wallets';
-import {
-  buildClaimCodePreimage,
-  buildClaimTripCalls,
-  parseGuestLink,
-  signClaim,
-} from '@sendero/guest';
-import type { Address, Hex } from 'viem';
+type Phase = 'preview' | 'submitting' | 'done' | 'error';
 
-type Phase = 'preview' | 'enroll' | 'submitting' | 'done' | 'error';
+interface ParsedLink {
+  chain: 'arc' | 'sol';
+  tripIdShort: string;
+  has2fa: boolean;
+}
 
-const ESCROW_ADDRESS = (process.env.NEXT_PUBLIC_SENDERO_GUEST_ESCROW ??
-  process.env.NEXT_PUBLIC_ARC_ESCROW_ADDRESS) as Address | undefined;
-const CHAIN_ID = Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? 5042002);
+function parseLink(fragment: string): ParsedLink | null {
+  const params = new URLSearchParams(fragment.startsWith('#') ? fragment.slice(1) : fragment);
+  const t = params.get('t');
+  const k = params.get('k');
+  const n = params.get('n');
+  const c = params.get('c');
+  if (!t || !k) return null;
+  const chain: 'arc' | 'sol' = c === 'sol' ? 'sol' : 'arc';
+  const tripIdShort =
+    chain === 'arc' ? `${t.slice(0, 10)}…${t.slice(-6)}` : `${t.slice(0, 6)}…${t.slice(-6)}`;
+  return { chain, tripIdShort, has2fa: Boolean(n) };
+}
 
 export default function GuestClaimPage() {
-  const [link, setLink] = useState<string | null>(null);
-  const [mode, setMode] = useState<'register' | 'login'>('register');
+  const [fragment, setFragment] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [claimCode, setClaimCode] = useState('');
   const [phase, setPhase] = useState<Phase>('preview');
   const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<Hex | null>(null);
-  // 2FA — only used when the link fragment carries `&n=<nonce>`. When
-  // present, the trip was created with a claimCodeHash and the guest
-  // must enter the 6-digit OTP from their invite email to reproduce
-  // the preimage on-chain.
-  const [claimCode, setClaimCode] = useState('');
+  const [result, setResult] = useState<{
+    txHash: string;
+    guestWallet: string;
+    redirectTo: string;
+  } | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') setLink(window.location.href);
+    if (typeof window !== 'undefined') setFragment(window.location.hash);
   }, []);
 
+  const parsed = useMemo(() => (fragment ? parseLink(fragment) : null), [fragment]);
+
+  // Once claim succeeds, redirect after a brief celebration screen so
+  // the user can copy the tx hash if they want.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const existing = await restoreFromStorage();
-      if (!cancelled && existing) {
-        setMode('login');
-        setDisplayName(existing.displayName);
-        setEmail(existing.email ?? '');
-        setPhone(existing.phone ?? '');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (phase !== 'done' || !result) return;
+    const t = setTimeout(() => {
+      window.location.assign(result.redirectTo);
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [phase, result]);
 
-  const parts = useMemo(() => (link ? parseGuestLink(link) : null), [link]);
-  const configured = isPasskeyConfigured();
-  const configIssue = useMemo(() => passkeyConfigIssue(), []);
+  if (fragment === null) return null;
 
-  if (link === null) return null;
-
-  if (!parts) {
+  if (!parsed) {
     return (
       <main style={rootStyle}>
         <h1 style={h1Style}>Invalid invite link.</h1>
         <p style={pStyle}>
-          Tokens must ride in the URL fragment (after the <code>#</code>).
+          The trip metadata must ride in the URL fragment (after the <code>#</code>). Make sure you
+          opened the full link from your invite email.
         </p>
       </main>
     );
   }
 
-  if (!ESCROW_ADDRESS) {
-    return (
-      <main style={rootStyle}>
-        <h1 style={h1Style}>Guest escrow not configured.</h1>
-        <p style={pStyle}>
-          Set <code>NEXT_PUBLIC_SENDERO_GUEST_ESCROW</code> before handing out guest links.
-        </p>
-      </main>
-    );
-  }
-
-  async function onClaim() {
-    if (!parts || !ESCROW_ADDRESS) return;
+  async function submit() {
+    if (phase === 'submitting') return;
     setError(null);
-
-    // 2FA guard — when the link includes a nonce (`&n=`), the trip was
-    // prefunded with require2fa=true and will revert with InvalidClaimCode
-    // unless we submit the real preimage. Fail fast with a friendly UI
-    // message instead of a gas-sunken revert.
-    if (parts.claimCodeNonce && !/^\d{6}$/.test(claimCode)) {
-      setError(
-        'This invite requires a 6-digit code. Check the email from Sendero and paste it above.'
-      );
-      return;
-    }
-
-    setPhase('enroll');
+    setPhase('submitting');
     try {
-      let wallet: UserWallet;
-      if (mode === 'register') {
-        if (!displayName.trim() || !isValidEmail(email) || !isValidPhone(phone)) {
-          throw new Error('Please fill display name, email, and E.164 phone.');
-        }
-        wallet = await registerPasskey({
-          displayName: displayName.trim(),
+      const res = await fetch('/api/guest/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fragment,
           email: email.trim(),
-          phone: phone.trim(),
-        });
-      } else {
-        wallet = await loginPasskey();
+          ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
+          ...(phone.trim() ? { phone: phone.trim() } : {}),
+          ...(claimCode.trim() ? { claimCode: claimCode.trim() } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.message || data?.error || `claim_failed (${res.status})`);
       }
-
-      setPhase('submitting');
-      const signature = await signClaim({
-        claimPrivateKey: parts.claimPrivateKey,
-        chainId: CHAIN_ID,
-        escrow: ESCROW_ADDRESS,
-        tripId: parts.tripId,
-        guestWallet: wallet.address,
+      setResult({
+        txHash: data.txHash,
+        guestWallet: data.guestWallet,
+        redirectTo: data.redirectTo ?? '/me?welcome=1',
       });
-      // Preimage resolution:
-      //   • trip with 2FA  → nonce in the URL fragment + code typed by guest → `${code}|${nonce}`
-      //   • trip no 2FA    → claimCodeHash is 0x00..00 on-chain → any bytes pass (we send '0x')
-      const claimCodePreimage: Hex = parts.claimCodeNonce
-        ? buildClaimCodePreimage(claimCode, parts.claimCodeNonce)
-        : ('0x' as Hex);
-      const calls = buildClaimTripCalls({
-        escrow: ESCROW_ADDRESS,
-        tripId: parts.tripId,
-        guestWallet: wallet.address,
-        signature,
-        claimCodePreimage,
-      });
-      const { txHash: hash } = await sendUserOp(
-        wallet,
-        calls.map(c => ({ to: c.to, data: c.data, value: c.value }))
-      );
-      setTxHash(hash);
       setPhase('done');
-
-      try {
-        await fetch('/api/guest/claimed', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tripId: parts.tripId,
-            guestWallet: wallet.address,
-            txHash: hash,
-          }),
-        });
-      } catch {
-        /* resume is reactive — ignore if the post fails */
-      }
     } catch (err) {
-      setPhase('error');
       setError(err instanceof Error ? err.message : String(err));
+      setPhase('error');
     }
   }
 
@@ -194,99 +132,97 @@ export default function GuestClaimPage() {
 
       <h1 style={h1Style}>Your trip is funded and waiting.</h1>
       <p style={pStyle}>
-        A Sendero buyer prefunded your travel budget in USDC on Arc. Claim it with a passkey — no
-        seed phrase, no app install. Gas is sponsored.
+        A Sendero buyer prefunded your travel budget in USDC on{' '}
+        {parsed.chain === 'sol' ? 'Solana' : 'Arc'}. Claim it with your email — Sendero creates your
+        account and on-chain wallet automatically. Gas is sponsored.
       </p>
 
       <section style={cardStyle}>
         <div style={eyebrowStyle}>Trip</div>
-        <div style={codeStyle}>{parts.tripId}</div>
-        <div style={eyebrowStyle}>Claim key · stays on your device</div>
-        <div style={codeFadedStyle}>
-          {parts.claimPrivateKey.slice(0, 10)}…{parts.claimPrivateKey.slice(-8)}
-        </div>
-        {parts.claimCodeNonce && (
+        <div style={codeStyle}>{parsed.tripIdShort}</div>
+        <div style={eyebrowStyle}>Chain</div>
+        <div style={pillStyle}>{parsed.chain === 'sol' ? 'Solana Devnet' : 'Arc Testnet'}</div>
+        {parsed.has2fa && (
           <>
-            <div style={eyebrowStyle}>2FA</div>
+            <div style={eyebrowStyle}>Security</div>
             <div style={pillStyle}>One-time code required — check your email</div>
           </>
         )}
       </section>
 
-      {!configured && (
-        <div style={alertStyle}>
-          <strong>Passkey not configured.</strong> {configIssue ?? 'Check .env.local.'}
-        </div>
+      {phase === 'done' && result && (
+        <section style={successStyle}>
+          <strong>Claimed.</strong> Funds released to your new Sendero wallet:
+          <div style={codeStyle}>{result.guestWallet}</div>
+          <a
+            href={
+              parsed.chain === 'sol'
+                ? `https://solscan.io/tx/${result.txHash}?cluster=devnet`
+                : `https://testnet.arcscan.app/tx/${result.txHash}`
+            }
+            target="_blank"
+            rel="noreferrer"
+            style={linkStyle}
+          >
+            View on-chain ↗
+          </a>
+          <p style={hintStyle}>Redirecting you to Sendero…</p>
+        </section>
       )}
 
-      {phase === 'preview' && (
+      {(phase === 'preview' || phase === 'error') && (
         <form
           onSubmit={e => {
             e.preventDefault();
-            onClaim();
+            submit();
           }}
           style={formStyle}
         >
-          <div style={tabRowStyle}>
-            <button
-              type="button"
-              style={tabStyle(mode === 'register')}
-              onClick={() => setMode('register')}
-            >
-              Create passkey
-            </button>
-            <button
-              type="button"
-              style={tabStyle(mode === 'login')}
-              onClick={() => setMode('login')}
-            >
-              Sign in
-            </button>
-          </div>
+          <label style={labelStyle}>
+            <span>Email</span>
+            <span style={hintInlineStyle}>
+              the address your invite was sent to — used to verify it's really you
+            </span>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              style={inputStyle}
+            />
+          </label>
 
-          {mode === 'register' && (
-            <>
-              <label style={labelStyle}>
-                <span>Display name</span>
-                <input
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  required
-                  maxLength={40}
-                  style={inputStyle}
-                />
-              </label>
-              <label style={labelStyle}>
-                <span>Email</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  style={inputStyle}
-                />
-              </label>
-              <label style={labelStyle}>
-                <span>Phone · E.164</span>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  required
-                  pattern="^\+[1-9]\d{6,14}$"
-                  style={inputStyle}
-                />
-              </label>
-            </>
-          )}
+          <label style={labelStyle}>
+            <span>Display name</span>
+            <input
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              maxLength={80}
+              autoComplete="name"
+              style={inputStyle}
+            />
+          </label>
 
-          {mode === 'login' && (
-            <p style={hintStyle}>Use the passkey on this device — biometric confirmation only.</p>
-          )}
+          <label style={labelStyle}>
+            <span>Phone · E.164</span>
+            <span style={hintInlineStyle}>
+              optional — lets us text or WhatsApp you trip updates later
+            </span>
+            <input
+              type="tel"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              pattern="^\+[1-9]\d{6,14}$"
+              autoComplete="tel"
+              style={inputStyle}
+            />
+          </label>
 
-          {parts.claimCodeNonce && (
+          {parsed.has2fa && (
             <label style={labelStyle}>
               <span>One-time code · 6 digits</span>
+              <span style={hintInlineStyle}>from your invite email</span>
               <input
                 inputMode="numeric"
                 autoComplete="one-time-code"
@@ -296,216 +232,142 @@ export default function GuestClaimPage() {
                 placeholder="123456"
                 required
                 maxLength={6}
-                style={{
-                  ...inputStyle,
-                  fontSize: 22,
-                  letterSpacing: '0.3em',
-                  textAlign: 'center',
-                  fontFamily: 'ui-monospace, Menlo, monospace',
-                }}
+                style={{ ...inputStyle, letterSpacing: '0.3em' }}
               />
             </label>
           )}
 
-          <button
-            type="submit"
-            style={ctaStyle}
-            disabled={!configured || (!!parts.claimCodeNonce && !/^\d{6}$/.test(claimCode))}
-          >
-            Claim trip with passkey →
+          {error && <div style={errorStyle}>{error}</div>}
+
+          <button type="submit" style={buttonStyle}>
+            Claim trip →
           </button>
         </form>
       )}
 
-      {phase === 'enroll' && <p style={progressStyle}>Talking to authenticator…</p>}
       {phase === 'submitting' && (
-        <p style={progressStyle}>Submitting claim userOp via Circle Paymaster…</p>
-      )}
-      {phase === 'done' && (
-        <div style={doneStyle}>
-          <div style={eyebrowStyle}>Claimed</div>
-          <div style={codeStyle}>{txHash}</div>
-          <a href="/" style={linkBtnStyle}>
-            Open Sendero →
-          </a>
-        </div>
-      )}
-      {phase === 'error' && error && (
-        <div style={alertStyle}>
-          <strong>Claim failed.</strong> {error}
-          <div>
-            <button type="button" style={ghostCtaStyle} onClick={() => setPhase('preview')}>
-              Try again
-            </button>
-          </div>
-        </div>
+        <section style={cardStyle}>
+          <strong>Provisioning your wallet and claiming on-chain…</strong>
+          <p style={hintStyle}>This usually takes about 10 seconds.</p>
+        </section>
       )}
     </main>
   );
 }
 
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
-function isValidPhone(phone: string): boolean {
-  return /^\+[1-9]\d{6,14}$/.test(phone.trim());
-}
-
-// ─── styles ───
-
+// ─── inline styles (kept verbatim from the previous page) ──────────
 const rootStyle: React.CSSProperties = {
   maxWidth: 560,
   margin: '0 auto',
-  padding: '64px 24px 80px',
-  fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-  color: '#111',
+  padding: '48px 24px 96px',
+  fontFamily:
+    'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif',
+  color: 'var(--text, #0f172a)',
+  background: 'var(--bg, #fbfbf9)',
 };
 const headerStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  gap: 8,
-  alignItems: 'center',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 11,
-  letterSpacing: '0.14em',
+  letterSpacing: '0.18em',
   textTransform: 'uppercase',
-  color: '#555',
-  marginBottom: 32,
+  color: 'var(--text-faint, #6b7280)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  marginBottom: 16,
 };
-const markStyle: React.CSSProperties = { width: 12, height: 12, background: '#fb542b' };
+const markStyle: React.CSSProperties = {
+  display: 'inline-block',
+  width: 8,
+  height: 8,
+  background: 'var(--ink, #111)',
+};
 const h1Style: React.CSSProperties = {
-  fontSize: 36,
-  letterSpacing: '-0.03em',
-  margin: '0 0 16px',
-  fontWeight: 500,
-  lineHeight: 1.1,
+  fontSize: 28,
+  fontWeight: 600,
+  margin: '0 0 12px',
+  lineHeight: 1.2,
 };
-const pStyle: React.CSSProperties = { color: '#555', fontSize: 16, margin: '0 0 32px' };
-const hintStyle: React.CSSProperties = { color: '#8a8a8a', fontSize: 13, margin: '4px 0 0' };
-const cardStyle: React.CSSProperties = {
-  border: '1.5px solid #e6e6e6',
-  padding: '20px 24px',
+const pStyle: React.CSSProperties = {
+  lineHeight: 1.55,
   marginBottom: 24,
+  color: 'var(--text-dim, #374151)',
+};
+const cardStyle: React.CSSProperties = {
+  border: '1px solid var(--border, #e5e7eb)',
+  padding: 16,
+  marginBottom: 16,
+  background: '#fff',
 };
 const eyebrowStyle: React.CSSProperties = {
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 10,
-  letterSpacing: '0.14em',
+  letterSpacing: '0.18em',
   textTransform: 'uppercase',
-  color: '#8a8a8a',
-  marginTop: 8,
+  color: 'var(--text-faint, #6b7280)',
+  marginBottom: 4,
 };
 const codeStyle: React.CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 12,
   wordBreak: 'break-all',
-  marginTop: 4,
+  marginBottom: 12,
 };
-const codeFadedStyle: React.CSSProperties = { ...codeStyle, color: '#8a8a8a' };
 const pillStyle: React.CSSProperties = {
   display: 'inline-block',
-  marginTop: 6,
-  padding: '4px 10px',
-  background: '#fff1ea',
-  color: '#b34b2e',
-  border: '1px solid #f0c8b4',
-  borderRadius: 999,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 11,
-  letterSpacing: '0.06em',
+  padding: '4px 8px',
+  border: '1px solid var(--border, #e5e7eb)',
+  marginBottom: 12,
 };
 const formStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 14,
-  padding: 20,
-  background: '#f9f9f9',
-  border: '1.5px solid #111',
+  gap: 16,
 };
-const tabRowStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  borderBottom: '1px solid #e6e6e6',
-};
-function tabStyle(selected: boolean): React.CSSProperties {
-  return {
-    background: 'transparent',
-    border: 'none',
-    borderBottom: selected ? '2px solid #111' : '2px solid transparent',
-    padding: '10px 4px',
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: 11,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase',
-    color: selected ? '#111' : '#8a8a8a',
-    cursor: 'pointer',
-  };
-}
 const labelStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 10,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: '#555',
+  fontSize: 13,
 };
-const inputStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  border: '1.5px solid #e6e6e6',
-  fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-  fontSize: 14,
-  background: '#fff',
+const hintInlineStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: 'var(--text-faint, #6b7280)',
 };
-const ctaStyle: React.CSSProperties = {
-  padding: '14px 20px',
-  background: '#fb542b',
-  color: '#fff',
-  border: 'none',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 12,
-  letterSpacing: '0.14em',
-  textTransform: 'uppercase',
-  cursor: 'pointer',
-  marginTop: 8,
-};
-const ghostCtaStyle: React.CSSProperties = {
-  ...ctaStyle,
-  background: '#fff',
-  color: '#111',
-  border: '1.5px solid #111',
+const hintStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: 'var(--text-dim, #374151)',
   marginTop: 12,
 };
-const progressStyle: React.CSSProperties = {
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 12,
-  color: '#8a8a8a',
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
+const inputStyle: React.CSSProperties = {
+  border: '1px solid var(--border, #e5e7eb)',
+  padding: '10px 12px',
+  fontSize: 14,
+  fontFamily: 'inherit',
 };
-const doneStyle: React.CSSProperties = {
-  border: '1.5px solid #0cc67a',
-  padding: '20px 24px',
-};
-const linkBtnStyle: React.CSSProperties = {
-  display: 'inline-block',
-  marginTop: 16,
-  padding: '10px 16px',
-  background: '#111',
+const buttonStyle: React.CSSProperties = {
+  background: 'var(--ink, #111)',
   color: '#fff',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 11,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-  textDecoration: 'none',
+  border: 'none',
+  padding: '14px 16px',
+  fontSize: 14,
+  letterSpacing: '0.04em',
+  cursor: 'pointer',
 };
-const alertStyle: React.CSSProperties = {
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 11,
-  lineHeight: 1.5,
-  color: '#e34',
-  padding: '8px 12px',
-  borderLeft: '2px solid #e34',
-  background: 'color-mix(in oklab, #e34 6%, transparent)',
-  marginBottom: 16,
+const errorStyle: React.CSSProperties = {
+  border: '1px solid #dc2626',
+  background: '#fef2f2',
+  color: '#7f1d1d',
+  padding: 12,
+  fontSize: 13,
+};
+const successStyle: React.CSSProperties = {
+  border: '1px solid #16a34a',
+  background: '#f0fdf4',
+  padding: 16,
+  fontSize: 13,
+};
+const linkStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: 'var(--ink, #111)',
+  textDecoration: 'underline',
 };

@@ -193,13 +193,102 @@ export async function payBooking(orderId: string) {
   }
 }
 
+export async function requestBookingPayment(
+  holdOrder: {
+    orderId: string;
+    bookingReference: string;
+    totalAmount: string;
+    totalCurrency: string;
+  },
+  channel: 'whatsapp' | 'slack'
+) {
+  const { setError, logEvent } = useSendero.getState();
+  const tripId = typeof window !== 'undefined' ? resolveTripIdFromLocation(window.location) : null;
+
+  setError(null);
+  logEvent({
+    group: 'payment.request',
+    bullet: 'active',
+    text: `requestPayment(<span class="v">${channel}</span>, <span class="v">${holdOrder.bookingReference}</span>)`,
+    t: now(),
+  });
+
+  if (!tripId) {
+    const msg = 'Open a trip-scoped conversation before sending a traveler payment request.';
+    setError(msg);
+    logEvent({ group: 'payment.request', bullet: 'fail', text: `error: ${msg}`, t: now() });
+    return null;
+  }
+
+  try {
+    const res = await fetch('/api/bookings/payment-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tripId,
+        orderId: holdOrder.orderId,
+        bookingReference: holdOrder.bookingReference,
+        amount: holdOrder.totalAmount,
+        currency: holdOrder.totalCurrency,
+        channel,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || data?.reason || data?.error || 'request_failed');
+    logEvent({
+      group: 'payment.request',
+      bullet: 'done',
+      text: `sent via <span class="v">${data.channel}</span> · wallet ${String(data.depositAddress ?? '').slice(0, 10)}…`,
+      t: now(),
+    });
+    noteToChat(
+      `Payment request sent via ${data.channel} for ${holdOrder.bookingReference}: ${holdOrder.totalAmount} ${holdOrder.totalCurrency}.`
+    );
+    return data;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setError(msg);
+    logEvent({ group: 'payment.request', bullet: 'fail', text: `error: ${msg}`, t: now() });
+    return null;
+  }
+}
+
+function resolveTripIdFromLocation(location: Location): string | null {
+  const fromSearch = new URLSearchParams(location.search).get('tripId');
+  if (fromSearch) return fromSearch;
+
+  const match = location.pathname.match(/\/dashboard\/trips\/([^/]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 export async function refreshTreasury() {
   const { setTreasury } = useSendero.getState();
   try {
-    const res = await fetch('/api/treasury/balance');
-    if (!res.ok) return;
-    const data = await res.json();
-    setTreasury(data);
+    const [chainRes, gatewayRes] = await Promise.all([
+      fetch('/api/treasury/balance'),
+      fetch('/api/gateway/balance'),
+    ]);
+    if (!chainRes.ok) return;
+
+    const chain = await chainRes.json();
+    if (!gatewayRes.ok) {
+      setTreasury(chain);
+      return;
+    }
+
+    const gateway = await gatewayRes.json();
+    setTreasury({
+      ...chain,
+      treasuryAddress: gateway.depositor ?? chain.treasuryAddress,
+      balances: [
+        {
+          symbol: 'USDC',
+          amount: gateway.spendableTotal ?? gateway.grandTotal ?? '0',
+          decimals: 6,
+          chain: 'Gateway',
+        },
+      ],
+    });
   } catch {
     /* ignore */
   }

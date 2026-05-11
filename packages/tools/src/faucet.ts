@@ -102,7 +102,7 @@ const faucetInput = z.object({
 export const faucetDripTool: ToolDef = {
   name: 'faucet_drip',
   description:
-    'Drip 20 testnet units of USDC or EURC from the Circle faucet to any address on a supported testnet (ARC-TESTNET default). Rate-limited upstream by Circle. Returns ok/status/message envelope.',
+    'EVM testnet only. Drip 20 testnet units of USDC or EURC from the Circle faucet to a `0x…` address on a supported EVM testnet (ARC-TESTNET default). Solana tenants must use the Solana devnet faucet (https://faucet.solana.com) directly — Circle does not drip USDC on Sol-Devnet today. Rate-limited upstream by Circle. Returns ok/status/message envelope.',
   inputSchema: faucetInput,
   jsonSchema: {
     type: 'object',

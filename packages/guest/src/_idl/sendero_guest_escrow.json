@@ -1,0 +1,1434 @@
+{
+  "address": "9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8",
+  "metadata": {
+    "name": "sendero_guest_escrow",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Solana port of SenderoGuestEscrow.sol — pre-funded guest-link travel escrow"
+  },
+  "instructions": [
+    {
+      "name": "cancel_trip",
+      "docs": [
+        "Buyer or operator cancels the trip. Requires no outstanding",
+        "reservations (caller refunds bookings first)."
+      ],
+      "discriminator": [5, 108, 92, 143, 47, 58, 229, 235],
+      "accounts": [
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "_trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_trip",
+      "docs": [
+        "Guest claims the trip with a recipient-bound Ed25519 signature",
+        "(verified by the sibling `Ed25519Program` instruction) plus the",
+        "OTP preimage. Status: `PreFunded → Active`.",
+        "",
+        "Caller is a relayer (Sendero backend or guest's own wallet);",
+        "authorization comes from the Ed25519 sig + OTP, not from the",
+        "transaction signer."
+      ],
+      "discriminator": [9, 140, 211, 39, 76, 254, 135, 200],
+      "accounts": [
+        {
+          "name": "relayer",
+          "docs": [
+            "Sendero relayer pays rent + sends the tx. The actual",
+            "authorization comes from the Ed25519 sibling instruction."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "otp_preimage",
+          "type": "bytes"
+        },
+        {
+          "name": "guest_claimant",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "commit_booking",
+      "docs": [
+        "Operator commits at the actual quoted price (≤ upper_bound) and",
+        "records the vendor + fee split. v1: operator-only."
+      ],
+      "discriminator": [138, 181, 37, 155, 46, 218, 54, 155],
+      "accounts": [
+        {
+          "name": "operator",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "booking",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [98, 111, 111, 107, 105, 110, 103]
+              },
+              {
+                "kind": "arg",
+                "path": "booking_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "_trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "_booking_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "vendor_amount",
+          "type": "u64"
+        },
+        {
+          "name": "fee_amount",
+          "type": "u64"
+        },
+        {
+          "name": "vendor",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "docs": [
+        "One-time init. Creates the Config PDA. Caller becomes owner;",
+        "`operator` is the Sendero backend signer that drives the",
+        "booking lifecycle."
+      ],
+      "discriminator": [175, 175, 109, 31, 13, 152, 155, 237],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "payment_mint"
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "operator",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "pre_fund_trip",
+      "docs": [
+        "Buyer pre-funds a trip for a named guest. Trip starts in",
+        "`PreFunded`. USDC moves from the buyer's token account into a",
+        "per-trip vault PDA owned by the Trip account.",
+        "",
+        "`claim_pubkey` is the Ed25519 pubkey of the ephemeral keypair",
+        "embedded in the share-link. `expected_otp_hash` is SHA-256 of",
+        "the OTP (plaintext delivered out-of-band)."
+      ],
+      "discriminator": [30, 248, 158, 27, 52, 173, 114, 82],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payment_mint"
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 117, 108, 116]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyer_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "claim_pubkey",
+          "type": "pubkey"
+        },
+        {
+          "name": "expiry",
+          "type": "i64"
+        },
+        {
+          "name": "expected_otp_hash",
+          "type": {
+            "array": ["u8", 32]
+          }
+        }
+      ]
+    },
+    {
+      "name": "reclaim_stuck_booking",
+      "docs": [
+        "Buyer-initiated force-refund after timeouts.",
+        "- Reserved + > RESERVE_TIMEOUT since reservation → ok",
+        "- Committed (no Duffel ref) + > CONFIRM_TIMEOUT since commit → ok"
+      ],
+      "discriminator": [222, 119, 227, 71, 170, 253, 116, 44],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "booking",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [98, 111, 111, 107, 105, 110, 103]
+              },
+              {
+                "kind": "arg",
+                "path": "booking_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "_trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "_booking_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_booking",
+      "docs": [
+        "Operator-initiated refund. Releases the booking's reservation",
+        "back to the trip's available pool. Status: `Reserved | Committed",
+        "→ Refunded`. No on-chain token transfer — the funds were always",
+        "in the trip vault, only the bookkeeping changes."
+      ],
+      "discriminator": [160, 80, 31, 89, 219, 78, 233, 67],
+      "accounts": [
+        {
+          "name": "operator",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "booking",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [98, 111, 111, 107, 105, 110, 103]
+              },
+              {
+                "kind": "arg",
+                "path": "booking_id"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "_trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "_booking_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        }
+      ]
+    },
+    {
+      "name": "reserve_booking",
+      "docs": [
+        "Operator reserves an upper-bound amount on a booking before",
+        "quoting Duffel. v1: operator-only. Booking PDA created here."
+      ],
+      "discriminator": [170, 28, 99, 26, 95, 11, 225, 109],
+      "accounts": [
+        {
+          "name": "operator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "booking",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [98, 111, 111, 107, 105, 110, 103]
+              },
+              {
+                "kind": "arg",
+                "path": "booking_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "booking_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "upper_bound",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_operator",
+      "docs": ["Owner rotates the operator. Mirrors Solidity `setOperator`."],
+      "discriminator": [238, 153, 101, 169, 243, 131, 36, 1],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_operator",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_paused",
+      "docs": [
+        "Owner pauses / unpauses. Pause blocks pre-fund / claim / booking",
+        "lifecycle but never the buyer's reclaim/sweep paths — buyers",
+        "must always be able to extract funds."
+      ],
+      "discriminator": [91, 60, 125, 192, 176, 225, 166, 218],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "paused",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "settle_booking",
+      "docs": [
+        "Operator settles after Duffel confirmation lands. Splits the",
+        "vault: `vendor_amount` → vendor token account, `fee_amount` →",
+        "operator token account. Status: `Committed → Settled`."
+      ],
+      "discriminator": [118, 241, 41, 192, 52, 160, 213, 100],
+      "accounts": [
+        {
+          "name": "operator",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "booking",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [98, 111, 111, 107, 105, 110, 103]
+              },
+              {
+                "kind": "arg",
+                "path": "booking_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 117, 108, 116]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vendor_token_account",
+          "writable": true
+        },
+        {
+          "name": "operator_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "_booking_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        },
+        {
+          "name": "duffel_order_ref",
+          "type": {
+            "array": ["u8", 32]
+          }
+        }
+      ]
+    },
+    {
+      "name": "sweep_trip_residual",
+      "docs": [
+        "Buyer or operator sweeps unspent USDC back to the buyer once",
+        "the trip is cancelled or expired. Idempotent: `swept` flag",
+        "guards re-entry."
+      ],
+      "discriminator": [179, 35, 198, 77, 31, 206, 190, 39],
+      "accounts": [
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "trip",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [116, 114, 105, 112]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 117, 108, 116]
+              },
+              {
+                "kind": "arg",
+                "path": "trip_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyer_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "trip_id",
+          "type": {
+            "array": ["u8", 32]
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Booking",
+      "discriminator": [147, 50, 61, 138, 208, 21, 254, 156]
+    },
+    {
+      "name": "Config",
+      "discriminator": [155, 12, 170, 224, 30, 250, 204, 130]
+    },
+    {
+      "name": "Trip",
+      "discriminator": [181, 162, 236, 3, 69, 140, 211, 173]
+    }
+  ],
+  "events": [
+    {
+      "name": "BookingCommitted",
+      "discriminator": [223, 15, 114, 105, 223, 74, 248, 240]
+    },
+    {
+      "name": "BookingReclaimed",
+      "discriminator": [167, 90, 254, 189, 100, 66, 5, 246]
+    },
+    {
+      "name": "BookingRefunded",
+      "discriminator": [191, 204, 47, 214, 172, 198, 38, 148]
+    },
+    {
+      "name": "BookingReserved",
+      "discriminator": [104, 204, 19, 68, 191, 130, 147, 111]
+    },
+    {
+      "name": "BookingSettled",
+      "discriminator": [111, 232, 188, 40, 82, 170, 192, 62]
+    },
+    {
+      "name": "EscrowInitialized",
+      "discriminator": [222, 186, 157, 47, 145, 142, 176, 248]
+    },
+    {
+      "name": "OperatorUpdated",
+      "discriminator": [28, 104, 226, 145, 253, 229, 17, 245]
+    },
+    {
+      "name": "PausedSet",
+      "discriminator": [171, 125, 127, 156, 233, 81, 68, 66]
+    },
+    {
+      "name": "TripCancelled",
+      "discriminator": [48, 158, 224, 48, 140, 35, 140, 231]
+    },
+    {
+      "name": "TripClaimed",
+      "discriminator": [86, 190, 140, 62, 33, 125, 54, 98]
+    },
+    {
+      "name": "TripPreFunded",
+      "discriminator": [136, 155, 26, 179, 45, 119, 196, 127]
+    },
+    {
+      "name": "TripSwept",
+      "discriminator": [184, 61, 238, 212, 49, 148, 71, 237]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidTrip",
+      "msg": "Trip does not exist"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidBooking",
+      "msg": "Booking does not match the supplied trip"
+    },
+    {
+      "code": 6002,
+      "name": "WrongStatus",
+      "msg": "Trip/Booking is not in the required state for this action"
+    },
+    {
+      "code": 6003,
+      "name": "Unauthorized",
+      "msg": "Caller is not authorized"
+    },
+    {
+      "code": 6004,
+      "name": "Expired",
+      "msg": "Trip has expired"
+    },
+    {
+      "code": 6005,
+      "name": "StillActive",
+      "msg": "Trip is still active and cannot be swept"
+    },
+    {
+      "code": 6006,
+      "name": "ReservationsOutstanding",
+      "msg": "Trip has outstanding reservations"
+    },
+    {
+      "code": 6007,
+      "name": "NothingToSweep",
+      "msg": "Nothing to sweep"
+    },
+    {
+      "code": 6008,
+      "name": "NotYetReclaimable",
+      "msg": "Booking is not yet reclaimable (timeouts not elapsed)"
+    },
+    {
+      "code": 6009,
+      "name": "AlreadyConfirmed",
+      "msg": "Booking already has a Duffel confirmation recorded"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidClaimSignature",
+      "msg": "Claim signature did not verify against the embedded pubkey + message"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidOtp",
+      "msg": "OTP preimage hash did not match"
+    },
+    {
+      "code": 6012,
+      "name": "QuoteExceedsBound",
+      "msg": "Quoted price exceeds upper bound"
+    },
+    {
+      "code": 6013,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient escrow balance"
+    },
+    {
+      "code": 6014,
+      "name": "ZeroAddress",
+      "msg": "Address cannot be the default/zero pubkey"
+    },
+    {
+      "code": 6015,
+      "name": "ZeroValue",
+      "msg": "Value must be greater than zero"
+    },
+    {
+      "code": 6016,
+      "name": "Paused",
+      "msg": "Program is paused"
+    },
+    {
+      "code": 6017,
+      "name": "DuplicateTokenAccount",
+      "msg": "vendor and operator token accounts must differ — duplicate would lose the fee leg"
+    }
+  ],
+  "types": [
+    {
+      "name": "Booking",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trip_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "booking_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "upper_bound",
+            "docs": [
+              "Mutates from upper-bound to actual_amount on commit (slack",
+              "returns to the trip's available pool)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "actual_amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee_amount",
+            "type": "u64"
+          },
+          {
+            "name": "vendor",
+            "type": "pubkey"
+          },
+          {
+            "name": "duffel_order_ref",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "reserved_at",
+            "type": "i64"
+          },
+          {
+            "name": "committed_at",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "BookingStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookingCommitted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "booking_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "vendor_amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee_amount",
+            "type": "u64"
+          },
+          {
+            "name": "vendor",
+            "type": "pubkey"
+          },
+          {
+            "name": "slack",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookingReclaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "booking_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookingRefunded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "booking_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookingReserved",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trip_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "booking_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "upper_bound",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookingSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "booking_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "vendor",
+            "type": "pubkey"
+          },
+          {
+            "name": "vendor_amount",
+            "type": "u64"
+          },
+          {
+            "name": "fee_amount",
+            "type": "u64"
+          },
+          {
+            "name": "duffel_order_ref",
+            "type": {
+              "array": ["u8", 32]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookingStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Reserved"
+          },
+          {
+            "name": "Committed"
+          },
+          {
+            "name": "Settled"
+          },
+          {
+            "name": "Refunded"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Config",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OperatorUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "operator",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PausedSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Trip",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trip_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "claim_pubkey",
+            "docs": [
+              "Ed25519 pubkey of the ephemeral guest keypair (embedded in",
+              "share-link). After `claim_trip`, this is replaced with the",
+              "guest's actual wallet via `guest_claimant`."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "guest_claimant",
+            "type": "pubkey"
+          },
+          {
+            "name": "funded_amount",
+            "type": "u64"
+          },
+          {
+            "name": "reserved_amount",
+            "type": "u64"
+          },
+          {
+            "name": "spent_amount",
+            "type": "u64"
+          },
+          {
+            "name": "expiry",
+            "type": "i64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "TripStatus"
+              }
+            }
+          },
+          {
+            "name": "expected_otp_hash",
+            "docs": ["SHA-256 of the OTP. Plaintext OTP is delivered out-of-band."],
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "swept",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TripCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trip_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "TripClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trip_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "guest_claimant",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TripPreFunded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trip_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "claim_pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "expiry",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TripStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "PreFunded"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Cancelled"
+          },
+          {
+            "name": "Expired"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TripSwept",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trip_id",
+            "type": {
+              "array": ["u8", 32]
+            }
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -7,6 +7,7 @@ const BodySchema = z.object({
   offerId: z.string().min(1),
   passengerName: z.string().min(1),
   passengerEmail: z.string().email(),
+  passengerPhone: z.string().regex(/^\+[1-9]\d{6,14}$/),
   passengerDob: z.string().optional(),
   passengerGender: z.enum(['male', 'female']).optional(),
 });
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
       offerId: body.offerId,
       passengerName: body.passengerName,
       passengerEmail: body.passengerEmail,
+      passengerPhone: body.passengerPhone,
       passengerDob: body.passengerDob,
       passengerGender: body.passengerGender,
       idempotencyKey,

@@ -1,0 +1,362 @@
+{
+  "ranAt": "2026-05-08T17:22:46.531Z",
+  "results": [
+    {
+      "category": "hotels",
+      "prompt": "DEVMODE search hotels in Mendoza Argentina for two adults checking in 2026-05-15 checking out 2026-05-17",
+      "expected": [
+        "search_hotels",
+        "list_stay_rates"
+      ],
+      "toolsCalled": [],
+      "ok": false,
+      "http": 500,
+      "latencyMs": 67696,
+      "errors": [
+        "HTTP 500: "
+      ],
+      "text": ""
+    },
+    {
+      "category": "wallet",
+      "prompt": "DEVMODE call check_treasury directly and tell me the corporate USDC + EURC on Arc",
+      "expected": [
+        "check_treasury"
+      ],
+      "toolsCalled": [],
+      "ok": false,
+      "http": 500,
+      "latencyMs": 26,
+      "errors": [
+        "HTTP 500: "
+      ],
+      "text": ""
+    },
+    {
+      "category": "wallet",
+      "prompt": "DEVMODE quote FX for converting 1000 USD into ARS for booking purposes",
+      "expected": [
+        "quote_fx"
+      ],
+      "toolsCalled": [],
+      "ok": false,
+      "http": 500,
+      "latencyMs": 253,
+      "errors": [
+        "HTTP 500: "
+      ],
+      "text": ""
+    },
+    {
+      "category": "concierge",
+      "prompt": "DEVMODE give me a polished restaurant route card for Don Belgrano in Mendoza",
+      "expected": [
+        "restaurant_route_card"
+      ],
+      "toolsCalled": [],
+      "ok": false,
+      "http": 500,
+      "latencyMs": 64,
+      "errors": [
+        "HTTP 500: "
+      ],
+      "text": ""
+    },
+    {
+      "category": "visa",
+      "prompt": "DEVMODE check_travel_eligibility for my upcoming Mendoza trip",
+      "expected": [
+        "check_travel_eligibility"
+      ],
+      "toolsCalled": [],
+      "ok": false,
+      "http": 500,
+      "latencyMs": 26,
+      "errors": [
+        "HTTP 500: "
+      ],
+      "text": ""
+    },
+    {
+      "category": "trips",
+      "prompt": "DEVMODE call get_trip_brief on my active trip",
+      "expected": [
+        "get_trip_brief"
+      ],
+      "toolsCalled": [],
+      "ok": false,
+      "http": 500,
+      "latencyMs": 322,
+      "errors": [
+        "HTTP 500: "
+      ],
+      "text": ""
+    },
+    {
+      "category": "trips",
+      "prompt": "DEVMODE generate a check-in reminder for my next flight",
+      "expected": [
+        "trip_checkin_reminder"
+      ],
+      "toolsCalled": [
+        "get_active_trip"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 35195,
+      "errors": [],
+      "text": "I don't have an active trip on file for you at the moment. Could you let me know which flight you're looking to check in for? I'll need the airline and departure date to pull up the details and set up"
+    },
+    {
+      "category": "trips",
+      "prompt": "DEVMODE my flight AR1234 EZE to MDZ tomorrow has been cancelled. Replan everything.",
+      "expected": [
+        "trip_delay_replanner"
+      ],
+      "toolsCalled": [
+        "trip_delay_replanner"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 23520,
+      "errors": [],
+      "text": "I have found three replacement options for tomorrow. Tap **Rebook 62.53 USD** to lock in the best alternative and we will get you sorted."
+    },
+    {
+      "category": "esim",
+      "prompt": "DEVMODE search eSIM plans for Argentina, do not book yet — just show me the options",
+      "expected": [
+        "search_esim"
+      ],
+      "toolsCalled": [
+        "search_esim"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 19558,
+      "errors": [],
+      "text": "Here are the eSIM options for Argentina. Tap the card to pick the plan that fits best."
+    },
+    {
+      "category": "flights",
+      "prompt": "DEVMODE search and hold the cheapest flight EZE to MDZ next Friday for traveler phone +54911 12345678",
+      "expected": [
+        "search_flights",
+        "book_flight"
+      ],
+      "toolsCalled": [
+        "search_flights"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 25952,
+      "errors": [],
+      "text": ""
+    },
+    {
+      "category": "trips",
+      "prompt": "DEVMODE create a new trip to Bariloche for this weekend, set kind=round_trip",
+      "expected": [
+        "create_trip",
+        "set_trip_kind"
+      ],
+      "toolsCalled": [
+        "create_trip",
+        "set_trip_kind"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 19275,
+      "errors": [],
+      "text": "I've created the Bariloche weekend trip for you. However, since it wasn't linked to a specific traveler profile, I couldn't update the trip type to round-trip right now. We can add those details once "
+    },
+    {
+      "category": "trips",
+      "prompt": "DEVMODE complete my current trip, I am back home",
+      "expected": [
+        "complete_trip"
+      ],
+      "toolsCalled": [
+        "get_active_trip"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 35174,
+      "errors": [],
+      "text": "I don't have an active trip on file for you right now. If you have a specific trip ID you'd like me to close out, let me know! Otherwise, it looks like you're already all set."
+    },
+    {
+      "category": "address",
+      "prompt": "DEVMODE geocode this stop: Hotel Park Hyatt Mendoza Plaza Independencia",
+      "expected": [
+        "geocode_trip_stop"
+      ],
+      "toolsCalled": [
+        "geocode_trip_stop"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 32589,
+      "errors": [],
+      "text": "The coordinates for the Park Hyatt Mendoza are -32.889557, -68.844833. The canonical address is Plaza Independencia, Gral. Espejo 300, M5502 AVJ, Mendoza, Argentina."
+    },
+    {
+      "category": "identity",
+      "prompt": "DEVMODE prepare a sign-in link for traveler phone +54911 9876543",
+      "expected": [
+        "prepare_traveler_signin"
+      ],
+      "toolsCalled": [
+        "prepare_traveler_signin"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 23592,
+      "errors": [],
+      "text": "Here is the one-shot sign-in link for the traveler. They can use this to authenticate (it expires in 15 minutes):\n\n**URL:** https://sendero-dev-bufi.ngrok.app/sign-in/traveler?token=MMGC54CW\n**Token:*"
+    },
+    {
+      "category": "settle",
+      "prompt": "DEVMODE issue a single-use magic-link payment URL for booking off_test1",
+      "expected": [
+        "send_pay_link"
+      ],
+      "toolsCalled": [
+        "send_pay_link"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 12239,
+      "errors": [],
+      "text": "I couldn't generate the payment link because the booking ID `off_test1` was not found in the system. If you have the correct booking ID, let me know and I'll try again!"
+    },
+    {
+      "category": "concierge",
+      "prompt": "DEVMODE take me home, I am stuck in MDZ",
+      "expected": [
+        "take_me_home"
+      ],
+      "toolsCalled": [
+        "take_me_home"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 13855,
+      "errors": [],
+      "text": "I don't have an active trip on file for you right now. What is your home airport so I can find you a flight out of Mendoza (MDZ)?"
+    },
+    {
+      "category": "flights",
+      "prompt": "DEVMODE show me the change/refund conditions for offer off_test_xyz",
+      "expected": [
+        "display_offer_conditions"
+      ],
+      "toolsCalled": [
+        "display_offer_conditions"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 12623,
+      "errors": [],
+      "text": "I ran into an error trying to pull the change and refund conditions for that offer (`off_test_xyz`). It looks like the offer ID might be invalid or expired. \n\nIf you have a different offer ID, let me "
+    },
+    {
+      "category": "groups",
+      "prompt": "DEVMODE add me to group trip gtr_test1 — claim my seat with token tk_xyz",
+      "expected": [
+        "claim_group_seat"
+      ],
+      "toolsCalled": [
+        "claim_group_seat"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 19567,
+      "errors": [],
+      "text": "That token (`tk_xyz`) doesn't seem to match any active group trips—it might be expired or malformed. Could you double-check the link or send me your email address so I can add you to `gtr_test1` direc"
+    },
+    {
+      "category": "concierge",
+      "prompt": "DEVMODE export my Mendoza route as a Google Maps shareable link",
+      "expected": [
+        "export_route_map"
+      ],
+      "toolsCalled": [
+        "export_route_map"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 29467,
+      "errors": [],
+      "text": "Here is the shareable link for your Mendoza route:\n\n**Google Maps:** [Open Route](https://www.google.com/maps/dir/?api=1&origin=Mendoza%2C+Argentina&destination=Mendoza%2C+Argentina&travelmode=driving"
+    },
+    {
+      "category": "wallet",
+      "prompt": "DEVMODE bridge 100 USDC from Polygon mainnet into Arc Testnet",
+      "expected": [
+        "bridge_to_arc",
+        "swap_and_bridge"
+      ],
+      "toolsCalled": [
+        "bridge_to_arc"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 16836,
+      "errors": [],
+      "text": "The bridge attempt failed because there is an insufficient balance on Polygon to cover the 100 USDC transfer."
+    },
+    {
+      "category": "wallet",
+      "prompt": "DEVMODE swap 5 USDC into EURC at the best price",
+      "expected": [
+        "swap_tokens"
+      ],
+      "toolsCalled": [
+        "swap_tokens",
+        "check_treasury",
+        "faucet_drip",
+        "swap_tokens"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 25104,
+      "errors": [],
+      "text": ""
+    },
+    {
+      "category": "wallet",
+      "prompt": "DEVMODE send 2 USDC from corporate treasury to address 0x1111…1111",
+      "expected": [
+        "send_tokens"
+      ],
+      "toolsCalled": [
+        "send_tokens",
+        "gateway_transfer",
+        "find_resolved_gap",
+        "report_knowledge_gap"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 68958,
+      "errors": [],
+      "text": ""
+    },
+    {
+      "category": "reputation",
+      "prompt": "DEVMODE request validation that my last booking happened, choose any Sendero validator",
+      "expected": [
+        "request_validation"
+      ],
+      "toolsCalled": [
+        "get_sendero_identity",
+        "request_validation"
+      ],
+      "ok": true,
+      "http": 200,
+      "latencyMs": 50035,
+      "errors": [],
+      "text": "The validation request failed because the Sendero agent ID (2286) does not currently have an `OnchainIdentity` minted on the network. We cannot request on-chain validations until the agent identity ha"
+    }
+  ]
+}

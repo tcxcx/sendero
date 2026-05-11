@@ -96,6 +96,7 @@ export function SenderoApp({ gate = 'passkey' }: SenderoAppProps = {}) {
 function SettleCelebration() {
   const onChain = useSendero(s => s.onChainSettlement);
   const holdOrder = useSendero(s => s.holdOrder);
+  const userAuth = useSendero(s => s.userAuth);
   const [visible, setVisible] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
 
@@ -157,7 +158,7 @@ function SettleCelebration() {
             color: 'var(--ink)',
           }}
         >
-          Booked on Arc
+          Booked on {userAuth?.chain === 'sol' ? 'Solana' : 'Arc'}
         </span>
         <button
           aria-label="dismiss"
@@ -216,7 +217,7 @@ function SettleCelebration() {
           paddingBottom: 1,
         }}
       >
-        View on Arcscan ↗
+        View on {userAuth?.chain === 'sol' ? 'Solana Explorer' : 'Arcscan'} ↗
       </a>
       <style jsx>{`
         @keyframes celebrate-slide {

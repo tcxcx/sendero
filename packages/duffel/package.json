@@ -6,7 +6,8 @@
   "description": "Sendero — Duffel flights + hotels adapter.",
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./country-from-iata": "./src/country-from-iata.ts"
   },
   "dependencies": {
     "@sendero/env": "workspace:*",

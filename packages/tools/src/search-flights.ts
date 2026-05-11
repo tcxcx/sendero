@@ -236,14 +236,45 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
       });
       return share ? { offers: top, share } : { offers: top };
     } catch (err) {
-      // Duffel can throw bare Error('') from network failures; surface
-      // a contextual message so smoke probes + tool-audit tests show
-      // *which* tool failed and on what input. Keeps the agent
-      // observable when search-flights bubbles up an opaque error.
+      // Duffel can throw bare Error('') from network failures, past-
+      // date validation, or sandbox-empty-corridor cases. Throwing
+      // here causes the route to return HTTP 500 — agent sees
+      // `tool_failed` and gets stuck (observed in dogfood: past-date
+      // inputs cascade into retries + handoff escalation). Return a
+      // structured empty-result instead so the agent can recover
+      // (try a different date, suggest an alternate route, etc.).
       const msg = err instanceof Error && err.message ? err.message : String(err);
-      throw new Error(
-        `search_flights failed (origin=${input.origin}, destination=${input.destination}, departureDate=${input.departureDate}): ${msg.slice(0, 200)}`
-      );
+      const trimmed = msg.slice(0, 200);
+      // Heuristic classification — duffel error messages aren't
+      // structured but the substrings are stable enough for routing.
+      const lower = trimmed.toLowerCase();
+      const status =
+        lower.includes('past') ||
+        lower.includes('future') ||
+        lower.includes('depart') ||
+        lower.includes('date')
+          ? ('past_or_invalid_date' as const)
+          : lower.includes('no') && lower.includes('offer')
+            ? ('no_offers' as const)
+            : ('supplier_error' as const);
+      console.warn('[search_flights] supplier returned error — surfacing as empty result', {
+        origin: input.origin,
+        destination: input.destination,
+        departureDate: input.departureDate,
+        status,
+        message: trimmed,
+      });
+      return {
+        offers: [],
+        status,
+        error: trimmed,
+        retryHint:
+          status === 'past_or_invalid_date'
+            ? 'departureDate must be a future ISO date (YYYY-MM-DD); call get_current_datetime if uncertain.'
+            : status === 'no_offers'
+              ? 'No supplier inventory on this corridor/date. Try a nearby airport or an adjacent date.'
+              : 'Supplier (Duffel) error. Retry once after 30s; if it persists, request_human_handoff.',
+      };
     }
   },
 };

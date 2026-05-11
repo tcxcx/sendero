@@ -12,6 +12,7 @@
 import { prisma } from '@sendero/database';
 import { redirect } from 'next/navigation';
 import { EmbeddedSignupButton } from './EmbeddedSignupButton';
+import { ensurePrimaryChainProvisioned } from '@/lib/provision-tenant-on-chain-choice';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,16 @@ async function configureAgency(formData: FormData): Promise<void> {
   const fiscalCountry = String(formData.get('fiscalCountry') ?? '')
     .trim()
     .toUpperCase();
+  // Chain choice locks the tenant's settlement rail end-to-end:
+  //   - Treasury wallet (Circle MSCA on Arc vs Squads V4 + DCWs on Sol)
+  //   - Booking escrow (SenderoGuestEscrow.sol vs sendero_guest_escrow Anchor)
+  //   - Trip stamps (SenderoStamps ERC-1155 vs Metaplex Core)
+  //   - Identity (ERC-8004 vs Metaplex Agent Registry)
+  //   - Traveler-pay reimbursement → matching superadmin treasury
+  // See packages/tools/src/book-flight.ts::settleTravelerUsdcToTreasury
+  // for the cascade in action.
+  const primaryChainRaw = String(formData.get('primaryChain') ?? 'arc');
+  const primaryChain = primaryChainRaw === 'sol' ? 'sol' : 'arc';
   if (!slug || !displayName || !phoneNumberId) return;
 
   const tenant = await prisma.tenant.upsert({
@@ -34,14 +45,23 @@ async function configureAgency(formData: FormData): Promise<void> {
       displayName,
       billingTier: 'pro',
       fiscalCountry: fiscalCountry || null,
+      primaryChain,
       metadata: { kind: 'agency', whatsappPhoneNumberId: phoneNumberId },
     },
     update: {
       displayName,
       billingTier: 'pro',
       fiscalCountry: fiscalCountry || null,
+      primaryChain,
       metadata: { kind: 'agency', whatsappPhoneNumberId: phoneNumberId },
     },
+  });
+
+  // Cascade trigger: kick off chain-matching treasury + identity provisioning.
+  await ensurePrimaryChainProvisioned({
+    tenantId: tenant.id,
+    clerkOrgId: tenant.clerkOrgId,
+    primaryChain,
   });
 
   redirect(`/onboarding/agency?tenantId=${tenant.id}&installed=1`);
@@ -130,6 +150,27 @@ export default async function AgencyOnboardingPage({ searchParams }: Props) {
         <label style={labelStyle}>
           <span>Fiscal country (ISO-3166-1 alpha-2)</span>
           <input name="fiscalCountry" maxLength={2} placeholder="BR" style={inputStyle} />
+        </label>
+        <label style={labelStyle}>
+          <span>Primary chain</span>
+          <select name="primaryChain" defaultValue="arc" style={inputStyle}>
+            <option value="arc">Arc — Circle MSCA + USDC settlement (default)</option>
+            <option value="sol">Solana — Squads V4 + USDC SPL</option>
+          </select>
+          <span
+            style={{
+              ...labelStyle,
+              fontSize: 10,
+              textTransform: 'none',
+              letterSpacing: 0,
+              color: '#888',
+            }}
+          >
+            Locks the entire stack — treasury wallet, booking escrow, trip stamps, identity, and
+            traveler-pay reimbursement all settle on the chosen chain. Pick once; flip requires zero
+            on-chain state and admin involvement. Your travelers will always see a unified balance
+            on their end; this chain abstraction is never exposed to end users.
+          </span>
         </label>
         <button type="submit" style={submitStyle}>
           Configure agency

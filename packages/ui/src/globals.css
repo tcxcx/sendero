@@ -116,4 +116,19 @@
     color: #fafaf7;
     text-shadow: none;
   }
+  .maplibregl-popup-content {
+    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+  }
+  .maplibregl-popup-tip {
+    @apply hidden!;
+  }
+  .maplibregl-map,
+  .maplibregl-canvas-container,
+  .maplibregl-canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .maplibregl-canvas {
+    display: block;
+  }
 }

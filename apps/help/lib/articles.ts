@@ -180,7 +180,7 @@ No seat fees. No SaaS license. You pay only when the agent acts.`,
       slug: 'how-booking-works',
       title: 'How a booking works',
       excerpt: 'From intent to PNR to on-chain settlement in under six seconds.',
-      body: `Sendero searches real-time Duffel inventory, holds an offer, runs policy checks when needed, confirms the booking, and settles the commission fan-out on Arc in a single on-chain transaction.
+      body: `Sendero searches real-time Duffel inventory, holds an offer, runs policy checks when needed, confirms the booking, and settles the commission fan-out on the tenant’s primary chain (Arc Testnet or Solana Devnet) in a single on-chain transaction.
 
 The same journey record keeps the traveler request, policy decision, supplier action, escrow state, ticket confirmation, and invoice together.`,
       category: 'getting-started',
@@ -275,8 +275,8 @@ Direct HTTP clients can call /tools/:name with x402 Payment-Signature headers. U
     {
       slug: 'nanopayment-pricing',
       title: 'Nanopayment pricing, explained',
-      excerpt: 'You pay only when the agent acts. Batched USDC settlement on Arc.',
-      body: `Every atomic action the agent performs is individually metered. Meter events accumulate per tenant; at the end of each window, hourly by default, Sendero builds a NanopayBatch and fires a single USDC transfer on Arc.`,
+      excerpt: 'You pay only when the agent acts. Batched USDC settlement on Arc or Solana.',
+      body: `Every atomic action the agent performs is individually metered. Meter events accumulate per tenant; at the end of each window, hourly by default, Sendero builds a NanopayBatch and fires a single USDC transfer on the tenant’s primary chain (Arc or Solana).`,
       category: 'billing-and-settlement',
       updatedAt: '2026-04-20',
       locale: 'en-US',
@@ -384,7 +384,7 @@ Sin tarifa por usuario. Sin licencia SaaS. Pagas solo cuando el agente actúa.`,
       slug: 'how-booking-works',
       title: 'Cómo funciona una reserva',
       excerpt: 'De intención a PNR y liquidación on-chain en menos de seis segundos.',
-      body: `Sendero busca inventario Duffel en tiempo real, mantiene una oferta, ejecuta controles de política cuando corresponde, confirma la reserva y liquida la distribución de comisión en Arc con una sola transacción on-chain.
+      body: `Sendero busca inventario Duffel en tiempo real, mantiene una oferta, ejecuta controles de política cuando corresponde, confirma la reserva y liquida la distribución de comisión en Arc o Solana con una sola transacción on-chain.
 
 El mismo registro de viaje conserva la solicitud, la decisión de política, la acción del proveedor, el estado del escrow, la confirmación del boleto y la factura.`,
       category: 'getting-started',
@@ -479,8 +479,8 @@ Los clientes HTTP directos pueden llamar /tools/:name con encabezados x402 Payme
     {
       slug: 'nanopayment-pricing',
       title: 'Precios por nanopago, explicado',
-      excerpt: 'Pagas solo cuando el agente actúa. Liquidación USDC en lote sobre Arc.',
-      body: `Cada acción atómica que ejecuta el agente se mide por separado. Los eventos se acumulan por tenant; al final de cada ventana, por defecto cada hora, Sendero construye un NanopayBatch y dispara una sola transferencia USDC en Arc.`,
+      excerpt: 'Pagas solo cuando el agente actúa. Liquidación USDC en lote sobre Arc o Solana.',
+      body: `Cada acción atómica que ejecuta el agente se mide por separado. Los eventos se acumulan por tenant; al final de cada ventana, por defecto cada hora, Sendero construye un NanopayBatch y dispara una sola transferencia USDC en Arc o Solana.`,
       category: 'billing-and-settlement',
       updatedAt: '2026-04-20',
       locale: 'es-MX',
@@ -631,7 +631,7 @@ Sem taxa por assento. Sem licença SaaS. Você paga somente quando o agente age.
       slug: 'how-booking-works',
       title: 'Como uma reserva funciona',
       excerpt: 'Da intenção ao PNR e à liquidação on-chain em menos de seis segundos.',
-      body: `A Sendero pesquisa inventário Duffel em tempo real, segura uma oferta, executa checagens de política quando necessário, confirma a reserva e liquida a distribuição de comissão na Arc em uma única transação on-chain.
+      body: `A Sendero pesquisa inventário Duffel em tempo real, segura uma oferta, executa checagens de política quando necessário, confirma a reserva e liquida a distribuição de comissão na Arc ou Solana em uma única transação on-chain.
 
 O mesmo registro de jornada mantém juntos o pedido do viajante, a decisão de política, a ação do fornecedor, o estado do escrow, a confirmação do bilhete e a fatura.`,
       category: 'getting-started',
@@ -726,8 +726,8 @@ Clientes HTTP diretos podem chamar /tools/:name com cabeçalhos x402 Payment-Sig
     {
       slug: 'nanopayment-pricing',
       title: 'Preço por nanopagamento, explicado',
-      excerpt: 'Você paga somente quando o agente age. Liquidação USDC em lote na Arc.',
-      body: `Cada ação atômica executada pelo agente é medida individualmente. Os eventos se acumulam por tenant; ao fim de cada janela, por padrão a cada hora, a Sendero cria um NanopayBatch e dispara uma única transferência USDC na Arc.`,
+      excerpt: 'Você paga somente quando o agente age. Liquidação USDC em lote na Arc ou Solana.',
+      body: `Cada ação atômica executada pelo agente é medida individualmente. Os eventos se acumulam por tenant; ao fim de cada janela, por padrão a cada hora, a Sendero cria um NanopayBatch e dispara uma única transferência USDC na Arc ou Solana.`,
       category: 'billing-and-settlement',
       updatedAt: '2026-04-20',
       locale: 'pt-BR',

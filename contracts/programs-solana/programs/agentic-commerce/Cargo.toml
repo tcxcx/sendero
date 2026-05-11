@@ -1,0 +1,26 @@
+[package]
+name = "agentic-commerce"
+version = "0.1.0"
+description = "Solana port of ERC-8183 AgenticCommerce — Job escrow with USDC SPL settlement"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "agentic_commerce"
+
+[features]
+default = []
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
+# Embeds a `.security.txt` ELF section so explorers render contact +
+# audit + source-code links on the program page. See sibling crate
+# `sendero-guest-escrow` for the full rationale.
+solana-security-txt = "1.1"

@@ -20,9 +20,12 @@
     "./unified-balance": "./src/unified-balance.ts",
     "./unified-gateway": "./src/unified-gateway.ts",
     "./gateway-solana-mint": "./src/gateway-solana-mint.ts",
+    "./dcw-transfer": "./src/dcw-transfer.ts",
     "./sca-deploy": "./src/sca-deploy.ts",
+    "./contract-execution": "./src/contract-execution.ts",
     "./modular-wallets": "./src/modular-wallets.ts",
     "./provision-tenant-wallet": "./src/provision-tenant-wallet.ts",
+    "./provision-tenant-solana-treasury": "./src/provision-tenant-solana-treasury.ts",
     "./sync-wallet-set": "./src/sync-wallet-set.ts"
   },
   "dependencies": {
@@ -36,6 +39,7 @@
   },
   "peerDependencies": {
     "@circle-fin/adapter-circle-wallets": "^1.2.7",
+    "@circle-fin/adapter-solana-kit": "^1.4.5",
     "@circle-fin/adapter-viem-v2": "^1.8.3",
     "@circle-fin/app-kit": "^1.4.1",
     "@circle-fin/bridge-kit": "^1.8.3",

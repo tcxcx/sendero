@@ -33,7 +33,7 @@
  *   model on first render and write it back to localStorage.
  */
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { Fragment, useCallback, useEffect, useMemo } from 'react';
 
 import { Lock } from 'lucide-react';
 import Link from 'next/link';
@@ -43,9 +43,8 @@ import {
   type ChatModelCogs,
   type ChatModelProvider,
   isModelAllowedByCap,
-  PLANS,
-  type PlanTier,
-} from '@sendero/billing';
+} from '@sendero/billing/cogs';
+import { PLANS, type PlanTier } from '@sendero/billing/plans';
 import { ProviderIcon, type ProviderSlug } from '@sendero/icons/providers';
 
 import { Badge } from '@/components/ui/badge';
@@ -248,7 +247,7 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
 
                 const wrapInPopover = (children: React.ReactNode) =>
                   m.description ? (
-                    <TooltipProvider delayDuration={300}>
+                    <TooltipProvider key={m.id} delayDuration={300}>
                       <Tooltip>
                         <TooltipTrigger asChild>{children}</TooltipTrigger>
                         <TooltipContent
@@ -271,7 +270,7 @@ export function ChatModelTrigger({ tier = 'free' }: ChatModelTriggerProps) {
                       </Tooltip>
                     </TooltipProvider>
                   ) : (
-                    <>{children}</>
+                    <Fragment key={m.id}>{children}</Fragment>
                   );
 
                 if (allowed) {

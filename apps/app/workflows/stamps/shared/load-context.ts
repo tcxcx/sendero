@@ -52,6 +52,7 @@ export async function loadStampContext(args: {
           displayName: true,
           brandColors: true,
           brandLogoUrl: true,
+          primaryChain: true,
         },
       },
       traveler: {
@@ -59,10 +60,13 @@ export async function loadStampContext(args: {
           id: true,
           displayName: true,
           email: true,
+          // Pull ALL DCW wallets and pick the one matching tenant.primaryChain
+          // below. Pre-Phase-H this query was Arc-only — Sol-primaryChain
+          // tenants got Arc DCW addresses passed into `mint_stamp` which
+          // happily minted on the wrong chain (the issue this fix closes).
           wallets: {
-            where: { provisioner: 'dcw', chainId: ARC_TESTNET_CHAIN_ID },
-            select: { address: true },
-            take: 1,
+            where: { provisioner: 'dcw' },
+            select: { address: true, chainId: true },
           },
         },
       },
@@ -87,9 +91,22 @@ export async function loadStampContext(args: {
     booking = projectBooking(row);
   }
 
+  // Solana Devnet wallet chainId for the Sol primaryChain branch.
+  // Mirrors `SOL_DEVNET_CHAIN_ID = 5` used in `settleTravelerUsdcToTreasury`
+  // and the Tenant.primaryChain cascade documented in CLAUDE.md.
+  const SOL_DEVNET_CHAIN_ID = 5;
+  const primaryChain: 'arc' | 'sol' = trip.tenant.primaryChain === 'sol' ? 'sol' : 'arc';
+
   const travelers: StampTraveler[] = [];
   if (trip.traveler) {
-    let addr = trip.traveler.wallets[0]?.address;
+    // Pick the wallet that matches the tenant's primaryChain. For Sol
+    // tenants we want the base58 Sol DCW (chainId=5); for Arc we want
+    // the EVM DCW (any non-Sol chain — they share one address).
+    const matchingWallet =
+      primaryChain === 'sol'
+        ? trip.traveler.wallets.find(w => w.chainId === SOL_DEVNET_CHAIN_ID)
+        : trip.traveler.wallets.find(w => w.chainId !== SOL_DEVNET_CHAIN_ID);
+    let addr = matchingWallet?.address;
     if (!addr) {
       const provisioned = await ensureTravelerWallet({ userId: trip.traveler.id });
       addr = provisioned?.address;
@@ -128,7 +145,15 @@ export async function loadStampContext(args: {
       ? (args.bookingId as string)
       : trip.id;
 
-  return { kind: args.kind, tenant, trip: tripCtx, booking, travelers, primaryKey };
+  return {
+    kind: args.kind,
+    tenant,
+    trip: tripCtx,
+    booking,
+    travelers,
+    primaryKey,
+    chain: primaryChain,
+  };
 }
 
 function projectBooking(row: {

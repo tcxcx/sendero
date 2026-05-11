@@ -1,33 +1,49 @@
-import crypto from 'node:crypto';
-
-import { z } from 'zod';
+import { queryUnifiedBalance } from '@sendero/circle/gateway';
+import { type MeterPayerType, type Prisma, prisma } from '@sendero/database';
 import {
   createHoldOrder,
+  type DuffelAirlineCreditId,
+  type DuffelPassengerIdentityDocument,
+  type DuffelPaymentInput,
   getAirlineCredit,
   getOfferOriginDestinationIso2,
   getOrder,
   payFromBalance,
   payOrder,
   projectFlightSegmentsFromPayload,
-  type DuffelAirlineCreditId,
-  type DuffelPaymentInput,
-  type DuffelPassengerIdentityDocument,
 } from '@sendero/duffel';
-import type { ToolDef, ToolContext } from './types';
-import { ensureFlightCustomer } from './ensure-flight-customer';
-import { ensureTravelerWallet } from './ensure-traveler-wallet';
-import { type Prisma, prisma, type MeterPayerType } from '@sendero/database';
 import { iso3to2 as locationIso3to2 } from '@sendero/location/iso';
 import { decryptVaultPayload } from '@sendero/vault';
-import { queryUnifiedBalance } from '@sendero/circle/gateway';
-import { getOrCreateGatewaySigner, getUserGatewaySigner } from '@sendero/circle/gateway-signer';
+import type { Address } from 'viem';
+import { z } from 'zod';
+
+import { ensureFlightCustomer } from './ensure-flight-customer';
+import { ensureTravelerWallet } from './ensure-traveler-wallet';
 import { resolvePayer } from './lib/resolve-payer';
 import {
   mergeServices,
-  readPendingAncillaries,
   type PendingFlightAncillaries,
+  readPendingAncillaries,
 } from './lib/trip-ancillaries';
-import type { Address } from 'viem';
+import type { ToolContext, ToolDef } from './types';
+import crypto from 'node:crypto';
+import { appendFileSync } from 'node:fs';
+
+// DEV-ONLY debug sink: book_flight has TWO silent-failure paths
+// (`usdc settlement failed (non-fatal)` and `booking persistence failed
+// (non-fatal)`) that print warns to stdout. The Ponder indexer dumps
+// thousands of lines into the same dev terminal, drowning these out.
+// Writing to a stable file lets us tail it cleanly during dogfooding.
+// Guarded so it can never run in production.
+function debugAppend(label: string, payload: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === 'production') return;
+  try {
+    const line = `${new Date().toISOString()} ${label} ${JSON.stringify(payload)}\n`;
+    appendFileSync('/tmp/sendero-book-flight.log', line);
+  } catch {
+    /* never block book_flight on a debug-sink error */
+  }
+}
 
 const serviceSchema = z.object({
   id: z.string().min(1),
@@ -77,6 +93,12 @@ const inputSchema = z.object({
   provisionedBy: z.enum(['tenant', 'traveler']).optional(),
   /** Optional Trip.id for payer resolution. */
   tripId: z.string().optional(),
+  /**
+   * Literal traveler confirmation text from the current channel turn.
+   * Required on WhatsApp for ticketing. "confirmar hold" is not a
+   * ticketing confirmation; the phrase must mention the charged amount.
+   */
+  confirmationText: z.string().optional(),
 });
 
 type BookFlightInput = z.infer<typeof inputSchema>;
@@ -129,9 +151,19 @@ export const bookFlightTool: ToolDef = {
         type: 'string',
         description: 'Optional Trip.id for payer resolution.',
       },
+      confirmationText: {
+        type: 'string',
+        description:
+          'Literal in-this-turn traveler confirmation. WhatsApp ticketing requires a phrase like "Confirmar ticketing 140 USDC"; hold-only language is rejected.',
+      },
     },
   },
   async handler(input: BookFlightInput, ctx?: ToolContext) {
+    const whatsappTicketingGate = validateWhatsAppTicketingConfirmation(input, ctx);
+    if (whatsappTicketingGate.ok === false) {
+      return whatsappTicketingGate.response;
+    }
+
     // Hard gate — `travelerPhone` MUST be passed on the proxy so we can
     // resolve a real Sendero User. Without it, `ctx.traveler.userId`
     // falls through to a `svc:<keyId>` service-account placeholder and
@@ -571,6 +603,17 @@ export const bookFlightTool: ToolDef = {
             `Hold *${hold.bookingReference}* is good for ~30 minutes — reply "confirm" once you've topped up.`,
         };
       }
+      if (ctx?.traveler?.tenantId) {
+        const { resolveTenantPlatformTreasury } = await import('./platform-treasury');
+        const destination = await resolveTenantPlatformTreasury(ctx.traveler.tenantId);
+        if (!destination) {
+          return {
+            status: 'settlement_destination_missing',
+            message:
+              'Cannot ticket this flight yet — this tenant has no live platform treasury destination for its primary chain, so the traveler wallet cannot be debited safely. Configure the treasury destination and retry.',
+          };
+        }
+      }
     }
 
     let paymentStatus: string;
@@ -665,9 +708,20 @@ export const bookFlightTool: ToolDef = {
           amountUsdc: hold.totalAmount,
         });
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errStack = err instanceof Error ? err.stack : undefined;
         console.warn('[book_flight] usdc settlement failed (non-fatal)', {
           orderId: hold.orderId,
-          error: err instanceof Error ? err.message : String(err),
+          error: errMsg,
+        });
+        debugAppend('[settle-failed]', {
+          orderId: hold.orderId,
+          travelerUserId: travelerUserRowId,
+          tenantId: ctx?.traveler?.tenantId,
+          amount: hold.totalAmount,
+          currency: hold.totalCurrency,
+          error: errMsg,
+          stack: errStack,
         });
       }
     }
@@ -705,9 +759,21 @@ export const bookFlightTool: ToolDef = {
         persistedBookingId = persisted.bookingId;
         persistedTripId = persisted.tripId;
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errStack = err instanceof Error ? err.stack : undefined;
         console.warn('[book_flight] booking persistence failed (non-fatal)', {
           orderId: hold.orderId,
-          error: err instanceof Error ? err.message : String(err),
+          error: errMsg,
+        });
+        debugAppend('[persist-failed]', {
+          orderId: hold.orderId,
+          travelerUserId: travelerUserRowId,
+          tenantId: ctx?.traveler?.tenantId,
+          pnr: hold.bookingReference,
+          amount: hold.totalAmount,
+          currency: hold.totalCurrency,
+          error: errMsg,
+          stack: errStack,
         });
       }
     }
@@ -864,6 +930,68 @@ export const bookFlightTool: ToolDef = {
     };
   },
 };
+
+function validateWhatsAppTicketingConfirmation(
+  input: BookFlightInput,
+  ctx?: ToolContext
+):
+  | { ok: true }
+  | {
+      ok: false;
+      response: {
+        status: 'ticketing_confirmation_required';
+        message: string;
+        requiredPhrase: string;
+      };
+    } {
+  // Only the WhatsApp runtime has shown ambiguity between hold-only
+  // language and ticketing confirmation. In-app/operator flows keep
+  // their existing confirmation gates.
+  if (!ctx?.traveler?.phone) return { ok: true };
+
+  const confirmation = input.confirmationText?.trim() ?? '';
+  const normalized = confirmation.toLowerCase();
+  const hasHoldOnlyLanguage =
+    /\b(hold|hold-only|solo hold|sin cobro|no cobres|no cobrar|no ticket|no ticketing|sin ticket|solo reserva)\b/i.test(
+      confirmation
+    );
+  const mentionsMoney = /(?:\b\d+(?:[.,]\d{1,2})?\s*(?:usd|usdc)\b|\$\s*\d+(?:[.,]\d{1,2})?)/i.test(
+    confirmation
+  );
+  const confirmsTicketing =
+    /\b(confirmar|confirmo|confirm|ticketing|emitir|emiti|book|comprar|pagar)\b/i.test(
+      confirmation
+    );
+
+  if (!confirmation || hasHoldOnlyLanguage || !mentionsMoney || !confirmsTicketing) {
+    return {
+      ok: false,
+      response: {
+        status: 'ticketing_confirmation_required',
+        requiredPhrase: 'Confirmar ticketing <amount> USDC',
+        message:
+          'I will not ticket this flight from hold-only language. Ask the traveler to reply with “Confirmar ticketing <amount> USDC” before calling book_flight.',
+      },
+    };
+  }
+
+  // Prevent a model from stuffing a stale confirm-card label while the
+  // current user text was "confirmar hold"; the caller must pass the
+  // literal current-turn confirmation.
+  if (normalized.includes('confirmar hold') || normalized.includes('confirm hold')) {
+    return {
+      ok: false,
+      response: {
+        status: 'ticketing_confirmation_required',
+        requiredPhrase: 'Confirmar ticketing <amount> USDC',
+        message:
+          '“Confirmar hold” is a hold-only instruction, not permission to ticket or debit a wallet.',
+      },
+    };
+  }
+
+  return { ok: true };
+}
 
 /**
  * Create the Trip + Booking rows so the post-ticketing fan-out has an
@@ -1038,7 +1166,7 @@ async function loadIdentityDocumentFromVault(args: {
 
 function pickOutboundDestinationIata(
   segments: import('@sendero/duffel').NormalizedFlightSegment[],
-  originIata: string | null,
+  _originIata: string | null,
   fallback: string | null
 ): string | null {
   if (!Array.isArray(segments) || segments.length === 0) return fallback;
@@ -1107,13 +1235,28 @@ async function persistBookingAndTrip(args: {
     args.destinationIata
   );
 
+  // Phase E — derive originIso2 + destinationIso2 from segments first,
+  // falling back to the IATA→country table for codes Duffel didn't
+  // stamp. Single source: `@sendero/tools/lib/derive-route-countries`.
+  // The map UI + downstream surfaces consume these directly.
+  const { deriveRouteCountries } = await import('./lib/derive-route-countries');
+  const derivedRoute = deriveRouteCountries({ segments: args.segments });
+
   const tripIntent: Record<string, unknown> = {
     source: 'book_flight',
     duffelOrderId: args.duffelOrderId,
   };
   if (args.originIata) tripIntent.origin = args.originIata;
   if (outboundDestinationIata) tripIntent.destination = outboundDestinationIata;
-  if (args.destinationIso2.length > 0) tripIntent.destinationIso2 = args.destinationIso2;
+  if (derivedRoute.originCountry) tripIntent.originIso2 = derivedRoute.originCountry;
+  // destinationIso2 stays an array shape (matches existing readers); when
+  // the projector left it empty, swap in the derived value as a single-
+  // element array so map UI + get_active_trip pick it up.
+  if (args.destinationIso2.length > 0) {
+    tripIntent.destinationIso2 = args.destinationIso2;
+  } else if (derivedRoute.destinationCountry) {
+    tripIntent.destinationIso2 = [derivedRoute.destinationCountry];
+  }
   if (args.startDate) tripIntent.startDate = args.startDate;
   if (args.endDate) tripIntent.endDate = args.endDate;
 
@@ -1130,6 +1273,10 @@ async function persistBookingAndTrip(args: {
           // (confirm_booking, settlement, refund) sees the same value
           // without re-deriving from override/tenant default.
           paymentMode: args.provisionedBy,
+          ...(derivedRoute.originCountry ? { originCountry: derivedRoute.originCountry } : {}),
+          ...(derivedRoute.destinationCountry
+            ? { destinationCountry: derivedRoute.destinationCountry }
+            : {}),
         },
         select: { id: true },
       })
@@ -1147,6 +1294,8 @@ async function persistBookingAndTrip(args: {
       await prisma.$executeRaw`
         UPDATE "trips"
         SET intent = COALESCE(intent, '{}'::jsonb) || ${JSON.stringify(tripIntent)}::jsonb,
+            "originCountry" = COALESCE("originCountry", ${derivedRoute.originCountry}),
+            "destinationCountry" = COALESCE("destinationCountry", ${derivedRoute.destinationCountry}),
             "updatedAt" = NOW()
         WHERE id = ${existingTrip.id}
           AND "tenantId" = ${args.tenantId}
@@ -1183,6 +1332,27 @@ async function persistBookingAndTrip(args: {
     });
   }
 
+  // Phase E — backfill any missing originCountry/destinationCountry
+  // per segment via the IATA→country fallback. Duffel populates these
+  // via `iata_country_code` when present, but charter/regional codes
+  // sometimes omit it; we want every persisted segment to have country
+  // metadata so the map + get_active_trip can resolve unconditionally.
+  const { deriveCountriesFromSegment } = await import('./lib/derive-route-countries');
+  const enrichedSegments = args.segments.map(seg => {
+    const derived = deriveCountriesFromSegment(seg);
+    if (
+      (seg.originCountry && seg.destinationCountry) ||
+      (!derived.originCountry && !derived.destinationCountry)
+    ) {
+      return seg;
+    }
+    return {
+      ...seg,
+      originCountry: seg.originCountry ?? derived.originCountry,
+      destinationCountry: seg.destinationCountry ?? derived.destinationCountry,
+    };
+  });
+
   const booking = await prisma.booking.create({
     data: {
       tenantId: args.tenantId,
@@ -1196,10 +1366,14 @@ async function persistBookingAndTrip(args: {
       bookedAt: new Date(),
       provisionedBy: args.provisionedBy,
       ...(eTicketUrl ? { eTicketDocumentUrl: eTicketUrl, eTicketIssuedAt: new Date() } : {}),
+      ...(derivedRoute.originCountry ? { originCountry: derivedRoute.originCountry } : {}),
+      ...(derivedRoute.destinationCountry
+        ? { destinationCountry: derivedRoute.destinationCountry }
+        : {}),
       // Normalized itinerary projection. `get_active_trip` and the
       // post-mint stamp prompts read this; rawDuffel is kept as
       // audit + fallback parsing surface.
-      segments: args.segments as unknown as Prisma.InputJsonValue,
+      segments: enrichedSegments as unknown as Prisma.InputJsonValue,
       ...(args.rawDuffel ? { rawDuffel: args.rawDuffel as unknown as Prisma.InputJsonValue } : {}),
       metadata: {
         paymentStatus: args.paymentStatus,
@@ -1573,53 +1747,235 @@ async function settleTravelerUsdcToTreasury(args: {
   // carve belongs on the tenant-markup leg in v2.
 
   const SOL_DEVNET_CHAIN_ID = 5;
-  const evmDcw = await prisma.wallet.findFirst({
+
+  // Resolve tenant.primaryChain — flips DCW selection + Gateway
+  // toChainKey + treasury destination to the matching chain in lockstep.
+  // Defaults to 'arc' when the tenant row is missing primaryChain
+  // (legacy rows pre-Phase H Solana parity).
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: args.tenantId },
+    select: { primaryChain: true },
+  });
+  const primaryChain: 'arc' | 'sol' =
+    (tenant as { primaryChain?: string | null } | null)?.primaryChain === 'sol' ? 'sol' : 'arc';
+
+  // Phase H+ multi-source settle: gather EVERY DCW the traveler has and
+  // pass each as a Gateway source. Without this, a Sol-primaryChain
+  // tenant whose traveler holds USDC only on Arc gets
+  // `BALANCE_INSUFFICIENT_TOKEN` from Circle App Kit's
+  // `assertFullyAllocated` (Gateway can't auto-allocate across chains
+  // it wasn't given sources for). With it, Gateway burns from any
+  // source chain with balance and mints on `toChainKey` via CCTP.
+  const dcws = await prisma.wallet.findMany({
     where: {
       userId: args.travelerUserId,
       provisioner: 'dcw',
-      NOT: { chainId: SOL_DEVNET_CHAIN_ID },
     },
     orderBy: { createdAt: 'asc' },
-    select: { address: true },
+    select: { address: true, chainId: true },
   });
-  if (!evmDcw?.address) return null;
-
-  const senderoRecipient = process.env.TREASURY_VIEM_ADDRESS;
-  if (!senderoRecipient) {
-    console.warn(
-      '[book_flight] TREASURY_VIEM_ADDRESS unset — refusing to settle (would lose money)'
-    );
-    return null;
-  }
+  if (dcws.length === 0) return null;
 
   // Lazy import avoids pulling the full unified-gateway module into
   // the cold path of every book_flight invocation that doesn't end up
   // settling (insufficient_funds, tenant_pay_unsupported, etc.).
   const { circleWalletsPrincipal, spend } = await import('@sendero/circle');
 
-  const principal = circleWalletsPrincipal({
-    address: evmDcw.address,
-    label: `traveler:${args.travelerUserId}:settle`,
-  });
-  if (!principal) return null;
+  const toChainKey = primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
 
-  console.log('[book_flight] settling (cost-reimbursement to Sendero)', {
+  // Destination resolution. Two distinct paths:
+  //
+  // 1) Arc primaryChain — use the SuperOrgTreasury vault address as
+  //    `recipient` directly. App Kit's first source (an EVM viem-
+  //    adapter principal) supplies both the burn AND mint signing
+  //    contexts since both chains share EVM signing. Same logic as
+  //    pre-Phase H.
+  //
+  // 2) Sol primaryChain — Circle App Kit's Sol Gateway program checks
+  //    that the signing DCW context OWNS the destination ATA (Anchor
+  //    error 6027 InvalidDestinationTokenAccount when it doesn't).
+  //    Squads vault PDAs are off-curve and can't own a DCW-signable
+  //    ATA in the App Kit pattern. The working pattern (see
+  //    `spendTenantUnifiedUsd` in `packages/circle/src/unified-balance.ts`):
+  //    bind `toAdapter` + `toAccount` to the tenant's Sol DCW (Circle-
+  //    managed, signs `gatewayMint`, owns its own ATA) and set
+  //    `recipient` to that SAME DCW. The DCW's adapter is `circle-
+  //    wallets` — App Kit's destination address-resolution skips the
+  //    viem chain-lookup that breaks on `solana-kit` adapters.
+  //
+  //    Funds land in the tenant Sol DCW; a separate sweep (off-cycle,
+  //    batched) moves DCW → multisig vault PDA. The SuperOrgTreasury
+  //    row's vaultAddress is preserved as the eventual destination
+  //    but isn't the immediate spend recipient.
+  const { resolvePlatformTreasuryDestination } = await import('./platform-treasury');
+  const senderoTreasury = await resolvePlatformTreasuryDestination(primaryChain);
+  if (!senderoTreasury) {
+    console.warn(
+      `[book_flight] no live ${primaryChain.toUpperCase()} SuperOrgTreasury — refusing to settle traveler reimbursement`
+    );
+    return null;
+  }
+
+  // Sol primaryChain note (architectural constraint): Circle App Kit's
+  // `gatewayMint` Anchor program (`gateway.v1.gatewayMint`) requires
+  // the signing DCW context to OWN the destination ATA. Setting
+  // `recipient = SuperOrgTreasury.vaultAddress` directly (e.g. an
+  // approver wallet, Squads vault PDA, or pre-derived multisig ATA)
+  // when `toAccount = tenant ops DCW` trips `AnchorError 6027:
+  // InvalidDestinationTokenAccount`. Verified in dogfood — the
+  // comment in `unified-balance.ts:366-368` about "external recipient
+  // fallback" doesn't hold on the Sol side. So for Sol we land funds
+  // in the tenant ops DCW (which the signer owns), THEN do a Circle
+  // DCW SPL transfer downstream to push them to the configured
+  // platform treasury. The sweep is wired below; if it fails the
+  // funds are still recoverable from the DCW.
+  let recipient: string;
+  let toAdapter: Awaited<ReturnType<typeof circleWalletsPrincipal>>['adapter'] | undefined;
+  let toAccount: string | undefined;
+  let solSweepDestination: string | null = null;
+  let solSweepWalletId: string | null = null;
+  if (primaryChain === 'sol') {
+    const tenantSolDcw = await prisma.circleWallet.findFirst({
+      where: { tenantId: args.tenantId, chain: 'SOL-DEVNET', kind: 'operations' },
+      select: { address: true, circleWalletId: true },
+    });
+    if (!tenantSolDcw?.address) {
+      console.warn(
+        '[book_flight] Sol-primaryChain settle: no tenant Sol operations DCW — provision one before settling'
+      );
+      return null;
+    }
+    const destPrincipal = circleWalletsPrincipal({
+      address: tenantSolDcw.address,
+      label: `tenant:${args.tenantId}:settle-dest:sol`,
+    });
+    if (!destPrincipal) return null;
+    recipient = tenantSolDcw.address;
+    toAdapter = destPrincipal.adapter;
+    toAccount = tenantSolDcw.address;
+    // Defer the sweep to AFTER spend() succeeds. Capture both the
+    // configured destination (vaultAddress) and the source walletId
+    // (Circle's internal DCW id we'll need to call createTransaction).
+    if (senderoTreasury.address !== tenantSolDcw.address) {
+      solSweepDestination = senderoTreasury.address;
+      solSweepWalletId = tenantSolDcw.circleWalletId ?? null;
+    }
+  } else {
+    recipient = senderoTreasury.address;
+  }
+
+  // Build sources. Only the traveler's DCWs that can actually sign
+  // their chain's burns get included. Circle DCW EVM principals
+  // implement what App Kit needs for EVM burns (viem adapter — full
+  // `signMessage` support). Sol DCWs do NOT implement `signMessages`
+  // for raw burn-intent signing, so including the traveler's Sol DCW
+  // as a source would abort App Kit with "Signer does not support
+  // any known signing method" if it ever tried to allocate from Sol.
+  // We deliberately exclude the Sol DCW from sources — the traveler's
+  // Arc balance is the burn pool, and Gateway burns from there + mints
+  // on Sol via CCTP.
+  const seenAddrs = new Set<string>();
+  const sources: Array<{ principal: ReturnType<typeof circleWalletsPrincipal> }> = [];
+  for (const w of dcws) {
+    if (!w.address || seenAddrs.has(w.address)) continue;
+    if (primaryChain === 'sol' && w.chainId === SOL_DEVNET_CHAIN_ID) continue;
+    seenAddrs.add(w.address);
+    const p = circleWalletsPrincipal({
+      address: w.address,
+      label: `traveler:${args.travelerUserId}:settle:chain${w.chainId}`,
+    });
+    if (p) sources.push({ principal: p });
+  }
+  if (sources.length === 0) return null;
+
+  console.log('[book_flight] settling (cost-reimbursement to Sendero, multi-source)', {
     tenantId: args.tenantId,
     travelerUserId: args.travelerUserId,
     amountUsdc: args.amountUsdc,
-    recipient: senderoRecipient,
-    note: 'tenant markup share is Phase H v2 — not wired yet',
+    primaryChain,
+    toChainKey,
+    sourceAddresses: Array.from(seenAddrs),
+    sourceCount: sources.length,
+    recipient,
+    toAccount: toAccount ?? '(fallback to first source)',
+    note:
+      primaryChain === 'sol'
+        ? 'sol destination: funds land in tenant Sol operations DCW. Separate sweep cron moves DCW → Squads vault PDA — TODO. Tenant markup share is Phase H v2.'
+        : 'tenant markup share is Phase H v2 — not wired yet',
   });
 
+  // `useForwarder: false` for Sol destinations (Circle's Forwarding
+  // Service doesn't support Solana as a destination today). For Arc
+  // we leave the flag unset; App Kit's default behavior signs the
+  // mint locally via the first source's adapter.
   const result = await spend({
-    sources: [{ principal }],
-    toChainKey: 'Arc_Testnet',
-    recipient: senderoRecipient,
+    sources,
+    toChainKey,
+    recipient,
+    ...(toAdapter ? { toAdapter } : {}),
+    ...(toAccount ? { toAccount } : {}),
+    ...(primaryChain === 'sol' ? { useForwarder: false } : {}),
     amount: args.amountUsdc,
   });
 
+  const explorerFallback =
+    primaryChain === 'sol'
+      ? `https://solscan.io/tx/${result.txHash}?cluster=devnet`
+      : `https://testnet.arcscan.app/tx/${result.txHash}`;
+
+  // Sol primaryChain second leg: sweep from tenant Sol operations DCW
+  // to the configured platform treasury address. Fire-and-forget at
+  // the typing level — if this fails the funds are still safe in the
+  // DCW and a periodic sweep cron picks them up. We still await so
+  // the response can carry the sweep tx hash when it lands first
+  // turn.
+  if (primaryChain === 'sol' && solSweepDestination && solSweepWalletId) {
+    try {
+      const { transferUsdcFromCircleWallet, resolveUsdcTokenId } = await import(
+        '@sendero/circle/dcw-transfer'
+      );
+      const sweep = await transferUsdcFromCircleWallet({
+        walletId: solSweepWalletId,
+        destinationAddress: solSweepDestination,
+        amount: args.amountUsdc,
+        tokenId: resolveUsdcTokenId('sol-devnet'),
+        refId: `book_flight:settle:${args.tenantId}:${Date.now()}`,
+      });
+      console.log('[book_flight] sol settle sweep kicked off', {
+        sweepTransactionId: sweep.transactionId,
+        sweepState: sweep.state,
+        from: toAccount,
+        to: solSweepDestination,
+        amount: args.amountUsdc,
+      });
+      debugAppend('[sweep-kicked]', {
+        sweepTransactionId: sweep.transactionId,
+        sweepState: sweep.state,
+        from: toAccount,
+        to: solSweepDestination,
+        amount: args.amountUsdc,
+        gatewayTxHash: result.txHash,
+      });
+    } catch (sweepErr) {
+      console.warn('[book_flight] sol settle sweep failed (non-fatal — funds in tenant DCW)', {
+        error: sweepErr instanceof Error ? sweepErr.message : String(sweepErr),
+        from: toAccount,
+        to: solSweepDestination,
+        amount: args.amountUsdc,
+      });
+      debugAppend('[sweep-failed]', {
+        error: sweepErr instanceof Error ? sweepErr.message : String(sweepErr),
+        stack: sweepErr instanceof Error ? sweepErr.stack : undefined,
+        from: toAccount,
+        to: solSweepDestination,
+        amount: args.amountUsdc,
+        gatewayTxHash: result.txHash,
+      });
+    }
+  }
+
   return {
     settlementTxHash: result.txHash,
-    explorerUrl: result.explorerUrl ?? `https://testnet.arcscan.app/tx/${result.txHash}`,
+    explorerUrl: result.explorerUrl ?? explorerFallback,
   };
 }

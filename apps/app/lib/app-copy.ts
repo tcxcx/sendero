@@ -196,7 +196,7 @@ const EN_US: AppCopy = {
     hero: {
       eyebrow: 'Agentic Travel OS',
       title: 'Run every trip from one Agentic workspace.',
-      body: 'Sendero is the product console for agent-native travel: launch prepaid traveler links, connect WhatsApp or Slack channels, let other LLMs call MCP tools, watch trip state, issue invoices, and settle metered actions in USDC on Arc.',
+      body: 'Sendero is the product console for agent-native travel: launch prepaid traveler links, connect WhatsApp or Slack channels, let other LLMs call MCP tools, watch trip state, issue invoices, and settle metered actions in USDC on Arc or Solana.',
       primaryCta: { label: 'Request access', href: '/waitlist' },
       secondaryCta: { label: 'Read llms.txt', href: '/llms.txt' },
       channels: ['WhatsApp', 'Web', 'Slack', 'Teams', 'MCP', 'API'],
@@ -232,7 +232,7 @@ const EN_US: AppCopy = {
         step: '04',
         label: 'Hold, pay, confirm',
         detail:
-          'The agent holds the itinerary, spends from escrow or card rails, settles on Arc, and records the booking.',
+          'The agent holds the itinerary, spends from escrow or card rails, settles on the tenant’s chain (Arc or Solana), and records the booking.',
         stamp: '/brand/icons/11-ticket.png',
       },
       {
@@ -527,7 +527,7 @@ const ES_MX: AppCopy = {
       ...EN_US.home.hero,
       eyebrow: 'Operaciones de viaje agentic',
       title: 'Opera cada viaje desde un solo workspace de agente.',
-      body: 'Sendero es la consola de producto para viajes agent-native: crea links prepagados para viajeros, conecta WhatsApp o Slack, permite que otros LLMs llamen herramientas MCP, monitorea viajes, emite facturas y liquida acciones en USDC sobre Arc.',
+      body: 'Sendero es la consola de producto para viajes agent-native: crea links prepagados para viajeros, conecta WhatsApp o Slack, permite que otros LLMs llamen herramientas MCP, monitorea viajes, emite facturas y liquida acciones en USDC sobre Arc o Solana.',
       primaryCta: { label: 'Solicitar acceso', href: '/waitlist' },
       secondaryCta: { label: 'Leer llms.txt', href: '/llms.txt' },
     },
@@ -554,7 +554,7 @@ const ES_MX: AppCopy = {
         ...EN_US.home.agentLoop[3],
         label: 'Retener, pagar, confirmar',
         detail:
-          'El agente retiene el itinerario, gasta desde escrow o tarjeta, liquida en Arc y registra la reserva.',
+          'El agente retiene el itinerario, gasta desde escrow o tarjeta, liquida en Arc o Solana y registra la reserva.',
       },
       {
         ...EN_US.home.agentLoop[4],
@@ -821,7 +821,7 @@ const ES_AR: AppCopy = {
     nav: { llms: 'llms.txt', signIn: 'Entrar', requestAccess: 'Pedir acceso' },
     hero: {
       ...ES_MX.home.hero,
-      body: 'Sendero es la consola de producto para viajes agent-native: lanzá links prepagados para viajeros, conectá WhatsApp o Slack, dejá que otros LLMs llamen herramientas MCP, mirá el estado del viaje, emití facturas y liquidá acciones en USDC sobre Arc.',
+      body: 'Sendero es la consola de producto para viajes agent-native: lanzá links prepagados para viajeros, conectá WhatsApp o Slack, dejá que otros LLMs llamen herramientas MCP, mirá el estado del viaje, emití facturas y liquidá acciones en USDC sobre Arc o Solana.',
       primaryCta: { label: 'Pedir acceso', href: '/waitlist' },
     },
     agentLoopEyebrow: 'Loop de agente en vivo',
@@ -868,7 +868,7 @@ const PT_BR: AppCopy = {
       ...EN_US.home.hero,
       eyebrow: 'Operações de viagem agentic',
       title: 'Opere cada viagem em um único workspace de agente.',
-      body: 'A Sendero é a console de produto para viagens agent-native: lance links pré-pagos para viajantes, conecte WhatsApp ou Slack, permita que outros LLMs chamem ferramentas MCP, acompanhe viagens, emita notas e liquide ações em USDC na Arc.',
+      body: 'A Sendero é a console de produto para viagens agent-native: lance links pré-pagos para viajantes, conecte WhatsApp ou Slack, permita que outros LLMs chamem ferramentas MCP, acompanhe viagens, emita notas e liquide ações em USDC na Arc ou Solana.',
       primaryCta: { label: 'Solicitar acesso', href: '/waitlist' },
       secondaryCta: { label: 'Ler llms.txt', href: '/llms.txt' },
     },
@@ -895,7 +895,7 @@ const PT_BR: AppCopy = {
         ...EN_US.home.agentLoop[3],
         label: 'Reter, pagar, confirmar',
         detail:
-          'O agente segura o itinerário, gasta do escrow ou cartão, liquida na Arc e registra a reserva.',
+          'O agente segura o itinerário, gasta do escrow ou cartão, liquida na Arc ou Solana e registra a reserva.',
       },
       {
         ...EN_US.home.agentLoop[4],
