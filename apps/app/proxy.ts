@@ -158,9 +158,13 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   const { isAuthenticated, sessionClaims, orgId } = await auth();
 
   if (!isAuthenticated) {
-    const signInUrl = new URL('/sign-in', req.url);
-    signInUrl.searchParams.set('redirect_url', req.url);
-    return applyLocaleCookie(NextResponse.redirect(signInUrl), locale);
+    // !auth guard — dump unauthenticated users at marketing root '/'
+    // (which is on the marketing site and has its own sign-in CTAs)
+    // instead of /sign-in. Keeps anyone who hits a protected URL
+    // without a session from getting trapped between /sign-in and a
+    // server redirect chain. /sign-in itself is still in
+    // `isPublicRoute` so explicit sign-in clicks still work.
+    return applyLocaleCookie(NextResponse.redirect(new URL('/', req.url)), locale);
   }
 
   // Traveler-kind users (B2C) — confined to `/me/*`. Block them from
