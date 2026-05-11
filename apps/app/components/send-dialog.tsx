@@ -78,8 +78,7 @@ function trimUsdcDecimal(value: string): string {
 
 export function SendDialog() {
   const tenantChain = useSendero(s => s.userAuth?.chain);
-  const defaultChain: DestinationChainId =
-    tenantChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
+  const defaultChain: DestinationChainId = tenantChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
 
   const [send, setSend] = useQueryState('send');
   const [to, setTo] = useQueryState('sendTo', { defaultValue: '' });
@@ -188,8 +187,8 @@ export function SendDialog() {
   return (
     <DialogShell open={open} title="Send" subtitle="Unified Balance" onClose={close}>
       <p className="dlg-sub">
-        Send USDC from your unified balance. App Kit pulls liquidity from any chain in your
-        Gateway pool (Arc, Sol, every EVM bridge chain) and mints on the destination.
+        Send USDC from your unified balance. App Kit pulls liquidity from any chain in your Gateway
+        pool (Arc, Sol, every EVM bridge chain) and mints on the destination.
       </p>
 
       {balanceError && <div className="snd-balance-error">{balanceError}</div>}

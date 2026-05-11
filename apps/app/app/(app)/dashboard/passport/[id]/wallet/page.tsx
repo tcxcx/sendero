@@ -129,7 +129,9 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
             className="sd-card-flat"
             style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
           >
-            <div className="t-meta">DCW · {wallet.chainId === 5 ? 'Solana Devnet' : 'Arc Testnet'}</div>
+            <div className="t-meta">
+              DCW · {wallet.chainId === 5 ? 'Solana Devnet' : 'Arc Testnet'}
+            </div>
             <div className="t-mono ink-70" style={{ fontSize: 12, marginTop: 4 }}>
               {wallet.address}
             </div>

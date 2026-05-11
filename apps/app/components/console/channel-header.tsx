@@ -50,13 +50,7 @@ function writeCookie(name: string, value: string, days = 365) {
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${exp}; path=/; SameSite=Lax`;
 }
 
-export function ChannelHeader({
-  channel,
-  traveler,
-  tripId,
-  channels,
-  hold,
-}: ChannelHeaderProps) {
+export function ChannelHeader({ channel, traveler, tripId, channels, hold }: ChannelHeaderProps) {
   const c = CHANNELS[channel];
   const [internalNoticeOpen, setInternalNoticeOpen] = useState(false);
   // Hydrate the cookie on mount. SSR renders nothing for the notice
@@ -207,11 +201,7 @@ export function ChannelHeader({
             {traveler ?? 'Traveler'}
           </span>
           {tripId ? (
-            <span
-              className="t-mono ink-60"
-              style={{ fontSize: 10 }}
-              title={tripId}
-            >
+            <span className="t-mono ink-60" style={{ fontSize: 10 }} title={tripId}>
               {shortId(tripId)}
             </span>
           ) : null}

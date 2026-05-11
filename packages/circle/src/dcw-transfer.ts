@@ -36,9 +36,7 @@ import { getCircle } from './wallets';
  */
 export function resolveUsdcTokenId(network: 'sol-devnet' | 'sol-mainnet'): string {
   const envName =
-    network === 'sol-mainnet'
-      ? 'CIRCLE_USDC_SOL_TOKEN_ID'
-      : 'CIRCLE_USDC_SOL_DEVNET_TOKEN_ID';
+    network === 'sol-mainnet' ? 'CIRCLE_USDC_SOL_TOKEN_ID' : 'CIRCLE_USDC_SOL_DEVNET_TOKEN_ID';
   const value = process.env[envName];
   if (!value) {
     throw new Error(

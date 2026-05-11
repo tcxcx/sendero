@@ -72,7 +72,8 @@ function firstString(...values) {
 
 function resolvePhoneNumberId(raw, body) {
   const context = raw?.execution_context?.context || raw?.input?.execution_context?.context || {};
-  const conversation = raw?.whatsapp_context?.conversation || raw?.input?.whatsapp_context?.conversation || {};
+  const conversation =
+    raw?.whatsapp_context?.conversation || raw?.input?.whatsapp_context?.conversation || {};
   const input = body?.input || {};
   return firstString(
     body?.phoneNumberId,
@@ -108,9 +109,8 @@ async function handler(request, env) {
   // `flow_info` block (see: agent_tool_called event payload). The
   // agent's own input lives one level down. Tolerate both shapes so
   // a direct invoke (testing) and a real Kapso call both work.
-  const body = raw && typeof raw === 'object' && raw.input && typeof raw.input === 'object'
-    ? raw.input
-    : raw;
+  const body =
+    raw && typeof raw === 'object' && raw.input && typeof raw.input === 'object' ? raw.input : raw;
 
   const toolName = typeof body?.toolName === 'string' ? body.toolName.trim() : '';
   if (!toolName) {

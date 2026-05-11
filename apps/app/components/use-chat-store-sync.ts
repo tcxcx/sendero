@@ -224,8 +224,7 @@ export function useChatStoreSync(messages: readonly unknown[]) {
             (output.txHash || output.state)
           ) {
             refreshTreasury();
-            const group =
-              toolName === 'send_tokens' ? 'treasury.send' : 'treasury.bridge';
+            const group = toolName === 'send_tokens' ? 'treasury.send' : 'treasury.bridge';
             s.updateLastEvent(group, { bullet: 'done' });
             s.logEvent({
               group,

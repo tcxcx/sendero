@@ -109,8 +109,7 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
   }
 
   const fundDisabled = phase === 'submitting';
-  const fundLabel =
-    phase === 'submitting' ? 'Funding on-chain…' : 'Fund with Sendero';
+  const fundLabel = phase === 'submitting' ? 'Funding on-chain…' : 'Fund with Sendero';
 
   return (
     <div className="flex flex-col gap-4 py-4">

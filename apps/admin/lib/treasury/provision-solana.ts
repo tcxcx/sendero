@@ -154,9 +154,7 @@ export async function provisionSolanaMultisig(
     })),
     {
       key: creator.publicKey,
-      permissions: multisig.types.Permissions.fromPermissions([
-        multisig.types.Permission.Vote,
-      ]),
+      permissions: multisig.types.Permissions.fromPermissions([multisig.types.Permission.Vote]),
     },
   ];
 

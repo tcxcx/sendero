@@ -14,11 +14,7 @@
  */
 
 import { executeContractCallFromDcw } from '@sendero/circle/contract-execution';
-import {
-  buildClaimCodePreimage,
-  encodeClaimTrip,
-  signClaim,
-} from '@sendero/guest';
+import { buildClaimCodePreimage, encodeClaimTrip, signClaim } from '@sendero/guest';
 import type { Address, Hex } from 'viem';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
@@ -55,9 +51,7 @@ export interface SubmitArcClaimResult {
   guestWallet: Address;
 }
 
-export async function submitArcClaim(
-  args: SubmitArcClaimArgs
-): Promise<SubmitArcClaimResult> {
+export async function submitArcClaim(args: SubmitArcClaimArgs): Promise<SubmitArcClaimResult> {
   const chainId = args.chainId ?? ARC_TESTNET_CHAIN_ID;
 
   const signature = await signClaim({

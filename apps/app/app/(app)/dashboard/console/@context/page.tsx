@@ -23,7 +23,10 @@
 
 import { prisma } from '@sendero/database';
 
-import { ConsoleRightPanel, type WorkspacePulseData } from '@/components/console/console-right-panel';
+import {
+  ConsoleRightPanel,
+  type WorkspacePulseData,
+} from '@/components/console/console-right-panel';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 interface Props {

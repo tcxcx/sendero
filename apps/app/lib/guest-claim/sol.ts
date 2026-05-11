@@ -33,11 +33,7 @@
 
 import { env } from '@sendero/env';
 import { ensureSolanaGas } from '@sendero/circle/unified-gateway';
-import {
-  buildClaimTripIxs,
-  claimMessageSolana,
-  signClaimSolana,
-} from '@sendero/guest/solana';
+import { buildClaimTripIxs, claimMessageSolana, signClaimSolana } from '@sendero/guest/solana';
 import bs58 from 'bs58';
 
 export interface SubmitSolClaimArgs {
@@ -67,18 +63,12 @@ export interface SubmitSolClaimResult {
   guestClaimant: string;
 }
 
-export async function submitSolClaim(
-  args: SubmitSolClaimArgs
-): Promise<SubmitSolClaimResult> {
+export async function submitSolClaim(args: SubmitSolClaimArgs): Promise<SubmitSolClaimResult> {
   // Lazy import — keeps web3.js out of the cold-path bundle for routes
   // that never touch Sol.
-  const {
-    Connection,
-    Keypair,
-    PublicKey,
-    Transaction,
-    sendAndConfirmTransaction,
-  } = await import('@solana/web3.js');
+  const { Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction } = await import(
+    '@solana/web3.js'
+  );
 
   const platformKey = env.senderoSolanaPlatformPrivateKey?.();
   if (!platformKey) {
@@ -97,10 +87,7 @@ export async function submitSolClaim(
   const claimKeypair = Keypair.fromSeed(
     claimSecret.length === 64 ? claimSecret.slice(0, 32) : claimSecret
   );
-  if (
-    args.claimPubkeyBase58 &&
-    claimKeypair.publicKey.toBase58() !== args.claimPubkeyBase58
-  ) {
+  if (args.claimPubkeyBase58 && claimKeypair.publicKey.toBase58() !== args.claimPubkeyBase58) {
     throw new Error(
       `submitSolClaim: claim secret does not match stored claim pubkey ` +
         `(expected ${args.claimPubkeyBase58}, derived ${claimKeypair.publicKey.toBase58()})`

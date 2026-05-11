@@ -4,10 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import { getArcClient } from '@sendero/arc/chain';
 import { GATEWAY_CHAINS } from '@sendero/circle/gateway';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
-import {
-  resolveUnifiedBalanceChain,
-  spendTenantUnifiedUsd,
-} from '@sendero/circle/unified-balance';
+import { resolveUnifiedBalanceChain, spendTenantUnifiedUsd } from '@sendero/circle/unified-balance';
 import { prisma } from '@sendero/database';
 import { getAddress, type Hex, parseAbiItem, zeroAddress } from 'viem';
 import { z } from 'zod';
@@ -121,11 +118,9 @@ async function assertArcUsdcMintedToRecipient(args: {
   }
   if (mintedToRecipient === args.amountMicro) return;
   throw new Error(
-    `Arc mint transaction ${args.txHash} minted ${(
-      Number(mintedToRecipient) / 1_000_000
-    ).toFixed(6)} USDC to ${recipient}; expected ${(
-      Number(args.amountMicro) / 1_000_000
-    ).toFixed(6)} USDC`
+    `Arc mint transaction ${args.txHash} minted ${(Number(mintedToRecipient) / 1_000_000).toFixed(
+      6
+    )} USDC to ${recipient}; expected ${(Number(args.amountMicro) / 1_000_000).toFixed(6)} USDC`
   );
 }
 
@@ -159,7 +154,8 @@ export async function POST(req: NextRequest) {
     const amountMicro = decimalToMicro(body.amount);
     // EVM addresses get checksum-normalised; Sol base58 is case-sensitive
     // and must NOT be lowercased.
-    const recipientForLog = body.destinationChain === 'Sol_Devnet' ? body.to : body.to.toLowerCase();
+    const recipientForLog =
+      body.destinationChain === 'Sol_Devnet' ? body.to : body.to.toLowerCase();
 
     const initiatedByUser = userId
       ? await prisma.user.findUnique({ where: { clerkUserId: userId }, select: { id: true } })

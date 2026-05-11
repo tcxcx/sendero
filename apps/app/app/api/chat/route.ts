@@ -405,16 +405,16 @@ async function buildTripRuntimeContext(tenantId: string, tripId: string) {
 function summarizeTripEvents(events: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(events)) return [];
   return events
-    .filter((event): event is Record<string, unknown> => Boolean(event) && typeof event === 'object')
+    .filter(
+      (event): event is Record<string, unknown> => Boolean(event) && typeof event === 'object'
+    )
     .map(event => ({
       at: typeof event.createdAt === 'string' ? event.createdAt : null,
       kind: typeof event.kind === 'string' ? event.kind : null,
       direction: typeof event.direction === 'string' ? event.direction : null,
       channel: typeof event.channel === 'string' ? event.channel : null,
       text:
-        typeof event.text === 'string'
-          ? event.text.replace(/\s+/g, ' ').slice(0, 500)
-          : undefined,
+        typeof event.text === 'string' ? event.text.replace(/\s+/g, ' ').slice(0, 500) : undefined,
       toolName: typeof event.toolName === 'string' ? event.toolName : undefined,
       status: typeof event.status === 'string' ? event.status : undefined,
       pnr: typeof event.pnr === 'string' ? event.pnr : undefined,
@@ -502,7 +502,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const tripRuntimeContext = tenantId && tripId ? await buildTripRuntimeContext(tenantId, tripId) : null;
+  const tripRuntimeContext =
+    tenantId && tripId ? await buildTripRuntimeContext(tenantId, tripId) : null;
   const runtimeContext =
     body.context || tripRuntimeContext
       ? {
@@ -533,7 +534,10 @@ export async function POST(req: NextRequest) {
     }
     cascade.unshift({
       model: resolved.model,
-      label: typeof resolved.model === 'string' ? `gateway:${resolved.modelId}` : `direct:${resolved.modelId}`,
+      label:
+        typeof resolved.model === 'string'
+          ? `gateway:${resolved.modelId}`
+          : `direct:${resolved.modelId}`,
       tier: requestedTier,
     });
   }

@@ -404,7 +404,9 @@ export function FooterRail() {
             ) : block === '—' ? (
               '#—'
             ) : (
-              <>#<DigitTicker value={block} /></>
+              <>
+                #<DigitTicker value={block} />
+              </>
             )}
           </strong>
         </span>

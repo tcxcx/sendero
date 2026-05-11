@@ -109,9 +109,7 @@ export function ProvisioningWaitScreen({
           <aside className="provisioning-notice" role="status">
             <span className="provisioning-notice__tag">Taking longer than usual</span>
             <h2 className="provisioning-notice__title">This is taking a moment.</h2>
-            <p>
-              We're still working on it. Try the button below to retry, or refresh the page.
-            </p>
+            <p>We're still working on it. Try the button below to retry, or refresh the page.</p>
           </aside>
         ) : null}
 

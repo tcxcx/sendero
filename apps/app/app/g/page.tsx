@@ -35,9 +35,7 @@ interface ParsedLink {
 }
 
 function parseLink(fragment: string): ParsedLink | null {
-  const params = new URLSearchParams(
-    fragment.startsWith('#') ? fragment.slice(1) : fragment
-  );
+  const params = new URLSearchParams(fragment.startsWith('#') ? fragment.slice(1) : fragment);
   const t = params.get('t');
   const k = params.get('k');
   const n = params.get('n');
@@ -45,9 +43,7 @@ function parseLink(fragment: string): ParsedLink | null {
   if (!t || !k) return null;
   const chain: 'arc' | 'sol' = c === 'sol' ? 'sol' : 'arc';
   const tripIdShort =
-    chain === 'arc'
-      ? `${t.slice(0, 10)}…${t.slice(-6)}`
-      : `${t.slice(0, 6)}…${t.slice(-6)}`;
+    chain === 'arc' ? `${t.slice(0, 10)}…${t.slice(-6)}` : `${t.slice(0, 6)}…${t.slice(-6)}`;
   return { chain, tripIdShort, has2fa: Boolean(n) };
 }
 
@@ -88,8 +84,8 @@ export default function GuestClaimPage() {
       <main style={rootStyle}>
         <h1 style={h1Style}>Invalid invite link.</h1>
         <p style={pStyle}>
-          The trip metadata must ride in the URL fragment (after the <code>#</code>). Make
-          sure you opened the full link from your invite email.
+          The trip metadata must ride in the URL fragment (after the <code>#</code>). Make sure you
+          opened the full link from your invite email.
         </p>
       </main>
     );
@@ -137,8 +133,8 @@ export default function GuestClaimPage() {
       <h1 style={h1Style}>Your trip is funded and waiting.</h1>
       <p style={pStyle}>
         A Sendero buyer prefunded your travel budget in USDC on{' '}
-        {parsed.chain === 'sol' ? 'Solana' : 'Arc'}. Claim it with your email — Sendero
-        creates your account and on-chain wallet automatically. Gas is sponsored.
+        {parsed.chain === 'sol' ? 'Solana' : 'Arc'}. Claim it with your email — Sendero creates your
+        account and on-chain wallet automatically. Gas is sponsored.
       </p>
 
       <section style={cardStyle}>
@@ -291,7 +287,11 @@ const h1Style: React.CSSProperties = {
   margin: '0 0 12px',
   lineHeight: 1.2,
 };
-const pStyle: React.CSSProperties = { lineHeight: 1.55, marginBottom: 24, color: 'var(--text-dim, #374151)' };
+const pStyle: React.CSSProperties = {
+  lineHeight: 1.55,
+  marginBottom: 24,
+  color: 'var(--text-dim, #374151)',
+};
 const cardStyle: React.CSSProperties = {
   border: '1px solid var(--border, #e5e7eb)',
   padding: 16,

@@ -61,7 +61,9 @@ function arg(name: string, fallback?: string): string | undefined {
 async function main() {
   const tenantId = arg('tenant');
   if (!tenantId) {
-    console.error('Usage: bun apps/app/scripts/_local/provision-squads-vault-ata.ts --tenant <tenantId>');
+    console.error(
+      'Usage: bun apps/app/scripts/_local/provision-squads-vault-ata.ts --tenant <tenantId>'
+    );
     process.exit(1);
   }
 
@@ -119,7 +121,9 @@ async function main() {
   if (!ataExists) {
     const platformPrivateKey = process.env.SENDERO_SOLANA_PLATFORM_PRIVATE_KEY;
     if (!platformPrivateKey) {
-      console.error('SENDERO_SOLANA_PLATFORM_PRIVATE_KEY not set — cannot pay rent for ATA create.');
+      console.error(
+        'SENDERO_SOLANA_PLATFORM_PRIVATE_KEY not set — cannot pay rent for ATA create.'
+      );
       process.exit(1);
     }
     const payer = Keypair.fromSecretKey(bs58.decode(platformPrivateKey));

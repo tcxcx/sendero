@@ -523,10 +523,7 @@ export async function spend(args: SpendArgs): Promise<SpendResult> {
     const principal = s.principal;
     if (principal.kind === 'solana-kit') {
       solGasTargets.add(principal.address);
-    } else if (
-      principal.kind === 'circle-wallets' &&
-      !principal.address.startsWith('0x')
-    ) {
+    } else if (principal.kind === 'circle-wallets' && !principal.address.startsWith('0x')) {
       solGasTargets.add(principal.address);
     }
   }
@@ -537,9 +534,7 @@ export async function spend(args: SpendArgs): Promise<SpendResult> {
     solGasTargets.add(args.toAccount);
   }
   await Promise.all(
-    [...solGasTargets].map(addr =>
-      ensureSolanaGas({ address: addr }).then(() => undefined)
-    )
+    [...solGasTargets].map(addr => ensureSolanaGas({ address: addr }).then(() => undefined))
   );
   const result = (await appKit().unifiedBalance.spend(buildSpendParams(args) as never)) as {
     txHash: string;

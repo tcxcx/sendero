@@ -44,7 +44,10 @@ async function resolveUniqueSlug(base: string, orgId: string): Promise<string> {
   if (!existing || existing.clerkOrgId === orgId) return base;
   // Stable suffix from orgId — same orgId always derives the same slug,
   // so re-running the deploy is idempotent.
-  const suffix = orgId.replace(/[^a-z0-9]/gi, '').slice(-6).toLowerCase();
+  const suffix = orgId
+    .replace(/[^a-z0-9]/gi, '')
+    .slice(-6)
+    .toLowerCase();
   return `${base}-${suffix}`;
 }
 
@@ -201,7 +204,7 @@ export async function POST(req: NextRequest) {
         // Route is gated dev-only at the top, so stack is always safe to surface.
         stack,
       },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

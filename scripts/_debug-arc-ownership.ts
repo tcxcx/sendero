@@ -11,23 +11,29 @@ const MSCA: Address = '0xdF17bb2BEad222A63EF529485A5207600ecCe5B9';
 const PLUGIN: Address = '0x0000000C984AFf541D6cE86Bb697e68ec57873C8';
 const RPC = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
 
-const OWNERSHIP_ABI = [{
-  inputs: [{ name: 'account', type: 'address' }],
-  name: 'ownershipInfoOf',
-  outputs: [
-    { name: 'ownerAddresses', type: 'bytes30[]' },
-    { name: 'ownersData', type: 'tuple[]', components: [
-      { name: 'weight', type: 'uint256' },
-      { name: 'credType', type: 'uint8' },
-      { name: 'addr', type: 'address' },
-      { name: 'publicKeyX', type: 'uint256' },
-      { name: 'publicKeyY', type: 'uint256' },
-    ]},
-    { name: 'thresholdWeight', type: 'uint256' },
-  ],
-  stateMutability: 'view',
-  type: 'function',
-}] as const;
+const OWNERSHIP_ABI = [
+  {
+    inputs: [{ name: 'account', type: 'address' }],
+    name: 'ownershipInfoOf',
+    outputs: [
+      { name: 'ownerAddresses', type: 'bytes30[]' },
+      {
+        name: 'ownersData',
+        type: 'tuple[]',
+        components: [
+          { name: 'weight', type: 'uint256' },
+          { name: 'credType', type: 'uint8' },
+          { name: 'addr', type: 'address' },
+          { name: 'publicKeyX', type: 'uint256' },
+          { name: 'publicKeyY', type: 'uint256' },
+        ],
+      },
+      { name: 'thresholdWeight', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
 
 const client = createPublicClient({ chain: arcTestnet, transport: http(RPC) });
 

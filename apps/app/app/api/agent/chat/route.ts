@@ -451,8 +451,7 @@ export async function POST(req: NextRequest) {
   // enforcement point for direct POSTs and channel-driven sessions.
   if (body.model) {
     const resolved = resolveChatModel(body.model, resolvePlan(planTier), {
-      source:
-        channel === 'web' || channel === 'slack' || channel === 'whatsapp' ? channel : 'api',
+      source: channel === 'web' || channel === 'slack' || channel === 'whatsapp' ? channel : 'api',
     });
     if ('locked' in resolved) {
       return NextResponse.json(resolved.locked, { status: 403 });

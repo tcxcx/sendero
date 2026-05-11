@@ -18,10 +18,7 @@ import { prisma } from '@sendero/database';
 
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
-import {
-  deliverPayLinkForBooking,
-  type DeliverPayLinkResult,
-} from '@/lib/pay-link/deliver';
+import { deliverPayLinkForBooking, type DeliverPayLinkResult } from '@/lib/pay-link/deliver';
 import { prefundTraveler, type PrefundResult } from '@/lib/transfer-spend/prefund';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
@@ -97,9 +94,7 @@ export async function prefundTravelerAction(input: {
   const effectiveSourceChain =
     parsed.sourceChain ?? (tenant.primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet');
   const walletChainId =
-    effectiveSourceChain === 'Sol_Devnet'
-      ? SOL_DEVNET_GATEWAY_DOMAIN
-      : ARC_TESTNET_CHAIN_ID;
+    effectiveSourceChain === 'Sol_Devnet' ? SOL_DEVNET_GATEWAY_DOMAIN : ARC_TESTNET_CHAIN_ID;
   const walletChainLabel = effectiveSourceChain === 'Sol_Devnet' ? 'Solana Devnet' : 'Arc Testnet';
 
   const wallet = await prisma.wallet.findFirst({

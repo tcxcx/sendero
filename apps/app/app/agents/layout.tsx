@@ -154,7 +154,11 @@ export default function AgentsLayout({ children }: { children: ReactNode }) {
         <nav className="agents-layout-nav" aria-label="Sendero public navigation">
           <div className="agents-layout-nav-inner">
             {/* Wordmark */}
-            <Link href="https://app.sendero.travel" className="agents-layout-wordmark" aria-label="Sendero home">
+            <Link
+              href="https://app.sendero.travel"
+              className="agents-layout-wordmark"
+              aria-label="Sendero home"
+            >
               <Image
                 src="/brand/logo-masters/clean/sendero_icon_vermilion_clean_2048.png"
                 alt=""

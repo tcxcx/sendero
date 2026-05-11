@@ -425,7 +425,8 @@ function redactValue(value: unknown, depth: number, maxString = 500): unknown {
     if (/^(sk_|pk_|ak_|Bearer\s+)/i.test(value)) return '[redacted]';
     return value.length > maxString ? `${value.slice(0, maxString)}…` : value;
   }
-  if (Array.isArray(value)) return value.slice(0, 20).map(v => redactValue(v, depth + 1, maxString));
+  if (Array.isArray(value))
+    return value.slice(0, 20).map(v => redactValue(v, depth + 1, maxString));
   if (!value || typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {

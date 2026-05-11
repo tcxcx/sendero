@@ -158,60 +158,67 @@ export async function runInspectMyWhatsapp(
   const includePreviews = input.includePreviews === true;
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-  const [install, webhookAggRaw, outboundRows, apiLogs, identityCounts, activeTripsCount, recentTrips] =
-    await Promise.all([
-      prisma.whatsAppInstall.findUnique({ where: { tenantId } }),
-      prisma.whatsAppWebhookEvent.findMany({
-        where: { tenantId, receivedAt: { gte: since } },
-        select: {
-          signatureValid: true,
-          messageCount: true,
-          identityChangeCount: true,
-          statusUpdateCount: true,
-          droppedReplayCount: true,
-          droppedDuplicateCount: true,
-          dispatchedCount: true,
+  const [
+    install,
+    webhookAggRaw,
+    outboundRows,
+    apiLogs,
+    identityCounts,
+    activeTripsCount,
+    recentTrips,
+  ] = await Promise.all([
+    prisma.whatsAppInstall.findUnique({ where: { tenantId } }),
+    prisma.whatsAppWebhookEvent.findMany({
+      where: { tenantId, receivedAt: { gte: since } },
+      select: {
+        signatureValid: true,
+        messageCount: true,
+        identityChangeCount: true,
+        statusUpdateCount: true,
+        droppedReplayCount: true,
+        droppedDuplicateCount: true,
+        dispatchedCount: true,
+      },
+      take: 5_000,
+    }),
+    prisma.whatsAppOutboundMessage.findMany({
+      where: { tenantId, sentAt: { gte: since } },
+      select: {
+        sentAt: true,
+        recipientId: true,
+        kind: true,
+        source: true,
+        preview: true,
+        deliveryStatus: true,
+        failureReason: true,
+      },
+      orderBy: { sentAt: 'desc' },
+      take: 1_000,
+    }),
+    prisma.whatsAppApiLog.findMany({
+      where: { tenantId, calledAt: { gte: since } },
+      select: { target: true, ok: true },
+      take: 5_000,
+    }),
+    prisma.channelIdentity.count({
+      where: { tenantId, kind: 'whatsapp' },
+    }),
+    prisma.trip.count({
+      where: {
+        tenantId,
+        status: { notIn: ['completed', 'canceled', 'failed'] },
+        traveler: {
+          channelIdentities: { some: { kind: 'whatsapp' } },
         },
-        take: 5_000,
-      }),
-      prisma.whatsAppOutboundMessage.findMany({
-        where: { tenantId, sentAt: { gte: since } },
-        select: {
-          sentAt: true,
-          recipientId: true,
-          kind: true,
-          source: true,
-          preview: true,
-          deliveryStatus: true,
-          failureReason: true,
-        },
-        orderBy: { sentAt: 'desc' },
-        take: 1_000,
-      }),
-      prisma.whatsAppApiLog.findMany({
-        where: { tenantId, calledAt: { gte: since } },
-        select: { target: true, ok: true },
-        take: 5_000,
-      }),
-      prisma.channelIdentity.count({
-        where: { tenantId, kind: 'whatsapp' },
-      }),
-      prisma.trip.count({
-        where: {
-          tenantId,
-          status: { notIn: ['completed', 'canceled', 'failed'] },
-          traveler: {
-            channelIdentities: { some: { kind: 'whatsapp' } },
-          },
-        },
-      }),
-      prisma.trip.findMany({
-        where: { tenantId },
-        orderBy: { updatedAt: 'desc' },
-        take: 100,
-        select: { events: true },
-      }),
-    ]);
+      },
+    }),
+    prisma.trip.findMany({
+      where: { tenantId },
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+      select: { events: true },
+    }),
+  ]);
 
   const installSummary: WhatsappInstallSummary = install
     ? {

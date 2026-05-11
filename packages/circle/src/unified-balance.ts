@@ -186,10 +186,7 @@ export async function getTenantUnifiedBalances(args: {
   // are REST queries because Sol depositors aren't tied to the EVM
   // viem adapter.
   const solanaAddresses: string[] = [ctx.solanaSigner.address];
-  if (
-    ctx.legacySolanaDcwAddress &&
-    ctx.legacySolanaDcwAddress !== ctx.solanaSigner.address
-  ) {
+  if (ctx.legacySolanaDcwAddress && ctx.legacySolanaDcwAddress !== ctx.solanaSigner.address) {
     solanaAddresses.push(ctx.legacySolanaDcwAddress);
   }
 
@@ -329,8 +326,7 @@ export async function spendTenantUnifiedUsd(
   //     mint via the self-custody Sol signer; gas via `ensureSolanaGas`.
   //   - Every other EVM destination → forwarder ON. Circle's relayer
   //     submits the mint, no destination DCW or gas needed.
-  const isSolDestination =
-    destinationChain === 'Sol_Devnet' || destinationChain === 'Sol';
+  const isSolDestination = destinationChain === 'Sol_Devnet' || destinationChain === 'Sol';
   const useForwarder = destinationChain !== 'Arc_Testnet' && !isSolDestination;
 
   // Destination adapter wiring (only relevant when forwarder is OFF).
@@ -425,8 +421,7 @@ export async function spendTenantUnifiedUsd(
       recipient,
       sources: sources.map(s => ({
         kind: s.principal.kind,
-        address:
-          'address' in s.principal ? (s.principal as { address?: string }).address : null,
+        address: 'address' in s.principal ? (s.principal as { address?: string }).address : null,
         sourceAccount: s.sourceAccount,
       })),
       pool: {

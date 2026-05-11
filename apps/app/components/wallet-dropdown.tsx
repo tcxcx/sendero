@@ -54,7 +54,9 @@ export function WalletDropdown() {
   const isArcChain = userAuth?.chain !== 'sol';
   const isZeroAddress =
     !!userAuth &&
-    (isArcChain ? /^0x0+$/i.test(userAuth.address) : userAuth.address === '11111111111111111111111111111111');
+    (isArcChain
+      ? /^0x0+$/i.test(userAuth.address)
+      : userAuth.address === '11111111111111111111111111111111');
   const chainLabel = isArcChain ? 'Arc' : 'Solana';
 
   // Balance authority is the Circle webhook → CircleWallet cached
@@ -209,7 +211,9 @@ export function WalletDropdown() {
           )}
           <span className="wd-trigger-body">
             <span className="wd-name">{userAuth.displayName}</span>
-            <span className="wd-addr">{isZeroAddress ? `provisioning ${chainLabel.toLowerCase()} wallet…` : short}</span>
+            <span className="wd-addr">
+              {isZeroAddress ? `provisioning ${chainLabel.toLowerCase()} wallet…` : short}
+            </span>
           </span>
           <span className={`wd-chev ${open ? 'open' : ''}`} aria-hidden="true">
             ▾
@@ -229,7 +233,9 @@ export function WalletDropdown() {
             <div className="wd-id-body">
               <span className="wd-id-name">{userAuth.displayName}</span>
               <span className="wd-id-role">
-                {isZeroAddress ? `Provisioning ${chainLabel} wallet…` : userAuth.email || 'no email'}
+                {isZeroAddress
+                  ? `Provisioning ${chainLabel} wallet…`
+                  : userAuth.email || 'no email'}
               </span>
             </div>
           </div>
@@ -246,8 +252,8 @@ export function WalletDropdown() {
               }}
             >
               Your {chainLabel} settlement wallet is still being provisioned. This normally
-              completes within a few seconds of org creation. Balances will load automatically
-              once the Circle webhook lands.
+              completes within a few seconds of org creation. Balances will load automatically once
+              the Circle webhook lands.
             </div>
           )}
 

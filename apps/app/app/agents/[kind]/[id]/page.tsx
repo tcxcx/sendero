@@ -173,9 +173,7 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
     ? 'Metaplex Agent Registry'
     : 'IdentityRegistry · ERC-8004';
   // Per-chain transaction explorer base for individual tx hashes.
-  const txExplorerBase = isSolChain
-    ? 'https://explorer.solana.com/tx'
-    : `${arcExplorer}/tx`;
+  const txExplorerBase = isSolChain ? 'https://explorer.solana.com/tx' : `${arcExplorer}/tx`;
   const txUrlSuffix = isSolChain ? '?cluster=devnet' : '';
   const isMinted = profile.status === 'minted' && !!profile.agentId;
   const kindTypeLabel = `${KIND_LABEL[kind]} · ${identityProtocol} · ${networkLabel}`;
@@ -680,13 +678,15 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
 
       <div className="ap-page">
         <div className="ap-wrap">
-
           {/* ── 1. Kind badge row ────────────────────────────── */}
           <div className="ap-eyebrow" role="doc-subtitle">
             <span className="ap-eyebrow-rule" aria-hidden="true" />
             <span className="ap-eyebrow-label">{kindTypeLabel}</span>
             {isMinted ? (
-              <span className="ap-status-badge ap-status-badge--minted" aria-label="Verified on-chain">
+              <span
+                className="ap-status-badge ap-status-badge--minted"
+                aria-label="Verified on-chain"
+              >
                 <span className="ap-status-dot" aria-hidden="true" />
                 Verified on-chain
               </span>
@@ -711,7 +711,10 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
             <div className="ap-rep-stars">
               {profile.stars != null ? (
                 <>
-                  <div className="ap-rep-stars-value" aria-label={`${profile.stars.toFixed(2)} stars`}>
+                  <div
+                    className="ap-rep-stars-value"
+                    aria-label={`${profile.stars.toFixed(2)} stars`}
+                  >
                     {profile.stars.toFixed(2)}
                   </div>
                   <div className="ap-rep-stars-glyphs" aria-hidden="true">
@@ -741,7 +744,9 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
 
           {/* ── 4. On-chain identity ─────────────────────────── */}
           <section className="ap-section" aria-labelledby="ap-chain-title">
-            <h2 className="ap-section-title" id="ap-chain-title">On-chain Identity</h2>
+            <h2 className="ap-section-title" id="ap-chain-title">
+              On-chain Identity
+            </h2>
             <div className="ap-chain-card">
               <div className="ap-chain-grid">
                 {/* Token ID */}
@@ -765,7 +770,10 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                       </span>
                     )
                   ) : (
-                    <span className="ap-chain-field-value" style={{ opacity: 0.35, fontStyle: 'italic' }}>
+                    <span
+                      className="ap-chain-field-value"
+                      style={{ opacity: 0.35, fontStyle: 'italic' }}
+                    >
                       Pending
                     </span>
                   )}
@@ -821,11 +829,12 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                 <div className="ap-chain-field">
                   <div className="ap-chain-field-label">Minted</div>
                   {profile.mintedAt ? (
-                    <span className="ap-chain-field-value">
-                      {formatDate(profile.mintedAt)}
-                    </span>
+                    <span className="ap-chain-field-value">{formatDate(profile.mintedAt)}</span>
                   ) : (
-                    <span className="ap-chain-field-value" style={{ opacity: 0.35, fontStyle: 'italic' }}>
+                    <span
+                      className="ap-chain-field-value"
+                      style={{ opacity: 0.35, fontStyle: 'italic' }}
+                    >
                       —
                     </span>
                   )}
@@ -869,7 +878,9 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
 
           {/* ── 5. Recent feedback ───────────────────────────── */}
           <section className="ap-section" aria-labelledby="ap-feedback-title">
-            <h2 className="ap-section-title" id="ap-feedback-title">Recent Ratings</h2>
+            <h2 className="ap-section-title" id="ap-feedback-title">
+              Recent Ratings
+            </h2>
             {profile.recent.length === 0 ? (
               <div className="ap-feedback-list">
                 <div className="ap-feedback-empty" role="status">
@@ -887,12 +898,12 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                       <div className="ap-feedback-stars" aria-label={`${r.stars} out of 5 stars`}>
                         {starsDisplay(r.stars)}
                       </div>
-                      {r.tag && (
-                        <div className="ap-feedback-tag">{r.tag}</div>
-                      )}
+                      {r.tag && <div className="ap-feedback-tag">{r.tag}</div>}
                       {(r.tripId || r.bookingId) && (
                         <div className="ap-feedback-trip">
-                          {r.tripId ? `Trip ${r.tripId.slice(0, 12)}` : `Booking ${r.bookingId?.slice(0, 12)}`}
+                          {r.tripId
+                            ? `Trip ${r.tripId.slice(0, 12)}`
+                            : `Booking ${r.bookingId?.slice(0, 12)}`}
                         </div>
                       )}
                     </div>
@@ -921,7 +932,9 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
 
           {/* ── 6. Identity metadata ─────────────────────────── */}
           <section className="ap-section" aria-labelledby="ap-meta-title">
-            <h2 className="ap-section-title" id="ap-meta-title">Agent Metadata</h2>
+            <h2 className="ap-section-title" id="ap-meta-title">
+              Agent Metadata
+            </h2>
             <nav className="ap-meta-links" aria-label="Agent metadata links">
               <Link
                 href={`/agents/${kind}/${id}/metadata.json`}
@@ -930,29 +943,29 @@ export default async function AgentProfilePage({ params }: { params: Promise<Pag
                 className="ap-meta-btn"
               >
                 {identityProtocol} metadata JSON
-                <span className="ap-meta-btn-arrow" aria-hidden="true">→</span>
+                <span className="ap-meta-btn-arrow" aria-hidden="true">
+                  →
+                </span>
               </Link>
-              <Link
-                href={contractUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="ap-meta-btn"
-              >
+              <Link href={contractUrl} target="_blank" rel="noreferrer" className="ap-meta-btn">
                 View {identityRegistryName} on {explorerName}
-                <span className="ap-meta-btn-arrow" aria-hidden="true">→</span>
+                <span className="ap-meta-btn-arrow" aria-hidden="true">
+                  →
+                </span>
               </Link>
             </nav>
           </section>
 
           {/* ── 7. Trust rail ────────────────────────────────── */}
           <div className="ap-trust-rail" role="contentinfo">
-            <span className="ap-trust-chain-icon" aria-hidden="true">⛓</span>
+            <span className="ap-trust-chain-icon" aria-hidden="true">
+              ⛓
+            </span>
             <p className="ap-trust-text">
               Reputation data sourced directly from {networkLabel} ({identityRegistryName}
               {isSolChain ? '' : ' + ReputationRegistry'}). Not editable post-mint.
             </p>
           </div>
-
         </div>
       </div>
     </>

@@ -46,7 +46,10 @@ async function main() {
       functionName: 'ownershipInfoOf',
     });
     console.log('EOA owners:    ', info[0]);
-    console.log('EOA weights:   ', info[1].map(w => w.toString()));
+    console.log(
+      'EOA weights:   ',
+      info[1].map(w => w.toString())
+    );
     console.log('webauthn count:', info[2].length);
     console.log('threshold:     ', info[4].toString());
     console.log('totalWeight:   ', info[5].toString());

@@ -80,8 +80,7 @@ export async function settleHoldAction(args: {
   // deferred) or booking.metadata.supplierPayee.
   const settleChainId =
     tenant.primaryChain === 'sol' ? SOL_DEVNET_GATEWAY_DOMAIN : ARC_TESTNET_CHAIN_ID;
-  const settleChainKey =
-    tenant.primaryChain === 'sol' ? APP_KIT_CHAIN_SOL : APP_KIT_CHAIN_ARC;
+  const settleChainKey = tenant.primaryChain === 'sol' ? APP_KIT_CHAIN_SOL : APP_KIT_CHAIN_ARC;
   const settleChainLabel = tenant.primaryChain === 'sol' ? 'Solana Devnet' : 'Arc Testnet';
 
   const booking = await prisma.booking.findFirst({

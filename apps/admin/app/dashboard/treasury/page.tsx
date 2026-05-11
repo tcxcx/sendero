@@ -153,7 +153,8 @@ function UsdcBalanceValue({ balance }: { balance: TreasuryBalance | null }) {
   }
   return (
     <span className="tabular-nums">
-      {balance.formatted} <span className="text-xs text-[color:var(--color-muted-foreground)]">USDC</span>
+      {balance.formatted}{' '}
+      <span className="text-xs text-[color:var(--color-muted-foreground)]">USDC</span>
       {balance.status === 'uninitialized' ? (
         <span className="ml-1 text-[10px] text-[color:var(--color-muted-foreground)]">
           · token account not yet initialized
@@ -313,11 +314,7 @@ function ArcTreasuryCard({
           <DetailRow label="Status">
             <StatusPill
               tone={
-                isLive && multisigInstalled
-                  ? 'success'
-                  : isLive || isPending
-                    ? 'warning'
-                    : 'muted'
+                isLive && multisigInstalled ? 'success' : isLive || isPending ? 'warning' : 'muted'
               }
             >
               {isIntent

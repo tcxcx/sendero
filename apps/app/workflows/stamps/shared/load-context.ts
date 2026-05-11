@@ -95,17 +95,17 @@ export async function loadStampContext(args: {
   // Mirrors `SOL_DEVNET_CHAIN_ID = 5` used in `settleTravelerUsdcToTreasury`
   // and the Tenant.primaryChain cascade documented in CLAUDE.md.
   const SOL_DEVNET_CHAIN_ID = 5;
-  const primaryChain: 'arc' | 'sol' =
-    trip.tenant.primaryChain === 'sol' ? 'sol' : 'arc';
+  const primaryChain: 'arc' | 'sol' = trip.tenant.primaryChain === 'sol' ? 'sol' : 'arc';
 
   const travelers: StampTraveler[] = [];
   if (trip.traveler) {
     // Pick the wallet that matches the tenant's primaryChain. For Sol
     // tenants we want the base58 Sol DCW (chainId=5); for Arc we want
     // the EVM DCW (any non-Sol chain — they share one address).
-    const matchingWallet = primaryChain === 'sol'
-      ? trip.traveler.wallets.find(w => w.chainId === SOL_DEVNET_CHAIN_ID)
-      : trip.traveler.wallets.find(w => w.chainId !== SOL_DEVNET_CHAIN_ID);
+    const matchingWallet =
+      primaryChain === 'sol'
+        ? trip.traveler.wallets.find(w => w.chainId === SOL_DEVNET_CHAIN_ID)
+        : trip.traveler.wallets.find(w => w.chainId !== SOL_DEVNET_CHAIN_ID);
     let addr = matchingWallet?.address;
     if (!addr) {
       const provisioned = await ensureTravelerWallet({ userId: trip.traveler.id });
@@ -145,7 +145,15 @@ export async function loadStampContext(args: {
       ? (args.bookingId as string)
       : trip.id;
 
-  return { kind: args.kind, tenant, trip: tripCtx, booking, travelers, primaryKey, chain: primaryChain };
+  return {
+    kind: args.kind,
+    tenant,
+    trip: tripCtx,
+    booking,
+    travelers,
+    primaryKey,
+    chain: primaryChain,
+  };
 }
 
 function projectBooking(row: {

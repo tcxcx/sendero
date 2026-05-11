@@ -162,7 +162,9 @@ function allowedOrigin(origin: string): string | null {
   return allowlist.includes(origin) ? origin : null;
 }
 
-async function buildRequestCatalog(resolved: ResolvedApiKey): Promise<Record<string, McpToolEntry>> {
+async function buildRequestCatalog(
+  resolved: ResolvedApiKey
+): Promise<Record<string, McpToolEntry>> {
   const ctx: ToolContext = {
     traveler: {
       tenantId: resolved.tenantId,

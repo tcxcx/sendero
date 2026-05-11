@@ -80,8 +80,12 @@ export function OnboardingAlert() {
   const chain: 'arc' | 'sol' = meta?.primaryChain === 'sol' ? 'sol' : 'arc';
   const missing =
     chain === 'sol'
-      ? isMissingSolWallet(typeof meta?.solTreasuryAddress === 'string' ? meta.solTreasuryAddress : null)
-      : isMissingArcWallet(typeof meta?.arcWalletAddress === 'string' ? meta.arcWalletAddress : null);
+      ? isMissingSolWallet(
+          typeof meta?.solTreasuryAddress === 'string' ? meta.solTreasuryAddress : null
+        )
+      : isMissingArcWallet(
+          typeof meta?.arcWalletAddress === 'string' ? meta.arcWalletAddress : null
+        );
   if (!missing) return null;
   if (dismissed) return null;
   const chainLabel = chain === 'sol' ? 'Solana' : 'Arc';
@@ -94,16 +98,18 @@ export function OnboardingAlert() {
   return (
     <div className="px-4 sm:px-6 pt-1">
       <Alert className="flex items-start gap-3 border-amber-500/40 bg-amber-50/60 text-foreground dark:bg-amber-950/30">
-        <span aria-hidden className="mt-[2px] text-base leading-none">⚠</span>
+        <span aria-hidden className="mt-[2px] text-base leading-none">
+          ⚠
+        </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <AlertTitle className="text-[13px] font-semibold tracking-tight">
             Finish setting up your wallet
           </AlertTitle>
           <AlertDescription className="text-[12px] leading-relaxed text-muted-foreground">
-            Your org doesn&apos;t have a {chainLabel} settlement wallet bound yet. Until it
-            does, you can&apos;t pay for bookings in USDC, settle escrow on-chain, or mint
-            boarding-pass NFTs. The agent will skip those steps silently, which is why your
-            demo runs stop short. One-time setup, takes about 30 seconds.
+            Your org doesn&apos;t have a {chainLabel} settlement wallet bound yet. Until it does,
+            you can&apos;t pay for bookings in USDC, settle escrow on-chain, or mint boarding-pass
+            NFTs. The agent will skip those steps silently, which is why your demo runs stop short.
+            One-time setup, takes about 30 seconds.
           </AlertDescription>
         </div>
         <div className="flex shrink-0 items-center gap-2">

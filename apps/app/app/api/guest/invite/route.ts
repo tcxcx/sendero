@@ -295,7 +295,9 @@ export async function POST(req: NextRequest) {
         bullets: [
           `Budget: ${safeResult.budgetUsdc} USDC`,
           `Trip: ${body.tripSummary ?? body.guestEmail}`,
-          safeResult.expiresAt ? `Expires: ${new Date(Number(safeResult.expiresAt) * 1000).toISOString()}` : null,
+          safeResult.expiresAt
+            ? `Expires: ${new Date(Number(safeResult.expiresAt) * 1000).toISOString()}`
+            : null,
           safeResult.claimCode ? 'A 6-digit claim code is required.' : null,
         ].filter((line): line is string => Boolean(line)),
         ctas: [
@@ -321,7 +323,9 @@ export async function POST(req: NextRequest) {
         select: { metadata: true },
       });
       const metadata =
-        current?.metadata && typeof current.metadata === 'object' && !Array.isArray(current.metadata)
+        current?.metadata &&
+        typeof current.metadata === 'object' &&
+        !Array.isArray(current.metadata)
           ? (current.metadata as Record<string, unknown>)
           : {};
       await prisma.trip.update({

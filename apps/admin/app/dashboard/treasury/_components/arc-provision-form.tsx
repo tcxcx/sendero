@@ -18,13 +18,7 @@ import { ApproverAddressFields } from './approver-address-fields';
 // recovery + plugin-config flows — removing it would forfeit those
 // affordances and the on-chain `updateMultisigWeights` call reverts
 // without surfacing a reason. Trust the default.
-type Stage =
-  | 'idle'
-  | 'reserving'
-  | 'deriving'
-  | 'deploying'
-  | 'installing'
-  | 'done';
+type Stage = 'idle' | 'reserving' | 'deriving' | 'deploying' | 'installing' | 'done';
 
 const STAGE_LABEL: Record<Stage, string> = {
   idle: 'Create Arc treasury',

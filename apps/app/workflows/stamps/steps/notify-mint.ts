@@ -15,6 +15,7 @@
  * traveler can still find the stamp via the dashboard.
  */
 
+import { appendFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 import { prisma } from '@sendero/database';
@@ -23,14 +24,24 @@ import { dispatchToTraveler } from '@/lib/channel-dispatch';
 
 import type { StampContext } from '../shared/types';
 
+// DEV-ONLY debug sink so notify-mint failures surface during dogfood
+// without trawling the dev terminal (Ponder logs drown them). Same
+// shape as the book_flight debug log; never runs in production.
+function notifyDebug(label: string, payload: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === 'production') return;
+  try {
+    const line = `${new Date().toISOString()} ${label} ${JSON.stringify(payload)}\n`;
+    appendFileSync('/tmp/sendero-notify-mint.log', line);
+  } catch {
+    /* never block the workflow on a debug-sink error */
+  }
+}
+
 const ARC_TX_EXPLORER = 'https://testnet.arcscan.app/tx';
 const SOL_TX_EXPLORER = 'https://explorer.solana.com/tx';
 const SOL_DEVNET_QS = '?cluster=devnet';
 
-function buildExplorerLink(
-  txHash: string,
-  chain: 'arc' | 'sol'
-): { href: string; label: string } {
+function buildExplorerLink(txHash: string, chain: 'arc' | 'sol'): { href: string; label: string } {
   if (chain === 'sol') {
     return {
       href: `${SOL_TX_EXPLORER}/${txHash}${SOL_DEVNET_QS}`,
@@ -59,11 +70,24 @@ export const notifyStampMint = async (args: {
   try {
     const tenantId = args.ctx.tenant.tenantId;
     const traveler = args.ctx.travelers[0];
+    notifyDebug('[invoked]', {
+      kind: args.ctx.kind,
+      primaryKey: args.ctx.primaryKey,
+      tokenId: args.tokenId,
+      contract: args.contract,
+      txHash: args.txHash,
+      chain: args.ctx.chain,
+      tenantId,
+      hasTraveler: !!traveler,
+      travelerUserId: traveler?.userId,
+      travelerAddress: traveler?.address,
+    });
     if (!traveler) {
       console.warn('[stamp-notify] no traveler in context', {
         kind: args.ctx.kind,
         primaryKey: args.ctx.primaryKey,
       });
+      notifyDebug('[no-traveler]', { kind: args.ctx.kind, primaryKey: args.ctx.primaryKey });
       return;
     }
 
@@ -121,12 +145,31 @@ export const notifyStampMint = async (args: {
         reason: result.reason,
         channel: result.channel,
       });
+      notifyDebug('[dispatch-skipped]', {
+        kind: args.ctx.kind,
+        userId: traveler.userId,
+        reason: result.reason,
+        channel: result.channel,
+        detail: (result as { detail?: unknown }).detail,
+      });
+    } else {
+      notifyDebug('[dispatch-ok]', {
+        kind: args.ctx.kind,
+        userId: traveler.userId,
+        channel: result.channel,
+      });
     }
   } catch (err) {
     console.warn('[stamp-notify] send failed (non-fatal)', {
       kind: args.ctx.kind,
       primaryKey: args.ctx.primaryKey,
       error: err instanceof Error ? err.message : String(err),
+    });
+    notifyDebug('[threw]', {
+      kind: args.ctx.kind,
+      primaryKey: args.ctx.primaryKey,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
     });
   }
 };

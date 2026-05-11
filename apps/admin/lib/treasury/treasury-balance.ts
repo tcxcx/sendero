@@ -97,7 +97,11 @@ async function readSolanaUsdc(treasury: SuperOrgTreasury): Promise<TreasuryBalan
   try {
     const conn = new Connection(SOL_DEVNET_RPC, 'confirmed');
     const vault = new PublicKey(treasury.vaultAddress);
-    const ata = getAssociatedTokenAddressSync(USDC_DEVNET_MINT, vault, /* allowOwnerOffCurve */ true);
+    const ata = getAssociatedTokenAddressSync(
+      USDC_DEVNET_MINT,
+      vault,
+      /* allowOwnerOffCurve */ true
+    );
     try {
       const acct = await getAccount(conn, ata);
       const raw = BigInt(acct.amount.toString());
@@ -117,11 +121,8 @@ async function readSolanaUsdc(treasury: SuperOrgTreasury): Promise<TreasuryBalan
   }
 }
 
-export async function getTreasuryUsdcBalance(
-  treasury: SuperOrgTreasury
-): Promise<TreasuryBalance> {
+export async function getTreasuryUsdcBalance(treasury: SuperOrgTreasury): Promise<TreasuryBalance> {
   if (treasury.chain === 'arc') return readArcUsdc(treasury);
   if (treasury.chain === 'sol') return readSolanaUsdc(treasury);
   return { ...ZERO, status: 'error', error: `Unknown chain "${treasury.chain}"` };
 }
-

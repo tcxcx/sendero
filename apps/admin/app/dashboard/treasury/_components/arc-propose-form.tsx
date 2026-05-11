@@ -15,9 +15,7 @@ import { proposeArcUsdcTransfer } from '@/lib/treasury/propose-arc';
 export function ArcProposeForm({ treasuryId }: { treasuryId: string }) {
   const [pending, setPending] = React.useState(false);
   const [result, setResult] = React.useState<
-    | null
-    | { ok: true; txIndex: number; callData: `0x${string}` }
-    | { ok: false; error: string }
+    null | { ok: true; txIndex: number; callData: `0x${string}` } | { ok: false; error: string }
   >(null);
 
   async function handleSubmit(formData: FormData) {

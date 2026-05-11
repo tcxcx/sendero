@@ -110,9 +110,7 @@ export function WorkflowLog() {
           <Row
             k="chain"
             v={
-              chainKind === 'sol'
-                ? 'Solana · Devnet'
-                : `Arc L2 · ${treasury?.arc?.chainId ?? '—'}`
+              chainKind === 'sol' ? 'Solana · Devnet' : `Arc L2 · ${treasury?.arc?.chainId ?? '—'}`
             }
           />
           <Row
@@ -178,7 +176,9 @@ export function WorkflowLog() {
                 : "USDC is Arc's native gas token. Per-call charges are paid in nano-USDC (1 nUSDC = 1e-9 USDC)."
             }
           >
-            <span className="name">▸ gas · nanopayments · {chainKind === 'sol' ? 'sol' : 'arc'}</span>
+            <span className="name">
+              ▸ gas · nanopayments · {chainKind === 'sol' ? 'sol' : 'arc'}
+            </span>
             <span className="dur">
               {meterSummary
                 ? `${meterSummary.paidCalls}p / ${meterSummary.rejectedCalls}r`

@@ -104,9 +104,7 @@ function registryMeta(chain: Chain, contract?: string | null) {
   };
 }
 
-export async function getSenderoIdentity(
-  ctx?: ToolContext
-): Promise<SenderoIdentityResult> {
+export async function getSenderoIdentity(ctx?: ToolContext): Promise<SenderoIdentityResult> {
   const chain = await resolveCallerChain(ctx);
   const agentId = process.env.SENDERO_AGENT_TOKEN_ID ?? process.env.SENDERO_AGENT_ID ?? null;
   const meta = registryMeta(chain);

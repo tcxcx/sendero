@@ -31,9 +31,7 @@ describe('gateway balance math', () => {
     // report it.
     const totals = calculateGatewayBalanceTotals({
       perDomain: [{ domain: 5, balance: '10.000000' }],
-      pendingCredits: [
-        { domain: 5, amount: decimalUsdcToMicro('10').toString() },
-      ],
+      pendingCredits: [{ domain: 5, amount: decimalUsdcToMicro('10').toString() }],
       opsStaging: [],
     });
     // Correct answer is $10, not $20.
@@ -47,9 +45,7 @@ describe('gateway balance math', () => {
     const totals = calculateGatewayBalanceTotals({
       perDomain: [{ domain: 1, balance: '0.000000' }],
       pendingCredits: [],
-      opsStaging: [
-        { chain: 'AVAX-FUJI', usdc: decimalUsdcToMicro('1').toString() },
-      ],
+      opsStaging: [{ chain: 'AVAX-FUJI', usdc: decimalUsdcToMicro('1').toString() }],
     });
     expect(microUsdcToDecimal(totals.grandTotalMicro)).toBe('1.000000');
   });

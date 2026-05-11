@@ -70,9 +70,7 @@ export async function submitSolPrefund(
   // `pre_fund_trip` with account[0] = buyer (treasury DCW).
   const buyerEntry = args.onchainInstructions[0].accounts[0];
   if (!buyerEntry?.isSigner) {
-    throw new Error(
-      'submitSolPrefund: first ix account is not a signer — prefund shape changed?'
-    );
+    throw new Error('submitSolPrefund: first ix account is not a signer — prefund shape changed?');
   }
   const buyerAddress = buyerEntry.pubkey;
 

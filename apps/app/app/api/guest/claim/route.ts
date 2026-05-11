@@ -141,10 +141,7 @@ interface TripContacts {
   phone?: string;
 }
 
-function readTripEmail(trip: {
-  guestVerifiedContacts: unknown;
-  metadata: unknown;
-}): string | null {
+function readTripEmail(trip: { guestVerifiedContacts: unknown; metadata: unknown }): string | null {
   const verified = (trip.guestVerifiedContacts ?? null) as TripContacts | null;
   if (verified?.email) return verified.email;
   const meta = trip.metadata as { invite?: { guestEmail?: string } } | null;
@@ -371,10 +368,11 @@ export async function POST(req: NextRequest) {
   // Bind trip → user + record the claim outcome on the trip row so
   // the operator dashboard reflects it. Status flips to 'claimed' —
   // downstream booking workflows wait on this transition.
-  const metadata =
-    (trip.metadata && typeof trip.metadata === 'object' && !Array.isArray(trip.metadata)
+  const metadata = (
+    trip.metadata && typeof trip.metadata === 'object' && !Array.isArray(trip.metadata)
       ? (trip.metadata as Record<string, unknown>)
-      : {}) as Record<string, unknown>;
+      : {}
+  ) as Record<string, unknown>;
   // `TripStatus` enum has no `claimed`; leave status untouched and let
   // booking flows transition it from here. The `metadata.claim` stamp
   // is the canonical "trip is claimed by traveler X" signal.

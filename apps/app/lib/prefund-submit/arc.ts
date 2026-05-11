@@ -21,22 +21,13 @@
 import { spendTenantUnifiedUsd } from '@sendero/circle/unified-balance';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { getArcClient } from '@sendero/arc/chain';
-import {
-  type Address,
-  type Hex,
-  createWalletClient,
-  http,
-  parseAbi,
-  parseUnits,
-} from 'viem';
+import { type Address, type Hex, createWalletClient, http, parseAbi, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 const ARC_USDC = '0x3600000000000000000000000000000000000000' as Address;
 const ARC_USDC_DECIMALS = 6;
 
-const USDC_ABI = parseAbi([
-  'function balanceOf(address) view returns (uint256)',
-]);
+const USDC_ABI = parseAbi(['function balanceOf(address) view returns (uint256)']);
 
 export interface ArcOnchainCall {
   to: string;

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 const findSlackInstall = mock(async (_args: unknown) => ({ teamId: 'T_TEST' }));
-const findUser = mock(async (_args: unknown) => null as null | { id: string; displayName: string | null; phone: string | null });
+const findUser = mock(
+  async (_args: unknown) =>
+    null as null | { id: string; displayName: string | null; phone: string | null }
+);
 const createUser = mock(async (_args: unknown) => ({ id: 'usr_new' }));
 const updateUser = mock(async (_args: unknown) => ({ id: 'usr_existing' }));
 const upsertChannelIdentity = mock(async (_args: unknown) => ({ id: 'ci_slack' }));

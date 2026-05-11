@@ -315,11 +315,7 @@ export async function POST(req: NextRequest) {
   // on tenant.primaryChain (book-flight, mint-stamp, etc.) stay visible;
   // only tools that physically can't operate on a Sol tenant (e.g.
   // bridge_to_arc) are stripped. Mirrors the MCP server's filter.
-  const ARC_ONLY_TOOL_NAMES = new Set<string>([
-    'bridge_to_arc',
-    'faucet_drip',
-    'swap_and_bridge',
-  ]);
+  const ARC_ONLY_TOOL_NAMES = new Set<string>(['bridge_to_arc', 'faucet_drip', 'swap_and_bridge']);
   const tenantForChain = await prisma.tenant.findUnique({
     where: { id: body.tenantId },
     select: { primaryChain: true },

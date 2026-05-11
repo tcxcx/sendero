@@ -39,8 +39,7 @@ function chainLabel(id: DestinationChainId): string {
 
 export function BridgeDialog() {
   const tenantChain = useSendero(s => s.userAuth?.chain);
-  const defaultChain: DestinationChainId =
-    tenantChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
+  const defaultChain: DestinationChainId = tenantChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
 
   const [bridge, setBridge] = useQueryState('bridge');
   const [toChain, setToChain] = useQueryState('bridgeToChain', {
@@ -99,8 +98,7 @@ export function BridgeDialog() {
     >
       <p className="dlg-sub">
         Pick where you want USDC to land. App Kit pulls liquidity from any chain in your unified
-        balance and mints on the destination. No source picker — the sweep keeps the pool
-        topped up.
+        balance and mints on the destination. No source picker — the sweep keeps the pool topped up.
       </p>
 
       <div className="dlg-row">

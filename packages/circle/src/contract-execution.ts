@@ -101,9 +101,7 @@ export async function executeContractCallFromDcw(
 
   const transactionId = (createRes.data as { id?: string })?.id;
   if (!transactionId) {
-    throw new Error(
-      'contract-execution: Circle returned no transactionId — SDK shape changed?'
-    );
+    throw new Error('contract-execution: Circle returned no transactionId — SDK shape changed?');
   }
 
   // Poll for confirmation. Circle's createTransaction is async; the

@@ -596,9 +596,7 @@ async function deriveSolanaAddress(privateKeyBase58: string): Promise<string> {
   const { Keypair } = await import('@solana/web3.js');
   const secret = bs58.decode(privateKeyBase58);
   if (secret.length !== 64) {
-    throw new Error(
-      `Solana secret key length mismatch — expected 64 bytes, got ${secret.length}`
-    );
+    throw new Error(`Solana secret key length mismatch — expected 64 bytes, got ${secret.length}`);
   }
   const kp = Keypair.fromSecretKey(secret);
   return kp.publicKey.toBase58();
@@ -612,9 +610,7 @@ interface DecryptSolanaArgs {
   caller?: GatewaySignerCallerContext;
 }
 
-async function decryptSolanaSigner(
-  args: DecryptSolanaArgs
-): Promise<TenantSolanaGatewaySigner> {
+async function decryptSolanaSigner(args: DecryptSolanaArgs): Promise<TenantSolanaGatewaySigner> {
   const plaintext = await decrypt({
     ciphertext: args.encryptedPrivateKey,
     purpose: 'gateway-signer',

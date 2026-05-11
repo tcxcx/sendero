@@ -309,13 +309,10 @@ function DeliveryBanner({
         gap: 2,
       }}
     >
-      <span style={{ fontWeight: 600 }}>
-        ✓ Pay link sent · {okChannels.join(' + ') || '—'}
-      </span>
+      <span style={{ fontWeight: 600 }}>✓ Pay link sent · {okChannels.join(' + ') || '—'}</span>
       {failedChannels.length > 0 ? (
         <span style={{ color: 'rgba(31,42,68,0.6)' }}>
-          (also tried{' '}
-          {failedChannels.map(c => `${c.channel}: ${c.reason ?? 'failed'}`).join(', ')})
+          (also tried {failedChannels.map(c => `${c.channel}: ${c.reason ?? 'failed'}`).join(', ')})
         </span>
       ) : null}
     </div>

@@ -128,8 +128,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             error: 'onchain_instructions_missing',
-            message:
-              'No saved Sol on-chain instructions for this trip. Recreate the invite.',
+            message: 'No saved Sol on-chain instructions for this trip. Recreate the invite.',
           },
           { status: 409 }
         );
