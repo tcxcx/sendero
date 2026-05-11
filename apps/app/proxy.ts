@@ -197,10 +197,12 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   }
 
   if (!orgId) {
-    return applyLocaleCookie(
-      NextResponse.redirect(new URL('/onboarding/choose-org', req.url)),
-      locale
-    );
+    // No active org — fall through to `/onboarding`, which renders
+    // `WelcomeCardScreen` for the no-org case (it embeds Clerk's
+    // `<OrganizationList />` to create or pick an org). The old
+    // `/onboarding/choose-org` page was deleted; single source of
+    // truth for the onboarding ladder is `/onboarding`.
+    return applyLocaleCookie(NextResponse.redirect(new URL('/onboarding', req.url)), locale);
   }
 
   const orgMetadata = sessionClaims?.org_metadata as OrgMetadata;
