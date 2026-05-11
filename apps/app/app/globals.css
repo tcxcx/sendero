@@ -2216,6 +2216,49 @@ a[role="button"]:active,
   }
 }
 
+/* OrbitingCircles primitive — used by the unified-balance orbit on the
+ * onboarding chain-select screen and any future orbital visualizations.
+ * Children are absolutely positioned at the parent's center (top/left
+ * 50% with the size offset) and then transformed onto the orbit ring
+ * via three composed rotations:
+ *
+ *   1. rotate by `--angle * 1deg`         (place at the right slot on the ring)
+ *   2. translateY by `--radius * 1px`     (push outward to the ring's radius)
+ *   3. rotate by `-(--angle) * 1deg`      (counter-rotate so the icon stays upright)
+ *
+ * The animation increments steps 1 + 3 together by 360deg over the
+ * `--duration` second cycle. `[animation-direction:reverse]` on a
+ * child gives counter-orbiting rings. Respect prefers-reduced-motion
+ * by overriding the animation property to none (handled by the
+ * consuming component's scoped style block).
+ */
+.animate-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  margin-top: calc(var(--icon-size) / -2);
+  margin-left: calc(var(--icon-size) / -2);
+  transform-origin: center;
+  animation: orbit calc(var(--duration, 20) * 1s) linear infinite;
+}
+
+@keyframes orbit {
+  0% {
+    transform:
+      rotate(calc(var(--angle, 0) * 1deg))
+      translateY(calc(var(--radius, 80) * 1px))
+      rotate(calc(var(--angle, 0) * -1deg));
+  }
+  100% {
+    transform:
+      rotate(calc(var(--angle, 0) * 1deg + 360deg))
+      translateY(calc(var(--radius, 80) * 1px))
+      rotate(calc(var(--angle, 0) * -1deg - 360deg));
+  }
+}
+
 .globe-marquee {
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
