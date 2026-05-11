@@ -26,11 +26,11 @@ const SITE_URL = resolvePublicOrigin(process.env.NEXT_PUBLIC_SITE_URL, 'https://
 const CLERK_ALLOWED_REDIRECT_ORIGINS = buildClerkAllowedRedirectOrigins();
 const SEO_LOCALES = ['en-US', 'es-MX', 'pt-BR', 'es-AR'] as const;
 const DESCRIPTION =
-  'Sendero turns travel requests into coordinated agent workflows: real inventory, policy checks, prepaid guest escrow, PNR issuance, USDC settlement on Arc, invoices, and trip support.';
+  'Sendero turns travel requests into coordinated agent workflows: real inventory, policy checks, prepaid guest escrow, PNR issuance, USDC settlement on-chain, invoices, and trip support — your entire trip in Slack and WhatsApp.';
 
 export const metadata = buildMetadata({
   title: 'Sendero',
-  titleSuffix: 'Agent-native travel, settled on Arc',
+  titleSuffix: 'Agent-native travel, settled on-chain. Your entire trip in Slack and WhatsApp.',
   description: DESCRIPTION,
   path: '/',
   locale: 'en-US',
@@ -39,9 +39,9 @@ export const metadata = buildMetadata({
   siteUrl: SITE_URL,
   siteName: 'Sendero',
   ogImage: buildOgImageUrl(SITE_URL, {
-    title: 'Agent-native travel, settled on Arc',
+    title: 'Agent-native travel, settled on-chain. Your entire trip in Slack and WhatsApp.',
     description:
-      'Real inventory, policy checks, prepaid escrow, PNR issuance, USDC settlement, and trip support — orchestrated by AI agents.',
+      'Real inventory, policy checks, prepaid escrow, PNR issuance, USDC settlement, and trip support — orchestrated by AI agents in the channels your team already uses.',
     eyebrow: 'sendero.travel',
   }),
   ogImageAlt: 'Sendero social preview with the binoculars mark and agent-native travel copy.',
