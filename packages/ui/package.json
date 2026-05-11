@@ -52,7 +52,8 @@
     "./segmented-tabs": "./src/components/segmented-tabs.tsx",
     "./textarea": "./src/components/textarea.tsx",
     "./tiptap": "./src/components/tiptap/index.ts",
-    "./tooltip": "./src/components/tooltip.tsx"
+    "./tooltip": "./src/components/tooltip.tsx",
+    "./map-blocks": "./src/components/map-blocks.tsx"
   },
   "peerDependencies": {
     "react": "^19",

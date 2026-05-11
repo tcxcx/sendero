@@ -34,7 +34,6 @@ async function sendEmail(to: string, subject: string, body: string): Promise<Ale
     // package isn't on the classpath. tsc can't see the types
     // without adding `resend` to apps/app/package.json — the runtime
     // works regardless because Next bundles transitives.
-    // @ts-expect-error -- transitive dep, no direct types in this app
     const { Resend } = await import('resend');
     const client = new Resend(apiKey);
     const result = await client.emails.send({

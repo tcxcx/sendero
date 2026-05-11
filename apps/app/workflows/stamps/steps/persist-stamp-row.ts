@@ -24,7 +24,11 @@ export const persistStampMetadata = async (args: {
 
   await prisma.nftStamp.update({
     where: {
-      kind_primaryKey: { kind: args.ctx.kind, primaryKey: args.ctx.primaryKey },
+      kind_primaryKey_chain: {
+        kind: args.ctx.kind,
+        primaryKey: args.ctx.primaryKey,
+        chain: args.ctx.chain,
+      },
     },
     data: {
       blobUrl: args.blobUrl,

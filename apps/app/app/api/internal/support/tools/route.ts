@@ -357,7 +357,10 @@ function verifiedSupportContext(body: SupportToolBody): VerifiedSupportContext |
 async function resolveTenant(body: SupportToolBody) {
   const phoneNumberId = trustedPhoneNumberIdFromContext(body);
   if (phoneNumberId) {
-    const install = await prisma.whatsAppInstall.findUnique({
+    // `phoneNumberId` is only unique within (tenantId, phoneNumberId);
+    // each Meta WBA phone maps to one tenant in practice, so findFirst
+    // matches the real constraint without needing tenant context.
+    const install = await prisma.whatsAppInstall.findFirst({
       where: { phoneNumberId },
       include: { tenant: true },
     });

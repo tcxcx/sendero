@@ -379,7 +379,6 @@ async function dispatchOtp(
       // Dynamic import keeps this module buildable when @sendero/notifications
       // (and its transitive `resend` dep) is missing from the classpath —
       // same pattern used in `apps/app/lib/security-alert-senders.ts`.
-      // @ts-expect-error -- transitive dep, no direct types in this app
       const { Resend } = await import('resend');
       const client = new Resend(apiKey);
       const html = [

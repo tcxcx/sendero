@@ -942,7 +942,10 @@ async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<s
   // through the Kapso setup link, so the phoneNumberId → tenant mapping
   // lives on the `whatsapp_installs` table.
   if (phoneNumberId) {
-    const install = await prisma.whatsAppInstall.findUnique({
+    // `phoneNumberId` is only unique within (tenantId, phoneNumberId);
+    // each Meta WBA phone maps to one tenant in practice, so findFirst
+    // matches the real constraint without needing tenant context.
+    const install = await prisma.whatsAppInstall.findFirst({
       where: { phoneNumberId },
       select: { tenantId: true, status: true },
     });
