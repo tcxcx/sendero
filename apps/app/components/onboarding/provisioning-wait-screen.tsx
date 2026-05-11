@@ -6,32 +6,50 @@ import { Button } from '@sendero/ui/button';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 
-const ARC_PHASES = [
-  { code: '01', label: 'Creating your treasury wallet' },
-  { code: '02', label: 'Setting up your agency identity' },
-  { code: '03', label: 'Wiring up notifications' },
-  { code: '04', label: 'Almost ready' },
-] as const;
+type StageStatus = 'idle' | 'running' | 'done' | 'failed';
 
-const SOL_PHASES = [
-  { code: '01', label: 'Creating your treasury wallet' },
-  { code: '02', label: 'Setting up your agency identity' },
-  { code: '03', label: 'Wiring up notifications' },
-  { code: '04', label: 'Almost ready' },
+type StageState = {
+  status: StageStatus;
+  error?: string;
+  address?: string;
+  identityStatus?: string;
+};
+
+export type ProvisioningProgressView = {
+  jobId: string;
+  chain: 'arc' | 'sol';
+  startedAt: string;
+  finishedAt?: string;
+  currentStage: 'treasury' | 'identity' | 'finalize' | 'done' | 'failed';
+  attempts: number;
+  stages: {
+    treasury: StageState;
+    identity: StageState;
+    finalize: StageState;
+  };
+  lastError?: { stage: 'treasury' | 'identity' | 'finalize'; message: string };
+} | null;
+
+// Three real stages. The old four-step UI included "Wiring up
+// notifications" which mapped to nothing on the server — it was a UI
+// fiction that made every retry look stuck on that step. Removed
+// until there's an actual server-side action to surface.
+const PHASES = [
+  { key: 'treasury', code: '01', label: 'Creating your treasury wallet' },
+  { key: 'identity', code: '02', label: 'Minting your agent identity' },
+  { key: 'finalize', code: '03', label: 'Almost ready' },
 ] as const;
 
 const CHAIN_META = {
   arc: {
     eyebrow: 'Setting things up',
     chainLabel: 'Arc',
-    lede: 'Building your workspace. This takes a few seconds.',
-    phases: ARC_PHASES,
+    lede: 'Building your workspace. This takes about a minute.',
   },
   sol: {
     eyebrow: 'Setting things up',
     chainLabel: 'Solana',
-    lede: 'Building your workspace. This takes a few seconds.',
-    phases: SOL_PHASES,
+    lede: 'Building your workspace. Solana provisioning takes 30 to 60 seconds.',
   },
 } as const;
 
@@ -41,6 +59,9 @@ export type ProvisioningWaitScreenProps = {
    *  for legacy callers that haven't been migrated to the chain-select
    *  flow yet. */
   chain?: 'arc' | 'sol';
+  /** Real provisioning state from `/api/onboarding/check-ready`. When
+   *  null, falls back to a generic "running" pulse on the first step. */
+  progress: ProvisioningProgressView;
   polling: boolean;
   stuck: boolean;
   completing: boolean;
@@ -48,9 +69,38 @@ export type ProvisioningWaitScreenProps = {
   onRunDevComplete: () => void;
 };
 
+function resolveStageStatus(
+  progress: ProvisioningProgressView,
+  key: 'treasury' | 'identity' | 'finalize'
+): StageStatus {
+  if (!progress) {
+    // Pre-state-machine fallback: animate the first step while we wait
+    // for the first /check-ready response.
+    return key === 'treasury' ? 'running' : 'idle';
+  }
+  return progress.stages[key]?.status ?? 'idle';
+}
+
+function resolveStageDetail(
+  progress: ProvisioningProgressView,
+  key: 'treasury' | 'identity' | 'finalize'
+): string | null {
+  if (!progress) return null;
+  const stage = progress.stages[key];
+  if (stage.status === 'failed' && stage.error) return stage.error;
+  if (key === 'treasury' && stage.status === 'done' && stage.address) {
+    return `${stage.address.slice(0, 6)}…${stage.address.slice(-4)}`;
+  }
+  if (key === 'identity' && stage.status === 'done' && stage.identityStatus) {
+    return stage.identityStatus;
+  }
+  return null;
+}
+
 export function ProvisioningWaitScreen({
   organizationName,
   chain = 'arc',
+  progress,
   polling,
   stuck,
   completing,
@@ -59,13 +109,20 @@ export function ProvisioningWaitScreen({
 }: ProvisioningWaitScreenProps) {
   const elapsed = useElapsedSeconds();
   const meta = CHAIN_META[chain];
+  const isFailed = progress?.currentStage === 'failed';
+  const isDone = progress?.currentStage === 'done';
+  const lastError = progress?.lastError;
 
   return (
     <main className="provisioning-screen">
       <article className="provisioning-card" aria-busy={polling} aria-live="polite">
         <header className="provisioning-card__head">
           <span className="provisioning-eyebrow">
-            <span className="provisioning-eyebrow__pulse" data-active={polling || undefined} />
+            <span
+              className="provisioning-eyebrow__pulse"
+              data-active={polling && !isFailed ? true : undefined}
+              data-failed={isFailed || undefined}
+            />
             {meta.eyebrow}
           </span>
           <h1 className="provisioning-title">
@@ -76,18 +133,23 @@ export function ProvisioningWaitScreen({
           <p className="provisioning-lede">{meta.lede}</p>
         </header>
 
-        <ol className="provisioning-manifest" data-running={!stuck || undefined}>
-          {meta.phases.map((phase, idx) => (
-            <li
-              key={phase.code}
-              className="provisioning-step"
-              style={{ ['--step-index' as string]: idx }}
-            >
-              <span className="provisioning-step__code">{phase.code}</span>
-              <span className="provisioning-step__label">{phase.label}</span>
-              <span className="provisioning-step__dot" aria-hidden="true" />
-            </li>
-          ))}
+        <ol className="provisioning-manifest">
+          {PHASES.map(phase => {
+            const status = resolveStageStatus(progress, phase.key);
+            const detail = resolveStageDetail(progress, phase.key);
+            return (
+              <li key={phase.code} className="provisioning-step" data-status={status}>
+                <span className="provisioning-step__code">{phase.code}</span>
+                <span className="provisioning-step__body">
+                  <span className="provisioning-step__label">{phase.label}</span>
+                  {detail ? <span className="provisioning-step__detail">{detail}</span> : null}
+                </span>
+                <span className="provisioning-step__dot" aria-hidden="true">
+                  {status === 'done' ? '✓' : status === 'failed' ? '!' : null}
+                </span>
+              </li>
+            );
+          })}
         </ol>
 
         <footer className="provisioning-meta">
@@ -103,9 +165,26 @@ export function ProvisioningWaitScreen({
             <span>elapsed</span>
             <span className="provisioning-meta__value">{formatElapsed(elapsed)}</span>
           </span>
+          {progress?.attempts && progress.attempts > 1 ? (
+            <span className="provisioning-meta__row">
+              <span>attempts</span>
+              <span className="provisioning-meta__value">{progress.attempts}</span>
+            </span>
+          ) : null}
         </footer>
 
-        {stuck ? (
+        {isFailed && lastError ? (
+          <aside className="provisioning-notice provisioning-notice--error" role="alert">
+            <span className="provisioning-notice__tag">Provisioning failed</span>
+            <h2 className="provisioning-notice__title">
+              Stage {lastError.stage} blew up. We can retry without losing the workspace.
+            </h2>
+            <p className="provisioning-notice__error">{lastError.message}</p>
+            <p className="provisioning-notice__hint">
+              Provisioning is idempotent — already-completed steps short-circuit. Hit Retry below.
+            </p>
+          </aside>
+        ) : stuck ? (
           <aside className="provisioning-notice" role="status">
             <span className="provisioning-notice__tag">Taking longer than usual</span>
             <h2 className="provisioning-notice__title">This is taking a moment.</h2>
@@ -113,20 +192,28 @@ export function ProvisioningWaitScreen({
           </aside>
         ) : null}
 
-        {IS_DEV ? (
+        {!isDone && (IS_DEV || isFailed || stuck) ? (
           <div className="provisioning-dev">
             <Button
               type="button"
-              variant="outline"
+              variant={isFailed ? 'default' : 'outline'}
               size="sm"
               disabled={completing}
               onClick={onRunDevComplete}
               className="provisioning-dev__button"
             >
-              {completing ? 'Setting up…' : 'Retry setup'}
+              {completing ? 'Retrying…' : isFailed ? 'Retry provisioning' : 'Retry setup'}
             </Button>
             {devHint ? <p className="provisioning-dev__hint">{devHint}</p> : null}
           </div>
+        ) : null}
+        {isDone ? (
+          <aside className="provisioning-notice provisioning-notice--success" role="status">
+            <span className="provisioning-notice__tag">Ready</span>
+            <h2 className="provisioning-notice__title">
+              Workspace is live. Redirecting to your dashboard…
+            </h2>
+          </aside>
         ) : null}
       </article>
 
@@ -189,11 +276,14 @@ export function ProvisioningWaitScreen({
           height: 7px;
           border-radius: 999px;
           background: color-mix(in oklab, var(--ink, #fb542b) 70%, transparent);
-          box-shadow: 0 0 0 0 color-mix(in oklab, var(--ink, #fb542b) 50%, transparent);
         }
 
         .provisioning-eyebrow__pulse[data-active] {
           animation: provisioning-eyebrow-pulse 2.4s ease-out infinite;
+        }
+
+        .provisioning-eyebrow__pulse[data-failed] {
+          background: var(--accent-rose, #b54848);
         }
 
         @keyframes provisioning-eyebrow-pulse {
@@ -246,7 +336,7 @@ export function ProvisioningWaitScreen({
 
         .provisioning-step {
           display: grid;
-          grid-template-columns: 32px 1fr auto;
+          grid-template-columns: 32px 1fr 22px;
           align-items: center;
           gap: 16px;
           padding: 14px 0;
@@ -266,34 +356,68 @@ export function ProvisioningWaitScreen({
           font-variant-numeric: tabular-nums;
         }
 
+        .provisioning-step__body {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+
         .provisioning-step__label {
           font-feature-settings: 'ss01' on;
         }
 
-        .provisioning-step__dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 999px;
-          background: color-mix(in oklab, var(--midnight, #1f2a44) 18%, transparent);
-          transition: background-color 200ms ease;
+        .provisioning-step__detail {
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-size: 10.5px;
+          letter-spacing: 0.04em;
+          color: color-mix(in oklab, var(--midnight, #1f2a44) 50%, transparent);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
-        [data-running] .provisioning-step__dot {
-          animation: provisioning-step-glow 5.2s ease-in-out infinite;
-          animation-delay: calc(var(--step-index) * 1.3s);
+        .provisioning-step[data-status='failed'] .provisioning-step__detail {
+          color: var(--accent-rose, #b54848);
+        }
+
+        .provisioning-step__dot {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          background: color-mix(in oklab, var(--midnight, #1f2a44) 12%, transparent);
+          display: grid;
+          place-items: center;
+          font-size: 10px;
+          line-height: 1;
+          color: transparent;
+          transition:
+            background-color 200ms ease,
+            color 200ms ease,
+            box-shadow 200ms ease;
+        }
+
+        .provisioning-step[data-status='running'] .provisioning-step__dot {
+          background: color-mix(in oklab, var(--ink, #fb542b) 75%, transparent);
+          animation: provisioning-step-glow 1.4s ease-in-out infinite;
+        }
+
+        .provisioning-step[data-status='done'] .provisioning-step__dot {
+          background: var(--ink, #fb542b);
+          color: #fff;
+        }
+
+        .provisioning-step[data-status='failed'] .provisioning-step__dot {
+          background: var(--accent-rose, #b54848);
+          color: #fff;
         }
 
         @keyframes provisioning-step-glow {
           0%,
-          70%,
           100% {
-            background: color-mix(in oklab, var(--midnight, #1f2a44) 18%, transparent);
-            box-shadow: 0 0 0 0 transparent;
+            box-shadow: 0 0 0 0 color-mix(in oklab, var(--ink, #fb542b) 0%, transparent);
           }
-          15%,
-          40% {
-            background: var(--ink, #fb542b);
-            box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink, #fb542b) 18%, transparent);
+          50% {
+            box-shadow: 0 0 0 5px color-mix(in oklab, var(--ink, #fb542b) 22%, transparent);
           }
         }
 
@@ -338,12 +462,30 @@ export function ProvisioningWaitScreen({
           color: color-mix(in oklab, var(--midnight, #1f2a44) 84%, transparent);
         }
 
+        .provisioning-notice--error {
+          border-color: color-mix(in oklab, var(--accent-rose, #b54848) 38%, transparent);
+          background: color-mix(in oklab, var(--accent-rose, #b54848) 8%, transparent);
+        }
+
+        .provisioning-notice--success {
+          border-color: color-mix(in oklab, var(--ink, #fb542b) 30%, transparent);
+          background: color-mix(in oklab, var(--ink, #fb542b) 6%, transparent);
+        }
+
+        .provisioning-notice--success .provisioning-notice__tag {
+          color: var(--ink, #fb542b);
+        }
+
         .provisioning-notice__tag {
           font-family: var(--font-mono, ui-monospace, monospace);
           font-size: 10px;
           letter-spacing: 0.18em;
           text-transform: uppercase;
           color: color-mix(in oklab, var(--midnight, #1f2a44) 60%, transparent);
+        }
+
+        .provisioning-notice--error .provisioning-notice__tag {
+          color: var(--accent-rose, #b54848);
         }
 
         .provisioning-notice__title {
@@ -359,16 +501,19 @@ export function ProvisioningWaitScreen({
           margin: 0;
         }
 
-        .provisioning-notice__hint {
-          color: color-mix(in oklab, var(--midnight, #1f2a44) 65%, transparent);
+        .provisioning-notice__error {
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-size: 11.5px;
+          line-height: 1.5;
+          color: var(--accent-rose, #b54848);
+          word-break: break-word;
+          padding: 8px 10px;
+          background: rgba(255, 255, 255, 0.55);
+          border-radius: 6px;
         }
 
-        .provisioning-notice code {
-          font-size: 0.75rem;
-          padding: 1px 5px;
-          border-radius: 4px;
-          background: color-mix(in oklab, var(--midnight, #1f2a44) 6%, transparent);
-          color: var(--midnight, #1f2a44);
+        .provisioning-notice__hint {
+          color: color-mix(in oklab, var(--midnight, #1f2a44) 65%, transparent);
         }
 
         .provisioning-dev {
@@ -397,7 +542,7 @@ export function ProvisioningWaitScreen({
 
         @media (prefers-reduced-motion: reduce) {
           .provisioning-eyebrow__pulse[data-active],
-          [data-running] .provisioning-step__dot {
+          .provisioning-step[data-status='running'] .provisioning-step__dot {
             animation: none;
           }
         }

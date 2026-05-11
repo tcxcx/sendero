@@ -24,9 +24,16 @@
 
 import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
+import { mintAndRegisterAgentIdentity } from '@sendero/metaplex';
 import type { Address } from 'viem';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
+// Solana devnet chain id sentinel — Solana doesn't have an EVM-style
+// chain id, so we use the same `5` constant the rest of the codebase
+// uses (see packages/tools/src/gateway-balance.ts, moonpay-topup.ts,
+// ensure-traveler-wallet.ts). Stored on OnchainIdentity.chainId for
+// Sol rows; the discriminator that actually matters is `chain='sol'`.
+const SOL_DEVNET_CHAIN_ID = 5;
 
 /// After this many consecutive failed mint attempts, the sweeper resets
 /// the row back to a fresh pending attempt. 12 attempts × 5min cron =
@@ -38,10 +45,24 @@ const MAX_ATTEMPTS = 12;
 /// returns ERC-8004 agent metadata JSON. URL is keyed on the Sendero
 /// id (tenantId/userId), not the on-chain agentId, so it survives any
 /// future re-mint without breaking the on-chain pointer.
+///
+/// Resolution priority:
+///   1. `SENDERO_IDENTITY_METADATA_BASE_URL` — explicit public base.
+///      Set this in local dev when the app runs on `http://localhost:*`,
+///      otherwise the Metaplex Agent API can't fetch the URI to validate
+///      it ("Invalid input data" at mint time). Dev + prod share the
+///      same Neon DB, so pointing local dev at the prod app URL Just
+///      Works for shared records.
+///   2. `NEXT_PUBLIC_APP_URL` — canonical app origin for prod deploys.
 function metadataUriFor(kind: 'org' | 'user', subjectId: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  const base =
+    process.env.SENDERO_IDENTITY_METADATA_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    '';
   if (!base) {
-    throw new Error('NEXT_PUBLIC_APP_URL not set — cannot build identity metadata URI');
+    throw new Error(
+      'No metadata base URL — set SENDERO_IDENTITY_METADATA_BASE_URL or NEXT_PUBLIC_APP_URL.'
+    );
   }
   return `${base.replace(/\/$/, '')}/agents/${kind}/${subjectId}/metadata.json`;
 }
@@ -56,22 +77,37 @@ export interface ProvisionIdentityResult {
 }
 
 /**
- * Provision an ERC-8004 identity for an organization. The org's treasury
- * `CircleWallet` (kind='treasury', chain='ARC-TESTNET') becomes the agent
- * NFT owner. Re-running after a successful mint returns the cached row
- * with `status='cached'`.
+ * Provision an on-chain identity for an organization. Routes on
+ * `tenant.primaryChain`:
+ *   - 'arc' → ERC-8004 IdentityRegistry mint via @sendero/arc/identity.
+ *             Treasury CircleWallet (chain='ARC-TESTNET') becomes the
+ *             NFT owner.
+ *   - 'sol' → Metaplex Agent Registry mint via @sendero/metaplex.
+ *             Treasury CircleWallet (chain='SOL-DEVNET', a Squads V4
+ *             vault pubkey) is the agent attestation subject; the
+ *             on-chain owner is the Sendero platform key (Squads
+ *             vault PDAs cannot sign API-built txns).
  *
- * Returns `status='pending'` when the wallet exists but the on-chain
- * mint hasn't completed yet — the sweeper will retry. Throws on
- * preconditions (no treasury wallet, no APP URL).
+ * Re-running after a successful mint returns `status='cached'`.
+ * Pre-cascade-aware code threw "no treasury CircleWallet on
+ * ARC-TESTNET" for every Sol org because the lookup was hardcoded.
  */
 export async function ensureOrgIdentity(args: {
   tenantId: string;
 }): Promise<ProvisionIdentityResult> {
   const { tenantId } = args;
 
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { primaryChain: true, displayName: true },
+  });
+  if (!tenant) {
+    throw new Error(`Cannot mint org identity — Tenant ${tenantId} not found.`);
+  }
+  const chain: 'arc' | 'sol' = tenant.primaryChain === 'sol' ? 'sol' : 'arc';
+
   const existing = await prisma.onchainIdentity.findFirst({
-    where: { kind: 'org', tenantId },
+    where: { kind: 'org', tenantId, chain },
   });
   if (existing && existing.status === 'minted' && existing.agentId) {
     return {
@@ -83,6 +119,16 @@ export async function ensureOrgIdentity(args: {
       txHash: existing.mintTxHash,
     };
   }
+
+  if (chain === 'sol') {
+    return ensureOrgIdentitySol({
+      tenantId,
+      displayName: tenant.displayName,
+      existingId: existing?.id ?? null,
+    });
+  }
+
+  // --- Arc path (default) ---
   const treasury = await prisma.circleWallet.findFirst({
     where: { tenantId, kind: 'treasury', chain: 'ARC-TESTNET' },
     select: { address: true, circleWalletId: true },
@@ -110,6 +156,106 @@ export async function ensureOrgIdentity(args: {
     metadataUri,
     existingId: existing?.id ?? null,
   });
+}
+
+/**
+ * Solana org-identity branch. Mints a Metaplex Core asset registered
+ * with the Agent Registry. The on-chain owner is the Sendero platform
+ * key (the Metaplex Agent API requires a wallet that can sign the
+ * API-built tx; Squads V4 vault PDAs cannot). The tenant's Squads vault
+ * pubkey is recorded as `holderAddress` so DB queries find the tenant
+ * by treasury — same shape as Arc, different chain.
+ */
+async function ensureOrgIdentitySol(args: {
+  tenantId: string;
+  displayName: string;
+  existingId: string | null;
+}): Promise<ProvisionIdentityResult> {
+  const { tenantId, displayName, existingId } = args;
+
+  const treasury = await prisma.circleWallet.findFirst({
+    where: { tenantId, kind: 'treasury', chain: 'SOL-DEVNET' },
+    select: { address: true },
+  });
+  if (!treasury) {
+    throw new Error(
+      `Cannot mint org identity for tenant ${tenantId} — no treasury CircleWallet on SOL-DEVNET. Provision the wallet first via provisionTenantSolanaTreasury.`
+    );
+  }
+
+  const metadataUri = metadataUriFor('org', tenantId);
+
+  // Insert/update the pending row before the network round-trip so a
+  // crash mid-mint is reasoned-about. Same idempotency contract as
+  // mintAndPersist for the Arc path.
+  const pending = existingId
+    ? await prisma.onchainIdentity.update({
+        where: { id: existingId },
+        data: {
+          attemptCount: { increment: 1 },
+          lastAttemptAt: new Date(),
+          status: 'pending',
+        },
+      })
+    : await prisma.onchainIdentity.create({
+        data: {
+          kind: 'org',
+          tenantId,
+          userId: null,
+          chain: 'sol',
+          chainId: SOL_DEVNET_CHAIN_ID,
+          // Final `contract` is overwritten with the Metaplex Agent
+          // Registry program id once the mint lands. Placeholder until
+          // then so the row is queryable while pending.
+          contract: 'metaplex-agent-registry',
+          holderAddress: treasury.address,
+          metadataUri,
+          status: 'pending',
+          attemptCount: 1,
+          lastAttemptAt: new Date(),
+        },
+      });
+
+  let result: Awaited<ReturnType<typeof mintAndRegisterAgentIdentity>>;
+  try {
+    result = await mintAndRegisterAgentIdentity({
+      tenantId,
+      name: displayName || `Sendero tenant ${tenantId.slice(0, 8)}`,
+      ownerPubkey: treasury.address,
+      identityUri: metadataUri,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown_metaplex_error';
+    await prisma.onchainIdentity.update({
+      where: { id: pending.id },
+      data: { lastError: message.slice(0, 500) },
+    });
+    throw err;
+  }
+
+  const minted = await prisma.onchainIdentity.update({
+    where: { id: pending.id },
+    data: {
+      agentId: result.assetAddress,
+      mintTxHash: result.signature,
+      // Agent Registry program id from the result (we don't know it
+      // statically — Metaplex resolves it from the network). Stored
+      // here for explorer linking.
+      contract: 'metaplex-agent-registry',
+      mintedAt: new Date(),
+      status: 'minted',
+      lastError: null,
+    },
+  });
+
+  return {
+    status: 'minted',
+    identityId: minted.id,
+    agentId: minted.agentId,
+    contract: minted.contract,
+    holderAddress: minted.holderAddress,
+    txHash: minted.mintTxHash,
+  };
 }
 
 /**

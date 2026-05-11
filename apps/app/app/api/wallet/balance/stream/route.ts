@@ -25,6 +25,7 @@ import type { NextRequest } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@sendero/database';
 
+import { canonicalizeAddress } from '@/lib/address-case';
 import { openListener } from '@/lib/pg-listen';
 
 export const runtime = 'nodejs';
@@ -51,11 +52,13 @@ export async function GET(req: NextRequest) {
     return new Response('unauthorized', { status: 401 });
   }
 
-  const address = req.nextUrl.searchParams.get('address');
-  if (!address) {
+  const addressParam = req.nextUrl.searchParams.get('address');
+  if (!addressParam) {
     return new Response('missing_address', { status: 400 });
   }
-  const lowered = address.toLowerCase();
+  // Canonicalize per chain: EVM lowercases safely, Solana base58 must
+  // preserve case (the stored row in CircleWallet is case-sensitive).
+  const lookup = canonicalizeAddress(addressParam);
 
   const tenant = await prisma.tenant.findUnique({
     where: { clerkOrgId: orgId },
@@ -70,7 +73,7 @@ export async function GET(req: NextRequest) {
   // subscriber could filter in-process for any address and see every
   // tenant's balance change.
   const owned = await prisma.circleWallet.findFirst({
-    where: { address: lowered, tenantId: tenant.id },
+    where: { address: lookup, tenantId: tenant.id },
     select: { id: true },
   });
   if (!owned) {
@@ -100,7 +103,7 @@ export async function GET(req: NextRequest) {
       const primeFromDb = async () => {
         try {
           const row = await prisma.circleWallet.findFirst({
-            where: { address: lowered, tenantId: tenant.id },
+            where: { address: lookup, tenantId: tenant.id },
             select: {
               usdcBalanceMicro: true,
               eurcBalanceMicro: true,
@@ -123,7 +126,11 @@ export async function GET(req: NextRequest) {
         onPayload: raw => {
           try {
             const evt = JSON.parse(raw) as BalanceEvent;
-            if (evt.address?.toLowerCase() !== lowered) return;
+            // Publisher (Circle webhook → pg_notify) emits the
+            // case-preserved address from the DB row. Compare with the
+            // canonicalized lookup directly — EVM already lowercased,
+            // Sol base58 left as-is.
+            if (canonicalizeAddress(evt.address ?? '') !== lookup) return;
             send('balance', {
               usdc: evt.usdc,
               eurc: evt.eurc,
@@ -146,7 +153,7 @@ export async function GET(req: NextRequest) {
           if (closed) return;
           try {
             const row = await prisma.circleWallet.findFirst({
-              where: { address: lowered, tenantId: tenant.id },
+              where: { address: lookup, tenantId: tenant.id },
               select: {
                 usdcBalanceMicro: true,
                 eurcBalanceMicro: true,

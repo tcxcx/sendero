@@ -52,6 +52,19 @@ export interface ResolveSenderoUserArgs {
    * keeps the agent turn alive without changing call sites elsewhere.
    */
   fallbackUserId: string;
+  /**
+   * Phase B2B2B — when the originating SlackInstall has
+   * `kind='customer_account'`, pass its `customerAccountId` so that
+   * auto-provisioned Users get stamped with the right corporate
+   * affiliation on first message. Null/undefined for tmc_internal
+   * installs + direct consumer flows.
+   *
+   * Already-existing Users (matched by email) are NOT reassigned —
+   * a corporate employee may already exist as a TMC employee in a
+   * different context; we don't want a Slack message to silently
+   * change their account binding.
+   */
+  customerAccountId?: string | null;
 }
 
 /**
@@ -71,7 +84,8 @@ interface SlackUsersInfoLike {
 export async function resolveSenderoUser(
   args: ResolveSenderoUserArgs
 ): Promise<ResolvedSlackUser> {
-  const { tenantId, slackTeamId, slackUserId, botToken, fallbackUserId } = args;
+  const { tenantId, slackTeamId, slackUserId, botToken, fallbackUserId, customerAccountId } =
+    args;
 
   try {
     // 1. Cache hit — no Slack call, no provisioning.
@@ -120,6 +134,10 @@ export async function resolveSenderoUser(
           data: {
             email: provisionalEmail,
             source: 'slack',
+            // Phase B2B2B — stamp the corporate affiliation when this
+            // Slack message came from a `customer_account` install.
+            // Null for tmc_internal installs + direct consumer flows.
+            customerAccountId: customerAccountId ?? null,
             // clerkUserId stays null — set if/when the human signs up
             // via Clerk and the webhook upserts onto this row.
           },

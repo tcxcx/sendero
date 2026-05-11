@@ -40,7 +40,22 @@ export async function GET() {
     }
   }
 
-  const explorerUrl = env.arcExplorerUrl();
+  // Explorer URL is chain-dependent.
+  //   - Arc: links to the IdentityRegistry contract on Arcscan/Blockscout.
+  //   - Sol: links to the minted Core asset (agentId) on Solana
+  //     Explorer. The on-chain "contract" for Sol is the Metaplex Agent
+  //     Registry program id; the asset address is the user-meaningful
+  //     reference, so we point there.
+  const isSol = profile?.contract === 'metaplex-agent-registry';
+  let contractUrl: string | null = null;
+  if (profile?.contract && profile.agentId && isSol) {
+    const cluster =
+      (process.env.SENDERO_METAPLEX_AGENT_NETWORK ?? '').includes('mainnet') ? '' : '?cluster=devnet';
+    contractUrl = `https://explorer.solana.com/address/${profile.agentId}${cluster}`;
+  } else if (profile?.contract && !isSol) {
+    const explorerUrl = env.arcExplorerUrl();
+    contractUrl = `${explorerUrl}/address/${profile.contract}`;
+  }
 
   return NextResponse.json({
     subjectId: tenant.id,
@@ -59,6 +74,6 @@ export async function GET() {
     validations: profile?.validations ?? [],
     provisioning,
     publicUrl: `/agents/org/${tenant.id}`,
-    contractUrl: profile?.contract ? `${explorerUrl}/address/${profile.contract}` : null,
+    contractUrl,
   });
 }
