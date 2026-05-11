@@ -36,11 +36,6 @@
 import type { ChannelMessage } from '@/lib/channel-render';
 import { sendChannelMessageSlack } from '@/lib/channel-send/slack';
 import { sendChannelMessageWhatsApp } from '@/lib/channel-send/whatsapp';
-import { resolveSandboxOutboundInstall } from '@/lib/whatsapp-sandbox-routing';
-import {
-  buildSendableTravelerChannels,
-  selectSendableTravelerChannel,
-} from '@/lib/sendable-traveler-channels';
 import { env } from '@sendero/env';
 import { prisma } from '@sendero/database';
 
@@ -90,7 +85,6 @@ export async function resolvePrimaryTravelerChannel(args: {
   travelerUserId: string;
   tripId?: string;
 }): Promise<TravelerChannelKind | null> {
-  let preferred: TravelerChannelKind | null = null;
   if (args.tripId) {
     const trip = await prisma.trip.findUnique({
       where: { id: args.tripId },
@@ -99,53 +93,24 @@ export async function resolvePrimaryTravelerChannel(args: {
     if (trip?.tenantId === args.tenantId) {
       const bindings = (trip.channelBindings ?? null) as { primary?: TravelerChannelKind } | null;
       if (bindings?.primary === 'whatsapp' || bindings?.primary === 'slack') {
-        preferred = bindings.primary;
+        return bindings.primary;
       }
     }
   }
 
-  const traveler = await prisma.user.findUnique({
-    where: { id: args.travelerUserId },
-    select: {
-      channelIdentities: {
-        where: { tenantId: args.tenantId },
-        select: {
-          kind: true,
-          externalUserId: true,
-          businessScopedUserId: true,
-          username: true,
-        },
-      },
-      slackUserBindings: {
-        where: { tenantId: args.tenantId },
-        select: { slackTeamId: true, slackUserId: true },
-      },
-    },
+  // ChannelIdentity covers WhatsApp (kind='whatsapp'). Slack travelers
+  // live in `SlackUserBinding`, queried separately.
+  const whatsapp = await prisma.channelIdentity.findFirst({
+    where: { tenantId: args.tenantId, userId: args.travelerUserId, kind: 'whatsapp' },
+    select: { id: true },
   });
-  if (!traveler) return null;
+  if (whatsapp) return 'whatsapp';
 
-  let activeSlackTeamIds = new Set<string>();
-  if (traveler.slackUserBindings.length > 0) {
-    const installs = await prisma.slackInstall.findMany({
-      where: {
-        tenantId: args.tenantId,
-        revokedAt: null,
-        teamId: { in: traveler.slackUserBindings.map(binding => binding.slackTeamId) },
-      },
-      select: { teamId: true },
-    });
-    activeSlackTeamIds = new Set(installs.map(install => install.teamId));
-  }
-
-  const selected = selectSendableTravelerChannel(
-    buildSendableTravelerChannels({
-      channelIdentities: traveler.channelIdentities,
-      slackUserBindings: traveler.slackUserBindings,
-      activeSlackTeamIds,
-    }),
-    preferred
-  );
-  if (selected === 'whatsapp' || selected === 'slack') return selected;
+  const slack = await prisma.slackUserBinding.findFirst({
+    where: { tenantId: args.tenantId, senderoUserId: args.travelerUserId },
+    select: { id: true },
+  });
+  if (slack) return 'slack';
 
   return null;
 }
@@ -183,15 +148,12 @@ async function dispatchWhatsApp(args: DispatchToTravelerArgs): Promise<DispatchT
     return { sent: false, reason: 'no_traveler_channel', channel: 'whatsapp' };
   }
 
-  // Real install wins. In dev mode, if the operator tenant has none,
-  // fall back to the Sendero sandbox install — same wire path, the
-  // sandbox phone number stamps the `from` field. Production posture
-  // is unchanged: missing install → `whatsapp_install_missing`.
-  const resolved = await resolveSandboxOutboundInstall(args.tenantId);
-  if (!resolved) {
+  const install = await prisma.whatsAppInstall.findUnique({
+    where: { tenantId: args.tenantId },
+  });
+  if (!install || install.status === 'disabled') {
     return { sent: false, reason: 'whatsapp_install_missing', channel: 'whatsapp' };
   }
-  const install = resolved.install;
 
   const accessToken = env.whatsappAccessToken() ?? env.kapsoApiKey();
   const apiBaseUrl =

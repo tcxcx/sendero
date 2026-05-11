@@ -57,7 +57,9 @@ const candidateSchema = z.object({
   rating: z.number().optional(),
   userRatingCount: z.number().int().optional(),
   priceLevel: z.string().optional(),
-  location: z.object({ latitude: z.number(), longitude: z.number() }).optional(),
+  location: z
+    .object({ latitude: z.number(), longitude: z.number() })
+    .optional(),
   openNow: z.boolean().optional(),
   editorialSummary: z.string().optional(),
   specialtyScore: z.number().min(0).max(1).optional(),
@@ -73,7 +75,9 @@ const inputSchema = z
       .array(candidateSchema)
       .max(30)
       .optional()
-      .describe('Pass-through mode: existing list (typically from specialty_coffee_finder).'),
+      .describe(
+        'Pass-through mode: existing list (typically from specialty_coffee_finder).'
+      ),
     city: z
       .string()
       .max(120)
@@ -120,7 +124,12 @@ export interface WorkFromCafeRankerDeps {
 
 // ── Work-friendliness scoring ────────────────────────────────────────
 
-const WIFI_PATTERNS = [/\bwi[\s-]?fi\b/i, /\binternet\b/i, /\bfast\s+wifi\b/i, /\bgood\s+wifi\b/i];
+const WIFI_PATTERNS = [
+  /\bwi[\s-]?fi\b/i,
+  /\binternet\b/i,
+  /\bfast\s+wifi\b/i,
+  /\bgood\s+wifi\b/i,
+];
 const OUTLET_PATTERNS = [
   /\boutlet/i,
   /\bplug/i,
@@ -261,9 +270,7 @@ export async function runWorkFromCafeRanker(
       ...(typeof c.rating === 'number' ? { rating: c.rating } : {}),
       ...(typeof c.userRatingCount === 'number' ? { userRatingCount: c.userRatingCount } : {}),
       ...(c.priceLevel ? { priceLevel: c.priceLevel as CoffeeShopHit['priceLevel'] } : {}),
-      ...(c.location &&
-      typeof c.location.latitude === 'number' &&
-      typeof c.location.longitude === 'number'
+      ...(c.location && typeof c.location.latitude === 'number' && typeof c.location.longitude === 'number'
         ? { location: { latitude: c.location.latitude, longitude: c.location.longitude } }
         : {}),
       ...(typeof c.openNow === 'boolean' ? { openNow: c.openNow } : {}),
@@ -343,6 +350,7 @@ export async function runWorkFromCafeRanker(
 export const workFromCafeRankerTool: ToolDef<WorkFromCafeRankerInput, WorkFromCafeRankerResult> = {
   name: 'work_from_cafe_ranker',
   internal: true,
+  experimental: true,
   description:
     "Rank cafes for laptop / remote-work sessions. Two modes: pass-through (give it a list from `specialty_coffee_finder`) or fresh discovery (give it a city, it'll run the finder first). Re-scores on wifi mentions, outlets, laptop / remote-work / co-working keywords, quiet / spacious cues, opening hours, plus penalties for very-expensive (likely turnover) and hyper-popular (likely crowded) cafes. Returns each shop with `workFriendlyScore` + `combinedScore` (0.6 × work + 0.4 × specialty). Use when the traveler asks 'where can I work from with my laptop', 'café para trabajar', 'remote-friendly café in <city>'.",
   inputSchema,

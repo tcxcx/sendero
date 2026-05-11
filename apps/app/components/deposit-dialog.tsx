@@ -3,10 +3,14 @@
 /**
  * DepositDialog — gateway-focused deposit instructions.
  *
- * Shows the operator's per-chain USDC deposit addresses (via Circle
- * Gateway unified balance). USDC chains: Arc Testnet, Avalanche Fuji,
- * Arbitrum Sepolia, Polygon Amoy, Solana Devnet. Sendero is USDC-only;
- * the unified Gateway pool is the single source of funds.
+ * Shows the operator's per-chain deposit addresses for USDC (via Circle
+ * Gateway unified balance) and EURC (direct on-chain). USDC chains:
+ * Arc Testnet, Avalanche Fuji, Arbitrum Sepolia, Polygon Amoy,
+ * Solana Devnet.
+ *
+ * USDC deposits pool into the unified Gateway balance visible in the
+ * UnifiedBalanceSection. EURC deposits land directly on each chain's
+ * balance independently (no pooling).
  *
  * Dev-only: treasury drip to MSCA is still available via a collapsed
  * section when NODE_ENV === 'development'.
@@ -18,6 +22,8 @@ import { DialogShell } from './dialog-shell';
 import { TokenIcon, BlockchainIcon } from '@sendero/icons';
 import { useSendero } from './store';
 
+type Token = 'USDC' | 'EURC';
+
 interface DepositChain {
   chain: string;
   label: string;
@@ -27,6 +33,7 @@ interface DepositChain {
 
 interface DepositInfo {
   usdc: DepositChain[];
+  eurc: DepositChain[];
 }
 
 const SHOW_TREASURY_DRIP = process.env.NODE_ENV === 'development';
@@ -35,6 +42,7 @@ export function DepositDialog() {
   const [deposit, setDeposit] = useQueryState('deposit');
   const userAuth = useSendero(s => s.userAuth);
 
+  const [selectedToken, setSelectedToken] = useState<Token>('USDC');
   const [info, setInfo] = useState<DepositInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -87,7 +95,7 @@ export function DepositDialog() {
     }
   }, []);
 
-  const chains: DepositChain[] = info?.usdc ?? [];
+  const chains: DepositChain[] = selectedToken === 'USDC' ? (info?.usdc ?? []) : (info?.eurc ?? []);
 
   // Dev drip
   const amt = dripAmount || '';
@@ -127,16 +135,36 @@ export function DepositDialog() {
       onClose={close}
     >
       <p className="dlg-sub">
-        Send ticket sales, customer deposits, or operating funds to any USDC address below. All
-        chains pool into your <strong>Business Balance</strong>.
+        Send ticket sales, customer deposits, or operating funds to any address below. USDC pools
+        into your <strong>Business Balance</strong>. EURC lands directly per chain.
       </p>
 
       <div className="dep-gateway-note">
-        <strong>Business Balance path</strong>
+        <strong>
+          {selectedToken === 'USDC' ? 'Business Balance path' : 'Per-chain EURC path'}
+        </strong>
         <span>
-          USDC deposits on Arc, Avalanche, Arbitrum, Polygon, or Solana sweep into one spendable
-          balance for ticket profit, send, bridge, traveler spend, and nanopayment billing.
+          {selectedToken === 'USDC'
+            ? 'USDC deposits on Arc, Avalanche, Arbitrum, Polygon, or Solana sweep into one spendable balance for ticket profit, send, bridge, swap, traveler spend, and nanopayment billing.'
+            : 'EURC is shown as a wallet balance on each supported chain until Gateway pooling is enabled for that asset.'}
         </span>
+      </div>
+
+      {/* Token selector */}
+      <div className="dep-tabs">
+        {(['USDC', 'EURC'] as Token[]).map(t => (
+          <button
+            key={t}
+            type="button"
+            className={`dep-tab ${selectedToken === t ? 'sel' : ''}`}
+            onClick={() => setSelectedToken(t)}
+          >
+            <TokenIcon token={t} size={15} />
+            <span>{t}</span>
+            {t === 'USDC' && <span className="dep-tab-note">unified</span>}
+            {t === 'EURC' && <span className="dep-tab-note">per chain</span>}
+          </button>
+        ))}
       </div>
 
       {/* Error loading addresses */}
@@ -153,8 +181,8 @@ export function DepositDialog() {
         <div className="dep-chains">
           {chains.length === 0 &&
             // Skeleton rows while loading
-            Array.from({ length: 5 }, (_, i) => (
-              <div key={`usdc-deposit-skeleton-${i + 1}`} className="dep-chain-skel" />
+            Array.from({ length: selectedToken === 'USDC' ? 5 : 2 }, (_, i) => (
+              <div key={`${selectedToken}-deposit-skeleton-${i + 1}`} className="dep-chain-skel" />
             ))}
 
           {chains.map(chain => (
@@ -163,8 +191,8 @@ export function DepositDialog() {
                 <BlockchainIcon chain={chain.chain} size={22} />
                 <span className="dep-chain-label">{chain.label}</span>
                 <span className="dep-token-pill">
-                  <TokenIcon token="USDC" size={13} />
-                  <span>USDC</span>
+                  <TokenIcon token={selectedToken} size={13} />
+                  <span>{selectedToken}</span>
                 </span>
               </div>
 

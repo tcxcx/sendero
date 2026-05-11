@@ -12,16 +12,18 @@
  * All experimental + internal + dev-gated.
  */
 
+import { z } from 'zod';
+import { generateText, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+
 import { searchText } from '@sendero/google-places';
 import { cseSearch } from '@sendero/web-search';
-import { generateObject, generateText } from 'ai';
-import { z } from 'zod';
 
 import { assertDevOnlyToolAllowed } from '../dev-gate';
-import { lookupMatchFixturesTool } from '../lookup-match-fixtures';
 import type { ToolContext, ToolDef } from '../types';
+
+import { lookupMatchFixturesTool } from '../lookup-match-fixtures';
 import { runMainstreamEventDiscovery } from './mainstream-event-discovery';
 
 const VERTEX_MODEL_ID = 'gemini-3-flash-preview';
@@ -320,9 +322,7 @@ ${sources
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -489,6 +489,7 @@ async function runTicketResaleRiskChecker(
 const ticketResaleRiskCheckerTool: ToolDef = {
   name: 'ticket_resale_risk_checker',
   internal: true,
+  experimental: true,
   description:
     'Evaluate resale-ticket risk on a URL + asking price. Pure heuristic — checks reseller against a trusted-host list, flags extreme markup or suspicious cheap pricing, surfaces sport-specific gotchas (football transfer-app rules, etc.), recommends safe payment methods. Use BEFORE the traveler hits "buy" on a non-Ticketmaster listing.',
   inputSchema: resaleInput,
@@ -584,6 +585,7 @@ async function runSportsBarFinder(
 const sportsBarFinderTool: ToolDef = {
   name: 'sports_bar_finder',
   internal: true,
+  experimental: true,
   description:
     'Find bars to watch a match in a city — filtered by sport (football/NFL/NBA/F1/etc.). Places-only with sport-keyword tilt + name/editorial filter. Use when traveler asks "where to watch the game in <city>" / "ver el partido en <ciudad>".',
   inputSchema: sportsBarInput,
@@ -676,6 +678,7 @@ async function runMatchPostponementMonitor(
 const matchPostponementMonitorTool: ToolDef = {
   name: 'match_postponement_monitor',
   internal: true,
+  experimental: true,
   description:
     'Detect fixture changes — caller passes original kickoff + latest known kickoff/venue/status from a fresh `lookup_match_fixtures` call. Returns `changed` flag + delta + guidance. Pure — schedule polling externally (Sendero scheduler) and feed into this tool.',
   inputSchema: postponementInput,
@@ -792,6 +795,7 @@ async function runFanGroupCoordinationTool(
 const fanGroupCoordinationToolTool: ToolDef = {
   name: 'fan_group_coordination_tool',
   internal: true,
+  experimental: true,
   description:
     'Coordinate group fan travel — aggregate per-member origin / budget tier / seat preference into a consensus + recommendations. Pure DB-only. Use when the traveler is leading a group of 4+ fans on a trip and wants a "how do we agree" briefing.',
   inputSchema: fanGroupInput,

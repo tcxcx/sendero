@@ -102,6 +102,7 @@ const LANG_TYPES = new Set(['bar', 'cafe', 'restaurant', 'community_center', 'po
 const languageExchangeFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'language_exchange_finder',
   internal: true,
+  experimental: true,
   description:
     'Find language exchanges + low-pressure social events in a city. Composes Mundo Lingo / Tandem / Meetup language groups + Eventbrite editorial via CSE with Places (community-friendly bars/cafés). Use when traveler asks "language exchange <city>", "mundo lingo", "intercambio idiomas", "language meetup".',
   inputSchema: baseInput,
@@ -156,6 +157,7 @@ const PHOTO_TYPES = new Set([
 const photographySpotFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'photography_spot_finder',
   internal: true,
+  experimental: true,
   description:
     'Find golden-hour spots, viewpoints, beautiful corners, street-photography districts. Editorial via 500px / Fstoppers / Phoblographer / Atlas Obscura + Places (viewpoints, scenic_lookout, tourist_attraction). Use when traveler asks "best photo spots <city>", "golden hour <city>", "miradores <ciudad>", "where to take photos in <city>".',
   inputSchema: baseInput,

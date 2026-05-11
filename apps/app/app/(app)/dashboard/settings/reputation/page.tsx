@@ -22,14 +22,11 @@ export default async function ReputationSettingsPage() {
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-6 pt-2 pb-8">
       <header className="flex flex-col gap-1">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-          {tenant.primaryChain === 'sol' ? 'Sendero × Solana' : 'Sendero × Arc'}
-        </p>
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Sendero × Arc</p>
         <h1 className="font-display text-3xl">Engagement policy</h1>
         <p className="text-sm text-muted-foreground">
-          Rules that gate which counterparties your agency engages with. Reads cached{' '}
-          {tenant.primaryChain === 'sol' ? 'Metaplex Agent Registry' : 'ERC-8004'} reputation for
-          sub-50ms checks at every dispatch. Defaults to{' '}
+          Rules that gate which counterparties your agency engages with. Reads cached ERC-8004
+          reputation for sub-50ms checks at every dispatch. Defaults to{' '}
           <code className="rounded bg-muted px-1">warn</code> so violations surface in the dashboard
           before you flip to <code className="rounded bg-muted px-1">block</code>.
         </p>

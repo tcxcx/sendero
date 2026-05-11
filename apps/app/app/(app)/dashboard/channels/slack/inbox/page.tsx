@@ -27,43 +27,10 @@ export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
 
-type SlackAgentAuditRow = {
-  id: string;
-  createdAt: Date;
-  traceId: string | null;
-  turnId: string | null;
-  teamId: string;
-  channelId: string;
-  threadTs: string;
-  sequence: number;
-  kind: string;
-  toolName: string | null;
-  ok: boolean | null;
-  durationMs: number | null;
-  statusText: string | null;
-  errorMessage: string | null;
-};
-
-type SlackWebhookAuditRow = {
-  id: string;
-  receivedAt: Date;
-  traceId: string | null;
-  eventId: string | null;
-  eventType: string | null;
-  channelId: string | null;
-  threadTs: string | null;
-  dispatchStatus: string;
-  dispatchError: string | null;
-  dispatchedCount: number;
-  droppedDuplicateCount: number;
-  droppedBusyCount: number;
-  durationMs: number | null;
-};
-
 export default async function SlackInboxPage() {
   const { tenant } = await requireCurrentTenant();
 
-  const [agentTurns, installs, agentEvents, webhookEvents] = await Promise.all([
+  const [agentTurns, installs] = await Promise.all([
     prisma.meterEvent.findMany({
       where: {
         tenantId: tenant.id,
@@ -97,8 +64,6 @@ export default async function SlackInboxPage() {
         revokedAt: true,
       },
     }),
-    loadSlackAgentEvents(tenant.id),
-    loadSlackWebhookEvents(tenant.id),
   ]);
 
   return (
@@ -119,160 +84,6 @@ export default async function SlackInboxPage() {
           a customer reports a missing reply or a workspace that stopped responding.
         </p>
       </header>
-
-      <InboxSectionCard
-        id="agent-events-heading"
-        title="Agent/tool timeline"
-        description="Exact Slack turn sequence · tool start, finish, failure, slow markers"
-        meta={`Last ${Math.min(agentEvents.length, PAGE_SIZE)}`}
-      >
-        {agentEvents.length === 0 ? (
-          <EmptyState
-            title="No Slack agent timeline rows yet"
-            body="New Slack turns will write a row for every tool start, tool finish, failure, placeholder update, and final reply."
-          />
-        ) : (
-          <TableWrap>
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr style={tableHeadRowStyle}>
-                  <Th>When</Th>
-                  <Th>Trace</Th>
-                  <Th align="right">Seq</Th>
-                  <Th>Kind</Th>
-                  <Th>Tool</Th>
-                  <Th>OK</Th>
-                  <Th align="right">ms</Th>
-                  <Th>Thread</Th>
-                  <Th>Status / error</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {agentEvents.map((e, i) => {
-                  const last = i === agentEvents.length - 1;
-                  const detail = e.errorMessage ?? e.statusText ?? '';
-                  return (
-                    <tr key={e.id} style={tableRowStyle(last)}>
-                      <Td title={e.createdAt.toISOString()}>{formatRelative(e.createdAt)}</Td>
-                      <Td className="font-mono text-[11px]" title={e.traceId ?? undefined}>
-                        {e.traceId?.slice(0, 12) ?? '—'}
-                      </Td>
-                      <Td className="font-mono" align="right">
-                        {e.sequence}
-                      </Td>
-                      <Td>
-                        <EventKindBadge kind={e.kind} />
-                      </Td>
-                      <Td className="font-mono text-[11px]">{e.toolName ?? '—'}</Td>
-                      <Td>
-                        {e.ok === null ? (
-                          '—'
-                        ) : e.ok ? (
-                          <Badge tone="ok">ok</Badge>
-                        ) : (
-                          <Badge tone="fail">fail</Badge>
-                        )}
-                      </Td>
-                      <Td className="font-mono" align="right">
-                        {e.durationMs ?? '—'}
-                      </Td>
-                      <Td className="font-mono text-[11px]" title={`${e.channelId}:${e.threadTs}`}>
-                        {e.channelId.slice(-5)}:{e.threadTs.slice(0, 8)}
-                      </Td>
-                      <Td
-                        className="max-w-[360px] truncate text-[11px]"
-                        title={detail || undefined}
-                      >
-                        {detail || <span className="ink-70">—</span>}
-                      </Td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </TableWrap>
-        )}
-      </InboxSectionCard>
-
-      <InboxSectionCard
-        id="webhooks-heading"
-        title="Webhook deliveries"
-        description="Slack Events API routing decisions"
-        meta={`Last ${Math.min(webhookEvents.length, PAGE_SIZE)}`}
-      >
-        {webhookEvents.length === 0 ? (
-          <EmptyState
-            title="No Slack webhook audit rows yet"
-            body="Incoming Slack Events API deliveries will show whether they dispatched, skipped, deduped, or hit a busy thread lock."
-          />
-        ) : (
-          <TableWrap>
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr style={tableHeadRowStyle}>
-                  <Th>Received</Th>
-                  <Th>Trace</Th>
-                  <Th>Event</Th>
-                  <Th>Status</Th>
-                  <Th align="right">Dispatch</Th>
-                  <Th align="right">Dupes</Th>
-                  <Th align="right">Busy</Th>
-                  <Th align="right">ms</Th>
-                  <Th>Thread</Th>
-                  <Th>Error</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {webhookEvents.map((e, i) => {
-                  const last = i === webhookEvents.length - 1;
-                  return (
-                    <tr key={e.id} style={tableRowStyle(last)}>
-                      <Td title={e.receivedAt.toISOString()}>{formatRelative(e.receivedAt)}</Td>
-                      <Td className="font-mono text-[11px]" title={e.traceId ?? undefined}>
-                        {e.traceId?.slice(0, 12) ?? '—'}
-                      </Td>
-                      <Td className="font-mono text-[11px]" title={e.eventId ?? undefined}>
-                        {e.eventType ?? '—'}
-                      </Td>
-                      <Td>
-                        <DispatchBadge status={e.dispatchStatus} />
-                      </Td>
-                      <Td className="font-mono" align="right">
-                        {e.dispatchedCount}
-                      </Td>
-                      <Td className="font-mono" align="right">
-                        {e.droppedDuplicateCount}
-                      </Td>
-                      <Td className="font-mono" align="right">
-                        {e.droppedBusyCount}
-                      </Td>
-                      <Td className="font-mono" align="right">
-                        {e.durationMs ?? '—'}
-                      </Td>
-                      <Td
-                        className="font-mono text-[11px]"
-                        title={
-                          e.channelId && e.threadTs ? `${e.channelId}:${e.threadTs}` : undefined
-                        }
-                      >
-                        {e.channelId && e.threadTs
-                          ? `${e.channelId.slice(-5)}:${e.threadTs.slice(0, 8)}`
-                          : '—'}
-                      </Td>
-                      <Td
-                        className="max-w-[260px] truncate text-[11px]"
-                        title={e.dispatchError ?? undefined}
-                      >
-                        {e.dispatchError ?? <span className="ink-70">—</span>}
-                      </Td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </TableWrap>
-        )}
-      </InboxSectionCard>
 
       <InboxSectionCard
         id="turns-heading"
@@ -478,26 +289,6 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge tone={tone}>{status}</Badge>;
 }
 
-function EventKindBadge({ kind }: { kind: string }) {
-  const tone: 'ok' | 'warn' | 'fail' =
-    kind === 'tool_failed' || kind === 'turn_failed' || kind === 'outbound_failed'
-      ? 'fail'
-      : kind === 'tool_slow'
-        ? 'warn'
-        : 'ok';
-  return <Badge tone={tone}>{kind}</Badge>;
-}
-
-function DispatchBadge({ status }: { status: string }) {
-  const tone: 'ok' | 'warn' | 'fail' =
-    status === 'failed' || status === 'unknown_install'
-      ? 'fail'
-      : status === 'skipped' || status === 'duplicate' || status === 'busy'
-        ? 'warn'
-        : 'ok';
-  return <Badge tone={tone}>{status}</Badge>;
-}
-
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <div
@@ -544,65 +335,4 @@ function formatUsdc(microUsdc: bigint | number | string): string {
     minimumFractionDigits: 4,
     maximumFractionDigits: 6,
   });
-}
-
-async function loadSlackAgentEvents(tenantId: string): Promise<SlackAgentAuditRow[]> {
-  try {
-    return await prisma.$queryRaw<SlackAgentAuditRow[]>`
-      SELECT
-        id,
-        created_at AS "createdAt",
-        trace_id AS "traceId",
-        turn_id AS "turnId",
-        team_id AS "teamId",
-        channel_id AS "channelId",
-        thread_ts AS "threadTs",
-        sequence,
-        kind,
-        tool_name AS "toolName",
-        ok,
-        duration_ms AS "durationMs",
-        status_text AS "statusText",
-        error_message AS "errorMessage"
-      FROM slack_agent_events
-      WHERE tenant_id = ${tenantId}
-      ORDER BY created_at DESC, sequence DESC
-      LIMIT ${PAGE_SIZE}
-    `;
-  } catch (err) {
-    console.warn('[slack-inbox] slack_agent_events unavailable', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return [];
-  }
-}
-
-async function loadSlackWebhookEvents(tenantId: string): Promise<SlackWebhookAuditRow[]> {
-  try {
-    return await prisma.$queryRaw<SlackWebhookAuditRow[]>`
-      SELECT
-        id,
-        received_at AS "receivedAt",
-        trace_id AS "traceId",
-        event_id AS "eventId",
-        event_type AS "eventType",
-        channel_id AS "channelId",
-        thread_ts AS "threadTs",
-        dispatch_status AS "dispatchStatus",
-        dispatch_error AS "dispatchError",
-        dispatched_count AS "dispatchedCount",
-        dropped_duplicate_count AS "droppedDuplicateCount",
-        dropped_busy_count AS "droppedBusyCount",
-        duration_ms AS "durationMs"
-      FROM slack_webhook_events
-      WHERE tenant_id = ${tenantId}
-      ORDER BY received_at DESC
-      LIMIT ${PAGE_SIZE}
-    `;
-  } catch (err) {
-    console.warn('[slack-inbox] slack_webhook_events unavailable', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return [];
-  }
 }

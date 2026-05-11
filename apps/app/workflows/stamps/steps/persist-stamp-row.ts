@@ -22,12 +22,9 @@ export const persistStampMetadata = async (args: {
 }): Promise<void> => {
   'use step';
 
-  // Phase 4.x: this Arc-side workflow updates the Arc-chain row.
-  // The Solana counterpart (when Phase 4.x.y lands) will write its
-  // own row with chain='sol' from a parallel workflow.
   await prisma.nftStamp.update({
     where: {
-      kind_primaryKey_chain: { kind: args.ctx.kind, primaryKey: args.ctx.primaryKey, chain: 'arc' },
+      kind_primaryKey: { kind: args.ctx.kind, primaryKey: args.ctx.primaryKey },
     },
     data: {
       blobUrl: args.blobUrl,

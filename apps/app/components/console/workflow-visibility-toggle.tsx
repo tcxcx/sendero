@@ -1,21 +1,19 @@
 'use client';
 
 /**
- * Console right-panel display toggle.
+ * Workflow-terminal visibility toggle.
  *
  * Reusable atom shared by:
  *   - The footer `TweaksToggle` popover (existing entry point).
  *   - The `WorkflowLog` col-head row (one-click hide from the panel
  *     itself; bring back via the footer Tweaks panel).
  *
- * Backed by `useSendero({ consoleRightPanelMode })`. Visual
+ * Backed by `useSendero({ showWorkflow, setShowWorkflow })`. Visual
  * matches the `tweak-group` / `tw-switch` styles defined in
  * `apps/app/app/globals.css` so both surfaces look identical.
  */
 
-import type { ReactNode } from 'react';
-
-import { useSendero, type ConsoleRightPanelMode } from '../store';
+import { useSendero } from '../store';
 
 export interface WorkflowVisibilityToggleProps {
   /**
@@ -28,66 +26,46 @@ export interface WorkflowVisibilityToggleProps {
 }
 
 export function WorkflowVisibilityToggle({ layout = 'stacked' }: WorkflowVisibilityToggleProps) {
-  const mode = useSendero(s => s.consoleRightPanelMode);
-  const setMode = useSendero(s => s.setConsoleRightPanelMode);
+  const showWorkflow = useSendero(s => s.showWorkflow);
+  const setShowWorkflow = useSendero(s => s.setShowWorkflow);
 
   if (layout === 'inline') {
     return (
       <div className="tweak-toggle" style={{ gap: 6 }}>
         <span className="tk-label" style={{ marginRight: 2 }}>
-          Panel
-        </span>
-        <PanelChoice mode="pulse" active={mode === 'pulse'} setMode={setMode}>
-          Pulse
-        </PanelChoice>
-        <PanelChoice mode="workflow" active={mode === 'workflow'} setMode={setMode}>
           Workflow
-        </PanelChoice>
-        <PanelChoice mode="hidden" active={mode === 'hidden'} setMode={setMode}>
-          Off
-        </PanelChoice>
+        </span>
+        <button
+          type="button"
+          aria-label={showWorkflow ? 'Hide workflow terminal' : 'Show workflow terminal'}
+          aria-pressed={showWorkflow}
+          className={`tw-switch ${showWorkflow ? 'on' : ''}`}
+          onClick={() => setShowWorkflow(!showWorkflow)}
+          style={{ background: 'transparent' }}
+        >
+          <div className="knob" />
+        </button>
+        <span style={{ minWidth: 38 }}>{showWorkflow ? 'Visible' : 'Hidden'}</span>
       </div>
     );
   }
 
   return (
     <div className="tweak-group">
-      <span className="tk-label">Right panel</span>
-      <div className="tweak-toggle" role="radiogroup" aria-label="Console right panel">
-        <PanelChoice mode="pulse" active={mode === 'pulse'} setMode={setMode}>
-          Pulse
-        </PanelChoice>
-        <PanelChoice mode="workflow" active={mode === 'workflow'} setMode={setMode}>
-          Workflow
-        </PanelChoice>
-        <PanelChoice mode="hidden" active={mode === 'hidden'} setMode={setMode}>
-          Off
-        </PanelChoice>
+      <span className="tk-label">Workflow terminal</span>
+      <div className="tweak-toggle">
+        <button
+          type="button"
+          aria-label={showWorkflow ? 'Hide workflow terminal' : 'Show workflow terminal'}
+          aria-pressed={showWorkflow}
+          className={`tw-switch ${showWorkflow ? 'on' : ''}`}
+          onClick={() => setShowWorkflow(!showWorkflow)}
+          style={{ background: 'transparent' }}
+        >
+          <div className="knob" />
+        </button>
+        <span>{showWorkflow ? 'Visible' : 'Hidden'}</span>
       </div>
     </div>
-  );
-}
-
-function PanelChoice({
-  mode,
-  active,
-  setMode,
-  children,
-}: {
-  mode: ConsoleRightPanelMode;
-  active: boolean;
-  setMode: (mode: ConsoleRightPanelMode) => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      className={`tw-choice ${active ? 'on' : ''}`}
-      onClick={() => setMode(mode)}
-    >
-      {children}
-    </button>
   );
 }

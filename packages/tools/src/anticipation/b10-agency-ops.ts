@@ -15,11 +15,12 @@
  * All experimental + internal + dev-gated.
  */
 
+import { z } from 'zod';
+import { generateText, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+
 import { cseSearch } from '@sendero/web-search';
-import { generateObject, generateText } from 'ai';
-import { z } from 'zod';
 
 import { assertDevOnlyToolAllowed } from '../dev-gate';
 import type { ToolContext, ToolDef } from '../types';
@@ -238,9 +239,7 @@ const supplierContactExtractorTool: ToolDef = {
       const grounded = await generateText({
         model: modelLike,
         tools: {
-          google_search: (vertex
-            ? vertex.tools.googleSearch({})
-            : google.tools.googleSearch({})) as any,
+          google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
         },
         prompt,
         ...(providerOptions ? { providerOptions } : {}),
@@ -702,6 +701,7 @@ type MarginGuardInput = z.infer<typeof marginGuardInput>;
 const agencyMarginGuardTool: ToolDef = {
   name: 'agency_margin_guard',
   internal: true,
+  experimental: true,
   description:
     'Check that a proposed price meets agency margin policy. Pure rules — flags markups below floor / above ceiling / negative margin / missing minimum-margin. Compose before quotes go to clients.',
   inputSchema: marginGuardInput,

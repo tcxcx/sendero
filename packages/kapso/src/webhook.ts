@@ -11,8 +11,6 @@
 
 import crypto from 'node:crypto';
 import {
-  MessageReceivedEvent,
-  MessageReceivedV2Event,
   PhoneNumberCreatedEvent,
   WorkflowFailedEvent,
   WorkflowHandoffEvent,
@@ -73,76 +71,10 @@ export interface ParsedWorkflowFailedEvent {
   errorCode: string | null;
 }
 
-/**
- * Inbound WhatsApp message from a traveler, normalised across the two
- * Kapso payload shapes (nested-under-`message` and top-level-flat).
- * `text` is null for non-text messages (image, location, etc); the
- * trip ledger logs them as `inbox_reply` with a placeholder body and
- * the original `messageType` so future handlers can branch.
- */
-export interface ParsedMessageReceivedEvent {
-  kind: 'whatsapp.message.received' | 'whatsapp.message.sent';
-  direction: 'inbound' | 'outbound';
-  phoneNumberId: string | null;
-  customerId: string | null;
-  customerPhone: string | null;
-  conversationId: string | null;
-  wamid: string | null;
-  messageType: string | null;
-  text: string | null;
-  /** Unix seconds (Meta convention) when present. */
-  timestamp: number | null;
-}
-
 export type ParsedKapsoProjectEvent =
   | ParsedConnectionEvent
   | ParsedWorkflowHandoffEvent
-  | ParsedWorkflowFailedEvent
-  | ParsedMessageReceivedEvent;
-
-function timestampSeconds(raw: unknown): number | null {
-  if (typeof raw === 'number') return raw;
-  if (typeof raw === 'string' && /^\d+$/.test(raw)) return Number(raw);
-  return null;
-}
-
-function normalizePhoneNumber(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  return trimmed.startsWith('+') ? trimmed : `+${trimmed}`;
-}
-
-function parsedMessageReceivedV2(
-  payload: unknown,
-  envelopeType?: unknown
-): ParsedMessageReceivedEvent | null {
-  const msgV2 = MessageReceivedV2Event.safeParse(payload);
-  if (!msgV2.success) return null;
-
-  const data = msgV2.data;
-  const m = data.message;
-  if (envelopeType === 'whatsapp.message.received' && m.kapso?.direction === 'outbound') {
-    return null;
-  }
-  const direction =
-    m.kapso?.direction === 'outbound' || envelopeType === 'whatsapp.message.sent'
-      ? 'outbound'
-      : 'inbound';
-
-  return {
-    kind: direction === 'outbound' ? 'whatsapp.message.sent' : 'whatsapp.message.received',
-    direction,
-    phoneNumberId: data.phone_number_id ?? data.conversation?.phone_number_id ?? null,
-    customerId: null,
-    customerPhone: normalizePhoneNumber(data.conversation?.phone_number),
-    conversationId: data.conversation?.id ?? null,
-    wamid: m.wamid ?? m.id ?? null,
-    messageType: m.type ?? null,
-    text: m.text?.body ?? m.body ?? m.kapso?.content ?? null,
-    timestamp: timestampSeconds(m.timestamp),
-  };
-}
+  | ParsedWorkflowFailedEvent;
 
 /**
  * Parse a Kapso project-scope event payload into the events Sendero
@@ -188,36 +120,7 @@ export function parseProjectEvent(payload: unknown): ParsedKapsoProjectEvent | n
       errorCode: data.error_code ?? null,
     };
   }
-  if (payload && typeof payload === 'object') {
-    const record = payload as { type?: unknown; data?: unknown };
-    if (record.type === 'whatsapp.message.received' || record.type === 'whatsapp.message.sent') {
-      const items = Array.isArray(record.data) ? record.data : [record.data];
-      for (const item of items) {
-        const event = parsedMessageReceivedV2(item, record.type);
-        if (event) return event;
-      }
-    }
-  }
-  const msg = MessageReceivedEvent.safeParse(payload);
-  if (msg.success) {
-    const { data } = msg.data;
-    const m = data.message ?? {};
-    const wamid = m.wamid ?? m.id ?? data.wamid ?? data.message_id ?? null;
-    const text = m.text?.body ?? m.body ?? data.text?.body ?? data.body ?? null;
-    return {
-      kind: 'whatsapp.message.received',
-      direction: 'inbound',
-      phoneNumberId: data.phone_number_id ?? null,
-      customerId: data.customer_id ?? null,
-      customerPhone: data.customer_phone ?? data.customer_phone_number ?? null,
-      conversationId: data.conversation_id ?? data.whatsapp_conversation_id ?? null,
-      wamid,
-      messageType: m.type ?? data.message_type ?? null,
-      text,
-      timestamp: timestampSeconds(m.timestamp),
-    };
-  }
-  return parsedMessageReceivedV2(payload);
+  return null;
 }
 
 /**

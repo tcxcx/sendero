@@ -22,7 +22,6 @@
       "@sendero/kapso/*": ["../../packages/kapso/src/*"],
       "@sendero/langfuse/*": ["../../packages/langfuse/src/*"],
       "@sendero/llms/*": ["../../packages/llms/src/*"],
-      "@sendero/location/*": ["../../packages/location/src/*"],
       "@sendero/locale/*": ["../../packages/locale/src/*"],
       "@sendero/multisig/*": ["../../packages/multisig/src/*"],
       "@sendero/nanopayments/*": ["../../packages/nanopayments/src/*"],

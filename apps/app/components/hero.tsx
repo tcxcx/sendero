@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Sendero · Arc + Solana — Landing Hero.
+ * Sendero × Arc — Landing Hero.
  *
  * Editorial split: left column is the pitch + passkey onboarding, right
  * column is a live cobe globe. Once the user registers or signs in, the
@@ -126,12 +126,12 @@ export function LandingHero() {
         <div className="hero-brand">
           <span className="hero-mark" />
           <span className="hero-word">SENDERO</span>
-          <span className="hero-x">·</span>
-          <span className="hero-word hero-word-alt">ARC + SOLANA</span>
+          <span className="hero-x">×</span>
+          <span className="hero-word hero-word-alt">ARC</span>
         </div>
         <div className="hero-meta">
-          <span className="hero-pill">circle · arc L2 · solana</span>
-          <span className="hero-pill-ink">Arc Testnet · Sol Devnet · live</span>
+          <span className="hero-pill">circle · arc L2</span>
+          <span className="hero-pill-ink">Arc Testnet · live</span>
           <span className="hero-ver">v0.9.4-alpha</span>
         </div>
       </header>
@@ -140,7 +140,7 @@ export function LandingHero() {
         <section className="hero-left">
           <div className="hero-eyebrow">
             <span className="dot" />
-            Hackathon · Circle × Arc · Solana · Spring 2026
+            Hackathon · Circle × Arc · Spring 2026
           </div>
 
           <h1 className="hero-title">
@@ -148,14 +148,14 @@ export function LandingHero() {
             <br />
             one <em>agent per trip</em>.
             <br />
-            Settled <em>on-chain</em>.
+            Settled on <em>Arc</em>.
           </h1>
 
           <p className="hero-sub">
             Every booking spawns its own AI agent. Reachable over <strong>email</strong> and{' '}
             <strong>WhatsApp</strong>, it issues a real PNR, clears policy with Clerk-bound org
-            rules, and settles on the tenant's chosen chain (Arc Testnet or Solana Devnet) through
-            an escrow job. No seed phrase, no native gas token — USDC is the gas.
+            rules, and settles on Arc Testnet through an ERC-8183 escrow job. No seed phrase, no
+            native gas token — USDC is the gas.
           </p>
 
           <MarginStrip />
@@ -266,8 +266,8 @@ export function LandingHero() {
               <dd>&lt; 6s</dd>
             </div>
             <div>
-              <dt>Token</dt>
-              <dd>USDC</dd>
+              <dt>Tokens</dt>
+              <dd>USDC · EURC</dd>
             </div>
             <div>
               <dt>Chain</dt>

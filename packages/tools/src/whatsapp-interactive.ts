@@ -689,36 +689,6 @@ async function resolveOutboundClient(
     phoneNumberId: install.phoneNumberId,
     accessToken,
     apiBaseUrl: baseUrl,
-    onSent: event => {
-      void prisma.whatsAppOutboundMessage
-        .create({
-          data: {
-            tenantId,
-            wamid: event.wamid,
-            phoneNumberId: install.phoneNumberId,
-            recipientId: event.recipientId,
-            kind: event.kind,
-            source: 'tool_call',
-            ...(event.templateName ? { templateName: event.templateName } : {}),
-            ...(event.preview ? { preview: event.preview } : {}),
-            deliveryStatus: 'sent',
-          },
-        })
-        .catch(err => {
-          if (
-            err &&
-            typeof err === 'object' &&
-            'code' in err &&
-            (err as { code?: string }).code === 'P2002'
-          ) {
-            return;
-          }
-          console.error('[whatsapp-interactive] outbound audit insert failed', {
-            wamid: event.wamid,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
-    },
   });
   return { client, recipient };
 }

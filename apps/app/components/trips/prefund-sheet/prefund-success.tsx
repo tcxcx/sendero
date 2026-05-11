@@ -2,16 +2,21 @@
 
 import { Alert, AlertDescription, AlertTitle } from '@sendero/ui/alert';
 import { Button } from '@sendero/ui/button';
+import {
+  isPasskeyConfigured,
+  loginPasskey,
+  passkeyConfigIssue,
+  registerPasskey,
+  restoreFromStorage,
+  sendUserOp,
+  type UserWallet,
+} from '@sendero/circle/modular-wallets';
 import { ExternalLink } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { Hex } from 'viem';
 import type { PrefundResult } from './prefund-form';
 
-// Funding is server-side now — the tenant's existing gateway signer
-// pays the escrow. The buyer just clicks "Fund with Sendero" and the
-// server submits the on-chain calls (Arc) via the EVM gateway signer
-// EOA, materializing USDC from the Gateway pool first if the EOA is
-// short. No buyer wallet, no passkey, no MSCA enrollment.
-type FundPhase = 'idle' | 'submitting' | 'funded' | 'error';
+type FundPhase = 'idle' | 'enrolling' | 'submitting' | 'funded' | 'error';
 type ClaimPhase = 'idle' | 'submitting' | 'claimed' | 'error';
 
 const ARC_EXPLORER = process.env.NEXT_PUBLIC_ARC_EXPLORER_URL ?? 'https://testnet.arcscan.app';
@@ -29,17 +34,31 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
   }, [result.claimCode, result.guestLink]);
   const whatsappHref = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
 
-  // ── Server-side fund state ───────────────────────────────────────────
+  // ── Passkey + fund state ─────────────────────────────────────────────
+  const passkeyOk = isPasskeyConfigured();
+  const passkeyIssue = useMemo(() => passkeyConfigIssue(), []);
+  const [wallet, setWallet] = useState<UserWallet | null>(null);
+  const [enrollName, setEnrollName] = useState('Sendero buyer');
   const [phase, setPhase] = useState<FundPhase>('idle');
   const [fundError, setFundError] = useState<string | null>(null);
-  const [fundTxHash, setFundTxHash] = useState<string | null>(null);
-  const [fundedFrom, setFundedFrom] = useState<string | null>(null);
+  const [fundTxHash, setFundTxHash] = useState<Hex | null>(null);
 
   // ── Channel-bound DCW claim state ────────────────────────────────────
   const boundTraveler = result.boundTraveler ?? null;
   const [claimPhase, setClaimPhase] = useState<ClaimPhase>('idle');
   const [claimError, setClaimError] = useState<string | null>(null);
   const [claimTxHash, setClaimTxHash] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const existing = await restoreFromStorage();
+      if (!cancelled && existing) setWallet(existing);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function copy(label: string, value: string) {
     await navigator.clipboard.writeText(value);
@@ -49,25 +68,53 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
 
   async function fund() {
     setFundError(null);
-    setPhase('submitting');
+    setPhase('enrolling');
     try {
-      const res = await fetch('/api/trips/prefund/fund', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ tripId: result.tripId }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        txHash?: string;
-        signerAddress?: string;
-        message?: string;
-        error?: string;
-      };
-      if (!res.ok || !data.ok) {
-        throw new Error(data.message ?? data.error ?? `fund_failed (${res.status})`);
+      let active = wallet;
+      if (!active) {
+        const trimmed = enrollName.trim();
+        if (!trimmed) {
+          throw new Error('Display name is required to register a passkey.');
+        }
+        // Buyer doesn't need WhatsApp binding — email/phone are optional
+        // here. The display name is used as the passkey label so the OS
+        // prompt reads "Sendero buyer" rather than a random hex.
+        active = await registerPasskey({ displayName: trimmed, email: '', phone: '' });
+        setWallet(active);
+      } else if (!wallet) {
+        // Defensive — if the cached wallet failed to restore but the
+        // browser still has the credential, log in fresh.
+        active = await loginPasskey();
+        setWallet(active);
       }
-      setFundTxHash(data.txHash ?? null);
-      setFundedFrom(data.signerAddress ?? null);
+
+      setPhase('submitting');
+      const calls = result.onchainCalls.map(c => ({
+        to: c.to,
+        data: c.data,
+        value: BigInt(c.value),
+      }));
+      const { txHash, userOpHash } = await sendUserOp(active, calls);
+      setFundTxHash(txHash);
+
+      // Best-effort: tell the server the userOp landed so the trip row
+      // reflects the on-chain truth. Failure here is non-fatal — the
+      // chain is the source of truth and a drift sweeper can reconcile.
+      try {
+        await fetch('/api/guest/funded', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            tripId: result.tripId,
+            txHash,
+            userOpHash,
+            fundingWalletAddress: active.address,
+          }),
+        });
+      } catch (err) {
+        console.warn('[prefund-success] /api/guest/funded notify failed', err);
+      }
+
       setPhase('funded');
     } catch (err) {
       setFundError(err instanceof Error ? err.message : String(err));
@@ -108,8 +155,15 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
     }
   }
 
-  const fundDisabled = phase === 'submitting';
-  const fundLabel = phase === 'submitting' ? 'Funding on-chain…' : 'Fund with Sendero';
+  const fundDisabled = !passkeyOk || phase === 'enrolling' || phase === 'submitting';
+  const fundLabel =
+    phase === 'enrolling'
+      ? 'Confirming passkey…'
+      : phase === 'submitting'
+        ? 'Submitting userOp…'
+        : wallet
+          ? `Fund this trip from ${shortAddr(wallet.address)}`
+          : 'Create passkey & fund';
 
   return (
     <div className="flex flex-col gap-4 py-4">
@@ -127,7 +181,7 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
       <Field label="Guest link" value={result.guestLink} />
       {result.claimCode ? <Field label="Claim code" value={result.claimCode} large /> : null}
 
-      {/* ── Server-side funder ────────────────────────────────────── */}
+      {/* ── Buyer-MSCA submitter ──────────────────────────────────── */}
       {phase !== 'funded' ? (
         <div
           className="flex flex-col gap-3 rounded-[var(--radius-md)] p-4"
@@ -140,12 +194,29 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
               letterSpacing: 'var(--label-meta-tracking, 0.12em)',
             }}
           >
-            Step 1 · Fund from Sendero
+            Step 1 · Fund on Arc
           </div>
-          <p className="text-sm text-muted-foreground">
-            Sendero pulls the budget from your tenant's Gateway pool and submits the escrow
-            on-chain. No passkey, no wallet popup — same custody model as your WhatsApp travelers.
-          </p>
+          {!passkeyOk ? (
+            <p className="text-sm text-destructive">
+              Passkey not configured. {passkeyIssue ?? 'Set NEXT_PUBLIC_CIRCLE_CLIENT_KEY.'}
+            </p>
+          ) : !wallet ? (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Display name on this device</span>
+              <input
+                value={enrollName}
+                onChange={e => setEnrollName(e.target.value)}
+                maxLength={40}
+                className="rounded-[var(--radius-md)] bg-[color:var(--surface-base)] p-2 font-mono text-sm"
+                style={{ border: 'var(--hairline-soft)' }}
+              />
+            </label>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Signing from your Modular Wallet. Circle Paymaster covers gas — no native token
+              needed.
+            </p>
+          )}
           <Button type="button" onClick={fund} disabled={fundDisabled}>
             {fundLabel}
           </Button>
@@ -167,11 +238,6 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
           >
             Funded on Arc
           </div>
-          {fundedFrom ? (
-            <p className="text-xs text-muted-foreground">
-              from Sendero gateway signer {shortAddr(fundedFrom)}
-            </p>
-          ) : null}
           <div className="break-all rounded-[var(--radius-md)] bg-[color:var(--surface-base)] p-3 font-mono text-xs">
             {fundTxHash}
           </div>
@@ -285,17 +351,6 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
           Email delivery was not confirmed: {result.invite.error ?? 'not configured'}.
         </p>
       ) : null}
-      {result.channelInvite ? (
-        <p
-          className={
-            result.channelInvite.sent
-              ? 'rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-700'
-              : 'rounded-md bg-muted p-3 text-sm text-muted-foreground'
-          }
-        >
-          <ChannelInviteStatus invite={result.channelInvite} />
-        </p>
-      ) : null}
       <details
         className="rounded-[var(--radius-md)] p-3 text-xs"
         style={{ border: 'var(--hairline-soft)' }}
@@ -308,19 +363,6 @@ export function PrefundSuccess({ result, onDone }: { result: PrefundResult; onDo
       <Button onClick={onDone}>Done</Button>
     </div>
   );
-}
-
-function ChannelInviteStatus({
-  invite,
-}: {
-  invite:
-    | { sent: true; channel: 'whatsapp' | 'slack' }
-    | { sent: false; reason: string; channel?: 'whatsapp' | 'slack' };
-}) {
-  if ('reason' in invite) {
-    return <>Channel delivery was not confirmed: {invite.reason}.</>;
-  }
-  return <>Claim link sent in {invite.channel}.</>;
 }
 
 function shortAddr(addr: string): string {

@@ -21,21 +21,8 @@ import { useSendero } from './store';
 import { restoreFromStorage, sendUserOp } from '@sendero/circle/modular-wallets';
 import { encodeGiveFeedback, encodeUsdcTransfer, toUsdcUnits } from '@sendero/erc8183/client';
 
-const ARC_EXPLORER_BASE = 'https://testnet.arcscan.app';
-const SOL_EXPLORER_BASE = 'https://explorer.solana.com';
-const SOL_DEVNET_QS = '?cluster=devnet';
+const EXPLORER_BASE = 'https://testnet.arcscan.app';
 const SETTLE_LOG_GROUP = 'settle.arc';
-
-function explorerForChain(chain: 'arc' | 'sol' | undefined): {
-  base: string;
-  txQs: string;
-  name: string;
-} {
-  if (chain === 'sol') {
-    return { base: SOL_EXPLORER_BASE, txQs: SOL_DEVNET_QS, name: 'Solana Explorer' };
-  }
-  return { base: ARC_EXPLORER_BASE, txQs: '', name: 'Arcscan' };
-}
 
 interface AgentIdentityResponse {
   agentId: string;
@@ -103,8 +90,6 @@ export function SettlePanel() {
   const totalAmount = holdOrder.totalAmount;
   const totalCurrency = holdOrder.totalCurrency;
 
-  const explorer = explorerForChain(userAuth?.chain);
-
   async function settle() {
     if (busy) return;
     setBusy(true);
@@ -144,7 +129,7 @@ export function SettlePanel() {
         pnr: holdOrder!.bookingReference,
         deliverableHash: '0x',
         txHashes: [txHash],
-        explorerBase: explorer.base,
+        explorerBase: EXPLORER_BASE,
         completedAt: Date.now(),
         demo: false,
       });
@@ -351,7 +336,7 @@ export function SettlePanel() {
           {settlement.txHashes.map(hash => (
             <a
               key={hash}
-              href={`${explorer.base}/tx/${hash}${explorer.txQs}`}
+              href={`${EXPLORER_BASE}/tx/${hash}`}
               target="_blank"
               rel="noreferrer"
               style={{

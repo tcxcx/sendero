@@ -362,7 +362,7 @@ export function ErrorBanner() {
 import { useMeterSummary } from './use-meter';
 import { DigitTicker, SmoothNumber } from './footer-numbers';
 
-// Dev/demo telemetry strip — block ticker, org Gateway balance, meter
+// Dev/demo telemetry strip — block ticker, treasury balance, meter
 // rate. Useful when shaking out flows locally; visual noise + a
 // surface for stale data in prod. NODE_ENV is inlined at build time
 // so the entire branch tree-shakes out of the prod bundle.
@@ -373,14 +373,13 @@ export function FooterRail() {
   const holdOrder = useSendero(s => s.holdOrder);
   const settlementPhase = useSendero(s => s.settlement.phase);
   const onChainSettlement = useSendero(s => s.onChainSettlement);
-  const userAuth = useSendero(s => s.userAuth);
-  const isSolTenant = userAuth?.chain === 'sol';
   const { summary: meter } = useMeterSummary(1500);
 
   if (!SHOW_FOOTER_RAIL) return null;
 
   const treasuryAddr = treasury?.treasuryAddress ?? null;
   const usdc = treasury?.balances.find(b => b.symbol === 'USDC');
+  const eurc = treasury?.balances.find(b => b.symbol === 'EURC');
   const block = treasury?.arc?.blockNumber ?? '—';
 
   const escrowLabel = onChainSettlement
@@ -393,34 +392,20 @@ export function FooterRail() {
     <div className="footer-rail">
       <div className="group">
         <span>
-          <strong>CIRCLE</strong> · {isSolTenant ? 'Solana' : 'Arc L2'}
+          <strong>CIRCLE</strong> · Arc L2
         </span>
         <span>·</span>
         <span>
-          {isSolTenant ? 'cluster' : 'block'}{' '}
+          block{' '}
           <strong style={{ color: 'var(--ink)' }}>
-            {isSolTenant ? (
-              'devnet'
-            ) : block === '—' ? (
-              '#—'
-            ) : (
-              <>
-                #<DigitTicker value={block} />
-              </>
-            )}
+            #{block === '—' ? '—' : <DigitTicker value={block} />}
           </strong>
         </span>
         <span>·</span>
         <span>
           gas{' '}
-          <strong
-            title={
-              isSolTenant
-                ? 'Solana settlement charges are paid in nano-USDC via Circle Gateway → Squads V4.'
-                : "USDC is Arc's native gas token (1 nUSDC = 1e-9 USDC)"
-            }
-          >
-            {!isSolTenant && treasury?.arc?.gasPrice ? (
+          <strong title="USDC is Arc's native gas token (1 nUSDC = 1e-9 USDC)">
+            {treasury?.arc?.gasPrice ? (
               <SmoothNumber
                 value={Number(treasury.arc.gasPrice) / 1e9}
                 precision={4}
@@ -435,7 +420,7 @@ export function FooterRail() {
       </div>
       <div className="group">
         <span>
-          org gateway{' '}
+          treasury{' '}
           <strong style={{ color: 'var(--text)' }}>
             {treasuryAddr ? `${treasuryAddr.slice(0, 6)}…${treasuryAddr.slice(-4)}` : '—'}
           </strong>
@@ -453,6 +438,21 @@ export function FooterRail() {
               />
             ) : (
               '— USDC'
+            )}
+          </strong>
+        </span>
+        <span>·</span>
+        <span>
+          <strong style={{ color: 'var(--eurc)' }}>
+            {eurc ? (
+              <SmoothNumber
+                value={Number(eurc.amount)}
+                precision={2}
+                suffix=" EURC"
+                cadence="calm"
+              />
+            ) : (
+              '— EURC'
             )}
           </strong>
         </span>

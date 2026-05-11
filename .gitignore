@@ -71,7 +71,7 @@ apps/storybook/storybook-static/
 
 # Local dev credentials (never commit — contains passwords)
 qa-logins.local.json
-.env.local.bak*
+.env.local.bak
 *.local.json
 
 # Temporary files from vercel/ops scripts
@@ -88,6 +88,3 @@ og-previews/
 # Self-hosted Phoenix data dir (packages/arize-phoenix/docker-compose.yml)
 .phoenix-data/
 packages/arize-phoenix/.phoenix-data/
-
-# Solana e2e test-mint secret key (devnet — regenerable, but still a private key)
-apps/admin/scripts/_local/.solana-test-usdc-mint.json

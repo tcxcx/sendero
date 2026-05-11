@@ -9,7 +9,6 @@
     ".": "./src/index.ts",
     "./pricing": "./src/pricing.ts",
     "./plans": "./src/plans.ts",
-    "./cogs": "./src/cogs.ts",
     "./caps": "./src/caps.ts",
     "./meter": "./src/meter.ts",
     "./batch": "./src/batch.ts",

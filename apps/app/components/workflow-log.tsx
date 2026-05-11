@@ -7,11 +7,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-import { cogsForModel } from '@sendero/billing/cogs';
+import { cogsForModel } from '@sendero/billing';
 
 import { tierDots } from '@/components/chat/chat-model-trigger';
 import { useChatModel } from '@/hooks/use-chat-model';
 
+import { WorkflowVisibilityToggle } from './console/workflow-visibility-toggle';
 import { DigitTicker, SmoothNumber } from './footer-numbers';
 import { useSendero } from './store';
 import { useMeterStream, useMeterSummary } from './use-meter';
@@ -26,17 +27,9 @@ interface Runtime {
 export function WorkflowLog() {
   const workflow = useSendero(s => s.workflow);
   const treasury = useSendero(s => s.treasury);
-  const userAuth = useSendero(s => s.userAuth);
-  const chainKind: 'arc' | 'sol' = userAuth?.chain ?? 'arc';
 
   // Stable per-mount run id so the header doesn't flicker every render.
-  // Generated client-side only — Math.random() during SSR diverged from
-  // the client value and produced a hydration mismatch on scoped trip
-  // routes that include the workflow log.
-  const [runId, setRunId] = useState<string>('wf_…');
-  useEffect(() => {
-    setRunId(`wf_${Math.random().toString(36).slice(2, 10)}`);
-  }, []);
+  const runId = useMemo(() => `wf_${Math.random().toString(36).slice(2, 10)}`, []);
 
   const [runtime, setRuntime] = useState<Runtime | null>(null);
   useEffect(() => {
@@ -78,6 +71,16 @@ export function WorkflowLog() {
       <div className="col-head">
         <span className="title">Workflow</span>
       </div>
+      <div
+        style={{
+          padding: '8px 14px',
+          borderBottom: '1px solid var(--hairline-color-soft)',
+          display: 'flex',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <WorkflowVisibilityToggle layout="inline" />
+      </div>
       <div className="col-body log">
         <WorkflowGraph workflow={workflow} />
 
@@ -107,12 +110,7 @@ export function WorkflowLog() {
             />
           ) : null}
           <Row k="tools" v={toolLabel} />
-          <Row
-            k="chain"
-            v={
-              chainKind === 'sol' ? 'Solana · Devnet' : `Arc L2 · ${treasury?.arc?.chainId ?? '—'}`
-            }
-          />
+          <Row k="chain" v={`Arc L2 · ${treasury?.arc?.chainId ?? '—'}`} />
           <Row
             k="block"
             v={
@@ -170,15 +168,9 @@ export function WorkflowLog() {
         <div className="log-group">
           <div
             className="log-head"
-            title={
-              chainKind === 'sol'
-                ? 'Per-call charges paid in nano-USDC. Solana settles via Circle Gateway → Squads V4.'
-                : "USDC is Arc's native gas token. Per-call charges are paid in nano-USDC (1 nUSDC = 1e-9 USDC)."
-            }
+            title="USDC is Arc's native gas token. Per-call charges are paid in nano-USDC (1 nUSDC = 1e-9 USDC)."
           >
-            <span className="name">
-              ▸ gas · nanopayments · {chainKind === 'sol' ? 'sol' : 'arc'}
-            </span>
+            <span className="name">▸ gas · nanopayments · arc</span>
             <span className="dur">
               {meterSummary
                 ? `${meterSummary.paidCalls}p / ${meterSummary.rejectedCalls}r`
@@ -225,15 +217,7 @@ export function WorkflowLog() {
                 modelLabel
               )}
             </span>
-            <span
-              title={
-                chainKind === 'sol'
-                  ? 'Total USDC paid as Solana settlement gas (nUSDC = nano-USDC)'
-                  : 'Total USDC paid as Arc gas (nUSDC = nano-USDC)'
-              }
-            >
-              {chainKind === 'sol' ? 'sol paid (nUSDC)' : 'arc paid (nUSDC)'}
-            </span>
+            <span title="Total USDC paid as Arc gas (nUSDC = nano-USDC)">arc paid (nUSDC)</span>
             <span
               style={{
                 color: 'var(--usdc)',
@@ -340,11 +324,7 @@ export function WorkflowLog() {
             lineHeight: 1.6,
           }}
         >
-          <div>
-            {chainKind === 'sol'
-              ? '// powered by Circle Nanopayments + Solana'
-              : '// powered by Circle Nanopayments + Arc L2'}
-          </div>
+          <div>{'// powered by Circle Nanopayments + Arc L2'}</div>
           <div>{'// x402 batched settlement · duffel hold-then-pay'}</div>
           <div>{'// ─────────────────────────────'}</div>
         </div>

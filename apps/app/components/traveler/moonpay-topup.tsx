@@ -10,13 +10,9 @@
  *     are in MoonPay's chain list as of 2026-05);
  *   - Circle Gateway treats Base, Solana, Arc, etc. as a single unified
  *     USDC balance, so where the funds *land* is irrelevant — they're
- *     instantly mintable on the tenant's settlement chain (Arc for
- *     arc-primary, Solana for sol-primary) when `book_flight` settles.
+ *     instantly mintable on Arc when `book_flight` settles.
  * Hiding the rail picker is intentional: travelers shouldn't have to
  * learn what a chain is.
- *
- * Caveat: this widget routes USDC to an EVM-shaped DCW address. Sol-only
- * DCWs (base58) need a Solana on-ramp peer — not wired today.
  *
  * Testnet vs mainnet: MoonPay's `pk_test_…` publishable key auto-routes
  * to sandbox (`buy-sandbox.moonpay.com`) which lands USDC on

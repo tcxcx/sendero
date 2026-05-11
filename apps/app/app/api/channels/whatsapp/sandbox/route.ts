@@ -42,11 +42,12 @@ export async function POST() {
     .updateMany({
       where: {
         tenantId: { not: tenant.id },
-        status: 'active',
         OR: [{ phoneNumberId }, { kapsoConnectionId: phoneNumberId }],
       },
       data: {
         status: 'disabled',
+        phoneNumberId: null,
+        kapsoConnectionId: null,
         lastErrorMessage: 'Sandbox WhatsApp number rebound to another dev workspace.',
       },
     })

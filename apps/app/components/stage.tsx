@@ -10,12 +10,11 @@
 
 import { useState } from 'react';
 import { useSendero } from './store';
-import { holdFlight, payBooking, requestBookingPayment, searchFlights } from './actions';
+import { holdFlight, payBooking, searchFlights } from './actions';
 import { sendViaChat } from './chat-bridge';
 import { StepRail, ErrorBanner } from './ui';
 import { SettlePanel } from './settle-panel';
 import { FundCard } from './fund-card';
-import { ChannelDiagnosticCard } from './console/channel-diagnostic-card';
 
 export function Stage() {
   const search = useSendero(s => s.search);
@@ -25,7 +24,6 @@ export function Stage() {
   const payment = useSendero(s => s.payment);
   const onChainSettlement = useSendero(s => s.onChainSettlement);
   const selectedOfferId = useSendero(s => s.selectedOfferId);
-  const channelDiagnostic = useSendero(s => s.channelDiagnostic);
 
   return (
     <div className="col" style={{ background: 'transparent' }}>
@@ -34,9 +32,7 @@ export function Stage() {
           <StepRail />
           <ErrorBanner />
 
-          {channelDiagnostic && <ChannelDiagnosticCard data={channelDiagnostic} />}
-
-          {!search && status === 'idle' && !channelDiagnostic && <SearchForm />}
+          {!search && status === 'idle' && <SearchForm />}
 
           {offers.length > 0 && status !== 'held' && status !== 'confirmed' && (
             <OffersCard
@@ -87,14 +83,16 @@ function SearchForm() {
       passengers,
       cabinClass,
     };
-    // Keep the operator Stage deterministic: run the direct search so
-    // offers render immediately, and also mirror the request into the
-    // chat surface when it is mounted so history keeps the intent.
+    // Prefer the agent path when a chat surface is mounted: the
+    // search_flights tool result then lands in chat history and
+    // rehydrates on reload, identical to a typed query. Headless
+    // surfaces (storybook, install/slack) have no chat → sendViaChat
+    // returns false and we fall through to the direct action.
     const cabinLabel = params.cabinClass.replace('_', ' ');
     const paxLabel = params.passengers === 1 ? '1 passenger' : `${params.passengers} passengers`;
     const returnPart = params.returnDate ? `, return ${params.returnDate}` : '';
     const text = `Use search_flights for ${params.origin} → ${params.destination} departing ${params.departureDate}${returnPart}, ${paxLabel}, ${cabinLabel}.`;
-    sendViaChat(text);
+    if (sendViaChat(text)) return;
     searchFlights(params);
   };
 
@@ -215,21 +213,6 @@ function OffersCard({
 }) {
   const traveler = useSendero(s => s.traveler);
   const userAuth = useSendero(s => s.userAuth);
-  const [phone, setPhone] = useState(userAuth?.phone ?? '');
-  const [phoneOfferId, setPhoneOfferId] = useState<string | null>(null);
-
-  const holdWithContact = (offerId: string) => {
-    const normalizedPhone = phone.trim();
-    if (!isE164Phone(normalizedPhone)) {
-      setPhoneOfferId(offerId);
-      return;
-    }
-    holdFlight(offerId, {
-      name: traveler.name,
-      email: traveler.email,
-      phone: normalizedPhone,
-    });
-  };
 
   return (
     <div className="card">
@@ -321,44 +304,20 @@ function OffersCard({
                     Instant only
                   </span>
                 ) : (
-                  <>
-                    <button
-                      className={`btn ${isSelected ? 'primary' : ''}`}
-                      disabled={disabled}
-                      onClick={() => holdWithContact(offer.id)}
-                      style={{ padding: '6px 12px', fontSize: 10 }}
-                    >
-                      {disabled ? '…' : 'Hold seat →'}
-                    </button>
-                    {phoneOfferId === offer.id && (
-                      <label
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 5,
-                          width: 168,
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: 9,
-                          letterSpacing: '0.08em',
-                          textTransform: 'uppercase',
-                          color: 'var(--text-dim)',
-                        }}
-                      >
-                        Traveler phone
-                        <input
-                          value={phone}
-                          onChange={e => setPhone(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') holdWithContact(offer.id);
-                          }}
-                          placeholder="+14155552671"
-                          inputMode="tel"
-                          className="stage-input"
-                          style={{ height: 30, fontSize: 11, textTransform: 'none' }}
-                        />
-                      </label>
-                    )}
-                  </>
+                  <button
+                    className={`btn ${isSelected ? 'primary' : ''}`}
+                    disabled={disabled}
+                    onClick={() =>
+                      holdFlight(offer.id, {
+                        name: traveler.name,
+                        email: traveler.email,
+                        phone: userAuth?.phone,
+                      })
+                    }
+                    style={{ padding: '6px 12px', fontSize: 10 }}
+                  >
+                    {disabled ? '…' : 'Hold seat →'}
+                  </button>
                 )}
               </div>
             </div>
@@ -367,10 +326,6 @@ function OffersCard({
       </div>
     </div>
   );
-}
-
-function isE164Phone(value: string) {
-  return /^\+[1-9]\d{6,14}$/.test(value);
 }
 
 function HoldCard({
@@ -384,19 +339,7 @@ function HoldCard({
   paying: boolean;
   onPay: () => void;
 }) {
-  const userAuth = useSendero(s => s.userAuth);
-  const settleChainLabel = userAuth?.chain === 'sol' ? 'Solana' : 'Arc';
   const deadline = holdOrder.paymentRequiredBy ? new Date(holdOrder.paymentRequiredBy) : null;
-  const [requesting, setRequesting] = useState<'whatsapp' | 'slack' | null>(null);
-
-  const requestPayment = async (channel: 'whatsapp' | 'slack') => {
-    setRequesting(channel);
-    try {
-      await requestBookingPayment(holdOrder, channel);
-    } finally {
-      setRequesting(null);
-    }
-  };
 
   return (
     <div className="card">
@@ -429,32 +372,21 @@ function HoldCard({
         <div className="settle-cell">
           <span className="k">Status</span>
           <span className="v">{paid ? 'Ticketed' : paying ? 'Paying…' : 'Held'}</span>
-          <span className="k">{paid ? 'seat confirmed' : 'awaiting org Gateway balance'}</span>
+          <span className="k">{paid ? 'seat confirmed' : 'awaiting balance'}</span>
         </div>
       </div>
       {!paid && (
         <div
           style={{
             display: 'flex',
-            flexWrap: 'wrap',
             gap: 8,
             padding: 14,
             borderTop: '1px solid var(--border)',
             justifyContent: 'flex-end',
           }}
         >
-          <button
-            className="btn"
-            disabled={!!requesting}
-            onClick={() => requestPayment('whatsapp')}
-          >
-            {requesting === 'whatsapp' ? 'Sending…' : 'Request payment · WhatsApp'}
-          </button>
-          <button className="btn" disabled={!!requesting} onClick={() => requestPayment('slack')}>
-            {requesting === 'slack' ? 'Sending…' : 'Request payment · Slack'}
-          </button>
           <button className="btn primary" disabled={paying} onClick={onPay}>
-            {paying ? `Settling on ${settleChainLabel}…` : 'Pay from org Gateway balance →'}
+            {paying ? 'Settling on Arc…' : 'Pay from prepaid balance →'}
           </button>
         </div>
       )}

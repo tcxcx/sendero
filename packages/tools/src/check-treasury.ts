@@ -71,7 +71,7 @@ function microToDisplay(micro: bigint): string {
 export const checkTreasuryTool: ToolDef<{ verify?: boolean }, CheckTreasuryResult> = {
   name: 'check_treasury',
   description:
-    "Check the caller tenant's USDC + EURC balance on its settlement chain (Arc Testnet for arc-primary tenants, Solana Devnet for sol-primary tenants — keyed by Wallet.chainId so this works for either). Reads the cached value (max ~5 min stale) by default. Pass `verify: true` to round-trip Circle live before returning — use that before settle-bearing decisions.",
+    "Check the caller tenant's USDC + EURC balance on Arc Testnet. Reads the cached value (max ~5 min stale) by default. Pass `verify: true` to round-trip Circle live before returning — use that before settle-bearing decisions.",
   inputSchema,
   jsonSchema: {
     type: 'object',

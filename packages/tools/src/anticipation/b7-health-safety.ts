@@ -15,12 +15,13 @@
  * All experimental + internal + dev-gated.
  */
 
+import { z } from 'zod';
+import { generateText, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+
 import { searchText } from '@sendero/google-places';
 import { cseSearch } from '@sendero/web-search';
-import { generateObject, generateText } from 'ai';
-import { z } from 'zod';
 
 import { assertDevOnlyToolAllowed } from '../dev-gate';
 import type { ToolContext, ToolDef } from '../types';
@@ -112,6 +113,7 @@ const baseJsonProps = {
 const clinicFinderTool: ToolDef = {
   name: 'clinic_finder',
   internal: true,
+  experimental: true,
   description:
     'Find clinics, private hospitals, urgent care in a city. Places-only with health-keyword filter. Use when traveler is sick on a trip and needs care without a full ER visit. ALWAYS pair with `emergency_numbers_card` for life-threatening situations.',
   inputSchema: cityInput,
@@ -130,6 +132,7 @@ const clinicFinderTool: ToolDef = {
 const pharmacy24hFinderTool: ToolDef = {
   name: 'pharmacy_24h_finder',
   internal: true,
+  experimental: true,
   description:
     'Find 24-hour pharmacies in a city. Places + name filter (24h / 24 horas / overnight / nocturna). Use when traveler needs medication outside business hours.',
   inputSchema: cityInput,
@@ -200,9 +203,7 @@ ${sources
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -324,9 +325,7 @@ ${text}
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -558,6 +557,7 @@ const EMERGENCY_NUMBERS: Record<string, EmergencyCard> = {
 const emergencyNumbersCardTool: ToolDef = {
   name: 'emergency_numbers_card',
   internal: true,
+  experimental: true,
   description:
     'Local emergency numbers + tourist police + consulate notes for ~40 countries. Pure curated table. Use whenever traveler arrives in a new country — pair with `embassy_consulate_locator` for the diplomatic-side info.',
   inputSchema: emergencyInput,
@@ -661,6 +661,7 @@ type SafeRouteInput = z.infer<typeof safeRouteInput>;
 const safeRouteHomeTool: ToolDef = {
   name: 'safe_route_home',
   internal: true,
+  experimental: true,
   description:
     "Recommend a safer route + mode home at night. Pure heuristic — caller passes from/to area scores + distance + hour + group size + phone state. Returns mode (walk / shared taxi / arranged ride) + concrete tips. Use when traveler asks 'how do I get back to my hotel' late at night.",
   inputSchema: safeRouteInput,
@@ -837,6 +838,7 @@ const CURATED_NEIGHBORHOODS: CuratedNeighborhood[] = [
 const areaAfterDarkCheckTool: ToolDef = {
   name: 'area_after_dark_check',
   internal: true,
+  experimental: true,
   description:
     "Evaluate after-dark suitability of a city neighborhood. Returns rating ('safe' / 'mostly_safe' / 'caution' / 'avoid') + notes. Curated table for ~30 high-traffic neighborhoods; CSE fallback for everything else. Compose with `safe_route_home` and `date_route_safety_check`.",
   inputSchema: areaCheckInput,
@@ -944,9 +946,7 @@ ${text}
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),

@@ -119,9 +119,6 @@ function makeHobbyDeps(): {
   const upserts: Array<{ key: string; priority: string }> = [];
   const rows = new Map<string, { priority: string; notes: string | null }>();
   const deps: HobbyProfileBuilderDeps = {
-    async userExists(_userId) {
-      return true;
-    },
     async findEntry(_userId, key) {
       return rows.get(key) ?? null;
     },

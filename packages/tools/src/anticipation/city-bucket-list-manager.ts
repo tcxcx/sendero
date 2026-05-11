@@ -210,6 +210,7 @@ export const cityBucketListManagerTool: ToolDef<
 > = {
   name: 'city_bucket_list_manager',
   internal: true,
+  experimental: true,
   description:
     "Save / love / skip / revisit / recommend-to-friend feedback on city discoveries. Closes the taste-graph feedback loop — every action improves future ranking. Use when the traveler says 'I want to go there', 'we went, it was great', 'skip that', 'I'd take a friend back'. Idempotent on (userId, city, placeId). Always pass the city the traveler is in or planning for; the city is the index.",
   inputSchema,

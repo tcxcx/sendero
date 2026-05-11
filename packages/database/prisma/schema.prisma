@@ -266,21 +266,6 @@ enum UserSource {
   guest
 }
 
-/// Blockchain operating mode for a tenant. Set at org creation time
-/// and cascades through wallet provisioning, NFT mint paths, escrow
-/// contract selection, and x402 signature scheme.
-///
-/// Phase 1 supports `arc` (Arc Testnet today, Arc mainnet at GA) and
-/// `sol` (Solana Devnet today, Mainnet at GA). The existing
-/// `CircleWallet.chain` String column carries the per-wallet chain
-/// after provisioning — this enum is the per-tenant DEFAULT that drives
-/// it. Multi-chain tenants (rare, enterprise-only) override per-wallet
-/// via the `TenantGatewaySigner` config.
-enum ChainKind {
-  arc
-  sol
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // TENANCY
 // ─────────────────────────────────────────────────────────────────────────────
@@ -315,21 +300,6 @@ model Tenant {
   /// `Trip.paymentMode`.
   defaultPaymentMode TripPaymentMode @default(traveler)
 
-  /// Source-of-truth blockchain for this tenant. Drives:
-  /// - new CircleWallet provisioning chain
-  /// - per-traveler Wallet rows for travelers booking with this agency
-  /// - OnchainIdentity contract resolution (Arc → ERC-8004 IdentityRegistry,
-  ///   Solana → Metaplex Agent Registry)
-  /// - Trip stamp NFT minting path (Arc → SenderoStamps thirdweb,
-  ///   Solana → Metaplex Core)
-  /// - escrow contract (Arc → AgenticCommerce.sol + SenderoGuestEscrow.sol,
-  ///   Solana → agentic_commerce + sendero_guest_escrow Anchor programs)
-  /// - x402 signature scheme (Arc → secp256k1, Solana → Ed25519)
-  /// Existing tenants backfill to `arc` to preserve current behavior.
-  /// Set at tenant creation; immutable afterwards (cross-chain migrate
-  /// would require draining wallets + re-minting NFTs).
-  primaryChain ChainKind @default(arc)
-
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -353,8 +323,6 @@ model Tenant {
   chatSessions                 ChatSession[]
   slackInstalls                SlackInstall[]
   slackUserBindings            SlackUserBinding[]
-  slackWebhookEvents           SlackWebhookEvent[]
-  slackAgentEvents             SlackAgentEvent[]
   whatsappInstall              WhatsAppInstall?
   whatsappFlowRegistrations    WhatsAppFlowRegistration[]
   whatsappOutbound             WhatsAppOutboundMessage[]
@@ -384,7 +352,6 @@ model Tenant {
   otpDeliveryAttempts          OtpDeliveryAttempt[]
   securityAlerts               SecurityAlert[]
   gatewaySigner                TenantGatewaySigner?
-  solanaGatewaySigner          TenantSolanaGatewaySigner?
   gatewayConfig                TenantGatewayConfig?
   gatewayDeposits              GatewayDepositLog[]
   gatewayTransfers             GatewayTransferLog[]
@@ -477,21 +444,21 @@ model User {
 ///
 /// Spec: docs/architecture/concierge-magic.md §2.1.
 model TravelerProfile {
-  id       String @id @default(cuid())
-  userId   String @unique
+  id     String @id @default(cuid())
+  userId String @unique
   tenantId String
 
   /// Accumulated preferences. Low-confidence inference allowed
   /// (e.g. one vegetarian-tagged restaurant tap → tentative dietary
   /// hint); the agent bias-corrects over time when user contradicts.
-  dietary        String[] @default([])
-  allergies      String[] @default([])
+  dietary   String[] @default([])
+  allergies String[] @default([])
   /// 'plan_ahead' | 'mix' | 'improvise'.
-  pace           String?
+  pace      String?
   /// Flips true after the first inbound audio message. One-way —
   /// never flips back without explicit user toggle. The agent uses
   /// this to bias outbound copy ("mandá un audio si querés…").
-  voicePreferred Boolean  @default(false)
+  voicePreferred Boolean @default(false)
 
   /// Cabin class the traveler picked on prior bookings (most-recent
   /// wins). Bias the search defaults; never lock — every search still
@@ -504,8 +471,8 @@ model TravelerProfile {
 
   /// Memory. visitedCities is JSON, shape:
   ///   [{ iso2: 'PE', citySlug: 'lima', lastVisitedAt: ISO }]
-  visitedCities Json      @default("[]")
-  totalTrips    Int       @default(0)
+  visitedCities Json     @default("[]")
+  totalTrips    Int      @default(0)
   lastTripAt    DateTime? @db.Timestamptz(6)
 
   /// Loyalty programmes accumulated from `book_flight` inputs. JSON
@@ -541,17 +508,17 @@ model TravelerTasteEntry {
   key String
 
   /// 'low' | 'medium' | 'high'.
-  priority           String   @default("medium")
-  notes              String?
+  priority String @default("medium")
+  notes    String?
   /// Negative tags ("loud cafés", "tourist trap food").
-  avoid              String[] @default([])
+  avoid    String[] @default([])
   /// 'morning' | 'afternoon' | 'evening' | 'late_night'.
-  preferredTimeOfDay String?  @map("preferred_time_of_day")
+  preferredTimeOfDay String? @map("preferred_time_of_day")
   /// 'budget' | 'medium' | 'premium' | 'splurge' | 'no_limit'.
-  preferredBudget    String?  @map("preferred_budget")
+  preferredBudget    String? @map("preferred_budget")
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -576,8 +543,8 @@ model CityBucketListItem {
 
   status BucketListItemStatus @default(want_to_visit)
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -600,23 +567,23 @@ enum BucketListItemStatus {
 /// operator strip and frequency-cap quota.
 /// Spec: docs/specs/anticipatory-concierge.md §4.0 + §11.
 model AnticipationEvent {
-  id             String  @id @default(cuid())
-  tenantId       String
+  id       String  @id @default(cuid())
+  tenantId String
   /// Optional — operator-side anticipation (Slack ops rollup) has no traveler.
   travelerUserId String? @map("traveler_user_id")
 
   /// 'group_confluence' | 'monday_ops_rollup' | 't_minus_48h_brief'
   /// | 'hobby_arrival_pack' | 'self_heal_applied' | …
-  kind   String
+  kind String
   /// 'fired' | 'positive' | 'negative' | 'suppressed_quota' | 'suppressed_optout'.
   status String @default("fired")
 
-  firedAt DateTime @default(now()) @map("fired_at") @db.Timestamptz(6)
+  firedAt DateTime @default(now()) @db.Timestamptz(6) @map("fired_at")
   /// Free-form context: triggerKey, channelKind, messageId, traceId, etc.
   payload Json?
 
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt DateTime @updatedAt @db.Timestamptz(6) @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -793,17 +760,6 @@ model Trip {
   /// reads this field. Null on legacy rows; treated as `tenant` by the
   /// resolver for backwards compatibility (matches pre-retro behavior).
   paymentMode           TripPaymentMode?
-  /// ISO-3166 alpha-2 origin country, derived at write time via
-  /// `@sendero/tools/lib/derive-route-countries` from segments / intent.
-  /// Source of truth for the trip-map UI + downstream tools that need
-  /// fast country lookups without parsing JSON. Nullable for now;
-  /// follow-up migration flips NOT NULL once the backfill verifies
-  /// zero stragglers (run `bun scripts/backfill-route-countries.ts`).
-  originCountry         String?          @db.Char(2)
-  /// ISO-3166 alpha-2 destination country (the OUTBOUND destination,
-  /// not the round-trip return). Same provenance + nullability as
-  /// `originCountry`.
-  destinationCountry    String?          @db.Char(2)
   createdAt             DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime         @updatedAt @db.Timestamptz(6)
 
@@ -820,14 +776,12 @@ model Trip {
   reputationFeedback ReputationFeedback[]
   chatSessions       ChatSession[]        @relation("ChatSessionTrip")
   channelHandoffs    ChannelHandoff[]
-  slackAgentEvents   SlackAgentEvent[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
   @@index([policyId])
   @@index([travelerId])
   @@index([createdById])
-  @@index([tenantId, destinationCountry])
   @@map("trips")
 }
 
@@ -915,7 +869,7 @@ enum GroupTripPassengerStatus {
 }
 
 model GroupTrip {
-  id            String          @id @default(cuid())
+  id            String   @id @default(cuid())
   tenantId      String
   name          String
   destination   String?
@@ -928,8 +882,8 @@ model GroupTrip {
   maxPassengers Int?
   /// Free-form metadata (purpose, deposit terms, etc.).
   metadata      Json?
-  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
 
   tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   passengers GroupTripPassenger[]
@@ -942,21 +896,21 @@ model GroupTrip {
 /// Many-to-many between GroupTrip and User. One row per passenger
 /// membership. Role is free-form ('lead', 'guest', 'attendee', …).
 model GroupTripPassenger {
-  id                String                   @id @default(uuid()) @db.Uuid
-  groupTripId       String
-  userId            String
-  role              String                   @default("attendee")
+  id          String                   @id @default(uuid()) @db.Uuid
+  groupTripId String
+  userId      String
+  role        String                   @default("attendee")
   /// Per-seat lifecycle state. `claimed` means this row is bound to
   /// the User and the seat counts toward capacity. `invited` means
   /// the operator pre-allocated the seat for this User but they
   /// haven't tapped the claim link yet. `declined` / `canceled` are
   /// operator-driven removals (kept for audit, not garbage-collected).
-  status            GroupTripPassengerStatus @default(claimed)
+  status      GroupTripPassengerStatus @default(claimed)
   /// Group-broadcast opt-out. Inbound "stop"/"unsubscribe"/"baja"
   /// inside a group thread flips this true; broadcast_to_group_trip
   /// skips with reason `opted_out`. Per-passenger, not tenant-wide.
-  broadcastOptedOut Boolean                  @default(false) @map("broadcast_opted_out")
-  addedAt           DateTime                 @default(now()) @db.Timestamptz(6)
+  broadcastOptedOut Boolean             @default(false) @map("broadcast_opted_out")
+  addedAt     DateTime                 @default(now()) @db.Timestamptz(6)
 
   groupTrip GroupTrip @relation(fields: [groupTripId], references: [id], onDelete: Cascade)
   user      User      @relation("GroupTripPassengers", fields: [userId], references: [id], onDelete: Cascade)
@@ -1027,14 +981,6 @@ model Booking {
   /// supplier didn't return a document (rare; logged for ops).
   eTicketDocumentUrl   String?
   eTicketIssuedAt      DateTime?       @db.Timestamptz(6)
-  /// ISO-3166 alpha-2 origin country for this booking. Derived at
-  /// write time from segments via `@sendero/tools/lib/derive-route-countries`
-  /// — same column on Trip carries the trip-level rollup. Nullable for
-  /// now; tightened to NOT NULL in a follow-up migration once backfill
-  /// completes.
-  originCountry        String?         @db.Char(2)
-  /// ISO-3166 alpha-2 destination country for this booking.
-  destinationCountry   String?         @db.Char(2)
   createdAt            DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime        @updatedAt @db.Timestamptz(6)
 
@@ -1056,7 +1002,6 @@ model Booking {
   @@index([supplierId])
   @@index([status])
   @@index([provisionedBy])
-  @@index([tenantId, destinationCountry])
   @@map("bookings")
 }
 
@@ -1246,33 +1191,6 @@ model TenantGatewaySigner {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tenant_gateway_signers")
-}
-
-/// Per-tenant self-custody Solana keypair used as the Gateway depositor
-/// + burn-intent signer on Solana. Replaces the Circle DCW Sol signer
-/// because Circle's `toSolanaSigner` only implements `signTransactions`
-/// — App Kit's `gateway.v1.signBurnIntents` needs `signMessage`/
-/// `signMessages`, which `@solana/kit`'s `KeyPairSigner` provides.
-///
-/// Address is the base58 pubkey. Ciphertext plaintext is the base58
-/// 64-byte secret key (full keypair, what `@solana/web3.js` Keypair
-/// emits as `secretKey` then base58-encodes). Decrypt + re-derive
-/// matches the same shape as `TenantGatewaySigner` for EVM.
-model TenantSolanaGatewaySigner {
-  tenantId            String   @id
-  /// Base58 Solana pubkey derived from the encrypted secret key. Stable
-  /// across calls. Verified on decrypt to detect KEK drift / corruption.
-  address             String   @unique
-  /// Base64-encoded ciphertext envelope from @sendero/encryption.
-  /// Plaintext is the base58 64-byte secret key (Keypair.secretKey).
-  encryptedPrivateKey String
-  kekVersion          Int      @default(1)
-  createdAt           DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@map("tenant_solana_gateway_signers")
 }
 
 /// Per-tenant Circle Gateway configuration — which chains are enabled,
@@ -1877,10 +1795,10 @@ model WhatsAppInstall {
   kapsoCustomerId     String    @unique
   /// Kapso's internal connection id for the WhatsApp number. Distinct
   /// from Meta's `phone_number_id` — Kapso exposes both.
-  kapsoConnectionId   String?
+  kapsoConnectionId   String?   @unique
   businessDisplayName String?
   /// Meta Graph API id — used for outbound sends + webhook routing.
-  phoneNumberId       String?
+  phoneNumberId       String?   @unique
   /// Meta WABA id — used when creating / submitting templates.
   businessAccountId   String?
   displayPhoneNumber  String?
@@ -1901,9 +1819,6 @@ model WhatsAppInstall {
 
   @@index([tenantId, status])
   @@index([phoneNumberId])
-  @@index([kapsoConnectionId])
-  @@unique([tenantId, phoneNumberId])
-  @@unique([tenantId, kapsoConnectionId])
   @@map("whatsapp_installs")
 }
 
@@ -2050,85 +1965,6 @@ model WhatsAppOutboundMessage {
   @@index([tenantId, source])
   @@index([groupTripId, broadcastId])
   @@map("whatsapp_outbound_messages")
-}
-
-/// Audit row for every Slack Events API webhook delivery.
-///
-/// Mirrors `WhatsAppWebhookEvent`: inserted fail-soft after routing
-/// decisions so operators can answer "did Slack send us the event, did
-/// we dispatch it, or did we skip/dedupe/drop it?" without grepping logs.
-model SlackWebhookEvent {
-  id                    String   @id @default(dbgenerated("gen_random_uuid()::text"))
-  tenantId              String?  @map("tenant_id")
-  receivedAt            DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
-  teamId                String   @map("team_id")
-  enterpriseId          String?  @map("enterprise_id")
-  eventId               String?  @map("event_id")
-  eventType             String?  @map("event_type")
-  eventSubtype          String?  @map("event_subtype")
-  channelId             String?  @map("channel_id")
-  threadTs              String?  @map("thread_ts")
-  slackUserId           String?  @map("slack_user_id")
-  signatureValid        Boolean  @map("signature_valid")
-  replayWindowOk        Boolean? @map("replay_window_ok")
-  messageCount          Int      @default(0) @map("message_count")
-  droppedDuplicateCount Int      @default(0) @map("dropped_duplicate_count")
-  droppedBusyCount      Int      @default(0) @map("dropped_busy_count")
-  dispatchedCount       Int      @default(0) @map("dispatched_count")
-  dispatchStatus        String   @default("processed") @map("dispatch_status")
-  dispatchError         String?  @map("dispatch_error")
-  durationMs            Int?     @map("duration_ms")
-  traceId               String?  @map("trace_id")
-  payloadHash           String?  @map("payload_hash")
-  rawEnvelope           Json?    @map("raw_envelope")
-
-  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-
-  @@index([tenantId, receivedAt(sort: Desc)])
-  @@index([traceId])
-  @@index([eventId])
-  @@index([teamId, channelId, threadTs, receivedAt(sort: Desc)])
-  @@map("slack_webhook_events")
-}
-
-/// Append-only Slack agent/tool timeline.
-///
-/// One row per important turn transition: placeholder post, step update,
-/// tool start/finish/failure/slow warning, final post. This is the Slack
-/// parity surface for WhatsApp/Kapso execution monitoring: a stuck
-/// thread will show the last tool that started even if the serverless
-/// function is killed before `runAgentTurn` returns.
-model SlackAgentEvent {
-  id            String   @id @default(dbgenerated("gen_random_uuid()::text"))
-  tenantId      String   @map("tenant_id")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  traceId       String?  @map("trace_id")
-  eventId       String?  @map("event_id")
-  turnId        String?  @map("turn_id")
-  teamId        String   @map("team_id")
-  enterpriseId  String?  @map("enterprise_id")
-  channelId     String   @map("channel_id")
-  threadTs      String   @map("thread_ts")
-  slackUserId   String?  @map("slack_user_id")
-  senderoUserId String?  @map("sendero_user_id")
-  tripId        String?  @map("trip_id")
-  sequence      Int      @default(0)
-  kind          String
-  toolName      String?  @map("tool_name")
-  ok            Boolean?
-  durationMs    Int?     @map("duration_ms")
-  statusText    String?  @map("status_text")
-  errorMessage  String?  @map("error_message")
-  metadata      Json?
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trip   Trip?  @relation(fields: [tripId], references: [id], onDelete: SetNull)
-
-  @@index([tenantId, createdAt(sort: Desc)])
-  @@index([traceId, sequence])
-  @@index([teamId, channelId, threadTs, createdAt(sort: Desc)])
-  @@index([kind, createdAt(sort: Desc)])
-  @@map("slack_agent_events")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2893,11 +2729,6 @@ model NftStamp {
   tripId     String?
   bookingId  String?
   travelerId String?
-  /// Phase 4.x — chain this stamp lives on. `arc` writes to the
-  /// SenderoStamps ERC-1155 contract via thirdweb; `sol` mints a
-  /// Metaplex Core asset via @sendero/metaplex. Defaults to `arc`
-  /// so existing rows backfill without a data migration.
-  chain      ChainKind @default(arc)
   /// One of: BoardingPass | SettlementReceipt | ItineraryMap | TripPassport
   /// | StayCheckIn | TripCompletion
   kind       String
@@ -2938,15 +2769,12 @@ model NftStamp {
   traveler   User?               @relation("StampTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
   ownerships NftStampOwnership[]
 
-  /// Phase 4.x widened idempotency to include chain so a tenant on
-  /// both chains can mint distinct stamps for the same domain key.
-  @@unique([kind, primaryKey, chain])
+  @@unique([kind, primaryKey])
   @@unique([contract, tokenId])
   @@index([tenantId, mintedAt])
   @@index([travelerId, mintedAt])
   @@index([tripId])
   @@index([status])
-  @@index([chain])
   @@map("nft_stamps")
 }
 
@@ -3064,131 +2892,6 @@ model NftStampOwnership {
 /// ERC-8004 IdentityRegistry agent NFT bound to a Sendero subject.
 /// Either the org's treasury wallet (kind='org', tenantId set) or the
 /// user's DCW (kind='user', userId set). Provisioning is async-with-
-/// Sendero superadmin's dual-chain treasury — one row per chain.
-/// Phase 7.4 provisions the Solana side (Squads V4 multisig vault on
-/// SOL devnet). Phase 7.5 provisions the Arc side (Circle MSCA
-/// weighted multisig via @sendero/multisig). Both treasuries serve
-/// the same logical role: receive platform fees, fund payouts,
-/// authorize contract upgrades.
-///
-/// Storage shape is chain-agnostic by design — `chain` + `network`
-/// disambiguate, `multisigAddress` + `vaultAddress` cover the Solana
-/// (config PDA + vault PDA at index 0 are distinct) and EVM (MSCA
-/// holds tokens directly, both addresses equal) split.
-model SuperOrgTreasury {
-  id                        String    @id @default(cuid())
-  chain                     ChainKind
-  /// Free-form network identifier matching the `CircleWallet.chain`
-  /// String convention: "sol-devnet" | "sol-mainnet" | "arc-testnet" |
-  /// "arc-mainnet". Used for explorer URL building + cross-references.
-  network                   String
-  /// Solana: multisig PDA (config). EVM: MSCA address. The "config"
-  /// surface — distinct from the vault on Solana, same address on EVM.
-  multisigAddress           String    @unique
-  /// Solana: vault PDA at index 0 (where USDC actually lives).
-  /// EVM: same as `multisigAddress` (the MSCA holds tokens directly).
-  vaultAddress              String
-  /// Threshold required for proposal execution.
-  threshold                 Int
-  /// Member pubkeys (Solana) / EOAs (EVM). JSON array of strings.
-  /// Each entry is the signer's external pubkey, not the multisig PDA.
-  members                   Json
-  /// Squads V4 createKey pubkey (Solana only). Used to derive the
-  /// multisig PDA — kept for audit + tooling. Null on EVM.
-  createKey                 String?
-  /// On-chain tx signature/hash that provisioned the multisig.
-  /// On Arc: the deploy userOp hash (Phase 7.5.x.y).
-  provisioningTxRef         String?
-  /// Phase 7.5.x.yy — Arc: hash of the userOp that called
-  /// `updateMultisigWeights` to add the form's members + set the
-  /// configured threshold. Null until the multisig install runs.
-  /// Distinct from `provisioningTxRef` (the deploy tx) so the audit
-  /// trail keeps both events.
-  multisigInstallTxRef      String?
-  /// Phase 7.5.x.yy — when the multisig was installed. UI uses this
-  /// as the boolean "is multi-owner config complete" rather than
-  /// growing the `status` enum further.
-  multisigInstalledAt       DateTime? @db.Timestamptz(6)
-  /// Phase 7.5.x.yy.y — when the platform recovery owner was removed
-  /// (set to weight=0 via a follow-up updateMultisigWeights). Null
-  /// means the platform EOA is still a recovery signer; non-null
-  /// means the multisig is in full tenant self-custody.
-  platformOwnerRemovedAt    DateTime? @db.Timestamptz(6)
-  /// Phase 7.5.x.yy.y — userOp hash of the platform-removal tx.
-  platformOwnerRemovalTxRef String?
-  /// 'pending' (provisioning tx submitted, awaiting confirmation) |
-  /// 'live' (vault confirmed, ready to use) | 'failed' (terminal).
-  status                    String    @default("pending")
-  /// Clerk userId of the superadmin who clicked Provision. Audit trail
-  /// — paired with Clerk's own session log.
-  provisionedByUserId       String
-
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
-
-  proposals TreasuryProposal[]
-
-  @@index([chain, network])
-  @@index([status])
-  @@map("super_org_treasuries")
-}
-
-/// Phase 7.6 — proposals against a SuperOrgTreasury. One row per
-/// Squads V4 vault transaction (or Arc MSCA userOp once 7.5.x ships).
-/// Captures the on-chain PDAs / addresses needed to vote + execute,
-/// plus the off-chain audit trail (who proposed, who approved).
-///
-/// Lifecycle:
-///   pending  — proposal PDA created, awaiting threshold of votes
-///   approved — threshold met, ready to execute
-///   executed — execution tx confirmed; `executedTxRef` populated
-///   rejected — explicit reject reached; refunds N/A on Squads
-///   cancelled — proposer cancelled before threshold
-///   failed   — terminal error during execution; surfaces in UI
-model TreasuryProposal {
-  id               String  @id @default(cuid())
-  treasuryId       String
-  /// Squads transaction index (u64). Stamped as `transactionIndex`
-  /// when creating the vault tx + proposal PDAs. Auto-incremented
-  /// per multisig — tracked off-chain for UI ergonomics.
-  txIndex          Int
-  /// Solana vault transaction PDA (`getTransactionPda`). EVM: TODO
-  /// Phase 7.5.x.
-  transactionPda   String
-  /// Solana proposal PDA (`getProposalPda`). EVM: TODO Phase 7.5.x.
-  proposalPda      String
-  /// Proposal kind. Phase 7.6: `'usdc-transfer'` only. Phase 7.6.x
-  /// adds `'sol-transfer'`, `'config-change'`, `'program-upgrade'`.
-  kind             String
-  /// Free-form payload — destination, amount, memo, etc. Shape varies
-  /// by `kind`. For 'usdc-transfer':
-  ///   { recipient: string, amountMicro: string, memo?: string }
-  payload          Json
-  /// Sig of the tx that created the proposal (vaultTransactionCreate +
-  /// proposalCreate are batched on Solana).
-  proposalTxRef    String?
-  /// Sig of the execution tx, when status === 'executed'.
-  executedTxRef    String?
-  /// Cached count of `Proposal.approved` from the last
-  /// `refreshProposalStatus` reconcile. Pairs with
-  /// `SuperOrgTreasury.threshold` for the "X of Y approved" pill so
-  /// the UI doesn't have to round-trip to the chain on every render.
-  approvedCount    Int     @default(0)
-  /// Status: pending | approved | executed | rejected | cancelled | failed.
-  status           String  @default("pending")
-  /// Clerk userId of the superadmin who proposed. Audit trail.
-  proposedByUserId String
-
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
-
-  treasury SuperOrgTreasury @relation(fields: [treasuryId], references: [id], onDelete: Cascade)
-
-  @@unique([treasuryId, txIndex])
-  @@index([treasuryId, status])
-  @@map("treasury_proposals")
-}
-
 /// retry, mirroring NftStamp.status semantics: `pending` → `minted` |
 /// `failed`. The sweeper retries `pending` rows forever; `failed` is
 /// terminal and surfaces in the admin UI.
@@ -3205,13 +2908,8 @@ model OnchainIdentity {
   kind                  String
   tenantId              String? // populated when kind='org'
   userId                String? // populated when kind='user'
-  /// Phase 5 — chain this identity lives on. A dual-chain tenant has
-  /// two rows (one with `arc`, one with `sol`); `loadMirroredAgentProfile`
-  /// aggregates `cached*` across both. Defaults to `arc` so existing
-  /// rows backfill without a data migration.
-  chain                 ChainKind @default(arc)
   chainId               Int // 5042002 for ARC-TESTNET
-  contract              String // IdentityRegistry address (0x8004A8…) on Arc; Agent Registry program id on Sol
+  contract              String // IdentityRegistry address (0x8004A8…)
   /// uint256 token id from IdentityRegistry — decimal string. Null
   /// while pending; populated from the Transfer event in the mint
   /// receipt.
@@ -3250,14 +2948,12 @@ model OnchainIdentity {
   validations ValidationCheck[]
 
   @@unique([contract, agentId])
-  /// App layer enforces "exactly one identity per (kind, subject, chain)"
-  /// — Postgres partial-unique on these two pairs. Phase 5 added
-  /// `chain` so a dual-chain tenant can hold one identity per chain.
-  @@unique([kind, tenantId, chain])
-  @@unique([kind, userId, chain])
+  /// App layer enforces "exactly one identity per (kind, subject)"
+  /// — Postgres partial-unique on these two pairs.
+  @@unique([kind, tenantId])
+  @@unique([kind, userId])
   @@index([holderAddress])
   @@index([status])
-  @@index([chain])
   @@map("onchain_identities")
 }
 
@@ -3464,92 +3160,6 @@ model SecurityAlert {
   @@map("security_alerts")
 }
 
-/// Phase C-2 — cross-channel notification dispatch correlation row.
-///
-/// One row per logical event-channel-recipient triple. Idempotency via
-/// the (tenantId, dedupKey, channelKind) UNIQUE constraint: when both
-/// the legacy direct-call site and the new dispatcher fire during the
-/// migration cutover (parallel-fire-with-dedupKey pattern, locked in
-/// /plan-eng-review E5), the second insert errors and the dispatcher
-/// drops the duplicate.
-///
-/// This row is an envelope/correlation only. Per-channel delivery
-/// status stays in existing tables (WhatsAppOutboundMessage,
-/// MeterEvent, SecurityAlert, Trip.events) — codex outside-voice #2
-/// flagged that adding a 3rd audit seam would duplicate infra.
-model NotificationDispatch {
-  id            String   @id @default(cuid())
-  tenantId      String
-  /// 'agent_tool' | 'webhook' | 'workflow' | 'manual'
-  sourceKind    String
-  /// Stable id from the originating call site (handoff id, booking id,
-  /// thread id, etc). Lets ops trace back from a duplicate row to the
-  /// fire path that produced it.
-  sourceId      String
-  /// 'handoff.requested' | 'booking.confirmed' | 'mention.received' in
-  /// v1. Discriminated union extends in v2 (security/platform/OTP).
-  eventKind     String
-  /// sha256(eventKind + sourceId + recipientId + channelKind). Both
-  /// the dispatcher AND the retrofitted direct-call sites compute the
-  /// SAME key so the UNIQUE constraint catches the dupe.
-  dedupKey      String
-  /// 'slack' | 'whatsapp' | 'liveblocks_bell' | 'email' | 'sms' | 'push'
-  /// (sms/push admitted from v1 even though no adapters; codex #10).
-  channelKind   String
-  /// JSON array of recipient descriptors at dispatch time. Frozen.
-  recipients    Json
-  /// JSON snapshot of the user's prefs at send time. Survives later
-  /// pref toggles so old audit rows stay coherent (locked E4).
-  snapshotPrefs Json
-  /// 'sent' | 'skipped_dupe' | 'skipped_pref' | 'failed' | 'failed_all_channels'.
-  /// 'failed_all_channels' fires from the fallback chain terminal
-  /// state (Sendero customer-support Slack post per E7).
-  status        String
-  /// 'user_xxx' (Clerk id) | 'system' | 'webhook:duffel' | 'workflow:run-id'.
-  /// Audit trail for cross-tenant/auth boundaries (locked E6).
-  triggeredBy   String
-  dispatchedAt  DateTime @default(now()) @db.Timestamptz(6)
-
-  @@unique([tenantId, dedupKey, channelKind])
-  @@index([tenantId, eventKind, dispatchedAt])
-  @@index([tenantId, sourceKind, sourceId])
-  @@map("notification_dispatch")
-}
-
-/// Phase C-2 — per-user notification channel preferences.
-///
-/// One row per (userId, tenantId, eventKind). `channels` is a Postgres
-/// text[] of enabled channels for that event kind. Empty array = "no
-/// notifications for this event"; missing row = tenant default applies.
-///
-/// Locked schema shape per /plan-eng-review E3: text[] over junction
-/// table. Atomic update, simpler queries for the common path
-/// ("which channels for user X event Y?"). Junction table revisited
-/// only when admin queries like "all users with Slack disabled" become
-/// frequent.
-///
-/// userId is the Clerk user id (string), not a Sendero User FK — this
-/// table is queried both for in-tenant org members and for tenant-
-/// admin defaults. No back-relation to User to keep cascade behavior
-/// predictable.
-model UserNotificationPref {
-  id        String   @id @default(cuid())
-  userId    String
-  tenantId  String
-  /// 'handoff.requested' | 'booking.confirmed' | 'mention.received'
-  eventKind String
-  /// Empty = "no notifications for this event." Missing row = tenant
-  /// default. Order is irrelevant; uniqueness via (userId, tenantId,
-  /// eventKind) below.
-  channels  String[]
-  updatedAt DateTime @updatedAt @db.Timestamptz(6)
-  createdAt DateTime @default(now()) @db.Timestamptz(6)
-
-  @@unique([userId, tenantId, eventKind])
-  @@index([tenantId, eventKind])
-  @@map("user_notification_pref")
-}
-
 /// MoonPay buy-widget transaction state. One row per checkout MoonPay
 /// reports via webhook. `transaction.created` inserts; `transaction.updated`
 /// mutates `status` + `failureReason`. Indexed by user for `/me/wallet`
@@ -3723,7 +3333,7 @@ model ShortLink {
 /// columns let the scanner compute "how long has this been broken?"
 /// and "is it still happening?" without scanning every row.
 model KnowledgeGap {
-  id String @id @default(cuid())
+  id   String @id @default(cuid())
 
   tenantId String  @map("tenant_id")
   /// Optional Langfuse trace id for round-trip into the trace tree.
@@ -3746,9 +3356,9 @@ model KnowledgeGap {
   blockingTraveler Boolean @default(false) @map("blocking_traveler")
 
   /// Context.
-  channelKind      String? @map("channel_kind")
+  channelKind      String?  @map("channel_kind")
   surface          String?
-  reportedByUserId String? @map("reported_by_user_id")
+  reportedByUserId String?  @map("reported_by_user_id")
 
   /// Resolution.
   resolvedAt      DateTime? @map("resolved_at") @db.Timestamptz(6)

@@ -116,6 +116,7 @@ const WINE_TYPES = new Set(['wine_bar', 'bar', 'restaurant']);
 const wineBarFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'wine_bar_finder',
   internal: true,
+  experimental: true,
   description:
     'Find serious wine bars in a city, ranked by editorial × quality. Composes Decanter / Vinepair / 50 Best Bars / Eater editorial via CSE with Places (New). Use when the traveler asks for "wine bar <city>", "natural wine", "by-the-glass list", "vinoteca <ciudad>".',
   inputSchema: baseInput,
@@ -163,6 +164,7 @@ const BOOK_TYPES = new Set(['book_store', 'store']);
 const bookstoreFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'bookstore_finder',
   internal: true,
+  experimental: true,
   description:
     'Find independent / design-led / rare-book bookstores in a city. Editorial-heavy ranking via Monocle / Wallpaper / Lithub / The Guardian + Places (New). Use when traveler asks "bookstore <city>", "librería independiente", "best bookshop", "design bookstore".',
   inputSchema: baseInput,
@@ -209,6 +211,7 @@ const RECORD_TYPES = new Set(['music_store', 'electronics_store', 'store']);
 const recordStoreFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'record_store_finder',
   internal: true,
+  experimental: true,
   description:
     'Find independent vinyl / record stores + local music culture spots. Composes Vinyl Factory / Resident Advisor / Pitchfork / Discogs editorial via CSE with Places (New). Use when traveler asks "record store <city>", "vinyl shops", "best record stores".',
   inputSchema: baseInput,
@@ -256,6 +259,7 @@ const MARKET_TYPES = new Set(['market', 'food_market', 'farmers_market', 'fish_m
 const localFoodMarketFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'local_food_market_finder',
   internal: true,
+  experimental: true,
   description:
     'Find food markets, street-food halls, gastronomic markets, farmers markets. Editorial via Eater / Culinary Backstreets / Atlas Obscura + Places (New). Use when traveler asks "food market <city>", "mercado <ciudad>", "street food market", "farmers market <city>".',
   inputSchema: baseInput,
@@ -302,6 +306,7 @@ const ART_TYPES = new Set(['art_gallery', 'museum', 'tourist_attraction']);
 const artGalleryOpeningFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'art_gallery_opening_finder',
   internal: true,
+  experimental: true,
   description:
     'Find gallery openings + museum nights + art fairs + vernissages in a city. Editorial via Artforum / Frieze / Artnews / Wallpaper + Places (New). Use when traveler asks "gallery opening <city>", "art week", "vernissage", "exposiciones <ciudad>".',
   inputSchema: baseInput,
@@ -355,6 +360,7 @@ const BIB_TYPES = new Set([
 const bibGourmandCityScannerTool: ToolDef<BaseInput, FinderResult> = {
   name: 'bib_gourmand_city_scanner',
   internal: true,
+  experimental: true,
   description:
     'Narrow scan of Bib Gourmand entries in a city — Michelin\'s good-value list, separate from `cheap_michelin_finder`. CSE primary against guide.michelin.com; snippet must explicitly mention "Bib Gourmand". Use when the traveler asks specifically for the Bib list, not "cheap Michelin in general".',
   inputSchema: baseInput,
@@ -411,6 +417,7 @@ const W50_TYPES_HOTEL = new Set(['lodging', 'hotel', 'resort_hotel']);
 const worlds50bestNearbyResearcherTool: ToolDef<W50Input, FinderResult> = {
   name: 'worlds50best_nearby_researcher',
   internal: true,
+  experimental: true,
   description:
     "Detect World's 50 Best Restaurants / Bars / Hotels in a city (and the regional 50 Best lists — Latin America, Asia, etc.). CSE primary against theworlds50best.com + fiftybest.com. Use when traveler asks 'is there a 50 Best restaurant in <city>', '50 Best bars', 'Latin America 50 Best', 'top hotels in <city>'.",
   inputSchema: w50InputSchema,

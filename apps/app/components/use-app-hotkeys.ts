@@ -31,7 +31,7 @@ export type HotkeyEntry =
       kind: 'wallet';
       combo: string; // canonical `mod+shift+d`
       label: string;
-      param: 'deposit' | 'send' | 'bridge';
+      param: 'deposit' | 'send' | 'swap' | 'bridge';
     }
   | {
       kind: 'nav';
@@ -53,23 +53,19 @@ export const HOTKEY_MANIFEST: HotkeyEntry[] = [
   {
     kind: 'command',
     combo: 'g x',
-    // Label stays chain-agnostic — the dispatched URL is resolved
-    // per-workspace by /api/agent/identity (Arcscan for arc tenants,
-    // Solana Explorer for sol tenants). Command id keeps the legacy
-    // `open-arcscan` name as an internal key.
-    label: 'Open contract explorer for active agent',
+    label: 'Open Arcscan for active agent',
     command: 'open-arcscan',
   },
   // Wallet actions (mod+shift+letter)
   { kind: 'wallet', combo: 'mod+shift+d', label: 'Deposit USDC', param: 'deposit' },
   { kind: 'wallet', combo: 'mod+shift+s', label: 'Send', param: 'send' },
-  { kind: 'wallet', combo: 'mod+shift+r', label: 'Bridge', param: 'bridge' },
+  { kind: 'wallet', combo: 'mod+shift+w', label: 'Swap (USDC ↔ EURC)', param: 'swap' },
+  { kind: 'wallet', combo: 'mod+shift+r', label: 'Bridge to Arc', param: 'bridge' },
   // Navigation (`g <letter>`)
   { kind: 'nav', combo: 'g h', label: 'Home', href: '/dashboard' },
   { kind: 'nav', combo: 'g c', label: 'Agent console', href: '/dashboard/console' },
   { kind: 'nav', combo: 'g i', label: 'Trip inbox', href: '/dashboard/inbox' },
   { kind: 'nav', combo: 'g t', label: 'Trips', href: '/dashboard/trips' },
-  { kind: 'nav', combo: 'g r', label: 'Active trips map', href: '/dashboard/trips/map' },
   { kind: 'nav', combo: 'g v', label: 'Invoices', href: '/dashboard/billing/invoices' },
   // Plans live inside Clerk's OrganizationProfile modal (opened from the
   // PlanTeaser on /dashboard). No standalone route — the hotkey lands on
@@ -99,13 +95,14 @@ function modPressed(e: KeyboardEvent): boolean {
 
 export function useAppHotkeys() {
   const router = useRouter();
+  const [, setSwap] = useQueryState('swap');
   const [, setSend] = useQueryState('send');
   const [, setDeposit] = useQueryState('deposit');
   const [, setBridge] = useQueryState('bridge');
 
   // Latest router/setter refs so the global listener stays mounted once.
-  const refs = useRef({ router, setSend, setDeposit, setBridge });
-  refs.current = { router, setSend, setDeposit, setBridge };
+  const refs = useRef({ router, setSwap, setSend, setDeposit, setBridge });
+  refs.current = { router, setSwap, setSend, setDeposit, setBridge };
 
   useEffect(() => {
     let goPending = false;
@@ -129,6 +126,7 @@ export function useAppHotkeys() {
           e.preventDefault();
           if (wallet.param === 'deposit') refs.current.setDeposit('open');
           if (wallet.param === 'send') refs.current.setSend('open');
+          if (wallet.param === 'swap') refs.current.setSwap('open');
           if (wallet.param === 'bridge') refs.current.setBridge('open');
           return;
         }

@@ -14,7 +14,6 @@ import {
   Home,
   Inbox,
   Landmark,
-  MapIcon,
   MessageCircle,
   Minus,
   Plane,
@@ -67,7 +66,6 @@ const sections: NavSection[] = [
       { title: 'Passport', url: '/dashboard/passport', icon: ShieldCheck },
       { title: 'Trip inboxes', url: '/dashboard/inbox', icon: Inbox },
       { title: 'Trips', url: '/dashboard/trips', icon: Plane },
-      { title: 'Active trips map', url: '/dashboard/trips/map', icon: MapIcon },
     ],
   },
   {
@@ -129,8 +127,6 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             <OrganizationSwitcher
               hidePersonal={false}
               afterSelectOrganizationUrl="/dashboard"
-              createOrganizationMode="navigation"
-              createOrganizationUrl="/onboarding/create"
               afterCreateOrganizationUrl="/onboarding"
               appearance={{
                 elements: {

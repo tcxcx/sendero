@@ -355,6 +355,7 @@ async function runNetworkingIntroStrategy(
 const networkingIntroStrategyTool: ToolDef = {
   name: 'networking_intro_strategy',
   internal: true,
+  experimental: true,
   description:
     'Practical advice for a specific networking event — worth attending? what time to arrive? whom to talk to? what to bring? when to leave? Pure tool, no external API. Pair with `professional_networking_scanner` (or its B2 cousins) to give the traveler the *strategy*, not just the *list*.',
   inputSchema: introStrategyInput,

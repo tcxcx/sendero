@@ -17,13 +17,6 @@ import {
 interface AgentIdentity {
   agentId: string;
   providerAddress: string;
-  /**
-   * Workspace settlement chain — drives the "View contract on …" label
-   * and which explorer the link targets. Arc workspaces see Arcscan;
-   * Sol workspaces see Solana Explorer pointed at the Metaplex Agent
-   * Registry program (per-tenant Sol agent assets ship in Phase 4.x).
-   */
-  chain: 'arc' | 'sol';
   stars: number;
   meanScore: number;
   count: number;
@@ -117,15 +110,6 @@ export function AgentChip() {
 
   const name = data.metadata?.name ?? 'Sendero Travel Agent';
   const shortAddr = `${data.providerAddress.slice(0, 6)}…${data.providerAddress.slice(-4)}`;
-  // Arc ERC-8004 ids are short decimals; Sol Metaplex ids are 32–44
-  // char base58 mints. Truncate the long-form so the chip + dropdown
-  // don't overflow.
-  const shortAgentId = /^\d+$/.test(data.agentId)
-    ? data.agentId
-    : data.agentId.length <= 14
-      ? data.agentId
-      : `${data.agentId.slice(0, 6)}…${data.agentId.slice(-4)}`;
-  const identityProtocol = data.chain === 'sol' ? 'Metaplex Agent Registry' : 'ERC-8004';
 
   return (
     <div className="ac-wrap" ref={wrapRef}>
@@ -138,9 +122,7 @@ export function AgentChip() {
       >
         <span className="ac-avatar">PS</span>
         <span className="ac-stars">★ {data.stars.toFixed(2)}</span>
-        <span className="ac-id" title={data.agentId}>
-          #{shortAgentId}
-        </span>
+        <span className="ac-id">#{data.agentId}</span>
         <span className={`ac-chev ${open ? 'open' : ''}`} aria-hidden="true">
           ▾
         </span>
@@ -152,9 +134,7 @@ export function AgentChip() {
             <span className="ac-avatar lg">PS</span>
             <div className="ac-header-body">
               <div className="ac-name">{name}</div>
-              <div className="ac-sub" title={data.agentId}>
-                {identityProtocol} · token #{shortAgentId}
-              </div>
+              <div className="ac-sub">ERC-8004 · token #{data.agentId}</div>
             </div>
           </div>
 
@@ -170,7 +150,6 @@ export function AgentChip() {
                 contract: data.indexed?.contract ?? null,
                 publicUrl: data.publicUrl,
                 explorerUrl: data.explorerUrl,
-                chain: data.chain,
                 mintedAt: data.indexed?.mintedAt ?? null,
                 cachedAt: data.indexed?.cachedAt ?? null,
               }}
@@ -197,7 +176,6 @@ export function AgentChip() {
                 contract: data.indexed?.contract ?? null,
                 publicUrl: data.publicUrl,
                 explorerUrl: data.explorerUrl,
-                chain: data.chain,
                 mintedAt: data.indexed?.mintedAt ?? null,
                 cachedAt: data.indexed?.cachedAt ?? null,
               }}
@@ -224,7 +202,6 @@ export function AgentChip() {
                 contract: data.indexed?.contract ?? null,
                 publicUrl: data.publicUrl,
                 explorerUrl: data.explorerUrl,
-                chain: data.chain,
                 mintedAt: data.indexed?.mintedAt ?? null,
                 cachedAt: data.indexed?.cachedAt ?? null,
               }}
@@ -251,7 +228,6 @@ export function AgentChip() {
                 contract: data.indexed?.contract ?? null,
                 publicUrl: data.publicUrl,
                 explorerUrl: data.explorerUrl,
-                chain: data.chain,
                 mintedAt: data.indexed?.mintedAt ?? null,
                 cachedAt: data.indexed?.cachedAt ?? null,
               }}
@@ -285,9 +261,9 @@ export function AgentChip() {
               href={data.contractUrl ?? data.explorerUrl}
               target="_blank"
               rel="noreferrer"
-              title={data.chain === 'sol' ? 'Open Solana Explorer (g x)' : 'Open Arcscan (g x)'}
+              title="Open Arcscan (g x)"
             >
-              View contract on {data.chain === 'sol' ? 'Solana' : 'Arc'} ↗
+              View contract on Arc ↗
             </a>
           </div>
         </div>

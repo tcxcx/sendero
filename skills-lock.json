@@ -23,12 +23,6 @@
       "skillPath": "plugins/circle/skills/bridge-stablecoin/SKILL.md",
       "computedHash": "fc1c7bc38d9912d63891d9b1038a2b7a6a48066afe471ac9456089c49beca01f"
     },
-    "colosseum-resources": {
-      "source": "ColosseumOrg/colosseum-resources",
-      "sourceType": "github",
-      "skillPath": "skills/colosseum-resources/SKILL.md",
-      "computedHash": "0444b3828284e571987b5dfcc293aa0dd4603b0bd395013e2557300ebf8c1e9f"
-    },
     "developer-experience": {
       "source": "absolutelyskilled/absolutelyskilled",
       "sourceType": "github",

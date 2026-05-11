@@ -8,6 +8,7 @@
  * org:admin only — pre-funding moves real corporate funds.
  */
 
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { prisma } from '@sendero/database';
@@ -17,8 +18,10 @@ import { PrefundForm } from '@/components/wallet/prefund-form';
 import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 import { getCircleUnifiedBalanceDelegate } from '@/lib/transfer-policy/app-kit';
+import { getTenantTreasury } from '@/lib/wallet/tenant-treasury-adapter';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
+const FAUCET_URL = 'https://faucet.circle.com';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +50,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
     select: { id: true, address: true, chainId: true, circleWalletId: true, createdAt: true },
   });
 
-  const [deposits, spends, balance, pendingBookings, gatewayConfig] = await Promise.all([
+  const [deposits, spends, balance, pendingBookings] = await Promise.all([
     prisma.transferAttempt.findMany({
       where: { tenantId: tenant.id, travelerId: id, kind: 'deposit' },
       orderBy: { createdAt: 'desc' },
@@ -94,12 +97,9 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
         supplier: { select: { name: true } },
       },
     }),
-    prisma.tenantGatewayConfig.findUnique({
-      where: { tenantId: tenant.id },
-      select: { evmDepositorAddress: true, solanaDepositorAddress: true, enabledDomains: true },
-    }),
   ]);
 
+  const treasury = getTenantTreasury(tenant.id);
   const label = traveler.displayName ?? traveler.email ?? traveler.id.slice(0, 12);
 
   return (
@@ -117,7 +117,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
         <h1 className="t-h1">{label}</h1>
         <p className="t-body-lg ink-70" style={{ marginTop: 6, maxWidth: '60ch' }}>
           Tenant-pre-funded unified balance + transfer history. Funds posted here flow into the
-          traveler's spend authority on every booking.
+          traveler's spend authority on every Arc booking.
         </p>
       </div>
 
@@ -129,9 +129,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
             className="sd-card-flat"
             style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: '14px 16px' }}
           >
-            <div className="t-meta">
-              DCW · {wallet.chainId === 5 ? 'Solana Devnet' : 'Arc Testnet'}
-            </div>
+            <div className="t-meta">DCW · Arc Testnet</div>
             <div className="t-mono ink-70" style={{ fontSize: 12, marginTop: 4 }}>
               {wallet.address}
             </div>
@@ -158,7 +156,7 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
             </div>
             <div className="t-mono ink-60" style={{ fontSize: 10.5, marginTop: 6 }}>
               {balance === null
-                ? 'live balance unavailable (Gateway API or tenant Gateway not configured)'
+                ? 'live balance unavailable (Gateway API or treasury not configured)'
                 : 'live · gateway.getBalances'}
             </div>
           </div>
@@ -171,7 +169,6 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
               travelerId={id}
               travelerAddress={wallet.address}
               defaultAmount="50"
-              chainLabel={wallet.chainId === 5 ? 'Solana Devnet' : 'Arc Testnet'}
               pendingBookings={pendingBookings.map(b => ({
                 id: b.id,
                 kind: b.kind,
@@ -189,23 +186,30 @@ export default async function TravelerWalletPage({ params }: { params: Promise<{
                 margin: '12px 0',
               }}
             />
-            <div className="t-meta">Org Gateway source</div>
+            <div className="t-meta">Treasury</div>
             <div className="t-mono ink-70" style={{ fontSize: 11, marginTop: 4 }}>
-              {gatewayConfig ? (
+              {treasury ? (
                 <>
-                  {gatewayConfig.evmDepositorAddress.slice(0, 12)}…
-                  {gatewayConfig.evmDepositorAddress.slice(-6)}{' '}
-                  <CopyAddress value={gatewayConfig.evmDepositorAddress} label="copy" />
+                  {treasury.address.slice(0, 12)}…{treasury.address.slice(-6)}{' '}
+                  <CopyAddress value={treasury.address} label="copy" />
                 </>
               ) : (
-                'Tenant Gateway is not provisioned yet.'
+                'TREASURY_PRIVATE_KEY not configured.'
               )}
             </div>
-            <div className="t-body ink-60" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 8 }}>
-              Prepaid trips, booking pay links, and manual traveler pre-funds debit this org's
-              Gateway context. Provisioned claim links are sent back through the traveler's
-              connected channel.
-            </div>
+            {treasury ? (
+              <div style={{ marginTop: 8 }}>
+                <Link
+                  href={FAUCET_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="t-mono"
+                  style={{ fontSize: 11, textDecoration: 'underline', color: 'var(--vermillion)' }}
+                >
+                  Get testnet USDC →
+                </Link>
+              </div>
+            ) : null}
           </div>
         </div>
       )}

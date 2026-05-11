@@ -80,16 +80,17 @@ function TripPresenceTracker({ tripId }: { tripId: string }) {
 
 function TripCollaborators() {
   const others = useOthers();
-  const collaborators = uniqueById(
-    others.filter(other => other.presence?.displayName).map(other => ({
+  const collaborators = others
+    .filter(other => other.presence?.displayName)
+    .slice(0, 6)
+    .map(other => ({
       id: other.id,
       name: other.presence.displayName,
       avatarUrl: other.presence.avatarUrl,
       role: other.presence.role,
       focus: other.presence.focusLabel ?? labelForFocus(other.presence.focusedSection),
       color: colorForUser(other.id),
-    }))
-  ).slice(0, 6);
+    }));
 
   if (collaborators.length === 0) return null;
 
@@ -139,15 +140,6 @@ function TripCollaborators() {
       </div>
     </aside>
   );
-}
-
-function uniqueById<T extends { id: string }>(items: T[]): T[] {
-  const seen = new Set<string>();
-  return items.filter(item => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
 }
 
 function focusForPath(pathname: string): {

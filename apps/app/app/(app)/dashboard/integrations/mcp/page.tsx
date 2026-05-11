@@ -149,8 +149,7 @@ export default function McpIntegrationsPage() {
                 <strong>Auth:</strong> every MCP method (<code className="t-mono">tools/list</code>,
                 <code className="t-mono"> tools/call</code>) requires{' '}
                 <code className="t-mono">Authorization: Bearer ak_…</code>. The key resolves to your
-                tenant; metered tool calls bill against your workspace's plan tier and settlement
-                wallet (Arc Circle MSCA or Solana Squads V4 vault, per your tenant's primary chain),
+                tenant; metered tool calls bill against your workspace's plan tier and Arc wallet,
                 with your plan's nanopayment discount applied.
               </p>
               <p style={{ margin: '0 0 8px' }}>

@@ -38,7 +38,7 @@ import {
 } from '@/components/ai-elements/prompt-input';
 import { AgentPersona } from '@/components/agent-chat/agent-persona';
 import { ChatModelTrigger } from '@/components/chat/chat-model-trigger';
-import { CHAT_MODEL_STORAGE_KEY, useChatModel } from '@/hooks/use-chat-model';
+import { useChatModel } from '@/hooks/use-chat-model';
 
 import { renderForOperator, type ChannelMessage } from '@/lib/channel-render';
 
@@ -64,10 +64,7 @@ export function AgentChatClient({ tenantId, playground = false }: Props) {
         body: () => ({
           tenantId,
           channel: 'web' as const,
-          model:
-            typeof window === 'undefined'
-              ? chatModel
-              : window.localStorage.getItem(CHAT_MODEL_STORAGE_KEY) || chatModel,
+          model: chatModel,
           ...(playground ? { playground: true } : {}),
         }),
       }),

@@ -128,6 +128,7 @@ export async function runDateProfileBuilder(
 const dateProfileBuilderTool: ToolDef<DateProfileBuilderInput, DateProfileBuilderResult> = {
   name: 'date_profile_builder',
   internal: true,
+  experimental: true,
   description:
     "Capture / update the traveler's dating preferences — budget tier, vibe, ambience, formality, dietary restrictions, things to avoid. Sibling of `hobby_profile_builder` but scoped to date-planning. Pure DB-only (in-process for v0.1, promotes to a `DateProfile` Postgres row in v0.2). Strict policy: never persist sensitive romantic / sexual traits — only travel-relevant preferences.",
   inputSchema: dateProfileInput,
@@ -284,6 +285,7 @@ export async function runDatePlanRanker(
 const datePlanRankerTool: ToolDef<DatePlanRankerInput, DatePlanRankerResult> = {
   name: 'date_plan_ranker',
   internal: true,
+  experimental: true,
   description:
     'Rank multiple candidate date plans by vibe fit + walk distance between stops + weather resilience + ambience fit + structural completeness (opener/anchor/second_move/exit). Pure tool — caller passes plans already assembled by `date_plan_builder` (or one per tier from `date_budget_optimizer`). Returns ranked list with explanations.',
   inputSchema: planRankerInput,
@@ -463,6 +465,7 @@ export async function runDateSecondMoveFinder(
 const dateSecondMoveFinderTool: ToolDef<DateSecondMoveFinderInput, DateSecondMoveFinderResult> = {
   name: 'date_second_move_finder',
   internal: true,
+  experimental: true,
   description:
     "Find the optional 'second move' for a date — wine bar / cocktail / dessert / walk / viewpoint / music / bookstore / late coffee, near a known anchor. Composes existing finders by kind. Use after the anchor is chosen and the first half of the date has gone well; never auto-suggest if the traveler hasn't asked.",
   inputSchema: secondMoveInput,
@@ -601,6 +604,7 @@ export async function runDateWeatherReplan(
 const dateWeatherReplanTool: ToolDef<DateWeatherReplanInput, DateWeatherReplanResult> = {
   name: 'date_weather_replan',
   internal: true,
+  experimental: true,
   description:
     'Adjust a date plan based on weather. Caller passes existing plan + a `weather` signal (sourced from `trip_weather_brief`). Returns `needsReplan` flag + concrete recommendations. Pure rules-based; no external API.',
   inputSchema: weatherReplanInput,
@@ -720,6 +724,7 @@ export async function runDateRouteSafetyCheck(
 const dateRouteSafetyCheckTool: ToolDef<DateRouteSafetyCheckInput, DateRouteSafetyResult> = {
   name: 'date_route_safety_check',
   internal: true,
+  experimental: true,
   description:
     'Check route smoothness + after-dark safety between date stops. Pure tool — caller passes neighborhood + atIso per stop, plus optional `neighborhoodNotes` from `area_after_dark_check` / local intelligence. Returns per-stop verdict (ok/caution/avoid) + holistic recommendations.',
   inputSchema: routeSafetyInput,

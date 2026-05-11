@@ -24,9 +24,6 @@
 
 import { type Prisma, prisma } from '@sendero/database';
 import { notifyOperatorHandoff, roomIdForSupportCase } from '@sendero/collaboration/server';
-import { claimDispatchSlot } from '@sendero/notifications/dedup-slot';
-import { dispatch } from '@sendero/notifications/dispatch';
-import { notifyTerminalFallback } from '@sendero/notifications/fallback-chain';
 import { z } from 'zod';
 
 import type { ToolDef, ToolContext } from './types';
@@ -65,8 +62,7 @@ const requestHumanHandoffInput = z
     tripId: z.string().min(1).optional(),
   })
   .refine(v => Boolean(v.question || v.reason), {
-    message:
-      'request_human_handoff requires `question` (or `reason`) describing what to ask the team.',
+    message: 'request_human_handoff requires `question` (or `reason`) describing what to ask the team.',
   });
 
 interface RequestHumanHandoffOutput {
@@ -157,29 +153,27 @@ export const requestHumanHandoffTool: ToolDef<
       });
     }
 
-    // Phase C-2 strict-dedup-alignment fanout (locked /plan-eng-review E5).
-    //
-    // 1. Resolve operator Clerk user ids ONCE — both legacy and dispatcher
-    //    target the same recipient set, so they share resolution.
-    // 2. Per operator, try-claim the `liveblocks_bell` dedup row. First
-    //    inserter wins — legacy fires bell ONLY for operators whose
-    //    slots it claimed. The parallel dispatcher will P2002 across the
-    //    same set and skip its bell calls.
-    // 3. Fire legacy default-channel Slack post (additive — tenant-wide
-    //    broadcast has no per-operator dedup analogue; commit 2 deletes
-    //    it once dispatcher's per-operator DMs prove out).
-    // 4. Fire `dispatch()` in parallel; its slack adapter does per-
-    //    operator DMs via `SlackUserBinding` (new behavior, doesn't
-    //    overlap legacy default-channel post).
-    // 5. On total sentCount === 0 → terminal fallback to Sendero ops
-    //    Slack (codex outside-voice #5; locked /plan-eng-review E7).
-    //
-    // All work is fire-and-forget — the agent's traveler-facing reply
-    // must never block on operator notification fan-out.
-    void runHandoffNotifications({
+    // Liveblocks notification fan-out is fire-and-forget — a notify
+    // failure must not block the agent's reply path. The operator
+    // dashboard list still shows pending rows from the DB, so the
+    // notification is purely a real-time nudge.
+    void notifyOperatorInbox({
       tenantId,
       handoffId: handoff.id,
       liveblocksRoomId,
+      question,
+      summary: input.summary ?? null,
+    });
+
+    // Slack fan-out — when the tenant has Slack installed, post the
+    // handoff request to their `routing.defaultChannel` as an
+    // internal-message card. Liveblocks already handles the dashboard
+    // inbox notification; this surfaces handoffs to operators living
+    // in Slack without forcing a context switch. Best-effort; failures
+    // log + drop.
+    void notifyOperatorSlack({
+      tenantId,
+      handoffId: handoff.id,
       question,
       summary: input.summary ?? null,
       channel: channelIdentity.kind,
@@ -272,148 +266,26 @@ async function appendTripHandoffEvent(args: {
   `;
 }
 
-/**
- * Resolve the Clerk user ids for the tenant's operator team
- * (agency_admin + finance). Used by both legacy bell fanout AND the
- * dispatcher — sharing resolution keeps the dedup keys aligned because
- * both code paths target the same recipient set.
- */
-async function resolveOperatorClerkUserIds(tenantId: string): Promise<string[]> {
-  try {
-    const memberships = await prisma.membership.findMany({
-      where: {
-        tenantId,
-        status: 'active',
-        role: { in: ['agency_admin', 'finance'] },
-        user: { clerkUserId: { not: null } },
-      },
-      select: { user: { select: { clerkUserId: true } } },
-      take: 50,
-    });
-    return memberships
-      .map(m => m.user?.clerkUserId)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Phase C-2 fanout orchestrator. See call-site comment for the
- * five-step contract. Returns nothing — fully fire-and-forget; failures
- * log + drop.
- */
-async function runHandoffNotifications(args: {
+async function notifyOperatorInbox(args: {
   tenantId: string;
   handoffId: string;
   liveblocksRoomId: string;
   question: string;
   summary: string | null;
-  channel: string;
-  tripId: string | null;
 }): Promise<void> {
-  const operatorUserIds = await resolveOperatorClerkUserIds(args.tenantId);
-
-  // Per-operator dedup claim for the bell channel. Legacy fires bell
-  // ONLY for operators whose slot it won — when the dispatcher (called
-  // below) gets there first, those operators bell from the dispatcher's
-  // adapter instead.
-  const claimedBellOperators: string[] = [];
-  for (const userId of operatorUserIds) {
-    const claim = await claimDispatchSlot({
+  try {
+    await notifyOperatorHandoff({
       tenantId: args.tenantId,
-      eventKind: 'handoff.requested',
-      sourceKind: 'agent_tool',
-      sourceId: args.handoffId,
-      recipientUserId: userId,
-      recipientReason: 'agency_admin/finance',
-      channelKind: 'liveblocks_bell',
-      triggeredBy: 'legacy:request_human_handoff',
-    });
-    if (claim.claimed) claimedBellOperators.push(userId);
-  }
-
-  // Fire legacy paths + dispatcher in parallel. Each is independently
-  // fail-soft. Use Promise.allSettled so a slow Slack post can't delay
-  // a fast bell, and a failed dispatcher can't break the legacy bell.
-  const dispatchPromise = dispatch({
-    event: {
-      kind: 'handoff.requested',
-      sourceId: args.handoffId,
-      sourceKind: 'agent_tool',
-      tripId: args.tripId ?? undefined,
-      data: {
-        title: 'Sendero needs your input',
-        message: args.summary ? `${args.question} — ${args.summary}` : args.question,
-        question: args.question,
-        summary: args.summary,
-        channel: args.channel,
-        url: `/dashboard/handoffs/${args.handoffId}`,
-      },
-    },
-    recipients: operatorUserIds.map(userId => ({
-      userId,
-      reason: 'agency_admin/finance',
-    })),
-    context: {
-      tenantId: args.tenantId,
-      triggeredBy: 'request_human_handoff',
-    },
-  }).catch(err => {
-    console.warn('[handoff] dispatcher failed', {
       handoffId: args.handoffId,
-      error: err instanceof Error ? err.message : String(err),
+      liveblocksRoomId: args.liveblocksRoomId,
+      title: 'Sendero needs your input',
+      message: args.summary ? `${args.question} — ${args.summary}` : args.question,
+      url: `/dashboard/handoffs/${args.handoffId}`,
     });
-    return null;
-  });
-
-  const legacyBellPromise = notifyOperatorHandoff({
-    tenantId: args.tenantId,
-    handoffId: args.handoffId,
-    liveblocksRoomId: args.liveblocksRoomId,
-    title: 'Sendero needs your input',
-    message: args.summary ? `${args.question} — ${args.summary}` : args.question,
-    url: `/dashboard/handoffs/${args.handoffId}`,
-    operatorUserIds: claimedBellOperators,
-  }).catch(err => {
+  } catch (err) {
     console.warn('[handoff] liveblocks notify failed', {
       handoffId: args.handoffId,
       error: err instanceof Error ? err.message : String(err),
-    });
-  });
-
-  const legacySlackPromise = notifyOperatorSlack({
-    tenantId: args.tenantId,
-    handoffId: args.handoffId,
-    question: args.question,
-    summary: args.summary,
-    channel: args.channel,
-    tripId: args.tripId,
-  });
-
-  const [, , dispatchResult] = await Promise.all([
-    legacyBellPromise,
-    legacySlackPromise,
-    dispatchPromise,
-  ]);
-
-  // Terminal-fallback chain — fires when no recipient got any
-  // notification. Reasons covered:
-  //   - 0 operators bound (operatorUserIds empty)
-  //   - all dispatcher channels failed AND legacy bell got 0 claimed ops
-  // Throttled 1-per-30-min per (tenantId, eventKind) inside notifyTerminalFallback.
-  const dispatcherSent = dispatchResult?.sentCount ?? 0;
-  const legacyBellSent = claimedBellOperators.length;
-  if (dispatcherSent === 0 && legacyBellSent === 0) {
-    await notifyTerminalFallback({
-      tenantId: args.tenantId,
-      eventKind: 'handoff.requested',
-      sourceId: args.handoffId,
-      reason:
-        operatorUserIds.length === 0
-          ? '0 operators bound to tenant'
-          : 'all dispatch channels failed and no legacy bells claimed',
-      url: `/dashboard/handoffs/${args.handoffId}`,
     });
   }
 }
@@ -482,7 +354,9 @@ async function notifyOperatorSlack(args: {
           type: 'context',
           elements: [
             { type: 'mrkdwn', text: `Channel: \`${args.channel}\`` },
-            ...(args.tripId ? [{ type: 'mrkdwn' as const, text: `Trip: \`${args.tripId}\`` }] : []),
+            ...(args.tripId
+              ? [{ type: 'mrkdwn' as const, text: `Trip: \`${args.tripId}\`` }]
+              : []),
             { type: 'mrkdwn', text: `Handoff: \`${args.handoffId}\`` },
           ],
         },

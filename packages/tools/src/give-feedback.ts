@@ -28,42 +28,6 @@ import { prisma } from '@sendero/database';
 import { resolveWalletUuidByAddress } from './resolve-wallet';
 import type { ToolDef } from './types';
 
-/** Resolve the rater tenant's primary chain. For org-raters this is the
- *  rater's own tenant. For user-raters we resolve via the user's tenant
- *  binding (each user belongs to exactly one tenant in v1). The choice
- *  cascades all reputation writes: Arc → ERC-8004 ReputationRegistry,
- *  Sol → (deferred — Metaplex Agent Registry feedback ix not yet adapter-
- *  exposed in @sendero/metaplex). Defaults to 'arc' to preserve legacy
- *  behavior on rows without a clean tenant link. */
-async function resolveRaterPrimaryChain(args: {
-  fromKind: 'org' | 'user';
-  fromTenantId?: string;
-  fromUserId?: string;
-}): Promise<'arc' | 'sol'> {
-  // Org rater: tenantId is in args. User rater: User↔Tenant is M2M via
-  // Membership, so we read the user's most-recent active membership and
-  // use that tenant's chain. v1 users belong to a single tenant in
-  // practice, so the active-status filter is enough; if a user ever
-  // joins multiple tenants, the call site should pass fromTenantId.
-  let tenantId: string | null = null;
-  if (args.fromKind === 'org') {
-    tenantId = args.fromTenantId ?? null;
-  } else if (args.fromUserId) {
-    const membership = await prisma.membership.findFirst({
-      where: { userId: args.fromUserId, status: 'active' },
-      orderBy: { joinedAt: 'desc' },
-      select: { tenantId: true },
-    });
-    tenantId = membership?.tenantId ?? null;
-  }
-  if (!tenantId) return 'arc';
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { primaryChain: true },
-  });
-  return tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
-}
-
 const inputSchema = z.object({
   /** Subject of the rating — the on-chain ERC-8004 agent id of the rated party. */
   subjectAgentId: z.string().regex(/^\d+$/, 'subjectAgentId must be a decimal uint256 string'),
@@ -98,7 +62,7 @@ interface GiveFeedbackResult {
 export const giveFeedbackTool: ToolDef<Input, GiveFeedbackResult> = {
   name: 'give_feedback',
   description:
-    "Record a 1-5 star rating for a counterparty. Routes by the rater tenant's primary chain — Arc → ERC-8004 ReputationRegistry; Solana → Metaplex Agent Registry (deferred until feedback ix lands in @sendero/metaplex). Cross-rating: the rater's own DCW signs (not Sendero treasury), so the on-chain trust graph is a true peer graph. Self-rating is rejected. Score mapping: stars × 20.",
+    "Record a 1-5 star rating for a counterparty on the ERC-8004 ReputationRegistry on Arc. Cross-rating: the rater's own DCW signs (not Sendero treasury), so the on-chain trust graph is a true peer graph. Self-rating is rejected. Score mapping: stars × 20.",
   internal: false,
   inputSchema,
   jsonSchema: {
@@ -122,26 +86,6 @@ export const giveFeedbackTool: ToolDef<Input, GiveFeedbackResult> = {
     }
     if (input.fromKind === 'user' && !input.fromUserId) {
       throw new Error('fromUserId required when fromKind=user');
-    }
-
-    // Cascade gate: resolve the rater tenant's primary chain BEFORE any
-    // Arc-specific work. Solana tenants get a typed refusal until the
-    // Metaplex Agent Registry feedback ix lands in @sendero/metaplex.
-    // Failing loudly here is the explicit anti-silent-fallback policy:
-    // a Solana tenant must NEVER have a rating routed to Arc by default.
-    const primaryChain = await resolveRaterPrimaryChain({
-      fromKind: input.fromKind,
-      fromTenantId: input.fromTenantId,
-      fromUserId: input.fromUserId,
-    });
-    if (primaryChain === 'sol') {
-      const e = new Error(
-        'give_feedback: tenant.primaryChain=sol — Solana reputation writes require the Metaplex Agent Registry feedback ix, which is not yet exposed in @sendero/metaplex. Track in CLAUDE.md "Solana Anchor program runbook" follow-ups; route Arc-only ratings via a tenant-arc identity if that is intended.'
-      ) as Error & { code: string; agentInstruction: string };
-      e.code = 'GIVE_FEEDBACK_SOL_DEFERRED';
-      e.agentInstruction =
-        'Tell the human that on-chain reputation for Solana-primary tenants is queued behind a Metaplex Agent Registry SDK update. Their feedback was not silently routed to Arc; a follow-up update will replay queued ratings once the registry adapter ships.';
-      throw e;
     }
 
     // Resolve the rater's OnchainIdentity → holder address.

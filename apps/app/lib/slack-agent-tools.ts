@@ -12,42 +12,51 @@
  * invocation. Until then we strip them out so the LLM never gets a tool
  * it can't actually call.
  *
- * Tools we keep (3):
- *   slack_read_channel       slack_read_thread
- *   slack_read_user_profile
+ * Tools we keep (8):
+ *   slack_send_message       slack_schedule_message
+ *   slack_create_canvas      slack_read_channel
+ *   slack_read_thread        slack_read_user_profile
+ *   slack_join_channel       slack_delete_message
  *
  * Tools we strip (4):
  *   slack_search_public           slack_search_public_and_private
  *   slack_search_channels         slack_search_users
  *
- * Approval gating: write tools are intentionally not exposed until the
- * Slack approval-resume path is fully wired. The channel adapter already
- * posts the final reply into the originating thread, so write tools are
- * not needed for normal traveler chat and can create dead-end approval
- * pauses when the model selects them.
+ * Approval gating: tools that mutate the workspace (send / canvas / join /
+ * delete) are gated through the AI SDK's built-in human-in-the-loop hook.
+ * `createSlackTools` accepts `needsApproval` and stamps each gated tool's
+ * `tool.needsApproval` so the agent loop pauses and emits an approval
+ * step instead of executing — `runSlackAgentTurn` (in ./agent) catches
+ * that pause and posts an approval card via `sendApprovalRequest`.
  */
 
-import type { SlackInstall } from '@sendero/slack';
 import type { Tool } from 'ai';
+
 import { createSlackTools } from 'slack-tools';
+
+import type { SlackInstall } from '@sendero/slack';
 
 /** Tools we surface to the agent — bot-token-only subset. */
 export const KEPT_SLACK_TOOLS = [
+  'slack_send_message',
+  'slack_schedule_message',
+  'slack_create_canvas',
   'slack_read_channel',
   'slack_read_thread',
   'slack_read_user_profile',
+  'slack_join_channel',
+  'slack_delete_message',
 ] as const;
 
 export type KeptSlackToolName = (typeof KEPT_SLACK_TOOLS)[number];
 
-/** Write tools that stay hidden until Slack approval resume is implemented. */
-export const MUTATING_SLACK_TOOLS = [
+/** Tools that mutate the workspace and therefore need human approval. */
+export const APPROVAL_REQUIRED_SLACK_TOOLS: KeptSlackToolName[] = [
   'slack_send_message',
-  'slack_schedule_message',
   'slack_create_canvas',
   'slack_join_channel',
   'slack_delete_message',
-] as const;
+];
 
 /**
  * Tools requiring a user OAuth token (`xoxp-…`). We don't request the
@@ -69,15 +78,14 @@ const USER_TOKEN_ONLY_TOOLS = new Set([
  * cross wires.
  */
 export function senderoSlackTools(install: Pick<SlackInstall, 'botToken'>): Record<string, Tool> {
-  const all = createSlackTools(install.botToken) as Record<string, Tool>;
+  const all = createSlackTools(install.botToken, {
+    needsApproval: APPROVAL_REQUIRED_SLACK_TOOLS,
+  }) as Record<string, Tool>;
 
   const kept: Record<string, Tool> = {};
   for (const name of KEPT_SLACK_TOOLS) {
     const t = all[name];
     if (t) kept[name] = t;
-  }
-  for (const mutating of MUTATING_SLACK_TOOLS) {
-    delete kept[mutating];
   }
   // Defensive: never let a user-token tool slip through, even if a future
   // slack-tools version restructures its return shape.

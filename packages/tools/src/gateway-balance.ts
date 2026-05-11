@@ -41,7 +41,7 @@ const SOL_DEVNET_CHAIN_ID = 5;
 export const treasuryBalanceTool: ToolDef = {
   name: 'treasury_balance',
   description:
-    'Operator-only. Return the Sendero TREASURY USDC unified balance across every Gateway-supported testnet (Arc Testnet, Solana Devnet, Ethereum Sepolia, Base Sepolia, Avalanche Fuji, etc.). Uses the platform treasury depositor — never the traveler. Use `traveler_balance` for personal balance questions.',
+    'Operator-only. Return the Sendero TREASURY USDC unified balance across every Gateway-supported testnet (Arc, Ethereum Sepolia, Base Sepolia, Avalanche Fuji, etc.). Uses the platform treasury depositor — never the traveler. Use `traveler_balance` for personal balance questions.',
   inputSchema: z.object({}),
   jsonSchema: { type: 'object', properties: {} },
   internal: true,

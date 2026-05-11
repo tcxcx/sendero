@@ -184,7 +184,6 @@ const SCOPE_TO_TAG: Record<Exclude<KeyScope, '*'>, string> = {
   compliance: 'Compliance',
   trip_assistance: 'Trip assistance',
   utilities: 'Utilities',
-  external_data: 'External data',
 };
 
 /** `scan_document` → `ScanDocumentInput`. */

@@ -13,7 +13,6 @@ import { buildInstallUrl, DEFAULT_BOT_SCOPES } from '@sendero/slack';
 import { redirect } from 'next/navigation';
 
 import { signSlackState } from '@/lib/slack-oauth-state';
-import { ensurePrimaryChainProvisioned } from '@/lib/provision-tenant-on-chain-choice';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,10 +24,6 @@ async function installCorporate(formData: FormData): Promise<void> {
   const fiscalCountry = String(formData.get('fiscalCountry') ?? '')
     .trim()
     .toUpperCase();
-  // Phase 3 — primary chain selection cascades through wallet
-  // provisioning, escrow ownership, and trip-stamp NFTs.
-  const primaryChainRaw = String(formData.get('primaryChain') ?? 'arc');
-  const primaryChain = primaryChainRaw === 'sol' ? 'sol' : 'arc';
   if (!slug || !displayName) return;
 
   const clientId = env.slackClientId();
@@ -45,28 +40,15 @@ async function installCorporate(formData: FormData): Promise<void> {
       displayName,
       billingTier: 'business',
       fiscalCountry: fiscalCountry || null,
-      primaryChain,
       metadata: { kind: 'corporate' },
     },
     update: {
       displayName,
       billingTier: 'business',
       fiscalCountry: fiscalCountry || null,
-      primaryChain,
       metadata: { kind: 'corporate' },
     },
-    select: { id: true, clerkOrgId: true },
-  });
-
-  // Cascade trigger: kick off chain-matching treasury + identity
-  // provisioning as part of the onboarding step so the tenant lands on
-  // Slack-install with their wallet already in flight. Errors are
-  // logged but never block — the retry-{arc,sol}-wallet-provision
-  // crons cover the long tail.
-  await ensurePrimaryChainProvisioned({
-    tenantId: tenant.id,
-    clerkOrgId: tenant.clerkOrgId,
-    primaryChain,
+    select: { id: true },
   });
 
   const state = signSlackState(tenant.id);
@@ -129,26 +111,6 @@ export default async function CorporateOnboardingPage({ searchParams }: Props) {
         <label style={labelStyle}>
           <span>Fiscal country (ISO-3166-1 alpha-2)</span>
           <input name="fiscalCountry" maxLength={2} placeholder="BR" style={inputStyle} />
-        </label>
-        <label style={labelStyle}>
-          <span>Primary chain</span>
-          <select name="primaryChain" defaultValue="arc" style={inputStyle}>
-            <option value="arc">Arc — Circle MSCA + USDC settlement (default)</option>
-            <option value="sol">Solana — Squads V4 + USDC SPL</option>
-          </select>
-          <span
-            style={{
-              ...labelStyle,
-              fontSize: 10,
-              textTransform: 'none',
-              letterSpacing: 0,
-              color: '#888',
-            }}
-          >
-            Locks the entire stack — treasury wallet, booking escrow, trip stamps, identity, and
-            traveler-pay reimbursement all settle on the chosen chain. Pick once; flip requires zero
-            on-chain state and admin involvement.
-          </span>
         </label>
         <button type="submit" style={submitStyle}>
           Continue to Slack install →

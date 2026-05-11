@@ -61,10 +61,9 @@ export default function TermsPage() {
       <h3>3a. Per-call nanopayments</h3>
       <p>
         On top of the monthly subscription, every metered tool call charges a small amount of USDC
-        from your workspace's settlement wallet (Arc Circle MSCA or Solana Squads V4 vault, per the
-        tenant's primary chain). Discounts compound: a Pro tenant pays 70% of base nanopay rate per
-        call, and the discount is materialized into <code>MeterEvent.priceMicroUsdc</code> at
-        dispatch time.
+        from your workspace's Arc wallet. Discounts compound: a Pro tenant pays 70% of base nanopay
+        rate per call, and the discount is materialized into <code>MeterEvent.priceMicroUsdc</code>{' '}
+        at dispatch time.
       </p>
 
       <h3>3b. Take-rate on settled bookings</h3>
@@ -94,17 +93,16 @@ export default function TermsPage() {
       <h2>5. On-chain settlement</h2>
       <ul>
         <li>
-          Sendero uses Circle's USDC across two settlement rails: Arc (EVM) and Solana. Confirmed
-          bookings write an on-chain row that surfaces an Arcscan URL (Arc tenants) or Solana
-          Explorer URL (Sol tenants) in the response payload.
+          Sendero uses Circle's USDC + Arc rails. Confirmed bookings write an on-chain row that
+          surfaces an Arcscan URL in the response payload.
         </li>
         <li>
           On-chain transactions are <strong>final</strong>. We can't reverse a settled transaction;
           refunds are forward transactions back to your wallet.
         </li>
         <li>
-          During the testnet beta, Arc-Testnet and Solana-Devnet USDC are used. No real value moves.
-          We'll flip the flag when Circle promotes the respective mainnets.
+          During the testnet beta, Arc-Testnet USDC is used. No real value moves. We'll flip the
+          flag when Circle promotes Arc mainnet.
         </li>
       </ul>
 

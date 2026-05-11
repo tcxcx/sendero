@@ -19,13 +19,6 @@ import { prisma } from '@sendero/database';
 export interface StampForOg {
   tokenId: string;
   contract: string;
-  /**
-   * Chain the stamp was minted on. `arc` → SenderoStamps ERC-1155 (links
-   * to Arcscan). `sol` → Metaplex Core asset (links to Solana Explorer).
-   * Drives the explorer URL + EIP-7572 metadata namespace selection on
-   * the public stamp page.
-   */
-  chain: 'arc' | 'sol';
   kind: string;
   primaryKey: string;
   name: string;
@@ -36,7 +29,7 @@ export interface StampForOg {
   tenantDisplayName: string | null;
   /** ISO string for the stamped-on date. */
   mintedAt: string | null;
-  /** ERC-1155 / Metaplex metadata `attributes` array (route, carrier, etc.). */
+  /** ERC-1155 metadata `attributes` array (route, carrier, etc.). */
   attributes: Array<{ trait_type: string; value: string | number }>;
 }
 
@@ -56,7 +49,6 @@ export const loadStampForOg = unstable_cache(
       select: {
         tokenId: true,
         contract: true,
-        chain: true,
         kind: true,
         primaryKey: true,
         caption: true,
@@ -65,7 +57,7 @@ export const loadStampForOg = unstable_cache(
         tenantSlug: true,
         mintedAt: true,
         metadata: true,
-        tenant: { select: { displayName: true, primaryChain: true } },
+        tenant: { select: { displayName: true } },
       },
     });
     if (!row || !row.blobUrl) return null;
@@ -81,7 +73,6 @@ export const loadStampForOg = unstable_cache(
     return {
       tokenId: row.tokenId,
       contract: row.contract,
-      chain: row.chain === 'sol' || row.tenant.primaryChain === 'sol' ? 'sol' : 'arc',
       kind: row.kind,
       primaryKey: row.primaryKey,
       name: `${KIND_LABELS[row.kind] ?? row.kind}${route ? ` · ${route}` : ''}`,

@@ -1,21 +1,46 @@
 /**
- * /dashboard/console — every column on this route is a sibling
- * parallel-routes slot (@kpis, @threads, @conversation, @stage,
- * @context). The layout-level <ConsoleChatHost /> owns useChat and
- * mirrors state to Zustand for the slots to read.
+ * /dashboard/console — the canonical MetaInbox.
  *
- * This file MUST exist and MUST NOT be deleted. Next.js requires a
- * page.tsx at the route segment for a URL to match — without it,
- * /dashboard/console 404s even though the layout + slots compile
- * fine. Phase B-γ Codex outside-voice review #3 + #4.
+ * Two modes routed by `?tripId=`:
+ *   - Unscoped: operator ↔ Sendero AI. INTERNAL · OPERATOR watermark,
+ *     midnight Sendero-AI header, terminal composer.
+ *   - Scoped:   operator ↔ traveler via the trip's primary channel.
+ *     Channel-tinted header, customer-bubble messages tagged with
+ *     "via {channel} · {time}", channel-tinted composer.
  *
- * Returns null on purpose: every visible column lives in a sibling
- * slot. Phase B-δ may revisit if a route-level redirect is wanted
- * (e.g., /dashboard/console with no params → ?tripId=…most-recent).
+ * Server-side fetch lives in `@/lib/console-data` so the inbox routes
+ * share the same shape.
  */
+
+import { MetaInboxLive } from '@/components/console/meta-inbox-live';
+import { loadConsoleData } from '@/lib/console-data';
+import { requireCurrentTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
-export default function ConsolePage() {
-  return null;
+interface ConsolePageProps {
+  searchParams: Promise<{ tripId?: string }>;
+}
+
+export default async function ConsolePage(props: ConsolePageProps) {
+  const params = await props.searchParams;
+  const scopedTripId = params.tripId ?? null;
+  const { tenant } = await requireCurrentTenant();
+
+  const { trips, conversation, traveler, holdExpires, pendingBooking, kpis } =
+    await loadConsoleData(tenant.id, scopedTripId);
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+      <MetaInboxLive
+        trips={trips}
+        scopedTripId={scopedTripId}
+        initialConversation={conversation}
+        traveler={traveler}
+        holdExpires={holdExpires}
+        pendingBooking={pendingBooking}
+        kpis={kpis}
+      />
+    </div>
+  );
 }

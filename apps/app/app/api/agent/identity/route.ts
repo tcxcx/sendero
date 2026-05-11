@@ -1,14 +1,8 @@
-import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 import { getAgentIdentity, getReputation, IDENTITY_REGISTRY } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
-
-// Solana Agent Registry program id — same constant as
-// @sendero/metaplex/register-tenant-agent. Inlined to keep this route
-// node-runtime cheap (no umi import).
-const SOL_AGENT_REGISTRY_PROGRAM_ID = '1DREGFgysWYxLnRnKQnwrxnJQeSMk2HmGaC6whw2B2p';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,25 +26,6 @@ export async function GET() {
       },
       { status: 503 }
     );
-  }
-
-  // Tenant chain controls the explorer URL the chip renders. Arc tenants
-  // see Arcscan; Sol tenants see Solana Explorer pointed at the Agent
-  // Registry program (Phase 4.x will land per-tenant Sol agent assets,
-  // at which point this links to the asset directly). Defaults to 'arc'
-  // when no Clerk org is selected (e.g. landing-shell discovery hits).
-  let workspaceChain: 'arc' | 'sol' = 'arc';
-  try {
-    const { orgId } = await auth();
-    if (orgId) {
-      const tenant = await prisma.tenant.findUnique({
-        where: { clerkOrgId: orgId },
-        select: { primaryChain: true },
-      });
-      if (tenant?.primaryChain === 'sol') workspaceChain = 'sol';
-    }
-  } catch {
-    /* unauthenticated — keep default 'arc' */
   }
 
   try {
@@ -99,19 +74,10 @@ export async function GET() {
     });
 
     const contract = indexed?.contract ?? IDENTITY_REGISTRY;
-    // Pick the explorer the chip should link to. Arc workspaces see the
-    // ERC-8004 IdentityRegistry on Arcscan; Sol workspaces see the
-    // Metaplex Agent Registry program on Solana Explorer (devnet during
-    // testnet beta).
-    const chipUrl =
-      workspaceChain === 'sol'
-        ? `https://explorer.solana.com/address/${SOL_AGENT_REGISTRY_PROGRAM_ID}?cluster=devnet`
-        : `${explorerUrl}/address/${contract}`;
 
     return NextResponse.json({
       agentId: agentIdStr,
       providerAddress,
-      chain: workspaceChain,
       stars: reputation?.stars ?? 0,
       meanScore: reputation?.meanScore ?? 0,
       count: reputation?.count ?? 0,
@@ -148,9 +114,10 @@ export async function GET() {
           resolvedAt: v.resolvedAt?.toISOString() ?? null,
         })) ?? [],
       publicUrl: `/agents/sendero/${agentIdStr}`,
-      // Workspace-chain-aware: Arcscan for arc, Solana Explorer for sol.
-      contractUrl: chipUrl,
-      explorerUrl: chipUrl,
+      // Arcscan doesn't expose a reliable per-tokenId page; link to the
+      // IdentityRegistry contract where the Sendero agent NFT lives.
+      contractUrl: `${explorerUrl}/address/${contract}`,
+      explorerUrl: `${explorerUrl}/address/${contract}`,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

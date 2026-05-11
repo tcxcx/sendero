@@ -72,9 +72,6 @@ function check(bucket: string, tool: string, ok: boolean, detail?: string) {
 const hobbyDeps = (() => {
   const rows = new Map<string, { priority: string; notes: string | null }>();
   return {
-    async userExists(_userId: string) {
-      return true;
-    },
     async findEntry(_userId: string, key: string) {
       return rows.get(key) ?? null;
     },

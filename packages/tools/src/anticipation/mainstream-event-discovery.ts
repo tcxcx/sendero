@@ -260,6 +260,7 @@ export const mainstreamEventDiscoveryTool: ToolDef<
 > = {
   name: 'mainstream_event_discovery',
   internal: true,
+  experimental: true,
   description:
     "Find mainstream events via Ticketmaster Discovery API: concerts, theater, sports, family shows, comedy, festivals. Filter by city + segment (`Music` / `Sports` / `Arts & Theatre`) + optional keyword + ISO date window. For founder/community/free events use `eventbrite_event_discovery`. For curated specialty discovery (Luma + Meetup + accelerators) use `professional_networking_scanner`. Use when the traveler asks 'concerts in <city> next week', 'Lakers tickets', 'Broadway shows', 'comedy <city>'.",
   inputSchema,

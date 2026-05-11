@@ -45,15 +45,12 @@ import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { makeCreditAwareMeterStore } from '@/lib/credit-store';
 import { resolvePlan } from '@sendero/billing/plans';
 import { resolvePayer, PayerResolutionError } from '@sendero/tools/lib/resolve-payer';
-import { prisma, type MeterPayerType } from '@sendero/database';
+import type { MeterPayerType } from '@sendero/database';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
 import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
 import { appendTripEvent, type TripEvent } from '@/lib/trip-events';
-import { notifyTripEvent } from '@/lib/trip-events-notify';
-import { notifyTenantOperators } from '@/lib/liveblocks-notify-operators';
-import { roomIdForTrip } from '@sendero/collaboration/server';
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
@@ -311,21 +308,7 @@ export async function POST(req: NextRequest) {
           }),
         ]
       : surfacedTools;
-  // Hide Arc-only tools from Sol tenants. Tools that branch internally
-  // on tenant.primaryChain (book-flight, mint-stamp, etc.) stay visible;
-  // only tools that physically can't operate on a Sol tenant (e.g.
-  // bridge_to_arc) are stripped. Mirrors the MCP server's filter.
-  const ARC_ONLY_TOOL_NAMES = new Set<string>(['bridge_to_arc', 'faucet_drip', 'swap_and_bridge']);
-  const tenantForChain = await prisma.tenant.findUnique({
-    where: { id: body.tenantId },
-    select: { primaryChain: true },
-  });
-  const tenantChain: 'arc' | 'sol' = tenantForChain?.primaryChain === 'sol' ? 'sol' : 'arc';
-  const chainFilteredTools =
-    tenantChain === 'sol'
-      ? channelToolList.filter(t => !ARC_ONLY_TOOL_NAMES.has(t.name))
-      : channelToolList;
-  const scopedTools = filterToolsByScopes(chainFilteredTools, grantedScopes);
+  const scopedTools = filterToolsByScopes(channelToolList, grantedScopes);
 
   // Narrow the zod-inferred shape to the AgentMediaAttachment contract —
   // (toolCtx assembly + buildAiSdkTools call moved below the payer
@@ -381,53 +364,21 @@ export async function POST(req: NextRequest) {
   if (body.tripId && body.text) {
     const inboundChannel = ledgerChannelFromDispatchChannel(body.channel);
     if (inboundChannel) {
-      const inboundCreatedAt = new Date().toISOString();
-      const inboundId = `inbound_${agentInput.turnId}`;
       await appendTripEvent({
         tripId: body.tripId,
         tenantId: body.tenantId,
         event: {
-          id: inboundId,
+          id: `inbound_${agentInput.turnId}`,
           kind: 'inbox_reply',
           direction: 'inbound',
           channel: inboundChannel,
-          createdAt: inboundCreatedAt,
+          createdAt: new Date().toISOString(),
           text: body.text,
           author: {
             kind: isServiceAccount ? 'system' : 'traveler',
             userId: body.userId,
           },
         },
-      });
-      void notifyTripEvent({
-        tenantId: body.tenantId,
-        tripId: body.tripId,
-        entry: {
-          id: inboundId,
-          kind: 'inbox_reply',
-          direction: 'inbound',
-          channel: inboundChannel,
-          createdAt: inboundCreatedAt,
-        },
-      });
-      // Light up the tenant operators' Liveblocks bell. Channel-aware
-      // title so the inbox preview is legible at a glance. Fire-and-
-      // forget — bell notifications must never gate dispatch.
-      const channelLabel =
-        inboundChannel === 'whatsapp'
-          ? 'WhatsApp'
-          : inboundChannel === 'slack'
-            ? 'Slack'
-            : inboundChannel === 'email'
-              ? 'Email'
-              : 'Web';
-      void notifyTenantOperators({
-        tenantId: body.tenantId,
-        subjectId: inboundId,
-        roomId: roomIdForTrip(body.tenantId, body.tripId),
-        title: `${channelLabel} · new traveler message`,
-        message: body.text.slice(0, 200),
-        url: `/dashboard/console?tripId=${body.tripId}`,
       });
     }
   }
@@ -614,30 +565,17 @@ export async function POST(req: NextRequest) {
     if (body.tripId && result.text) {
       const outboundChannel = ledgerChannelFromDispatchChannel(body.channel);
       if (outboundChannel) {
-        const outboundCreatedAt = new Date().toISOString();
-        const outboundId = `agent_${agentInput.turnId}`;
         await appendTripEvent({
           tripId: body.tripId,
           tenantId: body.tenantId,
           event: {
-            id: outboundId,
+            id: `agent_${agentInput.turnId}`,
             kind: 'agent_reply',
             direction: 'outbound',
             channel: outboundChannel,
-            createdAt: outboundCreatedAt,
+            createdAt: new Date().toISOString(),
             text: result.text,
             author: { kind: 'agent' },
-          },
-        });
-        void notifyTripEvent({
-          tenantId: body.tenantId,
-          tripId: body.tripId,
-          entry: {
-            id: outboundId,
-            kind: 'agent_reply',
-            direction: 'outbound',
-            channel: outboundChannel,
-            createdAt: outboundCreatedAt,
           },
         });
       }

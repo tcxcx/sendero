@@ -32,14 +32,12 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { prisma } from '@sendero/database';
 import { tools as toolMap, filterPublicTools, toolList } from '@sendero/tools';
 import type { ToolContext } from '@sendero/tools/types';
 
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { resolveTravelerByPhone } from '@/lib/agent-traveler-resolver';
-import { appendTripEvent, newTripEventId } from '@/lib/trip-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -50,8 +48,6 @@ interface ToolBody {
   input?: Record<string, unknown>;
   /** Optional traveler phone for tools that gate on it (e.g. handoff anchoring). */
   travelerPhone?: string;
-  /** WhatsApp business phone number id, used to resolve the active tenant install. */
-  phoneNumberId?: string;
   /** Optional active trip id — channel adapters pass this for ledger writes. */
   tripId?: string;
   /** Optional ChannelIdentity row id — channel adapters pass this for handoff anchoring. */
@@ -72,15 +68,6 @@ interface ToolBody {
    * was authoritative before this hop.
    */
   _slackSenderoUserId?: string;
-}
-
-async function resolveTenantIdFromPhoneNumberId(phoneNumberId: string): Promise<string | null> {
-  const install = await prisma.whatsAppInstall.findFirst({
-    where: { phoneNumberId, status: 'active' },
-    orderBy: { updatedAt: 'desc' },
-    select: { tenantId: true },
-  });
-  return install?.tenantId ?? null;
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ name: string }> }) {
@@ -122,28 +109,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
     } catch {
       /* fall through; tenant-required check below */
     }
-    if (earlyBody.phoneNumberId) {
-      tenantId = await resolveTenantIdFromPhoneNumberId(earlyBody.phoneNumberId);
-      if (!tenantId) {
-        return NextResponse.json(
-          {
-            error: 'tenant_not_found',
-            message: 'No active WhatsApp install found for `phoneNumberId`.',
-          },
-          { status: 404 }
-        );
-      }
-    } else if (earlyBody.tenantId) {
-      tenantId = earlyBody.tenantId;
-    } else {
+    if (!earlyBody.tenantId) {
       return NextResponse.json(
-        {
-          error: 'tenant_scope_required',
-          message: 'Shared-secret auth requires `phoneNumberId` or `tenantId` in body.',
-        },
+        { error: 'tenant_id_required', message: 'Shared-secret auth requires `tenantId` in body.' },
         { status: 400 }
       );
     }
+    tenantId = earlyBody.tenantId;
     scopes = ['*'];
     keyType = 'sandbox';
     effectiveKeyType = 'sandbox';
@@ -227,17 +199,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
 
   // 6. build context — same shape `/api/agent/dispatch` uses so the
   //    handler experience is identical regardless of caller.
-  //
-  //    For shared-secret callers we OMIT `caller` (matches dispatch +
-  //    chat). Tools that gate on `caller.effectiveKeyType` (e.g.
-  //    `confirm_booking`'s testnet-beta downgrade) already fail-closed
-  //    to sandbox semantics on absent caller, so the safety net stays.
-  //    Tools that need to spend Sendero treasury on third-party APIs
-  //    (e.g. `track_flight` via x402) treat absent caller as trusted
-  //    internal infra. See `packages/tools/src/x402-fetch.ts` gate.
   const ctx: ToolContext = {
-    tripId: body.tripId,
-    surface: body.phoneNumberId ? 'whatsapp_kapso' : 'api_tools',
     traveler: {
       tenantId: tenantId!,
       // Real user id when the phone resolved; falls back to the
@@ -247,15 +209,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
       ...(resolvedIsPlaceholder !== undefined ? { isPlaceholder: resolvedIsPlaceholder } : {}),
     },
     ...(resolvedChannelIdentityId ? { channelIdentityId: resolvedChannelIdentityId } : {}),
-    ...(apiKey
-      ? {
-          caller: {
-            scopes: grantedScopes,
-            keyType,
-            effectiveKeyType,
-          },
-        }
-      : {}),
+    caller: {
+      scopes: grantedScopes,
+      keyType,
+      effectiveKeyType,
+    },
   };
 
   // 7. validate input via the tool's zod schema BEFORE invoking the
@@ -284,68 +242,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
   // 8. run — handler returns the result. Throw becomes a 500 with the
   //    message so the caller (Kapso function) can surface it to the
   //    agent.
-  const startedAt = Date.now();
-  const eventTripId = body.tripId ?? extractTripId(parsedInput);
-  console.log(
-    '[api/tools] start',
-    JSON.stringify({
-      tool: name,
-      tenantId,
-      tripId: eventTripId ?? null,
-      phoneNumberId: body.phoneNumberId ?? null,
-      travelerUserId: resolvedUserId ?? null,
-      channelIdentityId: resolvedChannelIdentityId ?? null,
-      input: redactForLog(parsedInput),
-    })
-  );
-  if (eventTripId) {
-    void appendTripEvent({
-      tenantId: tenantId!,
-      tripId: eventTripId,
-      event: {
-        id: newTripEventId(`tool_${name}`),
-        kind: 'tool_call',
-        direction: 'internal',
-        channel: 'internal',
-        createdAt: new Date().toISOString(),
-        author: { kind: 'agent', displayName: 'Sendero AI' },
-        toolName: name,
-        toolArgs: JSON.stringify(redactForLog(parsedInput)).slice(0, 4000),
-        status: 'pending',
-        source: 'api/tools',
-      },
-    });
-  }
   try {
     const result = await def.handler(parsedInput, ctx);
-    console.log(
-      '[api/tools] success',
-      JSON.stringify({
-        tool: name,
-        tenantId,
-        tripId: eventTripId ?? null,
-        durationMs: Date.now() - startedAt,
-        result: summarizeForLog(result),
-      })
-    );
-    if (eventTripId) {
-      void appendTripEvent({
-        tenantId: tenantId!,
-        tripId: eventTripId,
-        event: {
-          id: newTripEventId(`tool_result_${name}`),
-          kind: 'tool_result',
-          direction: 'internal',
-          channel: 'internal',
-          createdAt: new Date().toISOString(),
-          author: { kind: 'agent', displayName: 'Sendero AI' },
-          toolName: name,
-          result: summarizeForLog(result),
-          status: 'sent',
-          source: 'api/tools',
-        },
-      });
-    }
     return NextResponse.json({ result });
   } catch (err) {
     const errName = err instanceof Error ? err.name : typeof err;
@@ -371,72 +269,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
       'unknown error';
     console.error('[api/tools] handler threw', {
       tool: name,
-      tenantId,
-      tripId: eventTripId ?? null,
-      durationMs: Date.now() - startedAt,
       errName,
       code,
       message,
       duffelErrors,
       stack,
     });
-    if (eventTripId) {
-      void appendTripEvent({
-        tenantId: tenantId!,
-        tripId: eventTripId,
-        event: {
-          id: newTripEventId(`tool_error_${name}`),
-          kind: 'tool_result',
-          direction: 'internal',
-          channel: 'internal',
-          createdAt: new Date().toISOString(),
-          author: { kind: 'agent', displayName: 'Sendero AI' },
-          toolName: name,
-          error: message,
-          status: 'failed',
-          source: 'api/tools',
-        },
-      });
-    }
     return NextResponse.json(
       { error: 'tool_failed', tool: name, errName, code, message },
       { status: 500 }
     );
   }
-}
-
-function extractTripId(input: unknown): string | null {
-  if (!input || typeof input !== 'object') return null;
-  const value = (input as Record<string, unknown>).tripId;
-  return typeof value === 'string' && value ? value : null;
-}
-
-function redactForLog(value: unknown): unknown {
-  return redactValue(value, 0);
-}
-
-function summarizeForLog(value: unknown): unknown {
-  return redactValue(value, 0, 1800);
-}
-
-function redactValue(value: unknown, depth: number, maxString = 500): unknown {
-  if (depth > 4) return '[depth]';
-  if (typeof value === 'string') {
-    if (/^(sk_|pk_|ak_|Bearer\s+)/i.test(value)) return '[redacted]';
-    return value.length > maxString ? `${value.slice(0, maxString)}…` : value;
-  }
-  if (Array.isArray(value))
-    return value.slice(0, 20).map(v => redactValue(v, depth + 1, maxString));
-  if (!value || typeof value !== 'object') return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    if (/secret|token|password|private|signature|authorization|api[-_]?key/i.test(key)) {
-      out[key] = '[redacted]';
-    } else {
-      out[key] = redactValue(item, depth + 1, maxString);
-    }
-  }
-  return out;
 }
 
 /**

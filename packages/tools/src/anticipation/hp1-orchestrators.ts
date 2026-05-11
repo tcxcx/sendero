@@ -357,6 +357,7 @@ export async function runCityHobbyPackBuilder(
 const cityHobbyPackBuilderTool: ToolDef<CityHobbyPackBuilderInput, CityHobbyPackBuilderResult> = {
   name: 'city_hobby_pack_builder',
   internal: true,
+  experimental: true,
   description:
     "Build a personalized city pack from the traveler's hobby selection. Pass the `hobbies` array (subset of `specialty_coffee`, `work_from_cafes`, `ramen`, `cheap_michelin`, `foodie`, `art_galleries`, `running`, `founder_events`); each becomes a layer in the pack. Different from `city_taste_map_builder` (HP2) — this is hobby-keyed, not category-keyed. Output includes a `topRecommendation` for the agent to quote first.",
   inputSchema: cityHobbyPackInput,

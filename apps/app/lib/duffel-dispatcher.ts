@@ -19,9 +19,6 @@ import { resumeRun, type ToolRegistry, type WorkflowRun } from '@sendero/workflo
 import type { DuffelAirlineCreditWire, DuffelWebhookEvent } from '@sendero/duffel';
 import { getAirlineCredit, getOrder } from '@sendero/duffel';
 import { notifier } from '@sendero/notifications';
-import { claimDispatchSlot } from '@sendero/notifications/dedup-slot';
-import { dispatch } from '@sendero/notifications/dispatch';
-import { notifyTerminalFallback } from '@sendero/notifications/fallback-chain';
 import { env } from '@sendero/env';
 
 import { dispatchToTraveler } from './channel-dispatch';
@@ -143,18 +140,6 @@ export async function dispatchDuffelEvent(args: {
       bookingId: booking.id,
       tripId: booking.tripId,
     });
-    // Phase C-2 — parallel dispatcher fan-out for booking.confirmed.
-    // Strict-dedup-aligned with `emailBookingConfirmed`: when both fire
-    // for the same Clerk-resolvable recipient, the UNIQUE constraint on
-    // `(tenantId, dedupKey, channelKind)` lets exactly one win. Dispatcher
-    // also fires the `liveblocks_bell` channel which legacy doesn't —
-    // additive new behavior, no overlap. Locked /plan-eng-review E5.
-    void runBookingConfirmedDispatcher({
-      bookingId: booking.id,
-      tenantId: booking.tenantId,
-      tripId: booking.tripId,
-      duffelOrderId: args.event.orderId,
-    });
   }
 
   // Phase F — airline-initiated schedule change. Push a server-side
@@ -223,28 +208,11 @@ export async function emailBookingConfirmed(args: {
     const linkOrigin = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010';
     const tripUrl = `${linkOrigin.replace(/\/$/, '')}/dashboard/console?tripId=${encodeURIComponent(row.trip.id)}`;
 
-    // Resolve each candidate recipient back to a Clerk userId where
-    // possible — needed for strict-dedup alignment with the parallel
-    // dispatcher() invocation. Recipients without a Clerk userId
-    // (e.g., raw `tenant.billingContactEmail` not in User table) fire
-    // legacy-only with no dedup claim — dispatcher cannot reach them.
+    const recipients = new Set<string>();
+    if (travelerEmail) recipients.add(travelerEmail);
     const adminEmail = await getTenantNotificationEmail(args.tenantId);
-    const candidateEmails: Array<{ email: string; reason: string }> = [];
-    if (travelerEmail) candidateEmails.push({ email: travelerEmail, reason: 'traveler' });
-    if (adminEmail && adminEmail !== travelerEmail) {
-      candidateEmails.push({ email: adminEmail, reason: 'tenant_admin' });
-    }
-    if (candidateEmails.length === 0) return;
-
-    const recipients = await Promise.all(
-      candidateEmails.map(async ({ email, reason }) => {
-        const user = await prisma.user.findFirst({
-          where: { email, memberships: { some: { tenantId: args.tenantId } } },
-          select: { clerkUserId: true },
-        });
-        return { email, reason, clerkUserId: user?.clerkUserId ?? null };
-      })
-    );
+    if (adminEmail && adminEmail !== travelerEmail) recipients.add(adminEmail);
+    if (recipients.size === 0) return;
 
     // Phase A.4 — attach the airline-issued e-ticket PDF when present.
     // Resend supports remote URLs via `path`, so we hand it the Duffel-
@@ -262,27 +230,9 @@ export async function emailBookingConfirmed(args: {
       : undefined;
 
     const n = notifier();
-    for (const recipient of recipients) {
-      // Strict-dedup-alignment: when the recipient has a Clerk userId,
-      // claim the slot before sending. P2002 means the parallel
-      // dispatcher already won the race — skip the legacy email.
-      // Recipients without a Clerk userId fire unconditionally
-      // (dispatcher never targets them, no double-fire risk).
-      if (recipient.clerkUserId) {
-        const claim = await claimDispatchSlot({
-          tenantId: args.tenantId,
-          eventKind: 'booking.confirmed',
-          sourceKind: 'webhook',
-          sourceId: args.bookingId,
-          recipientUserId: recipient.clerkUserId,
-          recipientReason: recipient.reason,
-          channelKind: 'email',
-          triggeredBy: 'legacy:duffel-dispatcher',
-        });
-        if (!claim.claimed) continue;
-      }
+    for (const to of recipients) {
       await n
-        .sendBookingConfirmed(recipient.email, {
+        .sendBookingConfirmed(to, {
           travelerName: row.trip.traveler?.displayName ?? 'Traveler',
           tripSummary,
           pnr: row.pnr ?? args.duffelOrderId,
@@ -305,138 +255,10 @@ export async function emailBookingConfirmed(args: {
           tripUrl,
           ...(attachments ? { attachments } : {}),
         })
-        .catch(err =>
-          console.warn('[duffel-dispatcher] sendBookingConfirmed failed', recipient.email, err)
-        );
+        .catch(err => console.warn('[duffel-dispatcher] sendBookingConfirmed failed', to, err));
     }
   } catch (err) {
     console.warn('[duffel-dispatcher] emailBookingConfirmed outer failure', err);
-  }
-}
-
-/**
- * Phase C-2 — parallel `dispatch()` call for booking.confirmed.
- *
- * Resolves the same email recipients `emailBookingConfirmed` targets
- * (traveler + tenant admin) but only includes those with a Clerk
- * userId — the dispatcher's email adapter looks up addresses via
- * Clerk and can't reach raw `billingContactEmail` recipients.
- *
- * For DEFAULT_CHANNELS_BY_EVENT['booking.confirmed'] = ['email',
- * 'liveblocks_bell']:
- *   - email: legacy claims slots first inside `emailBookingConfirmed`
- *     so dispatcher's email adapter mostly P2002s (skipped_dupe).
- *   - liveblocks_bell: new behavior in Phase C-2 — adds an inbox bell
- *     for the traveler/admin. No legacy overlap.
- *
- * Fires `notifyTerminalFallback` when zero recipients got any
- * notification (e.g., booking with no Clerk-resolvable recipient).
- * Fail-soft throughout.
- */
-async function runBookingConfirmedDispatcher(args: {
-  bookingId: string;
-  tenantId: string;
-  tripId: string | null;
-  duffelOrderId: string;
-}): Promise<void> {
-  try {
-    const booking = await prisma.booking.findUnique({
-      where: { id: args.bookingId },
-      select: {
-        pnr: true,
-        currency: true,
-        totalUsd: true,
-        trip: {
-          select: {
-            id: true,
-            intent: true,
-            traveler: {
-              select: { email: true, displayName: true, clerkUserId: true },
-            },
-          },
-        },
-      },
-    });
-    if (!booking || !booking.trip) return;
-
-    const candidates: Array<{ clerkUserId: string; reason: string }> = [];
-    if (booking.trip.traveler?.clerkUserId) {
-      candidates.push({
-        clerkUserId: booking.trip.traveler.clerkUserId,
-        reason: 'traveler',
-      });
-    }
-    const adminEmail = await getTenantNotificationEmail(args.tenantId);
-    if (adminEmail) {
-      const admin = await prisma.user.findFirst({
-        where: { email: adminEmail, memberships: { some: { tenantId: args.tenantId } } },
-        select: { clerkUserId: true },
-      });
-      if (admin?.clerkUserId && admin.clerkUserId !== booking.trip.traveler?.clerkUserId) {
-        candidates.push({ clerkUserId: admin.clerkUserId, reason: 'tenant_admin' });
-      }
-    }
-
-    if (candidates.length === 0) {
-      await notifyTerminalFallback({
-        tenantId: args.tenantId,
-        eventKind: 'booking.confirmed',
-        sourceId: args.bookingId,
-        reason: '0 Clerk-resolvable recipients for booking',
-        url: args.tripId
-          ? `/dashboard/console?tripId=${encodeURIComponent(args.tripId)}`
-          : undefined,
-      });
-      return;
-    }
-
-    const tripIntent = (booking.trip.intent ?? null) as { tripSummary?: string } | null;
-    const tripSummary = tripIntent?.tripSummary ?? `Trip ${booking.trip.id.slice(0, 12)}…`;
-    const totalAmount =
-      typeof booking.totalUsd === 'object' && booking.totalUsd && 'toFixed' in booking.totalUsd
-        ? booking.totalUsd.toFixed(2)
-        : String(booking.totalUsd ?? '0.00');
-
-    const result = await dispatch({
-      event: {
-        kind: 'booking.confirmed',
-        sourceId: args.bookingId,
-        sourceKind: 'webhook',
-        tripId: args.tripId ?? undefined,
-        data: {
-          title: `Booking confirmed — ${booking.pnr ?? args.duffelOrderId}`,
-          message: `${tripSummary} · ${booking.currency || 'USD'} ${totalAmount}`,
-          summary: tripSummary,
-          pnr: booking.pnr,
-          duffelOrderId: args.duffelOrderId,
-          url: args.tripId
-            ? `${(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010').replace(/\/$/, '')}/dashboard/console?tripId=${encodeURIComponent(args.tripId)}`
-            : undefined,
-        },
-      },
-      recipients: candidates.map(c => ({ userId: c.clerkUserId, reason: c.reason })),
-      context: {
-        tenantId: args.tenantId,
-        triggeredBy: 'webhook:duffel',
-      },
-    });
-
-    if (result.sentCount === 0) {
-      await notifyTerminalFallback({
-        tenantId: args.tenantId,
-        eventKind: 'booking.confirmed',
-        sourceId: args.bookingId,
-        reason: 'all dispatch channels failed for booking.confirmed',
-        url: args.tripId
-          ? `/dashboard/console?tripId=${encodeURIComponent(args.tripId)}`
-          : undefined,
-      });
-    }
-  } catch (err) {
-    console.warn('[duffel-dispatcher] runBookingConfirmedDispatcher failed', {
-      bookingId: args.bookingId,
-      error: err instanceof Error ? err.message : String(err),
-    });
   }
 }
 

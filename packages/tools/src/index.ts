@@ -7,14 +7,6 @@ import { getActiveTripTool } from './get-active-trip';
 import { getTripBriefTool } from './get-trip-brief';
 import { reportKnowledgeGapTool } from './report-knowledge-gap';
 import { listAvailableToolsTool } from './list-available-tools';
-import { trackFlightTool } from './track-flight';
-import { flightDisruptionsBriefTool } from './flight-disruptions-brief';
-import { nearbyAirportsLiveTool } from './nearby-airports-live';
-import { placesSearchTool } from './places-search';
-import { placeDetailsTool } from './place-details';
-import { inspectMyWhatsappChannelTool } from './inspect-my-whatsapp';
-import { inspectMySlackChannelTool } from './inspect-my-slack';
-import { startTravelerWhatsappConversationTool } from './start-traveler-whatsapp-conversation';
 import { recallSimilarTurnsTool } from './recall-similar-turns';
 import { findResolvedGapTool } from './find-resolved-gap';
 import { hobbyProfileBuilderTool } from './anticipation/hobby-profile-builder';
@@ -337,8 +329,6 @@ import { saveTravelerPreferenceTool } from './save-traveler-preference';
 import { gatewayTxHistoryTool } from './gateway-tx-history';
 import { tippingEtiquetteTool } from './tipping-etiquette';
 import { localColorBriefTool } from './local-color-brief';
-import { getOperatorAgencyTool } from './get-operator-agency';
-import { getSenderoIdentityTool } from './get-sendero-identity';
 export {
   localColorBrief,
   type LocalColorBriefInput,
@@ -583,18 +573,6 @@ export {
   type SaveTravelerPreferenceResult,
   saveTravelerPreferenceTool,
 } from './save-traveler-preference';
-export {
-  type GetOperatorAgencyInput,
-  type OperatorAgencyResult,
-  getOperatorAgency,
-  getOperatorAgencyTool,
-} from './get-operator-agency';
-export {
-  type GetSenderoIdentityInput,
-  type SenderoIdentityResult,
-  getSenderoIdentity,
-  getSenderoIdentityTool,
-} from './get-sendero-identity';
 export {
   type GatewayTxHistoryInput,
   type GatewayTxHistoryResult,
@@ -848,9 +826,6 @@ export {
  * catalogs from this array. Avoids tool drift.
  */
 export const toolList: ToolDef[] = [
-  inspectMyWhatsappChannelTool,
-  inspectMySlackChannelTool,
-  startTravelerWhatsappConversationTool,
   searchFlightsTool,
   bookFlightTool,
   searchHotelsTool,
@@ -911,13 +886,6 @@ export const toolList: ToolDef[] = [
   webSearchTool,
   lookupMatchFixturesTool,
   saveTravelerPreferenceTool,
-  // Identity layer — separates Sendero (the AI platform) from the
-  // tenant agency (the customer-facing brand). Agent must lead with
-  // the agency identity for who/what-agency questions; reach for
-  // Sendero identity only when explicitly asked about the AI
-  // platform / on-chain reputation of the AI itself.
-  getOperatorAgencyTool,
-  getSenderoIdentityTool,
   gatewayTxHistoryTool,
   tippingEtiquetteTool,
   recommendRestaurantsTool,
@@ -1260,15 +1228,6 @@ export const toolList: ToolDef[] = [
   sendFlowMessageTool,
   requestLocationTool,
   requestPhoneNumberTool,
-  // x402-outbound external-data tools — settle USDC outbound from
-  // treasury via `packages/tools/src/x402-fetch.ts`. Production keys
-  // only; sandbox callers refuse to spend real USDC. Per-tenant 24h
-  // cap $1, platform 24h cap $5, host allowlist gated.
-  trackFlightTool,
-  flightDisruptionsBriefTool,
-  nearbyAirportsLiveTool,
-  placesSearchTool,
-  placeDetailsTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */

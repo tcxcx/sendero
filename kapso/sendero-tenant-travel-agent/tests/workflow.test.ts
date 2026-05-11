@@ -8,13 +8,14 @@ const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)));
 describe('sendero tenant travel workflow', () => {
   test('validates without a static phone trigger', async () => {
     const url = pathToFileURL(
-      resolve(rootDir, 'workflows/sendero-tenant-travel-agent/workflow.js')
+      resolve(rootDir, 'workflows/sendero-tenant-travel-agent/workflow.ts')
     );
     url.searchParams.set('test', `${Date.now()}-${Math.random()}`);
-    const { default: workflow } = await import(url.href);
+    const { buildWorkflow } = await import(url.href);
+    const workflow = buildWorkflow();
     const validation = workflow.validate();
     expect(validation.errors ?? []).toEqual([]);
-    expect(workflow.toSourceFiles().metadata.triggers ?? []).toHaveLength(1);
+    expect(workflow.toSourceFiles().metadata.triggers ?? []).toEqual([]);
   });
 
   test('uses plain uploaded Worker function slugs', () => {

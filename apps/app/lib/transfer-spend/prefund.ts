@@ -2,17 +2,19 @@
  * Tenant pre-fund executor.
  *
  * Operator clicks "Pre-fund $X" on a traveler's wallet page → this
- * helper debits the active tenant's Circle Gateway unified balance,
- * materializes USDC to the traveler's Arc wallet, and writes a
+ * helper resolves the platform treasury context, calls
+ * `kit.depositFor` from the Unified Balance Kit, and writes a
  * `TransferAttempt(kind='deposit')` audit row regardless of outcome.
  *
- * Do not route this through the platform treasury. Org web flows must
- * spend from the logged-in org/user Gateway context so each tenant's
- * books, limits, and receipts stay isolated.
+ * The deposit is permissionless on the Gateway side (any wallet can
+ * credit another's unified balance), so no traveler signature or
+ * delegate ceremony is involved. Auth + role gating belong to the
+ * caller (server action / route).
  */
 
 import { prisma, type Prisma } from '@sendero/database';
-import { materializeTenantUnifiedUsdToArc } from '@sendero/circle/unified-balance';
+
+import { getTenantTreasury } from '@/lib/wallet/tenant-treasury-adapter';
 
 export interface PrefundArgs {
   tenantId: string;
@@ -35,7 +37,7 @@ export type PrefundResult =
       depositedTo: string;
       depositedBy: string;
     }
-  | { kind: 'gateway_missing'; attemptId: string }
+  | { kind: 'treasury_missing'; attemptId: string }
   | { kind: 'failed'; attemptId: string; message: string };
 
 function decimalToMicro(decimal: string): bigint {
@@ -60,16 +62,25 @@ export async function prefundTraveler(args: PrefundArgs): Promise<PrefundResult>
     } satisfies Record<string, unknown> as Prisma.InputJsonValue,
   };
 
+  const treasury = getTenantTreasury(args.tenantId);
+  if (!treasury) {
+    const row = await prisma.transferAttempt.create({
+      data: { ...baseAttempt, status: 'failed', blockReason: 'treasury_not_configured' },
+      select: { id: true },
+    });
+    return { kind: 'treasury_missing', attemptId: row.id };
+  }
+
   const attemptRow = await prisma.transferAttempt.create({
     data: { ...baseAttempt, status: 'passed' },
     select: { id: true },
   });
 
   try {
-    const result = await materializeTenantUnifiedUsdToArc({
-      tenantId: args.tenantId,
+    const result = await treasury.depositFor({
       amount: args.amount,
-      recipient: args.travelerAddress,
+      sourceChain: args.sourceChain,
+      depositAccount: args.travelerAddress,
     });
     const txHash = result.txHash ?? null;
     const explorerUrl = result.explorerUrl ?? null;
@@ -85,18 +96,15 @@ export async function prefundTraveler(args: PrefundArgs): Promise<PrefundResult>
       txHash,
       explorerUrl,
       depositedTo: args.travelerAddress,
-      depositedBy: result.signerAddress,
+      depositedBy: treasury.address,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[prefundTraveler] tenant Gateway materialization failed', { message });
+    console.error('[prefundTraveler] unifiedGateway.depositFor failed', { message });
     await prisma.transferAttempt.update({
       where: { id: attemptRow.id },
       data: { status: 'failed', blockReason: message.slice(0, 500) },
     });
-    if (/TenantGatewayConfig missing|Gateway.*missing|provision Gateway/i.test(message)) {
-      return { kind: 'gateway_missing', attemptId: attemptRow.id };
-    }
     return { kind: 'failed', attemptId: attemptRow.id, message };
   }
 }

@@ -22,7 +22,7 @@
 
 import { useMemo, useState } from 'react';
 
-import type { BookingKind } from '@sendero/billing/markup';
+import type { BookingKind } from '@sendero/billing';
 
 import { QuotePricingCard } from '@/components/quote-pricing-card';
 

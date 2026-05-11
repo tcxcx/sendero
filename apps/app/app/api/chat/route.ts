@@ -57,7 +57,6 @@ import {
   resolveSegment,
   resolveTenantPlan,
 } from '@/lib/agent-auth';
-import { resolveChatModel } from '@/lib/agent-models';
 import { currentOrgPlan } from '@/lib/billing-plan';
 import {
   chatPricingBreakdown,
@@ -66,8 +65,6 @@ import {
   type ChatUsage,
 } from '@/lib/chat-pricing';
 import { preflight } from '@sendero/billing/meter';
-import { resolvePlan } from '@sendero/billing/plans';
-import { appendTripEvent, newTripEventId } from '@/lib/trip-events';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -177,18 +174,13 @@ async function probeModel(pick: Picked): Promise<{ ok: true } | { ok: false; err
   try {
     const providerOptions =
       typeof pick.model === 'string' ? buildProviderOptions(pick.tier) : undefined;
-    await Promise.race([
-      generateText({
-        model: pick.model,
-        prompt: 'ok',
-        maxOutputTokens: 16,
-        maxRetries: 0,
-        providerOptions,
-      }),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Model probe timed out after 12s')), 12_000);
-      }),
-    ]);
+    await generateText({
+      model: pick.model,
+      prompt: 'ok',
+      maxOutputTokens: 16,
+      maxRetries: 0,
+      providerOptions,
+    });
     return { ok: true };
   } catch (err) {
     return { ok: false, err };
@@ -246,181 +238,6 @@ function extractContent(message: { parts?: unknown[] }): string {
     }
   }
   return out.join('\n').slice(0, 4000);
-}
-
-async function buildTripRuntimeContext(tenantId: string, tripId: string) {
-  const [trip, bookings, settlements, stamps, gatewayTransfers] = await Promise.all([
-    prisma.trip.findFirst({
-      where: { id: tripId, tenantId },
-      select: {
-        id: true,
-        status: true,
-        kind: true,
-        intent: true,
-        paymentMode: true,
-        totalUsdc: true,
-        channelBindings: true,
-        events: true,
-        updatedAt: true,
-        traveler: {
-          select: {
-            id: true,
-            displayName: true,
-            email: true,
-            channelIdentities: {
-              where: { tenantId },
-              select: { kind: true, externalUserId: true, username: true },
-            },
-          },
-        },
-      },
-    }),
-    prisma.booking.findMany({
-      where: { tripId, tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-      select: {
-        id: true,
-        kind: true,
-        status: true,
-        pnr: true,
-        duffelOrderId: true,
-        totalUsd: true,
-        currency: true,
-        bookedAt: true,
-        provisionedBy: true,
-        payerWalletId: true,
-        eTicketDocumentUrl: true,
-        createdAt: true,
-      },
-    }),
-    prisma.settlement.findMany({
-      where: { tripId, tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-      select: {
-        id: true,
-        bookingId: true,
-        status: true,
-        statusReason: true,
-        chain: true,
-        grossMicroUsdc: true,
-        txHashes: true,
-        createdAt: true,
-        confirmedAt: true,
-      },
-    }),
-    prisma.nftStamp.findMany({
-      where: { tripId, tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-      select: {
-        id: true,
-        bookingId: true,
-        kind: true,
-        chain: true,
-        status: true,
-        tokenId: true,
-        mintTxHash: true,
-        mintTxId: true,
-        createdAt: true,
-        mintedAt: true,
-      },
-    }),
-    prisma.gatewayTransferLog.findMany({
-      where: { tenantId, createdAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) } },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-      select: {
-        id: true,
-        status: true,
-        triggeredBy: true,
-        destinationChain: true,
-        amountMicroUsdc: true,
-        recipientAddress: true,
-        mintTxHash: true,
-        circleDestinationTxHash: true,
-        errorMessage: true,
-        createdAt: true,
-        confirmedAt: true,
-      },
-    }),
-  ]);
-
-  if (!trip) return { status: 'not_found', tripId };
-
-  return {
-    status: 'ok',
-    trip: {
-      id: trip.id,
-      state: trip.status,
-      kind: trip.kind,
-      paymentMode: trip.paymentMode,
-      totalUsdc: trip.totalUsdc?.toString() ?? null,
-      intent: trip.intent,
-      channelBindings: trip.channelBindings,
-      updatedAt: trip.updatedAt.toISOString(),
-      traveler: trip.traveler
-        ? {
-            id: trip.traveler.id,
-            displayName: trip.traveler.displayName,
-            email: trip.traveler.email,
-            channels: trip.traveler.channelIdentities,
-          }
-        : null,
-    },
-    recentEvents: summarizeTripEvents(trip.events).slice(-24),
-    bookings: bookings.map(b => ({
-      ...b,
-      totalUsd: b.totalUsd.toString(),
-      bookedAt: b.bookedAt?.toISOString() ?? null,
-      createdAt: b.createdAt.toISOString(),
-    })),
-    settlements: settlements.map(s => ({
-      ...s,
-      grossMicroUsdc: s.grossMicroUsdc.toString(),
-      createdAt: s.createdAt.toISOString(),
-      confirmedAt: s.confirmedAt?.toISOString() ?? null,
-    })),
-    stamps: stamps.map(s => ({
-      ...s,
-      createdAt: s.createdAt.toISOString(),
-      mintedAt: s.mintedAt?.toISOString() ?? null,
-    })),
-    recentGatewayTransfers: gatewayTransfers.map(t => ({
-      ...t,
-      amountMicroUsdc: t.amountMicroUsdc.toString(),
-      createdAt: t.createdAt.toISOString(),
-      confirmedAt: t.confirmedAt?.toISOString() ?? null,
-    })),
-    invariants: [
-      'If bookings is empty, no ticket was persisted.',
-      'If settlements and recentGatewayTransfers are empty, no wallet transfer was recorded by Sendero.',
-      'If stamps is empty, no NFT mint was kicked off for this trip.',
-      'Do not ask which flight when recentEvents already contains the passenger-visible flight/PNR claim.',
-    ],
-  };
-}
-
-function summarizeTripEvents(events: unknown): Array<Record<string, unknown>> {
-  if (!Array.isArray(events)) return [];
-  return events
-    .filter(
-      (event): event is Record<string, unknown> => Boolean(event) && typeof event === 'object'
-    )
-    .map(event => ({
-      at: typeof event.createdAt === 'string' ? event.createdAt : null,
-      kind: typeof event.kind === 'string' ? event.kind : null,
-      direction: typeof event.direction === 'string' ? event.direction : null,
-      channel: typeof event.channel === 'string' ? event.channel : null,
-      text:
-        typeof event.text === 'string' ? event.text.replace(/\s+/g, ' ').slice(0, 500) : undefined,
-      toolName: typeof event.toolName === 'string' ? event.toolName : undefined,
-      status: typeof event.status === 'string' ? event.status : undefined,
-      pnr: typeof event.pnr === 'string' ? event.pnr : undefined,
-      bookingId: typeof event.bookingId === 'string' ? event.bookingId : undefined,
-      error: typeof event.error === 'string' ? event.error : undefined,
-    }));
 }
 
 export async function POST(req: NextRequest) {
@@ -502,42 +319,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const tripRuntimeContext =
-    tenantId && tripId ? await buildTripRuntimeContext(tenantId, tripId) : null;
-  const runtimeContext =
-    body.context || tripRuntimeContext
-      ? {
-          ...(body.context ?? {}),
-          ...(tripRuntimeContext ? { focusedTrip: tripRuntimeContext } : {}),
-        }
-      : null;
-  const runtimeContextJson = runtimeContext ? JSON.stringify(runtimeContext, null, 2) : undefined;
+  const runtimeContextJson = body.context ? JSON.stringify(body.context, null, 2) : undefined;
 
   // Chat tier defaults to 'fast' (sonnet-class) for responsive replies.
   // A trailing body.tier override lets power users force a smart/cheap turn.
   const requestedTier: ModelTier = body.tier ?? 'fast';
   const cascade = pickModelCascade(requestedTier);
   // Operator-picked model trumps the default cascade head when valid.
-  // Server-side validation is mandatory: the UI hides locked models,
-  // but a caller can still POST any model id by hand. Keep fallback
-  // candidates after the chosen model so provider outages don't kill
-  // the chat turn.
-  if (body.model && Date.now() >= gatewayBrokenUntil) {
-    const plan = await currentOrgPlan().catch(async () =>
-      tenantId ? resolvePlan(await resolveTenantPlan(tenantId)) : resolvePlan('free')
-    );
-    const resolved = resolveChatModel(body.model, plan, {
-      source: channel === 'web' || channel === 'slack' || channel === 'whatsapp' ? channel : 'api',
-    });
-    if ('locked' in resolved) {
-      return NextResponse.json(resolved.locked, { status: 403 });
-    }
+  // Stays a string (gateway slug) — direct-provider fallbacks are still
+  // appended so a gateway outage doesn't kill the chat.
+  if (body.model && gatewayConfigured() && Date.now() >= gatewayBrokenUntil) {
     cascade.unshift({
-      model: resolved.model,
-      label:
-        typeof resolved.model === 'string'
-          ? `gateway:${resolved.modelId}`
-          : `direct:${resolved.modelId}`,
+      model: body.model,
+      label: `gateway:${body.model}`,
       tier: requestedTier,
     });
   }
@@ -606,23 +400,18 @@ export async function POST(req: NextRequest) {
   const enrichedTraveler = tenantId
     ? { ...(traveler ?? {}), tenantId, userId: userId ?? undefined }
     : traveler;
-  const toolCtx = {
-    traveler: enrichedTraveler,
-    ...(tripId ? { tripId } : {}),
-    surface: 'web_console_chat',
-  };
-  const baseTools = buildAiSdkTools(toolList, toolCtx);
+  const baseTools = buildAiSdkTools(toolList, { traveler: enrichedTraveler });
   const runWorkflowTool = buildRunWorkflowTool({
     resolveTools: () => {
       const registry: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {};
       for (const def of toolList) {
-        registry[def.name] = args => def.handler(args, toolCtx);
+        registry[def.name] = args => def.handler(args, { traveler });
       }
       return registry;
     },
   });
   const workflowTools = buildAiSdkTools([listWorkflowsTool, runWorkflowTool], {
-    ...toolCtx,
+    traveler: enrichedTraveler,
   });
   const tools = { ...baseTools, ...workflowTools };
   const converted = await convertToModelMessages(messages);
@@ -806,48 +595,6 @@ export async function POST(req: NextRequest) {
       }
 
       if (!tenantId) return;
-
-      if (tripId) {
-        const now = new Date().toISOString();
-        if (lastUserMessage.trim()) {
-          void appendTripEvent({
-            tenantId,
-            tripId,
-            event: {
-              id: newTripEventId('internal_user'),
-              kind: 'inbox_reply',
-              direction: 'internal',
-              channel: 'internal',
-              createdAt: now,
-              text: lastUserMessage,
-              author: { kind: 'operator', userId: userId ?? undefined, displayName: 'you' },
-              source: 'web_console_chat',
-              chatSessionId,
-              turnId,
-            },
-          });
-        }
-        const assistantText = finish.text?.trim() ?? '';
-        if (assistantText) {
-          void appendTripEvent({
-            tenantId,
-            tripId,
-            event: {
-              id: newTripEventId('internal_agent'),
-              kind: 'agent_reply',
-              direction: 'internal',
-              channel: 'internal',
-              createdAt: new Date().toISOString(),
-              text: assistantText,
-              author: { kind: 'agent', displayName: 'Sendero AI' },
-              source: 'web_console_chat',
-              chatSessionId,
-              turnId,
-              toolNames,
-            },
-          });
-        }
-      }
 
       // Persist the chat session + every UIMessage. Non-fatal: meter
       // write still runs even if this throws. Skipped when the caller

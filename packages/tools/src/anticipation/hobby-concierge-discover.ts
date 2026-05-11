@@ -239,6 +239,7 @@ export const hobbyConciergeDiscoverTool: ToolDef<
 > = {
   name: 'hobby_concierge_discover',
   internal: true,
+  experimental: true,
   description:
     "Single high-level entry for the HP1 anticipatory concierge. Pick `mode`: 'arrival_pack' / 'today' / 'tomorrow' / 'map' / 'build_city_list' (full city taste map), 'foodie' (food shortlist only), 'work_from_cafe' (laptop spots), 'networking' (founder/AI/etc events). Auto-derives the networking slot from optional `hobbies` keywords. Use as the FIRST anticipatory call when the traveler asks 'build my <city> pack', 'plan my <city> trip', 'what should I do in <city>'.",
   inputSchema,

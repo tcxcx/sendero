@@ -36,11 +36,6 @@ export interface ReputationDialogIdentity {
   contract?: string | null;
   publicUrl?: string | null;
   explorerUrl?: string | null;
-  /**
-   * Settlement chain — drives the "View contract on …" label so a Sol
-   * workspace doesn't see Arc when it's actually on Solana.
-   */
-  chain?: 'arc' | 'sol';
   mintedAt?: string | null;
   cachedAt?: string | null;
 }
@@ -165,7 +160,7 @@ export function ReputationStatDialog({
                   rel="noreferrer"
                   className="border border-[color:var(--hairline-color)] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--ink)] hover:bg-[color:var(--surface-raised)]"
                 >
-                  View contract on {identity.chain === 'sol' ? 'Solana' : 'Arc'}
+                  View contract on Arc
                 </a>
               ) : null}
             </div>

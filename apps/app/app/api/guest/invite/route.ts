@@ -25,7 +25,6 @@ import { prisma } from '@sendero/database';
 import { notifier } from '@sendero/notifications';
 
 import { getTenantNotificationEmail } from '@/lib/tenant-notification-email';
-import { dispatchToTraveler } from '@/lib/channel-dispatch';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,12 +64,25 @@ export async function POST(req: NextRequest) {
   // soft credential boundary. Buyer can opt out by passing require2fa=false.
   const require2fa = body.require2fa ?? true;
 
-  // Resolve tenant + user FIRST so we can hand the prefund tool a
-  // proper ToolContext. Without this, the tool's `resolveTenantPrimaryChain`
-  // call falls back to 'arc' (because `ctx?.traveler?.tenantId` is
-  // undefined) and Sol-primary tenants get the wrong chain's on-chain
-  // calls. Reading the tenant + user is cheap (~10ms) and the rest of
-  // the route already needs them.
+  let result: Awaited<ReturnType<typeof prefundTripTool.handler>>;
+  try {
+    result = await prefundTripTool.handler({
+      budgetUsdc: body.budgetUsdc,
+      guestEmail: body.guestEmail,
+      guestName: body.guestName,
+      buyerName: body.buyerName,
+      tripSummary: body.tripSummary,
+      expiresInDays: body.expiresInDays ?? 30,
+      require2fa,
+      ...(body.linkOrigin ? { linkOrigin: body.linkOrigin } : {}),
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: 'prefund_failed', message: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
+  }
+
   const tenant = await prisma.tenant.findUnique({ where: { clerkOrgId: orgId } });
   if (!tenant) {
     return NextResponse.json({ error: 'tenant_not_found' }, { status: 404 });
@@ -79,55 +91,15 @@ export async function POST(req: NextRequest) {
     where: { clerkUserId: userId },
     select: { id: true },
   });
-
-  let result: Awaited<ReturnType<typeof prefundTripTool.handler>>;
-  try {
-    result = await prefundTripTool.handler(
-      {
-        budgetUsdc: body.budgetUsdc,
-        guestEmail: body.guestEmail,
-        guestName: body.guestName,
-        buyerName: body.buyerName,
-        tripSummary: body.tripSummary,
-        expiresInDays: body.expiresInDays ?? 30,
-        require2fa,
-        ...(body.linkOrigin ? { linkOrigin: body.linkOrigin } : {}),
-      },
-      // ToolContext — traveler.tenantId routes prefund to Sol/Arc per
-      // `Tenant.primaryChain`. `userId` lets downstream audit + DCW
-      // resolvers attribute the call to the operator who triggered it.
-      { traveler: { tenantId: tenant.id, userId: user?.id } }
-    );
-  } catch (err) {
-    return NextResponse.json(
-      { error: 'prefund_failed', message: err instanceof Error ? err.message : String(err) },
-      { status: 500 }
-    );
-  }
   const safeResult = result as {
     tripId: string;
     budgetUsdc: string;
-    guestLink: string;
-    claimCode?: string | null;
     expiresAt?: string;
     escrowAddress?: string;
-    /** Arc shape — 20-byte address-style claim pubkey (`bytes20`). */
     claimPubKey20?: string;
-    /** Sol shape — full 32-byte Ed25519 pubkey, base58. The /api/guest/claim
-     *  route uses this to fail-fast on Sol claims with a malformed
-     *  fragment before broadcasting. */
-    claimPubKey?: string;
-    /** Solana program id when the trip was prefunded on Sol. */
-    programId?: string;
     require2fa?: boolean;
     invite?: { ok?: boolean; skipped?: boolean; error?: string };
-    onchainCalls?: Array<{ to: string; data: string; value: string }>;
-    onchainInstructions?: Array<{
-      programId: string;
-      accounts: Array<{ pubkey: string; isSigner: boolean; isWritable: boolean }>;
-      data: string;
-    }>;
-    chain?: 'arc' | 'sol';
+    onchainCalls?: Array<unknown>;
   };
 
   // Stamp `linkChannel` so the OTP resend route can prefer a DIFFERENT
@@ -179,20 +151,9 @@ export async function POST(req: NextRequest) {
         },
         escrow: {
           fundingStatus: 'pending_onchain_submission',
-          chain: safeResult.chain ?? 'arc',
-          address: safeResult.escrowAddress ?? safeResult.programId ?? null,
-          // Arc: 20-byte claim pubkey address. Sol: full base58 Ed25519
-          // pubkey. The /api/guest/claim route reads `claimPubKey` to
-          // verify Sol claim secrets before broadcasting on-chain.
+          address: safeResult.escrowAddress ?? null,
           claimPubKey20: safeResult.claimPubKey20 ?? null,
-          claimPubKey: safeResult.claimPubKey ?? null,
-          // Persist the on-chain calls / ixs so the buyer-side
-          // "Fund with Sendero" button at `/api/trips/prefund/fund` can
-          // submit them server-side without the buyer signing anything.
-          onchainCalls: safeResult.onchainCalls ?? null,
-          onchainInstructions: safeResult.onchainInstructions ?? null,
-          onchainCallCount:
-            safeResult.onchainCalls?.length ?? safeResult.onchainInstructions?.length ?? 0,
+          onchainCallCount: safeResult.onchainCalls?.length ?? 0,
         },
       },
     },
@@ -214,20 +175,9 @@ export async function POST(req: NextRequest) {
         },
         escrow: {
           fundingStatus: 'pending_onchain_submission',
-          chain: safeResult.chain ?? 'arc',
-          address: safeResult.escrowAddress ?? safeResult.programId ?? null,
-          // Arc: 20-byte claim pubkey address. Sol: full base58 Ed25519
-          // pubkey. The /api/guest/claim route reads `claimPubKey` to
-          // verify Sol claim secrets before broadcasting on-chain.
+          address: safeResult.escrowAddress ?? null,
           claimPubKey20: safeResult.claimPubKey20 ?? null,
-          claimPubKey: safeResult.claimPubKey ?? null,
-          // Persist the on-chain calls / ixs so the buyer-side
-          // "Fund with Sendero" button at `/api/trips/prefund/fund` can
-          // submit them server-side without the buyer signing anything.
-          onchainCalls: safeResult.onchainCalls ?? null,
-          onchainInstructions: safeResult.onchainInstructions ?? null,
-          onchainCallCount:
-            safeResult.onchainCalls?.length ?? safeResult.onchainInstructions?.length ?? 0,
+          onchainCallCount: safeResult.onchainCalls?.length ?? 0,
         },
       },
     },
@@ -275,78 +225,6 @@ export async function POST(req: NextRequest) {
         }
       : null;
 
-  let channelInvite:
-    | { sent: true; channel: 'whatsapp' | 'slack' }
-    | { sent: false; reason: string; channel?: 'whatsapp' | 'slack' }
-    | null = null;
-  if (boundUser) {
-    const dispatch = await dispatchToTraveler({
-      tenantId: tenant.id,
-      tripId: safeResult.tripId,
-      travelerUserId: boundUser.id,
-      message: {
-        kind: 'card',
-        id: `guest_claim_${safeResult.tripId}_${Date.now()}`,
-        author: { role: 'agent', name: tenant.displayName },
-        title: 'Your prepaid trip is ready',
-        body:
-          `${tenant.displayName} created a prepaid Sendero trip for you. ` +
-          'Open the claim link, claim the escrow, then keep booking here.',
-        bullets: [
-          `Budget: ${safeResult.budgetUsdc} USDC`,
-          `Trip: ${body.tripSummary ?? body.guestEmail}`,
-          safeResult.expiresAt
-            ? `Expires: ${new Date(Number(safeResult.expiresAt) * 1000).toISOString()}`
-            : null,
-          safeResult.claimCode ? 'A 6-digit claim code is required.' : null,
-        ].filter((line): line is string => Boolean(line)),
-        ctas: [
-          {
-            label: 'Claim prepaid trip',
-            kind: 'open_link',
-            href: safeResult.guestLink,
-            emphasis: 'primary',
-          },
-        ],
-        createdAt: new Date().toISOString(),
-      },
-    });
-    if ('reason' in dispatch) {
-      channelInvite = { sent: false, reason: dispatch.reason, channel: dispatch.channel };
-    } else {
-      channelInvite = { sent: true, channel: dispatch.channel };
-    }
-
-    if (dispatch.sent) {
-      const current = await prisma.trip.findUnique({
-        where: { id: safeResult.tripId },
-        select: { metadata: true },
-      });
-      const metadata =
-        current?.metadata &&
-        typeof current.metadata === 'object' &&
-        !Array.isArray(current.metadata)
-          ? (current.metadata as Record<string, unknown>)
-          : {};
-      await prisma.trip.update({
-        where: { id: safeResult.tripId },
-        data: {
-          metadata: {
-            ...metadata,
-            linkChannel: dispatch.channel,
-            invite: {
-              ...((metadata.invite && typeof metadata.invite === 'object'
-                ? metadata.invite
-                : {}) as Record<string, unknown>),
-              channelOk: true,
-              channel: dispatch.channel,
-            },
-          },
-        },
-      });
-    }
-  }
-
   capture({
     event: 'guest_invite_issued',
     distinctId: userId,
@@ -383,5 +261,5 @@ export async function POST(req: NextRequest) {
     }
   })();
 
-  return NextResponse.json({ ...result, boundTraveler, channelInvite });
+  return NextResponse.json({ ...result, boundTraveler });
 }

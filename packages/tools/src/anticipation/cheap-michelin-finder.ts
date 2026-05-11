@@ -152,6 +152,7 @@ export const cheapMichelinFinderTool: ToolDef<CheapMichelinFinderInput, CheapMic
   {
     name: 'cheap_michelin_finder',
     internal: true,
+    experimental: true,
     description:
       "Find Michelin Guide / Bib Gourmand / Selected restaurants in a city — the *affordable* end of the guide. Default `filter='bib'` returns Bib Gourmand only (under typical Michelin price). `filter='selected'` for Michelin Selected (no star, no Bib). `filter='all'` for the full guide including stars. Composes guide.michelin.com + theworlds50best.com + Eater editorial CSE with Places (New). Use when traveler asks 'cheap Michelin <city>', 'Bib Gourmand <city>', 'good-value Michelin'.",
     inputSchema,

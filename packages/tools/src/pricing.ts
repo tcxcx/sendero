@@ -101,38 +101,15 @@ export const TOOL_PRICING: Record<string, string> = {
   // settlement-tier per-call rate ($1.00 micro) to mirror confirm_booking.
   get_tenant_pricing_policy: '0.0005',
   activate_tenant_pricing_policy: '1.00',
-
-  // x402-outbound tools — Sendero pays the third-party USDC cost from
-  // treasury and recovers it via this inbound tenant charge. Markup is
-  // ~2.5x the outbound price to cover gas, facilitator overhead, and
-  // platform margin. Each call settles two MeterEvent rows: the inbound
-  // (tenant→Sendero) here, and the outbound (Sendero→bazaar) tagged
-  // `x402_outbound` in metadata by `x402-fetch.ts`. Admin billing
-  // rolls margin = inbound − outbound per tool. See
-  // `packages/tools/src/x402-fetch.ts` for caps + allowlist.
-  track_flight: '0.025',
-  flight_disruptions_brief: '0.05',
-  nearby_airports_live: '0.02',
-  places_search: '0.025',
-  place_details: '0.025',
 };
 
 /** USDC has 6 decimals on every chain. */
 const USDC_DECIMALS = 6;
 
-/**
- * Default pricing class for tools without an explicit `TOOL_PRICING`
- * entry. `'0'` means free — the tool runs, the meter records the call
- * for audit, but no USDC settles. This is the right default for reads,
- * config lookups, and explainers (codex consult 2026-05-08): every tool
- * needs a pricing *policy*, but most should be free until we have a
- * deliberate reason to charge for them. Fill in `TOOL_PRICING` rows
- * when a tool actually creates infra/provider cost.
- */
-const DEFAULT_FREE_PRICE = '0';
-
 export function priceFor(toolName: string): string {
-  return TOOL_PRICING[toolName] ?? DEFAULT_FREE_PRICE;
+  const p = TOOL_PRICING[toolName];
+  if (!p) throw new Error(`No price configured for tool: ${toolName}`);
+  return p;
 }
 
 /** Decimal "0.005" → atomic "5000" (6 decimals). */

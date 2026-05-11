@@ -18,29 +18,22 @@
 
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 
-import { ChevronLeft, ChevronRight, Loader2, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useQueryState } from 'nuqs';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSendero } from '@/components/store';
 
 import { TripRail, type TripRowData, type TripState } from './trip-rail';
+import type { CHANNELS } from './channels';
 
 const STORAGE_KEY = 'sendero.console.inboxRail.expanded';
 
-// `scopedChannel` was declared on the original prop interface (carrying a
-// CHANNELS lookup for the scoped trip) but never read inside the component.
-// Server→client serialization fails because CHANNELS entries hold an `icon`
-// React component (a function), so passing it from the @threads server
-// component to this client component throws "Functions cannot be passed
-// directly to Client Components" the moment any ?tripId= URL renders.
-// Dropped to fix the regression.
 interface InboxRailProps {
   trips: TripRowData[];
   activeTripId: string | null;
   scopedTripId: string | null;
+  scopedChannel?: ReturnType<typeof CHANNELS extends Record<string, infer V> ? () => V : never>;
 }
 
 export function InboxRail(props: InboxRailProps) {
@@ -92,12 +85,7 @@ export function InboxRail(props: InboxRailProps) {
               {...props}
               stateFilter={stateFilter}
               onStateFilterChange={toggleStateFilter}
-              collapseControl={
-                <span style={{ display: 'inline-flex', gap: 4 }}>
-                  <NewChatButton />
-                  <CollapseRailButton onClick={toggle} />
-                </span>
-              }
+              collapseControl={<CollapseRailButton onClick={toggle} />}
             />
           </TabsContent>
           <TabsContent value="chats" className="mt-0 flex-1 min-h-0 overflow-auto">
@@ -144,8 +132,7 @@ function ChatHistoryList() {
   // `cs` lives in the URL so reloads / shared links resume. nuqs
   // defaults to shallow (history.replaceState) so clicks don't
   // re-fetch the dashboard RSC tree or fire the loading.tsx overlay.
-  const [activeCs] = useQueryState('cs');
-  const router = useRouter();
+  const [activeCs, setActiveCs] = useQueryState('cs');
 
   // Stable refetch fn — pulled out so the SSE subscriber + intra-tab
   // BroadcastChannel listener can both call it. `useCallback` so the
@@ -278,15 +265,7 @@ function ChatHistoryList() {
           key={s.id}
           type="button"
           onClick={() => {
-            // Set BOTH `cs` and `tripId` (when linked) via a real
-            // navigation so `loadConsoleData` re-runs server-side and
-            // the right column shows the linked trip's offers /
-            // pending booking. Shallow nuqs updates skip RSC and
-            // would leave the right column stale.
-            const params = new URLSearchParams();
-            params.set('cs', s.id);
-            if (s.tripId) params.set('tripId', s.tripId);
-            router.push(`/dashboard/console?${params.toString()}`);
+            void setActiveCs(s.id);
           }}
           style={{
             display: 'block',
@@ -448,50 +427,6 @@ export function CollapseRailButton({ onClick }: { onClick: () => void }) {
       }}
     >
       <ChevronLeft size={12} />
-    </button>
-  );
-}
-
-/**
- * "Begin a new chat" trigger that sits next to the inbox rail's
- * collapse button. Clears the `?cs=` (chat session) and `?tripId`
- * query keys + resets the in-memory chat thread so the operator
- * lands in a clean console. ConsoleChatHost mints a fresh session
- * id on first turn when no `?cs=` is present.
- */
-function NewChatButton() {
-  const [, setActiveCs] = useQueryState('cs');
-  const [, setActiveTripId] = useQueryState('tripId');
-  const setChatMessages = useSendero(s => s.setChatMessages);
-  const [hover, setHover] = useState(false);
-  const onClick = useCallback(() => {
-    setChatMessages([]);
-    void setActiveCs(null);
-    void setActiveTripId(null);
-  }, [setActiveCs, setActiveTripId, setChatMessages]);
-  return (
-    <button
-      type="button"
-      aria-label="Begin a new chat"
-      title="Begin a new chat"
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        width: 22,
-        height: 22,
-        borderRadius: '50%',
-        border: 0,
-        background: hover ? 'var(--ink)' : 'color-mix(in oklab, var(--ink) 10%, transparent)',
-        color: hover ? '#fff' : 'var(--ink)',
-        cursor: 'pointer',
-        display: 'grid',
-        placeItems: 'center',
-        padding: 0,
-        transition: 'background-color 140ms ease, color 140ms ease',
-      }}
-    >
-      <Plus size={12} />
     </button>
   );
 }

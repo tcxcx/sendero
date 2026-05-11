@@ -23,11 +23,6 @@ export const KEY_SCOPES = [
   'compliance',
   'trip_assistance',
   'utilities',
-  // External third-party data tools that settle outbound USDC via x402
-  // (FlightAware live tracking, Tripadvisor places, etc.). Scoped
-  // separately from `search` because each call costs real USDC and
-  // a leaked read-mostly key shouldn't be able to drain the cap.
-  'external_data',
 ] as const;
 export type KeyScope = (typeof KEY_SCOPES)[number] | '*';
 
@@ -35,11 +30,6 @@ export type KeyScope = (typeof KEY_SCOPES)[number] | '*';
  * Default scope set for user-minted keys via Clerk's `<APIKeys />`.
  * Read-mostly, never settlement or treasury — so a leaked frontend
  * key spams search but can't move USDC or touch passport PII.
- *
- * `external_data` is included in the default set so concierge agents
- * can reach FA/Tripadvisor without an extra opt-in. The handler-layer
- * gates (sandbox-blocked + per-tenant 24h cap + allowlist) cap the
- * blast radius if a key leaks.
  */
 export const DEFAULT_PROD_SCOPES: KeyScope[] = [
   'search',
@@ -47,7 +37,6 @@ export const DEFAULT_PROD_SCOPES: KeyScope[] = [
   'utilities',
   'compliance',
   'documents',
-  'external_data',
 ];
 
 /** Sandbox + service keys default to full access — operators are trusted. */
@@ -120,12 +109,6 @@ export function toolToScope(toolName: string): KeyScope {
   if (toolName === 'read_reputation') {
     return 'trip_assistance';
   }
-  // Identity layer — public read-only. Tenant agency brand and
-  // Sendero's own ERC-8004 agent record. Scoped to `trip_assistance`
-  // so user-minted prod keys can call them (default-allowed scope set).
-  if (toolName === 'get_operator_agency' || toolName === 'get_sendero_identity') {
-    return 'trip_assistance';
-  }
   if (
     toolName.startsWith('airport_') ||
     toolName.startsWith('trip_') ||
@@ -151,20 +134,6 @@ export function toolToScope(toolName: string): KeyScope {
   // `report-knowledge-gap.ts::isCallerAllowed`), not here.
   if (toolName === 'report_knowledge_gap' || toolName === 'list_available_tools') {
     return 'utilities';
-  }
-  // x402-outbound tools (FlightAware live, Tripadvisor places, …).
-  // Settlement happens treasury-side via `x402-fetch`; the handler-layer
-  // gates (production-key only + allowlist + per-tenant cap) prevent
-  // sandbox keys from moving USDC. The `external_data` scope is the
-  // capability key, not the cap.
-  if (
-    toolName === 'track_flight' ||
-    toolName === 'flight_disruptions_brief' ||
-    toolName === 'nearby_airports_live' ||
-    toolName === 'places_search' ||
-    toolName === 'place_details'
-  ) {
-    return 'external_data';
   }
   return 'utilities';
 }

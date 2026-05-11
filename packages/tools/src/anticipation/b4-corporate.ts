@@ -20,15 +20,17 @@
  * All experimental + internal + dev-gated.
  */
 
+import { z } from 'zod';
+import { generateText, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+
 import { searchText } from '@sendero/google-places';
 import { cseSearch } from '@sendero/web-search';
-import { generateObject, generateText } from 'ai';
-import { z } from 'zod';
 
 import { assertDevOnlyToolAllowed } from '../dev-gate';
 import type { ToolContext, ToolDef } from '../types';
+
 import { runCheapMichelinFinder } from './cheap-michelin-finder';
 import { runMonoclePlaceResearcher } from './monocle-place-researcher';
 
@@ -130,6 +132,7 @@ async function runClientDinnerRecommender(
 const clientDinnerRecommenderTool: ToolDef = {
   name: 'client_dinner_recommender',
   internal: true,
+  experimental: true,
   description:
     "Find restaurants for client dinners — composes `cheap_michelin_finder` (with `filter='all'` for premium / splurge) tilted by tone (classic_steakhouse / modern_tasting / understated_local / safe_international / celebratory). Use when traveler asks 'where for a client dinner in <city>', 'cena con cliente <ciudad>'.",
   inputSchema: clientDinnerInput,
@@ -454,6 +457,7 @@ async function runBusinessDressCodeBrief(
 const businessDressCodeBriefTool: ToolDef = {
   name: 'business_dress_code_brief',
   internal: true,
+  experimental: true,
   description:
     "Recommend clothing for a business meeting based on country + city + industry + meeting type + climate. Pure curated tables; explicit 'verify with host' guardrail in output. Use when traveler asks 'what should I wear to my meeting in <city>'.",
   inputSchema: dressCodeInput,
@@ -558,9 +562,7 @@ ${sources
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -612,6 +614,7 @@ ${sources
 const localBusinessProtocolBriefTool: ToolDef = {
   name: 'local_business_protocol_brief',
   internal: true,
+  experimental: true,
   description:
     'Practical business etiquette — greetings, card exchange, punctuality, gifts, toasts, taboos — for a country + meeting context. Vertex-grounded research with Gateway fallback. Use when traveler asks "Japan business protocol", "how do I greet in Korea", "qué llevar a una cena en China".',
   inputSchema: protocolInput,
@@ -768,6 +771,7 @@ async function runExpensePolicyChecker(
 const expensePolicyCheckerTool: ToolDef = {
   name: 'expense_policy_checker',
   internal: true,
+  experimental: true,
   description:
     "Check proposed expenses against company travel policy. Pure rules-based — caller passes expenses[] + policy{flightCabin, flightCapUsd, hotelPerNightUsd, mealPerDayUsd, ...}. Returns per-line verdict (within / over / requires_approval / not_allowed) + trip total. Use BEFORE the traveler books anything that's borderline.",
   inputSchema: expensePolicyInput,
@@ -840,6 +844,7 @@ async function runReceiptCollectionAssistant(
 const receiptCollectionAssistantTool: ToolDef = {
   name: 'receipt_collection_assistant',
   internal: true,
+  experimental: true,
   description:
     'Track which trip bookings still need receipts attached. Returns per-row suggested action for each missing receipt. Use as a pre-expense-report step — agent can chase the traveler proactively in the days after a trip.',
   inputSchema: receiptInput,
@@ -909,9 +914,7 @@ ${sources
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -1025,9 +1028,7 @@ async function runCorporateTravelRiskDigest(
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -1071,6 +1072,7 @@ async function runCorporateTravelRiskDigest(
 const corporateTravelRiskDigestTool: ToolDef = {
   name: 'corporate_travel_risk_digest',
   internal: true,
+  experimental: true,
   description:
     'Daily risk digest for travel teams — top 3-5 specific risks (protests, strikes, weather, security advisories, transit) + official advisory level + recommendations. Vertex-grounded research with Gateway fallback. Compose with `crowd_level_predictor` for full city-pulse picture.',
   inputSchema: riskDigestInput,
@@ -1189,6 +1191,7 @@ async function runMeetingCommutePlanner(
 const meetingCommutePlannerTool: ToolDef = {
   name: 'meeting_commute_planner',
   internal: true,
+  experimental: true,
   description:
     'Calculate when to leave for a meeting. Pure heuristic — uses curated city rush-hour buffers + safety buffer. Compose with Routes API output by passing `drivingKm`. Use when traveler asks "what time should I leave for my <time> meeting".',
   inputSchema: commutePlannerInput,

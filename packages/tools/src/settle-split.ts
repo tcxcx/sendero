@@ -1,8 +1,6 @@
-import { prisma } from '@sendero/database';
-import { canonicalSplit, settleCommissionSplit } from '@sendero/nanopayments';
 import { z } from 'zod';
-
-import { requirePlatformTreasuryDestination } from './platform-treasury';
+import { canonicalSplit, settleCommissionSplit } from '@sendero/nanopayments';
+import { prisma } from '@sendero/database';
 import type { ToolDef } from './types';
 
 const inputSchema = z.object({
@@ -90,18 +88,19 @@ export const settleSplitTool: ToolDef = {
       },
     },
   },
-  async handler(input: z.infer<typeof inputSchema>, ctx) {
+  async handler(input: any, ctx) {
     const tenantId = ctx?.traveler?.tenantId;
     const agency =
       (input.agencyAddressOverride as `0x${string}` | undefined) ??
       (await resolveAgencyAddress(tenantId));
-    const senderoTreasury = await requirePlatformTreasuryDestination('arc', 'settle_split');
 
     const legs = canonicalSplit({
       gross: input.gross,
-      supplier: input.supplier as `0x${string}`,
+      supplier: input.supplier,
       agency,
-      sendero: senderoTreasury.address as `0x${string}`,
+      sendero:
+        (process.env.SENDERO_PROVIDER_ADDRESS as `0x${string}`) ||
+        '0x2dd43b06e707d45b40790abd5fa6e39403225425',
       validator:
         (process.env.AUX_VALIDATOR_1_ADDRESS as `0x${string}`) ||
         '0x22f7536934d6a00ade239474465b823418dd84bc',

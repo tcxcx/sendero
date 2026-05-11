@@ -73,8 +73,10 @@ function PresenceTracker() {
 
 function TeamPresence() {
   const others = useOthers();
-  const visibleOthers = uniqueById(
-    others.filter(other => other.presence?.displayName).map(other => ({
+  const visibleOthers = others
+    .filter(other => other.presence?.displayName)
+    .slice(0, 8)
+    .map(other => ({
       id: other.id,
       name: other.presence.displayName,
       avatarUrl: other.presence.avatarUrl,
@@ -82,8 +84,7 @@ function TeamPresence() {
       cursorX: other.presence.cursorX,
       cursorY: other.presence.cursorY,
       color: colorForUser(other.id),
-    }))
-  ).slice(0, 8);
+    }));
 
   if (visibleOthers.length === 0) return null;
 
@@ -123,15 +124,6 @@ function TeamPresence() {
       </div>
     </div>
   );
-}
-
-function uniqueById<T extends { id: string }>(items: T[]): T[] {
-  const seen = new Set<string>();
-  return items.filter(item => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
 }
 
 function RemoteCursor({

@@ -76,9 +76,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tri
       tripId: trip.id,
       tenantId: tenant.id,
       travelerUserId: trip.travelerId,
-      ...(body.data.channel === 'whatsapp' || body.data.channel === 'slack'
-        ? { forceChannel: body.data.channel }
-        : {}),
       message: {
         kind: 'text',
         id: randomUUID(),

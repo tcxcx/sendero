@@ -311,6 +311,7 @@ async function runSourceConfidenceScorer(
 const sourceConfidenceScorerTool: ToolDef = {
   name: 'source_confidence_scorer',
   internal: true,
+  experimental: true,
   description:
     'Pure scorer over an array of source URLs. Returns ranked list with authority + freshness + locality + combined score. Use as a middleware step before quoting any source to a traveler — the agent can drop low-confidence sources from the rationale.',
   inputSchema: sourceConfidenceScorerInput,
@@ -386,6 +387,7 @@ async function runResearchAuditTrail(
 const researchAuditTrailTool: ToolDef = {
   name: 'research_audit_trail',
   internal: true,
+  experimental: true,
   description:
     'Record why Sendero made a recommendation — tools used, sources cited, final confidence. Returns an `auditId` the agent can quote in its reply ("audit ref: audit_…"). The structured record is suitable for Phoenix span attachment + Postgres ResearchAudit row.',
   inputSchema: researchAuditTrailInput,
@@ -480,6 +482,7 @@ async function runSourceCacheManager(
 const sourceCacheManagerTool: ToolDef = {
   name: 'source_cache_manager',
   internal: true,
+  experimental: true,
   description:
     'Cache layer for research outputs — get/set/invalidate by key (e.g. `coffee:Tokyo:en`). v0.1 is in-process LRU (process restart wipes); v0.2 promotes to Upstash Redis. Use to avoid burning CSE quota on hot queries.',
   inputSchema: sourceCacheManagerInput,
@@ -604,6 +607,7 @@ function suggestAlternates(attempted: string[]): string[] {
 const researchGapRouterTool: ToolDef = {
   name: 'research_gap_router',
   internal: true,
+  experimental: true,
   description:
     'Router for low-confidence research. Decides among: try_alternate (different tool), ask_traveler (clarifying Q), escalate_handoff (request_human_handoff), accept_low_confidence (quote + caveat). Use as the second step after any failed/uncertain primary research.',
   inputSchema: researchGapRouterInput,
@@ -787,6 +791,7 @@ Rules:
 const agenticResearchPlannerTool: ToolDef = {
   name: 'agentic_research_planner',
   internal: true,
+  experimental: true,
   description:
     "Given a traveler intent, plan an ordered tool chain via Vertex / AI Gateway. Returns `plan[]` with toolName + rationale + inputs description, plus `expectedConfidence` and a `fallbackIfFails` recommendation. Use when the traveler asks something complex (e.g. 'plan my Tokyo week') and the agent needs to compose multiple tools.",
   inputSchema: agenticResearchPlannerInput,
@@ -864,6 +869,7 @@ async function runRecommendationExplainer(
 const recommendationExplainerTool: ToolDef = {
   name: 'recommendation_explainer',
   internal: true,
+  experimental: true,
   description:
     "Turn a recommendation + rationale parts + top sources + budget envelope into a quotable, locale-aware explanation paragraph. Pure — no external API. Use as the final step before sending the agent's reply, so the traveler sees WHY the recommendation was made.",
   inputSchema: recommendationExplainerInput,

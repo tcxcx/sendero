@@ -10,11 +10,6 @@
  *
  * Falls back silently if the WS endpoint is unreachable — the polled
  * REST snapshot in refreshTreasury still seeds the initial values.
- *
- * Sol-primary tenants short-circuit: opening an Arc WS for a workspace
- * that never settles on Arc is wasted bandwidth + misleading footer-rail
- * data. A Sol-side stream peer can be added behind the same hook
- * pattern when Sol footer-rail metrics ship.
  */
 
 import { useEffect } from 'react';
@@ -34,17 +29,8 @@ function resolveWsUrl(): string {
 
 export function useArcChainStream() {
   const setArcStatus = useSendero(s => s.setArcStatus);
-  const userAuth = useSendero(s => s.userAuth);
-  const isSolTenant = userAuth?.chain === 'sol';
 
   useEffect(() => {
-    if (isSolTenant) {
-      // Stamp a Sol-shaped placeholder so the footer rail can render
-      // "Solana Devnet · live" instead of leaking Arc state. A live Sol
-      // stream peer is Phase 2 work.
-      setArcStatus({ blockNumber: 'Sol Devnet', gasPrice: '0' });
-      return;
-    }
     const url = resolveWsUrl();
     let unwatch: (() => void) | null = null;
     let client: ReturnType<typeof createPublicClient> | null = null;
@@ -85,5 +71,5 @@ export function useArcChainStream() {
         unwatch?.();
       } catch {}
     };
-  }, [setArcStatus, isSolTenant]);
+  }, [setArcStatus]);
 }

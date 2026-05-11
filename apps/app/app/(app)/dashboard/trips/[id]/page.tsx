@@ -13,7 +13,6 @@ import { after } from 'next/server';
 import { roomIdForTrip } from '@sendero/collaboration/rooms';
 import { ensureRoom } from '@sendero/collaboration/server';
 import { prisma } from '@sendero/database';
-import { DeliveryProgressMap } from '@sendero/ui/map-blocks';
 
 import { TripComments } from '@/components/collaboration/trip-comments';
 import { TripLiveblocks } from '@/components/collaboration/trip-liveblocks';
@@ -23,7 +22,6 @@ import { TripStepper } from '@/components/trips/trip-stepper';
 import { buildInitialPresence } from '@/lib/collaboration-presence';
 import { stringFromJson } from '@/lib/format';
 import { requireCurrentTenant } from '@/lib/tenant-context';
-import { routeForTrip } from '@/lib/trip-map-data';
 
 type ChannelKind = 'whatsapp' | 'slack' | 'email' | 'web';
 type Bindings = { primary: ChannelKind; notifyChannels?: ChannelKind[] };
@@ -74,7 +72,6 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
         focusLabel: 'trip workspace',
       })
     : null;
-  const route = routeForTrip(trip);
 
   if (liveblocksEnabled) {
     after(() => ensureRoom({ tenantId: tenant.id, tripId: trip.id }));
@@ -113,12 +110,6 @@ export default async function TripDetailPage({ params }: { params: Promise<{ id:
       </div>
 
       <TripStepper status={trip.status} />
-
-      <DeliveryProgressMap
-        title="Trip route"
-        route={route}
-        progressLabel={route?.detail ?? 'Route geography appears here after the trip has booking segments.'}
-      />
 
       <TripDetailCard trip={trip} />
 

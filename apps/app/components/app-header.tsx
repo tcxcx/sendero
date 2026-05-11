@@ -17,8 +17,6 @@ export function AppHeader() {
         <Show when="signed-in">
           <OrganizationSwitcher
             afterSelectOrganizationUrl="/dashboard"
-            createOrganizationMode="navigation"
-            createOrganizationUrl="/onboarding/create"
             afterCreateOrganizationUrl="/onboarding"
           />
           <UserButton userProfileUrl="/dashboard/profile" />

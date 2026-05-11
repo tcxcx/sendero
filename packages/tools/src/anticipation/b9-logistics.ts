@@ -26,15 +26,17 @@
  * All experimental + internal + dev-gated.
  */
 
+import { z } from 'zod';
+import { generateText, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+
 import { searchText } from '@sendero/google-places';
 import { cseSearch } from '@sendero/web-search';
-import { generateObject, generateText } from 'ai';
-import { z } from 'zod';
 
 import { assertDevOnlyToolAllowed } from '../dev-gate';
 import type { ToolContext, ToolDef } from '../types';
+
 import { runBudgetEstimator } from './budget-estimator';
 import { runCrowdLevelPredictor } from './crowd-level-predictor';
 
@@ -68,9 +70,7 @@ async function runGroundedStructured<T extends z.ZodTypeAny>(
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -702,6 +702,7 @@ const transitTicketingShape = z.object({
 const publicTransitTicketingBriefTool: ToolDef = {
   name: 'public_transit_ticketing_brief',
   internal: true,
+  experimental: true,
   description:
     'Explain how public transit ticketing works for a city — primary mode, payment methods (contactless, IC card, mobile), ticket types (single, day pass, weekly), the right app or smart card to load, fare example. Vertex-grounded.',
   inputSchema: transitTicketingInput,
@@ -807,6 +808,7 @@ type LayoverViabilityInput = z.infer<typeof layoverViabilityInput>;
 const layoverViabilityCheckerTool: ToolDef = {
   name: 'layover_viability_checker',
   internal: true,
+  experimental: true,
   description:
     'Assess whether a layover is viable. Pure rules: minimum-connection-time-style heuristic considering immigration, bag recheck, terminal change, domestic/international mix. Returns viable / risky / not_viable + buffer minutes.',
   inputSchema: layoverViabilityInput,
@@ -970,6 +972,7 @@ const ALT_AIRPORT_TABLE: Record<
 const nearbyAirportAlternativeResearcherTool: ToolDef = {
   name: 'nearby_airport_alternative_researcher',
   internal: true,
+  experimental: true,
   description:
     "List nearby alternate airports for a primary airport, with rough description + tradeoff. Curated table for ~10 city-pairs. Use when traveler asks 'is there a closer airport to <city>'.",
   inputSchema: altAirportInput,
@@ -1075,6 +1078,7 @@ type TripBudgetInput = z.infer<typeof tripBudgetInput>;
 const tripBudgetResearcherTool: ToolDef = {
   name: 'trip_budget_researcher',
   internal: true,
+  experimental: true,
   description:
     'Estimate total trip daily spend for a city + style + duration. Composes `budget_estimator` across baseline categories (cafe, mid_restaurant, casual_restaurant, bar, ground_transport). Returns daily + total range.',
   inputSchema: tripBudgetInput,
@@ -1164,6 +1168,7 @@ const paymentAcceptanceShape = z.object({
 const localPaymentAcceptanceBriefTool: ToolDef = {
   name: 'local_payment_acceptance_brief',
   internal: true,
+  experimental: true,
   description:
     'Explain cash + card + local wallet acceptance in a country. Vertex-grounded. Returns whether contactless is the norm, whether cash is still needed, which local wallets to consider (Pix / Alipay / WeChat / Mercado Pago), ATM availability, tip norms.',
   inputSchema: paymentAcceptanceInput,
@@ -1217,6 +1222,7 @@ const invoiceTaxShape = z.object({
 const invoiceTaxRequirementsResearcherTool: ToolDef = {
   name: 'invoice_tax_requirements_researcher',
   internal: true,
+  experimental: true,
   description:
     "Research what's required on a corporate invoice in a country (hotel / restaurant / transport / general). Vertex-grounded. Returns expected format, tax-id requirement (CUIT / NIF / VAT-ID / etc.), reverse-charge applicability, retention period, gotchas.",
   inputSchema: invoiceTaxInput,
@@ -1318,6 +1324,7 @@ type MedicalAccessInput = z.infer<typeof medicalAccessInput>;
 const medicalAccessBriefTool: ToolDef = {
   name: 'medical_access_brief',
   internal: true,
+  experimental: true,
   description:
     'Quick medical access brief — emergency numbers + nearest private clinic (Places) + nearest 24h pharmacy. Composes `clinic_finder` + `pharmacy_24h_finder` + `emergency_numbers_card`. Use after arrival as part of the safety pack.',
   inputSchema: medicalAccessInput,
@@ -1393,6 +1400,7 @@ const communicationsShape = z.object({
 const communicationsResearcherTool: ToolDef = {
   name: 'communications_researcher',
   internal: true,
+  experimental: true,
   description:
     'Research local cellular networks + eSIM support + coverage + roaming + WiFi norms in a country. Vertex-grounded. Pair with `search_esim` to actually buy a plan.',
   inputSchema: communicationsInput,
@@ -1445,6 +1453,7 @@ const cultProtocolShape = z.object({
 const culturalProtocolBriefTool: ToolDef = {
   name: 'cultural_protocol_brief',
   internal: true,
+  experimental: true,
   description:
     'Practical cultural / etiquette guidance for a country + context (general / meal / host_home / public / shopping). Vertex-grounded. Different from `local_business_protocol_brief` (B4) which is business-meeting-specific.',
   inputSchema: cultProtocolInput,
@@ -1505,6 +1514,7 @@ const liveNewsShape = z.object({
 const liveNewsTripRiskScannerTool: ToolDef = {
   name: 'live_news_trip_risk_scanner',
   internal: true,
+  experimental: true,
   description:
     'Scan recent news (last N days) for risks affecting a trip — protests, strikes, weather events, political instability, security incidents. Vertex-grounded against Reuters / AP / local English-language press.',
   inputSchema: liveNewsInput,

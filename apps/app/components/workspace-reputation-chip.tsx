@@ -11,11 +11,6 @@ import {
 interface WorkspaceReputation {
   subjectId: string;
   displayName: string;
-  /**
-   * Settlement chain this workspace operates on. Drives the
-   * `View contract on …` link label + the chosen explorer URL.
-   */
-  chain: 'arc' | 'sol';
   status: string;
   agentId: string | null;
   contract: string | null;
@@ -82,10 +77,6 @@ export function WorkspaceReputationChip() {
   if (!data) return null;
 
   const stars = data.stars === null ? '—' : data.stars.toFixed(2);
-  // Sol Metaplex agent ids are base58 mints (~44 chars); Arc ERC-8004
-  // ids are short decimals. Truncate the long-form so the chip + body
-  // don't overflow.
-  const shortAgentId = data.agentId ? formatAgentId(data.agentId) : null;
   const initials =
     data.displayName
       .split(/\s+/)
@@ -106,9 +97,7 @@ export function WorkspaceReputationChip() {
       >
         <span className="wr-avatar">{initials}</span>
         <span className="wr-stars">★ {stars}</span>
-        <span className="wr-id" title={data.agentId ?? undefined}>
-          {shortAgentId ? `#${shortAgentId}` : data.status}
-        </span>
+        <span className="wr-id">{data.agentId ? `#${data.agentId}` : data.status}</span>
         <span className={`wr-chev ${open ? 'open' : ''}`} aria-hidden="true">
           ▾
         </span>
@@ -132,8 +121,8 @@ export function WorkspaceReputationChip() {
                     ? 'Provisioning needs attention'
                     : 'Workspace identity provisioning'}
               </span>
-              <span title={data.agentId ?? undefined}>
-                {data.provisioning.error ?? (shortAgentId ? `#${shortAgentId}` : data.status)}
+              <span>
+                {data.provisioning.error ?? (data.agentId ? `#${data.agentId}` : data.status)}
               </span>
             </div>
           )}
@@ -148,7 +137,6 @@ export function WorkspaceReputationChip() {
                 contract: data.contract,
                 publicUrl: data.publicUrl,
                 explorerUrl: data.contractUrl,
-                chain: data.chain,
                 mintedAt: data.mintedAt,
                 cachedAt: data.cachedAt,
               }}
@@ -174,7 +162,6 @@ export function WorkspaceReputationChip() {
                 contract: data.contract,
                 publicUrl: data.publicUrl,
                 explorerUrl: data.contractUrl,
-                chain: data.chain,
                 mintedAt: data.mintedAt,
                 cachedAt: data.cachedAt,
               }}
@@ -200,7 +187,6 @@ export function WorkspaceReputationChip() {
                 contract: data.contract,
                 publicUrl: data.publicUrl,
                 explorerUrl: data.contractUrl,
-                chain: data.chain,
                 mintedAt: data.mintedAt,
                 cachedAt: data.cachedAt,
               }}
@@ -226,7 +212,6 @@ export function WorkspaceReputationChip() {
                 contract: data.contract,
                 publicUrl: data.publicUrl,
                 explorerUrl: data.contractUrl,
-                chain: data.chain,
                 mintedAt: data.mintedAt,
                 cachedAt: data.cachedAt,
               }}
@@ -249,7 +234,7 @@ export function WorkspaceReputationChip() {
             </a>
             {data.contractUrl ? (
               <a className="wr-link" href={data.contractUrl} target="_blank" rel="noreferrer">
-                View contract on {data.chain === 'sol' ? 'Solana' : 'Arc'} ↗
+                View contract on Arc ↗
               </a>
             ) : null}
           </div>
@@ -343,12 +328,6 @@ export function WorkspaceReputationChip() {
 
 function isInsideReputationDialog(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest('[data-reputation-dialog="true"]') !== null;
-}
-
-function formatAgentId(id: string): string {
-  if (/^\d+$/.test(id)) return id;
-  if (id.length <= 14) return id;
-  return `${id.slice(0, 6)}…${id.slice(-4)}`;
 }
 
 function Stat({ value, label }: { value: string; label: string }) {

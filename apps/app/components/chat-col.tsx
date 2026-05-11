@@ -109,10 +109,9 @@ export function ChatCol() {
   // Stage SearchForm + quick-command surfaces dispatch through this
   // singleton so form-driven tool runs land in chat history (and
   // rehydrate on reload) instead of hitting /api/flights/search direct.
-  // The key is the mounted surface, not the hook callback identity:
-  // useChat can replace `sendMessage` across lifecycle edges, but
-  // same-surface re-registers are benign.
-  registerChatBridge((text: string) => sendMessage({ text }), 'chat-col');
+  // `sendMessage` is reference-stable; re-registering each render is
+  // idempotent and avoids the useEffect mount/unmount churn.
+  registerChatBridge((text: string) => sendMessage({ text }));
 
   // HoldCard / FundCard call noteToChat() AFTER a direct API call
   // succeeds (POST /api/bookings/hold, POST /api/bookings/pay). The
@@ -128,7 +127,7 @@ export function ChatCol() {
         parts: [{ type: 'text' as const, text }],
       },
     ]);
-  }, 'chat-col');
+  });
 
   // Every tool call the agent makes drives the store so that Stage,
   // StepRail, WorkflowLog, FooterRail and AgentCard all move in lockstep
@@ -197,7 +196,14 @@ export function ChatCol() {
             s.logEvent({
               group: 'treasury',
               bullet: 'active',
-              text: 'readBalances(USDC)',
+              text: 'readBalances(USDC, EURC)',
+              t: clock(),
+            });
+          } else if (toolName === 'swap_tokens') {
+            s.logEvent({
+              group: 'treasury.swap',
+              bullet: 'active',
+              text: `swap(<span class="v">${toolInput.amount} ${toolInput.fromToken} → ${toolInput.toToken}</span>)`,
               t: clock(),
             });
           } else if (toolName === 'send_tokens') {
@@ -212,6 +218,13 @@ export function ChatCol() {
               group: 'treasury.bridge',
               bullet: 'active',
               text: `bridge(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc)`,
+              t: clock(),
+            });
+          } else if (toolName === 'swap_and_bridge') {
+            s.logEvent({
+              group: 'treasury.swap-bridge',
+              bullet: 'active',
+              text: `bridge+swap(<span class="v">${toolInput.amount} USDC</span> · ${toolInput.fromChain} → Arc → ${toolInput.targetToken ?? 'EURC'})`,
               t: clock(),
             });
           } else if (toolName === 'restaurant_route_card') {
@@ -573,8 +586,8 @@ function AgentWelcome({
           <span style={{ color: 'var(--ink)' }}>agent</span>
         </div>
         <div className="msg-text">
-          Hi {traveler.split(' ')[0]}. I can search flights, hold the seat, and settle in USDC on
-          your workspace's settlement chain (Arc or Solana). Where to?
+          Hi {traveler.split(' ')[0]}. I can search flights, hold the seat, and settle in USDC or
+          EURC on Arc L2. Where to?
         </div>
         <div className="msg-suggestions">
           <button

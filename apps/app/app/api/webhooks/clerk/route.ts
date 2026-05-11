@@ -27,7 +27,6 @@ import { PLANS, type PlanTier, resolvePlan } from '@sendero/billing/plans';
 import { provisionTenantWallet } from '@sendero/circle';
 import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
-import { provisionTenantSolanaTreasury } from '@sendero/circle/provision-tenant-solana-treasury';
 import type { BillingTier, SubscriptionStatus } from '@sendero/database';
 import { type Prisma, prisma } from '@sendero/database';
 import {
@@ -351,44 +350,6 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     }
   }
 
-  // Phase 4.x.y — Solana-primary provisioning. Programmatic, mirrors
-  // the Arc path: Circle DCW (EOA on SOL-DEVNET) → ensureOrgIdentity
-  // (which forks on tenant.primaryChain → Phase 4 intent helper that
-  // now resolves the REAL just-provisioned holder address). Failures
-  // bubble; svix retries; the retry-solana-wallet-provision sweeper
-  // covers the long tail.
-  if (tenant.primaryChain === 'sol') {
-    const solResult = await provisionTenantSolanaTreasury({
-      tenantId: tenant.id,
-      clerkOrgId: id,
-    });
-
-    // Identity intent: writes an OnchainIdentity row with chain='sol',
-    // status='intent', and the real Solana DCW as holderAddress. The
-    // real Agent Registry submit lands when @metaplex-foundation/mpl-agent-identity
-    // pins (see provisionTenantSolanaIdentity below in 4.x.y.x).
-    try {
-      await ensureOrgIdentity({ tenantId: tenant.id });
-    } catch (err) {
-      console.warn('[webhooks/clerk] sol org identity intent failed (non-fatal)', {
-        id,
-        tenantId: tenant.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-
-    const client = await clerkClient();
-    await client.organizations.updateOrganization(id, {
-      publicMetadata: {
-        tenantId: tenant.id,
-        primaryChain: 'sol',
-        solTreasuryAddress: solResult.address,
-        onboardingComplete: true,
-      },
-    });
-    return;
-  }
-
   // Let provisioning exceptions bubble — the route returns 500, svix
   // retries, and the retry-wallet-provision cron backs that up.
   const result = await provisionTenantWallet({
@@ -462,7 +423,6 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
   await client.organizations.updateOrganization(id, {
     publicMetadata: {
       tenantId: tenant.id,
-      primaryChain: 'arc',
       arcWalletAddress: result.address,
       onboardingComplete: true,
     },

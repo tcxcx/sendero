@@ -122,7 +122,7 @@ export default async function HandoffsPage() {
               </div>
               {row.tripId ? (
                 <Link
-                  href={`/dashboard/console?tripId=${row.tripId}`}
+                  href={`/dashboard/inbox/${row.tripId}`}
                   className="t-meta"
                   style={{ textDecoration: 'underline' }}
                 >

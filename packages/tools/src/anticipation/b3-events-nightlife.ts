@@ -16,23 +16,25 @@
  * dev-gated.
  */
 
+import { z } from 'zod';
+import { generateText, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { createVertex } from '@ai-sdk/google-vertex';
+
 import { searchText } from '@sendero/google-places';
 import { cseSearch } from '@sendero/web-search';
-import { generateObject, generateText } from 'ai';
-import { z } from 'zod';
 
 import { assertDevOnlyToolAllowed } from '../dev-gate';
 import type { ToolContext, ToolDef } from '../types';
-import {
-  type GroundedFinderConfig,
-  type GroundedShopHit,
-  liveFinderDeps,
-  runGroundedFinder,
-} from './_grounded-place-finder';
+
 import { runEventbriteEventDiscovery } from './eventbrite-event-discovery';
 import { runMainstreamEventDiscovery } from './mainstream-event-discovery';
+import {
+  liveFinderDeps,
+  runGroundedFinder,
+  type GroundedFinderConfig,
+  type GroundedShopHit,
+} from './_grounded-place-finder';
 
 const baseInput = z.object({
   city: z.string().min(1).max(120),
@@ -98,6 +100,7 @@ const CULTURE_TYPES = new Set([
 const culturalAttractionsFinderTool: ToolDef<BaseInput, FinderResult> = {
   name: 'cultural_attractions_finder',
   internal: true,
+  experimental: true,
   description:
     'Find museums, galleries, monuments, cultural landmarks. Editorial via Atlas Obscura / Lonely Planet / Monocle / NatGeo + Places (museum / monument / historical_landmark / archaeological_site). Use for "what to see in <city>", "monumentos <ciudad>", "must-see culture".',
   inputSchema: baseInput,
@@ -217,9 +220,7 @@ Rules: never invent prices. Use null when a field isn't reliably reported.`;
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -328,6 +329,7 @@ type NightlifeFitInput = z.infer<typeof nightlifeFitInput>;
 const nightlifeFitFinderTool: ToolDef<NightlifeFitInput, FinderResult> = {
   name: 'nightlife_fit_finder',
   internal: true,
+  experimental: true,
   description:
     "Find bars / jazz clubs / rooftops / speakeasies / lounges / clubs by `fit`. Editorial via Resident Advisor / Punch / Monocle / 50 Best Bars + Places. Use when traveler asks 'cocktail bar <city>', 'rooftop bar', 'jazz club <city>', 'club techno <city>'.",
   inputSchema: nightlifeFitInput,
@@ -543,9 +545,7 @@ ${sources
     const grounded = await generateText({
       model: modelLike,
       tools: {
-        google_search: (vertex
-          ? vertex.tools.googleSearch({})
-          : google.tools.googleSearch({})) as any,
+        google_search: vertex ? vertex.tools.googleSearch({}) : google.tools.googleSearch({}),
       },
       prompt: groundingPrompt,
       ...(providerOptions ? { providerOptions } : {}),
@@ -766,6 +766,7 @@ async function runLastMinuteTicketsFinder(
 const lastMinuteTicketsFinderTool: ToolDef<LastMinuteInput, EventListResult> = {
   name: 'last_minute_tickets_finder',
   internal: true,
+  experimental: true,
   description:
     'Find events with available tickets in the next N hours (default 24). Composes `mainstream_event_discovery` with a tight time window + on-sale filter. Use when traveler asks "tonight\'s events <city>", "last-minute tickets", "tickets tonight <city>".',
   inputSchema: lastMinuteInput,
@@ -882,6 +883,7 @@ async function runVenueNearbyPlanBuilder(
 const venueNearbyPlanBuilderTool: ToolDef = {
   name: 'venue_nearby_plan_builder',
   internal: true,
+  experimental: true,
   description:
     'Given a venue + event time, propose dinner-before + drinks-after + route notes. Composes Places nearby searches around the venue. Use when traveler bought a ticket and asks "where should we eat before <show>" / "drinks after <concert>".',
   inputSchema: venueNearbyInput,
@@ -984,6 +986,7 @@ async function runRainyDayPlanFinder(
 const rainyDayPlanFinderTool: ToolDef = {
   name: 'rainy_day_plan_finder',
   internal: true,
+  experimental: true,
   description:
     'Find indoor plans when weather is bad. Composes Places searches across museum / bookstore / specialty coffee / theater / mall categories, ranks by review weight, returns 3-5 anchors + pacing notes for the requested hour budget. Use when `trip_weather_brief` reports rain / heavy snow / extreme heat.',
   inputSchema: rainyDayInput,

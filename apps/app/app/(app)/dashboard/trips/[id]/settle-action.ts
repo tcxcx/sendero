@@ -22,11 +22,7 @@ import { requireCurrentTenant } from '@/lib/tenant-context';
 import { executeTransferSpend } from '@/lib/transfer-spend/execute';
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
-// Circle Gateway's Solana domain id — Sendero stamps Sol DCW rows with
-// this synthetic chainId.
-const SOL_DEVNET_GATEWAY_DOMAIN = 5;
-const APP_KIT_CHAIN_ARC = 'Arc_Testnet';
-const APP_KIT_CHAIN_SOL = 'Sol_Devnet';
+const APP_KIT_CHAIN = 'Arc_Testnet';
 
 export type SettleHoldResult =
   | {
@@ -72,16 +68,6 @@ export async function settleHoldAction(args: {
   bookingId: string;
 }): Promise<SettleHoldResult> {
   const { tenant } = await requireCurrentTenant();
-
-  // Pick chain-shaped settlement params off tenant.primaryChain. Sol
-  // tenants must have their traveler DCW on Sol Devnet (Circle Gateway
-  // domain id 5) and the supplier payout address provided as a base58
-  // pubkey via Supplier.arcAddress (column reused — schema migration
-  // deferred) or booking.metadata.supplierPayee.
-  const settleChainId =
-    tenant.primaryChain === 'sol' ? SOL_DEVNET_GATEWAY_DOMAIN : ARC_TESTNET_CHAIN_ID;
-  const settleChainKey = tenant.primaryChain === 'sol' ? APP_KIT_CHAIN_SOL : APP_KIT_CHAIN_ARC;
-  const settleChainLabel = tenant.primaryChain === 'sol' ? 'Solana Devnet' : 'Arc Testnet';
 
   const booking = await prisma.booking.findFirst({
     where: { id: args.bookingId, tenantId: tenant.id, tripId: args.tripId },
@@ -143,7 +129,7 @@ export async function settleHoldAction(args: {
     where: {
       userId: booking.trip.travelerId,
       provisioner: 'dcw',
-      chainId: settleChainId,
+      chainId: ARC_TESTNET_CHAIN_ID,
     },
     select: { id: true, address: true },
   });
@@ -151,7 +137,8 @@ export async function settleHoldAction(args: {
     return {
       kind: 'rejected',
       code: 'no_traveler_wallet',
-      message: `Traveler has no DCW wallet on ${settleChainLabel} yet. Wallets are provisioned at hold — re-run the booking flow or wait for the next hold.`,
+      message:
+        'Traveler has no DCW wallet on Arc yet. Wallets are provisioned at hold — re-run the booking flow or wait for the next hold.',
     };
   }
 
@@ -171,7 +158,7 @@ export async function settleHoldAction(args: {
     travelerId: booking.trip.travelerId,
     amount,
     recipient,
-    destinationChain: settleChainKey,
+    destinationChain: APP_KIT_CHAIN,
     metadata: {
       bookingId: booking.id,
       tripId: args.tripId,
@@ -180,7 +167,7 @@ export async function settleHoldAction(args: {
   });
 
   revalidatePath(`/dashboard/trips/${args.tripId}`);
-  revalidatePath(`/dashboard/console`);
+  revalidatePath(`/dashboard/inbox/${args.tripId}`);
 
   // Fire the bidirectional rate_counterparty workflow on a successful
   // settle. Fire-and-forget — the workflow has its own 72h SLA + WDK

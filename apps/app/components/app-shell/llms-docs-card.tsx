@@ -66,8 +66,7 @@ export function LlmsDocsCard() {
         <div className="border-t border-[color:color-mix(in_oklab,var(--ink)_12%,transparent)] px-4 py-3">
           <p className="text-xs leading-relaxed text-[color:var(--text-dim)]">
             Plug your AI assistant into Sendero. Claude, Cursor, Zed, or any MCP-aware app can
-            search flights, hold seats, and settle bookings on your workspace's chain (Arc or
-            Solana) — directly from your chat.
+            search flights, hold seats, and settle bookings on Arc — directly from your chat.
           </p>
           <ul className="mt-3 space-y-1.5 text-xs leading-relaxed text-[color:var(--text-dim)]">
             <li>

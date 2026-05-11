@@ -14,26 +14,14 @@
 
 import { useEffect, useState } from 'react';
 
-import { asChannelKey, type ChannelKey, CHANNELS } from './channels';
+import { type ChannelKey, CHANNELS } from './channels';
 
 interface ChannelHeaderProps {
   channel: ChannelKey;
   traveler?: string;
   tripId?: string;
-  /**
-   * All channels bound to this traveler. When provided + length > 1,
-   * the header renders one chip per channel after the name. The
-   * primary `channel` still drives the tint background.
-   */
-  channels?: Array<{ kind: string; handle: string | null }>;
   /** Countdown text like "59:48" — colours vermillion when present. */
   hold?: string | null;
-}
-
-/** Truncate a long cuid to its first 8 chars for compact display. */
-function shortId(id: string): string {
-  if (id.length <= 10) return id;
-  return `${id.slice(0, 8)}…`;
 }
 
 const INTERNAL_NOTICE_COOKIE = 'sendero.console.internalNotice.dismissed';
@@ -50,7 +38,7 @@ function writeCookie(name: string, value: string, days = 365) {
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${exp}; path=/; SameSite=Lax`;
 }
 
-export function ChannelHeader({ channel, traveler, tripId, channels, hold }: ChannelHeaderProps) {
+export function ChannelHeader({ channel, traveler, tripId, hold }: ChannelHeaderProps) {
   const c = CHANNELS[channel];
   const [internalNoticeOpen, setInternalNoticeOpen] = useState(false);
   // Hydrate the cookie on mount. SSR renders nothing for the notice
@@ -155,88 +143,53 @@ export function ChannelHeader({ channel, traveler, tripId, channels, hold }: Cha
       </div>
     );
   }
-  // Resolve the channels list. When the consumer passes `channels`, use
-  // it; otherwise fall back to the single `channel` so we always render
-  // at least one chip. De-dupe by kind in case the join surfaced the
-  // same kind twice (BSUID + legacy).
-  const seen = new Set<ChannelKey>();
-  const chips: Array<{ key: ChannelKey; handle: string | null }> = [];
-  for (const ci of channels ?? [{ kind: channel, handle: null }]) {
-    const key = asChannelKey(ci.kind);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    chips.push({ key, handle: ci.handle });
-  }
-  if (chips.length === 0) chips.push({ key: channel, handle: null });
-
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '6px 10px',
-        borderRadius: 8,
+        gap: 14,
+        padding: '10px 14px',
+        borderRadius: 10,
         background: c.tint,
         boxShadow: 'inset 0 0 0 1px rgba(31,42,68,0.08)',
       }}
     >
       <div
         style={{
-          width: 24,
-          height: 24,
-          borderRadius: 12,
+          width: 32,
+          height: 32,
+          borderRadius: 16,
           background: '#fdfbf7',
           display: 'grid',
           placeItems: 'center',
           boxShadow: '0 1px 2px rgba(31,42,68,0.08)',
-          flexShrink: 0,
         }}
       >
-        {c.icon(14)}
+        {c.icon(18)}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span className="t-body" style={{ fontSize: 13, fontWeight: 600 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span className="t-body" style={{ fontSize: 14, fontWeight: 600 }}>
             {traveler ?? 'Traveler'}
           </span>
           {tripId ? (
-            <span className="t-mono ink-60" style={{ fontSize: 10 }} title={tripId}>
-              {shortId(tripId)}
+            <span className="t-mono ink-60" style={{ fontSize: 11 }}>
+              {tripId}
             </span>
           ) : null}
         </div>
         <div
           className="t-mono"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 6,
-            fontSize: 10,
-            marginTop: 1,
-            fontWeight: 500,
-          }}
+          style={{ fontSize: 11, color: c.accent, marginTop: 2, fontWeight: 500 }}
         >
-          {chips.map((chip, i) => {
-            const def = CHANNELS[chip.key];
-            const handleText = chip.handle ?? def.handle;
-            return (
-              <span key={chip.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                {i > 0 ? <span style={{ opacity: 0.4 }}>·</span> : null}
-                <span style={{ color: def.accent }}>{def.name}</span>
-                <span className="ink-60">{handleText}</span>
-              </span>
-            );
-          })}
+          {c.name} · {c.handle}
         </div>
       </div>
       {hold ? (
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div className="t-meta" style={{ fontSize: 9 }}>
-            Hold expires
-          </div>
-          <div className="t-num-md" style={{ fontSize: 13, color: 'var(--vermillion)' }}>
+        <div style={{ textAlign: 'right' }}>
+          <div className="t-meta">Hold expires</div>
+          <div className="t-num-md" style={{ fontSize: 16, color: 'var(--vermillion)' }}>
             {hold}
           </div>
         </div>

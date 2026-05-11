@@ -20,10 +20,9 @@
   "scripts": {
     "dev": "turbo run dev --filter=@sendero/app",
     "dev:edge": "turbo run dev --filter=@sendero/edge",
-    "dev:admin": "turbo run dev --filter=@sendero/admin --port 3013",
     "dev:indexer": "turbo run dev --filter=@sendero/indexer",
     "dev:pitch": "bun run pitch/serve.ts",
-    "dev:complete": "turbo run dev --ui=stream --filter=@sendero/app --filter=@sendero/marketing --filter=@sendero/help --filter=@sendero/docs --filter=@sendero/edge --filter=@sendero/indexer --filter=@sendero/admin --filter=@sendero/storybook",
+    "dev:complete": "turbo run dev --ui=stream --filter=@sendero/app --filter=@sendero/marketing --filter=@sendero/help --filter=@sendero/docs --filter=@sendero/edge --filter=@sendero/indexer --filter=@sendero/storybook",
     "dev:all": "turbo run dev --ui=stream",
     "indexer:codegen": "turbo run codegen --filter=@sendero/indexer",
     "indexer:sync-abi": "bun run --cwd apps/ponder sync-abi",

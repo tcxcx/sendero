@@ -62,103 +62,17 @@ function stampExperimentalSpan(toolName: string): void {
 
 export function toAiSdkTool(def: ToolDef, ctx: ToolContext = {}) {
   const schema = def.jsonSchema
-    ? jsonSchema(normalizeJsonSchema(def.jsonSchema) as Parameters<typeof jsonSchema>[0])
+    ? jsonSchema(def.jsonSchema as Parameters<typeof jsonSchema>[0])
     : (def.inputSchema as any);
   const isExperimental = def.experimental === true;
   return tool({
     description: def.description,
     inputSchema: schema,
-    execute: async (input: any) => {
+    execute: (input: any) => {
       if (isExperimental) stampExperimentalSpan(def.name);
-      const startedAt = Date.now();
-      console.log(
-        '[tool-call] start',
-        JSON.stringify({
-          tool: def.name,
-          tenantId: ctx.traveler?.tenantId ?? null,
-          userId: ctx.traveler?.userId ?? null,
-          tripId: ctx.tripId ?? null,
-          surface: ctx.surface ?? null,
-          input: redactForLog(input),
-        })
-      );
-      try {
-        const result = await def.handler(input, ctx);
-        console.log(
-          '[tool-call] success',
-          JSON.stringify({
-            tool: def.name,
-            tenantId: ctx.traveler?.tenantId ?? null,
-            userId: ctx.traveler?.userId ?? null,
-            tripId: ctx.tripId ?? null,
-            surface: ctx.surface ?? null,
-            durationMs: Date.now() - startedAt,
-            result: summarizeForLog(result),
-          })
-        );
-        return result;
-      } catch (err) {
-        console.error(
-          '[tool-call] error',
-          JSON.stringify({
-            tool: def.name,
-            tenantId: ctx.traveler?.tenantId ?? null,
-            userId: ctx.traveler?.userId ?? null,
-            tripId: ctx.tripId ?? null,
-            surface: ctx.surface ?? null,
-            durationMs: Date.now() - startedAt,
-            error: err instanceof Error ? err.message : String(err),
-          })
-        );
-        throw err;
-      }
+      return def.handler(input, ctx);
     },
   });
-}
-
-function redactForLog(value: unknown): unknown {
-  return redactValue(value, 0);
-}
-
-function summarizeForLog(value: unknown): unknown {
-  return redactValue(value, 0, 1800);
-}
-
-function redactValue(value: unknown, depth: number, maxString = 500): unknown {
-  if (depth > 4) return '[depth]';
-  if (typeof value === 'string') {
-    if (/^(sk_|pk_|ak_|Bearer\s+)/i.test(value)) return '[redacted]';
-    return value.length > maxString ? `${value.slice(0, maxString)}…` : value;
-  }
-  if (Array.isArray(value))
-    return value.slice(0, 20).map(v => redactValue(v, depth + 1, maxString));
-  if (!value || typeof value !== 'object') return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    if (/secret|token|password|private|signature|authorization|api[-_]?key/i.test(key)) {
-      out[key] = '[redacted]';
-    } else {
-      out[key] = redactValue(item, depth + 1, maxString);
-    }
-  }
-  return out;
-}
-
-function normalizeJsonSchema<T>(schema: T): T {
-  if (Array.isArray(schema)) return schema.map(normalizeJsonSchema) as T;
-  if (!schema || typeof schema !== 'object') return schema;
-
-  const input = schema as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(input)) {
-    normalized[key] = normalizeJsonSchema(value);
-  }
-
-  if (normalized.type === 'array' && normalized.items === undefined) {
-    normalized.items = { type: 'object', additionalProperties: true };
-  }
-
-  return normalized as T;
 }
 
 export function buildAiSdkTools(defs: ToolDef[], ctx: ToolContext = {}): ToolSet {

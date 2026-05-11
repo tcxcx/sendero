@@ -1,5 +1,5 @@
 /**
- * Server-side loader for the public on-chain agent profile pages.
+ * Server-side loader for the public ERC-8004 agent profile pages.
  * Reads from `OnchainIdentity.cached*` (sub-50ms) and joins the most-
  * recent N feedback rows so the page renders in one round-trip.
  *
@@ -18,18 +18,9 @@ import { getAgentIdentity, getReputation, IDENTITY_REGISTRY } from '@sendero/arc
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
 
-import { loadMirroredReputation } from '@/lib/reputation-mirror';
-
 export interface AgentProfile {
   kind: 'org' | 'user' | 'sendero';
   subjectId: string;
-  /**
-   * Settlement chain for the displayed identity row. Drives every
-   * "View on …" link, registry name, and chain label on the public
-   * profile. For org profiles, Tenant.primaryChain picks the displayed
-   * row when both Arc and Sol identities exist.
-   */
-  chain: 'arc' | 'sol';
   agentId: string | null;
   contract: string;
   holderAddress: string;
@@ -68,95 +59,77 @@ export async function loadAgentProfileFresh(args: {
   kind: 'org' | 'user';
   subjectId: string;
 }): Promise<AgentProfile | null> {
-  // Phase 5.x — read via the chain-aware mirror so dual-chain
-  // tenants surface aggregated stars + counts on the public profile.
-  // Mirror returns null when no identity exists on any chain.
-  const mirror = await loadMirroredReputation(args);
-  if (!mirror) return null;
+  const identity = await prisma.onchainIdentity.findFirst({
+    where:
+      args.kind === 'org'
+        ? { kind: 'org', tenantId: args.subjectId }
+        : { kind: 'user', userId: args.subjectId },
+    select: {
+      id: true,
+      agentId: true,
+      contract: true,
+      holderAddress: true,
+      status: true,
+      mintedAt: true,
+      cachedStars: true,
+      cachedFeedbackCount: true,
+      cachedValidatorCount: true,
+      cachedValidationCount: true,
+      cachedAt: true,
+      tenant: { select: { displayName: true } },
+      user: { select: { displayName: true, email: true } },
+    },
+  });
+  if (!identity) return null;
 
-  // Display name comes from tenant/user — read it independently
-  // (the mirror doesn't carry it; identity rows are FK-joined to
-  // Tenant/User but we want a single read regardless of chain).
-  let displayName: string;
-  let tenantPrimaryChain: 'arc' | 'sol' | null = null;
-  if (args.kind === 'org') {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: args.subjectId },
-      select: { displayName: true, primaryChain: true },
-    });
-    displayName = tenant?.displayName ?? `Tenant ${args.subjectId}`;
-    tenantPrimaryChain = tenant?.primaryChain === 'sol' ? 'sol' : 'arc';
-  } else {
-    const user = await prisma.user.findUnique({
-      where: { id: args.subjectId },
-      select: { displayName: true, email: true },
-    });
-    displayName = user?.displayName ?? user?.email ?? `Traveler ${args.subjectId}`;
-  }
+  const displayName =
+    args.kind === 'org'
+      ? (identity.tenant?.displayName ?? `Tenant ${args.subjectId}`)
+      : (identity.user?.displayName ?? identity.user?.email ?? `Traveler ${args.subjectId}`);
 
-  const primaryChain: 'arc' | 'sol' =
-    tenantPrimaryChain && mirror.perChain[tenantPrimaryChain]
-      ? tenantPrimaryChain
-      : mirror.perChain.arc
-        ? 'arc'
-        : 'sol';
-  const primary = mirror.perChain[primaryChain];
-  if (!primary) return null;
-
-  // Recent feedback + validations span all chains for this subject.
-  // ReputationFeedback FK is OnchainIdentity.id, so we query for the
-  // ids of every chain row.
-  const identityIds = [mirror.perChain.arc?.identityId, mirror.perChain.sol?.identityId].filter(
-    (id): id is string => Boolean(id)
-  );
-
-  const [recent, validations] = await Promise.all([
-    prisma.reputationFeedback.findMany({
-      where: { subjectId: { in: identityIds } },
-      orderBy: { createdAt: 'desc' },
-      take: 12,
-      select: {
-        stars: true,
-        score: true,
-        tag: true,
-        fromAddress: true,
-        txHash: true,
-        tripId: true,
-        bookingId: true,
-        createdAt: true,
-      },
-    }),
-    prisma.validationCheck.findMany({
-      where: { subjectId: { in: identityIds } },
-      orderBy: { createdAt: 'desc' },
-      take: 12,
-      select: {
-        validatorAddress: true,
-        requestHash: true,
-        responseScore: true,
-        tag: true,
-        createdAt: true,
-        resolvedAt: true,
-      },
-    }),
-  ]);
+  const recent = await prisma.reputationFeedback.findMany({
+    where: { subjectId: identity.id },
+    orderBy: { createdAt: 'desc' },
+    take: 12,
+    select: {
+      stars: true,
+      score: true,
+      tag: true,
+      fromAddress: true,
+      txHash: true,
+      tripId: true,
+      bookingId: true,
+      createdAt: true,
+    },
+  });
+  const validations = await prisma.validationCheck.findMany({
+    where: { subjectId: identity.id },
+    orderBy: { createdAt: 'desc' },
+    take: 12,
+    select: {
+      validatorAddress: true,
+      requestHash: true,
+      responseScore: true,
+      tag: true,
+      createdAt: true,
+      resolvedAt: true,
+    },
+  });
 
   return {
     kind: args.kind,
     subjectId: args.subjectId,
-    chain: primaryChain,
-    agentId: primary.agentId,
-    contract: primary.contract,
-    holderAddress: primary.holderAddress,
-    status: primary.status as 'pending' | 'minted' | 'failed',
+    agentId: identity.agentId,
+    contract: identity.contract,
+    holderAddress: identity.holderAddress,
+    status: identity.status as 'pending' | 'minted' | 'failed',
     displayName,
-    mintedAt: primary.mintedAt?.toISOString() ?? null,
-    // Mirror-folded values: weighted-average stars + summed counts.
-    stars: mirror.stars,
-    feedbackCount: mirror.feedbackCount,
-    validatorCount: mirror.validatorCount,
-    validationCount: mirror.validationCount,
-    cachedAt: mirror.cachedAt?.toISOString() ?? null,
+    mintedAt: identity.mintedAt?.toISOString() ?? null,
+    stars: identity.cachedStars,
+    feedbackCount: identity.cachedFeedbackCount,
+    validatorCount: identity.cachedValidatorCount,
+    validationCount: identity.cachedValidationCount,
+    cachedAt: identity.cachedAt?.toISOString() ?? null,
     recent: recent.map(r => ({
       stars: r.stars,
       score: r.score,
@@ -244,9 +217,6 @@ export async function loadSenderoAgentProfileFresh(): Promise<AgentProfile | nul
   return {
     kind: 'sendero',
     subjectId: agentId,
-    // Sendero's primary platform agent lives on Arc ERC-8004; the
-    // workspace-level chip routes per tenant chain in its own loader.
-    chain: 'arc',
     agentId,
     contract: indexed?.contract ?? IDENTITY_REGISTRY,
     holderAddress: indexed?.holderAddress ?? providerAddress,
@@ -255,7 +225,7 @@ export async function loadSenderoAgentProfileFresh(): Promise<AgentProfile | nul
     displayName: identity?.metadata?.name ?? 'Sendero Travel Agent',
     description:
       identity?.metadata?.description ??
-      'Sendero primary AI travel agent. Books, settles, and records reputation on Arc Testnet.',
+      'Sendero primary AI travel agent. Books, settles, and records reputation on Arc-Testnet.',
     tokenURI: identity?.tokenURI ?? null,
     mintedAt: indexed?.mintedAt?.toISOString() ?? null,
     stars: reputation?.stars ?? indexed?.cachedStars ?? null,

@@ -69,7 +69,7 @@ export default async function DashboardPage() {
       where: { id: tenant.id },
       select: {
         whatsappInstall: { select: { status: true } },
-        slackInstalls: { where: { revokedAt: null }, take: 1, select: { id: true } },
+        slackInstalls: { take: 1, select: { id: true } },
       },
     }),
   ]);

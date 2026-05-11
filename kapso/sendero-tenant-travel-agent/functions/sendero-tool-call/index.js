@@ -34,15 +34,7 @@
  *   { error, message, tool? }   on failure — agent surfaces to user
  */
 
-// 28s sits just under Cloudflare's ~30s per-subrequest hard ceiling
-// (standard Workers plan). Bumping past 30s is a no-op — CF kills the
-// upstream fetch() regardless of our AbortSignal. Tools that genuinely
-// need >30s (exhibition_calendar_researcher, scam_risk_brief,
-// vat_refund_researcher — all heavy Vertex grounded calls) need
-// Vertex result caching or an async/streaming pattern, not a longer
-// timeout here. 28s gives Sendero a one-shot at returning before CF
-// pre-empts; 25s was leaving ~5s on the table for warm tool runs.
-const DEFAULT_TIMEOUT_MS = 28000;
+const DEFAULT_TIMEOUT_MS = 25000;
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -56,41 +48,6 @@ function requireEnv(value, name) {
     throw new Error(`Missing required runtime env: ${name}`);
   }
   return value;
-}
-
-function asString(value) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function firstString(...values) {
-  for (const value of values) {
-    const text = asString(value);
-    if (text) return text;
-  }
-  return null;
-}
-
-function resolvePhoneNumberId(raw, body) {
-  const context = raw?.execution_context?.context || raw?.input?.execution_context?.context || {};
-  const conversation =
-    raw?.whatsapp_context?.conversation || raw?.input?.whatsapp_context?.conversation || {};
-  const input = body?.input || {};
-  return firstString(
-    body?.phoneNumberId,
-    body?.phone_number_id,
-    input.phoneNumberId,
-    input.phone_number_id,
-    conversation.phoneNumberId,
-    conversation.phone_number_id,
-    conversation.whatsappPhoneNumberId,
-    conversation.whatsapp_phone_number_id,
-    conversation.whatsapp_config?.phoneNumberId,
-    conversation.whatsapp_config?.phone_number_id,
-    context.phoneNumberId,
-    context.phone_number_id,
-    context.whatsappPhoneNumberId,
-    context.whatsapp_phone_number_id
-  );
 }
 
 async function handler(request, env) {
@@ -109,8 +66,9 @@ async function handler(request, env) {
   // `flow_info` block (see: agent_tool_called event payload). The
   // agent's own input lives one level down. Tolerate both shapes so
   // a direct invoke (testing) and a real Kapso call both work.
-  const body =
-    raw && typeof raw === 'object' && raw.input && typeof raw.input === 'object' ? raw.input : raw;
+  const body = raw && typeof raw === 'object' && raw.input && typeof raw.input === 'object'
+    ? raw.input
+    : raw;
 
   const toolName = typeof body?.toolName === 'string' ? body.toolName.trim() : '';
   if (!toolName) {
@@ -137,19 +95,17 @@ async function handler(request, env) {
     ...(body.travelerPhone ? { travelerPhone: body.travelerPhone } : {}),
     ...(body.tripId ? { tripId: body.tripId } : {}),
   };
-  const phoneNumberId = resolvePhoneNumberId(raw, body);
-  if (phoneNumberId) forwardBody.phoneNumberId = phoneNumberId;
   if (env.SENDERO_API_KEY) {
     headers['X-API-Key'] = env.SENDERO_API_KEY;
-  } else if (env.SENDERO_DISPATCH_SECRET && (phoneNumberId || env.SENDERO_TENANT_ID)) {
+  } else if (env.SENDERO_DISPATCH_SECRET && env.SENDERO_TENANT_ID) {
     headers['x-sendero-dispatch-secret'] = env.SENDERO_DISPATCH_SECRET;
-    if (!phoneNumberId) forwardBody.tenantId = env.SENDERO_TENANT_ID;
+    forwardBody.tenantId = env.SENDERO_TENANT_ID;
   } else {
     return jsonResponse(
       {
         error: 'env_missing',
         message:
-          'Set SENDERO_API_KEY (production) or SENDERO_DISPATCH_SECRET plus phoneNumberId/SENDERO_TENANT_ID (sandbox).',
+          'Set SENDERO_API_KEY (production) or SENDERO_DISPATCH_SECRET + SENDERO_TENANT_ID (sandbox).',
       },
       500
     );

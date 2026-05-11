@@ -28,12 +28,7 @@
     "./lib/payer-copy": "./src/lib/payer-copy.ts",
     "./lib/trip-brief-token": "./src/lib/trip-brief-token.ts",
     "./lib/traveler-profile": "./src/lib/traveler-profile.ts",
-    "./lib/group-claim-token": "./src/lib/group-claim-token.ts",
-    "./lib/derive-route-countries": "./src/lib/derive-route-countries.ts"
-  },
-  "dependencies": {
-    "@solana/web3.js": "^1.98.4",
-    "bs58": "^6.0.0"
+    "./lib/group-claim-token": "./src/lib/group-claim-token.ts"
   },
   "peerDependencies": {
     "@ai-sdk/anthropic": "*",
@@ -58,7 +53,6 @@
     "@sendero/kapso": "*",
     "@sendero/langfuse": "*",
     "@sendero/location": "*",
-    "@sendero/metaplex": "*",
     "@sendero/nanopayments": "*",
     "@sendero/notifications": "*",
     "@sendero/ocr": "*",
