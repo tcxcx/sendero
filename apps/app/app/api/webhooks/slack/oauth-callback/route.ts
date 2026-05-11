@@ -16,7 +16,7 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 
 import { prisma } from '@sendero/database';
 import { env } from '@sendero/env';
-import { exchangeCode } from '@sendero/slack';
+import { createSlackClient, exchangeCode, postMessage } from '@sendero/slack';
 
 import { sendSlackInstallReceivedEmail } from '@/lib/slack-install-email';
 import { type SlackStateVerifyResult, verifySlackState } from '@/lib/slack-oauth-state';
@@ -56,12 +56,30 @@ export async function GET(req: NextRequest) {
 
   const tenantExists = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, displayName: true },
   });
   if (!tenantExists) {
     return NextResponse.json({ error: 'unknown_tenant' }, { status: 404 });
   }
   const flow = verified.flow;
+  const kind = verified.kind;
+  const customerAccountId = verified.customerAccountId;
+
+  // Flow B (B2B2B corporate-customer install): verify the customer
+  // account row still exists + belongs to this tenant. Belt + braces:
+  // the signed state already encodes both ids, but the row could have
+  // been deleted between invite mint and OAuth completion.
+  let customerAccount: { id: string; displayName: string } | null = null;
+  if (kind === 'customer_account' && customerAccountId) {
+    const row = await prisma.customerAccount.findFirst({
+      where: { id: customerAccountId, tenantId },
+      select: { id: true, displayName: true },
+    });
+    if (!row) {
+      return NextResponse.json({ error: 'unknown_customer_account' }, { status: 404 });
+    }
+    customerAccount = row;
+  }
 
   try {
     const install = await exchangeCode({
@@ -80,6 +98,8 @@ export async function GET(req: NextRequest) {
       },
       create: {
         tenantId,
+        kind,
+        customerAccountId: customerAccount?.id ?? null,
         enterpriseId: install.enterpriseId,
         enterpriseName: install.enterpriseName,
         teamId: install.teamId,
@@ -94,6 +114,8 @@ export async function GET(req: NextRequest) {
       },
       update: {
         tenantId,
+        kind,
+        customerAccountId: customerAccount?.id ?? null,
         botToken: install.botToken,
         scope: install.scope,
         enterpriseName: install.enterpriseName,
@@ -105,6 +127,33 @@ export async function GET(req: NextRequest) {
         revokedAt: null,
       },
     });
+
+    // Flow B post-install: flip the CustomerAccount status to 'active'
+    // so the dashboard reflects the live binding, and fire a welcome
+    // DM to the corporate admin who just installed. Both done in
+    // after() so the redirect lands instantly.
+    if (kind === 'customer_account' && customerAccount) {
+      after(async () => {
+        try {
+          await prisma.customerAccount.update({
+            where: { id: customerAccount.id },
+            data: { status: 'active' },
+          });
+        } catch (err) {
+          console.warn('[slack/oauth] customer-account activate failed', err);
+        }
+        try {
+          await sendWelcomeDm({
+            botToken: install.botToken,
+            installerSlackUserId: install.authedUserId,
+            tmcDisplayName: tenantExists.displayName ?? tenantExists.slug,
+            customerDisplayName: customerAccount.displayName,
+          });
+        } catch (err) {
+          console.warn('[slack/oauth] welcome DM fire-and-forget failed', err);
+        }
+      });
+    }
 
     // Fire the tenant-admin email past the redirect so the user sees
     // the success page immediately. Resend latency / outage never
@@ -122,6 +171,15 @@ export async function GET(req: NextRequest) {
       }
     });
 
+    if (kind === 'customer_account' && customerAccount) {
+      // Flow B — corporate admin installing into their own workspace.
+      // Land them on the B2B2B success page with TMC + account attribution.
+      const url = new URL('/install/slack/customer-account/success', req.url);
+      url.searchParams.set('tenant', tenantExists.slug);
+      url.searchParams.set('account', customerAccount.displayName);
+      url.searchParams.set('team', install.teamName);
+      return NextResponse.redirect(url);
+    }
     if (flow === 'public') {
       // Persona C — end-customer admin who came in via the public
       // /install/slack?tenant=<slug> flow. Land them on the public
@@ -138,4 +196,29 @@ export async function GET(req: NextRequest) {
     console.error('[slack/oauth] exchange failed:', msg);
     return NextResponse.json({ error: 'oauth_exchange_failed', message: msg }, { status: 500 });
   }
+}
+
+/**
+ * Post-install welcome DM for the corporate admin who installed Sendero
+ * into their workspace under Flow B. Fire-and-forget — failure should
+ * never block the install flow.
+ */
+async function sendWelcomeDm(args: {
+  botToken: string;
+  installerSlackUserId: string;
+  tmcDisplayName: string;
+  customerDisplayName: string;
+}): Promise<void> {
+  const client = createSlackClient(args.botToken);
+  const text =
+    `Welcome to Sendero — installed for *${args.customerDisplayName}* by your travel agency *${args.tmcDisplayName}*.\n\n` +
+    `*Next steps:*\n` +
+    `• Invite me to a channel: \`/invite @Sendero\` in (for example) #travel.\n` +
+    `• Your team requests trips by mentioning me: \`@Sendero book me NYC → LAX next Tuesday\`.\n` +
+    `• Policy + approvals are managed by *${args.tmcDisplayName}* — they see every trip in their dashboard.\n` +
+    `• I'll post booking confirmations + settlement events in the channel where the trip was requested.`;
+  await postMessage(client, {
+    channel: args.installerSlackUserId,
+    text,
+  });
 }

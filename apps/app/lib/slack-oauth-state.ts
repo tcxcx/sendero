@@ -32,21 +32,52 @@ const STATE_TTL_MS = 10 * 60 * 1000;
  */
 export type SlackStateFlow = 'wizard' | 'public';
 
+/**
+ * Phase B2B2B — discriminates between the TMC-internal install
+ * (`tmc_internal`, the existing flow for ops alerts / handoff fanout)
+ * and a corporate-customer install (`customer_account`, the new B2B2B
+ * surface where employees provision trips inside the corporate's own
+ * Slack workspace). Maps 1:1 to Prisma's `SlackInstallKind` enum.
+ */
+export type SlackInstallKind = 'tmc_internal' | 'customer_account';
+
 export type SlackStatePayload = {
   tenantId: string;
   exp: number;
   flow?: SlackStateFlow;
+  /** B2B2B install discriminator. Absent = legacy = 'tmc_internal'. */
+  kind?: SlackInstallKind;
+  /** Set when kind='customer_account'. Identifies the downstream corporate. */
+  customerAccountId?: string;
 };
 
 export type SlackStateVerifyResult =
-  | { ok: true; tenantId: string; flow: SlackStateFlow }
+  | {
+      ok: true;
+      tenantId: string;
+      flow: SlackStateFlow;
+      kind: SlackInstallKind;
+      customerAccountId: string | null;
+    }
   | { ok: false; reason: string };
 
-export function signSlackState(tenantId: string, flow: SlackStateFlow = 'wizard'): string {
+/** Extra fields for Flow B (corporate-customer install). */
+export interface SlackStateExtras {
+  kind?: SlackInstallKind;
+  customerAccountId?: string;
+}
+
+export function signSlackState(
+  tenantId: string,
+  flow: SlackStateFlow = 'wizard',
+  extras: SlackStateExtras = {}
+): string {
   const payload: SlackStatePayload = {
     tenantId,
     exp: Date.now() + STATE_TTL_MS,
     flow,
+    ...(extras.kind ? { kind: extras.kind } : {}),
+    ...(extras.customerAccountId ? { customerAccountId: extras.customerAccountId } : {}),
   };
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = hmac(encoded);
@@ -79,7 +110,27 @@ export function verifySlackState(state: string): SlackStateVerifyResult {
   // dashboard redirect, which is the safer default.
   const flow: SlackStateFlow = payload.flow === 'public' ? 'public' : 'wizard';
 
-  return { ok: true, tenantId: payload.tenantId, flow };
+  // Default to 'tmc_internal' for backward compat — legacy states pre-
+  // dating the B2B2B work all install into the TMC's own Slack.
+  const kind: SlackInstallKind =
+    payload.kind === 'customer_account' ? 'customer_account' : 'tmc_internal';
+
+  // customerAccountId only meaningful when kind='customer_account'. If
+  // someone sets it under kind='tmc_internal' (attack vector?), null it out.
+  const customerAccountId =
+    kind === 'customer_account' &&
+    typeof payload.customerAccountId === 'string' &&
+    payload.customerAccountId
+      ? payload.customerAccountId
+      : null;
+
+  // kind='customer_account' MUST carry a customerAccountId — without it
+  // we can't bind the resulting SlackInstall to anything.
+  if (kind === 'customer_account' && !customerAccountId) {
+    return { ok: false, reason: 'missing_customer_account' };
+  }
+
+  return { ok: true, tenantId: payload.tenantId, flow, kind, customerAccountId };
 }
 
 function hmac(input: string): string {

@@ -278,6 +278,10 @@ export async function POST(req: NextRequest) {
               // return a non-null id even on total failure. authedUserId is
               // the install admin's id, so it's a known-good User row.
               fallbackUserId: install.authedUserId,
+              // Phase B2B2B — when this install is a corporate-customer
+              // workspace, auto-provisioned Users get stamped with the
+              // matching customerAccountId on first message.
+              customerAccountId: install.customerAccountId,
             })
           ).senderoUserId
         : install.authedUserId;
