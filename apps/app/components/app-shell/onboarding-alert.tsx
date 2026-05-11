@@ -1,18 +1,21 @@
 'use client';
 
 /**
- * OnboardingAlert — a header strip that surfaces when the signed-in
- * user's org doesn't have an Arc wallet yet (i.e. organization
- * publicMetadata.arcWalletAddress is missing or still the placeholder).
+ * OnboardingAlert — header strip that surfaces when the signed-in
+ * user's org doesn't have a chain-appropriate treasury wallet yet.
+ *
+ * Chain-aware:
+ *   - tenant.primaryChain === 'arc' → check `arcWalletAddress`
+ *   - tenant.primaryChain === 'sol' → check `solTreasuryAddress`
  *
  * Without a real wallet, on-chain settlement, USDC payments, and
  * boarding-pass NFT mints all silently fail. This alert is the canonical
- * way to surface that gap — it explains what's missing in plain language
- * and routes the user straight to the onboarding flow that fixes it.
+ * way to surface that gap — explains what's missing + routes to the
+ * onboarding flow with `?retry=1` so the layout doesn't bounce back to
+ * /dashboard.
  *
- * The alert hydrates from Clerk org metadata (same source as
- * ClerkWalletBridge) so it reflects the org you've actually selected, not
- * the user's first org.
+ * Hydrates from Clerk org metadata (same source as ClerkWalletBridge)
+ * so it reflects the org you've actually selected, not the user's first org.
  */
 
 import Link from 'next/link';
@@ -27,10 +30,20 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const PLACEHOLDER_ADDRESS = '0x1111111111111111111111111111111111111111';
 const DISMISS_COOKIE = 'sendero.onboarding.alert.dismissed';
 
-function isMissingWallet(addr: string | null | undefined): boolean {
+function isMissingEvmWallet(addr: string | null | undefined): boolean {
   if (!addr) return true;
   const lower = addr.toLowerCase();
   return lower === ZERO_ADDRESS || lower === PLACEHOLDER_ADDRESS;
+}
+
+function isMissingSolWallet(addr: string | null | undefined): boolean {
+  return !addr || addr.length < 32;
+}
+
+type ChainHint = 'arc' | 'sol';
+function readChain(meta: Record<string, unknown> | undefined): ChainHint {
+  const c = meta?.primaryChain;
+  return c === 'sol' ? 'sol' : 'arc';
 }
 
 function readCookie(name: string): string | null {
@@ -58,10 +71,16 @@ export function OnboardingAlert() {
 
   if (!userLoaded || !orgLoaded || !isSignedIn || !organization) return null;
 
-  const arcAddressRaw = organization.publicMetadata?.arcWalletAddress;
-  const arcAddress = typeof arcAddressRaw === 'string' ? arcAddressRaw : null;
-  if (!isMissingWallet(arcAddress)) return null;
+  const meta = organization.publicMetadata as Record<string, unknown> | undefined;
+  const chain = readChain(meta);
+  const missing =
+    chain === 'sol'
+      ? isMissingSolWallet(typeof meta?.solTreasuryAddress === 'string' ? meta.solTreasuryAddress : null)
+      : isMissingEvmWallet(typeof meta?.arcWalletAddress === 'string' ? meta.arcWalletAddress : null);
+  if (!missing) return null;
   if (dismissed) return null;
+
+  const chainLabel = chain === 'sol' ? 'Solana treasury' : 'Arc wallet';
 
   const onDismiss = () => {
     writeCookie(DISMISS_COOKIE, '1');
@@ -74,18 +93,18 @@ export function OnboardingAlert() {
         <span aria-hidden className="mt-[2px] text-base leading-none">⚠</span>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <AlertTitle className="text-[13px] font-semibold tracking-tight">
-            Finish setting up your wallet
+            Finish setting up your treasury
           </AlertTitle>
           <AlertDescription className="text-[12px] leading-relaxed text-muted-foreground">
-            Your org doesn&apos;t have an Arc wallet bound yet. Until it does, you can&apos;t pay
-            for bookings in USDC, settle escrow on-chain, or mint boarding-pass NFTs. The
+            Your org doesn&apos;t have a {chainLabel} bound yet. Until it does, you can&apos;t
+            pay for bookings in USDC, settle escrow on-chain, or mint boarding-pass NFTs. The
             agent will skip those steps silently, which is why your demo runs stop short.
             One-time setup, takes about 30 seconds.
           </AlertDescription>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button asChild size="sm" className="h-7 px-3 text-[11px]">
-            <Link href="/onboarding">Finish setup →</Link>
+            <Link href="/onboarding?retry=1">Finish setup →</Link>
           </Button>
           <button
             type="button"

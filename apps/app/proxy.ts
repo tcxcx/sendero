@@ -158,13 +158,20 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   const { isAuthenticated, sessionClaims, orgId } = await auth();
 
   if (!isAuthenticated) {
-    // !auth guard — dump unauthenticated users at marketing root '/'
-    // (which is on the marketing site and has its own sign-in CTAs)
-    // instead of /sign-in. Keeps anyone who hits a protected URL
-    // without a session from getting trapped between /sign-in and a
-    // server redirect chain. /sign-in itself is still in
-    // `isPublicRoute` so explicit sign-in clicks still work.
-    return applyLocaleCookie(NextResponse.redirect(new URL('/', req.url)), locale);
+    // Send unauthenticated requests to /sign-in with a `redirect_url`
+    // back to the original target. The /sign-in route silently
+    // refreshes Clerk session cookies when they exist but the JWT
+    // has expired (common after a few minutes of inactivity), so
+    // users get bounced through it transparently rather than dumped
+    // at the marketing root every time their token rolls over.
+    //
+    // Earlier this redirected to '/' but that turned every brief
+    // session blip into "you are signed out" — the regression was
+    // worse than the loop it was trying to avoid (loop is now fixed
+    // structurally via /api/onboarding/check-ready).
+    const signInUrl = new URL('/sign-in', req.url);
+    signInUrl.searchParams.set('redirect_url', req.url);
+    return applyLocaleCookie(NextResponse.redirect(signInUrl), locale);
   }
 
   // Traveler-kind users (B2C) — confined to `/me/*`. Block them from

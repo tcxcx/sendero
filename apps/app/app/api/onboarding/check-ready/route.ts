@@ -27,7 +27,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET() {
-  const { orgId } = await auth();
+  const { orgId, sessionClaims } = await auth();
   if (!orgId) {
     return NextResponse.json({ ready: false, reason: 'no_org' });
   }
@@ -38,6 +38,25 @@ export async function GET() {
   if (!tenant) {
     return NextResponse.json({ ready: false, reason: 'no_tenant', orgId });
   }
+
+  // Chain-appropriate wallet check. Without this, a Tenant row with
+  // null arcAddress / missing solTreasuryAddress would falsely report
+  // ready=true and the user would land on /dashboard with the
+  // OnboardingAlert showing — the same stuck state.
+  const orgMeta = (sessionClaims?.org_metadata ?? {}) as { solTreasuryAddress?: string };
+  const walletReady =
+    tenant.primaryChain === 'sol'
+      ? Boolean(orgMeta.solTreasuryAddress)
+      : Boolean(tenant.arcAddress);
+  if (!walletReady) {
+    return NextResponse.json({
+      ready: false,
+      reason: 'no_wallet',
+      tenantId: tenant.id,
+      primaryChain: tenant.primaryChain,
+    });
+  }
+
   return NextResponse.json({
     ready: true,
     tenantId: tenant.id,

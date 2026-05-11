@@ -3,7 +3,11 @@ import { redirect } from 'next/navigation';
 
 import { prisma } from '@sendero/database';
 
-export default async function OnboardingLayout({ children }: { children: React.ReactNode }) {
+export default async function OnboardingLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { sessionClaims, orgId } = await auth();
 
   // Travelers (B2C) must never reach operator onboarding — defense in
@@ -12,22 +16,40 @@ export default async function OnboardingLayout({ children }: { children: React.R
   const userMeta = (sessionClaims?.public_metadata ?? {}) as { kind?: string };
   if (userMeta.kind === 'traveler') redirect('/me');
 
-  // Anti-loop guard: redirecting to /dashboard ONLY because Clerk
-  // says onboardingComplete=true is unsafe — if the matching Tenant
-  // row is missing in our DB (webhook failed, data reset, drift),
-  // /dashboard will bounce right back to /onboarding via
-  // requireCurrentTenant() and the user sees a flicker loop.
+  // Anti-loop + retry guards:
   //
-  // Require BOTH conditions: Clerk flag AND a matching Tenant row.
-  // If Clerk is ahead of the DB (the common drift mode), stay on
-  // onboarding so the user can re-run the provisioning steps.
+  //   1. Require BOTH Clerk's onboardingComplete flag AND a matching
+  //      Tenant row in DB before redirecting to /dashboard. Without
+  //      this, a stale flag (cached JWT, DB reset) creates a flicker
+  //      loop via /dashboard's requireCurrentTenant().
+  //   2. ALSO require the chain-appropriate wallet to be set on the
+  //      Tenant. A partial provisioning leaves the Tenant row created
+  //      but `arcAddress` / `solTreasuryAddress` null — those users
+  //      bounce back to /onboarding from /dashboard's OnboardingAlert
+  //      with `?retry=1` and need to re-run deployWithChain.
+  //   3. Honor `?retry=1` to let the user explicitly re-run setup
+  //      without arguing about it. Used by the OnboardingAlert's
+  //      "Finish setup →" button.
   const orgMeta = (sessionClaims?.org_metadata ?? {}) as { onboardingComplete?: boolean };
   if (orgMeta.onboardingComplete === true && orgId) {
     const tenant = await prisma.tenant.findUnique({
       where: { clerkOrgId: orgId },
-      select: { id: true },
+      select: {
+        id: true,
+        primaryChain: true,
+        arcAddress: true,
+      },
     });
-    if (tenant) redirect('/dashboard');
+    if (tenant) {
+      const walletReady =
+        tenant.primaryChain === 'sol'
+          ? Boolean(
+              (sessionClaims?.org_metadata as Record<string, unknown> | undefined)
+                ?.solTreasuryAddress
+            )
+          : Boolean(tenant.arcAddress);
+      if (walletReady) redirect('/dashboard');
+    }
   }
   return <>{children}</>;
 }
