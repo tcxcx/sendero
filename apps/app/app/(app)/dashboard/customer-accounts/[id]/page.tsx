@@ -98,6 +98,38 @@ export default async function CustomerAccountDetailPage({
         style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: 16 }}
       >
         <div className="t-meta" style={{ marginBottom: 4 }}>
+          Travel policy
+        </div>
+        <p className="t-body ink-70" style={{ marginTop: 4, fontSize: 13, marginBottom: 12 }}>
+          {account._count.policies > 0
+            ? `${account._count.policies} policy version(s) on file. The agent checks every offer against the latest revision before booking.`
+            : "No policy set. Trips for this customer will fall through to the tenant default. Set caps + cabin rules + approval threshold here."}
+        </p>
+        <a
+          href={`/dashboard/customer-accounts/${account.id}/policy`}
+          className="sd-btn"
+          style={{
+            display: 'inline-block',
+            padding: '8px 14px',
+            borderRadius: 8,
+            border: '1px solid var(--ink, #fb542b)',
+            color: 'var(--ink, #fb542b)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            textDecoration: 'none',
+          }}
+        >
+          {account._count.policies > 0 ? 'Edit policy →' : 'Set policy →'}
+        </a>
+      </section>
+
+      <section
+        className="sd-card-flat"
+        style={{ boxShadow: 'inset 0 0 0 1px var(--hairline-color)', padding: 16 }}
+      >
+        <div className="t-meta" style={{ marginBottom: 4 }}>
           Slack install
         </div>
         <p className="t-body ink-70" style={{ marginTop: 4, fontSize: 13, marginBottom: 12 }}>
