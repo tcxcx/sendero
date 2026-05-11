@@ -6,7 +6,7 @@
   "description": "Sendero × Arc — Next.js 16 App Router. Web console for agent-per-trip corporate travel.",
   "scripts": {
     "dev": "NODE_OPTIONS='--max-http-header-size=32768' next dev -p ${APP_PORT:-3010}",
-    "build": "next build",
+    "build": "next build --debug --experimental-debug-memory-usage",
     "start": "next start -p ${APP_PORT:-3010}",
     "lint": "biome lint .",
     "typecheck": "tsc --noEmit",
