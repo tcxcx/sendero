@@ -16,6 +16,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@sendero/database';
 
+import { canonicalizeAddress } from '@/lib/address-case';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -41,8 +43,13 @@ export async function GET(req: NextRequest) {
   // Scope by tenantId. `findFirst` over the compound filter instead of
   // `findUnique({ address })` because a valid address owned by another
   // tenant must 404, not leak.
+  //
+  // Address canonicalization is chain-aware. EVM addresses lowercase
+  // safely; Solana base58 is case-sensitive and lowercasing would never
+  // match the stored row (which preserves case in
+  // provisionTenantSolanaTreasury).
   const wallet = await prisma.circleWallet.findFirst({
-    where: { address: address.toLowerCase(), tenantId: tenant.id },
+    where: { address: canonicalizeAddress(address), tenantId: tenant.id },
     select: {
       address: true,
       usdcBalanceMicro: true,

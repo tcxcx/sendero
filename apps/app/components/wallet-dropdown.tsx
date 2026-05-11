@@ -122,9 +122,14 @@ export function WalletDropdown() {
   // Balance authority is the Circle webhook → CircleWallet cached
   // columns. One-shot GET primes the panel, then SSE keeps it live.
   // No viem polling — the browser never reads RPC directly.
+  //
+  // Treasury mode uses userAuth.address (the MSCA / Squads vault).
+  // The address is sent as-is to the route, which canonicalizes per
+  // chain — lowercasing client-side breaks Sol base58 lookups because
+  // the DB row preserves case.
   useEffect(() => {
     if (!userAuth || isZeroAddress) return;
-    const address = userAuth.address.toLowerCase();
+    const address = userAuth.address;
     const encoded = encodeURIComponent(address);
 
     let cancelled = false;
@@ -431,10 +436,9 @@ export function WalletDropdown() {
                     // Refresh refreshes the treasury balance (the
                     // per-wallet view). Unified Operations balance has
                     // its own poll inside UnifiedBalanceSection.
+                    // Address sent case-preserved; route canonicalizes.
                     const r = await fetch(
-                      `/api/wallet/balance?address=${encodeURIComponent(
-                        userAuth.address.toLowerCase()
-                      )}`,
+                      `/api/wallet/balance?address=${encodeURIComponent(userAuth.address)}`,
                       { cache: 'no-store' }
                     );
                     if (!r.ok) return;
