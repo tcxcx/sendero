@@ -24,7 +24,6 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
 import { verifyClerkWebhook } from '@sendero/auth/webhooks';
 import { PLANS, type PlanTier, resolvePlan } from '@sendero/billing/plans';
-import { provisionTenantWallet } from '@sendero/circle';
 import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
 import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import type { BillingTier, SubscriptionStatus } from '@sendero/database';
@@ -35,10 +34,10 @@ import {
   findCustomerUserByEmail,
 } from '@sendero/duffel';
 import { getEnabledGatewayDomains, getTenantOperationsChains } from '@sendero/env/chains';
-import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
 import { invalidateApiKeyCache } from '@/lib/api-key-auth';
+import { runTenantProvisioning } from '@/lib/run-tenant-provisioning';
 import { webhookEventStore } from '@/lib/webhook-events';
 
 export const runtime = 'nodejs';
@@ -350,11 +349,20 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     }
   }
 
+  // Chain-aware treasury + identity + Clerk metadata flip. Delegates
+  // to runTenantProvisioning so the dev endpoint + this webhook share
+  // a single orchestration path and per-stage progress stamps. Without
+  // this branch the old code called provisionTenantWallet (Arc only)
+  // for every org regardless of tenant.primaryChain — orgs that picked
+  // Solana ended up with no treasury and a stuck retry-identity cron
+  // (see tenant cmp1lweau).
+  //
   // Let provisioning exceptions bubble — the route returns 500, svix
   // retries, and the retry-wallet-provision cron backs that up.
-  const result = await provisionTenantWallet({
+  const provisioning = await runTenantProvisioning({
     tenantId: tenant.id,
     clerkOrgId: id,
+    primaryChain: tenant.primaryChain as 'arc' | 'sol',
   });
 
   // Gateway phase 1 provisioning — non-fatal. Failure here doesn't
@@ -404,29 +412,11 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     });
   }
 
-  // Mint the org's ERC-8004 identity NFT atomically with wallet
-  // provisioning. The treasury wallet (just provisioned above) becomes
-  // the agent owner. Failure is non-fatal — wallet stands on its own;
-  // the cron sweeper at /api/cron/retry-identity-provision picks up
-  // pending rows.
-  try {
-    await ensureOrgIdentity({ tenantId: tenant.id });
-  } catch (err) {
-    console.warn('[webhooks/clerk] org identity mint failed (non-fatal)', {
-      id,
-      tenantId: tenant.id,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // Identity mint + Clerk publicMetadata flip already happened inside
+  // runTenantProvisioning above. The retry-identity-provision cron
+  // still backs up the long tail when the inline mint fails.
 
   const client = await clerkClient();
-  await client.organizations.updateOrganization(id, {
-    publicMetadata: {
-      tenantId: tenant.id,
-      arcWalletAddress: result.address,
-      onboardingComplete: true,
-    },
-  });
 
   // Mint a sandbox API key so the org can call /api/mcp and /api/agent/dispatch
   // immediately without a manual mint step. Production keys are user-minted
@@ -462,7 +452,11 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
   console.log('[webhooks/clerk] organization.created done', {
     id,
     tenantId: tenant.id,
-    arcWalletAddress: result.address,
+    chain: provisioning.chain,
+    address: provisioning.address,
+    alreadyExisted: provisioning.alreadyExisted,
+    identityStatus: provisioning.identityStatus,
+    identityError: provisioning.identityError,
   });
 }
 

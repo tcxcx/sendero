@@ -10,16 +10,19 @@
  * is upserted with the chosen chain BEFORE branching, so the user's
  * selection is what drives provisioning regardless of any prior default.
  *
- * Branches on `tenant.primaryChain` (post-upsert):
- *   - 'arc' → provisionTenantWallet (Circle MSCA on Arc) + ensureOrgIdentity
- *   - 'sol' → provisionTenantSolanaTreasury (Squads V4 + DCWs) + ensureOrgIdentity
+ * Provisioning runs through `runTenantProvisioning`, the single chain-
+ * aware orchestrator shared with the Clerk webhook. Per-stage progress
+ * stamps into `Tenant.metadata.provisioning` so the wait screen can
+ * render real state via `/api/onboarding/check-ready`.
  */
-import { auth, clerkClient } from '@clerk/nextjs/server';
-import { provisionTenantWallet } from '@sendero/circle';
-import { provisionTenantSolanaTreasury } from '@sendero/circle/provision-tenant-solana-treasury';
-import { prisma } from '@sendero/database';
-import { ensureOrgIdentity } from '@sendero/tools/provision-identity';
+
 import { type NextRequest, NextResponse } from 'next/server';
+
+import { auth, clerkClient } from '@clerk/nextjs/server';
+import { prisma } from '@sendero/database';
+
+import { readProvisioning } from '@/lib/provisioning-progress';
+import { runTenantProvisioning } from '@/lib/run-tenant-provisioning';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,9 +64,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // Body is optional — legacy callers (the old "Run provisioning without
-  // webhook" button) don't send one. Defaults to 'sol' so the chain-select
-  // flow's Solana-first default holds even if the client races the body.
+  // Body is optional — legacy callers don't send one. Defaults to 'sol'.
   let body: unknown = null;
   try {
     body = await req.json();
@@ -72,9 +73,7 @@ export async function POST(req: NextRequest) {
   }
   const primaryChain = parsePrimaryChain((body as { primaryChain?: unknown } | null)?.primaryChain);
 
-  // Stage tracking so a 500 tells us WHICH step blew up — empty `{}` from
-  // an unhandled throw was the diagnostic black hole that motivated this.
-  let stage: string = 'init';
+  let stage = 'init';
   try {
     stage = 'clerk:getOrganization';
     const client = await clerkClient();
@@ -99,95 +98,52 @@ export async function POST(req: NextRequest) {
       update: { slug, displayName: name, primaryChain },
     });
 
-    if (tenant.primaryChain === 'sol') {
-      stage = 'sol:provisionTenantSolanaTreasury';
-      const sol = await provisionTenantSolanaTreasury({
-        tenantId: tenant.id,
-        clerkOrgId: orgId,
-      });
-      let identityStatus: string | null = null;
-      let identityError: string | null = null;
-      try {
-        stage = 'sol:ensureOrgIdentity';
-        const identity = await ensureOrgIdentity({ tenantId: tenant.id });
-        identityStatus = identity.status;
-      } catch (err) {
-        identityError = err instanceof Error ? err.message : String(err);
-        console.warn('[dev/complete-org-provisioning] sol identity failed (non-fatal)', {
-          tenantId: tenant.id,
-          error: identityError,
-        });
-      }
-      stage = 'sol:clerk.updateOrganization';
-      await client.organizations.updateOrganization(orgId, {
-        publicMetadata: {
-          tenantId: tenant.id,
-          primaryChain: 'sol',
-          solTreasuryAddress: sol.address,
-          onboardingComplete: true,
-        },
-      });
-      console.log('[dev/complete-org-provisioning] sol', {
-        orgId,
-        tenantId: tenant.id,
-        address: sol.address,
-        alreadyExisted: sol.alreadyExisted,
-        identityStatus,
-      });
-      return NextResponse.json({
-        ok: true,
-        chain: 'sol',
-        tenantId: tenant.id,
-        solTreasuryAddress: sol.address,
-        alreadyExisted: sol.alreadyExisted,
-        identityStatus,
-        identityError,
-      });
-    }
-
-    stage = 'arc:provisionTenantWallet';
-    const result = await provisionTenantWallet({
+    stage = 'runTenantProvisioning';
+    const result = await runTenantProvisioning({
       tenantId: tenant.id,
       clerkOrgId: orgId,
+      primaryChain: tenant.primaryChain as 'arc' | 'sol',
     });
 
-    // Best-effort identity intent for Arc parity. Failure is non-fatal —
-    // the retry-identity-provision sweeper picks pending rows up.
-    try {
-      stage = 'arc:ensureOrgIdentity';
-      await ensureOrgIdentity({ tenantId: tenant.id });
-    } catch (err) {
-      console.warn('[dev/complete-org-provisioning] arc identity failed (non-fatal)', {
-        tenantId: tenant.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-
-    stage = 'arc:clerk.updateOrganization';
-    await client.organizations.updateOrganization(orgId, {
-      publicMetadata: {
-        tenantId: tenant.id,
-        primaryChain: 'arc',
-        arcWalletAddress: result.address,
-        onboardingComplete: true,
-      },
-    });
-
-    console.log('[dev/complete-org-provisioning] arc', {
+    console.log('[dev/complete-org-provisioning] done', {
       orgId,
       tenantId: tenant.id,
+      chain: result.chain,
       address: result.address,
+      alreadyExisted: result.alreadyExisted,
+      identityStatus: result.identityStatus,
+      identityError: result.identityError,
     });
 
     return NextResponse.json({
       ok: true,
-      chain: 'arc',
+      chain: result.chain,
       tenantId: tenant.id,
-      arcWalletAddress: result.address,
+      address: result.address,
+      ...(result.chain === 'sol'
+        ? { solTreasuryAddress: result.address }
+        : { arcWalletAddress: result.address }),
+      alreadyExisted: result.alreadyExisted,
+      identityStatus: result.identityStatus,
+      identityError: result.identityError,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
+
+    // Surface the stamped failure so the client can render which stage
+    // blew up without waiting on the next /check-ready poll.
+    let progress: unknown = null;
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { clerkOrgId: orgId },
+        select: { id: true },
+      });
+      if (tenant) progress = await readProvisioning(tenant.id);
+    } catch {
+      // best-effort; the route is already in an error path
+    }
+
     console.error('[dev/complete-org-provisioning] FAILED', {
       orgId,
       userId,
@@ -203,6 +159,7 @@ export async function POST(req: NextRequest) {
         message,
         // Route is gated dev-only at the top, so stack is always safe to surface.
         stack,
+        progress,
       },
       { status: 500 }
     );
