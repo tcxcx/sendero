@@ -17,6 +17,7 @@ import { prisma } from '@sendero/database';
 import { TripComments } from '@/components/collaboration/trip-comments';
 import { TripLiveblocks } from '@/components/collaboration/trip-liveblocks';
 import { MetaInboxLive } from '@/components/console/meta-inbox-live';
+import { TripChannelLanes } from '@/components/inbox/trip-channel-lanes';
 import { buildInitialPresence } from '@/lib/collaboration-presence';
 import { loadConsoleData } from '@/lib/console-data';
 import { requireCurrentTenant } from '@/lib/tenant-context';
@@ -56,16 +57,23 @@ export default async function InboxTripPage({ params }: Props) {
 
   const content = (
     <div className="grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="min-h-0 min-w-0">
-        <MetaInboxLive
-          trips={trips}
-          scopedTripId={tripId}
-          initialConversation={conversation}
-          traveler={traveler}
-          holdExpires={holdExpires}
-          pendingBooking={pendingBooking}
-          kpis={kpis}
-        />
+      <div className="min-h-0 min-w-0 flex flex-col">
+        {/* B2B2B 3-lane summary: Slack / WhatsApp / Web. Renders above
+            the unified MetaInbox so operators see cross-channel state
+            at a glance. Server-side fetched; never blocks the inbox
+            render (empty lanes show a "no activity" hint). */}
+        <TripChannelLanes tenantId={tenant.id} tripId={tripId} />
+        <div className="min-h-0 flex-1">
+          <MetaInboxLive
+            trips={trips}
+            scopedTripId={tripId}
+            initialConversation={conversation}
+            traveler={traveler}
+            holdExpires={holdExpires}
+            pendingBooking={pendingBooking}
+            kpis={kpis}
+          />
+        </div>
       </div>
       {liveblocksEnabled ? (
         <aside className="min-h-0 overflow-auto pr-3 pb-3">
