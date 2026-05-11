@@ -17,6 +17,8 @@ import { DepositDialog } from '@/components/deposit-dialog';
 import { SendDialog } from '@/components/send-dialog';
 import { hydrateFromStorage } from '@/components/store';
 import { SwapDialog } from '@/components/swap-dialog';
+import { TreasuryDepositDialog } from '@/components/treasury-deposit-dialog';
+import { TreasurySendDialog } from '@/components/treasury-send-dialog';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { useAppHotkeys } from '@/components/use-app-hotkeys';
 import { useArcChainStream } from '@/components/use-arc-chain-stream';
@@ -90,6 +92,8 @@ export function AppChrome({
       <SendDialog />
       <BridgeDialog />
       <DepositDialog />
+      <TreasuryDepositDialog />
+      <TreasurySendDialog />
     </div>
   );
 }

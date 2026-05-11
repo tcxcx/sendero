@@ -55,10 +55,18 @@ export function WalletDropdown() {
 
   // Dialog query state (nuqs). These open on button click; the dialog
   // components themselves read the same keys to render/hide.
+  //
+  // Operations dialogs are Gateway-multichain (Deposit shows every
+  // enabled chain; Send pulls from unified balance). Treasury dialogs
+  // are chain-aware single-wallet (Deposit shows just the MSCA/Squads
+  // address; Send queues a multisig proposal). Swap+Bridge are
+  // Operations-only — those operate on Gateway hot funds.
   const [, setSend] = useQueryState('send');
   const [, setSwap] = useQueryState('swap');
   const [, setBridge] = useQueryState('bridge');
   const [, setDeposit] = useQueryState('deposit');
+  const [, setTreasuryDeposit] = useQueryState('treasury-deposit');
+  const [, setTreasurySend] = useQueryState('treasury-send');
 
   // Unprovisioned-state detection. Chain-aware: Arc uses the EVM
   // zero-address placeholder; Sol uses the 'pending-sol' sentinel set by
@@ -77,8 +85,9 @@ export function WalletDropdown() {
   // trigger pill needs *something* to render before /api/gateway/balance
   // returns.
   const activeAddress =
-    mode === 'operations' ? operationsAddress ?? treasuryAddress : treasuryAddress;
-  const isZeroAddress = mode === 'operations' ? !operationsAddress && isZeroTreasury : isZeroTreasury;
+    mode === 'operations' ? (operationsAddress ?? treasuryAddress) : treasuryAddress;
+  const isZeroAddress =
+    mode === 'operations' ? !operationsAddress && isZeroTreasury : isZeroTreasury;
   const chainLabel = chain === 'sol' ? 'Solana' : 'Arc';
   const modeLabel = mode === 'operations' ? 'Operations' : 'Treasury';
 
@@ -234,6 +243,12 @@ export function WalletDropdown() {
 
   const openAction = (which: 'deposit' | 'send' | 'swap' | 'bridge') => {
     setOpen(false);
+    if (mode === 'treasury') {
+      if (which === 'deposit') setTreasuryDeposit('open');
+      if (which === 'send') setTreasurySend('open');
+      // swap/bridge intentionally not surfaced in treasury mode.
+      return;
+    }
     if (which === 'deposit') setDeposit('open');
     if (which === 'send') setSend('open');
     if (which === 'swap') setSwap('open');
@@ -781,11 +796,18 @@ export function WalletDropdown() {
           margin-left: 2px;
         }
         .wd-actions {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 10px;
+          display: flex;
+          justify-content: center;
+          gap: 28px;
           width: 100%;
           padding-top: 4px;
+          flex-wrap: wrap;
+        }
+        /* Buttons keep their natural width so a 2-button (Treasury)
+           and a 4-button (Operations) row both center cleanly without
+           stretching individual buttons. */
+        .wd-actions > * {
+          flex: 0 0 auto;
         }
 
         .wd-wallet-meta {
