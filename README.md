@@ -302,7 +302,7 @@ Sendero is not a chat on top of a booking tool — it is a **workflow engine wit
 | **Wallet UX** | Phantom Connect for traveler-facing email-first onboarding + native crypto-user fast-path. |
 | **Agentic commerce rail** | x402 via Coinbase CDP facilitator on every priced MCP tool. Sendero registers in Agentic Market as travel-ops infra. |
 | **Real-world money** | MoonPay virtual cards + virtual accounts + ramps for the supplier-side flows where stablecoin doesn't reach. |
-| **AI quality discipline** | Langfuse 4-judge LLM-as-Judge per turn, Phoenix self-introspection, Plurai eval drafting against a Responsible-AI ship gate. |
+| **AI quality discipline** | Arize Phoenix as the one-place AI & agent engineering platform — development, observability, and evaluation. Langfuse complements with 4-judge LLM-as-Judge per turn + prompt management. Both gated by the Responsible-AI ship guard. |
 | **Production hardening** | Scoped API keys, HMAC-signed privileged calls, signed response envelopes, encrypted-by-default workflow runtime. |
 
 <br />
@@ -456,7 +456,7 @@ Authority + IDL audit refresh from `/dashboard/contracts?chain=sol`. Re-deploy r
 - **Metaplex** — Agent Kit for identity, Core for trip stamps, Umi runtime in [`packages/metaplex`](./packages/metaplex).
 - **MoonPay Agents** — virtual cards, virtual accounts, swaps, ramps via the agent runtime.
 - **Next.js 15** (App Router) on Vercel Fluid Compute · **React 19** · **Vercel Workflow DevKit** for durable runs · **Vercel AI Gateway + Google Gemini** as the default LLM path.
-- **Langfuse** + **Phoenix** + **Plurai** observability triplet — production traces, agent self-introspection, eval drafting.
+- **Arize Phoenix** as the AI & agent engineering platform — one place for development, observability, and evaluation. Get visibility into your agents. Complemented by **Langfuse** for prompt management + production-trace LLM-as-Judge scoring.
 - **AI SDK + MCP** — every tool ships through both surfaces from one definition in [`packages/tools`](./packages/tools).
 - **Postgres** (Neon) + **Upstash Redis** for cache + nonce dedup.
 - **Resend** for email · **Pinata** for IPFS · **Kapso** for WhatsApp orchestration.

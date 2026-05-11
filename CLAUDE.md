@@ -18,31 +18,40 @@ Before ship, verify:
 
 Left Hook runs `scripts/check-responsible-ai.ts`. If this section or the guard script is weakened, pre-push must fail.
 
-## Tenant channel operating goal
+## Channel topology — B2B2B
 
-WhatsApp/Slack/web agents should help tenant travel teams close deals, plan trips across the full lifecycle, and reduce personnel cost without fragmenting state.
+Sendero is a **B2B2B platform**. Three audiences, three channels, none interchangeable:
 
-- **Kapso orchestration for WhatsApp:** Kapso owns tenant WhatsApp inbound workflow triggers and WhatsApp Flow UX. Sendero stays canonical for tenant auth, tools, MCP, trips, billing, wallets, escrow, audit, internal handoff, and Slack.
-- **Canonical tools first:** new channel flows must call `@sendero/tools`, `@sendero/workflows`, channel renderers, and internal Sendero tool endpoints instead of duplicating booking/payment logic inside Kapso functions.
-- **Internal web handoff is primary:** every human escalation creates a durable Sendero web/internal handoff first. Slack and WhatsApp operator handoff are optional tenant-configured fanout destinations.
-- **Free tenant WhatsApp readiness:** free workspaces can review setup requirements, but do not get a shared live WhatsApp sandbox number. The Sendero-owned sandbox number stays reserved for Sendero customer support. Tenant WhatsApp operations require a paid plan and dedicated WhatsApp Business number.
-- **Paid tenant production:** paid tenants activate their own WhatsApp number after Kapso phone health passes; provisioning attaches the Kapso tenant workflow trigger to that phone number.
-- **Cross-channel continuity:** WhatsApp customer threads, Slack operator threads, web handoff records, and trip events must reconcile around tenant, customer identity, trip id, workflow execution id, and trace id.
+| Audience | Channel | Surface | Relationship to Sendero |
+|---|---|---|---|
+| **TMC / agency operator** (our B2B customer; the paying tenant) | **Web dashboard** | `/dashboard/*` on `app.sendero.travel` | Buys Sendero; manages their downstream corporate-customer accounts + travelers from web |
+| **Corporate customer** (the TMC's client; the B2B2B layer) | **Slack** (installed in the corporate's own workspace) | `@sendero` in the corporate's Slack | Corporate employees self-serve trip provisioning from inside their own company's Slack; the TMC operator monitors + intervenes from web |
+| **Traveler** (employee of the corporate customer, or direct consumer) | **WhatsApp** | Per-tenant Meta WhatsApp Business number | Receives boarding pass, balance, claim links, in-trip support |
+
+**Key rules:**
+
+- **Web is the only operator surface.** Slack is NOT the operator handoff channel. Slack-as-operator is a recurring bug pattern that conflates B2 (TMC operator) with B2B2 (corporate customer). When in doubt: operator = web, full stop.
+- **Slack install = downstream B2B2B onboarding.** When a TMC signs a corporate customer, that customer installs the Sendero Slack app in **their own workspace**. The TMC operator never reads/writes from that Slack thread directly — they see it surfaced in their `/dashboard` and can intervene via web (which writes back into the Slack thread through the agent).
+- **WhatsApp = traveler-facing only.** TMC operators do NOT WhatsApp travelers directly. Conversations happen through the agent; the operator sees them in `/dashboard/inbox/[tripId]` and can take over via web handoff.
+- **Kapso orchestration for WhatsApp:** Kapso owns inbound workflow triggers + Flow UX. Sendero stays canonical for tenant auth, tools, MCP, trips, billing, wallets, escrow, audit, web handoff.
+- **Canonical tools first:** new channel flows must call `@sendero/tools`, `@sendero/workflows`, channel renderers, and internal Sendero tool endpoints — not duplicate logic inside Kapso functions or a Slack bot.
+- **Cross-channel continuity:** Web (operator), Slack (corporate customer), WhatsApp (traveler), and the trip ledger reconcile around tenant id, customer-account id, trip id, workflow execution id, and trace id. The merged thread at `/dashboard/inbox/[tripId]` is the operator's source of truth.
+- **Free vs paid:** free workspaces preview setup requirements but cannot run live channels against real audiences. The Sendero-owned WhatsApp sandbox number stays reserved for Sendero customer support. Production WhatsApp requires a paid plan + dedicated WhatsApp Business number. Slack-to-corporate installs require a paid TMC tenant.
 
 ## Meta admin: multi-vertical AI agents (apps/admin)
 
 `apps/admin/` is **meta**. It does not exist to "create new orgs in Sendero" — it exists to spin up **multiple vertical AI agents**. Sendero (travel ops) is one of those verticals; the next ones are legal, real-estate, healthcare, etc. Each vertical reuses the same template app shell + channel adapters (WhatsApp, Slack, MCP, web) + settlement rail + billing plumbing. **The only thing that changes per vertical is the tool catalog.**
 
-Hierarchy admin must surface (rollups in this order):
+Hierarchy admin must surface (rollups in this order — note the B2B2B layers):
 
 ```
-business unit  >  vertical agent (Sendero / legal / …)  >  business (TMC)  >  tenant  >  tool
+business unit  >  vertical agent (Sendero / legal / …)  >  tenant (TMC, our paying B2B)  >  customer-account (corporate, the TMC's downstream B2B)  >  traveler  >  tool
 ```
 
 Rules:
 - No hardcoded `"Sendero"` strings in admin UI — pull from active vertical context. Branding (logo, copy, default agent persona) replaceable per vertical.
-- Tenant/org creation flows ask "which vertical?" first. Vertical → team → user is the auth/permissions tree.
-- Channel tracking parity: every "Slack" surface in admin must have a WhatsApp peer. They are the two production channels; treating Slack as primary is a recurring bug.
+- Tenant/org creation flows ask "which vertical?" first. Vertical → tenant → customer-account → traveler is the auth/permissions tree.
+- **Channel ownership:** Web is the TMC operator surface (the paying tenant). Slack is the corporate-customer install surface (B2B2B). WhatsApp is the traveler surface. Admin views must keep these three distinct; conflating Slack with operator handoff is a recurring bug pattern.
 - Empty sidebar items use a **single shared** `<ComingSoonScreen feature="…" />` (location: `apps/admin/components/`). Do not populate placeholder pages with bespoke content — one screen, swapped in until the real feature ships.
 - Billing dashboards: per-tool spend rolls up cleanly to per-tenant → per-business → per-vertical → per-business-unit. Reuse the existing admin graph/stats primitives (founder approves the look).
 - Tool catalog UI is the primary differentiation knob — uploading/swapping/configuring per vertical, not building new app shells.
