@@ -311,6 +311,7 @@ import {
   slackSendTestMessageTool,
   slackStartOauthInstallTool,
 } from './slack-channel';
+import { requestBookingApprovalTool } from './request-booking-approval';
 import { requestHumanHandoffTool } from './request-human-handoff';
 import { sendWhatsAppTemplateTool } from './send-whatsapp-template';
 import { settleBookingTool } from './settle-booking';
@@ -1214,6 +1215,12 @@ export const toolList: ToolDef[] = [
   // keys or MCP clients; the agent calls it when uncertain and the
   // operator answers in MetaInbox / trip inbox / `/dashboard/handoffs`.
   requestHumanHandoffTool,
+  // Policy-driven booking approval gate (B2B2B Phase 3). Agent calls
+  // this when check_policy returns `requires_approver_above` for a
+  // booking it's about to confirm. Returns a handoffId the agent
+  // polls until the operator approves or rejects from
+  // `/dashboard/handoffs`.
+  requestBookingApprovalTool,
   // Outbound HSM templates. Internal-only — the agent picks a template
   // when outside the 24-hour window or when a branded touch-point is
   // warranted (QUOTE_READY, BOOKING_CONFIRMED, CHECKIN_REMINDER, …).

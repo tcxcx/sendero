@@ -2686,8 +2686,16 @@ model ChannelHandoff {
   question          String
   /// Optional context summary the agent attached when escalating.
   summary           String?
-  /// pending | answered | closed
+  /// pending | answered | closed | approved | rejected
+  /// (approved/rejected are reserved for kind='approval_request')
   status            String    @default("pending")
+  /// 'support_question' (default, existing) | 'approval_request'
+  /// (B2B2B Phase 3 — booking approval driven by check_policy's
+  /// `requireApproverOverUsd` threshold).
+  kind              String    @default("support_question")
+  /// Optional structured context. For approval_request rows:
+  /// { priceUsd, thresholdUsd, route, customerAccountId, bookingId? }.
+  metadata          Json?
   /// Liveblocks room id used for operator notifications + collaboration.
   liveblocksRoomId  String
   /// Operator-composed answer (delivered to the traveler verbatim or

@@ -20,6 +20,7 @@ import { requireRole } from '@/lib/require-role';
 import { requireCurrentTenant } from '@/lib/tenant-context';
 
 import { HandoffAnswerForm } from '@/components/handoffs/handoff-answer-form';
+import { HandoffApprovalButtons } from '@/components/handoffs/handoff-approval-buttons';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,8 @@ export default async function HandoffsPage() {
       question: true,
       summary: true,
       status: true,
+      kind: true,
+      metadata: true,
       answer: true,
       createdAt: true,
       answeredAt: true,
@@ -96,7 +99,7 @@ export default async function HandoffsPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                 <div>
                   <div className="t-meta" style={{ textTransform: 'uppercase' }}>
-                    {row.channel}
+                    {row.kind === 'approval_request' ? 'Approval' : row.channel}
                     {row.channelIdentity?.externalUserId
                       ? ` · ${row.channelIdentity.externalUserId}`
                       : ''}
@@ -115,6 +118,9 @@ export default async function HandoffsPage() {
                       {row.summary}
                     </p>
                   ) : null}
+                  {row.kind === 'approval_request' ? (
+                    <ApprovalContext metadata={row.metadata as Record<string, unknown> | null} />
+                  ) : null}
                 </div>
                 <div className="t-meta" style={{ whiteSpace: 'nowrap' }}>
                   {timeAgo(row.createdAt)}
@@ -129,7 +135,11 @@ export default async function HandoffsPage() {
                   Open trip inbox
                 </Link>
               ) : null}
-              <HandoffAnswerForm handoffId={row.id} />
+              {row.kind === 'approval_request' ? (
+                <HandoffApprovalButtons handoffId={row.id} />
+              ) : (
+                <HandoffAnswerForm handoffId={row.id} />
+              )}
             </article>
           ))}
         </section>
@@ -168,6 +178,52 @@ export default async function HandoffsPage() {
         </section>
       ) : null}
     </div>
+  );
+}
+
+function ApprovalContext({ metadata }: { metadata: Record<string, unknown> | null }) {
+  if (!metadata) return null;
+  const price = typeof metadata.priceUsd === 'number' ? metadata.priceUsd : null;
+  const threshold = typeof metadata.thresholdUsd === 'number' ? metadata.thresholdUsd : null;
+  const route = typeof metadata.route === 'string' ? metadata.route : null;
+  const customer = typeof metadata.customerAccountId === 'string' ? metadata.customerAccountId : null;
+  if (price === null && threshold === null && !route && !customer) return null;
+  return (
+    <dl
+      style={{
+        marginTop: 10,
+        display: 'grid',
+        gridTemplateColumns: 'max-content 1fr',
+        gap: '4px 12px',
+        fontSize: 12,
+        fontFamily: 'var(--font-mono)',
+      }}
+    >
+      {price !== null ? (
+        <>
+          <dt className="ink-60">Price</dt>
+          <dd>${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}</dd>
+        </>
+      ) : null}
+      {threshold !== null ? (
+        <>
+          <dt className="ink-60">Threshold</dt>
+          <dd>${threshold.toLocaleString('en-US', { maximumFractionDigits: 0 })}</dd>
+        </>
+      ) : null}
+      {route ? (
+        <>
+          <dt className="ink-60">Route</dt>
+          <dd>{route}</dd>
+        </>
+      ) : null}
+      {customer ? (
+        <>
+          <dt className="ink-60">Customer</dt>
+          <dd>{customer}</dd>
+        </>
+      ) : null}
+    </dl>
   );
 }
 
