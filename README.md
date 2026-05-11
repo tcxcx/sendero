@@ -27,6 +27,66 @@ If the credentials did not arrive in your reviewer packet, ping the team via the
 
 <br />
 
+## Hackathon Origin & Momentum
+
+Sendero was **built from scratch during this hackathon period**. We worked on it for two events in parallel — the **Arc hackathon** and the **Solana Frontier Hackathon** — with the same codebase entered to both. We already took home **Best Google Gemini Implementation** at the Arc event; the Solana Frontier submission is the same project, same repo, judged on its Solana-native surface.
+
+To see how far we moved inside the contest window — what shipped between the start of Frontier and now — here is our Arc/Google submission: **[lablab.ai/ai-hackathons/nano-payments-arc](https://lablab.ai/ai-hackathons/nano-payments-arc)**.
+
+**Dual-chain by design, not by port.** `Tenant.primaryChain: 'sol' | 'arc'` is a runtime choice from day one. Both chains share the same agent surface, tool catalog (128 tools), MCP server, OpenAPI spec, and ledger — only the settlement adapter swaps. Solana-side: `sendero_guest_escrow`, `agentic_commerce`, Metaplex Core for trip-stamp NFTs, Metaplex Agent Registry for agent identity. EVM-side (Arc): SenderoGuestEscrow + SenderoStamps + ERC-8004. The system is genuinely multi-chain, not single-chain with a port.
+
+**Why this exists.** We built on Y Combinator's thesis that vertical AI agents will replace SaaS, category by category. The hard part wasn't the agent — it was building a lean, replicable template so the same shell could be reused across verticals (legal, real estate, healthcare). Travel ops is the proving ground; the tool catalog is the only thing that swaps per vertical.
+
+### What we're most proud of
+
+- **WhatsApp-native wallet via Circle Gateway.** Gateway lets us mint a single unified USDC balance across EVM and Solana — chain selection becomes a runtime concern, not a user concern. Travelers manage funds inside WhatsApp with zero blockchain UX. Maggi (Brazil) and Félix Pago pioneered WhatsApp stablecoins for cross-border payments; we're taking the next step — a WhatsApp-native wallet driven by a vertical AI agent that actually does the work (book the flight, pay the supplier, file the expense), not just holds the money.
+- **A genuinely good WhatsApp flow.** Voice notes are supported. Every share link sent via WhatsApp or Slack runs through our own Open Graph image generator, so multi-tenant customers get fully branded, share-ready cards out of the box. NFT stamps, invoices, itineraries, and approvals all unfurl natively in chat.
+- **Multi-tenant operator dashboard with Liveblocks collaboration.** Web is the third surface: operators take over from the AI when needed (or when the AI asks). Liveblocks gives teams real-time collaboration on tenant workspaces, channel management, and handoffs.
+
+### External validation
+
+Off the back of the Arc win, **Google invited us to San Jose** to compete again at the **TechEx Intelligent Enterprise Solutions Hackathon** — enterprise AI adoption track. Same product, new venue, on the strength of the Gemini implementation we shipped during these few weeks: **[lablab.ai/ai-hackathons/techex-intelligent-enterprise-solutions-hackathon](https://lablab.ai/ai-hackathons/techex-intelligent-enterprise-solutions-hackathon)**.
+
+### What's gated by external systems
+
+The biggest practical blocker was **Meta WhatsApp Business verification**. The integration is complete and fully working — we just can't ship a production WhatsApp number without a verified business profile, and three days through Meta's verification flow did not get us there. For the demo we use the **Kapso sandbox** number. A real customer (e.g. a LATAM travel agency) with an established business identity verifies in a normal-length window, attaches their phone, and the same flow runs on their own number. **Slack has no equivalent friction** — OAuth, slash commands, modals, and approvals all work end-to-end against real workspaces.
+
+### Scope clarity
+
+Everything in the pitch deck (this repo's `/pitch` directory) is built. The four Solana programs are deployed and verified on devnet; the 128-tool catalog is live behind MCP and OpenAPI; the WhatsApp + Slack + web + MCP surfaces are wired and operational. Mainnet promotion is gated on plan-tier finalization, not on tech.
+
+<br />
+
+## Deployed contracts
+
+All Sendero settlement, identity, and stamp surfaces are live on testnets — Solana devnet (the primary surface for this submission) and Arc Testnet (parity leg).
+
+### Solana — devnet
+
+| # | Program | Address | Explorer | Source |
+|---|---|---|---|---|
+| 1 | `sendero_guest_escrow` — prefund / reserve / commit / settle / refund | `9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8` | [Solana Explorer ↗](https://explorer.solana.com/address/9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8?cluster=devnet) | [`programs/sendero-guest-escrow/src/lib.rs`](./contracts/programs-solana/programs/sendero-guest-escrow/src/lib.rs) |
+| 2 | `agentic_commerce` — AI-agent job lifecycle (create / fund / complete / refund) | `4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9` | [Solana Explorer ↗](https://explorer.solana.com/address/4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9?cluster=devnet) | [`programs/agentic-commerce/src/lib.rs`](./contracts/programs-solana/programs/agentic-commerce/src/lib.rs) |
+| 3 | Metaplex Core — trip-stamp NFTs (boarding pass · receipt · passport) | `CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d` | [Solana Explorer ↗](https://explorer.solana.com/address/CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d?cluster=devnet) | [`packages/metaplex`](./packages/metaplex) · external program |
+| 4 | Metaplex Agent Registry — Identity + Reputation + Validation (ERC-8004 parity) | `1DREGFgysWYxLnRnKQnwrxnJQeSMk2HmGaC6whw2B2p` | [Solana Explorer ↗](https://explorer.solana.com/address/1DREGFgysWYxLnRnKQnwrxnJQeSMk2HmGaC6whw2B2p?cluster=devnet) | [`packages/metaplex`](./packages/metaplex) · external program |
+
+TS adapters that build the instructions consumed by the agent: [`packages/guest/src/solana.ts`](./packages/guest/src/solana.ts) and [`packages/tools/src/guest-escrow.ts`](./packages/tools/src/guest-escrow.ts).
+
+### Arc Testnet — EVM parity leg
+
+| # | Contract | Address | Explorer | Source |
+|---|---|---|---|---|
+| 1 | `SenderoGuestEscrow` (proxy) — Solidity twin of `sendero_guest_escrow` | `0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515` | [Arcscan ↗](https://testnet.arcscan.app/address/0x640e15B2B7cBa421c93dA1514f8E6Ba3e11f8515) | [`contracts/src/SenderoGuestEscrow.sol`](./contracts/src/SenderoGuestEscrow.sol) |
+| 2 | `SenderoStamps` (Circle SCP EIP-1167 proxy) — trip-stamp ERC-1155 | `0xcc0fa83535675a856d773cfbc71232c3d7b71a03` | [Arcscan ↗](https://testnet.arcscan.app/address/0xcc0fa83535675a856d773cfbc71232c3d7b71a03) | [`scripts/deploy-stamps-template.ts`](./scripts/deploy-stamps-template.ts) · thirdweb template |
+| 3 | `SenderoStamps` impl — thirdweb `TokenERC1155` | `0xCCf28A443e35F8bD982b8E8651bE9f6caFEd4672` | [Arcscan ↗](https://testnet.arcscan.app/address/0xCCf28A443e35F8bD982b8E8651bE9f6caFEd4672) | external (thirdweb prebuilt) |
+| 4 | ERC-8004 `IdentityRegistry` | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | [Arcscan ↗](https://testnet.arcscan.app/address/0x8004A818BFB912233c491871b3d84c89A494BD9e) | [`packages/arc`](./packages/arc) · Arc/Circle upstream |
+| 5 | ERC-8004 `ReputationRegistry` | `0x8004B663056A597Dffe9eCcC1965A193B7388713` | [Arcscan ↗](https://testnet.arcscan.app/address/0x8004B663056A597Dffe9eCcC1965A193B7388713) | [`packages/arc`](./packages/arc) · Arc/Circle upstream |
+| 6 | ERC-8004 `ValidationRegistry` | `0x8004Cb1BF31DAf7788923b405b754f57acEB4272` | [Arcscan ↗](https://testnet.arcscan.app/address/0x8004Cb1BF31DAf7788923b405b754f57acEB4272) | [`packages/arc`](./packages/arc) · Arc/Circle upstream |
+
+Verify the full set in one command: `bun scripts/verify-deployments.ts` (encodes expected verification shape per address — exits non-zero on any gap). Source: [`scripts/verify-deployments.ts`](./scripts/verify-deployments.ts).
+
+<br />
+
 ## What Sendero is
 
 Sendero is the AI operating layer for travel agencies, TMCs, concierge teams, and corporate travel desks — and the traveler companion they expose on WhatsApp, Slack, web, and MCP. It turns messy travel requests into quotes, approvals, bookings, service actions, refunds, artifacts, invoices, and settlement trails. **Solana is the trust + money backplane**: every flight, hotel, and ground leg can be booked by an AI workflow and settled in USDC on Solana with sub-second finality.
@@ -265,6 +325,99 @@ mise run dev              # full stack (apps + edge + Ponder indexer)
 mise run dev:web          # web only → http://localhost:3010
 mise run typecheck        # turbo run typecheck
 ```
+
+### Run it locally with `bun dev:complete`
+
+If you'd rather skip `mise` and drive everything from bun, this is the path. `bun dev:complete` boots seven workspaces in parallel through turbo with streaming UI: the main app, marketing site, help center, docs, edge worker, Ponder indexer, and Storybook.
+
+#### 1. Prerequisites
+
+- **bun 1.3.10+** — `curl -fsSL https://bun.sh/install | bash`
+- **Node 22.18+** — for `prisma` codegen and Anchor scripts
+- **Postgres** — Neon project (free tier works) or a local Postgres reachable on a `postgresql://…` URL
+- **(optional) Anchor 0.30+** — only if you plan to redeploy the Solana programs; the deployed devnet program IDs in the README work out of the box
+
+#### 2. Install and seed env
+
+```bash
+git clone https://github.com/<your-fork>/sendero && cd sendero
+bun install                                  # workspaces + prisma postinstall
+cp .env.example .env.local                   # copy the env scaffold
+```
+
+Open `.env.local` and fill **at minimum** the keys below. Every other key in `.env.example` is documented inline; most are optional for a first boot.
+
+| Variable | Purpose | Where to get it |
+|---|---|---|
+| `DATABASE_URL` / `DIRECT_URL` / `DATABASE_URL_UNPOOLED` | Postgres for app + prisma + LISTEN/NOTIFY | [Neon](https://console.neon.tech) (pooled + direct + unpooled URLs) |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | Auth, orgs, billing tier | [Clerk dashboard](https://dashboard.clerk.com) |
+| `GEMINI_API_KEY` *or* `AI_GATEWAY_API_KEY` | Agent LLM. Gateway is preferred; Gemini-direct is the fallback | [Google AI Studio](https://aistudio.google.com/apikey) / [Vercel AI Gateway](https://vercel.com/dashboard/ai) |
+| `DUFFEL_API_TOKEN` (`duffel_test_…`) | Flights + hotels (sandbox is free) | [Duffel](https://duffel.com/docs/guides/quick-start) |
+| `PASSPORT_VAULT_KEK` | 32-byte base64; encrypts the passport vault | `openssl rand -base64 32` |
+| `SENDERO_SOLANA_PLATFORM_PRIVATE_KEY` | Base58 keypair; pays SOL gas for Gateway-mint drips | `solana-keygen new` + `cat` the JSON, or Phantom export |
+| `SENDERO_SOLANA_RPC_URL` | Solana RPC | Defaults to `https://api.devnet.solana.com` |
+| `NEXT_PUBLIC_APP_URL` | Same origin you open in the browser | Keep `http://localhost:3010` for dev |
+
+Channel/sponsor surfaces (`KAPSO_*`, `SLACK_*`, `COINBASE_CDP_*`, `MOONPAY_*`, `LIVEBLOCKS_*`) degrade gracefully when missing — the app boots and the affected surface logs a warn. Add them only when you want to exercise that channel.
+
+Validate your env wiring at any point:
+
+```bash
+bun env:validate                              # checks process.env vs zod schemas in @sendero/env
+bun run scripts/config-doctor.ts              # diffs .env.example vs what TS actually reads
+```
+
+#### 3. Database bootstrap
+
+```bash
+bun db:generate                               # prisma client
+bun db:migrate                                # apply migrations to your DATABASE_URL
+bun db:seed                                   # optional — seeds plan tiers + demo tenant
+```
+
+#### 4. Run the full stack
+
+```bash
+bun dev:complete
+```
+
+Streaming UI prints each workspace separately. Once stabilized, the following ports are live:
+
+| Port | Workspace | URL |
+|---|---|---|
+| `3010` | `@sendero/app` — main app, agent runtime, MCP, dashboards | http://localhost:3010 |
+| `3011` | `@sendero/marketing` — sendero.travel landing | http://localhost:3011 |
+| `3012` | `@sendero/help` — help center | http://localhost:3012 |
+| `3020` | `@sendero/docs` — docs site + API viewer | http://localhost:3020 |
+| `3021` | `@sendero/edge` — Hono edge worker (x402 paywall, Routing Middleware) | http://localhost:3021 |
+| `3030` | `@sendero/storybook` — component sandbox | http://localhost:3030 |
+| — | `@sendero/indexer` — Ponder indexer (no HTTP port; logs to stream) | — |
+
+Want a leaner boot? Three smaller scripts cover the common subsets:
+
+```bash
+bun dev                                       # @sendero/app only — fastest cold start
+bun dev:edge                                  # edge worker only
+bun dev:all                                   # every workspace including any new ones
+```
+
+#### 5. (Optional) Solana platform wallet bootstrap
+
+The platform hot wallet pays SOL gas for Gateway mint operations and is required if you want to exercise the full Solana settlement path. One-shot bootstrap:
+
+```bash
+bun apps/app/scripts/_local/provision-solana-platform.ts
+```
+
+This generates a base58 keypair, attempts a devnet airdrop (~1 SOL), and prints the value to paste into `SENDERO_SOLANA_PLATFORM_PRIVATE_KEY`. Top up via [faucet.solana.com](https://faucet.solana.com) if the airdrop fails — 1 SOL covers ~100 transfers.
+
+#### 6. Troubleshooting
+
+- **Prisma client out of date** → re-run `bun db:generate` after any schema change.
+- **`PASSPORT_VAULT_KEK` unset** errors in agent runtime → generate one with `openssl rand -base64 32` and restart. Most agent tools tolerate it missing; `scan_passport_inline` does not.
+- **Wallet balance SSE silent** → set `DATABASE_URL_UNPOOLED` (Neon's direct URL). Without it the stream falls back to a 10s slow-poll and logs a warn.
+- **Port already in use** → run `mise run ports` (kills Sendero dev processes) or override with `APP_PORT=4010 bun dev:complete`.
+- **AI tools refuse to start** → confirm one of `AI_GATEWAY_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` is set. The cascade is Gateway → Gemini → OpenAI → Anthropic.
 
 ### Anchor (Solana programs)
 

@@ -153,7 +153,30 @@
      S1 · Title — giant Fraunces wordmark
      ============================================================ */
   .s1 .frame { padding: 32px 32px; }
-  .s1 .mark { position: absolute; top: 120px; right: 96px; opacity: 0.85; }
+  /* Hero logo — perfectly centered in the slide. Translate-based
+   * centering keeps it pixel-true regardless of intrinsic size.
+   * NOTE: the generic `.reveal` rise keyframe sets `transform: none`
+   * at its end state, which would wipe the centering translate.
+   * The .s1 .mark element uses a dedicated keyframe below that
+   * preserves the translate as part of its end state. */
+  .s1 .mark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: clamp(220px, 26vw, 360px);
+    height: auto;
+    transform: translate(-50%, -50%);
+    opacity: 0.95;
+    pointer-events: none;
+  }
+  section.is-active .s1 .mark {
+    animation: hero-mark-rise 700ms var(--ease) both;
+    animation-delay: 80ms;
+  }
+  @keyframes hero-mark-rise {
+    from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
+    to { opacity: 0.95; transform: translate(-50%, -50%); }
+  }
   .s1 .wordmark {
     font-family: var(--display);
     font-weight: 450;
@@ -331,19 +354,24 @@
   <section data-label="01 Title" class="s1">
     <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
     <div class="frame">
-      <div class="header"><span class="topic">&nbsp;</span><span class="brand">Pitch / 2026</span></div>
+      <div class="header"><span class="topic">Solana Frontier Hackathon · 2026</span><span class="brand">Pitch / 2026</span></div>
 
-      <!-- Sendero binocular mark — left lens has a star (direction), right lens has a horizon line (destination) -->
-      <svg class="mark reveal" xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 160 100" fill="none" stroke="#D65438" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="44" cy="58" r="32" fill="none"/>
-        <circle cx="116" cy="58" r="32" fill="none"/>
-        <path d="M 76 50 L 84 50 M 76 64 L 84 64" />
-        <!-- Star in left lens -->
-        <path d="M 44 46 L 47 56 L 56 56 L 49 62 L 52 72 L 44 66 L 36 72 L 39 62 L 32 56 L 41 56 Z" fill="#D65438" stroke="none"/>
-        <!-- Horizon line + tiny mountain in right lens -->
-        <path d="M 92 64 L 140 64" stroke-width="2"/>
-        <path d="M 102 64 L 112 50 L 122 64" stroke-width="2" fill="none"/>
-      </svg>
+      <!-- Sendero binocular mark — textured PNG, perfectly centered.
+           Intentionally NOT tagged `reveal` — the dedicated
+           `hero-mark-rise` keyframe in `.s1 .mark` runs the entrance
+           and preserves the centering translate at the end state. -->
+      <img class="mark" src="assets/sendero-logo.png" alt="Sendero binoculars" />
+      <noscript>
+        <!-- Fallback SVG retained for environments that disable images. -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 160 100" fill="none" stroke="#D65438" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="44" cy="58" r="32" fill="none"/>
+          <circle cx="116" cy="58" r="32" fill="none"/>
+          <path d="M 76 50 L 84 50 M 76 64 L 84 64" />
+          <path d="M 44 46 L 47 56 L 56 56 L 49 62 L 52 72 L 44 66 L 36 72 L 39 62 L 32 56 L 41 56 Z" fill="#D65438" stroke="none"/>
+          <path d="M 92 64 L 140 64" stroke-width="2"/>
+          <path d="M 102 64 L 112 50 L 122 64" stroke-width="2" fill="none"/>
+        </svg>
+      </noscript>
 
       <p class="tagline reveal">The AI agent that does <em>travel work</em>.<br/>Charged per action. Not per seat.</p>
 
@@ -368,7 +396,7 @@
                 <svg viewBox="0 0 56 56" fill="none"><rect x="6" y="14" width="44" height="36" stroke="#1F2A44" stroke-width="2"/><path d="M6 22 H50 M6 30 H50 M6 38 H50" stroke="#1F2A44" stroke-width="1.5"/></svg>
               </div>
               <h2>Six vendors,<br/>one workflow.</h2>
-              <p>Every booking touches an airline GDS, a travel firm, a CRM, expense software, payments, and humans gluing it all together. You pay all six.</p>
+              <p>GDS, TMC, CRM, expense, payments, humans. A $1,000 expense report still takes a Concur user 3+ hours. You pay for all six.</p>
             </div>
             <h2 class="headline reveal">The current market for travel ops is <em>a mess</em>.</h2>
           </div>
@@ -385,14 +413,14 @@
                 <svg viewBox="0 0 56 56" fill="none"><circle cx="28" cy="20" r="8" stroke="#1F2A44" stroke-width="2"/><path d="M14 50 c0-8 6-14 14-14 s14 6 14 14" stroke="#1F2A44" stroke-width="2"/></svg>
               </div>
               <h2>Manual humans.<br/>Who quit.</h2>
-              <p>Your best travel agent costs $800 a month, works eight hours a day, quotes manually, and is gone in eighteen months.</p>
+              <p>An international flight booked via TMC agent costs $35–50 in fees. Your best agent works 8 hours, quotes by hand, and is gone in 18 months.</p>
             </div>
             <div class="card reveal">
               <div class="icon">
                 <svg viewBox="0 0 56 56" fill="none"><rect x="8" y="12" width="40" height="28" rx="2" stroke="#1F2A44" stroke-width="2"/><path d="M14 46 H42" stroke="#1F2A44" stroke-width="2"/><path d="M22 26 L34 26" stroke="#D65438" stroke-width="2"/></svg>
               </div>
-              <h2>Forty-year-old tech.</h2>
-              <p>Sabre and Amadeus were built for travel agents in mainframes, not for the AI agents your customers now expect to do the work.</p>
+              <h2>Modern hit a ceiling.</h2>
+              <p>Concur owns 49.6% of T&amp;E share but Gartner calls the booking flow pre-AI. Navan IPO'd at $6.21B — down from $9.2B in 2022. SaaS-with-AI-bolt-on isn't the answer.</p>
             </div>
           </div>
         </div>
@@ -458,14 +486,14 @@
         <div class="grid-3 wide-image">
           <div class="col">
             <div class="card has-stat reveal">
-              <h2>Contracts verified.</h2>
-              <p>All Sendero contracts shipped to Arc-Testnet — escrow, stamps, ERC-8004 identity, reputation, validation — all verified-equivalent on Arcscan.</p>
-              <span class="stat live"><span data-count="6">6</span><span style="color:var(--ink-40);"> / 6</span></span>
+              <h2>Programs deployed.</h2>
+              <p>Escrow, agentic-commerce, Metaplex Core stamps, Metaplex Agent Registry — all live on Solana devnet, verified on Explorer.</p>
+              <span class="stat live"><span data-count="4">4</span><span style="color:var(--ink-40);"> / 4</span></span>
             </div>
             <div class="card has-stat reveal">
-              <h2>End-to-end.</h2>
-              <p>From WhatsApp request to ticketed Duffel order with USDC on Arc, signature-and-freshness-dedup'd webhooks.</p>
-              <span class="stat"><span data-count="90">90</span><small>s</small></span>
+              <h2>Tool catalog.</h2>
+              <p>Search, book, settle, identity, stamps, FX, visa, eSIM, weather, document-scan. Every one priced and discoverable via MCP + OpenAPI.</p>
+              <span class="stat"><span data-count="128">128</span><small>tools</small></span>
             </div>
           </div>
 
@@ -475,13 +503,13 @@
 
           <div class="col">
             <div class="card has-stat reveal">
-              <h2>Pilot pipeline.</h2>
-              <p>Mid-market LATAM travel agencies in Quito and Pichincha. Each one ready to white-label Sendero on their WhatsApp number.</p>
-              <span class="stat live"><span data-count="3">3</span></span>
+              <h2>End-to-end.</h2>
+              <p>WhatsApp request to ticketed Duffel order with USDC settled on Solana. Idempotent, audit-logged, Langfuse-traced.</p>
+              <span class="stat"><span data-count="90">90</span><small>s</small></span>
             </div>
             <div class="card has-stat reveal">
               <h2>MCP server, open.</h2>
-              <p>llms.txt published. First external AI agents already calling Sendero tools and paying nano-payments per call.</p>
+              <p>llms.txt published. External AI agents already calling Sendero tools and paying x402 nano-payments per call.</p>
               <span class="open-tag"><span class="dot"></span>LIVE · sendero.travel/.well-known/llms.txt</span>
             </div>
           </div>
@@ -491,12 +519,12 @@
   </section>
 
   <!-- ============================================================
-       S5 · NFT Trip Stamps · Google × Arc
+       S5 · NFT Trip Stamps · Google × Solana
        ============================================================ -->
   <section data-label="05 Stamps" class="s5">
     <div class="grid-lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>
     <div class="frame">
-      <div class="header"><span class="topic">Living NFTs · Google × Arc</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
+      <div class="header"><span class="topic">Living NFTs · Google × Solana</span><a class="brand" href="https://sendero.travel">sendero.travel</a></div>
 
       <div class="body">
         <div class="grid-3 wide-image">
@@ -506,7 +534,7 @@
               <span class="line"><span>passport.</span></span>
             </h2>
             <div class="card has-stat reveal">
-              <h2>Gemini 2.5.<br/>IPFS. Arc.</h2>
+              <h2>Gemini 2.5.<br/>IPFS. Metaplex Core.</h2>
               <p>Boarding pass at confirm. Settlement receipt at payment. Itinerary map as legs land. A two-page passport spread when the trip closes.</p>
               <span class="stat"><span data-count="14">14</span><small>s</small></span>
             </div>
@@ -519,7 +547,7 @@
           <div class="col">
             <div class="card reveal">
               <h2>Painted on the trip.</h2>
-              <p>Vercel Workflow runs Gemini image + caption in parallel, pins to IPFS, mints into the traveler's Arc wallet. Idempotent on (kind, primaryKey).</p>
+              <p>Vercel Workflow runs Gemini image + caption in parallel, pins to IPFS, mints a Metaplex Core asset into the traveler's Solana wallet. Idempotent on (kind, primaryKey).</p>
             </div>
             <div class="card reveal">
               <h2>Unfurls inline.</h2>
@@ -559,10 +587,10 @@
         </div>
 
         <div class="examples-row">
-          <div class="ex"><span class="seg">Legal</span><span class="co">Harvey</span><span class="note">Replaces associate + research</span></div>
-          <div class="ex"><span class="seg">Customer service</span><span class="co">Sierra</span><span class="note">Replaces agents + Zendesk</span></div>
-          <div class="ex"><span class="seg">Sales development</span><span class="co">Clay / 11x</span><span class="note">Replaces SDRs + tools</span></div>
-          <div class="ex accent"><span class="seg">Travel operations</span><span class="co">Sendero</span><span class="note">Replaces GDS + travel firm + humans</span></div>
+          <div class="ex"><span class="seg">Legal · $11B</span><span class="co">Harvey</span><span class="note">Replaces BigLaw associates + LexisNexis. $190M ARR.</span></div>
+          <div class="ex"><span class="seg">Customer service · $15B</span><span class="co">Sierra</span><span class="note">Replaces tier-1 agents + Zendesk. $150M+ ARR.</span></div>
+          <div class="ex"><span class="seg">GTM · $3.1B</span><span class="co">Clay</span><span class="note">Replaces ZoomInfo + SDR tooling. $100M ARR.</span></div>
+          <div class="ex accent"><span class="seg">Travel ops · open seat</span><span class="co">Sendero</span><span class="note">Replaces GDS + TMC + humans. The open category.</span></div>
         </div>
       </div>
     </div>
@@ -583,7 +611,7 @@
         </h2>
 
         <p class="reveal" style="font-family: var(--sans); font-size: 22px; line-height: 1.5; color: var(--ink-80); max-width: 60ch;">
-          When AI does the work, you price the work — not the software. SaaS shell on top, per-action nano-payments underneath. <b>Both legs from day one.</b>
+          When AI does the work, you price the work — not the software. SaaS shell on top, per-action nano-payments underneath. Solana settles in sub-seconds at <b>~$0.0004 per transfer</b> — that's what makes $0.02 search prices possible.
         </p>
 
         <div class="price-row">
@@ -617,25 +645,25 @@
 
       <div class="body" style="gap: 48px;">
         <h2 class="headline kinetic-title reveal" style="font-size: clamp(56px, 7vw, 104px); max-width: 18ch;">
+          <span class="line"><span>One US mid-market.</span></span><br/>
           <span class="line"><span>Eighty employees,</span></span><br/>
-          <span class="line"><span>two hundred trips.</span></span><br/>
-          <span class="line"><span>The math is <em>not close</em>.</span></span>
+          <span class="line"><span>two hundred trips.<br/><em>Not close</em>.</span></span>
         </h2>
 
         <div class="grid-3" style="gap: 24px; align-items: stretch;">
           <div class="card has-stat reveal">
-            <h2>With a travel firm.</h2>
-            <p>Transaction fees, monthly management, expense software, after-hours premium, implementation.</p>
+            <h2>With a US TMC.</h2>
+            <p>$18–50 per booking + 1–3% of GMV + SMB minimums of $3–8K/yr. Concur, Navan, Egencia all bundled.</p>
             <span class="stat">$<span data-count="28.5" data-decimals="1">28.5</span><small>K</small></span>
           </div>
           <div class="card has-stat center-card reveal">
             <h2>Year-1 savings.</h2>
-            <p style="color: rgba(214,84,56,0.65);">Twenty-six thousand dollars back. Real-time data the travel firm never gave you.</p>
+            <p style="color: rgba(214,84,56,0.65);">Twenty-six thousand back. Real-time data the TMC never gave you. Travelers stay in WhatsApp.</p>
             <span class="stat accent"><span data-count="91">91</span><small>%</small></span>
           </div>
           <div class="card has-stat reveal">
             <h2>With Sendero.</h2>
-            <p>Nano-payments per action and a 0.5% GMV take. No licenses, no seats, no setup fees.</p>
+            <p>$0.02 per search, $1 per booking, 0.5% GMV take. No seats, no minimums, no setup fees.</p>
             <span class="stat accent">$<span data-count="2.4" data-decimals="1">2.4</span><small>K</small></span>
           </div>
         </div>
@@ -653,20 +681,20 @@
 
       <div class="body" style="gap: 64px;">
         <h2 class="headline kinetic-title reveal" style="font-size: clamp(56px, 7vw, 104px);">
-          <span class="line"><span>$1.9T industry.</span></span><br/>
-          <span class="line"><span>Travel agencies still <em>mostly human</em>.</span></span>
+          <span class="line"><span>$1.57T industry.</span></span><br/>
+          <span class="line"><span>Two wedges. <em>Both human-bottlenecked</em>.</span></span>
         </h2>
 
         <div class="tam-row">
           <div class="tam reveal">
-            <span class="label">Total · global travel</span>
-            <span class="num">$<span data-count="1.9" data-decimals="1">1.9</span>T</span>
-            <span class="sub">All travel spend. The workflow Sendero collapses end-to-end. <em>GBTA 2025</em>.</span>
+            <span class="label">Wedge · US corporate travel</span>
+            <span class="num">$<span data-count="395">395</span>B</span>
+            <span class="sub">2025 US business-travel spend. Concur owns 49.6% of T&amp;E; Navan's $9.2B valuation reset to $6.21B at IPO. The category is up for grabs. <em>GBTA 2025</em>.</span>
           </div>
           <div class="tam reveal">
-            <span class="label">Wedge · LATAM + Spain</span>
-            <span class="num">$<span data-count="180">180</span>B</span>
-            <span class="sub">Spanish-speaking mid-market. Underserved, WhatsApp-native, USDC-growing.</span>
+            <span class="label">Compound · LATAM agencies</span>
+            <span class="num">$<span data-count="50.6" data-decimals="1">50.6</span>B</span>
+            <span class="sub">LATAM business travel. 35%+ booked offline. 72% of LATAM conversational commerce runs on WhatsApp — agencies carry travelers into the network. <em>IMARC 2024</em>.</span>
           </div>
           <div class="tam accent reveal">
             <span class="label">3-year target</span>
@@ -688,12 +716,12 @@
 
       <div class="body" style="justify-content: flex-start; gap: 36px; padding-top: 56px;">
         <h1 class="ask-headline kinetic-title reveal">
-          <span class="line"><span><em>Three</em> paid pilots.</span></span><br/>
-          <span class="line"><span>And intros.</span></span>
+          <span class="line"><span>Pilot <em>US corporate</em> travel.</span></span><br/>
+          <span class="line"><span>Compound with <em>LATAM agencies</em>.</span></span>
         </h1>
 
         <p class="reveal" style="font-family: var(--sans); font-size: 24px; line-height: 1.5; color: var(--ink-80); max-width: 56ch; margin: 0;">
-          Mid-market LATAM corporates and travel agencies for the pilot. Finance leaders we should meet. Investors who get vertical AI.
+          US enterprises ready to retire Concur or Navan. LATAM travel agencies ready to white-label Sendero on WhatsApp. Solana ecosystem intros for distribution. Investors who get vertical AI settling on chain.
         </p>
       </div>
 
@@ -705,8 +733,8 @@
             <span class="name">Circle</span>
           </div>
           <div class="partner">
-            <span class="role">L2 chain · sub-6s settlement</span>
-            <span class="name">Arc</span>
+            <span class="role">Settlement · Metaplex · Squads</span>
+            <span class="name">Solana</span>
           </div>
           <div class="partner">
             <span class="role">Gemini 2.5 · Vertex AI</span>
@@ -727,16 +755,16 @@
 
 <script type="application/json" id="speaker-notes">
 [
-  "Sendero is the AI agent that does travel work. End to end. Charged per action, not per seat.",
-  "Travel ops today: six vendors, manual humans who quit in eighteen months, forty-year-old tech. The current market is a mess.",
-  "One agent runs the entire lifecycle — search, book, pay, support, ancillaries, expense, report. Multi-tenant, all channels, sixty seconds.",
-  "Live today. Six contracts verified on Arc. Three pilots in pipeline. End-to-end ninety seconds. MCP server open to any AI agent.",
-  "Every trip mints collectible NFT stamps. Painted by Gemini in fourteen seconds. Pinned to IPFS, minted on Arc. The collectible is the marketing surface.",
-  "Vertical AI agents replace SaaS — that's YC's bet, three hundred billion-dollar opportunities. Harvey did legal. Sierra did support. Sendero does travel.",
-  "If nobody travels, nobody pays. SaaS shell on top, nano-payments underneath. Both legs from day one. Two cents per search, a dollar per booking.",
-  "Eighty-person company, two hundred trips: twenty-eight thousand five hundred with a travel firm. Two thousand four hundred with us. Ninety-one percent.",
-  "One-point-nine trillion industry. One hundred eighty billion wedge in LATAM and Spain. Three-year target: five to sixteen million ARR.",
-  "Three paid pilots. Intros to LATAM finance leaders. Investors who get vertical AI. hola@sendero.travel."
+  "Sendero is the AI agent for travel work. It lives in WhatsApp and Slack. Priced per action, not per seat.",
+  "Travel ops is a mess. Concur is pre-AI. Navan IPO'd at six billion — down from nine. The category is open.",
+  "One agent runs the whole lifecycle: search, book, pay, support, report. Multi-tenant. WhatsApp for travelers, Slack for operators. Ninety seconds end-to-end.",
+  "Live today. Four programs deployed on Solana. One hundred twenty-eight tools, every one discoverable via MCP. External AI agents already calling and paying.",
+  "Every trip mints NFT stamps. Gemini paints, Metaplex Core mints to the Solana wallet. They unfurl in Slack and WhatsApp — the collectible is the marketing.",
+  "Vertical AI is replacing SaaS. Harvey: eleven billion in legal. Sierra: fifteen billion in customer service. Travel ops is the open seat. Sendero takes it.",
+  "If nobody travels, nobody pays. Two cents per search, one dollar per booking. Solana settles for four-hundredths of a cent — that is the unlock.",
+  "Eighty employees, two hundred trips. A US travel firm: twenty-eight thousand five hundred. Sendero: two thousand four hundred. Ninety-one percent back — in WhatsApp.",
+  "Two wedges. US corporate travel, three hundred ninety-five billion. LATAM agencies, fifty billion — seventy-two percent of commerce already on WhatsApp. Target: sixteen million ARR.",
+  "We need US pilots ready to retire Concur or Navan, LATAM agency white-labels on WhatsApp, and Solana ecosystem intros. hola at sendero dot travel."
 ]
 </script>
 
@@ -802,7 +830,7 @@
      ============================================================ */
   (function () {
     const STORAGE_KEY = 'sendero-pitch-unlocked-v1';
-    const PASSWORD = 'arc';
+    const PASSWORD = 'solana';
     const gate = document.getElementById('pw-gate');
     const form = document.getElementById('pw-form');
     const input = document.getElementById('pw-input');
