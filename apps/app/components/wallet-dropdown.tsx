@@ -437,8 +437,15 @@ export function WalletDropdown() {
                     // per-wallet view). Unified Operations balance has
                     // its own poll inside UnifiedBalanceSection.
                     // Address sent case-preserved; route canonicalizes.
+                    //
+                    // Treasury mode on Sol uses `?live=1` to bypass the
+                    // Circle webhook cache and read the vault PDA's
+                    // USDC ATA directly from RPC. Operations + Arc
+                    // treasury stay on the cached column (Circle is
+                    // authoritative there).
+                    const live = mode === 'treasury' && chain === 'sol' ? '&live=1' : '';
                     const r = await fetch(
-                      `/api/wallet/balance?address=${encodeURIComponent(userAuth.address)}`,
+                      `/api/wallet/balance?address=${encodeURIComponent(userAuth.address)}${live}`,
                       { cache: 'no-store' }
                     );
                     if (!r.ok) return;
