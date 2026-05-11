@@ -110,6 +110,7 @@ export function ProvisioningWaitScreen({
   const elapsed = useElapsedSeconds();
   const meta = CHAIN_META[chain];
   const isFailed = progress?.currentStage === 'failed';
+  const isDone = progress?.currentStage === 'done';
   const lastError = progress?.lastError;
 
   return (
@@ -191,7 +192,7 @@ export function ProvisioningWaitScreen({
           </aside>
         ) : null}
 
-        {IS_DEV || isFailed || stuck ? (
+        {!isDone && (IS_DEV || isFailed || stuck) ? (
           <div className="provisioning-dev">
             <Button
               type="button"
@@ -205,6 +206,14 @@ export function ProvisioningWaitScreen({
             </Button>
             {devHint ? <p className="provisioning-dev__hint">{devHint}</p> : null}
           </div>
+        ) : null}
+        {isDone ? (
+          <aside className="provisioning-notice provisioning-notice--success" role="status">
+            <span className="provisioning-notice__tag">Ready</span>
+            <h2 className="provisioning-notice__title">
+              Workspace is live. Redirecting to your dashboard…
+            </h2>
+          </aside>
         ) : null}
       </article>
 
@@ -456,6 +465,15 @@ export function ProvisioningWaitScreen({
         .provisioning-notice--error {
           border-color: color-mix(in oklab, var(--accent-rose, #b54848) 38%, transparent);
           background: color-mix(in oklab, var(--accent-rose, #b54848) 8%, transparent);
+        }
+
+        .provisioning-notice--success {
+          border-color: color-mix(in oklab, var(--ink, #fb542b) 30%, transparent);
+          background: color-mix(in oklab, var(--ink, #fb542b) 6%, transparent);
+        }
+
+        .provisioning-notice--success .provisioning-notice__tag {
+          color: var(--ink, #fb542b);
         }
 
         .provisioning-notice__tag {

@@ -28,6 +28,7 @@ import { clerkClient } from '@clerk/nextjs/server';
 
 import { ensurePrimaryChainProvisioned } from '@/lib/provision-tenant-on-chain-choice';
 import { beginProvisioning, stampStage } from '@/lib/provisioning-progress';
+import { runTenantGateway } from '@/lib/run-tenant-gateway';
 
 export interface RunTenantProvisioningArgs {
   tenantId: string;
@@ -99,8 +100,13 @@ export async function runTenantProvisioning(
     });
   }
 
-  // --- Stage 3: finalize (Clerk publicMetadata flip) -----------------
+  // --- Stage 3: finalize (Gateway + Clerk publicMetadata flip) ------
+  // Gateway provisioning is non-fatal; the cron sweeper picks up
+  // missing TenantGatewayConfig / signer / ops DCWs on the next run.
+  // We attempt it inline here so the operator dashboard sees the
+  // unified balance widget light up without waiting for a cron tick.
   await stampStage({ tenantId, stage: 'finalize', status: 'running' });
+  const gateway = await runTenantGateway({ tenantId, clerkOrgId });
   try {
     const client = await clerkClient();
     await client.organizations.updateOrganization(clerkOrgId, {
@@ -113,7 +119,17 @@ export async function runTenantProvisioning(
         onboardingComplete: true,
       },
     });
-    await stampStage({ tenantId, stage: 'finalize', status: 'done' });
+    await stampStage({
+      tenantId,
+      stage: 'finalize',
+      status: 'done',
+      extras: {
+        gatewayOk: gateway.ok,
+        gatewaySignerAddress: gateway.signerAddress,
+        gatewaySolanaDepositor: gateway.solanaDepositorAddress,
+        gatewayError: gateway.error,
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await stampStage({ tenantId, stage: 'finalize', status: 'failed', error: message });

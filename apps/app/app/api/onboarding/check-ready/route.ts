@@ -45,11 +45,25 @@ export async function GET() {
 
   const progress = await readProvisioning(tenant.id);
 
+  // Readiness derivation. Two independent truth sources — we accept
+  // either, because Clerk's session JWT refresh lags ~60s behind the
+  // org metadata write and the user shouldn't sit on /onboarding while
+  // we wait for the JWT to roll over.
+  //
+  //   1. `Tenant.metadata.provisioning.currentStage === 'done'` — DB-
+  //      stamped at the end of runTenantProvisioning(). Source of truth.
+  //   2. `sessionClaims.org_metadata.solTreasuryAddress` /
+  //      `tenant.arcAddress` — the older session-driven path, kept for
+  //      back-compat with tenants provisioned before the state-machine
+  //      landed (no `provisioning` blob in metadata).
   const orgMeta = (sessionClaims?.org_metadata ?? {}) as { solTreasuryAddress?: string };
-  const walletReady =
+  const sessionWalletReady =
     tenant.primaryChain === 'sol'
       ? Boolean(orgMeta.solTreasuryAddress)
       : Boolean(tenant.arcAddress);
+  const stateMachineReady = progress?.currentStage === 'done';
+
+  const walletReady = stateMachineReady || sessionWalletReady;
 
   if (!walletReady) {
     return NextResponse.json({

@@ -24,8 +24,6 @@ import { clerkClient } from '@clerk/nextjs/server';
 import { mapClerkRoleToPrisma } from '@sendero/auth/roles';
 import { verifyClerkWebhook } from '@sendero/auth/webhooks';
 import { PLANS, type PlanTier, resolvePlan } from '@sendero/billing/plans';
-import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import type { BillingTier, SubscriptionStatus } from '@sendero/database';
 import { type Prisma, prisma } from '@sendero/database';
 import {
@@ -33,7 +31,6 @@ import {
   createCustomerUserGroup,
   findCustomerUserByEmail,
 } from '@sendero/duffel';
-import { getEnabledGatewayDomains, getTenantOperationsChains } from '@sendero/env/chains';
 import { processDurableWebhook } from '@sendero/webhooks/inbound';
 
 import { invalidateApiKeyCache } from '@/lib/api-key-auth';
@@ -365,56 +362,9 @@ async function onOrganizationCreated(data: Record<string, unknown>): Promise<voi
     primaryChain: tenant.primaryChain as 'arc' | 'sol',
   });
 
-  // Gateway phase 1 provisioning — non-fatal. Failure here doesn't
-  // block onboarding: a backfill cron (Phase 1 P1.7) picks up tenants
-  // missing TenantGatewaySigner / TenantGatewayConfig / operations DCW
-  // and provisions on next run. Treasury wallet alone is enough for
-  // operator dashboard + sandbox bookings; Gateway is only on the
-  // unified-balance + auto-sweep hot path.
-  try {
-    const signer = await getOrCreateGatewaySigner(tenant.id);
-
-    const opsWallets = await Promise.all(
-      getTenantOperationsChains().map(chain =>
-        provisionTenantOpsDcw({
-          tenantId: tenant.id,
-          clerkOrgId: id,
-          chain,
-        })
-      )
-    );
-    const solanaOpsWallet = opsWallets.find(w => !w.address.startsWith('0x'));
-
-    await prisma.tenantGatewayConfig.upsert({
-      where: { tenantId: tenant.id },
-      create: {
-        tenantId: tenant.id,
-        evmDepositorAddress: signer.address,
-        solanaDepositorAddress: solanaOpsWallet?.address ?? null,
-        enabledDomains: getEnabledGatewayDomains(),
-      },
-      update: {
-        evmDepositorAddress: signer.address,
-        solanaDepositorAddress: solanaOpsWallet?.address ?? undefined,
-        enabledDomains: { set: getEnabledGatewayDomains() },
-      },
-    });
-
-    console.log('[webhooks/clerk] gateway provisioned', {
-      tenantId: tenant.id,
-      depositor: signer.address,
-    });
-  } catch (err) {
-    console.warn('[webhooks/clerk] gateway provisioning failed (non-fatal)', {
-      id,
-      tenantId: tenant.id,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  // Identity mint + Clerk publicMetadata flip already happened inside
-  // runTenantProvisioning above. The retry-identity-provision cron
-  // still backs up the long tail when the inline mint fails.
+  // Treasury, identity, Gateway, and Clerk publicMetadata flip all
+  // happened inside runTenantProvisioning above. The retry-identity-
+  // provision and retry-wallet-provision crons back up the long tail.
 
   const client = await clerkClient();
 
