@@ -920,3 +920,76 @@ before writing code.
   engine is post-network-effect.
 - Travelers seeing the markup breakdown. Tenant markup stays opaque
   to the end customer by default — they see one price.
+
+---
+
+## Treasury balance — Solana RPC fallback
+
+Treasury balance in the wallet dropdown reads from `CircleWallet.
+usdcBalanceMicro`, which is the Circle webhook's cached column. For
+Arc MSCAs this is the canonical authority. For Sol Squads V4 vault
+PDAs it's a **convenience cache** — the on-chain truth lives in the
+vault's USDC associated-token-account (ATA), and there's no guarantee
+Circle's Sol balance sync covers vault PDAs the same way it covers
+their DCW wallets. The vault PDA itself is a CircleWallet row (created
+by `provisionTenantSolanaTreasury`), but its on-chain holdings can
+diverge from the cached column if:
+
+- The Circle webhook for that wallet kind doesn't fire (Squads vaults
+  aren't a Circle-managed wallet in the usual sense; they're just an
+  address Circle's listWallets API returned).
+- Funds land via paths Circle doesn't observe (manual user deposit,
+  cross-program invocation from a sweeper, on-chain settlement from
+  a future booking-margin split).
+- The webhook is slow and the operator wants the live value now.
+
+For hackathon parity we treat `CircleWallet.usdcBalanceMicro` as the
+single source. Post-hackathon we should add a Solana RPC fallback that
+queries the vault's USDC ATA directly via `getParsedTokenAccountsByOwner`.
+
+### Why
+Today the Treasury USDC card shows `0` even when funds have landed via
+a path Circle doesn't observe. That breaks operator trust in the
+balance widget and makes the booking-margin split spec (above) much
+harder to debug — operators won't know whether a missing balance means
+"split didn't fire" or "balance widget is stale".
+
+### What to build
+- New helper in `apps/app/lib/solana-balance.ts` (or extend the
+  existing `apps/app/lib/prefund-submit/sol.ts`): wraps
+  `@solana/web3.js` `Connection.getParsedTokenAccountsByOwner(vault,
+  { mint: USDC_DEVNET_MINT })`. Returns `{ usdcMicro, ata, updatedAt }`.
+  The pattern lives in `apps/app/scripts/_local/diagnose-sol-deposit.ts`
+  — copy verbatim into a server-only helper.
+- Extend `/api/wallet/balance` (or add a `?live=1` flag): when the
+  tenant's primaryChain is `sol` AND the queried address is the
+  treasury vault, hit Solana RPC after the DB read and reconcile:
+  if RPC's number is higher than the cached column by more than a
+  threshold (say 1 USDC), use the RPC value and persist it back to
+  `CircleWallet.usdcBalanceMicro` (so the next webhook fires don't
+  regress).
+- Client side: WalletDropdown's refresh button hits the live path
+  unconditionally. SSE stream stays cached (don't spam RPC from
+  many subscribers).
+
+### Files to touch
+- `apps/app/lib/solana-balance.ts` (new) — RPC helper.
+- `apps/app/app/api/wallet/balance/route.ts` — opt-in `?live=1`
+  branch for Sol vault addresses.
+- `apps/app/components/wallet-dropdown.tsx` — refresh button passes
+  `?live=1` when mode=treasury.
+- `packages/circle/src/balance-sync.ts` — confirm whether Sol vault
+  PDAs are skipped by the webhook sync today; if so, add them or
+  document that the RPC fallback is the canonical reader.
+
+### Dependencies
+- `@solana/web3.js` already in tree (used by `prefund-submit/sol.ts`).
+- `SENDERO_SOLANA_RPC_URL` env (already set, falls back to devnet).
+- `SENDERO_SOLANA_USDC_MINT` env (already set).
+
+### Not in scope
+- Live RPC for Arc MSCAs. Circle webhook is the canonical authority
+  there and we don't want every dashboard mount to viem-poll Arc.
+- Per-DCW live reads on Operations side. Gateway already has
+  `/api/gateway/balance` with its own fetch path; Treasury is the
+  only mode where the DB-cached value is at risk of being a lie.
