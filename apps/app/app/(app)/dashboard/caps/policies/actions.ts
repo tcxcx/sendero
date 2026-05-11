@@ -23,7 +23,7 @@ type Scope = 'tenant' | 'traveler' | 'tool';
 
 async function requireAdminTenantId(): Promise<string> {
   const { orgId, has } = await auth();
-  if (!orgId) redirect('/onboarding/choose-org');
+  if (!orgId) redirect('/onboarding');
   if (!has({ role: 'org:admin' })) redirect('/dashboard');
   const tenant = await prisma.tenant.findUnique({
     where: { clerkOrgId: orgId },

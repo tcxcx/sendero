@@ -9,7 +9,7 @@ export async function requireCurrentTenant(): Promise<{
 }> {
   const { userId, orgId } = await auth();
   if (!userId) redirect('/sign-in');
-  if (!orgId) redirect('/onboarding/choose-org');
+  if (!orgId) redirect('/onboarding');
 
   const tenant = await prisma.tenant.findUnique({ where: { clerkOrgId: orgId } });
   if (!tenant) redirect('/onboarding');
