@@ -770,3 +770,153 @@ Plan: `~/.gstack/projects/tcxcx-sendero/ship-2026-04-24-platform-release-multi-t
   `{ provisioned: false }` for wallet-not-found-in-tenant and keeps
   401/404 only for auth/tenant lookup. (b) is the right fix but
   bigger blast radius — every caller of /api/wallet/balance.
+
+---
+
+## Booking margin split (spec)
+
+Today `confirm_booking` settles everything into the tenant's Operations
+surface (Circle Gateway depositor / Squads V4 vault DCWs). Treasury
+shows but no booking-margin flow lands there. Needs its own spec.
+
+### Why it matters
+On every booking, Sendero takes the lion's share of the markup because
+**we front the supplier payment to Duffel out of platform liquidity**.
+The tenant's markup is layered on top of Sendero's, not under it.
+Conflating "settle the booking" with "split margins" was the right call
+for v0 — for v1 the wallets that get credited need to encode who owns
+the money:
+
+| Source                              | Destination                                      | Owner               |
+|------------------------------------- |--------------------------------------------------|---------------------|
+| Vendor wholesale (Duffel net rate)   | Sendero platform vault (cross-tenant treasury)   | Sendero (us)         |
+| Sendero markup (Duffel resale spread + take-rate) | Sendero platform vault                | Sendero (us)         |
+| Tenant markup (configured per product) | Tenant Treasury (Squads V4 / Arc MSCA)          | Tenant agency / TMC |
+| Tenant operating cap (Gateway pull)  | Tenant Operations (Gateway DCWs)                 | Tenant agency / TMC |
+
+### Acceptance criteria
+- `confirm_booking` performs a 3-way (or 4-way) on-chain split in a
+  single tx: vendor net → platform vault, Sendero markup → platform
+  vault, tenant markup → tenant Treasury, tenant operating cap →
+  tenant Operations.
+- Splits are computed from `TenantPricingPolicy.markupConfig` +
+  Duffel net rate at settle time. No off-chain reconciliation step.
+- Per-booking ledger row in `Settlement` carries each leg explicitly
+  so the operator dashboard can show "this trip contributed $X to
+  Treasury, $Y to Operations, $Z to Sendero" without re-deriving.
+- The Treasury wallet dropdown's balance must now reflect inflows
+  from settled bookings. Treasury balance fetch needs to go through
+  Squads vault SDK / MSCA balance — not the existing
+  `/api/wallet/balance` route (Circle DCW-shaped, returns 0 for
+  vault PDAs).
+- RBAC: Treasury Send is multisig-gated (see
+  `apps/admin/lib/treasury/propose-solana.ts` for Sol;
+  `@sendero/multisig/userop-builder` for Arc). Operations Send /
+  Swap / Bridge stay autonomous (agent-driven via Gateway).
+
+### Why it's its own spec
+The settlement contract on Arc (`SenderoGuestEscrow.sol`,
+`AgenticCommerce.sol`) and the Anchor programs (`sendero_guest_escrow`,
+`agentic_commerce`) both encode a single destination today. Adding the
+4-way split requires either (a) extending the on-chain commit to take
+N destinations + amounts, or (b) a post-settle sweep step that fans
+out from the single destination to the four sinks. (b) ships faster
+but loses the atomic guarantee that the split actually happens; (a)
+requires a contract upgrade. Pick the right tradeoff in the spec
+before writing code.
+
+### Not in scope
+- Cross-tenant netting (Sendero platform vault → tenant Treasury
+  payouts for promo credits, refunds, etc.). Separate spec.
+- Sendero's own treasury management (where does the platform vault
+  hold liquidity, multisig governance over it, etc.). Separate spec.
+
+---
+
+## Tenant-set markups on products (user story)
+
+### User story
+> As a tenant operator (TMC / agency), I want to set my own markup on
+> top of every product Sendero offers through my channels — flights,
+> stays, ground transport, eSIM, lounge access, insurance, ancillaries
+> like seat selection or bag fees — so that my margin is configurable
+> per product and per route without me having to renegotiate with
+> Sendero or touch the contract.
+
+### Background — why this is layered on top, not replacing Sendero's
+- Sendero fronts the wholesale supplier payment (Duffel net rate +
+  inventory deposits to Stripe-fronted ancillary providers).
+- That capital risk is real. Sendero's markup on top of the wholesale
+  rate covers the float, the dispute exposure, the chargeback risk,
+  and the underlying provider operational cost.
+- So **the majority of the markup goes to Sendero** by construction.
+- Tenant markup is a **second-layer spread** applied on top of the
+  Sendero-side price the agent quotes to the traveler. The tenant
+  picks a per-product (and optionally per-route, per-supplier, per-
+  traveler-class) markup; the agent rolls it into the quoted price;
+  on settle, the tenant markup flows to the Tenant Treasury.
+
+### Acceptance criteria
+- `TenantPricingPolicy.markupConfig` extends to support per-product
+  granularity. Today it has `{ flight, hotel, rail, car, other }`;
+  expand to:
+  ```
+  {
+    flight: { strategy, bps | flat, perRouteOverrides[] },
+    hotel: { strategy, bps | flat, perCityOverrides[] },
+    ancillaries: {
+      seat_selection: { strategy, bps | flat },
+      bag_fee: { strategy, bps | flat },
+      insurance: { strategy, bps | flat },
+      esim: { strategy, bps | flat },
+      lounge: { strategy, bps | flat },
+    },
+    ...
+  }
+  ```
+- Operator UI to edit each value. Live preview of "your markup on a
+  $500 SFO→LHR flight: $X" so the operator sees what they're charging.
+- Plan-tier guardrails on the spread: free / basic tier caps the
+  total markup so resellers can't price-gouge their travelers. Pro /
+  enterprise unlocks higher ceilings.
+- Per-channel override (optional, post-MVP): a TMC's WhatsApp number
+  for traveler X could carry a different markup from their Slack
+  channel, e.g. higher margin for off-platform direct travelers.
+- Agent surfacing: when the tenant updates a markup, every in-flight
+  quote refreshes (or carries an explicit "price expires when policy
+  changes" disclaimer to the traveler).
+- Audit trail: `TenantPricingPolicy.version` increments on every
+  change; the active version is recorded on each `Booking` so we can
+  trace what markup was applied to a historical trip.
+
+### Why this matters strategically
+- Today the tenant gets a flat take-rate discount from their billing
+  tier (5% basic, 10% pro, 15% enterprise on Sendero's markup). That's
+  a kickback model, not a margin model. Tenants don't get to *price
+  their own product*.
+- Letting tenants set markup makes Sendero the platform their book
+  runs on rather than a margin competitor. It's also the only way
+  Tier 3 ("Stay for Network", per the wedge findings) makes sense —
+  resellers won't co-brand a channel if the prices are dictated.
+- Ancillary markup is the prize. Seat selection, bag fees, lounge
+  access, insurance, eSIM — each is a Duffel/Stripe wholesale rate
+  Sendero exposes. Tenants who set their own ancillary spread can
+  build a P&L on top of Sendero without owning the supply.
+
+### Dependencies / sequencing
+- Settlement split (above spec) must land first — the tenant markup
+  needs a destination wallet to flow into. Without the on-chain split,
+  there's no Treasury sink for tenant margins.
+- Per-product pricing requires the agent to know the product
+  taxonomy at quote time. Flight/hotel/rail are already separated
+  in `confirm_booking`. Ancillaries need explicit kind tags on the
+  Duffel offer parse.
+- Operator UI surface (probably `/dashboard/money-policy/pricing`)
+  needs design pass.
+
+### Not in scope (yet)
+- Dynamic / rule-based markup ("apply 12% on routes ≤ $500, 8% above").
+  v1 is flat per-product rates with optional route overrides. Rule
+  engine is post-network-effect.
+- Travelers seeing the markup breakdown. Tenant markup stays opaque
+  to the end customer by default — they see one price.
