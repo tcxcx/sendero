@@ -46,11 +46,18 @@ export function WalletDropdown() {
   const [, setBridge] = useQueryState('bridge');
   const [, setDeposit] = useQueryState('deposit');
 
-  // Zero-address means `organization.publicMetadata.arcWalletAddress`
-  // hasn't been stamped yet (Clerk webhook pending or Circle provision
-  // failed). The trigger renders a "provisioning" state below; we skip
-  // balance fetching entirely to avoid 404s.
-  const isZeroAddress = !!userAuth && /^0x0+$/i.test(userAuth.address);
+  // Unprovisioned-state detection. Chain-aware: Arc uses the EVM
+  // zero-address placeholder; Sol uses the 'pending-sol' sentinel set by
+  // ClerkWalletBridge when `solTreasuryAddress` hasn't landed yet.
+  // Either way, skip balance fetching to avoid 404s and render a
+  // "provisioning" copy below.
+  const chain: 'arc' | 'sol' = userAuth?.chain === 'sol' ? 'sol' : 'arc';
+  const isZeroAddress =
+    !!userAuth &&
+    (chain === 'sol'
+      ? userAuth.address === 'pending-sol' || userAuth.address.length < 32
+      : /^0x0+$/i.test(userAuth.address));
+  const chainLabel = chain === 'sol' ? 'Solana treasury' : 'Arc wallet';
 
   // Balance authority is the Circle webhook → CircleWallet cached
   // columns. One-shot GET primes the panel, then SSE keeps it live.
@@ -111,7 +118,16 @@ export function WalletDropdown() {
     };
   }, [open]);
 
-  const short = userAuth ? `${userAuth.address.slice(0, 6)}…${userAuth.address.slice(-4)}` : '';
+  // Truncate the address for the trigger label. For Arc the slice
+  // [0..6] captures `0x`+4 hex chars; for Sol base58 the same window
+  // is more useful starting at 0 (no `0x` prefix). Both end with the
+  // last 4 chars. Unprovisioned addresses fall back to a "provisioning"
+  // copy via the isZeroAddress branch below.
+  const short = userAuth
+    ? chain === 'sol'
+      ? `${userAuth.address.slice(0, 4)}…${userAuth.address.slice(-4)}`
+      : `${userAuth.address.slice(0, 6)}…${userAuth.address.slice(-4)}`
+    : '';
   const initials = userAuth
     ? userAuth.displayName
         .split(/\s+/)
@@ -217,7 +233,9 @@ export function WalletDropdown() {
             <div className="wd-id-body">
               <span className="wd-id-name">{userAuth.displayName}</span>
               <span className="wd-id-role">
-                {isZeroAddress ? 'Provisioning Arc wallet…' : userAuth.email || 'no email'}
+                {isZeroAddress
+                  ? `Provisioning ${chainLabel}…`
+                  : userAuth.email || 'no email'}
               </span>
             </div>
           </div>
@@ -233,9 +251,9 @@ export function WalletDropdown() {
                 borderTop: '1px solid var(--border)',
               }}
             >
-              Your Arc wallet is still being provisioned. This normally completes within a few
-              seconds of org creation. Balances will load automatically once the Circle webhook
-              lands.
+              Your {chainLabel} is still being provisioned. This normally completes within a few
+              seconds of org creation. Balances will load automatically once the
+              {chain === 'sol' ? ' Squads V4 multisig + DCWs are ready.' : ' Circle webhook lands.'}
             </div>
           )}
 

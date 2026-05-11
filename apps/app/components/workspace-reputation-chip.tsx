@@ -86,6 +86,19 @@ export function WorkspaceReputationChip() {
       .join('')
       .toUpperCase() || 'WS';
 
+  // Truncate the displayed agent id. Arc agent ids are short decimal
+  // strings (e.g. "1234") so we leave them whole. Solana asset
+  // addresses are 32-byte base58 (~44 chars) which blow the chip out;
+  // shorten to head…tail. Heuristic: anything ≥ 12 chars gets cropped.
+  const shortenId = (id: string): string =>
+    id.length >= 12 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id;
+  const idLabel = data.agentId ? `#${shortenId(data.agentId)}` : data.status;
+  // Chain inferred from the contract value stamped by ensureOrgIdentity.
+  // 'metaplex-agent-registry' = Sol; an `0x…` IdentityRegistry address
+  // (or null/unknown) defaults to Arc.
+  const isSol = data.contract === 'metaplex-agent-registry';
+  const contractLabel = isSol ? 'View on Solana Explorer ↗' : 'View contract on Arc ↗';
+
   return (
     <div className="wr-wrap" ref={wrapRef}>
       <button
@@ -97,7 +110,7 @@ export function WorkspaceReputationChip() {
       >
         <span className="wr-avatar">{initials}</span>
         <span className="wr-stars">★ {stars}</span>
-        <span className="wr-id">{data.agentId ? `#${data.agentId}` : data.status}</span>
+        <span className="wr-id" title={data.agentId ?? data.status}>{idLabel}</span>
         <span className={`wr-chev ${open ? 'open' : ''}`} aria-hidden="true">
           ▾
         </span>
@@ -121,8 +134,8 @@ export function WorkspaceReputationChip() {
                     ? 'Provisioning needs attention'
                     : 'Workspace identity provisioning'}
               </span>
-              <span>
-                {data.provisioning.error ?? (data.agentId ? `#${data.agentId}` : data.status)}
+              <span title={data.provisioning.error ?? data.agentId ?? data.status}>
+                {data.provisioning.error ?? idLabel}
               </span>
             </div>
           )}
@@ -234,7 +247,7 @@ export function WorkspaceReputationChip() {
             </a>
             {data.contractUrl ? (
               <a className="wr-link" href={data.contractUrl} target="_blank" rel="noreferrer">
-                View contract on Arc ↗
+                {contractLabel}
               </a>
             ) : null}
           </div>
