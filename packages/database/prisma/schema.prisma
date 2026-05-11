@@ -393,10 +393,62 @@ model Tenant {
   travelerTasteEntries         TravelerTasteEntry[]
   cityBucketListItems          CityBucketListItem[]
   anticipationEvents           AnticipationEvent[]
+  customerAccounts             CustomerAccount[]
 
   @@index([parentTenantId])
   @@index([createdAt])
   @@map("tenants")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER ACCOUNT — the B2B2B layer
+// A corporate customer (e.g. AcmeCorp) that the TMC (Tenant) sells Sendero to.
+// CustomerAccounts have their own Slack workspace install (Flow B), their own
+// per-account Policy, their own employees (Users), and their own Trips.
+// The TMC operator manages all of this from /dashboard/customer-accounts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CustomerAccount {
+  id                  String   @id @default(cuid())
+  /// The TMC tenant that signed this corporate customer.
+  tenantId            String
+  /// Human label shown in dashboard (e.g. "AcmeCorp Travel").
+  displayName         String
+  /// Primary email domain (e.g. "acmecorp.com") — used to auto-resolve
+  /// employee Users on first Slack message. Optional; null when the
+  /// corporate hasn't been domain-verified yet.
+  primaryDomain       String?
+  /// "active" | "invited" | "suspended". Invited = invite link minted
+  /// but Slack app not yet installed in the corporate's workspace.
+  status              String   @default("invited")
+  /// Clerk userId of the TMC operator who created this account. Audit.
+  createdByOperatorId String
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @db.Timestamptz(6)
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  slackInstalls SlackInstall[]
+  users         User[]
+  policies      Policy[]
+  trips         Trip[]
+
+  @@unique([tenantId, primaryDomain])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("customer_accounts")
+}
+
+/// Discriminator for SlackInstall — distinguishes the TMC's own Slack
+/// (ops alerts / handoff fanout) from a corporate-customer's Slack
+/// (employees provisioning trips inside their company workspace).
+enum SlackInstallKind {
+  /// Installed in the TMC's own Slack workspace. Receives ops alerts,
+  /// low-balance warnings, agent handoff fanout. NOT for trip provisioning.
+  tmc_internal
+  /// Installed in a corporate customer's Slack workspace. The B2B2B
+  /// surface. Employees use @sendero to request trips. The TMC
+  /// operator monitors from web (never opens this Slack directly).
+  customer_account
 }
 
 /// Human user. Identified by Clerk; cached MSCA address is deterministic
@@ -426,10 +478,16 @@ model User {
   source               UserSource @default(native)
   /// Free-form user metadata (preferred language, locale, etc.).
   metadata             Json?
+  /// Phase B2B2B — when set, this user is an employee of a corporate
+  /// customer of the TMC tenant, not a direct TMC employee. Drives
+  /// policy scoping + trip provisioning gating. Null on TMC operators
+  /// and direct consumers.
+  customerAccountId    String?
   createdAt            DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt            DateTime   @updatedAt @db.Timestamptz(6)
   lastSeenAt           DateTime?  @db.Timestamptz(6)
 
+  customerAccount        CustomerAccount?      @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
   memberships            Membership[]
   wallets                Wallet[]
   travelerTrips          Trip[]                @relation("TripTraveler")
@@ -728,6 +786,11 @@ model Subscription {
 model Policy {
   id            String    @id @default(cuid())
   tenantId      String
+  /// Phase B2B2B — when set, this policy applies only to trips whose
+  /// `Trip.customerAccountId` matches. Null = tenant-wide fallback
+  /// (used for direct consumers + TMC employees). check_policy
+  /// resolves customer-account-scoped first, then falls back here.
+  customerAccountId String?
   slug          String // "vale-corp-2026"
   displayName   String
   /// JSON rules: maxNightUsd, intlCabinRequired, preferredCarriers, fiscalCountry, etc.
@@ -739,12 +802,14 @@ model Policy {
   createdAt     DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trips  Trip[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
+  trips           Trip[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, isDefault])
   @@index([tenantId, createdAt])
+  @@index([customerAccountId])
   @@map("policies")
 }
 
@@ -756,6 +821,11 @@ model Policy {
 model Trip {
   id                    String           @id @default(cuid())
   tenantId              String
+  /// Phase B2B2B — when set, this trip belongs to a corporate customer
+  /// (the TMC tenant's downstream B2B). Drives policy resolution +
+  /// merged-thread routing + Slack-workspace fanout. Null = consumer
+  /// trip or direct-TMC-employee trip.
+  customerAccountId     String?
   policyId              String?
   travelerId            String? // User.id — may be guest
   createdById           String? // booking agent
@@ -807,10 +877,11 @@ model Trip {
   createdAt             DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt             DateTime         @updatedAt @db.Timestamptz(6)
 
-  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  policy    Policy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
-  traveler  User?   @relation("TripTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
-  createdBy User?   @relation("TripCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id], onDelete: SetNull)
+  policy          Policy?          @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  traveler        User?            @relation("TripTraveler", fields: [travelerId], references: [id], onDelete: SetNull)
+  createdBy       User?            @relation("TripCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   bookings           Booking[]
   settlements        Settlement[]
@@ -828,6 +899,7 @@ model Trip {
   @@index([travelerId])
   @@index([createdById])
   @@index([tenantId, destinationCountry])
+  @@index([customerAccountId, status])
   @@map("trips")
 }
 
@@ -1746,8 +1818,16 @@ model WhatsAppSessionVerification {
 /// Enterprise Grid installs spanning multiple workspaces resolve to one
 /// install. `enterpriseId` is nullable for classic (non-Grid) installs.
 model SlackInstall {
-  id                  String    @id @default(uuid()) @db.Uuid
+  id                  String           @id @default(uuid()) @db.Uuid
   tenantId            String
+  /// Phase B2B2B — discriminates between the TMC's own Slack install
+  /// (`tmc_internal`, ops surface) and a corporate-customer's Slack
+  /// install (`customer_account`, trip-provisioning surface). Existing
+  /// rows backfill to `tmc_internal` via @default; no data migration.
+  kind                SlackInstallKind @default(tmc_internal)
+  /// Set when kind=customer_account; null for tmc_internal. Identifies
+  /// which corporate customer's workspace this install belongs to.
+  customerAccountId   String?
   /// Nullable for classic installs; required for Grid.
   enterpriseId        String?
   enterpriseName      String?
@@ -1758,15 +1838,15 @@ model SlackInstall {
   /// Encrypt-at-rest in production. Plaintext acceptable on testnet demo.
   botToken            String
   scope               String
-  isEnterpriseInstall Boolean   @default(false)
+  isEnterpriseInstall Boolean          @default(false)
   authedUserId        String
-  installedAt         DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+  installedAt         DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime         @updatedAt @db.Timestamptz(6)
   /// Set when Slack delivers `tokens_revoked` or `app_uninstalled` for
   /// this install. Non-null means the bot token is dead — keep the
   /// row for audit trail (meter_events.userId references survive) but
   /// every webhook handler must treat the install as gone.
-  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedAt           DateTime?        @map("revoked_at") @db.Timestamptz(6)
   raw                 Json?
   /// Channel routing config from the Slack setup wizard:
   /// { defaultChannel, routes: [{ eventClass, channel, mode }] }.
@@ -1776,11 +1856,13 @@ model SlackInstall {
   /// Backed by `migrations/20260424_slack_routing/migration.sql`.
   routing             Json?
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerAccount CustomerAccount? @relation(fields: [customerAccountId], references: [id], onDelete: Cascade)
 
   @@unique([enterpriseId, teamId])
   @@index([tenantId])
   @@index([revokedAt])
+  @@index([customerAccountId])
   @@map("slack_installs")
 }
 

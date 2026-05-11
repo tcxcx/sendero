@@ -10,6 +10,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
   Bot,
+  Building2,
   FileText,
   Home,
   Inbox,
@@ -66,6 +67,7 @@ const sections: NavSection[] = [
       { title: 'Passport', url: '/dashboard/passport', icon: ShieldCheck },
       { title: 'Trip inboxes', url: '/dashboard/inbox', icon: Inbox },
       { title: 'Trips', url: '/dashboard/trips', icon: Plane },
+      { title: 'Customer accounts', url: '/dashboard/customer-accounts', icon: Building2 },
     ],
   },
   {

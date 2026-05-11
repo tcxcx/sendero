@@ -31,6 +31,8 @@ export function slackInstallFixture(overrides: Partial<SlackInstall> = {}): Slac
     revokedAt: null,
     raw: null,
     routing: null,
+    kind: 'tmc_internal',
+    customerAccountId: null,
     ...overrides,
   };
 }
