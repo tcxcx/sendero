@@ -18,7 +18,10 @@
   },
   "dependencies": {
     "resend": "^4.0.1",
-    "viem": "^2.21.0"
+    "viem": "^2.21.0",
+    "@clerk/nextjs": "7.2.5",
+    "@liveblocks/node": "2.24.4",
+    "@slack/web-api": "^7.0.0"
   },
   "peerDependencies": {
     "@sendero/invoicing": "workspace:*"

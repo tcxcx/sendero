@@ -813,6 +813,9 @@
       "name": "@sendero/notifications",
       "version": "0.1.0",
       "dependencies": {
+        "@clerk/nextjs": "7.2.5",
+        "@liveblocks/node": "2.24.4",
+        "@slack/web-api": "^7.0.0",
         "resend": "^4.0.1",
         "viem": "^2.21.0",
       },
