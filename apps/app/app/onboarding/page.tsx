@@ -126,11 +126,57 @@ export default function OnboardingPage() {
       return;
     }
     pushedToApp.current = true;
-    if (IS_DEV) {
-      console.log('[onboarding] onboardingComplete → /dashboard', orgRef.current?.publicMetadata);
-    }
-    router.push('/dashboard');
-  }, [onboardingComplete, router]);
+
+    // Verify the DB Tenant row exists before pushing — otherwise
+    // /dashboard's requireCurrentTenant() would server-redirect us
+    // back here in a tight flicker loop (Clerk session JWT can carry
+    // a stale onboardingComplete=true while the DB has no matching
+    // Tenant; common when the Clerk webhook upsert failed earlier).
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/onboarding/check-ready', {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        const data = (await res.json()) as { ready?: boolean; reason?: string };
+        if (cancelled) return;
+
+        if (data.ready) {
+          if (IS_DEV) {
+            console.log(
+              '[onboarding] check-ready ok → /dashboard',
+              orgRef.current?.publicMetadata
+            );
+          }
+          router.push('/dashboard');
+          return;
+        }
+
+        // Inconsistent state: Clerk says done, DB doesn't. Auto-repair
+        // by re-triggering provisioning with the org's stamped chain
+        // (or the spec default 'sol'). The endpoint is idempotent.
+        if (IS_DEV) {
+          console.warn(
+            '[onboarding] check-ready not ready, re-running deploy',
+            data.reason,
+            orgRef.current?.publicMetadata
+          );
+        }
+        pushedToApp.current = false;
+        void deployWithChain(activeChain);
+      } catch (err) {
+        if (cancelled) return;
+        // Network blip — let the next render retry.
+        pushedToApp.current = false;
+        if (IS_DEV) console.warn('[onboarding] check-ready failed', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onboardingComplete, router, activeChain, deployWithChain]);
 
   useEffect(() => {
     // Only start the wait-for-webhook polling AFTER the user has picked
