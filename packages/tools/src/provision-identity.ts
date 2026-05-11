@@ -45,10 +45,24 @@ const MAX_ATTEMPTS = 12;
 /// returns ERC-8004 agent metadata JSON. URL is keyed on the Sendero
 /// id (tenantId/userId), not the on-chain agentId, so it survives any
 /// future re-mint without breaking the on-chain pointer.
+///
+/// Resolution priority:
+///   1. `SENDERO_IDENTITY_METADATA_BASE_URL` — explicit public base.
+///      Set this in local dev when the app runs on `http://localhost:*`,
+///      otherwise the Metaplex Agent API can't fetch the URI to validate
+///      it ("Invalid input data" at mint time). Dev + prod share the
+///      same Neon DB, so pointing local dev at the prod app URL Just
+///      Works for shared records.
+///   2. `NEXT_PUBLIC_APP_URL` — canonical app origin for prod deploys.
 function metadataUriFor(kind: 'org' | 'user', subjectId: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  const base =
+    process.env.SENDERO_IDENTITY_METADATA_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    '';
   if (!base) {
-    throw new Error('NEXT_PUBLIC_APP_URL not set — cannot build identity metadata URI');
+    throw new Error(
+      'No metadata base URL — set SENDERO_IDENTITY_METADATA_BASE_URL or NEXT_PUBLIC_APP_URL.'
+    );
   }
   return `${base.replace(/\/$/, '')}/agents/${kind}/${subjectId}/metadata.json`;
 }

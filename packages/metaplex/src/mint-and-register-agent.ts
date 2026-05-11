@@ -97,10 +97,47 @@ export interface MintAndRegisterAgentResult {
   network: SvmNetwork;
 }
 
+// Metaplex Agent SDK accepts the full canonical names:
+// 'solana-mainnet' | 'solana-devnet' | 'localnet' | 'eclipse-mainnet'
+// | 'sonic-mainnet' | 'sonic-devnet' | 'fogo-mainnet' | 'fogo-testnet'.
+// The Vercel/.env shorthand is `devnet` / `mainnet`, which the API
+// rejects with "Invalid input data" — so we normalize defensively here.
+const VALID_NETWORKS: ReadonlySet<SvmNetwork> = new Set<SvmNetwork>([
+  'solana-mainnet',
+  'solana-devnet',
+  'localnet',
+  'eclipse-mainnet',
+  'sonic-mainnet',
+  'sonic-devnet',
+  'fogo-mainnet',
+  'fogo-testnet',
+]);
+
+function normalizeNetwork(input: string): SvmNetwork | null {
+  const trimmed = input.trim().toLowerCase();
+  if (VALID_NETWORKS.has(trimmed as SvmNetwork)) return trimmed as SvmNetwork;
+  // Shorthand aliases: 'devnet' → 'solana-devnet', 'mainnet' →
+  // 'solana-mainnet', 'testnet' → 'solana-devnet' (Sendero testnet-beta
+  // posture uses devnet under the hood).
+  if (trimmed === 'devnet' || trimmed === 'testnet' || trimmed === 'solana-testnet') {
+    return 'solana-devnet';
+  }
+  if (trimmed === 'mainnet' || trimmed === 'mainnet-beta' || trimmed === 'solana-mainnet-beta') {
+    return 'solana-mainnet';
+  }
+  return null;
+}
+
 function resolveNetwork(): SvmNetwork {
   const override = process.env.SENDERO_METAPLEX_AGENT_NETWORK;
   if (override) {
-    return override as SvmNetwork;
+    const normalized = normalizeNetwork(override);
+    if (normalized) return normalized;
+    // Bogus override — log once and fall through to RPC sniffing
+    // rather than passing a bad string downstream.
+    console.warn(
+      `[metaplex] SENDERO_METAPLEX_AGENT_NETWORK="${override}" is not a valid SvmNetwork. Falling back to RPC sniffing.`
+    );
   }
   const rpcUrl = process.env.SENDERO_SOLANA_RPC_URL ?? '';
   if (rpcUrl.includes('devnet')) return 'solana-devnet';
