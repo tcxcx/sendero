@@ -176,7 +176,9 @@ export const mintStampTool: ToolDef<z.infer<typeof mintStampInput>, MintStampRes
 
     // ── Idempotency check before any on-chain work ──
     const existing = await prisma.nftStamp.findUnique({
-      where: { kind_primaryKey_chain: { kind: input.kind, primaryKey: input.primaryKey, chain: 'arc' } },
+      where: {
+        kind_primaryKey_chain: { kind: input.kind, primaryKey: input.primaryKey, chain: 'arc' },
+      },
     });
     if (existing && existing.status === 'minted') {
       return {
@@ -209,7 +211,9 @@ export const mintStampTool: ToolDef<z.infer<typeof mintStampInput>, MintStampRes
     }
 
     const pendingRow = await prisma.nftStamp.upsert({
-      where: { kind_primaryKey_chain: { kind: input.kind, primaryKey: input.primaryKey, chain: 'arc' } },
+      where: {
+        kind_primaryKey_chain: { kind: input.kind, primaryKey: input.primaryKey, chain: 'arc' },
+      },
       create: {
         tenantId,
         tripId: input.tripId,
@@ -361,7 +365,9 @@ export const refreshStampUriTool: ToolDef<
     if (!contractAddress) throw new Error('SENDERO_STAMPS_ADDRESS is required');
 
     const existing = await prisma.nftStamp.findUnique({
-      where: { kind_primaryKey_chain: { kind: input.kind, primaryKey: input.primaryKey, chain: 'arc' } },
+      where: {
+        kind_primaryKey_chain: { kind: input.kind, primaryKey: input.primaryKey, chain: 'arc' },
+      },
     });
     if (!existing) throw new Error(`No NftStamp for (${input.kind}, ${input.primaryKey})`);
     if (existing.status !== 'minted') {
@@ -409,9 +415,7 @@ export const refreshStampUriTool: ToolDef<
  *   - contract: Metaplex Core program ID
  *   - mintTxHash: Solana tx signature (base58)
  */
-async function mintSolanaStamp(
-  input: z.infer<typeof mintStampInput>
-): Promise<MintStampResult> {
+async function mintSolanaStamp(input: z.infer<typeof mintStampInput>): Promise<MintStampResult> {
   if (input.existingTokenId) {
     throw new Error(
       'mint_stamp(sol): existingTokenId is unsupported — Metaplex Core is single-asset; group recipients mint distinct assets.'

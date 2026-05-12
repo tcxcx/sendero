@@ -436,7 +436,10 @@ export async function POST(req: NextRequest) {
   // the install). Acceptable to leave null on those rows.
   let auditTenantId: string | null = null;
   if (messages[0]) {
-    auditTenantId = await resolveTenantIdForPhoneNumberId(messages[0].tenantPhoneNumberId);
+    auditTenantId = await resolveTenantIdForPhoneNumberId(
+      messages[0].tenantPhoneNumberId,
+      messages[0].identity.phone ?? messages[0].identity.phoneRaw ?? null
+    );
   }
 
   // Persist webhook audit row past the 200 ack so a slow Prisma write
@@ -656,7 +659,10 @@ async function sendWhatsAppReply(msg: NormalizedInboundMessage, reply: string): 
   // Resolve the tenant once so every audit row carries the correct
   // tenantId. Skip auditing entirely when we can't resolve (dev with
   // no install row) — better a missing audit row than a broken FK.
-  const auditTenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
+  const auditTenantId = await resolveTenantIdForPhoneNumberId(
+    msg.tenantPhoneNumberId,
+    msg.identity.phone ?? msg.identity.phoneRaw ?? null
+  );
 
   const client = new WhatsAppClient({
     phoneNumberId: msg.tenantPhoneNumberId,
@@ -813,7 +819,10 @@ async function sendShareCards(
 ): Promise<void> {
   const accessToken = whatsappOutboundAccessToken();
   if (!accessToken) return;
-  const auditTenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
+  const auditTenantId = await resolveTenantIdForPhoneNumberId(
+    msg.tenantPhoneNumberId,
+    msg.identity.phone ?? msg.identity.phoneRaw ?? null
+  );
   if (!auditTenantId) return;
 
   const install = await prisma.whatsAppInstall.findUnique({
@@ -937,22 +946,23 @@ void sendWhatsAppCanonical;
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
-async function resolveTenantIdForPhoneNumberId(phoneNumberId: string): Promise<string | null> {
-  // Phase 11h: BYO WhatsApp — every tenant installs their own Meta number
-  // through the Kapso setup link, so the phoneNumberId → tenant mapping
-  // lives on the `whatsapp_installs` table.
-  if (phoneNumberId) {
-    // `phoneNumberId` is only unique within (tenantId, phoneNumberId);
-    // each Meta WBA phone maps to one tenant in practice, so findFirst
-    // matches the real constraint without needing tenant context.
-    const install = await prisma.whatsAppInstall.findFirst({
-      where: { phoneNumberId },
-      select: { tenantId: true, status: true },
-    });
-    if (install && install.status !== 'disabled') return install.tenantId;
-  }
-  // Dev-mode last-resort fallback — leave unset in production.
-  return env.whatsappDefaultTenantId();
+async function resolveTenantIdForPhoneNumberId(
+  phoneNumberId: string,
+  travelerPhone?: string | null
+): Promise<string | null> {
+  // Phase 0 (2026-05-12): shared-sandbox-aware resolution. The sandbox
+  // WhatsApp number is installed across many tenants (every agency's
+  // demo); a naïve findFirst picks an arbitrary row and breaks when
+  // that row points at a deleted tenant. Delegates to
+  // `resolveTenantForWhatsAppTurn` which prefers single-install,
+  // most-recent-traveler-binding, then the protected sandbox tenant
+  // before falling back to the env-var.
+  const { resolveTenantForWhatsAppTurn } = await import('@/lib/whatsapp-tenant-resolver');
+  const result = await resolveTenantForWhatsAppTurn({
+    tenantPhoneNumberId: phoneNumberId,
+    travelerPhone: travelerPhone ?? null,
+  });
+  return result.tenantId;
 }
 
 async function upsertChannelIdentity(msg: NormalizedInboundMessage): Promise<{
@@ -963,7 +973,10 @@ async function upsertChannelIdentity(msg: NormalizedInboundMessage): Promise<{
   /** True when the User row was created on this turn — drives first-touch UX. */
   provisional: boolean;
 } | null> {
-  const tenantId = await resolveTenantIdForPhoneNumberId(msg.tenantPhoneNumberId);
+  const tenantId = await resolveTenantIdForPhoneNumberId(
+    msg.tenantPhoneNumberId,
+    msg.identity.phone ?? msg.identity.phoneRaw ?? null
+  );
   if (!tenantId) return null;
 
   const bsuid = msg.identity.businessScopedUserId;
@@ -1136,7 +1149,10 @@ async function applyOtpStatusUpdate(status: NormalizedStatusUpdate): Promise<num
 }
 
 async function applyIdentityChange(change: NormalizedIdentityChange): Promise<void> {
-  const tenantId = await resolveTenantIdForPhoneNumberId(change.tenantPhoneNumberId);
+  const tenantId = await resolveTenantIdForPhoneNumberId(
+    change.tenantPhoneNumberId,
+    change.previous.phone ?? change.previous.phoneRaw ?? change.current.phone ?? null
+  );
   if (!tenantId) return;
 
   // Find the previous ChannelIdentity record (by whichever key we have)

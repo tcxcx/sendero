@@ -38,6 +38,7 @@ import type { ToolContext } from '@sendero/tools/types';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { resolveTravelerByPhone } from '@/lib/agent-traveler-resolver';
+import { resolveTenantForWhatsAppTurn } from '@/lib/whatsapp-tenant-resolver';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -55,9 +56,19 @@ interface ToolBody {
   /**
    * Required when authenticating via shared secret (Kapso proxy
    * function path). Ignored when an `X-API-Key` is provided since
-   * the key resolves to its own tenant.
+   * the key resolves to its own tenant. Honored only if the tenant
+   * still exists — Phase 0 hardening (2026-05-12): a stale env var
+   * pointing at a deleted tenant falls through to the WhatsApp
+   * resolver chain (most-recent-traveler-binding → sandbox).
    */
   tenantId?: string;
+  /**
+   * Phase 1 forward-compat — Meta Graph `phone_number_id` of the bot
+   * that received the inbound message. When present, takes priority
+   * over `tenantId` so each WhatsApp install routes to its own tenant
+   * even when the same number is shared across many demos.
+   */
+  tenantPhoneNumberId?: string;
   /**
    * Phase G — Slack-binding shortcut. When the caller is the Slack
    * interactions handler reacting to a button tap (no phone available
@@ -103,23 +114,37 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ nam
     // Shared-secret callers are trusted internal — full scope, sandbox
     // key type, tenant resolved from body. Read tenantId before scope
     // gate so the rest of the handler sees a populated value.
+    //
+    // Phase 0 (2026-05-12): if `body.tenantId` is missing OR points at
+    // a deleted tenant, fall back to the WhatsApp resolver chain.
+    // Kapso's `SENDERO_TENANT_ID` env var pointing at a removed agency
+    // is exactly the bug we're absorbing here.
     let earlyBody: ToolBody = {};
     try {
       earlyBody = (await req.clone().json()) as ToolBody;
     } catch {
-      /* fall through; tenant-required check below */
+      /* fall through; resolver below picks up whatever we have */
     }
-    if (!earlyBody.tenantId) {
+    const resolved = await resolveTenantForWhatsAppTurn({
+      tenantPhoneNumberId: earlyBody.tenantPhoneNumberId ?? null,
+      travelerPhone: earlyBody.travelerPhone ?? null,
+      bodyTenantId: earlyBody.tenantId ?? null,
+    });
+    if (!resolved.tenantId) {
       return NextResponse.json(
-        { error: 'tenant_id_required', message: 'Shared-secret auth requires `tenantId` in body.' },
+        {
+          error: 'tenant_unresolved',
+          message:
+            'Shared-secret auth needs `tenantId`, `tenantPhoneNumberId`, or a known `travelerPhone`. None resolved — and no sandbox tenant is provisioned.',
+        },
         { status: 400 }
       );
     }
-    tenantId = earlyBody.tenantId;
+    tenantId = resolved.tenantId;
     scopes = ['*'];
     keyType = 'sandbox';
     effectiveKeyType = 'sandbox';
-    keyId = 'shared-secret';
+    keyId = `shared-secret:${resolved.source}`;
   }
 
   // 2. tool lookup

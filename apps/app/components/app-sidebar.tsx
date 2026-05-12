@@ -67,7 +67,6 @@ const sections: NavSection[] = [
       { title: 'Passport', url: '/dashboard/passport', icon: ShieldCheck },
       { title: 'Trip inboxes', url: '/dashboard/inbox', icon: Inbox },
       { title: 'Trips', url: '/dashboard/trips', icon: Plane },
-      { title: 'Customer accounts', url: '/dashboard/customer-accounts', icon: Building2 },
     ],
   },
   {
@@ -92,6 +91,11 @@ const sections: NavSection[] = [
         url: '/dashboard/channels/slack',
         icon: Landmark,
         iconSrc: '/brand/app-store/slack.svg',
+      },
+      {
+        title: 'Customer accounts',
+        url: '/dashboard/customer-accounts',
+        icon: Building2,
       },
       {
         title: 'API keys / MCP',
