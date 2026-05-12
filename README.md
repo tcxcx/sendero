@@ -19,6 +19,38 @@
 
 <br />
 
+## Judges — 60-second skim
+
+If you only read one section, read this. Five things differentiate Sendero from the typical Frontier submission and from Colosseum history:
+
+1. **Real Solana protocol contribution, not just SDK consumption.** Sendero authored a `@solana/kit`-based Gateway signer that Circle itself doesn't ship. Circle's stock `toSolanaSigner` only signs transactions; Gateway's `signBurnIntents` needs `signMessage`. We wrote the signer wrapper (Phase 4.5, shipped 2026-05-11) — that's the load-bearing primitive making Sol-source crosschain spend work end-to-end. See [`packages/circle/src/gateway-signer.ts::getOrCreateTenantSolanaSigner`](./packages/circle/src/gateway-signer.ts) and the unified deposit core at [`packages/circle/src/gateway-deposit-core.ts`](./packages/circle/src/gateway-deposit-core.ts).
+
+2. **Two Anchor programs deployed on sol-devnet — not just SPL wrappers.** [`sendero_guest_escrow`](https://explorer.solana.com/address/9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8?cluster=devnet) + [`agentic_commerce`](https://explorer.solana.com/address/4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9?cluster=devnet). Real prefund / reserve / commit / settle / refund flows on Solana, not a Solana-flavored façade over an EVM contract. Plus Metaplex Core for trip-stamp NFTs and Metaplex Agent Registry for on-chain identity.
+
+3. **Vertical AI thesis match — not consumer DeFi or NFT.** YC's RFS pegs each AI-native service vertical at $100-300M+ ARR. Sendero is that bet for travel ops: a regulated B2B2B industry with real supply (Duffel + StableTravel — flights, hotels, activities, transfers, reference data), not toy mocks. Past Colosseum winners shipped single-chain consumer DeFi or NFT — Sendero ships vertical AI infrastructure with a real supplier graph.
+
+4. **B2B2B, not B2C.** Three audiences, three channels, one ledger:
+   - **TMC operator** (paying tenant) on the web dashboard
+   - **Corporate buyer** with Sendero installed in *their own* Slack workspace (B2B2B install)
+   - **Traveler** on WhatsApp
+   - All three reconcile on `/dashboard/inbox/[tripId]` via Liveblocks fan-out. `Tenant.primaryChain` cascade refuses silent Arc fallback for Sol tenants — typed `*_SOL_DEFERRED` errors keep parity at the compiler. Most agent projects are B2C; this is the layer Concur/Navan/Spotnana can't ship without rebuilding from scratch.
+
+5. **Agent-to-agent commerce surface.** Sendero is on *both* sides of the agentic economy: MCP server + OpenAPI 3.1 + llms.txt + x402 nanopayments. Other AI agents (Claude, ChatGPT, autonomous workflows) can call Sendero's 128-tool catalog directly and pay per-call in stablecoin. That's the Frontier-thesis surface for agent commerce — already live at [`/api/mcp`](./apps/app/app/api/mcp).
+
+**Credibility signal.** Won **Best Google Gemini Implementation** at the Arc Hackathon — same team, same codebase, same week we built the full Solana stack. Bilateral execution across two ecosystems isn't common.
+
+## Try it now (judges)
+
+| Surface | How to access |
+|---|---|
+| **WhatsApp traveler agent** | Message **`+56 9 2040 3095`** from any phone. Drop a passport photo, ask for a flight, check your balance. The agent runs over Circle Gateway with real Solana settlement under the hood. |
+| **Web operator dashboard** | Sign in at [`https://www.sendero.travel/sign-in`](https://www.sendero.travel/sign-in) with the `hackathon@colosseum.org` reviewer credentials (in the Devpost submission form). |
+| **MCP / agent-to-agent** | Point any MCP client (Claude Desktop, ChatGPT MCP, your own agent) at [`https://www.sendero.travel/api/mcp`](https://www.sendero.travel/api/mcp). Public catalog at [`/llms.txt`](https://www.sendero.travel/llms.txt). |
+| **Live Solana state** | [`sendero_guest_escrow` ↗](https://explorer.solana.com/address/9NHw47GifDKsPDggQeQd53sNrAsBWeSayzvvSr2tjUL8?cluster=devnet) · [`agentic_commerce` ↗](https://explorer.solana.com/address/4dvtCnTgoJpnmjc9zqBTgEdCiGyHkBHFtDquMgXE1PR9?cluster=devnet) · [Metaplex Agent Registry ↗](https://explorer.solana.com/address/1DREGFgysWYxLnRnKQnwrxnJQeSMk2HmGaC6whw2B2p?cluster=devnet) |
+| **Sample Gateway deposit (Phase 4.5)** | [Arcscan tx ↗](https://testnet.arcscan.app/tx/0xd20fde5dde7f130fab80ad670cce278283c025f1e99d1bbe53130c93250ab725) — a real traveler `depositFor` to the per-traveler signer EOA, using the `@solana/kit` signer pattern we authored. |
+
+<br />
+
 ## For judges
 
 **Judge access has been granted.** The Clerk username + password for the dedicated `hackathon@colosseum.org` reviewer account were provided in the **Colosseum / Devpost submission form** (not in this repository). Sign in at [`https://www.sendero.travel/sign-in`](https://www.sendero.travel/sign-in) with those credentials to walk the live console, treasury surfaces, channel inboxes, and agent chat with full org context.
