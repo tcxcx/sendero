@@ -10,14 +10,15 @@
 // (in the parent desk-v1 monorepo).
 
 import crypto from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import { start } from 'workflow/api';
 import { runAgentWorkflow } from '@/app/workflows/chat';
 import { db } from '@/lib/db/client';
-import { users } from '@/lib/db/schema';
+import { githubInstallations, users } from '@/lib/db/schema';
 import { createSessionWithInitialChat } from '@/lib/db/sessions';
+import { getAppOctokit } from '@/lib/github/app';
 import { APP_DEFAULT_MODEL_ID } from '@/lib/models';
 
 const BUFI_BOT_USER_ID = 'bufi-bridge-bot';
@@ -71,6 +72,76 @@ async function getOrCreateBufiBotUser(): Promise<string> {
   return BUFI_BOT_USER_ID;
 }
 
+/**
+ * Ensure a github_installations row exists for the bot user pointing at
+ * the BUFI GitHub App's installation on `accountLogin` (e.g. BuFi007).
+ *
+ * This lets the standard OA flow — verifyRepoAccess → mintInstallationToken
+ * → connectSandbox({ githubToken }) — work for bot-dispatched sessions
+ * even though the bot user has no OAuth token. The user-octokit precondition
+ * is bypassed in lib/github/access.ts for this specific user id.
+ */
+async function ensureBufiInstallation(accountLogin: string): Promise<void> {
+  const existing = await db
+    .select({ id: githubInstallations.id })
+    .from(githubInstallations)
+    .where(
+      and(
+        eq(githubInstallations.userId, BUFI_BOT_USER_ID),
+        eq(githubInstallations.accountLogin, accountLogin)
+      )
+    )
+    .limit(1);
+  if (existing[0]) return;
+
+  const appOctokit = getAppOctokit();
+  let install: {
+    id: number;
+    accountType: 'User' | 'Organization';
+    repositorySelection: 'all' | 'selected';
+    htmlUrl: string | null;
+  } | null = null;
+
+  // Orgs first (BuFi007 is an org). Fall back to user account if needed.
+  try {
+    const resp = await appOctokit.rest.apps.getOrgInstallation({ org: accountLogin });
+    install = {
+      id: resp.data.id,
+      accountType: 'Organization',
+      repositorySelection: resp.data.repository_selection as 'all' | 'selected',
+      htmlUrl: resp.data.html_url ?? null,
+    };
+  } catch {
+    try {
+      const resp = await appOctokit.rest.apps.getUserInstallation({ username: accountLogin });
+      install = {
+        id: resp.data.id,
+        accountType: 'User',
+        repositorySelection: resp.data.repository_selection as 'all' | 'selected',
+        htmlUrl: resp.data.html_url ?? null,
+      };
+    } catch {
+      install = null;
+    }
+  }
+
+  if (!install) {
+    throw new Error(
+      `GitHub App not installed on '${accountLogin}'. Install the BUFI Open Agents Bot app on this account and grant repo access.`
+    );
+  }
+
+  await db.insert(githubInstallations).values({
+    id: nanoid(),
+    userId: BUFI_BOT_USER_ID,
+    installationId: install.id,
+    accountLogin,
+    accountType: install.accountType,
+    repositorySelection: install.repositorySelection,
+    installationUrl: install.htmlUrl,
+  });
+}
+
 function isValidBody(value: unknown): value is DispatchRequestBody {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -116,6 +187,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Bot user provisioning failed' }, { status: 500 });
   }
 
+  // Ensure the bot has a github_installations row for the target owner so
+  // OA's standard verifyRepoAccess → mintInstallationToken flow works.
+  try {
+    await ensureBufiInstallation(body.repo.owner);
+  } catch (error) {
+    console.error('[bufi-dispatch] github installation seed failed:', error);
+    return NextResponse.json(
+      { error: 'github_app_not_installed', message: (error as Error).message },
+      { status: 502 }
+    );
+  }
+
+  // Construct the cloneUrl so chat-sandbox-runtime.ts triggers its
+  // setupToken minting path (which uses the bot's installation we just
+  // ensured above).
+  const cloneUrl = `https://github.com/${body.repo.owner}/${body.repo.name}.git`;
+
   const sessionId = nanoid();
   const chatId = nanoid();
   const messageId = nanoid();
@@ -131,6 +219,7 @@ export async function POST(req: NextRequest) {
         repoOwner: body.repo.owner,
         repoName: body.repo.name,
         branch: body.repo.branch,
+        cloneUrl,
         autoCommitPushOverride: true,
         autoCreatePrOverride: true,
       },
