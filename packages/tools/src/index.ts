@@ -286,6 +286,8 @@ import {
   reserveBookingTool,
 } from './guest-escrow';
 import { quoteFxTool } from './quote-fx';
+import { getOperatorAgencyTool } from './get-operator-agency';
+import { getSenderoIdentityTool } from './get-sendero-identity';
 import { giveFeedbackTool } from './give-feedback';
 import { readReputationTool } from './read-reputation';
 import { readValidationTool } from './read-validation';
@@ -843,6 +845,9 @@ export const toolList: ToolDef[] = [
   settleSplitTool,
   checkPolicyTool,
   quoteFxTool,
+  // Tenant + platform identity (who is this agency, what's the platform footer)
+  getOperatorAgencyTool,
+  getSenderoIdentityTool,
   // ERC-8004 reputation + validation (replaces the in-memory rate_agent mock)
   giveFeedbackTool,
   readReputationTool,
