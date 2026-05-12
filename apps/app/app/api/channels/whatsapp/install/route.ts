@@ -248,6 +248,27 @@ async function reconcilePendingInstallFromKapso(args: {
       currentCustomerId: installWithFreshSetupLink.kapsoCustomerId,
     });
     if (!phoneNumber) {
+      // Re-read DB — a concurrent sandbox bind may have flipped this row
+      // to active between the initial snapshot read and now. Returning a
+      // pending shape here would otherwise clobber the UI right after
+      // /api/channels/whatsapp/sandbox succeeded, causing operators to
+      // click Disconnect on a healthy install.
+      const refreshed = await prisma.whatsAppInstall.findUnique({
+        where: { id: installWithFreshSetupLink.id },
+        select: installSelect,
+      });
+      if (refreshed?.status === 'active' && refreshed.phoneNumberId) {
+        console.info(
+          '[whatsapp/install] reconciliation observed concurrent active bind; returning fresh row',
+          {
+            tenantId: args.tenantId,
+            installId: refreshed.id,
+            phoneNumberId: refreshed.phoneNumberId,
+            kapsoCustomerId: refreshed.kapsoCustomerId,
+          }
+        );
+        return refreshed;
+      }
       console.info('[whatsapp/install] no provisioned phone number found in Kapso', {
         tenantId: args.tenantId,
         installId: installWithFreshSetupLink.id,
