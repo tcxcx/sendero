@@ -630,3 +630,30 @@ Production agents fall back to `request_human_handoff` (Sendero-native, fully wi
 **Debugging chain:** gap board → Langfuse trace (via `traceId` on the gap row) → Vercel logs (`vercel logs <deployment>`) → Cloudflare worker logs (when `kind: 'runtime_constraint'`). Total ~5 min from gap surfacing to root cause; ask Claude one question and it walks all four sources in parallel.
 
 **Pre-push gate:** if you're tempted to expose either gap-tool to a production caller, the answer is `request_human_handoff` instead. The handler-level gate is load-bearing — don't soften it.
+
+## Sendero Open-Agents — sibling fork of vercel-labs/open-agents
+
+The Raj demand-driven kanban + auto-execute loop ships from a **separate GitHub repository**, not from this monorepo. Forked directly from `vercel-labs/open-agents` (peer to `BuFi007/desk-v1`, not downstream of it). Repo: `github.com/tcxcx/sendero-open-agents`. Deployed independently to Vercel.
+
+```
+       vercel-labs/open-agents (upstream)
+                │
+   ┌────────────┼────────────┐
+   │            │            │
+BuFi007/    tcxcx/        <future
+desk-v1    sendero-       verticals>
+            open-agents
+```
+
+**Three siblings, no vendoring.** Sendero monorepo never imports OA code. Integration is two HTTP boundaries:
+- Sendero → Minions: `POST /api/agent-gaps/ingest` (mirrors gap reports)
+- Minions → Sendero: `GET /api/agent-gaps/find-resolved` (self-heal preamble lookup)
+
+Both gated by `AGENT_GAPS_INGEST_SECRET` (constant-time compare). Env vars set on Sendero side: `AGENT_GAPS_BASE_URL`, `AGENT_GAPS_INGEST_SECRET`. **NOT yet wired** — base fork must deploy first, kanban migration second, observability third.
+
+**Migration phases (cherry-picks against tcxcx/sendero-open-agents `main`):**
+- M1: kanban + agent-gaps loop (from `BuFi007/desk-v1 tcxcx/minions-raj-loop` — 5 raj commits: `fa667a3fc`, `aa5840087`, `67def7729`, `486806a9e`, `ac56aa978`)
+- M2: GH App install token + bridge-bot pattern (from BuFi007)
+- M3: direction-B live completion callback (from BuFi007)
+- M4: paired Langfuse + Phoenix observability — Sendero-specific, no upstream
+- M5: ATEO play (from BuFi007 — identify commits when ready)
