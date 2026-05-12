@@ -42,6 +42,7 @@ import { AppKit } from '@circle-fin/app-kit';
 import { BridgeKit } from '@circle-fin/bridge-kit';
 import * as bridgeChains from '@circle-fin/bridge-kit/chains';
 import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
+import type { createSolanaKitAdapterFromPrivateKey } from '@circle-fin/adapter-solana-kit';
 import type { ViemAdapter } from '@circle-fin/adapter-viem-v2';
 import bs58 from 'bs58';
 import type { Address } from 'viem';
@@ -117,6 +118,17 @@ export type Principal =
   | {
       kind: 'circle-wallets';
       adapter: ReturnType<typeof createCircleWalletsAdapter>;
+      address: string;
+      label: string;
+    }
+  // Sol self-custody (Phase 4.5). Single-keypair adapter — derives its
+  // signing address from the private key, so App Kit's source/destination
+  // shape must NOT include `address` (the adapter rejects it as a
+  // user-controlled-adapter validation failure). `address` is still
+  // surfaced on the Principal for label/log purposes + ensureSolanaGas.
+  | {
+      kind: 'solana-kit';
+      adapter: ReturnType<typeof createSolanaKitAdapterFromPrivateKey>;
       address: string;
       label: string;
     };
@@ -239,16 +251,20 @@ export type SupportedToken = 'USDC' | 'EURC';
  * the private key); for Circle Wallets the address is required.
  */
 function depositFromContext(principal: Principal, chainKey: GatewayChainKey) {
-  if (principal.kind === 'viem') {
+  // Viem + Solana-kit adapters are single-keypair (user-controlled in App
+  // Kit's terms) — the adapter derives its address from the key and
+  // rejects `address` in the from-shape as a validation error. Only
+  // Circle Wallets (multi-wallet fleet) needs `address` to disambiguate.
+  if (principal.kind === 'circle-wallets') {
     return {
       adapter: principal.adapter,
       chain: unifiedBalanceChainName(chainKey),
+      address: principal.address,
     } as const;
   }
   return {
     adapter: principal.adapter,
     chain: unifiedBalanceChainName(chainKey),
-    address: principal.address,
   } as const;
 }
 
@@ -354,6 +370,15 @@ export interface SpendArgs {
   allocations?: Array<{ amount: string; chain: string }>;
   /** Optional custom fee carved from the spend. Defaults to "no fee". */
   customFee?: CustomFee;
+  /**
+   * App Kit retry shape — when set, the kit skips estimate+burn and
+   * replays only the mint step using a previously-obtained attestation.
+   * Used by `spendWithMintRetry` in `unified-balance.ts` to recover
+   * from transient destination-chain gas failures after the burn has
+   * already confirmed (e.g., "Insufficient native token on Arc Testnet"
+   * when the tenant EOA signer has no ETH).
+   */
+  retry?: { attestation: string; signature: string };
 }
 
 export interface SpendResult {
@@ -378,13 +403,17 @@ function buildSpendFrom(args: SpendArgs) {
   }
   return args.sources.map(s => {
     const base: Record<string, unknown> = { adapter: s.principal.adapter };
-    // Circle Wallets is a multi-wallet "fleet" adapter — every spend
-    // call needs `address` to identify which DCW signs. The SDK
+    // Circle Wallets is the only multi-wallet "fleet" adapter — every
+    // spend call needs `address` to identify which DCW signs. The SDK
     // explicitly rejects circle-wallets sources without it:
     // "Address is required for developer-controlled adapters."
+    //
+    // Viem + Solana-kit are single-keypair "user-controlled" adapters
+    // and reject the inverse: passing `address` trips the validation
+    // "Address should not be provided for user-controlled adapters".
+    // sourceAccount is the delegate-spending hook (signing for another
+    // address's balance) and is independent of adapter kind.
     if (s.principal.kind === 'circle-wallets') base.address = s.principal.address;
-    // viem (single-wallet) doesn't need address; sourceAccount is the
-    // delegate-spending hook (signing for another address's balance).
     if (s.sourceAccount) base.sourceAccount = s.sourceAccount;
     return base;
   });
@@ -400,8 +429,7 @@ function buildSpendParams(args: SpendArgs) {
   // — it's the DCW the adapter uses as the signing context on the
   // destination chain (distinct from `recipientAddress` which is the
   // actual receiver). Same pattern desk-v1's BridgeKit wrapper uses.
-  // For viem (single-wallet) the field is harmless; we omit it to
-  // match the docs example shape exactly.
+  // viem + solana-kit are user-controlled and reject `address`.
   const toCtx: Record<string, unknown> = {
     adapter: toAdapter,
     chain: unifiedBalanceChainName(args.toChainKey),
@@ -416,12 +444,19 @@ function buildSpendParams(args: SpendArgs) {
     amount: args.amount,
     token: args.token ?? 'USDC',
   };
-  if (args.customFee) {
+  if (args.customFee || args.retry) {
     params.config = {
-      customFee: {
-        value: args.customFee.value,
-        recipientAddress: args.customFee.recipientAddress,
-      },
+      ...(args.customFee
+        ? {
+            customFee: {
+              value: args.customFee.value,
+              recipientAddress: args.customFee.recipientAddress,
+            },
+          }
+        : {}),
+      ...(args.retry
+        ? { retry: { attestation: args.retry.attestation, signature: args.retry.signature } }
+        : {}),
     };
   }
   return params;
@@ -431,13 +466,18 @@ export async function spend(args: SpendArgs): Promise<SpendResult> {
   // Top up SOL on every Solana source — `kit.unifiedBalance.spend`
   // burns on each source chain, and the Solana-side burn needs SOL
   // gas. JIT-funds in parallel, fail-soft.
+  //
+  // Two Sol-shaped Principal kinds need this: `circle-wallets` (the
+  // legacy Sol DCW path, kept for read fallback) and `solana-kit`
+  // (Phase 4.5 self-custody signer, the one App Kit actually spends
+  // from). Both expose `address` as base58 — same gas-funding logic.
   await Promise.all(
     args.sources.map(s => {
       const principal = s.principal;
+      if (principal.kind === 'solana-kit') {
+        return ensureSolanaGas({ address: principal.address }).then(() => undefined);
+      }
       if (principal.kind !== 'circle-wallets') return Promise.resolve();
-      // Heuristic: top up if the source chain key looks Solana-shaped
-      // via the source allocation (when explicit allocations were
-      // given) or principal address (Solana base58 vs EVM 0x-hex).
       const isSolanaPrincipal = !principal.address.startsWith('0x');
       if (!isSolanaPrincipal) return Promise.resolve();
       return ensureSolanaGas({ address: principal.address }).then(() => undefined);

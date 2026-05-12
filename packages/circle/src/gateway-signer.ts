@@ -40,6 +40,7 @@
  * a network round trip.
  */
 
+import bs58 from 'bs58';
 import { prisma } from '@sendero/database';
 import { decrypt, encrypt } from '@sendero/encryption';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -516,4 +517,196 @@ function isUniqueConstraintError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const e = err as { code?: unknown };
   return e.code === 'P2002';
+}
+
+// ── Tenant Solana signer — Phase 4.5 ──────────────────────────────────
+//
+// Self-custody Sol keypair stored encrypted under SENDERO_KEK. This is
+// what unblocks Sol-source unified spend: App Kit's Sol signer protocol
+// requires secretKey/signMessage(s), which Circle Wallets adapter can't
+// satisfy (Circle holds DCW keys server-side). The self-custody signer
+// builds a @circle-fin/adapter-solana-kit principal that DOES satisfy
+// the protocol — App Kit can then burn from this principal's Gateway
+// pool on Sol and mint on the destination EVM chain via CCTP.
+//
+// One-time-cost vs DCW: this address must be funded separately (faucet
+// or transfer from the DCW). It does NOT pool funds with the tenant's
+// existing Sol DCW. After provisioning, deposits go directly to this
+// address; the DCW remains for inbound webhook-driven sweeps.
+
+export interface TenantSolanaSigner {
+  /** Base58 Solana pubkey. Stable across calls for the same tenant. */
+  address: string;
+  /**
+   * Base58-encoded 64-byte secretKey (Keypair.secretKey). Accepted
+   * directly by `createSolanaKitAdapterFromPrivateKey`.
+   */
+  privateKey: string;
+  kekVersion: number;
+}
+
+const solSignerCache = new Map<string, { signer: TenantSolanaSigner; expiresAt: number }>();
+
+function solCacheGet(tenantId: string): TenantSolanaSigner | null {
+  const entry = solSignerCache.get(tenantId);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    solSignerCache.delete(tenantId);
+    return null;
+  }
+  return entry.signer;
+}
+
+function solCacheSet(tenantId: string, signer: TenantSolanaSigner): void {
+  solSignerCache.set(tenantId, { signer, expiresAt: Date.now() + SIGNER_CACHE_TTL_MS });
+}
+
+export function invalidateTenantSolanaSignerCache(tenantId: string): void {
+  solSignerCache.delete(tenantId);
+}
+
+/**
+ * Returns the tenant's self-custody Sol gateway depositor keypair,
+ * generating a fresh one on first call. Same race + caching pattern as
+ * `getOrCreateGatewaySigner`. Lazy-imports @solana/web3.js + bs58 so
+ * EVM-only callers don't pull them into their bundle.
+ *
+ * Throws if:
+ *   - tenantId missing.
+ *   - Decryption fails (corrupted ciphertext, KEK env missing, version gap).
+ *   - Decrypted secretKey derives a different pubkey than the one stored.
+ */
+export async function getOrCreateTenantSolanaSigner(
+  tenantId: string,
+  options?: GetGatewaySignerOptions
+): Promise<TenantSolanaSigner> {
+  if (!tenantId) {
+    throw new Error('getOrCreateTenantSolanaSigner: tenantId required');
+  }
+
+  const cached = solCacheGet(tenantId);
+  if (cached) return cached;
+
+  const existing = await prisma.tenantSolanaGatewaySigner.findUnique({
+    where: { tenantId },
+  });
+
+  if (existing) {
+    const signer = await decryptSolanaSigner({
+      tenantId,
+      address: existing.address,
+      encryptedPrivateKey: existing.encryptedPrivateKey,
+      kekVersion: existing.kekVersion,
+      caller: options?.caller,
+    });
+    solCacheSet(tenantId, signer);
+    return signer;
+  }
+
+  const { Keypair } = await import('@solana/web3.js');
+  const kp = Keypair.generate();
+  const address = kp.publicKey.toBase58();
+  const privateKey = bs58.encode(kp.secretKey);
+  const { ciphertext, kekVersion } = await encrypt({
+    plaintext: privateKey,
+    purpose: 'gateway-signer',
+    contextId: `sol:${tenantId}`,
+  });
+
+  try {
+    await prisma.tenantSolanaGatewaySigner.create({
+      data: { tenantId, address, encryptedPrivateKey: ciphertext, kekVersion },
+    });
+  } catch (err) {
+    if (isUniqueConstraintError(err)) {
+      const winner = await prisma.tenantSolanaGatewaySigner.findUnique({
+        where: { tenantId },
+      });
+      if (winner) {
+        const signer = await decryptSolanaSigner({
+          tenantId,
+          address: winner.address,
+          encryptedPrivateKey: winner.encryptedPrivateKey,
+          kekVersion: winner.kekVersion,
+          caller: options?.caller,
+        });
+        solCacheSet(tenantId, signer);
+        return signer;
+      }
+    }
+    throw err;
+  }
+
+  void writeAuditLog({
+    tenantId,
+    userId: null,
+    kekVersion,
+    caller: options?.caller,
+    contextSuffix: 'sol-create',
+  });
+
+  const signer: TenantSolanaSigner = { address, privateKey, kekVersion };
+  solCacheSet(tenantId, signer);
+  return signer;
+}
+
+/** Read-only — returns null when no row exists yet. */
+export async function getTenantSolanaSigner(
+  tenantId: string,
+  options?: GetGatewaySignerOptions
+): Promise<TenantSolanaSigner | null> {
+  if (!tenantId) {
+    throw new Error('getTenantSolanaSigner: tenantId required');
+  }
+  const cached = solCacheGet(tenantId);
+  if (cached) return cached;
+  const row = await prisma.tenantSolanaGatewaySigner.findUnique({
+    where: { tenantId },
+  });
+  if (!row) return null;
+  const signer = await decryptSolanaSigner({
+    tenantId,
+    address: row.address,
+    encryptedPrivateKey: row.encryptedPrivateKey,
+    kekVersion: row.kekVersion,
+    caller: options?.caller,
+  });
+  solCacheSet(tenantId, signer);
+  return signer;
+}
+
+interface DecryptSolanaArgs {
+  tenantId: string;
+  address: string;
+  encryptedPrivateKey: string;
+  kekVersion: number;
+  caller?: GatewaySignerCallerContext;
+}
+
+async function decryptSolanaSigner(args: DecryptSolanaArgs): Promise<TenantSolanaSigner> {
+  const plaintext = await decrypt({
+    ciphertext: args.encryptedPrivateKey,
+    purpose: 'gateway-signer',
+    contextId: `sol:${args.tenantId}`,
+    kekVersion: args.kekVersion,
+  });
+  const { Keypair } = await import('@solana/web3.js');
+  const secretKey = bs58.decode(plaintext);
+  const kp = Keypair.fromSecretKey(secretKey);
+  const derived = kp.publicKey.toBase58();
+  if (derived !== args.address) {
+    throw new Error(
+      `Tenant Sol signer key mismatch for tenant:${args.tenantId}: stored address ` +
+        `${args.address} but decrypted key derives ${derived}. KEK rotation gap or ` +
+        `row tamper — refusing to sign with the wrong key.`
+    );
+  }
+  void writeAuditLog({
+    tenantId: args.tenantId,
+    userId: null,
+    kekVersion: args.kekVersion,
+    caller: args.caller,
+    contextSuffix: 'sol-decrypt',
+  });
+  return { address: derived, privateKey: plaintext, kekVersion: args.kekVersion };
 }

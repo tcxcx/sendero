@@ -122,9 +122,28 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
     };
     void load();
     const id = setInterval(load, POLL_INTERVAL_MS);
+
+    // Phase 4.5 — SSE pulse from /api/gateway/balance/stream lets the
+    // dashboard react within ~50ms of a deposit/spend instead of
+    // waiting for the next 30s poll tick. The stream itself carries
+    // no balance payload (Gateway pool isn't cached in a column); on
+    // any `refresh` event we re-fetch /api/gateway/balance — same
+    // pattern operator inbox uses for trip_events.
+    const es =
+      typeof window !== 'undefined' && typeof EventSource !== 'undefined'
+        ? new EventSource('/api/gateway/balance/stream', { withCredentials: true })
+        : null;
+    if (es) {
+      es.addEventListener('refresh', () => {
+        if (!cancelled) void load();
+      });
+      // hello / ping / bye are heartbeats — no handler needed.
+    }
+
     return () => {
       cancelled = true;
       clearInterval(id);
+      if (es) es.close();
     };
   }, []);
 
@@ -156,7 +175,7 @@ export function UnifiedBalanceSection({ chrome = 'section' }: { chrome?: 'sectio
                 : 'mt-0.5 font-mono text-lg tabular-nums'
             }
           >
-            {data ? `$${formatGrandTotal(data.spendableAvailable ?? data.available)}` : '—'}
+            {data ? `$${formatGrandTotal(data.grandTotal)}` : '—'}
           </div>
         </div>
         <HoverCard openDelay={120} closeDelay={80}>
@@ -237,7 +256,7 @@ function BreakdownContent({ data }: { data: UnifiedBalanceResponse }) {
             </div>
             <div className="mt-1 flex items-end gap-2">
               <span className="text-[28px] leading-none font-semibold tracking-[-0.02em] tabular-nums text-black">
-                ${formatGrandTotal(spendableAvailable)}
+                ${formatGrandTotal(data.grandTotal)}
               </span>
               <span className="pb-0.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-black/55">
                 USDC

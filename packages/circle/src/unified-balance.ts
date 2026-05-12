@@ -16,9 +16,11 @@ import type { GetBalancesResult, SpendResult } from '@circle-fin/unified-balance
 import { prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
+import { createSolanaKitAdapterFromPrivateKey } from '@circle-fin/adapter-solana-kit';
+
 import { GATEWAY_CHAINS } from './gateway';
-import type { TenantGatewaySigner } from './gateway-signer';
-import { getOrCreateGatewaySigner } from './gateway-signer';
+import type { TenantGatewaySigner, TenantSolanaSigner } from './gateway-signer';
+import { getOrCreateGatewaySigner, getTenantSolanaSigner } from './gateway-signer';
 import {
   type GatewayChainKey,
   type Principal,
@@ -57,15 +59,20 @@ export interface TenantUnifiedBalanceContext {
   signer: TenantGatewaySigner;
   principal: Principal;
   /**
-   * Read-only principals merged into balance queries alongside `principal`.
-   * Sol-primary tenants land inbound USDC on a Circle Wallets DCW that
-   * the EVM signer doesn't know about; surfacing the DCW here is what
-   * lets the unified-balance API aggregate Sol funds. Spend signing
-   * still goes through `principal` — never include these in spend
-   * sources without first re-modelling the spend path to handle
-   * cross-adapter signing.
+   * Read-only principals merged into balance queries alongside
+   * `principal`. Always safe to surface. For Sol-primary tenants this
+   * includes the self-custody Sol signer when provisioned, or the Sol
+   * DCW addresses as a read-only fallback.
    */
   extraReadPrincipals: Principal[];
+  /**
+   * Principals safe to pass as `unifiedBalance.spend` sources alongside
+   * `principal`. Self-custody Sol signers belong here (their adapter
+   * satisfies App Kit's signMessages protocol via the @solana/kit
+   * KeyPairSigner). Circle Wallets DCW principals do NOT (Circle
+   * holds keys server-side) and must stay out.
+   */
+  extraSpendPrincipals: Principal[];
   enabledChains: GatewayChainKey[];
 }
 
@@ -90,22 +97,54 @@ export async function getTenantUnifiedBalanceContext(
     throw new Error('TenantGatewayConfig has no enabled Gateway domains.');
   }
 
+  // Phase 4.5 — Sol-source spend path. The self-custody Sol signer
+  // (TenantSolanaGatewaySigner) holds its own keypair encrypted under
+  // SENDERO_KEK; createSolanaKitAdapterFromPrivateKey wraps it as a
+  // proper App Kit Sol signer (satisfies signMessages protocol that
+  // Circle Wallets DCW adapter doesn't). Funds at this address can be
+  // both READ as part of unified balance AND SPENT cross-chain via
+  // App Kit `unifiedBalance.spend` (burn-Sol, mint-EVM).
+  //
+  // Falls back to surfacing Sol DCWs as read-only when no self-custody
+  // signer exists yet — they still show in the unified-balance display
+  // but trip the "Signer does not support" error on spend.
   const extraReadPrincipals: Principal[] = [];
+  const extraSpendPrincipals: Principal[] = [];
+  let solSigner: TenantSolanaSigner | null = null;
   if (tenant.primaryChain === 'sol') {
-    const solDcws = await prisma.circleWallet.findMany({
-      where: {
-        tenantId,
-        kind: 'operations',
-        chain: { in: ['SOL-DEVNET', 'SOL'] },
-      },
-      select: { address: true, chain: true },
-    });
-    for (const dcw of solDcws) {
-      const dcwPrincipal = circleWalletsPrincipal({
-        address: dcw.address,
-        label: `tenant:${tenantId}:sol-ops:${dcw.chain}`,
+    solSigner = await getTenantSolanaSigner(tenantId);
+    if (solSigner) {
+      // 'solana-kit' kind matches App Kit's "user-controlled adapter"
+      // expectation — buildSpendFrom omits `address` (the adapter
+      // derives it from the private key), but maybeTopUpSolanaGas still
+      // gas-tops the signer via SENDERO_SOLANA_PLATFORM_PRIVATE_KEY.
+      const adapter = createSolanaKitAdapterFromPrivateKey({
+        privateKey: solSigner.privateKey,
       });
-      if (dcwPrincipal) extraReadPrincipals.push(dcwPrincipal);
+      const solPrincipal: Principal = {
+        kind: 'solana-kit',
+        adapter,
+        address: solSigner.address,
+        label: `tenant:${tenantId}:sol-self-custody`,
+      };
+      extraReadPrincipals.push(solPrincipal);
+      extraSpendPrincipals.push(solPrincipal);
+    } else {
+      const solDcws = await prisma.circleWallet.findMany({
+        where: {
+          tenantId,
+          kind: 'operations',
+          chain: { in: ['SOL-DEVNET', 'SOL'] },
+        },
+        select: { address: true, chain: true },
+      });
+      for (const dcw of solDcws) {
+        const dcwPrincipal = circleWalletsPrincipal({
+          address: dcw.address,
+          label: `tenant:${tenantId}:sol-ops:${dcw.chain}`,
+        });
+        if (dcwPrincipal) extraReadPrincipals.push(dcwPrincipal);
+      }
     }
   }
 
@@ -118,6 +157,7 @@ export async function getTenantUnifiedBalanceContext(
       label: `tenant:${tenantId}`,
     }),
     extraReadPrincipals,
+    extraSpendPrincipals,
     enabledChains,
   };
 }
@@ -181,6 +221,54 @@ export async function getTenantUnifiedBalances(args: {
   return merged;
 }
 
+/**
+ * App Kit's `spend()` runs three steps: estimate → burn (on each source
+ * chain) → mint (on the destination). When the burn succeeds but the
+ * mint step's tx submit fails (e.g., the EVM tenant signer has no native
+ * gas), the kit throws with the burn attestation + signature attached
+ * to `error.cause.trace`. The kit's own retry path skips estimate+burn
+ * and replays only the mint via `config.retry`.
+ *
+ * Common production trigger: tenant EOA signer with 0 native ETH on the
+ * destination EVM chain. Arc's Gateway service has a server-side
+ * fallback that eventually submits the mint with relayer gas, but the
+ * UI sees the kit error in the meantime. Single-shot retry papers over
+ * transient gas blips and saves the burn attestation from being lost.
+ */
+interface RetryTrace {
+  attestation: string;
+  signature: string;
+}
+
+function extractRetryTrace(err: unknown): RetryTrace | null {
+  if (!err || typeof err !== 'object') return null;
+  const cause = (err as { cause?: unknown }).cause;
+  if (!cause || typeof cause !== 'object') return null;
+  const trace = (cause as { trace?: unknown }).trace;
+  if (!trace || typeof trace !== 'object') return null;
+  const t = trace as { attestation?: unknown; signature?: unknown };
+  if (typeof t.attestation !== 'string' || typeof t.signature !== 'string') return null;
+  return { attestation: t.attestation, signature: t.signature };
+}
+
+async function spendWithMintRetry(args: Parameters<typeof spend>[0]) {
+  try {
+    return await spend(args);
+  } catch (err) {
+    const trace = extractRetryTrace(err);
+    if (!trace) throw err;
+    console.warn('[unified-balance] mint failed; retrying with attestation', {
+      tenantId: args.sources[0]?.principal.label,
+      toChainKey: args.toChainKey,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    return await spend({
+      ...args,
+      retry: trace,
+    });
+  }
+}
+
 export interface TenantUnifiedSpendArgs {
   tenantId: string;
   amount: string;
@@ -208,8 +296,17 @@ export async function spendTenantUnifiedUsd(
   const destinationChain = resolveUnifiedBalanceChain(args.destinationChain);
   const recipient = args.recipient ?? ctx.signer.address;
 
-  const result = await spend({
-    sources: [{ principal: ctx.principal, sourceAccount: ctx.signer.address }],
+  // EVM signer + any self-custody Sol signers from ctx. The self-custody
+  // Sol path is Phase 4.5: createSolanaKitAdapterFromPrivateKey wraps an
+  // encrypted-at-rest secretKey into an App-Kit-compatible Sol signer
+  // that DOES satisfy signMessages. App Kit allocates burns across
+  // every source adapter and mints on the destination chain via CCTP.
+  const sources = [
+    { principal: ctx.principal, sourceAccount: ctx.signer.address },
+    ...ctx.extraSpendPrincipals.map(p => ({ principal: p })),
+  ];
+  const result = await spendWithMintRetry({
+    sources,
     toChainKey: destinationChain,
     recipient,
     amount: args.amount,

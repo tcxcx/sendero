@@ -26,7 +26,7 @@
  */
 
 import { backfillTenantWallets } from '@sendero/circle/gateway-backfill';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { getOrCreateGatewaySigner, getTenantSolanaSigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import { GATEWAY_DOMAIN_BY_CHAIN, getTenantOperationsChains } from '@sendero/env/chains';
 
@@ -67,26 +67,36 @@ export async function backfillTenantGatewayPostLogin(
         .map(w => GATEWAY_DOMAIN_BY_CHAIN[w.chain])
         .filter((domain): domain is number => typeof domain === 'number')
     );
-    const solanaOpsWallet = await prisma.circleWallet.findFirst({
-      where: {
-        tenantId: args.tenantId,
-        kind: 'operations',
-        chain: { in: ['SOL-DEVNET', 'SOL'] },
-      },
-      select: { address: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    // Phase 4.5: prefer the self-custody Sol signer (which can actually
+    // sign App Kit's gatewayBurn for Sol-source unified spend) over the
+    // legacy Circle DCW operations wallet. The DCW falls back as the
+    // depositor pointer only when no self-custody signer is provisioned
+    // yet — that fallback also pins the address until Phase 4.5 lights
+    // up for that tenant.
+    const [solSelfCustody, solanaOpsWallet] = await Promise.all([
+      getTenantSolanaSigner(args.tenantId),
+      prisma.circleWallet.findFirst({
+        where: {
+          tenantId: args.tenantId,
+          kind: 'operations',
+          chain: { in: ['SOL-DEVNET', 'SOL'] },
+        },
+        select: { address: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+    const solanaDepositor = solSelfCustody?.address ?? solanaOpsWallet?.address ?? null;
     await prisma.tenantGatewayConfig.upsert({
       where: { tenantId: args.tenantId },
       create: {
         tenantId: args.tenantId,
         evmDepositorAddress: signer.address,
-        solanaDepositorAddress: solanaOpsWallet?.address ?? null,
+        solanaDepositorAddress: solanaDepositor,
         enabledDomains,
       },
       update: {
         evmDepositorAddress: signer.address,
-        solanaDepositorAddress: solanaOpsWallet?.address ?? undefined,
+        solanaDepositorAddress: solanaDepositor ?? undefined,
         // Only widen, never narrow. Operators can disable chains
         // explicitly via a future admin action; the login hook should
         // not retract a chain a tenant has been transacting on.

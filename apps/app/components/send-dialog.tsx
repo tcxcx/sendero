@@ -18,6 +18,7 @@ type Token = 'USDC' | 'EURC';
 
 interface GatewayBalanceSnapshot {
   grandTotal?: string;
+  spendableTotal?: string;
   available?: string;
   spendableAvailable?: string;
   pendingCreditTotal?: string;
@@ -154,7 +155,7 @@ export function SendDialog() {
           <div className="snd-balance-head">
             <span>Unified Balance</span>
             <strong>
-              {balance ? `$${money(balance.spendableAvailable ?? balance.available)}` : '—'}
+              {balance ? `$${money(balance.spendableTotal ?? balance.grandTotal)}` : '—'}
             </strong>
           </div>
           <div className="snd-balance-grid">

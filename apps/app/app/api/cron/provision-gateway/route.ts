@@ -26,7 +26,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { backfillTenantOpsDcws } from '@sendero/circle/gateway-backfill';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { getOrCreateGatewaySigner, getTenantSolanaSigner } from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import {
   GATEWAY_DOMAIN_BY_CHAIN,
@@ -139,26 +139,34 @@ export async function GET(req: NextRequest) {
         .filter((domain): domain is number => typeof domain === 'number');
       const enabledDomains = mergeUniqueSorted(undefined, actualDomains);
       const missingDomains = requiredDomains.filter(domain => !enabledDomains.includes(domain));
-      const solanaOpsWallet = await prisma.circleWallet.findFirst({
-        where: {
-          tenantId: c.id,
-          kind: 'operations',
-          chain: { in: ['SOL-DEVNET', 'SOL'] },
-        },
-        select: { address: true },
-        orderBy: { createdAt: 'asc' },
-      });
+      // Phase 4.5: self-custody Sol signer (read-only here — cron
+      // doesn't provision it, just respects it when present) wins over
+      // the legacy DCW for solanaDepositorAddress. Cron stays cheap;
+      // signer provisioning happens on the login/backfill hook path.
+      const [solSelfCustody, solanaOpsWallet] = await Promise.all([
+        getTenantSolanaSigner(c.id),
+        prisma.circleWallet.findFirst({
+          where: {
+            tenantId: c.id,
+            kind: 'operations',
+            chain: { in: ['SOL-DEVNET', 'SOL'] },
+          },
+          select: { address: true },
+          orderBy: { createdAt: 'asc' },
+        }),
+      ]);
+      const solanaDepositor = solSelfCustody?.address ?? solanaOpsWallet?.address ?? null;
       await prisma.tenantGatewayConfig.upsert({
         where: { tenantId: c.id },
         create: {
           tenantId: c.id,
           evmDepositorAddress: signer.address,
-          solanaDepositorAddress: solanaOpsWallet?.address ?? null,
+          solanaDepositorAddress: solanaDepositor,
           enabledDomains,
         },
         update: {
           evmDepositorAddress: signer.address,
-          solanaDepositorAddress: solanaOpsWallet?.address ?? undefined,
+          solanaDepositorAddress: solanaDepositor ?? undefined,
           enabledDomains: { set: enabledDomains },
         },
       });

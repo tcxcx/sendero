@@ -86,10 +86,17 @@ export async function GET() {
   const arbAddress = opsAddressByChain.get('ARB-SEPOLIA') ?? opsAddressByChain.get('ARB') ?? null;
   const polygonAddress =
     opsAddressByChain.get('MATIC-AMOY') ?? opsAddressByChain.get('MATIC') ?? null;
+  // Phase 4.5: `solanaDepositorAddress` (TenantGatewayConfig) is the
+  // canonical Sol depositor pointer — it tracks the self-custody Sol
+  // signer (TenantSolanaGatewaySigner) when one is provisioned, falling
+  // back to the legacy Circle DCW ops address. The CircleWallet ops row
+  // for SOL-DEVNET is the old DCW that may still hold orphaned Gateway
+  // pool funds; we keep it as the secondary fallback for tenants that
+  // pre-date the Phase 4.5 self-custody rollout.
   const solAddress =
+    solanaDepositorAddress ??
     opsAddressByChain.get('SOL-DEVNET') ??
     opsAddressByChain.get('SOL') ??
-    solanaDepositorAddress ??
     null;
 
   const usdc: DepositChain[] = [

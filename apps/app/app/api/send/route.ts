@@ -11,6 +11,8 @@ import { prisma } from '@sendero/database';
 import { getAddress, type Hex, parseAbiItem, zeroAddress } from 'viem';
 import { z } from 'zod';
 
+import { notifyTenantGatewayPool } from '@/lib/gateway-pool-notify';
+
 /**
  * POST /api/send
  * Same-chain USDC/EURC transfer on Arc Testnet via App Kit (viem adapter).
@@ -150,6 +152,12 @@ export async function POST(req: NextRequest) {
           confirmedAt: new Date(),
         },
       });
+      // Phase 4.5 — pulse the gateway-pool SSE channel so the dashboard
+      // reflects the post-spend pool balance without waiting on the
+      // 30s unified-balance poll. Sol-source spends drain the
+      // self-custody pool; EVM-only spends drain the EVM signer's
+      // Gateway pool — either way the unified balance shrank.
+      void notifyTenantGatewayPool({ tenantId: tenant.id, reason: 'spend' });
       return NextResponse.json({
         state: 'success',
         txHash: result.txHash,

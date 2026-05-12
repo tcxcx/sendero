@@ -43,12 +43,19 @@ export function microUsdcToDecimal(value: bigint): string {
   return `${sign}${whole}.${frac}`;
 }
 
-export function isGatewaySpendableDomain(domain: number): boolean {
-  return domain !== SOLANA_GATEWAY_DOMAIN;
+export function isGatewaySpendableDomain(_domain: number): boolean {
+  // Phase 4.5 — Sol funds at the self-custody signer's Gateway pool
+  // ARE spendable cross-chain via App Kit (the @circle-fin/adapter-
+  // solana-kit adapter satisfies signMessages). Tenants without a
+  // provisioned TenantSolanaGatewaySigner will see Sol DCW balances
+  // surfaced as read-only — those still trip the signer error on
+  // spend, but the gating happens at the unified-balance.ts source-
+  // selection layer, not here.
+  return true;
 }
 
-export function isGatewaySpendableOpsChain(chain: string): boolean {
-  return !SOLANA_CHAINS.has(chain);
+export function isGatewaySpendableOpsChain(_chain: string): boolean {
+  return true;
 }
 
 export function calculateGatewayBalanceTotals(args: {

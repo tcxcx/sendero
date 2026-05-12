@@ -16,7 +16,10 @@
  */
 
 import { provisionTenantOpsDcw } from '@sendero/circle/gateway-ops-wallet';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import {
+  getOrCreateGatewaySigner,
+  getOrCreateTenantSolanaSigner,
+} from '@sendero/circle/gateway-signer';
 import { prisma } from '@sendero/database';
 import { getEnabledGatewayDomains, getTenantOperationsChains } from '@sendero/env/chains';
 
@@ -51,17 +54,32 @@ export async function runTenantGateway(
     // Solana ops DCWs are the ones with a base58 (non-0x) address.
     const solanaOpsWallet = opsWallets.find(w => !w.address.startsWith('0x'));
 
+    // Phase 4.5: provision the self-custody Sol signer too. Its pubkey
+    // becomes the canonical solanaDepositorAddress so unified spend can
+    // burn from this signer (it satisfies App Kit's signMessages, which
+    // the Circle DCW adapter doesn't). The legacy DCW stays in
+    // CircleWallet for inbound webhook compatibility but is no longer
+    // the depositor pointer.
+    const solSelfCustody = await getOrCreateTenantSolanaSigner(tenantId).catch(err => {
+      console.warn('[run-tenant-gateway] sol self-custody signer provision failed (non-fatal)', {
+        tenantId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    });
+    const solanaDepositor = solSelfCustody?.address ?? solanaOpsWallet?.address ?? null;
+
     await prisma.tenantGatewayConfig.upsert({
       where: { tenantId },
       create: {
         tenantId,
         evmDepositorAddress: signer.address,
-        solanaDepositorAddress: solanaOpsWallet?.address ?? null,
+        solanaDepositorAddress: solanaDepositor,
         enabledDomains: getEnabledGatewayDomains(),
       },
       update: {
         evmDepositorAddress: signer.address,
-        solanaDepositorAddress: solanaOpsWallet?.address ?? undefined,
+        solanaDepositorAddress: solanaDepositor ?? undefined,
         enabledDomains: { set: getEnabledGatewayDomains() },
       },
     });
@@ -69,13 +87,15 @@ export async function runTenantGateway(
     console.log('[run-tenant-gateway] provisioned', {
       tenantId,
       depositor: signer.address,
-      solanaDepositor: solanaOpsWallet?.address ?? null,
+      solanaDepositor,
+      solSelfCustody: solSelfCustody?.address ?? null,
+      solDcw: solanaOpsWallet?.address ?? null,
     });
 
     return {
       ok: true,
       signerAddress: signer.address,
-      solanaDepositorAddress: solanaOpsWallet?.address ?? null,
+      solanaDepositorAddress: solanaDepositor,
       error: null,
     };
   } catch (err) {
