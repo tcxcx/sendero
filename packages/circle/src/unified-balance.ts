@@ -122,19 +122,63 @@ export async function getTenantUnifiedBalanceContext(
   };
 }
 
+function sumDecimal(values: Array<string | undefined>): string {
+  let microSum = 0n;
+  for (const value of values) {
+    if (!value) continue;
+    const [whole = '0', frac = ''] = value.split('.');
+    const padded = `${frac}000000`.slice(0, 6);
+    microSum += BigInt(whole || '0') * 1_000_000n + BigInt(padded || '0');
+  }
+  const whole = microSum / 1_000_000n;
+  const frac = (microSum % 1_000_000n).toString().padStart(6, '0');
+  return `${whole}.${frac}`;
+}
+
 export async function getTenantUnifiedBalances(args: {
   tenantId: string;
   includePending?: boolean;
 }): Promise<GetBalancesResult> {
   const ctx = await getTenantUnifiedBalanceContext(args.tenantId);
-  if (ctx.extraReadPrincipals.length === 0) {
-    return getBalances({ principal: ctx.principal, includePending: args.includePending });
-  }
-  return getBalances({
-    kind: 'principals',
-    principals: [ctx.principal, ...ctx.extraReadPrincipals],
+  const primary = await getBalances({
+    principal: ctx.principal,
     includePending: args.includePending,
   });
+  if (ctx.extraReadPrincipals.length === 0) return primary;
+
+  // App Kit's getBalances expects ONE adapter shape per call. Run an
+  // address-based query per Circle Wallets DCW and merge breakdowns
+  // into the primary result. allSettled isolates failures so a single
+  // misconfigured Sol DCW can't poison the EVM signer's read.
+  const extraResults = await Promise.allSettled(
+    ctx.extraReadPrincipals.map(p =>
+      getBalances({
+        kind: 'address',
+        address: p.address,
+        includePending: args.includePending,
+      })
+    )
+  );
+
+  const merged = { ...primary, breakdown: [...primary.breakdown] };
+  const totals = [primary.totalConfirmedBalance];
+  const pendingTotals = [primary.totalPendingBalance];
+  for (const [i, r] of extraResults.entries()) {
+    if (r.status !== 'fulfilled') {
+      console.warn('[unified-balance] extra principal balance read failed (non-fatal)', {
+        tenantId: args.tenantId,
+        principalLabel: ctx.extraReadPrincipals[i]?.label,
+        reason: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      });
+      continue;
+    }
+    merged.breakdown.push(...r.value.breakdown);
+    totals.push(r.value.totalConfirmedBalance);
+    pendingTotals.push(r.value.totalPendingBalance);
+  }
+  merged.totalConfirmedBalance = sumDecimal(totals);
+  merged.totalPendingBalance = sumDecimal(pendingTotals);
+  return merged;
 }
 
 export interface TenantUnifiedSpendArgs {
