@@ -226,7 +226,15 @@ async function ensureOrgIdentitySol(args: {
   // Dynamic import — see file-top comment for why. The first call pays
   // the load cost (umi + mpl-agent-registry + web3.js); subsequent
   // calls in the same function instance hit the V8 module cache.
-  const { mintAndRegisterAgentIdentity } = await import('@sendero/metaplex');
+  //
+  // Indirection via a variable so Wrangler/esbuild treats this as a
+  // runtime expression instead of statically resolving + bundling the
+  // package into the Cloudflare Workers edge bundle. The Workers
+  // runtime doesn't have the Node module system; this code path only
+  // runs on Vercel Node functions where `await import()` resolves
+  // through normal package resolution.
+  const metaplexPkg = '@sendero/metaplex';
+  const { mintAndRegisterAgentIdentity } = await import(metaplexPkg);
   let result: Awaited<ReturnType<typeof mintAndRegisterAgentIdentity>>;
   try {
     result = await mintAndRegisterAgentIdentity({

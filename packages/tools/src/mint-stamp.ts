@@ -427,9 +427,14 @@ async function mintSolanaStamp(
   // Lazy import keeps the metaplex umi bundle off the cold-boot path
   // for Arc-only flows. Arc is the dominant case during the testnet
   // beta; we don't want every Arc mint to load mpl-core + umi.
-  const { mintCoreTripStamp, AGENT_REGISTRY_PROGRAM_ID: _unused } = await import(
-    '@sendero/metaplex'
-  );
+  //
+  // Indirection via a variable so Wrangler/esbuild treats this as a
+  // runtime expression instead of statically resolving + bundling the
+  // package into the Cloudflare Workers edge bundle. Sol minting
+  // doesn't run on the edge — only on Vercel Node functions where
+  // normal package resolution applies.
+  const metaplexPkg = '@sendero/metaplex';
+  const { mintCoreTripStamp, AGENT_REGISTRY_PROGRAM_ID: _unused } = await import(metaplexPkg);
   void _unused; // keep import shape stable for tree-shaking
 
   // Metaplex Core program ID — canonical address used as `contract`.
