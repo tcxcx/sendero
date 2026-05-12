@@ -993,3 +993,60 @@ harder to debug — operators won't know whether a missing balance means
 - Per-DCW live reads on Operations side. Gateway already has
   `/api/gateway/balance` with its own fetch path; Treasury is the
   only mode where the DB-cached value is at risk of being a lie.
+
+---
+
+## Vercel build size — lazy-load remaining heavy SDKs
+
+Standard 8GB + Enhanced 16GB Vercel build machines OOM'd on this
+monorepo (2026-05-11). Workaround: bumped to Turbo (60GB,
+$0.126/build-min vs $0.014). Metaplex is now lazy-imported (biggest
+single hit) but other heavy SDKs are still inlined into every route
+that consumes the parent package.
+
+### Goal
+Standard 8GB build succeeds without OOM. Downgrade `buildMachineType`
+back to `elastic` / `standard` for 9× cost saving per build minute.
+
+### Suspects still inlined at module top
+
+- `packages/circle/src/gateway-solana-mint.ts` — `@solana/web3.js`,
+  `@solana/spl-token`. Re-exported via `gateway` namespace in
+  `packages/circle/src/index.ts`. Every consumer of `@sendero/circle`
+  pulls Solana web3 even if they only need EVM helpers.
+- `packages/nanopayments/src/solana.ts` — `@solana/web3.js`. Pulled
+  by the nanopay router.
+- `packages/guest/src/solana.ts` — same shape.
+- `apps/admin/lib/treasury/propose-solana.ts` — `@sqds/multisig`.
+  Admin app only.
+
+### Pattern
+
+```ts
+// Bad: heavy SDK inlined into every consumer.
+import { Connection, PublicKey } from '@solana/web3.js';
+export async function readBalance(owner: string) {
+  const conn = new Connection(RPC);
+}
+
+// Good: SDK loaded only when function actually runs.
+export async function readBalance(owner: string) {
+  const { Connection, PublicKey } = await import('@solana/web3.js');
+  const conn = new Connection(RPC);
+}
+```
+
+Module-level constants stay as strings; construct `PublicKey` inside
+the function.
+
+### Acceptance
+- Lambda sizes drop (check `vercel inspect <url>` for routes that
+  don't touch Solana).
+- Standard 8GB build succeeds.
+- `buildMachineType` switched back to `elastic` via the project
+  resource config PATCH endpoint.
+
+### Not in scope (yet)
+- Splitting `@sendero/circle` into `circle-evm` + `circle-sol`
+  packages. Cleaner long-term but a refactor; lazy imports buy the
+  same OOM relief without ripping the package boundary.

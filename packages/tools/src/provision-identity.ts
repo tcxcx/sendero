@@ -24,8 +24,15 @@
 
 import { IDENTITY_REGISTRY, registerAgent } from '@sendero/arc/identity';
 import { prisma } from '@sendero/database';
-import { mintAndRegisterAgentIdentity } from '@sendero/metaplex';
 import type { Address } from 'viem';
+
+// `@sendero/metaplex` is dynamically imported inside the Sol branch
+// of ensureOrgIdentity to keep @metaplex-foundation/umi +
+// @solana/web3.js + bs58 out of every route bundle that consumes
+// `@sendero/tools`. Eagerly importing the package at module-load
+// pushed the Vercel Turbopack build past 16GB OOM. The Sol identity
+// mint is a leaf path that runs once per tenant, so the lazy-load
+// cost is negligible.
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
 // Solana devnet chain id sentinel — Solana doesn't have an EVM-style
@@ -216,6 +223,10 @@ async function ensureOrgIdentitySol(args: {
         },
       });
 
+  // Dynamic import — see file-top comment for why. The first call pays
+  // the load cost (umi + mpl-agent-registry + web3.js); subsequent
+  // calls in the same function instance hit the V8 module cache.
+  const { mintAndRegisterAgentIdentity } = await import('@sendero/metaplex');
   let result: Awaited<ReturnType<typeof mintAndRegisterAgentIdentity>>;
   try {
     result = await mintAndRegisterAgentIdentity({
