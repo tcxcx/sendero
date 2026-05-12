@@ -165,6 +165,8 @@ export async function GET() {
     Optimism_Sepolia: 900_000,
     Arbitrum_Sepolia: 900_000,
     Polygon_Amoy: 300_000,
+    Sol_Devnet: 30_000, // ~30s; App Kit picks up the Sol DCW principal once
+    Sol: 30_000,        // unified-balance.ts adds it as extraReadPrincipal
   };
 
   const pendingCredits = pendingCreditRows

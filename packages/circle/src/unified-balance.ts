@@ -22,6 +22,7 @@ import { getOrCreateGatewaySigner } from './gateway-signer';
 import {
   type GatewayChainKey,
   type Principal,
+  circleWalletsPrincipal,
   getBalances,
   spend,
   viemPrincipal,
@@ -55,6 +56,16 @@ export interface TenantUnifiedBalanceContext {
   tenantId: string;
   signer: TenantGatewaySigner;
   principal: Principal;
+  /**
+   * Read-only principals merged into balance queries alongside `principal`.
+   * Sol-primary tenants land inbound USDC on a Circle Wallets DCW that
+   * the EVM signer doesn't know about; surfacing the DCW here is what
+   * lets the unified-balance API aggregate Sol funds. Spend signing
+   * still goes through `principal` — never include these in spend
+   * sources without first re-modelling the spend path to handle
+   * cross-adapter signing.
+   */
+  extraReadPrincipals: Principal[];
   enabledChains: GatewayChainKey[];
 }
 
@@ -64,7 +75,10 @@ export async function getTenantUnifiedBalanceContext(
   const [tenant, signer] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { gatewayConfig: { select: { enabledDomains: true } } },
+      select: {
+        primaryChain: true,
+        gatewayConfig: { select: { enabledDomains: true } },
+      },
     }),
     getOrCreateGatewaySigner(tenantId),
   ]);
@@ -75,6 +89,26 @@ export async function getTenantUnifiedBalanceContext(
   if (enabledChains.length === 0) {
     throw new Error('TenantGatewayConfig has no enabled Gateway domains.');
   }
+
+  const extraReadPrincipals: Principal[] = [];
+  if (tenant.primaryChain === 'sol') {
+    const solDcws = await prisma.circleWallet.findMany({
+      where: {
+        tenantId,
+        kind: 'operations',
+        chain: { in: ['SOL-DEVNET', 'SOL'] },
+      },
+      select: { address: true, chain: true },
+    });
+    for (const dcw of solDcws) {
+      const dcwPrincipal = circleWalletsPrincipal({
+        address: dcw.address,
+        label: `tenant:${tenantId}:sol-ops:${dcw.chain}`,
+      });
+      if (dcwPrincipal) extraReadPrincipals.push(dcwPrincipal);
+    }
+  }
+
   return {
     tenantId,
     signer,
@@ -83,6 +117,7 @@ export async function getTenantUnifiedBalanceContext(
       address: signer.address,
       label: `tenant:${tenantId}`,
     }),
+    extraReadPrincipals,
     enabledChains,
   };
 }
@@ -92,7 +127,14 @@ export async function getTenantUnifiedBalances(args: {
   includePending?: boolean;
 }): Promise<GetBalancesResult> {
   const ctx = await getTenantUnifiedBalanceContext(args.tenantId);
-  return getBalances({ principal: ctx.principal, includePending: args.includePending });
+  if (ctx.extraReadPrincipals.length === 0) {
+    return getBalances({ principal: ctx.principal, includePending: args.includePending });
+  }
+  return getBalances({
+    kind: 'principals',
+    principals: [ctx.principal, ...ctx.extraReadPrincipals],
+    includePending: args.includePending,
+  });
 }
 
 export interface TenantUnifiedSpendArgs {
