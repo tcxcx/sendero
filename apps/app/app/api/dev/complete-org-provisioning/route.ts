@@ -1,19 +1,27 @@
 /**
  * POST /api/dev/complete-org-provisioning
  *
- * Local development only. Mirrors the `organization.created` Clerk webhook
- * path when Clerk cannot reach localhost (no tunnel on /api/webhooks/clerk),
- * AND serves as the deploy endpoint for the chain-select onboarding step.
+ * Chain-select onboarding deploy endpoint. The `dev/` path prefix is
+ * legacy from when this only filled in for unreachable Clerk webhooks
+ * during localhost development — it's the canonical entry point for
+ * the chain-aware provisioning ladder on every environment now.
+ * (Rename to `/api/onboarding/deploy` is queued for a follow-up
+ * commit once the client + any external callers are migrated.)
  *
  * Body: `{ primaryChain?: 'sol' | 'arc' }` — optional, defaults to 'sol'
  * (per the onboarding spec — Sendero is Solana-first now). The Tenant row
  * is upserted with the chosen chain BEFORE branching, so the user's
- * selection is what drives provisioning regardless of any prior default.
+ * selection is what drives provisioning regardless of any prior default
+ * the Clerk webhook may have stamped (it lacks the chain context the
+ * user picks on `/onboarding`).
  *
  * Provisioning runs through `runTenantProvisioning`, the single chain-
  * aware orchestrator shared with the Clerk webhook. Per-stage progress
  * stamps into `Tenant.metadata.provisioning` so the wait screen can
  * render real state via `/api/onboarding/check-ready`.
+ *
+ * Auth-gated: Clerk session + active org required. Route refuses
+ * cross-tenant calls — only the caller's own org can be provisioned.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -55,10 +63,6 @@ async function resolveUniqueSlug(base: string, orgId: string): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
-  if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  }
-
   const { userId, orgId } = await auth();
   if (!userId || !orgId) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
