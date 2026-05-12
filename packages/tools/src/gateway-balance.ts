@@ -83,43 +83,44 @@ export const travelerBalanceTool: ToolDef = {
           'No signed-in traveler on this turn. Pass `travelerPhone` on `call_sendero` so Sendero can resolve the wallet, or ask the traveler to sign in first.',
       };
     }
-    // Architecture flip (2026-05-04): the EVM Gateway depositor is now
-    // the traveler's Circle DCW EVM address — Circle's webhook system
-    // tracks these, so transactions.inbound fires and we auto-deposit.
-    // UserGatewaySigner EOAs are off Circle's radar; funds sent there
-    // strand silently. The signer row is still surfaced separately
-    // (for stranded-fund recovery), but the DCW is the source of truth
-    // for balance reads.
-    //
-    // Cross-chain audit (2026-05-04): we used to return ONE canonical
-    // EVM address with the assumption "Circle DCWs are deterministic,
-    // every chain shares the same SCA address". That assumption fails
-    // for tenant treasury wallets (Arc has its own address, others
-    // share another) and could fail for travelers in the future. We
-    // now query EVERY EVM DCW row and run `auditEvmAddresses`. When
-    // all chains agree, `evmAddress` carries the canonical value
-    // (same as before). When they diverge, `evmAddress` is null and
-    // `evmAddresses` lists each chain explicitly so the renderer
-    // can't show an unsafe "valid for all chains" address.
-    const [evmDcwRows, solanaWallet, signer] = await Promise.all([
-      prisma.wallet.findMany({
-        where: {
+    // Self-healing pre-sweep: Circle's transactions.inbound webhook is
+    // the primary trigger but mis-routed webhook URLs, ngrok flapping,
+    // and direct (non-Circle) transfers all leave funds stranded at
+    // the DCW. Run a balance-check + sweep cycle on every traveler
+    // balance read so the unified pool reflects truth without
+    // depending on the webhook ever firing. Fail-soft: a sweep failure
+    // doesn't block the read.
+    const tenantIdForSweep = ctx?.traveler?.tenantId;
+    if (tenantIdForSweep) {
+      try {
+        const { autoSweepStrandedTravelerBalances } = await import(
+          '@sendero/circle/auto-sweep-traveler'
+        );
+        const sweepResult = await autoSweepStrandedTravelerBalances({
           userId,
-          provisioner: 'dcw',
-          NOT: { chainId: SOL_DEVNET_CHAIN_ID },
-        },
-        orderBy: { createdAt: 'asc' },
-        select: { address: true, chainId: true },
-      }),
-      prisma.wallet.findFirst({
-        where: { userId, provisioner: 'dcw', chainId: SOL_DEVNET_CHAIN_ID },
-        select: { address: true },
-      }),
-      getUserGatewaySigner(userId, {
-        caller: { surface: 'tool', userId, context: 'traveler_balance' },
-      }),
-    ]);
-    if (evmDcwRows.length === 0 && !solanaWallet) {
+          tenantId: tenantIdForSweep,
+        });
+        if (sweepResult.swept.length > 0) {
+          console.log('[traveler_balance] auto-swept stranded balances', {
+            userId,
+            swept: sweepResult.swept.map(s => ({ chain: s.chainKey, amount: s.amount })),
+          });
+        }
+      } catch (err) {
+        console.warn('[traveler_balance] auto-sweep failed (non-fatal)', {
+          userId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // DRY balance lookup — same shared helper book_flight and
+    // notifyTravelerOfDeposit use. One function for "traveler unified
+    // balance" so the wallet card, the pre-pay funds gate, and the
+    // post-deposit ping all agree on the number.
+    const { getTravelerUnifiedBalance } = await import('@sendero/circle/traveler-unified-balance');
+    const unified = await getTravelerUnifiedBalance({ userId });
+    if (unified.resolvedFrom === 'no_wallet') {
       return {
         status: 'no_wallet',
         message:
@@ -127,10 +128,10 @@ export const travelerBalanceTool: ToolDef = {
       };
     }
 
-    // Map chainId → GatewayChainKey for audit. Rows whose chainId isn't
-    // in `GATEWAY_CHAINS` get dropped with a console-noted warning;
-    // they shouldn't reach the wallet card anyway.
-    const auditRows = evmDcwRows.flatMap(row => {
+    // Map chainId → GatewayChainKey for the per-chain wallet-card
+    // render. This is the tool's display concern, not the balance
+    // concern; balance lives in `unified`.
+    const auditRows = unified.evmDcwAddresses.flatMap(row => {
       const chainKey = chainIdToGatewayKey(row.chainId);
       if (!chainKey) {
         console.warn('[traveler_balance] EVM Wallet row with unmapped chainId — dropping', {
@@ -143,18 +144,9 @@ export const travelerBalanceTool: ToolDef = {
     });
     const evmAudit = auditEvmAddresses(auditRows);
 
-    // For the Gateway REST query we still need ONE EVM depositor —
-    // the canonical when safe, otherwise the first row (Gateway
-    // queries are per-domain, not address-bound; the divergence flag
-    // tells the agent to surface caveat in the wallet card).
-    const evmForBalance = (evmAudit.canonical ?? evmDcwRows[0]?.address ?? null) as Address | null;
-    const balance = await queryUnifiedBalance({
-      evm: evmForBalance ?? undefined,
-      solana: solanaWallet?.address ?? undefined,
-    });
-
     return {
-      ...balance,
+      total: unified.total,
+      balances: unified.balances,
       // Single safe value — populated only when every EVM row uses the
       // same address. Renderers SHOULD prefer this; the per-chain map
       // exists for divergent edge cases.
@@ -163,21 +155,23 @@ export const travelerBalanceTool: ToolDef = {
       // divergent without a second DB call.
       evmAddresses: evmAudit.perChain,
       evmAddressesDivergent: evmAudit.divergent,
-      solanaAddress: solanaWallet?.address ?? null,
-      signerAddress: signer?.address ?? null,
+      solanaAddress: unified.solanaAddress,
+      signerAddress: unified.signerAddress,
     };
   },
 };
 
 /**
- * @deprecated Kept as an alias of `treasury_balance` so legacy callers
- * (older Kapso graph versions, MCP clients pinned to v0) keep working
- * during the rollout. Will be removed once the Kapso graph + docs flip
- * to the split tools.
+ * @deprecated Legacy alias — kept for Kapso graphs + MCP clients pinned
+ * to the pre-split tool name. Now routes to `traveler_balance` (NOT
+ * `treasury_balance`). In every existing call site, the agent asked
+ * "what's the user's wallet balance" and got tenant-pool numbers
+ * instead — a misleading bug that pre-dated the split. The new alias
+ * matches the documented intent: "user's own wallet" → traveler view.
  */
 export const gatewayBalanceTool: ToolDef = {
-  ...treasuryBalanceTool,
+  ...travelerBalanceTool,
   name: 'gateway_balance',
   description:
-    '[Deprecated alias of `treasury_balance`] Return the Sendero treasury USDC unified balance across every Gateway-supported testnet. Use `traveler_balance` for the SIGNED-IN TRAVELER instead.',
+    "[Legacy alias of `traveler_balance`] Return the SIGNED-IN TRAVELER's USDC unified balance across every Gateway-supported testnet. Use `traveler_balance` directly in new code; `treasury_balance` for the tenant pool.",
 };

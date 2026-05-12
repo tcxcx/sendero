@@ -1,122 +1,210 @@
 # Sendero — 3-minute demo script
 
-WhatsApp + Slack are the highlights. Web dashboard is the reconciler. Three audiences, one ledger.
+A founder/builder, an AI co-founder, and a real Duffel order pull off a single trip
+across three channels in 180 seconds. Email invitation cold open. Then onboarding,
+then the dashboard tour, then the agent live on WhatsApp + Slack, then the close.
 
 ---
 
-## The framing (memorize)
+## The framing (memorize, 18 seconds)
 
-> "Sendero is a vertical AI agent for travel ops. Three audiences, three channels: the TMC operator runs everything from web. Their corporate clients install Sendero in their own Slack. Travelers chat over WhatsApp. Same trip, same on-chain ledger, all three channels — that's the wedge. Per-seat tools cap at HR budget. We charge percent of revenue plus agent-to-agent nanopayments."
+> "Sendero is a vertical AI agent platform for travel ops. Same trip, three channels:
+> the TMC operator runs everything from web, the corporate-customer installs Sendero
+> in their own Slack, the traveler chats over WhatsApp. One on-chain ledger ties all
+> three together. USDC settlement on Arc and Solana. We don't charge per seat — we
+> take a cut of revenue plus agent-to-agent nanopayments. Travel is the wedge;
+> agent-native vertical service businesses are the moat."
 
-Say that in 18–20 seconds. Then go.
+Open with that. Then drop the email.
 
 ---
 
 ## Pre-flight (do 5 min before)
 
-- [ ] Phone on +593980668984 connected to WiFi, WhatsApp open to `+56 9 2040 3095` thread.
-- [ ] Tomas's Arc DCW funded — drip via faucet so balance > 0:
-      `bun apps/app/scripts/_local/diagnose-tomas-funds.ts` then send the bot "drip me 5 USDC on Arc".
-- [ ] Browser tab 1 → `/dashboard` (logged in as TMC operator).
-- [ ] Browser tab 2 → `/dashboard/inbox/[tripId]` (pick an existing trip with Slack + WhatsApp activity).
-- [ ] Browser tab 3 → `/dashboard/customer-accounts/[id]/policy` (so you can flash the policy editor).
-- [ ] Browser tab 4 → Slack workspace in the corporate customer's tenant; have `#sendero` channel open with the bot member.
-- [ ] Confirm Kapso health: `bun apps/app/scripts/_local/diagnose-wa-live.ts` — last webhook event within 5 min, signatureValid=Y, dispatchedCount > 0.
-- [ ] Mute Slack desktop notifications. Bot replies are the demo; pings are noise.
-- [ ] Camera over the phone so people see WhatsApp UI directly, not a screen mirror.
+- [ ] Browser tabs (in order):
+  1. **Gmail** open on the unread "Invitation to join Sendero Travel" email.
+  2. `app.sendero.travel/onboarding/agency` — Sol-primary preselected so bootstrap path matches the demo.
+  3. `app.sendero.travel/dashboard` — operator home.
+  4. `app.sendero.travel/dashboard/agent-chat` — operator agent console.
+  5. `app.sendero.travel/dashboard/channels/whatsapp` — sandbox bind ready.
+  6. `app.sendero.travel/dashboard/channels/slack` — Slack OAuth install ready.
+  7. `app.sendero.travel/dashboard/inbox` — trip merged inbox.
+- [ ] Phone on `+593980668984`, WhatsApp open to the sandbox thread `+56 9 2040 3095`.
+- [ ] Slack: corporate-customer workspace (Acme Corp), `#sendero` channel, bot installed.
+- [ ] Funded tenant `cmp214zo20000c1o4c3p5ge7m` (Enterprise Test) signed in. Unified
+      balance ≥ $20 on Sol Gateway pool (`FkSc…udDL`) + ≥ $1 on Arc Testnet. Run
+      `bun apps/app/scripts/_local/where-is-20.ts` to confirm.
+- [ ] Tomas's traveler Arc DCW has > 0 USDC. If empty, ask the bot `drip me 5 USDC on Arc`.
+- [ ] Camera over the phone — audience watches WhatsApp directly, not screen mirror.
+- [ ] Mute Slack desktop notifications. Pings during the bot reply window kill flow.
+- [ ] Confirm the Kapso pipe is hot: open
+      [`/dashboard/channels/whatsapp/inbox`](https://app.sendero.travel/dashboard/channels/whatsapp/inbox)
+      — last inbound event within the last 5 minutes.
 
 ---
 
 ## Beat sheet
 
 ```
-0:00 — 0:20   OPEN — pitch + topology (talk only)
-0:20 — 1:30   ACT 1 — WhatsApp traveler (highlight)
-1:30 — 2:30   ACT 2 — Slack corporate buyer (highlight)
-2:30 — 2:50   ACT 3 — Operator merged inbox (reconciler)
-2:50 — 3:00   CLOSE — wedge + traction line
+0:00 — 0:20   COLD OPEN — framing + the invitation email
+0:20 — 0:50   SETUP — accept invite → onboarding → bootstrap (wallets, gateway, identity)
+0:50 — 1:15   TOUR — dashboard, operator agent console, channel install (Slack + WhatsApp)
+1:15 — 2:30   WHATSAPP LIVE — passport, wallet, flight, eSIM, restaurants, ancillary
+2:30 — 2:50   SLACK LIVE — corporate buyer + policy + Liveblocks handoff
+2:50 — 3:00   CLOSE — one-sentence wedge + traction
 ```
 
----
-
-## 0:00 — OPEN (20s, talk only)
-
-Say the framing paragraph. End with: *"Let me show you all three. Start with the traveler."*
+12 beats. Don't run long on any single act — every overrun eats the close.
 
 ---
 
-## 0:20 — ACT 1: WhatsApp traveler (70s)
+## 0:00 — COLD OPEN (20s)
 
-Camera on phone. Type slowly so the audience can read.
+Say the framing paragraph while showing **Gmail**.
 
-| Beat | You type | Bot replies | What to say |
+> "Today, someone signs up. This is the email they get."
+
+Click into "Invitation to join Sendero Travel". Show the binoculars hero, the **Accept invitation** button, the 30-day expiry.
+
+> "Clerk-issued, signed, 30-day TTL. Click."
+
+Click **Accept invitation**.
+
+**Vision beat:** Sendero is a platform for spinning up vertical AI agents. Travel
+is the first vertical; legal, real-estate, and healthcare reuse the same shell.
+The invitation flow we're about to walk through provisions *everything* a vertical
+needs in under 30 seconds.
+
+---
+
+## 0:20 — SETUP: onboarding + bootstrap (30s)
+
+Land on `/onboarding/agency`. Pick **Solana-primary** (so the cross-chain settle in
+the WhatsApp act gets to flex Phase 4.5). Click **Continue**.
+
+| What you see | What to say |
+|---|---|
+| Wait screen with five orange dots animating | "Five things spinning up in parallel — same architecture for every new vertical." |
+| Treasury wallet check ✓ | "Circle MSCA on Arc + Squads V4 vault on Sol. The tenant's money lives here." |
+| Operations DCWs ✓ | "One Circle DCW per chain — Arc, Base, Avalanche, Polygon, Arbitrum, Optimism, Sol Devnet. These receive inbound USDC; the Gateway sweep pools them." |
+| Gateway depositor ✓ | "Self-custody Sol signer encrypted under SENDERO_KEK + EVM Gateway signer. This is what makes Sol funds spendable cross-chain — Phase 4.5 we just shipped." |
+| Identity mint ✓ | "ERC-8004 agent identity on Arc and Metaplex Agent Registry on Sol. The agency now has an on-chain reputation surface that compounds across every booking." |
+| Done → redirect to `/dashboard` | "30 seconds. Bootstrap done. Same template, every vertical." |
+
+**Recovery:** if the Sol identity stage fails (Metaplex blip), don't dwell —
+"Sol identity is async, retries on the next dashboard navigation." Move on.
+
+---
+
+## 0:50 — TOUR: dashboard + agent console + channel install (25s)
+
+Land on `/dashboard`. Three things to flash:
+
+1. **Unified balance pill** (top right) — pop the dropdown.
+   > "$21 USDC. One USD coin across Arc + Sol — Circle Gateway pools them. Spend
+   > from any chain, mint on any chain, sub-second. We just shipped Sol-source
+   > spending. Watch the live route — Solana Devnet $20, Arc Testnet $1, both
+   > spendable."
+
+2. **Operator agent console** (`/dashboard/agent-chat`).
+   > "Operator can talk to the agent directly. Same agent that runs on WhatsApp and
+   > Slack — same tools, same persona, same on-chain rail. Useful for one-off ops
+   > work or testing prompt changes."
+   Click into one recent conversation, scroll the tool calls.
+
+3. **Channels install** (`/dashboard/channels/whatsapp` then `/dashboard/channels/slack`).
+   > "Two-click WhatsApp via the Sendero sandbox number for testing — paid plans
+   > swap in a dedicated number through Kapso. Slack is one OAuth click — that's
+   > the corporate-customer install, deployed into the *corporate's* workspace,
+   > not the operator's. B2B2B in one click."
+
+**Vision beat:** three audiences, three surfaces, one tenant. The operator never
+context-switches; everything reconciles to `/dashboard/inbox/[tripId]`.
+
+---
+
+## 1:15 — WHATSAPP LIVE (75s, highlight act)
+
+Camera on phone. Switch to the WhatsApp thread. Type slowly so the audience reads.
+
+| # | You type | Bot replies | What to say |
 |---|---|---|---|
-| Identity | `qué agencia es esta?` | Brand card: agency name, slug, on-chain reputation status | "Sendero is an AI platform; the customer-facing brand is always the agency. The agent reads ERC-8004 identity on-chain — once the agency has reviews, they'll show up here." |
-| Wallet | `mi billetera` | Multi-chain unified balance card: Arc, Sol, 6 EVM testnets | "Every traveler gets a Circle DCW on every chain. **Unified USDC balance** via Circle Gateway. Deposit anywhere, settle anywhere — sub-second on Arc." |
-| Doc scan | *(send a passport photo from camera roll)* | OCR result: name, doc number redacted, expiry highlight | "Gemini Vision through our `scan_passport_inline` tool. Document goes into the encrypted PassportVault. Compliance-gated — only the traveler and the operator can decrypt." |
-| Booking | `un vuelo CDMX a Lima el martes próximo` | Search results card with 3 Duffel offers | "That's a real Duffel call — live inventory through StableTravel and Duffel. The agent will hold and confirm on-chain through SenderoGuestEscrow." |
+| 1 | `qué agencia es esta?` | Brand card: "Enterprise Test", on-chain reputation status | "The agent reads ERC-8004 — once the agency has reviews on Arc, they surface here. Sendero is always the platform; the brand is always the agency." |
+| 2 | *(send a passport photo)* | OCR result, doc number + expiry; "vault sealed" footer | "Gemini 2.0 Vision through `scan_passport_inline`. Document goes into PassportVault — AES-GCM-encrypted, KEK in Vercel sensitive env. Only the traveler and operator can decrypt." |
+| 3 | `mi billetera` | Unified balance card: Arc + Sol breakdown + 6 EVM testnets | "Every traveler gets a Circle DCW on every chain. Unified balance via Gateway. Same model that just shipped for the *tenant* — Sol funds are spendable across chains." |
+| 4 | `un vuelo CDMX a Lima el martes próximo` | Card with 3 Duffel offers + interactive buttons | "Real Duffel inventory through `search_flights`. The card is native WhatsApp interactive — buttons, list pickers, image carousels. Same canonical `ChannelMessage` renders to Slack and web." |
+| 5 | *(tap top offer's Confirm button)* | Booking confirmed; settlement on-chain; NFT BoardingPass card | "SenderoGuestEscrow on Arc holds funds until ticketing. Cross-chain settlement burns Sol pool + mints Arc for the supplier. Metaplex BoardingPass NFT lands in the traveler's wallet — that's their proof of trip." |
+| 6 | `eSIM 2GB para Perú` | eSIM card with QR + activation steps | "`search_esim` + `book_esim` through our Stable Travel partner. USDC settles inline. eSIM is an ancillary; same pricing policy and take-rate as flights." |
+| 7 | `restaurantes cerca de Miraflores` | Curated list — Bib Gourmand finder + neighborhood color | "Local concierge tools: `recommend_restaurants` composes Google Places + Bib Gourmand + Sendero's own taste graph. This is where the vertical shines — not just booking, *being there*." |
+| 8 | `add baggage` | Selection card, picks 23kg checked | "`add_baggage` stages an ancillary on the booking. Pre-ticketing → forwarded to Duffel as a service. Post-ticketing → Duffel order change. Sendero handles both shapes." |
+
+**Speed up if needed:** skip beats 7 and 8. Keep 1, 2, 3, 4, 5, 6 — passport, wallet,
+flight, eSIM is the headline.
 
 **Recovery moves:**
-- If wallet shows 0 USDC → say "fresh DCW, watch the faucet drip" then `drip me 5 USDC on Arc`.
-- If Gemini stalls (>4s) → talk over it: "vision call going through Vertex right now — typically returns in two to three seconds; this one's slower."
-- If Duffel returns empty → fall back: `un hotel en Lima por $180 la noche` (hotel inventory is more reliable for demo).
+- Duffel empty → fall back to `un hotel en Lima por $180`. Hotel inventory is deeper.
+- Gemini stalls > 4s → talk over it: "Vertex grounded call; sub-3-seconds typical."
+- Sol cross-chain spend errors → it's the mint-retry path we built last night;
+  Arc's gateway service eventually mints anyway. Don't dwell.
+
+**Vision beat:** the agent isn't a chatbot routing to a CRUD app. It's a vertical
+service business: tools-first, multi-channel, settlement-native. Every booking writes
+to the on-chain ledger.
 
 ---
 
-## 1:30 — ACT 2: Slack corporate buyer (60s)
+## 2:30 — SLACK LIVE (20s, B2B2B layer)
 
-Switch to Slack. The audience now sees the **B2B2B** layer.
+Switch to Slack — the corporate-customer's workspace, not the operator's.
 
-> "This is a different Slack workspace — Acme Corp installed Sendero into their own workspace. Their employees self-serve travel from inside their own company chat. The TMC operator never sees this thread directly; they see it surface in the web dashboard. That's the B2B2B wedge."
+> "This is Acme Corp's Slack. They installed Sendero into their own workspace.
+> Their employees self-serve travel from inside the company chat. The TMC operator
+> never sees this thread directly — they see it surface in `/dashboard/inbox`."
 
 | Beat | Action | Visible result | What to say |
 |---|---|---|---|
-| Request | `@sendero book a hotel in Lima next Tuesday under $200/night for [employee name]` | Bot: "Checking policy…" then results card | "Every corporate request runs through `check_policy` — per-customer-account policy editor lives on the TMC's dashboard." |
-| Policy gate | *(if approval threshold hit)* Bot posts approval card | Block Kit card with **Approve / Reject** buttons | "Approval-required flow. Liveblocks fan-out — the operator sees this same approval request in real-time on web." |
-| Approval | Click **Approve** in Slack OR on web | Booking confirms in both places | "Web and Slack stay in sync through Liveblocks + ChannelMessage. Operator can intervene from either surface." |
+| Request | `@sendero book SFO → LIM next Tuesday under $1,800 for Tomas` | "Checking policy…" → results card | "Every corporate booking runs through `check_policy` — per-customer policy lives on the TMC's dashboard. $1,500 threshold; this trips it." |
+| Approval | Approval card with **Approve / Reject** buttons | Block Kit card | "Liveblocks fans this out — operator sees the same approval card live on web. Click either surface, both update." |
+| Approve | Click **Approve** on Slack | Booking confirms on Slack AND on web `/dashboard/handoffs` | "Same trip. Three channels. One ledger." |
 
-**Recovery moves:**
-- If `check_policy` returns no policy → fine, that means auto-approve; just continue.
-- If Liveblocks lag → switch tabs to `/dashboard/handoffs` and click Approve from web; Slack will update.
-
----
-
-## 2:30 — ACT 3: Operator merged inbox (20s)
-
-Switch to Browser tab 2 → `/dashboard/inbox/[tripId]`.
-
-> "This is the TMC operator view. Same trip — three lanes side by side: Slack from the corporate, WhatsApp from the traveler, web for operator interventions. ChannelIdentity ties one logical traveler across all three. The operator never has to context-switch."
-
-Pan across the three lanes. Hover the latest message. Show the trace ID footer (Langfuse link).
-
-**Bonus flash (if time):** click into `/dashboard/customer-accounts/[id]/policy` — show the per-customer policy editor for 3 seconds. "TMCs set policy per corporate client. Per-vertical-agent template."
+**Vision beat:** this is the B2B2B layer. The TMC sells Sendero to corporate
+clients; the corporate installs into their own Slack; the traveler interacts via
+WhatsApp. Three audiences, one trip, one tenant — Sendero pools the take rate.
 
 ---
 
 ## 2:50 — CLOSE (10s)
 
-Say:
+Switch to `/dashboard/inbox/[tripId]` for the closing visual — three lanes side by
+side, the same trip we just booked, Slack + WhatsApp + web all stitched.
 
-> "Three audiences. One ledger. USDC settlement on Arc and Solana. We've shipped the agent, the channels, the policy layer, and the on-chain rail. Three paid TMC pilots, twelve in pipeline. Won Best Gemini Implementation at Arc Hackathon. Travel ops is the wedge — buyer × supplier × ops triangle is the moat."
+> "Three audiences. One ledger. USDC settlement on Arc and Sol — both spendable,
+> shipped last night. We've shipped the agent, the channels, the policy gate, the
+> on-chain rail, and the multi-vertical platform shell. Travel is the wedge;
+> agent-native service businesses are the moat."
+
+If pitching investors, add: *"Best Gemini Implementation at the Arc Hackathon. Three
+TMC pilots in market. Twelve in pipeline."*
+
+Stop talking. Let it land.
 
 ---
 
-## Things to NEVER say in the demo
+## Things to NEVER say
 
-- "Token launch" — don't have one, don't plan one. Crypto is plumbing.
-- "Chatbot" — we're agent-native, multi-tool, multi-channel.
-- "It's just OpenAI" — the persona is composed in Langfuse, the prompts are evaluated nightly, the model is gateway-routed with Vertex direct fallback.
-- "We're like Concur" — explicitly anti-Concur (compliance-first CRUD travel bolted to a chatbot).
-- Anything about the sandbox tenant by name. It's plumbing.
-
----
+- "Token launch" — we don't have one, don't plan one. Crypto is plumbing.
+- "Chatbot" — agent-native, multi-tool, multi-channel.
+- "Just OpenAI" — Langfuse-composed persona, Vertex direct first, gateway fallback.
+- "Like Concur" — explicitly the opposite.
+- The sandbox tenant by name. It's infrastructure.
 
 ## Things to ALWAYS say
 
 - **"On-chain audit"** when settlement comes up. Arcscan link is your friend.
 - **"Same trip, three channels"** when switching surfaces.
-- **"Vertical AI"** — not horizontal agent. Stay on category.
-- **Take rate + nanopay** when pricing is asked. Never per-seat.
+- **"Vertical AI"** — not horizontal agent.
+- **"Take rate + nanopay"** when pricing comes up. Never per-seat.
+- **"Phase 4.5"** when Sol cross-chain spend comes up. Signals we ship weekly.
 
 ---
 
@@ -124,35 +212,41 @@ Say:
 
 Two graceful pivots:
 
-1. **WhatsApp is dead** → switch entirely to web operator chat at `/dashboard/agent-chat`. Same agent, same tools, same on-chain rail. Frame it as "the operator chat surface — useful when an operator wants to invoke the agent directly without going through a channel."
+1. **WhatsApp dead** → switch entirely to `/dashboard/agent-chat`. Same agent, same
+   tools, same on-chain rail. Frame: "the operator chat surface — useful when an
+   operator wants to invoke the agent directly without going through a channel."
+2. **Web dashboard dead** → stay in Slack + WhatsApp. Frame: "operator visibility
+   is a reconciler layer. Channel surfaces are durable and independent — if the
+   dashboard hiccups, the agent keeps booking trips."
 
-2. **Web dashboard is dead** → stay in Slack + WhatsApp. Frame it as "operator visibility is a reconciler layer — channel surfaces are independent and durable. If the dashboard hiccups, the agent keeps booking trips."
-
-Never debug live. Move on, fix later.
+Never debug live. Move on; fix later.
 
 ---
 
-## Tools you may want to call manually before demo
+## Diagnostics (run before, not during)
 
 ```bash
-# Confirm WhatsApp pipeline is hot
-bun apps/app/scripts/_local/diagnose-wa-live.ts
+# unified balance + Sol Gateway pool sanity
+bun apps/app/scripts/_local/where-is-20.ts
 
-# Confirm tenant resolution working
-bun apps/app/scripts/_local/verify-tenant-resolver.ts
-
-# Confirm Tomas's DCWs + funds
+# Tomas traveler funds
 bun apps/app/scripts/_local/diagnose-tomas-funds.ts
 
-# If passport demo needed: pre-warm Gemini with one throwaway scan via /dashboard/scan
+# Kapso pipeline + last webhook timestamp
+bun apps/app/scripts/_local/diagnose-wa-live.ts
+
+# pre-warm Gemini Vision (if passport beat is in the cut)
+# → upload one throwaway scan via /dashboard/scan first
 ```
 
 ---
 
 ## After the demo
 
-- Save the conversation traceIds (Langfuse) for follow-up.
-- Note any "what about X?" questions that came up — file them under `/dashboard/handoffs` or as docs/agent-gaps/board.md entries.
-- If demo'd a real prospect, log the meeting in your tracker.
+- Save the conversation traceIds (Langfuse link footer in agent-chat).
+- Log unanswered questions under `/dashboard/handoffs` or as
+  `docs/agent-gaps/board.md` entries.
+- If a real prospect demo, log the meeting + push the follow-up trip into their
+  tenant's `/dashboard/inbox` for cross-channel continuity.
 
 Three minutes. Twelve beats. Three audiences. One ledger.

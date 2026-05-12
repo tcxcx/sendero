@@ -60,5 +60,22 @@ export async function register() {
     const { setSolanaPlatformLowAlertCallback } = await import('@sendero/circle');
     const { notifyPlatformWalletLow } = await import('@/lib/platform-wallet-alerts');
     setSolanaPlatformLowAlertCallback(notifyPlatformWalletLow);
+
+    // Wire the gateway-deposit-core → notification fan-out so EVERY
+    // confirmed deposit (Circle webhook, manual sweep tool, agent
+    // auto-sweep) emits the same WhatsApp / email notification.
+    // Pre-2026-05-12 these hooks lived inline in the Circle webhook
+    // handler, so manual sweeps stayed silent. One core, one hook,
+    // every path fires.
+    const { registerDepositNotificationHooks } = await import(
+      '@sendero/circle/gateway-deposit-core'
+    );
+    const { notifyTravelerOfDeposit, notifyTreasuryOfDeposit } = await import(
+      '@/lib/deposit-notifications'
+    );
+    registerDepositNotificationHooks({
+      notifyTraveler: args => notifyTravelerOfDeposit(args),
+      notifyTenant: args => notifyTreasuryOfDeposit({ ...args, walletKind: 'operations' }),
+    });
   }
 }

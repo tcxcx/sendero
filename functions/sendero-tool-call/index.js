@@ -14,7 +14,7 @@
  *     that for every new tool keeps the iteration fast.
  *
  * Required env (set via POST /platform/v1/functions/<id>/secrets):
- *   - SENDERO_API_BASE_URL   e.g. https://app.travel.sendero or ngrok host in dev
+ *   - SENDERO_API_BASE_URL   e.g. https://app.sendero.travel or ngrok host in dev
  *   - SENDERO_API_KEY        Clerk-issued ak_… for the tenant. PRODUCTION model.
  *   - SENDERO_TENANT_ID      Sendero tenant cuid. Used in fallback shared-secret
  *                             auth path (sandbox / dev). Optional when API_KEY is set.
@@ -66,9 +66,8 @@ async function handler(request, env) {
   // `flow_info` block (see: agent_tool_called event payload). The
   // agent's own input lives one level down. Tolerate both shapes so
   // a direct invoke (testing) and a real Kapso call both work.
-  const body = raw && typeof raw === 'object' && raw.input && typeof raw.input === 'object'
-    ? raw.input
-    : raw;
+  const body =
+    raw && typeof raw === 'object' && raw.input && typeof raw.input === 'object' ? raw.input : raw;
 
   const toolName = typeof body?.toolName === 'string' ? body.toolName.trim() : '';
   if (!toolName) {

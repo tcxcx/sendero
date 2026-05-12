@@ -29,15 +29,19 @@ interface TravelerSignInProps {
 
 export default async function TravelerSignInPage({ searchParams }: TravelerSignInProps) {
   // Operators (org-bound users) shouldn't land on the traveler sign-in
-  // surface — bounce them to their dashboard so the org context isn't
-  // lost. Travelers in middle of OTP have userId set but no orgId,
-  // which lets Clerk's <SignIn /> render the form.
+  // surface in the organic case — bounce them to their dashboard so
+  // the org context isn't lost. BUT when a `?token=` is present the
+  // operator is intentionally redeeming a WhatsApp magic link
+  // (founder-as-traveler demo + real operators who also book trips on
+  // their own phone). The /api/whatsapp/link-clerk redemption route
+  // handles merging the placeholder traveler User into their Clerk
+  // identity without disturbing org memberships.
   const { orgId } = await auth();
-  if (orgId) redirect('/dashboard');
-
   const params = await searchParams;
   const tokenRaw = params.token;
-  const token = typeof tokenRaw === 'string' ? tokenRaw : Array.isArray(tokenRaw) ? tokenRaw[0] : '';
+  const token =
+    typeof tokenRaw === 'string' ? tokenRaw : Array.isArray(tokenRaw) ? tokenRaw[0] : '';
+  if (orgId && !token) redirect('/dashboard');
 
   // Always route through /api/whatsapp/link-clerk after sign-in. With a
   // token: redeems and merges the placeholder. Without: stamps the

@@ -1652,28 +1652,15 @@ async function assertTravelerHasUsdc(args: {
   userId: string;
   requiredUsdc: number;
 }): Promise<FundsCheckResult> {
-  // 2026-05-04 architecture flip: Gateway depositor for travelers is
-  // the Circle DCW (provisioner='dcw'), NOT the legacy
-  // UserGatewaySigner EOA. Mirrors `traveler_balance` so book_flight's
-  // insufficient-funds card directs the user to the SAME address the
-  // wallet card already shows. Querying the legacy signer would
-  // surface 0 USDC (we drained it during recovery) even when the user
-  // has plenty in their unified balance.
-  const SOL_DEVNET_CHAIN_ID = 5;
-  const [evmDcw, solanaWallet] = await Promise.all([
-    prisma.wallet.findFirst({
-      where: { userId: args.userId, provisioner: 'dcw', NOT: { chainId: SOL_DEVNET_CHAIN_ID } },
-      orderBy: { createdAt: 'asc' },
-      select: { address: true },
-    }),
-    prisma.wallet.findFirst({
-      where: { userId: args.userId, provisioner: 'dcw', chainId: SOL_DEVNET_CHAIN_ID },
-      select: { address: true },
-    }),
-  ]);
-  const evmAddress = (evmDcw?.address as Address | undefined) ?? null;
-  const solanaAddress = solanaWallet?.address ?? null;
-  if (!evmAddress && !solanaAddress) {
+  // DRY balance lookup — the SAME helper the wallet card + deposit
+  // notification use. Three sites used to roll this independently;
+  // two queried Gateway with the DCW principal and got 0 USDC after
+  // `depositFor` credited the signer, leading to "Tu balance actual:
+  // 23 USDC" right next to a wallet card showing 316.50 USDC. Never
+  // again — one function for "traveler unified balance".
+  const { getTravelerUnifiedBalance } = await import('@sendero/circle/traveler-unified-balance');
+  const balance = await getTravelerUnifiedBalance({ userId: args.userId });
+  if (balance.resolvedFrom === 'no_wallet') {
     return {
       ok: false,
       totalUsdc: '0.000000',
@@ -1682,18 +1669,14 @@ async function assertTravelerHasUsdc(args: {
       solanaAddress: null,
     };
   }
-  const balance = await queryUnifiedBalance({
-    evm: evmAddress ?? undefined,
-    solana: solanaAddress ?? undefined,
-  });
   const total = Number(balance.total);
-  const primary = evmAddress ?? solanaAddress ?? 'pending';
+  const primary = (balance.evmDepositorAddress ?? balance.solanaAddress ?? 'pending') as string;
   return {
     ok: total >= args.requiredUsdc,
     totalUsdc: balance.total,
     walletAddress: primary,
-    evmAddress,
-    solanaAddress,
+    evmAddress: balance.evmDepositorAddress,
+    solanaAddress: balance.solanaAddress,
   };
 }
 

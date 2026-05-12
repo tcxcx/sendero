@@ -94,7 +94,7 @@ Do not edit outside the mounted repository.`,
       sandbox_allowed_outbound_hosts: [
         'api.kapso.ai',
         'docs.kapso.ai',
-        'app.travel.sendero',
+        'app.sendero.travel',
         'docs.sendero.travel',
       ],
       flow_agent_function_tools: [

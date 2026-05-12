@@ -14,7 +14,7 @@
  *     that for every new tool keeps the iteration fast.
  *
  * Required env (set via POST /platform/v1/functions/<id>/secrets):
- *   - SENDERO_API_BASE_URL   e.g. https://app.travel.sendero or ngrok host in dev
+ *   - SENDERO_API_BASE_URL   e.g. https://app.sendero.travel or ngrok host in dev
  *   - SENDERO_API_KEY        Clerk-issued ak_… for the tenant. PRODUCTION model.
  *   - SENDERO_TENANT_ID      Sendero tenant cuid. Used in fallback shared-secret
  *                             auth path (sandbox / dev). Optional when API_KEY is set.

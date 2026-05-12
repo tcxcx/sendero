@@ -219,7 +219,7 @@ AGENT_SANDBOX_GITHUB_REPO_URL=https://github.com/tcxcx/sendero
 AGENT_SANDBOX_GITHUB_REPO_BRANCH=whatsapp-e2e
 AGENT_SANDBOX_GITHUB_PAT=github_pat_...
 AGENT_SANDBOX_NETWORK_MODE=allow_list
-AGENT_SANDBOX_ALLOWED_OUTBOUND_HOSTS=api.kapso.ai,docs.kapso.ai,app.travel.sendero,docs.sendero.travel
+AGENT_SANDBOX_ALLOWED_OUTBOUND_HOSTS=api.kapso.ai,docs.kapso.ai,app.sendero.travel,docs.sendero.travel
 ```
 
 The GitHub PAT should be fine-grained and read-only with Contents access to the

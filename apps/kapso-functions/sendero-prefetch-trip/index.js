@@ -11,7 +11,7 @@
  * plain text BEFORE the agent runs, so the model can't "forget".
  *
  * Required env (set via POST /platform/v1/functions/<id>/secrets):
- *   - SENDERO_API_BASE_URL   e.g. https://app.travel.sendero or ngrok host in dev
+ *   - SENDERO_API_BASE_URL   e.g. https://app.sendero.travel or ngrok host in dev
  *   - SENDERO_API_KEY        Clerk-issued ak_… for the tenant. Production model.
  *   - SENDERO_DISPATCH_SECRET (optional fallback) — paired with SENDERO_TENANT_ID for sandbox.
  *   - SENDERO_TENANT_ID       (optional fallback) — required when API_KEY is absent.

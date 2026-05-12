@@ -227,9 +227,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "query"
-                ],
+                "required": ["query"],
                 "type": "object"
               },
               "name": "search_sendero_docs"
@@ -249,10 +247,7 @@
                   },
                   "flow_key": {
                     "description": "Canonical Sendero WhatsApp Flow to send. Use trip_intake for travel requests and support_intake for structured support/refund/setup intake.",
-                    "enum": [
-                      "trip_intake",
-                      "support_intake"
-                    ],
+                    "enum": ["trip_intake", "support_intake"],
                     "type": "string"
                   },
                   "footer_text": {
@@ -263,16 +258,11 @@
                   },
                   "mode": {
                     "description": "Optional Flow send mode. Use draft only during Flow preview testing before publish.",
-                    "enum": [
-                      "draft",
-                      "published"
-                    ],
+                    "enum": ["draft", "published"],
                     "type": "string"
                   }
                 },
-                "required": [
-                  "flow_key"
-                ],
+                "required": ["flow_key"],
                 "type": "object"
               },
               "name": "send_whatsapp_flow_message"
@@ -294,10 +284,7 @@
                     "type": "string"
                   },
                   "priority": {
-                    "enum": [
-                      "normal",
-                      "urgent"
-                    ],
+                    "enum": ["normal", "urgent"],
                     "type": "string"
                   },
                   "summary": {
@@ -319,10 +306,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "title",
-                  "summary"
-                ],
+                "required": ["title", "summary"],
                 "type": "object"
               },
               "name": "create_support_ticket"
@@ -335,12 +319,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "status": {
-                    "enum": [
-                      "open",
-                      "waiting",
-                      "resolved",
-                      "closed"
-                    ],
+                    "enum": ["open", "waiting", "resolved", "closed"],
                     "type": "string"
                   },
                   "summary": {
@@ -362,9 +341,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "ticket_id"
-                ],
+                "required": ["ticket_id"],
                 "type": "object"
               },
               "name": "update_support_ticket"
@@ -390,10 +367,7 @@
                   },
                   "priority": {
                     "description": "Urgency for the internal team.",
-                    "enum": [
-                      "normal",
-                      "urgent"
-                    ],
+                    "enum": ["normal", "urgent"],
                     "type": "string"
                   },
                   "question": {
@@ -425,9 +399,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "question"
-                ],
+                "required": ["question"],
                 "type": "object"
               },
               "name": "sendero_ask_team_question"
@@ -456,7 +428,7 @@
           "sandbox_allowed_outbound_hosts": [
             "api.kapso.ai",
             "docs.kapso.ai",
-            "app.travel.sendero",
+            "app.sendero.travel",
             "docs.sendero.travel"
           ],
           "sandbox_enabled": true,

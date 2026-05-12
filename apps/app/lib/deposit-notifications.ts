@@ -49,7 +49,9 @@ interface NotifyArgs {
 export interface NotifyTravelerArgs extends NotifyArgs {
   /** Sendero User.id of the traveler whose DCW received USDC. */
   userId: string;
-  /** DCW EVM address — used to query the post-deposit unified balance. */
+  /** DCW EVM address — kept for audit logging only; the unified
+   *  balance is queried against the gateway-signer EOA (the address
+   *  Circle Gateway credits via `depositFor`), not the DCW.  */
   dcwAddress: string;
 }
 
@@ -80,17 +82,20 @@ export async function notifyTravelerOfDeposit(args: NotifyTravelerArgs): Promise
     const accessToken = env.whatsappAccessToken() ?? env.kapsoApiKey();
     if (!accessToken) return;
 
-    // Resolve the user's Solana DCW too so the unified balance reflects
-    // every chain Sendero tracks — without this the message reports the
-    // EVM-only slice and undercounts a traveler holding USDC on Solana.
-    const solanaWallet = await prisma.wallet.findFirst({
-      where: { userId: args.userId, provisioner: 'dcw', chainId: SOL_DEVNET_CHAIN_ID },
-      select: { address: true },
-    });
-    const newTotal = await safeUnifiedTotal({
-      evm: args.dcwAddress as Address,
-      solana: solanaWallet?.address ?? undefined,
-    });
+    // DRY balance read — same shared helper as `traveler_balance`
+    // (wallet card) and `book_flight` (pre-pay funds gate). The
+    // notification message MUST report the same number the user
+    // sees in their wallet seconds later.
+    const { getTravelerUnifiedBalance } = await import('@sendero/circle/traveler-unified-balance');
+    let newTotal: string | null = null;
+    try {
+      const unified = await getTravelerUnifiedBalance({ userId: args.userId });
+      newTotal = unified.total ? Number(unified.total).toFixed(2) : null;
+    } catch (err) {
+      console.warn('[deposit-notify] unified balance lookup failed (non-fatal)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     const chainLabel = GATEWAY_CHAINS[args.chainKey]?.label ?? args.chainKey;
 
     const text = formatTravelerMessage({

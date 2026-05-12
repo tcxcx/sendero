@@ -131,26 +131,27 @@ export async function resolveTenantForWhatsAppTurn(
     }
   }
 
-  // Step 3: trusted-caller override — but only if the tenant still
-  // exists. The bug we're fixing is exactly the case where this env-var
-  // points at a deleted tenant.
-  if (bodyTenantId && (await tenantExists(bodyTenantId))) {
-    return { tenantId: bodyTenantId, source: 'body_tenant_id' };
-  }
-
-  // Step 4: traveler-known but not pinned to a candidate — last-known
-  // ChannelIdentity across any tenant. Covers the case where the
-  // traveler's previously-bound tenant is no longer in the install set
-  // for this number (e.g. the agency uninstalled the demo).
+  // Step 3: traveler's most-recent ChannelIdentity wins over the
+  // env-var override. The traveler's own binding history is a stronger
+  // signal than Kapso's static SENDERO_TENANT_ID — that env-var drifts
+  // every time someone spins up a new demo tenant. We only honor it as
+  // a fallback when we have no other anchoring info.
   if (travelerPhone) {
-    const any = await prisma.channelIdentity.findFirst({
+    const recent = await prisma.channelIdentity.findFirst({
       where: { kind: 'whatsapp', externalUserId: travelerPhone },
       orderBy: { updatedAt: 'desc' },
       select: { tenantId: true },
     });
-    if (any && (await tenantExists(any.tenantId))) {
-      return { tenantId: any.tenantId, source: 'channel_identity_any' };
+    if (recent && (await tenantExists(recent.tenantId))) {
+      return { tenantId: recent.tenantId, source: 'channel_identity_any' };
     }
+  }
+
+  // Step 4: trusted-caller override — but only if the tenant still
+  // exists. The bug we're fixing is exactly the case where this env-var
+  // points at a deleted tenant.
+  if (bodyTenantId && (await tenantExists(bodyTenantId))) {
+    return { tenantId: bodyTenantId, source: 'body_tenant_id' };
   }
 
   // Step 5: sandbox fallback

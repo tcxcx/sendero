@@ -1,20 +1,22 @@
 import { START, Workflow } from '@kapso/workflows';
 
-const workflow = new Workflow("sendero-whatsapp-support-agent", {
-  name: "Sendero WhatsApp Support Agent",
-  status: "active",
+const workflow = new Workflow('sendero-whatsapp-support-agent', {
+  name: 'Sendero WhatsApp Support Agent',
+  status: 'active',
 });
 
 workflow.addNode(START, {
-  "position": {
-    "x": 120,
-    "y": 140
-  }
+  position: {
+    x: 120,
+    y: 140,
+  },
 });
 
-workflow.addNode("support_agent", {
-  "config": {
-    "system_prompt": `You are Sendero's WhatsApp support agent for platform operators, agencies, TMCs, and tenant admins.
+workflow.addNode(
+  'support_agent',
+  {
+    config: {
+      system_prompt: `You are Sendero's WhatsApp support agent for platform operators, agencies, TMCs, and tenant admins.
 
 Primary job:
 - Help users connect WhatsApp, understand Sendero workflows, debug onboarding, answer billing/escrow/policy questions, and explain product behavior clearly.
@@ -70,455 +72,444 @@ If a sandbox GitHub repository is mounted for this node, inspect /workspace/repo
 Read the README and the most relevant files before making claims.
 Prefer repo inspection before escalating to Slack when the answer likely exists in the repository.
 Do not edit outside the mounted repository.`,
-    "provider_model_id": "198e85b6-554d-489b-b552-b405133c9306",
-    "provider_model_name": "gpt-5-mini",
-    "temperature": "0.2",
-    "max_iterations": 80,
-    "max_tokens": 8192,
-    "reasoning_effort": "medium",
-    "observer_prompt_mode": "analysis_only",
-    "enabled_default_tools": [
-      "send_notification_to_user",
-      "get_execution_metadata",
-      "get_whatsapp_context",
-      "get_current_datetime",
-      "ask_about_file",
-      "enter_waiting",
-      "complete_task",
-      "handoff_to_human"
-    ],
-    "sandbox_enabled": true,
-    "sandbox_network_mode": "allow_list",
-    "sandbox_allowed_outbound_hosts": [
-      "api.kapso.ai",
-      "docs.kapso.ai",
-      "app.travel.sendero",
-      "docs.sendero.travel"
-    ],
-    "flow_agent_function_tools": [
-      {
-        "name": "get_tenant_context",
-        "description": "Fetch live Sendero tenant, subscription, channel, and recent support context.",
-        "function_name": "Sendero support get tenant context",
-        "input_schema": {
-          "type": "object",
-          "properties": {
-            "tenant_id": {
-              "type": "string"
+      provider_model_id: '198e85b6-554d-489b-b552-b405133c9306',
+      provider_model_name: 'gpt-5-mini',
+      temperature: '0.2',
+      max_iterations: 80,
+      max_tokens: 8192,
+      reasoning_effort: 'medium',
+      observer_prompt_mode: 'analysis_only',
+      enabled_default_tools: [
+        'send_notification_to_user',
+        'get_execution_metadata',
+        'get_whatsapp_context',
+        'get_current_datetime',
+        'ask_about_file',
+        'enter_waiting',
+        'complete_task',
+        'handoff_to_human',
+      ],
+      sandbox_enabled: true,
+      sandbox_network_mode: 'allow_list',
+      sandbox_allowed_outbound_hosts: [
+        'api.kapso.ai',
+        'docs.kapso.ai',
+        'app.sendero.travel',
+        'docs.sendero.travel',
+      ],
+      flow_agent_function_tools: [
+        {
+          name: 'get_tenant_context',
+          description:
+            'Fetch live Sendero tenant, subscription, channel, and recent support context.',
+          function_name: 'Sendero support get tenant context',
+          input_schema: {
+            type: 'object',
+            properties: {
+              tenant_id: {
+                type: 'string',
+              },
+              support_ref: {
+                type: 'string',
+              },
+              tenant_slug: {
+                type: 'string',
+              },
+              clerk_org_id: {
+                type: 'string',
+              },
+              phone_number: {
+                type: 'string',
+              },
+              support_context_token: {
+                type: 'string',
+              },
             },
-            "support_ref": {
-              "type": "string"
-            },
-            "tenant_slug": {
-              "type": "string"
-            },
-            "clerk_org_id": {
-              "type": "string"
-            },
-            "phone_number": {
-              "type": "string"
-            },
-            "support_context_token": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-get-tenant-context',
         },
-        "function_slug": "sendero-whatsapp-support-get-tenant-context"
-      },
-      {
-        "name": "get_whatsapp_setup_status",
-        "description": "Fetch live WhatsApp install, setup link, phone number, webhook, API, and delivery diagnostics.",
-        "function_name": "Sendero support get WhatsApp setup status",
-        "input_schema": {
-          "type": "object",
-          "properties": {
-            "tenant_id": {
-              "type": "string"
+        {
+          name: 'get_whatsapp_setup_status',
+          description:
+            'Fetch live WhatsApp install, setup link, phone number, webhook, API, and delivery diagnostics.',
+          function_name: 'Sendero support get WhatsApp setup status',
+          input_schema: {
+            type: 'object',
+            properties: {
+              tenant_id: {
+                type: 'string',
+              },
+              support_ref: {
+                type: 'string',
+              },
+              tenant_slug: {
+                type: 'string',
+              },
+              clerk_org_id: {
+                type: 'string',
+              },
+              support_context_token: {
+                type: 'string',
+              },
             },
-            "support_ref": {
-              "type": "string"
-            },
-            "tenant_slug": {
-              "type": "string"
-            },
-            "clerk_org_id": {
-              "type": "string"
-            },
-            "support_context_token": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-get-whatsapp-setup-status',
         },
-        "function_slug": "sendero-whatsapp-support-get-whatsapp-setup-status"
-      },
-      {
-        "name": "get_recent_channel_events",
-        "description": "Fetch recent WhatsApp webhook, API, outbound delivery, and identity events for debugging channel issues.",
-        "function_name": "Sendero support get recent channel events",
-        "input_schema": {
-          "type": "object",
-          "properties": {
-            "limit": {
-              "type": "number"
+        {
+          name: 'get_recent_channel_events',
+          description:
+            'Fetch recent WhatsApp webhook, API, outbound delivery, and identity events for debugging channel issues.',
+          function_name: 'Sendero support get recent channel events',
+          input_schema: {
+            type: 'object',
+            properties: {
+              limit: {
+                type: 'number',
+              },
+              tenant_id: {
+                type: 'string',
+              },
+              support_ref: {
+                type: 'string',
+              },
+              tenant_slug: {
+                type: 'string',
+              },
+              support_context_token: {
+                type: 'string',
+              },
             },
-            "tenant_id": {
-              "type": "string"
-            },
-            "support_ref": {
-              "type": "string"
-            },
-            "tenant_slug": {
-              "type": "string"
-            },
-            "support_context_token": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-get-recent-channel-events',
         },
-        "function_slug": "sendero-whatsapp-support-get-recent-channel-events"
-      },
-      {
-        "name": "get_trip_context",
-        "description": "Fetch live trip, traveler, policy, booking, settlement, and session context for a Sendero trip.",
-        "function_name": "Sendero support get trip context",
-        "input_schema": {
-          "type": "object",
-          "properties": {
-            "limit": {
-              "type": "number"
+        {
+          name: 'get_trip_context',
+          description:
+            'Fetch live trip, traveler, policy, booking, settlement, and session context for a Sendero trip.',
+          function_name: 'Sendero support get trip context',
+          input_schema: {
+            type: 'object',
+            properties: {
+              limit: {
+                type: 'number',
+              },
+              trip_id: {
+                type: 'string',
+              },
+              list_all: {
+                type: 'boolean',
+              },
+              tenant_id: {
+                type: 'string',
+              },
+              booking_id: {
+                type: 'string',
+              },
+              support_ref: {
+                type: 'string',
+              },
+              tenant_slug: {
+                type: 'string',
+              },
+              customer_phone_number: {
+                type: 'string',
+              },
+              support_context_token: {
+                type: 'string',
+              },
             },
-            "trip_id": {
-              "type": "string"
-            },
-            "list_all": {
-              "type": "boolean"
-            },
-            "tenant_id": {
-              "type": "string"
-            },
-            "booking_id": {
-              "type": "string"
-            },
-            "support_ref": {
-              "type": "string"
-            },
-            "tenant_slug": {
-              "type": "string"
-            },
-            "customer_phone_number": {
-              "type": "string"
-            },
-            "support_context_token": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-get-trip-context',
         },
-        "function_slug": "sendero-whatsapp-support-get-trip-context"
-      },
-      {
-        "name": "get_billing_context",
-        "description": "Fetch live billing, subscription, credit meter, invoice, and spend-cap context for a Sendero tenant.",
-        "function_name": "Sendero support get billing context",
-        "input_schema": {
-          "type": "object",
-          "properties": {
-            "tenant_id": {
-              "type": "string"
+        {
+          name: 'get_billing_context',
+          description:
+            'Fetch live billing, subscription, credit meter, invoice, and spend-cap context for a Sendero tenant.',
+          function_name: 'Sendero support get billing context',
+          input_schema: {
+            type: 'object',
+            properties: {
+              tenant_id: {
+                type: 'string',
+              },
+              support_ref: {
+                type: 'string',
+              },
+              tenant_slug: {
+                type: 'string',
+              },
+              support_context_token: {
+                type: 'string',
+              },
             },
-            "support_ref": {
-              "type": "string"
-            },
-            "tenant_slug": {
-              "type": "string"
-            },
-            "support_context_token": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-get-billing-context',
         },
-        "function_slug": "sendero-whatsapp-support-get-billing-context"
-      },
-      {
-        "name": "get_escrow_context",
-        "description": "Fetch live escrow, settlement, transfer, wallet, gateway, and validation context for a Sendero tenant.",
-        "function_name": "Sendero support get escrow context",
-        "input_schema": {
-          "type": "object",
-          "properties": {
-            "trip_id": {
-              "type": "string"
+        {
+          name: 'get_escrow_context',
+          description:
+            'Fetch live escrow, settlement, transfer, wallet, gateway, and validation context for a Sendero tenant.',
+          function_name: 'Sendero support get escrow context',
+          input_schema: {
+            type: 'object',
+            properties: {
+              trip_id: {
+                type: 'string',
+              },
+              tenant_id: {
+                type: 'string',
+              },
+              booking_id: {
+                type: 'string',
+              },
+              support_ref: {
+                type: 'string',
+              },
+              tenant_slug: {
+                type: 'string',
+              },
+              support_context_token: {
+                type: 'string',
+              },
             },
-            "tenant_id": {
-              "type": "string"
-            },
-            "booking_id": {
-              "type": "string"
-            },
-            "support_ref": {
-              "type": "string"
-            },
-            "tenant_slug": {
-              "type": "string"
-            },
-            "support_context_token": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-get-escrow-context',
         },
-        "function_slug": "sendero-whatsapp-support-get-escrow-context"
-      },
-      {
-        "name": "search_sendero_docs",
-        "description": "Search Sendero product docs, runbooks, and WhatsApp templates.",
-        "function_name": "Sendero support search Sendero docs",
-        "input_schema": {
-          "type": "object",
-          "required": [
-            "query"
-          ],
-          "properties": {
-            "limit": {
-              "type": "number"
+        {
+          name: 'search_sendero_docs',
+          description: 'Search Sendero product docs, runbooks, and WhatsApp templates.',
+          function_name: 'Sendero support search Sendero docs',
+          input_schema: {
+            type: 'object',
+            required: ['query'],
+            properties: {
+              limit: {
+                type: 'number',
+              },
+              query: {
+                type: 'string',
+              },
             },
-            "query": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-search-sendero-docs',
         },
-        "function_slug": "sendero-whatsapp-support-search-sendero-docs"
-      },
-      {
-        "name": "send_whatsapp_flow_message",
-        "description": "Send a configured Sendero WhatsApp Flow form to the current support WhatsApp conversation.",
-        "function_name": "Send WhatsApp Flow Message",
-        "input_schema": {
-          "type": "object",
-          "required": [
-            "flow_key"
-          ],
-          "properties": {
-            "cta": {
-              "type": "string"
+        {
+          name: 'send_whatsapp_flow_message',
+          description:
+            'Send a configured Sendero WhatsApp Flow form to the current support WhatsApp conversation.',
+          function_name: 'Send WhatsApp Flow Message',
+          input_schema: {
+            type: 'object',
+            required: ['flow_key'],
+            properties: {
+              cta: {
+                type: 'string',
+              },
+              mode: {
+                enum: ['draft', 'published'],
+                type: 'string',
+                description:
+                  'Optional Flow send mode. Use draft only during Flow preview testing before publish.',
+              },
+              flow_key: {
+                enum: ['trip_intake', 'support_intake'],
+                type: 'string',
+                description:
+                  'Canonical Sendero WhatsApp Flow to send. Use trip_intake for travel requests and support_intake for structured support/refund/setup intake.',
+              },
+              body_text: {
+                type: 'string',
+              },
+              footer_text: {
+                type: 'string',
+              },
+              header_text: {
+                type: 'string',
+              },
             },
-            "mode": {
-              "enum": [
-                "draft",
-                "published"
-              ],
-              "type": "string",
-              "description": "Optional Flow send mode. Use draft only during Flow preview testing before publish."
-            },
-            "flow_key": {
-              "enum": [
-                "trip_intake",
-                "support_intake"
-              ],
-              "type": "string",
-              "description": "Canonical Sendero WhatsApp Flow to send. Use trip_intake for travel requests and support_intake for structured support/refund/setup intake."
-            },
-            "body_text": {
-              "type": "string"
-            },
-            "footer_text": {
-              "type": "string"
-            },
-            "header_text": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-send-flow-message',
         },
-        "function_slug": "sendero-whatsapp-support-send-flow-message"
-      },
-      {
-        "name": "create_support_ticket",
-        "description": "Create a durable Sendero support ticket linked to tenant, WhatsApp, workflow, and Slack context.",
-        "function_name": "Sendero support create support ticket",
-        "input_schema": {
-          "type": "object",
-          "required": [
-            "title",
-            "summary"
-          ],
-          "properties": {
-            "title": {
-              "type": "string"
+        {
+          name: 'create_support_ticket',
+          description:
+            'Create a durable Sendero support ticket linked to tenant, WhatsApp, workflow, and Slack context.',
+          function_name: 'Sendero support create support ticket',
+          input_schema: {
+            type: 'object',
+            required: ['title', 'summary'],
+            properties: {
+              title: {
+                type: 'string',
+              },
+              summary: {
+                type: 'string',
+              },
+              priority: {
+                enum: ['normal', 'urgent'],
+                type: 'string',
+              },
+              tenant_id: {
+                type: 'string',
+              },
+              support_ref: {
+                type: 'string',
+              },
+              tenant_slug: {
+                type: 'string',
+              },
+              assignee_name: {
+                type: 'string',
+              },
+              assignee_email: {
+                type: 'string',
+              },
+              support_context_token: {
+                type: 'string',
+              },
+              assignee_slack_user_id: {
+                type: 'string',
+              },
             },
-            "summary": {
-              "type": "string"
-            },
-            "priority": {
-              "enum": [
-                "normal",
-                "urgent"
-              ],
-              "type": "string"
-            },
-            "tenant_id": {
-              "type": "string"
-            },
-            "support_ref": {
-              "type": "string"
-            },
-            "tenant_slug": {
-              "type": "string"
-            },
-            "assignee_name": {
-              "type": "string"
-            },
-            "assignee_email": {
-              "type": "string"
-            },
-            "support_context_token": {
-              "type": "string"
-            },
-            "assignee_slack_user_id": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-create-support-ticket',
         },
-        "function_slug": "sendero-whatsapp-support-create-support-ticket"
-      },
-      {
-        "name": "update_support_ticket",
-        "description": "Update the status or summary of a durable Sendero support ticket.",
-        "function_name": "Sendero support update support ticket",
-        "input_schema": {
-          "type": "object",
-          "required": [
-            "ticket_id"
-          ],
-          "properties": {
-            "status": {
-              "enum": [
-                "open",
-                "waiting",
-                "resolved",
-                "closed"
-              ],
-              "type": "string"
+        {
+          name: 'update_support_ticket',
+          description: 'Update the status or summary of a durable Sendero support ticket.',
+          function_name: 'Sendero support update support ticket',
+          input_schema: {
+            type: 'object',
+            required: ['ticket_id'],
+            properties: {
+              status: {
+                enum: ['open', 'waiting', 'resolved', 'closed'],
+                type: 'string',
+              },
+              summary: {
+                type: 'string',
+              },
+              tenant_id: {
+                type: 'string',
+              },
+              ticket_id: {
+                type: 'string',
+              },
+              support_ref: {
+                type: 'string',
+              },
+              tenant_slug: {
+                type: 'string',
+              },
+              support_context_token: {
+                type: 'string',
+              },
             },
-            "summary": {
-              "type": "string"
-            },
-            "tenant_id": {
-              "type": "string"
-            },
-            "ticket_id": {
-              "type": "string"
-            },
-            "support_ref": {
-              "type": "string"
-            },
-            "tenant_slug": {
-              "type": "string"
-            },
-            "support_context_token": {
-              "type": "string"
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-update-support-ticket',
         },
-        "function_slug": "sendero-whatsapp-support-update-support-ticket"
-      },
-      {
-        "name": "sendero_ask_team_question",
-        "description": "Ask the Sendero support team a precise question in Slack when the WhatsApp agent cannot safely resolve a customer issue.",
-        "function_name": "Sendero WhatsApp support ask team question",
-        "input_schema": {
-          "type": "object",
-          "required": [
-            "question"
-          ],
-          "properties": {
-            "title": {
-              "type": "string",
-              "description": "Short Slack thread title."
+        {
+          name: 'sendero_ask_team_question',
+          description:
+            'Ask the Sendero support team a precise question in Slack when the WhatsApp agent cannot safely resolve a customer issue.',
+          function_name: 'Sendero WhatsApp support ask team question',
+          input_schema: {
+            type: 'object',
+            required: ['question'],
+            properties: {
+              title: {
+                type: 'string',
+                description: 'Short Slack thread title.',
+              },
+              summary: {
+                type: 'string',
+                description: 'Customer and context summary.',
+              },
+              priority: {
+                enum: ['normal', 'urgent'],
+                type: 'string',
+                description: 'Urgency for the internal team.',
+              },
+              question: {
+                type: 'string',
+                description: 'Exact question for the Sendero team.',
+              },
+              tenant_id: {
+                type: 'string',
+                description: 'Sendero tenant ID from dashboard context, when available.',
+              },
+              support_ref: {
+                type: 'string',
+                description: 'Short Sendero dashboard support reference, when present.',
+              },
+              tenant_slug: {
+                type: 'string',
+                description: 'Sendero tenant slug from dashboard context, when available.',
+              },
+              assignee_name: {
+                type: 'string',
+                description:
+                  'Optional human assignee display name. Defaults to the configured support owner.',
+              },
+              assignee_email: {
+                type: 'string',
+                description:
+                  'Optional human assignee email. Defaults to the configured support owner email.',
+              },
+              support_context_token: {
+                type: 'string',
+                description:
+                  'Signed Sendero dashboard support context token, when present. Never expose it to the user or Slack.',
+              },
+              assignee_slack_user_id: {
+                type: 'string',
+                description:
+                  'Optional Slack user ID for a direct mention. Defaults to the configured support assignee.',
+              },
             },
-            "summary": {
-              "type": "string",
-              "description": "Customer and context summary."
-            },
-            "priority": {
-              "enum": [
-                "normal",
-                "urgent"
-              ],
-              "type": "string",
-              "description": "Urgency for the internal team."
-            },
-            "question": {
-              "type": "string",
-              "description": "Exact question for the Sendero team."
-            },
-            "tenant_id": {
-              "type": "string",
-              "description": "Sendero tenant ID from dashboard context, when available."
-            },
-            "support_ref": {
-              "type": "string",
-              "description": "Short Sendero dashboard support reference, when present."
-            },
-            "tenant_slug": {
-              "type": "string",
-              "description": "Sendero tenant slug from dashboard context, when available."
-            },
-            "assignee_name": {
-              "type": "string",
-              "description": "Optional human assignee display name. Defaults to the configured support owner."
-            },
-            "assignee_email": {
-              "type": "string",
-              "description": "Optional human assignee email. Defaults to the configured support owner email."
-            },
-            "support_context_token": {
-              "type": "string",
-              "description": "Signed Sendero dashboard support context token, when present. Never expose it to the user or Slack."
-            },
-            "assignee_slack_user_id": {
-              "type": "string",
-              "description": "Optional Slack user ID for a direct mention. Defaults to the configured support assignee."
-            }
+            additionalProperties: false,
           },
-          "additionalProperties": false
+          function_slug: 'sendero-whatsapp-support-ask-team-question',
         },
-        "function_slug": "sendero-whatsapp-support-ask-team-question"
-      }
-    ],
-    "flow_agent_app_integration_tools": [],
-    "flow_agent_webhooks": [],
-    "flow_agent_knowledge_bases": [],
-    "flow_agent_mcp_servers": [],
-    "flow_agent_resources": [
-      {
-        "id": "50fe1b11-fcaf-4566-bded-e2922ed7b672",
-        "resource_type": "github_repository",
-        "repo_url": "https://github.com/tcxcx/sendero",
-        "owner": "tcxcx",
-        "repo_name": "sendero",
-        "branch": "whatsapp-e2e",
-        "has_pat": true
-      }
-    ]
+      ],
+      flow_agent_app_integration_tools: [],
+      flow_agent_webhooks: [],
+      flow_agent_knowledge_bases: [],
+      flow_agent_mcp_servers: [],
+      flow_agent_resources: [
+        {
+          id: '50fe1b11-fcaf-4566-bded-e2922ed7b672',
+          resource_type: 'github_repository',
+          repo_url: 'https://github.com/tcxcx/sendero',
+          owner: 'tcxcx',
+          repo_name: 'sendero',
+          branch: 'whatsapp-e2e',
+          has_pat: true,
+        },
+      ],
+    },
+    nodeType: 'agent',
+    type: 'raw',
   },
-  "nodeType": "agent",
-  "type": "raw"
-}, {
-  "position": {
-    "x": 420,
-    "y": 140
-  },
-  "displayName": "AI Agent"
-});
+  {
+    position: {
+      x: 420,
+      y: 140,
+    },
+    displayName: 'AI Agent',
+  }
+);
 
-workflow.addEdge(START, "support_agent");
+workflow.addEdge(START, 'support_agent');
 
 export default workflow;

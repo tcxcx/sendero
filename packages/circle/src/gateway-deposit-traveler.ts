@@ -1,43 +1,25 @@
 /**
  * Traveler-side Gateway deposit.
  *
- * Thin orchestrator: when USDC lands at the traveler's Circle DCW
- * (Circle webhook fires `transactions.inbound`), push it into the
- * user's Gateway unified balance. All SDK contact points — the kit
- * instance, the Circle Wallets adapter, the chain-name mapping —
- * live in `@sendero/circle/unified-gateway`. This file owns the
- * audit log + idempotency surface only.
- *
- * Idempotent on `webhookEventId` via `GatewayDepositLog.webhookEventId`
- * unique index — Circle's at-least-once delivery + dual CONFIRMED /
- * COMPLETED firing collapses to one deposit.
+ * Thin shim over `gateway-deposit-core.ts::depositTravelerToGatewayUnified`.
+ * Kept under the original filename + signature so existing call sites
+ * (Circle webhook handler, sweep tools, auto-sweep helper) don't have
+ * to change. ALL deposit semantics live in the core. If you find
+ * yourself adding logic here, you're drifting — push it into the
+ * core instead.
  */
 
-import { prisma } from '@sendero/database';
-
-import { GATEWAY_CHAINS } from './gateway';
-import {
-  circleWalletsPrincipal,
-  deposit as unifiedDeposit,
-  type GatewayChainKey,
-} from './unified-gateway';
+import { depositTravelerToGatewayUnified } from './gateway-deposit-core';
+import { type GatewayChainKey } from './unified-gateway';
 
 export interface DepositTravelerToGatewayArgs {
-  /** Sendero User.id whose DCW received the USDC. Used for audit + log. */
   userId: string;
-  /** Tenant context — log row needs a tenantId; resolve from User.metadata.primaryTenantId. */
   tenantId: string;
-  /** Source chain key (e.g. 'Arc_Testnet', 'Base_Sepolia'). Must exist in GATEWAY_CHAINS. */
   chainKey: GatewayChainKey;
-  /** Traveler's Circle DCW EVM address (depositor + recipient). */
   dcwAddress: string;
-  /** Human-readable USDC amount (e.g. "10" for 10 USDC). */
   amount: string;
-  /** Amount in base units (10^6 USDC) for the audit log row. */
   amountBaseUnits: bigint;
-  /** auto (webhook-triggered) | manual (recovery script) | cron (reaper). */
   triggeredBy?: 'auto' | 'manual' | 'cron';
-  /** Idempotency key — Circle webhook notification.id when triggered by auto-sweep. */
   webhookEventId?: string;
 }
 
@@ -51,98 +33,46 @@ export interface DepositTravelerToGatewayResult {
 export async function depositTravelerToGateway(
   args: DepositTravelerToGatewayArgs
 ): Promise<DepositTravelerToGatewayResult> {
-  const {
-    userId,
-    tenantId,
-    chainKey,
-    dcwAddress,
-    amount,
-    amountBaseUnits,
-    triggeredBy = 'auto',
-    webhookEventId,
-  } = args;
-
-  const chain = GATEWAY_CHAINS[chainKey];
-  if (!chain) {
-    return { status: 'failed', depositLogId: '', error: `Unknown Gateway chain: ${chainKey}` };
-  }
-  // EVM and Solana both flow through the same single-step
-  // `unifiedGateway.deposit` — the Circle Wallets adapter handles both
-  // ecosystems. Solana inbounds used to be dropped here with a "flow
-  // through their own path" stub that never existed, so they silently
-  // died.
-
-  if (webhookEventId) {
-    const existing = await prisma.gatewayDepositLog.findUnique({
-      where: { webhookEventId },
-    });
-    if (existing?.status === 'confirmed' && existing.depositTxHash) {
-      return {
-        status: 'already-processed',
-        depositLogId: existing.id,
-        depositTxHash: existing.depositTxHash,
-      };
-    }
-  }
-
-  const logRow = await prisma.gatewayDepositLog.upsert({
-    where: webhookEventId ? { webhookEventId } : { id: '00000000-0000-0000-0000-000000000000' },
-    create: {
-      tenantId,
-      chain: chain.kitName,
-      domain: chain.domain,
-      amountMicroUsdc: amountBaseUnits,
-      status: 'pending',
-      triggeredBy,
-      webhookEventId: webhookEventId ?? null,
-    },
-    update: {},
+  const result = await depositTravelerToGatewayUnified({
+    tenantId: args.tenantId,
+    userId: args.userId,
+    dcwAddress: args.dcwAddress,
+    chainKey: args.chainKey,
+    amount: args.amount,
+    amountBaseUnits: args.amountBaseUnits,
+    triggeredBy: args.triggeredBy,
+    webhookEventId: args.webhookEventId,
   });
 
-  const principal = circleWalletsPrincipal({
-    address: dcwAddress,
-    label: `traveler:${userId}:${chainKey}`,
-  });
-  if (!principal) {
-    await prisma.gatewayDepositLog.update({
-      where: { id: logRow.id },
-      data: { status: 'failed', errorMessage: 'circle_wallets_adapter_not_configured' },
-    });
+  // Narrow the core's discriminated union back to the legacy shape so
+  // call sites that destructure { status, depositLogId, depositTxHash }
+  // keep working without touching them.
+  if (result.status === 'confirmed') {
     return {
-      status: 'failed',
-      depositLogId: logRow.id,
-      error: 'circle_wallets_adapter_not_configured',
+      status: 'confirmed',
+      depositLogId: result.depositLogId,
+      depositTxHash: result.depositTxHash,
     };
   }
-
-  try {
-    const { txHash: depositTxHash } = await unifiedDeposit({
-      principal,
-      chainKey,
-      amount,
-    });
-
-    await prisma.gatewayDepositLog.update({
-      where: { id: logRow.id },
-      data: { status: 'confirmed', depositTxHash, confirmedAt: new Date() },
-    });
-
-    console.log('[gateway-deposit-traveler] confirmed', {
-      userId,
-      dcwAddress,
-      chainKey,
-      amount,
-      depositTxHash,
-      depositLogId: logRow.id,
-    });
-
-    return { status: 'confirmed', depositLogId: logRow.id, depositTxHash };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await prisma.gatewayDepositLog.update({
-      where: { id: logRow.id },
-      data: { status: 'failed', errorMessage: message.slice(0, 500) },
-    });
-    return { status: 'failed', depositLogId: logRow.id, error: message };
+  if (result.status === 'already-processed') {
+    return {
+      status: 'already-processed',
+      depositLogId: result.depositLogId,
+      depositTxHash: result.depositTxHash,
+    };
   }
+  if (result.status === 'failed') {
+    return {
+      status: 'failed',
+      depositLogId: result.depositLogId ?? '',
+      error: result.error,
+    };
+  }
+  // 'skipped' from the core (zero-amount / unknown chain) — surface as
+  // failed for legacy callers, with the skip reason in the error.
+  return {
+    status: 'failed',
+    depositLogId: '',
+    error: `skipped: ${result.reason}`,
+  };
 }
