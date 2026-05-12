@@ -16,11 +16,21 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 interface FakeTrip {
   id: string;
   tenantId: string;
+  travelerId?: string | null;
+  status?: string;
   events: unknown[];
+}
+
+interface FakeBooking {
+  id: string;
+  tenantId: string;
+  tripId: string;
+  metadata: Record<string, unknown> | null;
 }
 
 const state = {
   trips: new Map<string, FakeTrip>(),
+  bookings: [] as FakeBooking[],
   rawCalls: [] as Array<{ tripId: string; tenantId: string; appended: unknown[] }>,
   shouldThrow: false,
 };
@@ -37,20 +47,76 @@ mock.module('@sendero/database', () => ({
       state.rawCalls.push({ tripId, tenantId, appended });
       return 1;
     },
+    booking: {
+      findMany: async (query: {
+        where: {
+          tenantId?: string;
+          metadata?: { path?: string[]; equals?: unknown };
+          AND?: Array<{ metadata?: { path?: string[]; equals?: unknown } }>;
+          trip?: {
+            tenantId?: string;
+            travelerId?: string;
+            status?: { notIn?: string[] };
+          };
+        };
+        take?: number;
+      }) => {
+        const matches = state.bookings
+          .filter(booking => {
+            const trip = state.trips.get(booking.tripId);
+            if (!trip) return false;
+            if (query.where.tenantId && booking.tenantId !== query.where.tenantId) return false;
+            if (!metadataMatches(booking.metadata, query.where.metadata)) return false;
+            for (const clause of query.where.AND ?? []) {
+              if (!metadataMatches(booking.metadata, clause.metadata)) return false;
+            }
+            const tripWhere = query.where.trip;
+            if (tripWhere?.tenantId && trip.tenantId !== tripWhere.tenantId) return false;
+            if (tripWhere?.travelerId && trip.travelerId !== tripWhere.travelerId) return false;
+            if (tripWhere?.status?.notIn?.includes(trip.status ?? 'draft')) return false;
+            return true;
+          })
+          .map(booking => ({ trip: { id: booking.tripId } }));
+        return matches.slice(0, query.take ?? matches.length);
+      },
+    },
   },
 }));
 
-const { appendTripEvent, newTripEventId } = await import('../trip-events');
+function metadataMatches(
+  metadata: Record<string, unknown> | null,
+  filter?: { path?: string[]; equals?: unknown }
+): boolean {
+  if (!filter?.path?.length) return true;
+  let value: unknown = metadata;
+  for (const segment of filter.path) {
+    value =
+      value && typeof value === 'object' ? (value as Record<string, unknown>)[segment] : undefined;
+  }
+  return value === filter.equals;
+}
+
+const { appendTripEvent, newTripEventId, resolveTripByBoardingPass } = await import(
+  '../trip-events'
+);
 
 beforeEach(() => {
   state.trips.clear();
+  state.bookings = [];
   state.rawCalls = [];
   state.shouldThrow = false;
-  state.trips.set('trip_a', { id: 'trip_a', tenantId: 'tnt_1', events: [] });
+  state.trips.set('trip_a', {
+    id: 'trip_a',
+    tenantId: 'tnt_1',
+    travelerId: 'user_1',
+    status: 'booked',
+    events: [],
+  });
 });
 
 afterEach(() => {
   state.trips.clear();
+  state.bookings = [];
   state.rawCalls = [];
 });
 
@@ -206,6 +272,22 @@ describe('appendTripEvent', () => {
     expect(ids).toContain('evt_2');
     expect(ids).toContain('evt_3');
   });
+
+  test('does not dedup identical event ids at write time', async () => {
+    const event = {
+      id: 'doc_same_image',
+      kind: 'document_scanned' as const,
+      documentKind: 'receipt' as const,
+      direction: 'internal' as const,
+      channel: 'internal' as const,
+      createdAt: '2026-05-12T10:00:00Z',
+      extractedAt: '2026-05-12T10:00:00Z',
+      extractionRef: { provider: 'google', imageSha256: 'sha_1' },
+    };
+    await appendTripEvent({ tripId: 'trip_a', tenantId: 'tnt_1', event });
+    await appendTripEvent({ tripId: 'trip_a', tenantId: 'tnt_1', event });
+    expect(state.trips.get('trip_a')!.events).toHaveLength(2);
+  });
 });
 
 describe('newTripEventId', () => {
@@ -220,5 +302,75 @@ describe('newTripEventId', () => {
   test('custom prefix', () => {
     const id = newTripEventId('reply');
     expect(id.startsWith('reply_')).toBe(true);
+  });
+});
+
+describe('resolveTripByBoardingPass', () => {
+  function addTrip(id: string, overrides: Partial<FakeTrip> = {}) {
+    state.trips.set(id, {
+      id,
+      tenantId: 'tnt_1',
+      travelerId: 'user_1',
+      status: 'booked',
+      events: [],
+      ...overrides,
+    });
+  }
+
+  function addBooking(id: string, overrides: Partial<FakeBooking> = {}) {
+    state.bookings.push({
+      id,
+      tenantId: 'tnt_1',
+      tripId: 'trip_a',
+      metadata: {
+        pnr: 'ABC123',
+        flightNumber: 'AA100',
+        departureDate: '2026-06-01',
+      },
+      ...overrides,
+    });
+  }
+
+  const input = {
+    tenantId: 'tnt_1',
+    userId: 'user_1',
+    pnr: 'ABC123',
+    flightNumber: 'AA100',
+    departureDate: '2026-06-01',
+  };
+
+  test('returns null when PNR is missing', async () => {
+    addBooking('booking_1');
+    await expect(resolveTripByBoardingPass({ ...input, pnr: null })).resolves.toBeNull();
+  });
+
+  test('returns null when more than one booking matches', async () => {
+    addTrip('trip_b');
+    addBooking('booking_1');
+    addBooking('booking_2', { tripId: 'trip_b' });
+    await expect(resolveTripByBoardingPass(input)).resolves.toBeNull();
+  });
+
+  test('returns null for cross-tenant bookings', async () => {
+    addTrip('trip_other', { tenantId: 'tnt_2' });
+    addBooking('booking_1', { tenantId: 'tnt_2', tripId: 'trip_other' });
+    await expect(resolveTripByBoardingPass(input)).resolves.toBeNull();
+  });
+
+  test('returns null when traveler userId does not match', async () => {
+    addTrip('trip_other_user', { travelerId: 'user_2' });
+    addBooking('booking_1', { tripId: 'trip_other_user' });
+    await expect(resolveTripByBoardingPass(input)).resolves.toBeNull();
+  });
+
+  test('returns null for terminal-state trips', async () => {
+    addTrip('trip_done', { status: 'completed' });
+    addBooking('booking_1', { tripId: 'trip_done' });
+    await expect(resolveTripByBoardingPass(input)).resolves.toBeNull();
+  });
+
+  test('returns the trip when tenant, traveler, PNR, flight, and departure date all match', async () => {
+    addBooking('booking_1');
+    await expect(resolveTripByBoardingPass(input)).resolves.toEqual({ id: 'trip_a' });
   });
 });
