@@ -8,10 +8,12 @@
 // "use workflow" gives us durable hibernation between polls — the function
 // suspends to disk and resumes when the sleep elapses, so a 30-minute
 // agent run doesn't hold a function instance open.
+//
+// DB ops are imported from @/lib/db/bufi-callback (not @/lib/db/client
+// directly) — Vercel Workflow flags any traceable import of `postgres`
+// in a workflow file.
 
-import { db } from '@/lib/db/client';
-import { sessions } from '@/lib/db/schema';
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { getBufiCallbackSessionState, markBufiCallbackFired } from '@/lib/db/bufi-callback';
 
 interface BufiCallbackOptions {
   sessionId: string;
@@ -26,25 +28,6 @@ const DEFAULT_MAX_WAIT_SECONDS = 90 * 60;
 const DEFAULT_POLL_INTERVAL_SECONDS = 30;
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'archived']);
 
-async function getSessionState(sessionId: string) {
-  const rows = await db
-    .select({
-      id: sessions.id,
-      status: sessions.status,
-      bufiCallbackUrl: sessions.bufiCallbackUrl,
-      bufiCallbackSecret: sessions.bufiCallbackSecret,
-      bufiCallbackFiredAt: sessions.bufiCallbackFiredAt,
-      repoOwner: sessions.repoOwner,
-      repoName: sessions.repoName,
-      branch: sessions.branch,
-      title: sessions.title,
-    })
-    .from(sessions)
-    .where(eq(sessions.id, sessionId))
-    .limit(1);
-  return rows[0];
-}
-
 export async function bufiCallbackWorkflow(opts: BufiCallbackOptions) {
   'use workflow';
 
@@ -53,7 +36,7 @@ export async function bufiCallbackWorkflow(opts: BufiCallbackOptions) {
   const startedAt = Date.now();
 
   while (true) {
-    const session = await getSessionState(opts.sessionId);
+    const session = await getBufiCallbackSessionState(opts.sessionId);
 
     if (!session) {
       console.warn('[bufi-callback] session disappeared', { sessionId: opts.sessionId });
@@ -66,17 +49,22 @@ export async function bufiCallbackWorkflow(opts: BufiCallbackOptions) {
     }
 
     if (session.bufiCallbackFiredAt) {
-      // Some other path already fired the callback (e.g. retry) — exit.
+      // Some other path already fired the callback — exit.
       return { fired: false, reason: 'already_fired' };
     }
 
     if (TERMINAL_STATUSES.has(session.status)) {
-      // Fire the callback exactly once.
       const sessionOrigin =
         process.env.VERCEL_PROJECT_PRODUCTION_URL ??
         process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ??
         'open-agents-bay.vercel.app';
       const streamUrl = `https://${sessionOrigin.replace(/^https?:\/\//, '')}/sessions/${session.id}`;
+
+      // Atomically claim the fire — wins the race against any duplicate.
+      const won = await markBufiCallbackFired(session.id);
+      if (!won) {
+        return { fired: false, reason: 'already_fired' };
+      }
 
       try {
         const res = await fetch(session.bufiCallbackUrl, {
@@ -99,7 +87,6 @@ export async function bufiCallbackWorkflow(opts: BufiCallbackOptions) {
           }),
         });
 
-        // Best-effort: log non-2xx but still mark as fired so we don't loop.
         if (!res.ok) {
           const text = await res.text().catch(() => '');
           console.warn('[bufi-callback] receiver returned non-2xx', {
@@ -113,20 +100,10 @@ export async function bufiCallbackWorkflow(opts: BufiCallbackOptions) {
           sessionId: session.id,
           error: (err as Error).message,
         });
-        // Fall through — mark fired anyway. Retries would risk N×
-        // notifications which is worse than a missed one.
+        // markBufiCallbackFired already ran — we don't retry, to avoid
+        // N× notifications. A failed POST is logged for visibility but
+        // the workflow considers itself done.
       }
-
-      await db
-        .update(sessions)
-        .set({ bufiCallbackFiredAt: new Date() })
-        .where(
-          and(
-            eq(sessions.id, session.id),
-            isNotNull(sessions.bufiCallbackUrl),
-            isNull(sessions.bufiCallbackFiredAt)
-          )
-        );
 
       return { fired: true, status: session.status };
     }
