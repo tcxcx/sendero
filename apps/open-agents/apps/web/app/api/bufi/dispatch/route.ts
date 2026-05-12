@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
         autoCreatePrEnabled: true,
       } as Parameters<typeof runAgentWorkflow>[0],
     ]);
-    workflowRunId = run.id;
+    workflowRunId = run.runId;
   } catch (error) {
     console.error('[bufi-dispatch] runAgentWorkflow start failed:', error);
     return NextResponse.json(
