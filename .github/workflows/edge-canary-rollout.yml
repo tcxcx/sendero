@@ -1,32 +1,41 @@
 name: Edge canary rollout
 
-# Triggers (chosen after weighing options):
+# RETIRED — gated to manual dispatch only.
 #
-#   * `workflow_run` — REJECTED. CF Workers Builds is an external CI; its
-#     "workflow run" doesn't surface to GitHub Actions, so workflow_run
-#     can't observe it.
-#   * `repository_dispatch` — REJECTED unless we wire CF Builds to POST
-#     into the GH API after each successful build, which we don't today.
-#   * `push` to main + `workflow_dispatch` — CHOSEN. Push fires when code
-#     lands on main (same moment CF Builds starts), and we wait inside
-#     stage 1 for the build to actually deploy before probing. Manual
-#     dispatch covers the "I want to canary an arbitrary version" case.
+# Why: CF Workers Builds (dashboard-configured) deploys
+# `sendero-arc-edge.tomas-cordero-esp.workers.dev` on every push. This
+# GH Actions workflow used to ship a parallel canary via `wrangler
+# deploy` but it points at `arc-edge` (per apps/edge/wrangler.toml's
+# `name` field). The actual CF Worker is named `sendero-arc-edge`, so
+# every push-triggered run fails with `code: 10007 — This Worker does
+# not exist`. See CLAUDE.md "Edge worker — deployed name vs wrangler
+# name" for the full background; the rule there is:
 #
-# Skip via PR label `skip-canary` — checked at the start of stage 1.
-# (We can't check labels from `push` directly, but the most recent commit's
-# associated PR is resolvable via gh and we honor the label there.)
+#   > Don't "fix" the wrangler name to match without also re-pointing
+#   > CF Builds — you'll fork the deploy.
+#
+# Until someone wires a proper canary on top of CF Workers Builds
+# (which doesn't natively support gradient rollouts), this workflow
+# stays on `workflow_dispatch` only. Manual canary still works for
+# the rare "I want to test a specific commit" case — but it'll only
+# succeed if you pass `--name sendero-arc-edge` or temporarily flip
+# the wrangler.toml name (and then revert).
+#
+# Original triggers (kept for reference; uncomment when reviving):
+#   on:
+#     push:
+#       branches: [main]
+#       paths:
+#         - 'apps/edge/**'
+#         - 'packages/tools/**'
+#         - 'packages/llms/**'
+#         - 'packages/seo/**'
+#         - 'packages/auth/**'
+#         - 'apps/edge/wrangler.toml'
+#         - '.github/workflows/edge-canary-rollout.yml'
+#     workflow_dispatch:
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/edge/**'
-      - 'packages/tools/**'
-      - 'packages/llms/**'
-      - 'packages/seo/**'
-      - 'packages/auth/**'
-      - 'apps/edge/wrangler.toml'
-      - '.github/workflows/edge-canary-rollout.yml'
   workflow_dispatch:
     inputs:
       initial_pct:

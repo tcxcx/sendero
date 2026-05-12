@@ -1,8 +1,15 @@
+/// <reference path="./decls.d.ts" />
 /**
  * Integration brand marks rendered into `/dashboard/integrations` cards.
  * MCP ships as an inline SVG component so `currentColor` inherits from
  * the parent's CSS color (img tags don't propagate CSS color into
  * externally-loaded SVG documents). Bufi ships as a webp asset.
+ *
+ * The reference-path directive above pulls the *.png / *.webp ambient
+ * module declarations from decls.d.ts into any program that imports
+ * this file. Without it, consumers whose tsconfig include doesn't
+ * cover packages/icons/src/[*.d.ts] (e.g. apps/admin) fail typecheck
+ * on the asset imports below.
  */
 
 import Image from 'next/image';

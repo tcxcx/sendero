@@ -1,7 +1,10 @@
+/// <reference path="./decls.d.ts" />
 /**
  * AI provider brand marks (Google, Anthropic, OpenAI). Used by the
  * console + agent-chat model picker. Webp at native resolution; consumer
  * passes a render `size` to `<ProviderIcon>` and gets a sized next/image.
+ *
+ * See integrations.tsx for why `<reference path />` is needed.
  */
 
 import Image from 'next/image';
