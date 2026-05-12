@@ -25,8 +25,14 @@ import {
   type ModelTier,
   runAgentTurn,
 } from '@sendero/agent';
-import { buildAgentPersona } from '@/lib/agent-persona';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
+import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
+import { resolvePlan } from '@sendero/billing/plans';
+import { type MeterPayerType, prisma } from '@sendero/database';
+import { filterPublicTools, toolList } from '@sendero/tools';
+import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
+import { PayerResolutionError, resolvePayer } from '@sendero/tools/lib/resolve-payer';
+import { z } from 'zod';
 
 import {
   authorizeDispatch,
@@ -41,21 +47,15 @@ import {
   resolveSegment,
   resolveTenantPlan,
 } from '@/lib/agent-auth';
+import { buildAgentPersona } from '@/lib/agent-persona';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { makeCreditAwareMeterStore } from '@/lib/credit-store';
-import { resolvePlan } from '@sendero/billing/plans';
-import { resolvePayer, PayerResolutionError } from '@sendero/tools/lib/resolve-payer';
-import type { MeterPayerType } from '@sendero/database';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
-import { enforcePolicyChain } from '@/lib/transfer-policy';
 import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
-import { appendTripEvent, type TripEvent } from '@/lib/trip-events';
-import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
-import { filterPublicTools, toolList } from '@sendero/tools';
-import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 import { buildStartWorkflowTool } from '@/lib/start-workflow-tool';
-import { z } from 'zod';
+import { enforcePolicyChain } from '@/lib/transfer-policy';
+import { appendTripEvent, resolveTripByBoardingPass, type TripEvent } from '@/lib/trip-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -304,6 +304,9 @@ export async function POST(req: NextRequest) {
                 ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
               },
               channelIdentityId: body.channelIdentityId,
+              appendTripEvent,
+              resolveTripByBoardingPass,
+              readTripEvents,
             },
           }),
         ]
@@ -457,6 +460,9 @@ export async function POST(req: NextRequest) {
       tenantId: body.tenantId,
       ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
     },
+    appendTripEvent,
+    resolveTripByBoardingPass,
+    readTripEvents,
     ...(body.channelIdentityId ? { channelIdentityId: body.channelIdentityId } : {}),
     // Caller identity flows from the API key resolver into every tool
     // handler via ctx.caller. Tools that gate on scope or key type
@@ -643,4 +649,12 @@ function ledgerChannelFromDispatchChannel(channel: Channel): TripEvent['channel'
     default:
       return null;
   }
+}
+
+async function readTripEvents(args: { tripId: string; tenantId: string }): Promise<TripEvent[]> {
+  const trip = await prisma.trip.findFirst({
+    where: { id: args.tripId, tenantId: args.tenantId },
+    select: { events: true },
+  });
+  return Array.isArray(trip?.events) ? (trip.events as unknown as TripEvent[]) : [];
 }
