@@ -286,8 +286,18 @@ import {
   reserveBookingTool,
 } from './guest-escrow';
 import { quoteFxTool } from './quote-fx';
+import { bookInsuranceTool } from './book-insurance';
+import { flightDisruptionsBriefTool } from './flight-disruptions-brief';
 import { getOperatorAgencyTool } from './get-operator-agency';
 import { getSenderoIdentityTool } from './get-sendero-identity';
+import { inspectMySlackChannelTool } from './inspect-my-slack';
+import { inspectMyWhatsappChannelTool } from './inspect-my-whatsapp';
+import { nearbyAirportsLiveTool } from './nearby-airports-live';
+import { placeDetailsTool } from './place-details';
+import { placesSearchTool } from './places-search';
+import { searchInsuranceTool } from './search-insurance';
+import { startTravelerWhatsappConversationTool } from './start-traveler-whatsapp-conversation';
+import { trackFlightTool } from './track-flight';
 import { giveFeedbackTool } from './give-feedback';
 import { readReputationTool } from './read-reputation';
 import { readValidationTool } from './read-validation';
@@ -1240,6 +1250,23 @@ export const toolList: ToolDef[] = [
   sendFlowMessageTool,
   requestLocationTool,
   requestPhoneNumberTool,
+  // Backfill — these tools were authored but never imported into the
+  // catalog, so the agent's call_sendero round-trips landed as
+  // unknown_tool 404s. Caught in prod dogfood 2026-05-11.
+  // Travel ancillaries (parallel to esim/visa flows)
+  searchInsuranceTool,
+  bookInsuranceTool,
+  // Flight ops — live tracking + disruption awareness
+  trackFlightTool,
+  flightDisruptionsBriefTool,
+  // Live places — Google Places New / Apple lookups
+  placesSearchTool,
+  placeDetailsTool,
+  nearbyAirportsLiveTool,
+  // Internal channel introspection + traveler-side conversation start
+  inspectMySlackChannelTool,
+  inspectMyWhatsappChannelTool,
+  startTravelerWhatsappConversationTool,
 ];
 
 /** Keyed registry for O(1) lookup by name. */
