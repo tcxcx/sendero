@@ -233,3 +233,92 @@ packages/agent   agent implementation, tools, subagents, skills
 packages/sandbox sandbox abstraction and Vercel sandbox integration
 packages/shared  shared utilities
 ```
+
+## Agent Gaps — Raj demand-driven loop
+
+When a session terminates in a recoverable failure, the agent files its own bug ticket. The operator triages those tickets on a kanban board at `/agent-gaps`; dragging a card to **In Progress** with auto-execute enabled dispatches a fresh sandbox run whose prompt is pre-loaded with the prior resolution as a constraint.
+
+![How AI Agents Work](docs/agent-gaps/assets/how-ai-agents-work.png)
+
+Every pillar in that diagram has a concrete home in this app:
+
+| Pillar | Implementation |
+|---|---|
+| Human Control | `app/agent-gaps` kanban — authenticated operator only |
+| Delegate Tasks | `lib/agent-gaps/mutations.ts` `moveCardOnBoard` → `POST /api/bufi/dispatch` |
+| Tools | Vercel Sandbox (`packages/sandbox`) + `@open-agents/agent` |
+| Autonomous Action | `auto_execute_on_in_progress` flag on each row — drag = dispatch |
+| Memory | `knowledge_gaps` table in OA's own Postgres (Drizzle), dedup'd by `sha256(kind\|tool\|hypothesis_norm)` |
+| Reactivity | `findResolvedGap()` injects "Known fix from prior run" into the next prompt |
+| Environment | The repo, the sandbox VM, the PR surface, `apps/web` itself |
+
+The arrow back from Environment to Memory is the closed loop. Most agent demos stop at Tools → Environment.
+
+### The Raj demand-driven approach
+
+Most agent context strategies are *push*: dump the wiki into a vector DB, pile on MCP servers, hope the model figures it out. That approach caps around 30% accuracy on real institutional knowledge.
+
+Raj Kapadia's pattern flips it to **pull**:
+
+1. Let the agent fail.
+2. Capture *what it needed* — error, attempted tool, hypothesis, the field it expected.
+3. Triage the gap once. Close it with a PR URL + `must_mention[]` tokens.
+4. The next run on a similar blueprint pre-reads the resolution and threads it into the prompt as a constraint.
+
+Each iteration compounds. The prompt slab + tool catalog get smarter every session, not just less broken.
+
+The closed loop in code:
+
+```
+session ends → /api/agent-gaps/ingest writes/dedups a knowledge_gaps row →
+  card appears in Backlog →
+  operator flips Auto-execute and drags to In Progress →
+  moveCardOnBoard() synthesizes a blueprint and POSTs /api/bufi/dispatch →
+  buildSelfHealPreamble injects prior fix (findResolvedGap) →
+  agent runs in a fresh sandbox with the constraint pre-loaded →
+  callback writes terminal state → card moves to Review (success) or back to Backlog (fail, occurrence_count++)
+```
+
+### Surfaces
+
+| Path | Purpose |
+|---|---|
+| `app/agent-gaps/page.tsx` | Server component — auth gate + initial board state |
+| `app/agent-gaps/agent-gaps-board-client.tsx` | Client kanban + drag-and-drop + optimistic updates |
+| `app/agent-gaps/agent-gap-card.tsx` | Card with severity pill, occurrence count, auto-execute toggle |
+| `app/agent-gaps/agent-gap-detail-sheet.tsx` | Detail sheet on click — hypothesis, error, must_mention chips, PR links |
+| `components/agent-gaps/kanban.tsx` | Minimal dnd-kit primitives (KanbanRoot/Column/Item/SortableContext) |
+| `lib/agent-gaps/{queries,mutations,blueprint,normalize}.ts` | Pure Drizzle + crypto, no external services |
+| `app/api/agent-gaps/route.ts` | `GET` board state |
+| `app/api/agent-gaps/[gapId]/move/route.ts` | `POST` move card; fires dispatch if auto-execute |
+| `app/api/agent-gaps/[gapId]/auto-execute/route.ts` | `POST` toggle |
+| `app/api/agent-gaps/ingest/route.ts` | `POST` from minion runners — writes/dedups gaps + progresses originating card |
+| `lib/db/schema.ts` `knowledgeGaps` | Drizzle table + 3 enum string unions |
+| `lib/db/migrations/0037_late_eternals.sql` | Generated migration |
+| `.agents/skills/raj-demand-driven-context/SKILL.md` | Native skill installed for in-VM consumption |
+
+### Env vars
+
+```env
+# Required for ingest auth + outbound dispatch
+OPEN_AGENTS_CALLBACK_SECRET=         # bearer token for /api/agent-gaps/ingest
+OPEN_AGENTS_BUFI_INGRESS_SECRET=     # bearer token to call /api/bufi/dispatch
+AGENT_GAPS_DEFAULT_REPO_SLUG=        # optional fallback "owner/name" when a gap has no repo_slug
+
+# Optional override; defaults to http://localhost:3000 for self-dispatch
+OPEN_AGENTS_INTERNAL_URL=
+```
+
+### Inspiration & primary sources
+
+- **Raj Kapadia — "Demand-Driven Context for AI Agents"**: https://www.youtube.com/watch?v=_QAVExf_1uw
+- **Stripe Minions** — one-shot end-to-end coding agents: https://stripe.dev/blog/minions-stripes-one-shot-end-to-end-coding-agents
+- **Ramp — Why we built our background agent**: https://builders.ramp.com/post/why-we-built-our-background-agent
+- **Vercel AI SDK 6**: https://vercel.com/blog/ai-sdk-6
+- **Vercel AI SDK docs**: https://ai-sdk.dev/docs/introduction
+- **How to build AI agents with Vercel and the AI SDK**: https://vercel.com/kb/guide/how-to-build-ai-agents-with-vercel-and-the-ai-sdk
+- **Vercel Agent**: https://vercel.com/docs/agent
+- **Vercel Sandbox SDK Reference**: https://vercel.com/docs/vercel-sandbox/sdk-reference
+- **Building an agent with OpenAI Agents SDK and Vercel Sandbox**: https://vercel.com/kb/guide/building-an-agent-with-openai-agents-sdk-and-vercel-sandbox
+
+The native skill at `.agents/skills/raj-demand-driven-context/SKILL.md` is documentation the in-VM agent reads when it lands a self-heal preamble in its prompt — it tells the agent how to honor the constraint and how to phrase its own structured failure report when it gets stuck.
