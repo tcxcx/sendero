@@ -14,7 +14,6 @@ import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import { start } from 'workflow/api';
-import { bufiCallbackWorkflow } from '@/app/workflows/bufi-callback';
 import { runAgentWorkflow } from '@/app/workflows/chat';
 import { db } from '@/lib/db/client';
 import { githubInstallations, users } from '@/lib/db/schema';
@@ -280,18 +279,14 @@ export async function POST(req: NextRequest) {
     ]);
     workflowRunId = run.runId;
 
-    // If the caller asked for a completion callback, fire-and-forget the
-    // polling workflow alongside. It hibernates between polls so it
-    // doesn't cost function-instance time while the agent works.
-    if (body.callback) {
-      try {
-        await start(bufiCallbackWorkflow, [{ sessionId: session.id }]);
-      } catch (cbErr) {
-        // Don't fail the dispatch if the callback workflow won't start —
-        // the morning digest cron is still the fallback. Log and move on.
-        console.warn('[bufi-dispatch] callback workflow start failed:', cbErr);
-      }
-    }
+    // Callback config (body.callback) is persisted on session row for a
+    // future fire-on-completion mechanism. We're not firing it yet —
+    // the bufi-callback workflow approach tripped Vercel Workflow's
+    // workflow-node-module-error plugin (DB-via-postgres import chain not
+    // permitted from workflow files). The morning digest cron remains the
+    // v0 reporting path. Live updates is a v1 follow-up that should use
+    // a non-workflow polling pattern (BUFI cron polling OA, or Trigger.dev
+    // task) rather than a Vercel Workflow.
   } catch (error) {
     console.error('[bufi-dispatch] runAgentWorkflow start failed:', error);
     return NextResponse.json(
