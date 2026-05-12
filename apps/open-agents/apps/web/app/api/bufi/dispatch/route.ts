@@ -14,6 +14,7 @@ import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import { start } from 'workflow/api';
+import { bufiCallbackWorkflow } from '@/app/workflows/bufi-callback';
 import { runAgentWorkflow } from '@/app/workflows/chat';
 import { db } from '@/lib/db/client';
 import { githubInstallations, users } from '@/lib/db/schema';
@@ -37,6 +38,14 @@ interface DispatchRequestBody {
     branch: string;
   };
   prompt: string;
+  /**
+   * Optional. When set, OA persists this on the session row and a polling
+   * workflow (bufi-callback.ts) POSTs `{sessionId, status, prUrl?}` to
+   * `url` with `Authorization: Bearer ${secret}` when the session reaches
+   * terminal state. Lets BUFI update Linear + Slack instantly instead of
+   * waiting on the morning digest cron.
+   */
+  callback?: { url: string; secret: string };
 }
 
 function verifyBufiIngress(req: NextRequest): boolean {
@@ -157,6 +166,14 @@ function isValidBody(value: unknown): value is DispatchRequestBody {
     return false;
   }
 
+  // Optional callback — accept if present, but shape-check
+  if (v.callback !== undefined) {
+    const cb = v.callback as Record<string, unknown> | null;
+    if (!cb || typeof cb !== 'object') return false;
+    if (typeof cb.url !== 'string' || typeof cb.secret !== 'string') return false;
+    if (cb.url.length === 0 || cb.secret.length < 32) return false;
+  }
+
   return true;
 }
 
@@ -222,6 +239,11 @@ export async function POST(req: NextRequest) {
         cloneUrl,
         autoCommitPushOverride: true,
         autoCreatePrOverride: true,
+        // Persist the BUFI callback config if provided — picked up by
+        // the bufi-callback polling workflow that fires the POST on
+        // terminal state.
+        bufiCallbackUrl: body.callback?.url ?? null,
+        bufiCallbackSecret: body.callback?.secret ?? null,
       },
       initialChat: {
         id: chatId,
@@ -257,6 +279,19 @@ export async function POST(req: NextRequest) {
       } as Parameters<typeof runAgentWorkflow>[0],
     ]);
     workflowRunId = run.runId;
+
+    // If the caller asked for a completion callback, fire-and-forget the
+    // polling workflow alongside. It hibernates between polls so it
+    // doesn't cost function-instance time while the agent works.
+    if (body.callback) {
+      try {
+        await start(bufiCallbackWorkflow, [{ sessionId: session.id }]);
+      } catch (cbErr) {
+        // Don't fail the dispatch if the callback workflow won't start —
+        // the morning digest cron is still the fallback. Log and move on.
+        console.warn('[bufi-dispatch] callback workflow start failed:', cbErr);
+      }
+    }
   } catch (error) {
     console.error('[bufi-dispatch] runAgentWorkflow start failed:', error);
     return NextResponse.json(
