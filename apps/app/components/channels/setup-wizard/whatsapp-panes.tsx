@@ -374,7 +374,8 @@ function VerifyNumberPane({ setResolution }: WizardPaneProps) {
           ) : null}
           Waiting
         </span>
-        {process.env.NODE_ENV !== 'production' ? (
+        {process.env.NODE_ENV !== 'production' ||
+        process.env.NEXT_PUBLIC_SENDERO_ENABLE_WHATSAPP_SANDBOX === 'true' ? (
           <button
             type="button"
             onClick={() => void bindSandboxNumber()}

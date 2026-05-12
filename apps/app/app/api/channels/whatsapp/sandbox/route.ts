@@ -240,7 +240,6 @@ async function ensureSandboxInboundWebhook(
 }
 
 function isSandboxBindAllowed(): boolean {
-  if (process.env.VERCEL_ENV === 'production') return false;
   if (process.env.NODE_ENV !== 'production') return true;
   return process.env.SENDERO_ENABLE_WHATSAPP_SANDBOX === 'true';
 }
