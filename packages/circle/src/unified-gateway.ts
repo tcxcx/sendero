@@ -38,20 +38,25 @@
  * goes through here.
  */
 
-import { AppKit } from '@circle-fin/app-kit';
-import { BridgeKit } from '@circle-fin/bridge-kit';
-import * as bridgeChains from '@circle-fin/bridge-kit/chains';
 import { createCircleWalletsAdapter } from '@circle-fin/adapter-circle-wallets';
 import type { createSolanaKitAdapterFromPrivateKey } from '@circle-fin/adapter-solana-kit';
 import type { ViemAdapter } from '@circle-fin/adapter-viem-v2';
+import { AppKit } from '@circle-fin/app-kit';
+import { BridgeKit } from '@circle-fin/bridge-kit';
+import * as bridgeChains from '@circle-fin/bridge-kit/chains';
+import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
 import bs58 from 'bs58';
 import type { Address } from 'viem';
 
-import { prisma } from '@sendero/database';
-import { env } from '@sendero/env';
-
-import { createAdapterForSigner, getTreasuryAddress, getTreasuryAdapter } from './app-kit';
+import { createAdapterForSigner, getTreasuryAdapter, getTreasuryAddress } from './app-kit';
 import { GATEWAY_CHAINS, queryUnifiedBalance } from './gateway';
+import {
+  type JournalAccount,
+  journalAccounts,
+  journalTransactionId,
+  writeJournalEntry,
+} from './journal';
 
 export type GatewayChainKey = keyof typeof GATEWAY_CHAINS;
 
@@ -370,6 +375,17 @@ export interface SpendArgs {
   allocations?: Array<{ amount: string; chain: string }>;
   /** Optional custom fee carved from the spend. Defaults to "no fee". */
   customFee?: CustomFee;
+  /** Optional Step 1 shadow journal context. Defaults off via env flag. */
+  journal?: {
+    tenantId: string;
+    userId?: string | null;
+    complianceDecisionId?: string | null;
+    contextKind?: 'spend' | 'bridge';
+    contextRef: string;
+    liabilityAccount?: JournalAccount;
+  };
+  /** Optional Step 2 shadow intent id. Observability only. */
+  gatewayIntentId?: string | null;
   /**
    * App Kit retry shape — when set, the kit skips estimate+burn and
    * replays only the mint step using a previously-obtained attestation.
@@ -488,12 +504,66 @@ export async function spend(args: SpendArgs): Promise<SpendResult> {
     explorerUrl?: string;
     allocations?: SpendResult['allocations'];
   };
+  if (args.journal) {
+    const amountMicroUsdc = decimalToMicro(args.amount);
+    const contextKind = args.journal.contextKind ?? 'spend';
+    const transactionId = journalTransactionId(contextKind, args.journal.contextRef);
+    const liabilityAccount =
+      args.journal.liabilityAccount ??
+      (args.journal.userId
+        ? journalAccounts.userLiability(args.journal.userId)
+        : journalAccounts.tenantLiability(args.journal.tenantId));
+    await writeJournalEntry([
+      {
+        transactionId,
+        tenantId: args.journal.tenantId,
+        userId: args.journal.userId ?? null,
+        complianceDecisionId: args.journal.complianceDecisionId ?? null,
+        account: liabilityAccount,
+        direction: 'debit',
+        amountMicroUsdc,
+        contextKind,
+        contextRef: args.journal.contextRef,
+        metadata: {
+          toChainKey: args.toChainKey,
+          recipient: args.recipient,
+          txHash: result.txHash,
+          allocations: result.allocations as PrismaJson,
+        },
+      },
+      {
+        transactionId,
+        tenantId: args.journal.tenantId,
+        userId: args.journal.userId ?? null,
+        complianceDecisionId: args.journal.complianceDecisionId ?? null,
+        account: journalAccounts.gatewayAsset(args.toChainKey),
+        direction: 'credit',
+        amountMicroUsdc,
+        contextKind,
+        contextRef: args.journal.contextRef,
+        metadata: {
+          toChainKey: args.toChainKey,
+          recipient: args.recipient,
+          txHash: result.txHash,
+          allocations: result.allocations as PrismaJson,
+        },
+      },
+    ]);
+  }
   return {
     txHash: result.txHash,
     explorerUrl: result.explorerUrl,
     allocations: result.allocations,
     raw: result,
   };
+}
+
+type PrismaJson = string | number | boolean | null | PrismaJson[] | { [key: string]: PrismaJson };
+
+function decimalToMicro(amount: string): bigint {
+  const [whole = '0', frac = ''] = amount.split('.');
+  const padded = `${frac}000000`.slice(0, 6);
+  return BigInt(whole || '0') * 1_000_000n + BigInt(padded || '0');
 }
 
 /**

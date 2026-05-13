@@ -40,11 +40,13 @@
  * a network round trip.
  */
 
-import bs58 from 'bs58';
 import { prisma } from '@sendero/database';
-import { decrypt, encrypt } from '@sendero/encryption';
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { decrypt, decryptKmsEnvelope, encrypt } from '@sendero/encryption';
+import bs58 from 'bs58';
 import type { Hex, PrivateKeyAccount } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+
+import { recordSigningEvent } from './signing-event';
 
 /**
  * Phase 5 P5.3 — caller context for the audit trail. Routes / crons /
@@ -84,7 +86,12 @@ export interface TenantGatewaySigner {
   /** KEK version the underlying ciphertext was decrypted under. Useful
    *  for the rotation path that re-encrypts to the latest KEK on read. */
   kekVersion: number;
+  /** KMS crypto key version/resource label when the signer came from
+   *  the Step 5 KMS envelope path. */
+  kmsKeyVersion?: string;
 }
+
+type SignerKekProviderValue = 'env_v1' | 'kms_v1' | 'env-v1' | 'kms-v1';
 
 // ── Cache ─────────────────────────────────────────────────────────────
 
@@ -163,7 +170,17 @@ export async function getOrCreateGatewaySigner(
   }
 
   const cached = cacheGet(tenantId);
-  if (cached) return cached;
+  if (cached) {
+    void recordSignerAccessEvent({
+      signerKind: 'custodial-eoa',
+      signerAddress: cached.address,
+      principalId: tenantId,
+      caller: options?.caller,
+      messageKind: 'signer-access:tenant:cache-hit',
+      kmsKeyVersion: cached.kmsKeyVersion ?? cached.kekVersion,
+    });
+    return cached;
+  }
 
   const existing = await prisma.tenantGatewaySigner.findUnique({
     where: { tenantId },
@@ -176,6 +193,10 @@ export async function getOrCreateGatewaySigner(
       address: existing.address,
       encryptedPrivateKey: existing.encryptedPrivateKey,
       kekVersion: existing.kekVersion,
+      kekProvider: existing.kekProvider,
+      newEnvelope: existing.newEnvelope,
+      kmsKeyResource: existing.kmsKeyResource,
+      kmsKeyVersion: existing.kmsKeyVersion,
       caller: options?.caller,
     });
     cacheSet(tenantId, signer);
@@ -215,6 +236,10 @@ export async function getOrCreateGatewaySigner(
           address: winner.address,
           encryptedPrivateKey: winner.encryptedPrivateKey,
           kekVersion: winner.kekVersion,
+          kekProvider: winner.kekProvider,
+          newEnvelope: winner.newEnvelope,
+          kmsKeyResource: winner.kmsKeyResource,
+          kmsKeyVersion: winner.kmsKeyVersion,
           caller: options?.caller,
         });
         cacheSet(tenantId, signer);
@@ -233,6 +258,14 @@ export async function getOrCreateGatewaySigner(
     kekVersion,
     caller: options?.caller,
     contextSuffix: 'create',
+  });
+  void recordSignerAccessEvent({
+    signerKind: 'custodial-eoa',
+    signerAddress: lowerAddress,
+    principalId: tenantId,
+    caller: options?.caller,
+    messageKind: 'signer-access:tenant:create',
+    kmsKeyVersion: kekVersion,
   });
 
   const signer: TenantGatewaySigner = {
@@ -259,7 +292,17 @@ export async function getGatewaySigner(
   }
 
   const cached = cacheGet(tenantId);
-  if (cached) return cached;
+  if (cached) {
+    void recordSignerAccessEvent({
+      signerKind: 'custodial-eoa',
+      signerAddress: cached.address,
+      principalId: tenantId,
+      caller: options?.caller,
+      messageKind: 'signer-access:tenant:cache-hit',
+      kmsKeyVersion: cached.kmsKeyVersion ?? cached.kekVersion,
+    });
+    return cached;
+  }
 
   const row = await prisma.tenantGatewaySigner.findUnique({
     where: { tenantId },
@@ -272,6 +315,10 @@ export async function getGatewaySigner(
     address: row.address,
     encryptedPrivateKey: row.encryptedPrivateKey,
     kekVersion: row.kekVersion,
+    kekProvider: row.kekProvider,
+    newEnvelope: row.newEnvelope,
+    kmsKeyResource: row.kmsKeyResource,
+    kmsKeyVersion: row.kmsKeyVersion,
     caller: options?.caller,
   });
   cacheSet(tenantId, signer);
@@ -296,7 +343,17 @@ export async function getOrCreateUserGatewaySigner(
   }
 
   const cached = userCacheGet(userId);
-  if (cached) return cached;
+  if (cached) {
+    void recordSignerAccessEvent({
+      signerKind: 'custodial-eoa',
+      signerAddress: cached.address,
+      principalId: userId,
+      caller: options?.caller,
+      messageKind: 'signer-access:user:cache-hit',
+      kmsKeyVersion: cached.kmsKeyVersion ?? cached.kekVersion,
+    });
+    return cached;
+  }
 
   const existing = await prisma.userGatewaySigner.findUnique({
     where: { userId },
@@ -309,6 +366,10 @@ export async function getOrCreateUserGatewaySigner(
       address: existing.address,
       encryptedPrivateKey: existing.encryptedPrivateKey,
       kekVersion: existing.kekVersion,
+      kekProvider: existing.kekProvider,
+      newEnvelope: existing.newEnvelope,
+      kmsKeyResource: existing.kmsKeyResource,
+      kmsKeyVersion: existing.kmsKeyVersion,
       caller: options?.caller,
     });
     userCacheSet(userId, signer);
@@ -345,6 +406,10 @@ export async function getOrCreateUserGatewaySigner(
           address: winner.address,
           encryptedPrivateKey: winner.encryptedPrivateKey,
           kekVersion: winner.kekVersion,
+          kekProvider: winner.kekProvider,
+          newEnvelope: winner.newEnvelope,
+          kmsKeyResource: winner.kmsKeyResource,
+          kmsKeyVersion: winner.kmsKeyVersion,
           caller: options?.caller,
         });
         userCacheSet(userId, signer);
@@ -360,6 +425,14 @@ export async function getOrCreateUserGatewaySigner(
     kekVersion,
     caller: options?.caller,
     contextSuffix: 'create:user',
+  });
+  void recordSignerAccessEvent({
+    signerKind: 'custodial-eoa',
+    signerAddress: lowerAddress,
+    principalId: userId,
+    caller: options?.caller,
+    messageKind: 'signer-access:user:create',
+    kmsKeyVersion: kekVersion,
   });
 
   const signer: TenantGatewaySigner = {
@@ -384,7 +457,17 @@ export async function getUserGatewaySigner(
   }
 
   const cached = userCacheGet(userId);
-  if (cached) return cached;
+  if (cached) {
+    void recordSignerAccessEvent({
+      signerKind: 'custodial-eoa',
+      signerAddress: cached.address,
+      principalId: userId,
+      caller: options?.caller,
+      messageKind: 'signer-access:user:cache-hit',
+      kmsKeyVersion: cached.kmsKeyVersion ?? cached.kekVersion,
+    });
+    return cached;
+  }
 
   const row = await prisma.userGatewaySigner.findUnique({
     where: { userId },
@@ -397,6 +480,10 @@ export async function getUserGatewaySigner(
     address: row.address,
     encryptedPrivateKey: row.encryptedPrivateKey,
     kekVersion: row.kekVersion,
+    kekProvider: row.kekProvider,
+    newEnvelope: row.newEnvelope,
+    kmsKeyResource: row.kmsKeyResource,
+    kmsKeyVersion: row.kmsKeyVersion,
     caller: options?.caller,
   });
   userCacheSet(userId, signer);
@@ -413,6 +500,10 @@ interface DecryptArgs {
   address: string;
   encryptedPrivateKey: string;
   kekVersion: number;
+  kekProvider?: SignerKekProviderValue | null;
+  newEnvelope?: Uint8Array | Buffer | null;
+  kmsKeyResource?: string | null;
+  kmsKeyVersion?: string | null;
   caller?: GatewaySignerCallerContext;
 }
 
@@ -427,12 +518,22 @@ interface DecryptArgs {
  * entirely, so audit volume is bounded by cold starts × tenant ops.
  */
 async function decryptSigner(args: DecryptArgs): Promise<TenantGatewaySigner> {
-  const plaintext = await decrypt({
-    ciphertext: args.encryptedPrivateKey,
-    purpose: 'gateway-signer',
-    contextId: args.contextId,
-    kekVersion: args.kekVersion,
-  });
+  const useKmsEnvelope = shouldReadKmsEnvelope(args);
+  const plaintext = useKmsEnvelope
+    ? await decryptKmsEnvelope({
+        envelope: Buffer.from(args.newEnvelope ?? []),
+        purpose: 'gateway-signer',
+        contextId: args.contextId,
+      })
+    : await decrypt({
+        ciphertext: args.encryptedPrivateKey,
+        purpose: 'gateway-signer',
+        contextId: args.contextId,
+        kekVersion: args.kekVersion,
+      });
+  const signerKmsKeyVersion = useKmsEnvelope
+    ? (args.kmsKeyVersion ?? args.kmsKeyResource ?? `kek:${args.kekVersion}`)
+    : `env-v${args.kekVersion}`;
 
   const account = privateKeyToAccount(plaintext as Hex);
   if (account.address.toLowerCase() !== args.address.toLowerCase()) {
@@ -455,13 +556,50 @@ async function decryptSigner(args: DecryptArgs): Promise<TenantGatewaySigner> {
       contextSuffix: 'decrypt',
     });
   }
+  void recordSignerAccessEvent({
+    signerKind: 'custodial-eoa',
+    signerAddress: account.address.toLowerCase(),
+    principalId: args.contextId,
+    caller: args.caller,
+    messageKind: args.contextLabel.startsWith('tenant:')
+      ? 'signer-access:tenant:decrypt'
+      : 'signer-access:user:decrypt',
+    kmsKeyVersion: signerKmsKeyVersion,
+  });
 
   return {
     address: account.address.toLowerCase() as Hex,
     account,
     privateKey: plaintext as Hex,
     kekVersion: args.kekVersion,
+    kmsKeyVersion: signerKmsKeyVersion,
   };
+}
+
+function shouldReadKmsEnvelope(args: DecryptArgs): boolean {
+  if (!isKmsProvider(args.kekProvider) || !args.newEnvelope || !args.kmsKeyResource) return false;
+  const mode = process.env.SENDERO_GATEWAY_SIGNER_KMS_READ_MODE ?? 'canary';
+  if (mode === 'off' || mode === '0' || mode === 'false') return false;
+  if (mode === 'all' || mode === '1' || mode === 'true') return true;
+
+  const tenantOrUser = args.contextLabel.startsWith('tenant:') ? 'tenant' : 'user';
+  const envName =
+    tenantOrUser === 'tenant'
+      ? 'SENDERO_GATEWAY_SIGNER_KMS_CANARY_TENANTS'
+      : 'SENDERO_GATEWAY_SIGNER_KMS_CANARY_USERS';
+  return envListIncludes(process.env[envName], args.contextId);
+}
+
+function isKmsProvider(provider: SignerKekProviderValue | null | undefined): boolean {
+  return provider === 'kms_v1' || provider === 'kms-v1';
+}
+
+function envListIncludes(raw: string | undefined, value: string): boolean {
+  if (!raw) return false;
+  return raw
+    .split(',')
+    .map(item => item.trim())
+    .some(item => item === '*' || item === value);
 }
 
 /**
@@ -585,7 +723,17 @@ export async function getOrCreateTenantSolanaSigner(
   }
 
   const cached = solCacheGet(tenantId);
-  if (cached) return cached;
+  if (cached) {
+    void recordSignerAccessEvent({
+      signerKind: 'solana-kit',
+      signerAddress: cached.address,
+      principalId: tenantId,
+      caller: options?.caller,
+      messageKind: 'signer-access:tenant-solana:cache-hit',
+      kmsKeyVersion: cached.kekVersion,
+    });
+    return cached;
+  }
 
   const existing = await prisma.tenantSolanaGatewaySigner.findUnique({
     where: { tenantId },
@@ -644,6 +792,14 @@ export async function getOrCreateTenantSolanaSigner(
     caller: options?.caller,
     contextSuffix: 'sol-create',
   });
+  void recordSignerAccessEvent({
+    signerKind: 'solana-kit',
+    signerAddress: address,
+    principalId: tenantId,
+    caller: options?.caller,
+    messageKind: 'signer-access:tenant-solana:create',
+    kmsKeyVersion: kekVersion,
+  });
 
   const signer: TenantSolanaSigner = { address, privateKey, kekVersion };
   solCacheSet(tenantId, signer);
@@ -659,7 +815,17 @@ export async function getTenantSolanaSigner(
     throw new Error('getTenantSolanaSigner: tenantId required');
   }
   const cached = solCacheGet(tenantId);
-  if (cached) return cached;
+  if (cached) {
+    void recordSignerAccessEvent({
+      signerKind: 'solana-kit',
+      signerAddress: cached.address,
+      principalId: tenantId,
+      caller: options?.caller,
+      messageKind: 'signer-access:tenant-solana:cache-hit',
+      kmsKeyVersion: cached.kekVersion,
+    });
+    return cached;
+  }
   const row = await prisma.tenantSolanaGatewaySigner.findUnique({
     where: { tenantId },
   });
@@ -708,5 +874,33 @@ async function decryptSolanaSigner(args: DecryptSolanaArgs): Promise<TenantSolan
     caller: args.caller,
     contextSuffix: 'sol-decrypt',
   });
+  void recordSignerAccessEvent({
+    signerKind: 'solana-kit',
+    signerAddress: derived,
+    principalId: args.tenantId,
+    caller: args.caller,
+    messageKind: 'signer-access:tenant-solana:decrypt',
+    kmsKeyVersion: args.kekVersion,
+  });
   return { address: derived, privateKey: plaintext, kekVersion: args.kekVersion };
+}
+
+function recordSignerAccessEvent(args: {
+  signerKind: string;
+  signerAddress: string;
+  principalId: string;
+  caller?: GatewaySignerCallerContext;
+  messageKind: string;
+  kmsKeyVersion: string | number;
+}): Promise<void> {
+  return recordSigningEvent({
+    signerKind: args.signerKind,
+    signerAddress: args.signerAddress,
+    principalId: args.principalId,
+    caller: args.caller,
+    messageKind: args.messageKind,
+    message: `${args.messageKind}:${args.principalId}:${args.signerAddress}`,
+    signature: null,
+    kmsKeyVersion: args.kmsKeyVersion,
+  });
 }

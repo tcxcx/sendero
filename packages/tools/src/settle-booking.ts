@@ -6,6 +6,13 @@
  * Caller: operator MSCA.
  */
 
+import { createLogOnlyComplianceDecision } from '@sendero/circle/compliance';
+import {
+  type BalancedJournalLegs,
+  journalAccounts,
+  journalTransactionId,
+  writeJournalEntry,
+} from '@sendero/circle/journal';
 import { SENDERO_GUEST_ESCROW_ABI } from '@sendero/guest';
 import { type Address, encodeFunctionData, type Hex } from 'viem';
 import { z } from 'zod';
@@ -48,6 +55,7 @@ export const settleBookingTool: ToolDef = {
       functionName: 'settleBooking',
       args: [parsed.bookingId as Hex],
     });
+    await shadowJournalSettleBooking(parsed.bookingId, escrow);
     return {
       bookingId: parsed.bookingId,
       escrowAddress: escrow,
@@ -56,3 +64,93 @@ export const settleBookingTool: ToolDef = {
     };
   },
 };
+
+async function shadowJournalSettleBooking(
+  bookingExternalId: string,
+  escrowAddress: Address
+): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  const { prisma } = await import('@sendero/database');
+  const booking = await prisma.booking.findFirst({
+    where: { externalId: bookingExternalId },
+    select: {
+      id: true,
+      tenantId: true,
+      costMicroUsdc: true,
+      markupMicroUsdc: true,
+      senderoTakeMicroUsdc: true,
+      tenant: { select: { primaryChain: true } },
+    },
+  });
+  if (!booking?.costMicroUsdc) return;
+
+  const cost = BigInt(booking.costMicroUsdc.toString());
+  const markup = booking.markupMicroUsdc ? BigInt(booking.markupMicroUsdc.toString()) : 0n;
+  const senderoTake = booking.senderoTakeMicroUsdc
+    ? BigInt(booking.senderoTakeMicroUsdc.toString())
+    : 0n;
+  const tenantTake = markup > senderoTake ? markup - senderoTake : 0n;
+  const transactionId = journalTransactionId('booking_settle', booking.id);
+  const chainAccount = booking.tenant.primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
+  const complianceDecision = await createLogOnlyComplianceDecision({
+    tenantId: booking.tenantId,
+    recipientAddress: escrowAddress,
+    recipientChain: chainAccount,
+    amountMicroUsdc: cost + tenantTake + senderoTake,
+    contextKind: 'booking_settle',
+    contextRef: booking.id,
+    metadata: {
+      mode: 'log_only',
+      source: 'settle_booking',
+      bookingId: booking.id,
+      bookingExternalId,
+    },
+  });
+  const legs = [
+    {
+      transactionId,
+      tenantId: booking.tenantId,
+      complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      account: journalAccounts.tenantLiability(booking.tenantId),
+      direction: 'debit',
+      amountMicroUsdc: cost + tenantTake + senderoTake,
+      contextKind: 'booking_settle',
+      contextRef: booking.id,
+      metadata: { bookingId: booking.id, bookingExternalId },
+    },
+    {
+      transactionId,
+      tenantId: booking.tenantId,
+      complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      account: journalAccounts.gatewayAsset(chainAccount),
+      direction: 'credit',
+      amountMicroUsdc: cost,
+      contextKind: 'booking_settle',
+      contextRef: booking.id,
+      metadata: { leg: 'vendor' },
+    },
+    {
+      transactionId,
+      tenantId: booking.tenantId,
+      complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      account: journalAccounts.tenantLiability(booking.tenantId),
+      direction: 'credit',
+      amountMicroUsdc: tenantTake,
+      contextKind: 'booking_settle',
+      contextRef: booking.id,
+      metadata: { leg: 'agency' },
+    },
+    {
+      transactionId,
+      tenantId: booking.tenantId,
+      complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      account: journalAccounts.revenueFee(),
+      direction: 'credit',
+      amountMicroUsdc: senderoTake,
+      contextKind: 'booking_settle',
+      contextRef: booking.id,
+      metadata: { leg: 'fee' },
+    },
+  ].filter(leg => leg.amountMicroUsdc > 0n) as unknown as BalancedJournalLegs;
+  await writeJournalEntry(legs);
+}

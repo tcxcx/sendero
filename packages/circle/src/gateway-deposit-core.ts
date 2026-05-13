@@ -32,14 +32,20 @@
  * short window collapse.
  */
 
-import { type Prisma, prisma } from '@sendero/database';
+import { prisma } from '@sendero/database';
 
 import { GATEWAY_CHAINS, isEvmChain } from './gateway';
 import {
+  type BalancedJournalLegs,
+  journalAccounts,
+  journalTransactionId,
+  writeJournalEntry,
+} from './journal';
+import {
   circleWalletsPrincipal,
+  type GatewayChainKey,
   deposit as unifiedDeposit,
   depositFor as unifiedDepositFor,
-  type GatewayChainKey,
 } from './unified-gateway';
 
 /**
@@ -233,6 +239,60 @@ export async function depositToGatewayCore(
         confirmedAt: new Date(),
       },
     });
+
+    const contextKind = args.scope === 'tenant' ? 'gateway_sweep' : 'deposit';
+    const transactionId = journalTransactionId(contextKind, logRow.id);
+    const liabilityAccount =
+      args.scope === 'traveler' && userId
+        ? journalAccounts.userLiability(userId)
+        : journalAccounts.tenantLiability(tenantId);
+    const journalLegs: BalancedJournalLegs = [
+      {
+        transactionId,
+        tenantId,
+        userId: userId ?? null,
+        account: journalAccounts.dcwAsset(chainKey),
+        direction: 'debit',
+        amountMicroUsdc: amountBaseUnits,
+        contextKind,
+        contextRef: logRow.id,
+        metadata: { leg: 'inbound_deposit', depositMode, depositAccount, dcwAddress },
+      },
+      {
+        transactionId,
+        tenantId,
+        userId: userId ?? null,
+        account: liabilityAccount,
+        direction: 'credit',
+        amountMicroUsdc: amountBaseUnits,
+        contextKind,
+        contextRef: logRow.id,
+        metadata: { leg: 'inbound_deposit', depositMode, depositAccount, dcwAddress },
+      },
+      {
+        transactionId,
+        tenantId,
+        userId: userId ?? null,
+        account: journalAccounts.gatewayAsset(chainKey),
+        direction: 'debit',
+        amountMicroUsdc: amountBaseUnits,
+        contextKind,
+        contextRef: logRow.id,
+        metadata: { leg: 'gateway_sweep', depositMode, depositAccount, dcwAddress, depositTxHash },
+      },
+      {
+        transactionId,
+        tenantId,
+        userId: userId ?? null,
+        account: journalAccounts.dcwAsset(chainKey),
+        direction: 'credit',
+        amountMicroUsdc: amountBaseUnits,
+        contextKind,
+        contextRef: logRow.id,
+        metadata: { leg: 'gateway_sweep', depositMode, depositAccount, dcwAddress, depositTxHash },
+      },
+    ];
+    await writeJournalEntry(journalLegs);
 
     console.log('[gateway-deposit-core] confirmed', {
       tenantId,

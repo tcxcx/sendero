@@ -164,6 +164,9 @@ export async function POST(req: NextRequest) {
       amount: body.amount,
       destinationChain: body.to,
       recipient: body.recipient,
+      gatewayTransferLogId: log.id,
+      journalContextRef: log.id,
+      journalContextKind: body.from && body.from !== body.to ? 'bridge' : 'spend',
     });
 
     await prisma.gatewayTransferLog.update({

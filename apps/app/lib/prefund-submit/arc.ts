@@ -18,10 +18,10 @@
  * and reuses the gas the EOA already gets faucet-dripped.
  */
 
-import { spendTenantUnifiedUsd } from '@sendero/circle/unified-balance';
-import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
 import { getArcClient } from '@sendero/arc/chain';
-import { type Address, type Hex, createWalletClient, http, parseAbi, parseUnits } from 'viem';
+import { getOrCreateGatewaySigner } from '@sendero/circle/gateway-signer';
+import { spendTenantUnifiedUsd } from '@sendero/circle/unified-balance';
+import { type Address, createWalletClient, type Hex, http, parseAbi, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 const ARC_USDC = '0x3600000000000000000000000000000000000000' as Address;
@@ -101,6 +101,8 @@ async function ensureSignerUsdcOnArc(args: {
     amount: gapDecimal,
     destinationChain: 'Arc_Testnet',
     recipient: args.signerAddress,
+    journalContextRef: `prefund-arc:${args.tenantId}:${args.signerAddress}:${gapMicro.toString()}`,
+    journalContextKind: 'spend',
   });
   // Confirm by re-reading balance — guards against silent
   // attestation lag where spend returns success but the destination

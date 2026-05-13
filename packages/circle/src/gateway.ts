@@ -12,31 +12,39 @@
  *                    then gatewayMint on destination chain (one-shot)
  */
 
+import { env } from '@sendero/env';
 import {
+  type Address,
+  type Chain,
   createPublicClient,
   createWalletClient,
+  erc20Abi,
+  type Hex,
   http,
+  maxUint64,
+  type PrivateKeyAccount,
   pad,
   parseUnits,
   zeroAddress,
-  erc20Abi,
-  maxUint64,
-  type Chain,
-  type Hex,
-  type Address,
-  type PrivateKeyAccount,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import {
+  arbitrumSepolia,
   arcTestnet,
-  baseSepolia,
-  sepolia,
   avalancheFuji,
+  baseSepolia,
   optimismSepolia,
   polygonAmoy,
-  arbitrumSepolia,
+  sepolia,
 } from 'viem/chains';
-import { env } from '@sendero/env';
+
+import { createLogOnlyComplianceDecision } from './compliance';
+import {
+  createGatewayTransferIntent,
+  decimalUsdcToMicro,
+  markGatewayTransferIntent,
+} from './gateway-intent';
+import { recordSigningEvent } from './signing-event';
 
 // ───────────────────────────────────────────────────────────────────
 // Contract addresses (Circle Gateway testnet — identical on all EVM)
@@ -335,7 +343,7 @@ export async function queryUnifiedBalance(
   const usedOptionsObject = typeof depositor === 'object' && depositor !== null;
   const evmDepositor = usedOptionsObject
     ? depositor?.evm
-    : (depositor as Address | undefined) ?? treasuryAccount().address;
+    : ((depositor as Address | undefined) ?? treasuryAccount().address);
   const solanaDepositor = usedOptionsObject ? depositor?.solana : undefined;
 
   // Per-chain depositor map. Circle Gateway's /balances endpoint
@@ -455,6 +463,12 @@ export async function transferViaGateway(params: {
   recipient?: string;
   /** Optional per-tenant signer. Defaults to platform TREASURY_PRIVATE_KEY. */
   signer?: PrivateKeyAccount;
+  /** Step 2 shadow intent context. Observability only. */
+  intent?: {
+    tenantId: string;
+    gatewayTransferLogId?: string | null;
+    signerKind?: string;
+  };
 }): Promise<{
   burnSignature: Hex;
   /** EVM destination: 66-char tx hash. Solana destination: 88-char signature. */
@@ -477,6 +491,35 @@ export async function transferViaGateway(params: {
 
   const acct = params.signer ?? treasuryAccount();
   const value = parseUnits(params.amountUsdc, 6);
+  const amountMicroUsdc = decimalUsdcToMicro(params.amountUsdc);
+  const intentId = params.intent?.tenantId
+    ? await createGatewayTransferIntent({
+        tenantId: params.intent.tenantId,
+        gatewayTransferLogId: params.intent.gatewayTransferLogId ?? null,
+        signerKind: params.intent.signerKind ?? 'custodial-eoa',
+        sourceChain: params.from,
+        destinationChain: params.to,
+        amountMicroUsdc,
+        recipientAddress: params.recipient ?? acct.address,
+        metadata: { source: 'transferViaGateway' },
+      })
+    : null;
+  const complianceDecision = params.intent?.tenantId
+    ? await createLogOnlyComplianceDecision({
+        tenantId: params.intent.tenantId,
+        intentId,
+        recipientAddress: params.recipient ?? acct.address,
+        recipientChain: params.to,
+        amountMicroUsdc,
+        contextKind: 'gateway_transfer',
+        contextRef: params.intent.gatewayTransferLogId ?? intentId,
+        metadata: {
+          mode: 'log_only',
+          source: 'transferViaGateway',
+          gatewayTransferLogId: params.intent.gatewayTransferLogId ?? null,
+        },
+      })
+    : null;
 
   // Lazy-load Solana helpers only when the destination needs them. Keeps
   // EVM-only callers (the gateway_transfer MCP tool, App Kit ops) from
@@ -558,6 +601,11 @@ export async function transferViaGateway(params: {
     types: EIP712_TYPES,
     message: burnIntent,
   });
+  await markGatewayTransferIntent({
+    intentId,
+    state: 'burn_signed',
+    burnIntentSalt: burnIntent.spec.salt,
+  });
 
   // Serialize bigints for the API — Gateway expects decimal strings.
   const burnIntentWire = {
@@ -568,6 +616,17 @@ export async function transferViaGateway(params: {
       value: burnIntent.spec.value.toString(),
     },
   };
+  void recordSigningEvent({
+    signerKind: params.intent?.signerKind ?? 'custodial-eoa',
+    signerAddress: acct.address,
+    principalId: params.intent?.tenantId ?? acct.address,
+    intentId,
+    messageKind: 'eip712:burn-intent',
+    message: JSON.stringify(burnIntentWire),
+    signature: burnSignature,
+    kmsKeyVersion: 'unknown',
+    complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+  });
   const res = await fetch(`${GATEWAY_API}/transfer`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -580,9 +639,16 @@ export async function transferViaGateway(params: {
     attestation: Hex;
     signature: Hex;
   };
+  await markGatewayTransferIntent({
+    intentId,
+    state: 'burn_attested',
+    attestation,
+    apiSignature,
+  });
 
   // Dispatch the destination-side mint based on chain kind.
   if (isSolanaChain(dst) && solanaHelpers && solanaMintContext) {
+    await markGatewayTransferIntent({ intentId, state: 'mint_submitted' });
     const result = await solanaHelpers.mintOnSolana({
       attestation,
       operatorSignature: apiSignature,
@@ -590,6 +656,11 @@ export async function transferViaGateway(params: {
       recipientAta: solanaMintContext.recipientAta,
       recipientOwner: solanaMintContext.recipientOwner,
       needsAtaCreate: solanaMintContext.needsAtaCreate,
+    });
+    await markGatewayTransferIntent({
+      intentId,
+      state: 'mint_confirmed',
+      mintTxHash: result.txSignature,
     });
     return {
       burnSignature,
@@ -615,6 +686,7 @@ export async function transferViaGateway(params: {
     transport: http(dst.rpcUrl, { retryCount: 3, timeout: 15_000 }),
   });
   const dstPub = publicClientFor(dst);
+  await markGatewayTransferIntent({ intentId, state: 'mint_submitted' });
   const mintHash = await dstWallet.writeContract({
     address: GATEWAY_MINTER,
     abi: gatewayMinterAbi,
@@ -624,6 +696,11 @@ export async function transferViaGateway(params: {
     chain: dst.viemChain,
   });
   await dstPub.waitForTransactionReceipt({ hash: mintHash });
+  await markGatewayTransferIntent({
+    intentId,
+    state: 'mint_confirmed',
+    mintTxHash: mintHash,
+  });
 
   const explorerUrl =
     dst.kitName === 'Arc_Testnet'
@@ -646,6 +723,12 @@ export async function transferViaGatewayFromSources(params: {
   recipient?: string;
   /** Optional per-tenant signer. Defaults to platform TREASURY_PRIVATE_KEY. */
   signer?: PrivateKeyAccount;
+  /** Step 2 shadow intent context. Observability only. */
+  intent?: {
+    tenantId: string;
+    gatewayTransferLogId?: string | null;
+    signerKind?: string;
+  };
 }): Promise<{
   burnSignature: Hex;
   burnSignatures: Hex[];
@@ -664,6 +747,7 @@ export async function transferViaGatewayFromSources(params: {
       amountUsdc: params.sources[0].amountUsdc,
       recipient: params.recipient,
       signer: params.signer,
+      intent: params.intent,
     });
     return { ...result, burnSignatures: [result.burnSignature] };
   }
@@ -674,6 +758,38 @@ export async function transferViaGatewayFromSources(params: {
   }
 
   const acct = params.signer ?? treasuryAccount();
+  const amountMicroUsdc = params.sources.reduce(
+    (sum, source) => sum + decimalUsdcToMicro(source.amountUsdc),
+    0n
+  );
+  const intentId = params.intent?.tenantId
+    ? await createGatewayTransferIntent({
+        tenantId: params.intent.tenantId,
+        gatewayTransferLogId: params.intent.gatewayTransferLogId ?? null,
+        signerKind: params.intent.signerKind ?? 'custodial-eoa',
+        sourceChain: params.sources.map(source => source.from).join(','),
+        destinationChain: params.to,
+        amountMicroUsdc,
+        recipientAddress: params.recipient ?? acct.address,
+        metadata: { source: 'transferViaGatewayFromSources' },
+      })
+    : null;
+  const complianceDecision = params.intent?.tenantId
+    ? await createLogOnlyComplianceDecision({
+        tenantId: params.intent.tenantId,
+        intentId,
+        recipientAddress: params.recipient ?? acct.address,
+        recipientChain: params.to,
+        amountMicroUsdc,
+        contextKind: 'gateway_transfer',
+        contextRef: params.intent.gatewayTransferLogId ?? intentId,
+        metadata: {
+          mode: 'log_only',
+          source: 'transferViaGatewayFromSources',
+          gatewayTransferLogId: params.intent.gatewayTransferLogId ?? null,
+        },
+      })
+    : null;
   const solanaHelpers = isSolanaChain(dst) ? await import('./gateway-solana-mint') : null;
   let destinationContractEncoded: Hex;
   let destinationTokenEncoded: Hex;
@@ -760,6 +876,26 @@ export async function transferViaGatewayFromSources(params: {
       };
     })
   );
+  await markGatewayTransferIntent({
+    intentId,
+    state: 'burn_signed',
+    burnIntentSalt: signed.map(item => item.burnIntent.spec.salt).join(','),
+  });
+  await Promise.all(
+    signed.map(item =>
+      recordSigningEvent({
+        signerKind: params.intent?.signerKind ?? 'custodial-eoa',
+        signerAddress: acct.address,
+        principalId: params.intent?.tenantId ?? acct.address,
+        intentId,
+        messageKind: 'eip712:burn-intent',
+        message: JSON.stringify(item.burnIntent),
+        signature: item.signature,
+        kmsKeyVersion: 'unknown',
+        complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      })
+    )
+  );
 
   const res = await fetch(`${GATEWAY_API}/transfer`, {
     method: 'POST',
@@ -773,8 +909,15 @@ export async function transferViaGatewayFromSources(params: {
     attestation: Hex;
     signature: Hex;
   };
+  await markGatewayTransferIntent({
+    intentId,
+    state: 'burn_attested',
+    attestation,
+    apiSignature,
+  });
 
   if (isSolanaChain(dst) && solanaHelpers && solanaMintContext) {
+    await markGatewayTransferIntent({ intentId, state: 'mint_submitted' });
     const result = await solanaHelpers.mintOnSolana({
       attestation,
       operatorSignature: apiSignature,
@@ -782,6 +925,11 @@ export async function transferViaGatewayFromSources(params: {
       recipientAta: solanaMintContext.recipientAta,
       recipientOwner: solanaMintContext.recipientOwner,
       needsAtaCreate: solanaMintContext.needsAtaCreate,
+    });
+    await markGatewayTransferIntent({
+      intentId,
+      state: 'mint_confirmed',
+      mintTxHash: result.txSignature,
     });
     return {
       burnSignature: signed[0].signature,
@@ -805,6 +953,7 @@ export async function transferViaGatewayFromSources(params: {
     transport: http(dst.rpcUrl, { retryCount: 3, timeout: 15_000 }),
   });
   const dstPub = publicClientFor(dst);
+  await markGatewayTransferIntent({ intentId, state: 'mint_submitted' });
   const mintHash = await dstWallet.writeContract({
     address: GATEWAY_MINTER,
     abi: gatewayMinterAbi,
@@ -814,6 +963,11 @@ export async function transferViaGatewayFromSources(params: {
     chain: dst.viemChain,
   });
   await dstPub.waitForTransactionReceipt({ hash: mintHash });
+  await markGatewayTransferIntent({
+    intentId,
+    state: 'mint_confirmed',
+    mintTxHash: mintHash,
+  });
 
   const explorerUrl =
     dst.kitName === 'Arc_Testnet'

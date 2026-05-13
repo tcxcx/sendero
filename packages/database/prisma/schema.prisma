@@ -125,6 +125,37 @@ enum SupplierKind {
   other
 }
 
+enum JournalDirection {
+  debit
+  credit
+}
+
+enum JournalAsset {
+  USDC
+  EURC
+}
+
+enum GatewayTransferIntentState {
+  prepared
+  burn_signed
+  burn_attested
+  mint_submitted
+  mint_confirmed
+  mint_failed_retriable
+  mint_failed_terminal
+}
+
+enum ComplianceSanctionsResult {
+  allow
+  block
+  manual_review
+}
+
+enum SignerKekProvider {
+  env_v1 @map("env-v1")
+  kms_v1 @map("kms-v1")
+}
+
 enum SupplierVisibility {
   public
   tenant_private
@@ -387,7 +418,10 @@ model Tenant {
   solanaGatewaySigner          TenantSolanaGatewaySigner?
   gatewayConfig                TenantGatewayConfig?
   gatewayDeposits              GatewayDepositLog[]
+  gatewayTransferIntents       GatewayTransferIntent[]
   gatewayTransfers             GatewayTransferLog[]
+  journalEntries               JournalEntry[]
+  complianceDecisions          ComplianceDecision[]
   walletAccessLogs             WalletAccessLog[]
   travelerProfiles             TravelerProfile[]
   travelerTasteEntries         TravelerTasteEntry[]
@@ -512,6 +546,8 @@ model User {
   chatSessions           ChatSession[]         @relation("ChatSessionUser")
   handoffsAnswered       ChannelHandoff[]      @relation("ChannelHandoffAnsweredBy")
   gatewaySigner          UserGatewaySigner?
+  journalEntries         JournalEntry[]
+  complianceDecisions    ComplianceDecision[]
   moonpayTopUps          MoonPayTopUp[]
   moonpayOffRamps        MoonPayOffRamp[]
   travelerProfile        TravelerProfile?
@@ -1292,6 +1328,13 @@ model UserGatewaySigner {
   address             String   @unique
   encryptedPrivateKey String
   kekVersion          Int      @default(1)
+  kekProvider         SignerKekProvider @default(env_v1)
+  /// Step 5 KMS envelope. Binary JSON envelope containing AES-GCM
+  /// ciphertext + KMS-wrapped DEK. Dual-read keeps encryptedPrivateKey
+  /// as rollback fallback during canary.
+  newEnvelope         Bytes?
+  kmsKeyResource      String?
+  kmsKeyVersion       String?
   createdAt           DateTime @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 
@@ -1312,6 +1355,13 @@ model TenantGatewaySigner {
   /// KEK generation. Bumped on rotation; row decrypts under
   /// SENDERO_KEK_v{kekVersion} and re-encrypts under latest.
   kekVersion          Int      @default(1)
+  kekProvider         SignerKekProvider @default(env_v1)
+  /// Step 5 KMS envelope. Binary JSON envelope containing AES-GCM
+  /// ciphertext + KMS-wrapped DEK. Dual-read keeps encryptedPrivateKey
+  /// as rollback fallback during canary.
+  newEnvelope         Bytes?
+  kmsKeyResource      String?
+  kmsKeyVersion       String?
   createdAt           DateTime @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 
@@ -1474,10 +1524,119 @@ model GatewayTransferLog {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  intent GatewayTransferIntent?
+
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
   @@index([status, createdAt])
   @@map("gateway_transfer_logs")
+}
+
+/// Durable shadow state machine for outbound Gateway burn/mint transfers.
+/// Step 2 records current inline behavior only; it does not yet drive
+/// retries or replace GatewayTransferLog as the operator-facing index.
+model GatewayTransferIntent {
+  id                   String                     @id @default(uuid()) @db.Uuid
+  tenantId             String
+  gatewayTransferLogId String?                    @unique @db.Uuid
+  signerKind           String
+  sourceChain          String?
+  destinationChain     String
+  amountMicroUsdc      BigInt
+  recipientAddress     String
+  burnIntentSalt       String?
+  state                GatewayTransferIntentState @default(prepared)
+  attestation          String?
+  apiSignature         String?
+  burnTxHash           String?
+  mintTxHash           String?
+  failedReason         String?
+  metadata             Json?
+  createdAt            DateTime                   @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime                   @updatedAt @db.Timestamptz(6)
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gatewayTransferLog GatewayTransferLog? @relation(fields: [gatewayTransferLogId], references: [id], onDelete: SetNull)
+  signingEvents      SigningEvent[]
+  complianceDecisions ComplianceDecision[]
+
+  @@index([tenantId, state, createdAt])
+  @@index([state, updatedAt])
+  @@index([burnIntentSalt])
+  @@map("gateway_transfer_intents")
+}
+
+/// Log-only compliance gate record for pre-sign recipient screening.
+/// Step 4 writes synthetic allow decisions (`provider = 'none'`) so
+/// call sites already carry a complianceDecisionId before a KYT vendor
+/// is selected and wired behind this contract.
+model ComplianceDecision {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  intentId             String?                   @db.Uuid
+  tenantId             String
+  userId               String?
+  recipientAddress     String
+  recipientChain       String
+  amountMicroUsdc      BigInt
+  sanctionsResult      ComplianceSanctionsResult @default(allow)
+  riskScore            Decimal                   @default(0) @db.Decimal(5, 4)
+  provider             String                    @default("none")
+  providerRequestId    String
+  decidedAt            DateTime                  @default(now()) @db.Timestamptz(6)
+  expiresAt            DateTime                  @db.Timestamptz(6)
+  operatorOverrideId   String?
+  callerSurface        String?
+  callerUserId         String?
+  metadata             Json?
+  createdAt            DateTime                  @default(now()) @db.Timestamptz(6)
+
+  intent        GatewayTransferIntent? @relation(fields: [intentId], references: [id], onDelete: SetNull)
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user          User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  journalEntries JournalEntry[]
+  signingEvents  SigningEvent[]
+
+  @@index([tenantId, decidedAt(sort: Desc)])
+  @@index([tenantId, recipientAddress, decidedAt(sort: Desc)])
+  @@index([intentId])
+  @@index([expiresAt])
+  @@index([providerRequestId])
+  @@map("compliance_decisions")
+}
+
+/// Authoritative append-only record of Gateway-related signing and
+/// signer-access events. Step 3 records direct Gateway burn signatures
+/// plus signer cache/decrypt/create access events; later KMS/TEE steps
+/// enrich kmsKeyVersion and attestation fields.
+model SigningEvent {
+  id                   String   @id @default(uuid()) @db.Uuid
+  signerKind           String
+  signerAddress        String
+  principalId          String
+  callerSurface        String
+  callerUserId         String?
+  intentId             String?  @db.Uuid
+  messageKind          String
+  messageHash          Bytes
+  signature            Bytes
+  kmsKeyVersion        String
+  attestedImageDigest  String?
+  slsaSourceCommit     String?
+  complianceDecisionId String?  @db.Uuid
+  approvalReceiptId    String?  @db.Uuid
+  revocationEpoch      Int      @default(0)
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+
+  intent             GatewayTransferIntent? @relation(fields: [intentId], references: [id], onDelete: SetNull)
+  complianceDecision ComplianceDecision?    @relation(fields: [complianceDecisionId], references: [id], onDelete: SetNull)
+
+  @@index([principalId, createdAt(sort: Desc)])
+  @@index([signerAddress, createdAt(sort: Desc)])
+  @@index([intentId])
+  @@index([complianceDecisionId])
+  @@index([messageHash])
+  @@index([createdAt])
+  @@map("signing_events")
 }
 
 /// Append-only audit trail of every Gateway-signer key-material access.
@@ -1522,6 +1681,49 @@ model WalletAccessLog {
   @@index([tenantId, occurredAt])
   @@index([occurredAt])
   @@map("wallet_access_logs")
+}
+
+/// Immutable double-entry journal for Gateway and settlement money
+/// movement. Shadow-written first; becomes the bookkeeping authority
+/// only after the migration shadow period is clean.
+model JournalEntry {
+  id                   String           @id @default(uuid()) @db.Uuid
+  /// Groups all legs for one logical operation. A deferred Postgres
+  /// constraint trigger asserts debits equal credits at commit.
+  transactionId        String           @db.Uuid
+  /// Stable ordering within a transaction and idempotency guard for
+  /// retried shadow writes.
+  legIndex             Int
+  tenantId             String
+  userId               String?
+  /// Nullable for Step 1. Step 4 wires ComplianceDecision and later
+  /// makes this mandatory for value-moving paths.
+  complianceDecisionId String?          @db.Uuid
+  /// Chart-of-accounts string. Enforced by SQL CHECK in the migration:
+  /// asset:gateway:<chain>, asset:dcw:<chain>,
+  /// liability:user:<userId>, liability:tenant:<tenantId>,
+  /// revenue:fee, expense:gas.
+  account              String
+  direction            JournalDirection
+  /// Positive micro-USDC amount. Direction carries debit/credit sign.
+  amountMicroUsdc      BigInt
+  asset                JournalAsset     @default(USDC)
+  contextKind          String
+  contextRef           String
+  metadata             Json?
+  createdAt            DateTime         @default(now()) @db.Timestamptz(6)
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user               User?               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  complianceDecision ComplianceDecision? @relation(fields: [complianceDecisionId], references: [id], onDelete: Restrict)
+
+  @@unique([transactionId, legIndex])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([tenantId, account, createdAt(sort: Desc)])
+  @@index([transactionId])
+  @@index([contextKind, contextRef])
+  @@index([complianceDecisionId])
+  @@map("journal_entries")
 }
 
 /// Append-only nanopayment ledger. Mirrors packages/tools/src/meter.ts

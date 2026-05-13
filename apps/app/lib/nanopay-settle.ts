@@ -141,6 +141,9 @@ export function makeSettleFn(): SettleFn {
         amount,
         destinationChain: 'Arc_Testnet',
         recipient: to,
+        gatewayTransferLogId: log.id,
+        journalContextRef: log.id,
+        journalContextKind: 'spend',
       });
       await prisma.gatewayTransferLog.update({
         where: { id: log.id },
