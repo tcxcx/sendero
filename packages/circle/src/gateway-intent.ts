@@ -43,25 +43,37 @@ export async function createGatewayTransferIntent(
   args: CreateGatewayTransferIntentArgs
 ): Promise<string | null> {
   if (!args.tenantId || args.amountMicroUsdc <= 0n) return null;
+  const data = {
+    tenantId: args.tenantId,
+    gatewayTransferLogId: args.gatewayTransferLogId ?? null,
+    signerKind: args.signerKind,
+    sourceChain: args.sourceChain ?? null,
+    destinationChain: args.destinationChain,
+    amountMicroUsdc: args.amountMicroUsdc,
+    recipientAddress: args.recipientAddress,
+    burnIntentSalt: args.burnIntentSalt ?? null,
+    metadata: args.metadata ?? undefined,
+  };
   try {
-    const row = await prisma.gatewayTransferIntent.upsert({
-      where: args.gatewayTransferLogId
-        ? { gatewayTransferLogId: args.gatewayTransferLogId }
-        : { id: '00000000-0000-0000-0000-000000000000' },
-      create: {
-        tenantId: args.tenantId,
-        gatewayTransferLogId: args.gatewayTransferLogId ?? null,
-        signerKind: args.signerKind,
-        sourceChain: args.sourceChain ?? null,
-        destinationChain: args.destinationChain,
-        amountMicroUsdc: args.amountMicroUsdc,
-        recipientAddress: args.recipientAddress,
-        burnIntentSalt: args.burnIntentSalt ?? null,
-        metadata: args.metadata ?? undefined,
-      },
-      update: {},
-      select: { id: true },
-    });
+    // When a gatewayTransferLogId is supplied we upsert on its UNIQUE
+    // index so retries of the same transfer log idempotently resolve to
+    // the same intent row. When it's absent (e.g. ad-hoc `transfer_via_gateway`
+    // tool invocations, prefund spends) every call is a fresh intent and
+    // we MUST create a new row — never reuse a sentinel id, otherwise
+    // concurrent callers without a log id collide on a single row and the
+    // second caller's `update` branch silently mutates the first caller's
+    // intent.
+    const row = args.gatewayTransferLogId
+      ? await prisma.gatewayTransferIntent.upsert({
+          where: { gatewayTransferLogId: args.gatewayTransferLogId },
+          create: data,
+          update: {},
+          select: { id: true },
+        })
+      : await prisma.gatewayTransferIntent.create({
+          data,
+          select: { id: true },
+        });
     return row.id;
   } catch (err) {
     console.warn('[gateway-intent] create failed (non-fatal)', {
