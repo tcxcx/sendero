@@ -17,5 +17,5 @@
     { "path": "/api/cron/post-trip-feedback", "schedule": "0 * * * *" },
     { "path": "/api/cron/passport-expiry-reminder", "schedule": "0 12 * * 1" }
   ],
-  "ignoreCommand": "bash -c '[[ \"$VERCEL_GIT_COMMIT_REF\" == \"main\" || \"$VERCEL_GIT_COMMIT_REF\" == \"development\" ]] && exec npx turbo-ignore @sendero/app; exit 0'"
+  "ignoreCommand": "bash -c 'if [[ \"$VERCEL_GIT_COMMIT_REF\" == \"preview\" ]]; then exit 1; fi; if [[ \"$VERCEL_GIT_COMMIT_REF\" == \"main\" || \"$VERCEL_GIT_COMMIT_REF\" == \"development\" ]]; then exec npx turbo-ignore @sendero/app; fi; exit 0'"
 }
