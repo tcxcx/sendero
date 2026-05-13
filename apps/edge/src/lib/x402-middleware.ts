@@ -243,7 +243,10 @@ export function requirePayment(toolName: string): MiddlewareHandler {
     //    `matchAccepted` above so the facilitator sees the exact bytes the
     //    buyer signed.
     try {
-      const settle = await facilitator.settle(payload as unknown as Parameters<typeof facilitator.settle>[0], matched);
+      const settle = await facilitator.settle(
+        payload as unknown as Parameters<typeof facilitator.settle>[0],
+        matched
+      );
       if (!settle.success) {
         logMeter({
           at: Date.now(),

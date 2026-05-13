@@ -54,6 +54,7 @@ import { appendTripEvent, type TripEvent } from '@/lib/trip-events';
 import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
 import { filterPublicTools, toolList } from '@sendero/tools';
 import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
+import { buildBoundExternalWorkflowTools } from '@/lib/external-workflow-tools';
 import { buildStartWorkflowTool } from '@/lib/start-workflow-tool';
 import { z } from 'zod';
 
@@ -308,7 +309,16 @@ export async function POST(req: NextRequest) {
           }),
         ]
       : surfacedTools;
-  const scopedTools = filterToolsByScopes(channelToolList, grantedScopes);
+  // External API-key callers get the runtime-bound `sendero_*` workflow
+  // tools (one per public WORKFLOW_CATALOG entry) + `resume_workflow`.
+  // Internal trusted callers (operator console, channel webhooks) already
+  // have the richer `start_workflow` dispatcher above and don't need the
+  // per-workflow fan-out. Scope filter below drops tools the API key
+  // doesn't carry (default prod keys can only see read-tier workflows).
+  const externalToolList = apiKey
+    ? [...channelToolList, ...buildBoundExternalWorkflowTools({ apiKeyId: apiKey.keyId })]
+    : channelToolList;
+  const scopedTools = filterToolsByScopes(externalToolList, grantedScopes);
 
   // Narrow the zod-inferred shape to the AgentMediaAttachment contract —
   // (toolCtx assembly + buildAiSdkTools call moved below the payer

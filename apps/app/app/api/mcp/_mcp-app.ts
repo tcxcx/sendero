@@ -22,12 +22,20 @@ import type { ResolvedApiKey } from '@/lib/api-key-auth';
 // provisioning, tenant-admin actions) are stripped here. The web
 // console agent at /api/chat consumes the canonical registry directly
 // and sees everything; only outward-facing surfaces filter.
+import { buildBoundExternalWorkflowTools } from '@/lib/external-workflow-tools';
+
 const PUBLIC_TOOLS = filterPublicTools(toolList);
+
+// Workflow tools advertised in catalog discovery use a key-less binding
+// (no `apiKeyId`) — fine for `tools/list` which only reads name + schema.
+// `tools/call` rebuilds per-request with the resolved key id so paused
+// sessions land under a stable subject across calls.
+const DISCOVERY_WORKFLOW_TOOLS = buildBoundExternalWorkflowTools({});
 
 // Tools/list is identity-free (names + schemas only), so a single
 // module-level catalog built with no context serves every discovery.
 // tools/call rebuilds the catalog per-request with the caller's ctx.
-const discoveryCatalog = buildMcpCatalog(PUBLIC_TOOLS);
+const discoveryCatalog = buildMcpCatalog([...PUBLIC_TOOLS, ...DISCOVERY_WORKFLOW_TOOLS]);
 
 interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -153,7 +161,11 @@ function buildRequestCatalog(resolved: ResolvedApiKey): Record<string, McpToolEn
       effectiveKeyType: resolved.effectiveKeyType,
     },
   };
-  return buildMcpCatalog(PUBLIC_TOOLS, ctx);
+  // Per-request: bind workflow tools to the resolved API key id so a
+  // paused workflow keys its Session under the same subject across the
+  // initial start + any later `resume_workflow` calls from the same key.
+  const requestWorkflowTools = buildBoundExternalWorkflowTools({ apiKeyId: resolved.keyId });
+  return buildMcpCatalog([...PUBLIC_TOOLS, ...requestWorkflowTools], ctx);
 }
 
 export const mcpApp = new Hono()
