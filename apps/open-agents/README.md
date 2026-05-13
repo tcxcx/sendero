@@ -1,0 +1,324 @@
+# Open Agents
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?project-name=open-agents&repository-name=open-agents&repository-url=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fopen-agents&demo-title=Open+Agents&demo-description=Open-source+reference+app+for+building+and+running+background+coding+agents+on+Vercel.&demo-url=https%3A%2F%2Fopen-agents.dev%2F&env=POSTGRES_URL%2CBETTER_AUTH_SECRET%2CNEXT_PUBLIC_VERCEL_APP_CLIENT_ID%2CVERCEL_APP_CLIENT_SECRET%2CNEXT_PUBLIC_GITHUB_CLIENT_ID%2CGITHUB_CLIENT_SECRET%2CGITHUB_APP_ID%2CGITHUB_APP_PRIVATE_KEY%2CNEXT_PUBLIC_GITHUB_APP_SLUG%2CGITHUB_WEBHOOK_SECRET&envDescription=Neon+can+provide+POSTGRES_URL+automatically.+Generate+BETTER_AUTH_SECRET+yourself%2C+then+add+your+Vercel+OAuth+and+GitHub+App+credentials+for+a+full+deployment.&products=%255B%257B%2522type%2522%253A%2522integration%2522%252C%2522protocol%2522%253A%2522storage%2522%252C%2522productSlug%2522%253A%2522neon%2522%252C%2522integrationSlug%2522%253A%2522neon%2522%257D%252C%257B%2522type%2522%253A%2522integration%2522%252C%2522protocol%2522%253A%2522storage%2522%252C%2522productSlug%2522%253A%2522upstash-kv%2522%252C%2522integrationSlug%2522%253A%2522upstash%2522%257D%255D&skippable-integrations=1)
+
+Open Agents is an open-source reference app for building and running background coding agents on Vercel. It includes the web UI, the agent runtime, sandbox orchestration, and the GitHub integration needed to go from prompt to code changes without keeping your laptop involved.
+
+The repo is meant to be forked and adapted, not treated as a black box.
+
+## What it is
+
+Open Agents is a three-layer system:
+
+```text
+Web -> Agent workflow -> Sandbox VM
+```
+
+- The web app handles auth, sessions, chat, and streaming UI.
+- The agent runs as a durable workflow on Vercel.
+- The sandbox is the execution environment: filesystem, shell, git, dev servers, and preview ports.
+
+### The key architectural decision: the agent is not the sandbox
+
+The agent does not run inside the VM. It runs outside the sandbox and interacts with it through tools like file reads, edits, search, and shell commands.
+
+That separation is the main point of the project:
+
+- agent execution is not tied to a single request lifecycle
+- sandbox lifecycle can hibernate and resume independently
+- model/provider choices and sandbox implementation can evolve separately
+- the VM stays a plain execution environment instead of becoming the control plane
+
+## Current capabilities
+
+- chat-driven coding agent with file, search, shell, task, skill, and web tools
+- durable multi-step execution with Workflow SDK-backed runs, streaming, and cancellation
+- isolated Vercel sandboxes with snapshot-based resume
+- repo cloning and branch work inside the sandbox
+- optional auto-commit, push, and PR creation after a successful run
+- session sharing via read-only links
+- optional voice input via ElevenLabs transcription
+
+## Runtime notes
+
+A few details that matter for understanding the current implementation:
+
+- Chat requests start a workflow run instead of executing the agent inline.
+- Each agent turn can continue across many persisted workflow steps.
+- Active runs can be resumed by reconnecting to the stream for the existing workflow.
+- Sandboxes expose ports `3000`, `5173`, `4321`, and `8000`, can optionally use a configured base snapshot, and hibernate after inactivity.
+- Auto-commit and auto-PR are supported, but they are preference-driven features, not always-on behavior.
+
+## Environment variables
+
+See `apps/web/.env.example` for the full list. Summary:
+
+### Minimum runtime
+
+```env
+POSTGRES_URL=
+BETTER_AUTH_SECRET=
+```
+
+### Required for sign-in (Vercel OAuth)
+
+```env
+NEXT_PUBLIC_VERCEL_APP_CLIENT_ID=
+VERCEL_APP_CLIENT_SECRET=
+```
+
+### Required for GitHub repo access, pushes, and PRs
+
+```env
+NEXT_PUBLIC_GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY=
+NEXT_PUBLIC_GITHUB_APP_SLUG=
+GITHUB_WEBHOOK_SECRET=
+```
+
+### Optional
+
+```env
+REDIS_URL=
+KV_URL=
+OPEN_AGENTS_RESOURCE_PROFILE=
+VERCEL_PROJECT_PRODUCTION_URL=
+NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL=
+VERCEL_SANDBOX_BASE_SNAPSHOT_ID=
+ELEVENLABS_API_KEY=
+```
+
+- `REDIS_URL` / `KV_URL`: optional skills metadata cache (falls back to in-memory when not configured).
+- `OPEN_AGENTS_RESOURCE_PROFILE`: optional deployment resource profile. Set to `hobby` to use Hobby-compatible defaults for chat and sandbox resources; leave unset for standard behavior.
+- `VERCEL_PROJECT_PRODUCTION_URL` / `NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL`: canonical production URL for metadata and some callback behavior.
+- `VERCEL_SANDBOX_BASE_SNAPSHOT_ID`: optional base snapshot for fresh sandboxes. If unset, sandboxes start from Vercel's standard Sandbox runtime. Use a snapshot created in/accessible to your own Vercel scope.
+- `ELEVENLABS_API_KEY`: voice transcription.
+
+## Deploy your own copy on Vercel
+
+1. Fork this repo.
+2. Import the repo into Vercel. Neon Postgres is auto-provisioned if you use the deploy button above.
+3. Generate a secret for session signing:
+
+   ```bash
+   openssl rand -base64 32   # BETTER_AUTH_SECRET
+   ```
+
+4. Add env vars in Vercel project settings:
+
+   ```env
+   POSTGRES_URL=
+   BETTER_AUTH_SECRET=
+   ```
+
+5. Deploy once to get a stable production URL.
+6. Create a Vercel OAuth app with callback URL:
+
+   ```text
+   https://YOUR_DOMAIN/api/auth/callback/vercel
+   ```
+
+7. Add these env vars and redeploy:
+
+   ```env
+   NEXT_PUBLIC_VERCEL_APP_CLIENT_ID=
+   VERCEL_APP_CLIENT_SECRET=
+   ```
+
+8. If you want the full GitHub-enabled coding-agent flow, create a GitHub App using:
+
+   - Homepage URL: `https://YOUR_DOMAIN`
+   - Callback URL: `https://YOUR_DOMAIN/api/auth/callback/github`
+   - Setup URL: `https://YOUR_DOMAIN/api/github/app/callback`
+
+   In the GitHub App settings:
+   - use the GitHub App's Client ID and Client Secret for `NEXT_PUBLIC_GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`
+   - make the app public if you want org installs to work cleanly
+
+9. Add the GitHub App env vars and redeploy.
+10. Optionally add Redis/KV, `OPEN_AGENTS_RESOURCE_PROFILE=hobby` for Hobby-compatible resource defaults, the canonical production URL vars, and your own `VERCEL_SANDBOX_BASE_SNAPSHOT_ID` if you want fresh sandboxes to start from a preconfigured image.
+
+## Local setup
+
+1. Install dependencies:
+
+   ```bash
+   bun install
+   ```
+
+2. Create your local env file:
+
+   ```bash
+   cp apps/web/.env.example apps/web/.env
+   ```
+
+3. Fill in the required values in `apps/web/.env`.
+4. Start the app:
+
+   ```bash
+   bun run web
+   ```
+
+If you already have a linked Vercel project, you can pull env vars locally with `vc env pull`.
+
+## OAuth and integration setup
+
+### Vercel OAuth
+
+Authentication is handled by [Better Auth](https://www.better-auth.com/) with Vercel and GitHub as social providers. All auth routes are served from the `/api/auth/[...all]` catchall.
+
+Create a Vercel OAuth app and use this callback:
+
+```text
+https://YOUR_DOMAIN/api/auth/callback/vercel
+```
+
+For local development, use:
+
+```text
+http://localhost:3000/api/auth/callback/vercel
+```
+
+Then set:
+
+```env
+NEXT_PUBLIC_VERCEL_APP_CLIENT_ID=...
+VERCEL_APP_CLIENT_SECRET=...
+```
+
+### GitHub App
+
+You do not need a separate GitHub OAuth app. Open Agents uses the GitHub App's OAuth credentials as a Better Auth social provider, plus the App's installation tokens for repo access.
+
+Create a GitHub App for installation-based repo access and configure:
+
+- Homepage URL: `https://YOUR_DOMAIN`
+- Callback URL: `https://YOUR_DOMAIN/api/auth/callback/github`
+- Setup URL: `https://YOUR_DOMAIN/api/github/app/callback`
+- make the app public if you want org installs to work cleanly
+
+For local development, use `http://localhost:3000` as the homepage URL, `http://localhost:3000/api/auth/callback/github` as the callback URL, and `http://localhost:3000/api/github/app/callback` as the setup URL.
+
+Then set:
+
+```env
+NEXT_PUBLIC_GITHUB_CLIENT_ID=...   # GitHub App Client ID
+GITHUB_CLIENT_SECRET=...           # GitHub App Client Secret
+GITHUB_APP_ID=...
+GITHUB_APP_PRIVATE_KEY=...
+NEXT_PUBLIC_GITHUB_APP_SLUG=...
+GITHUB_WEBHOOK_SECRET=...
+```
+
+`GITHUB_APP_PRIVATE_KEY` can be stored as the PEM contents with escaped newlines or as a base64-encoded PEM.
+
+## Useful commands
+
+```bash
+bun run web                # run dev server
+bun run check              # lint + format check
+bun run fix                # lint + format fix
+bun run typecheck          # typecheck all packages
+bun run ci                 # full CI: check, typecheck, tests, migration check
+bun run sandbox:snapshot-base  # refresh sandbox base snapshot
+```
+
+## Repo layout
+
+```text
+apps/web         Next.js app, workflows, auth, chat UI
+packages/agent   agent implementation, tools, subagents, skills
+packages/sandbox sandbox abstraction and Vercel sandbox integration
+packages/shared  shared utilities
+```
+
+## Agent Gaps — Raj demand-driven loop
+
+When a session terminates in a recoverable failure, the agent files its own bug ticket. The operator triages those tickets on a kanban board at `/agent-gaps`; dragging a card to **In Progress** with auto-execute enabled dispatches a fresh sandbox run whose prompt is pre-loaded with the prior resolution as a constraint.
+
+![How AI Agents Work](docs/agent-gaps/assets/how-ai-agents-work.png)
+
+Every pillar in that diagram has a concrete home in this app:
+
+| Pillar | Implementation |
+|---|---|
+| Human Control | `app/agent-gaps` kanban — authenticated operator only |
+| Delegate Tasks | `lib/agent-gaps/mutations.ts` `moveCardOnBoard` → `POST /api/sendero/dispatch` |
+| Tools | Vercel Sandbox (`packages/sandbox`) + `@open-agents/agent` |
+| Autonomous Action | `auto_execute_on_in_progress` flag on each row — drag = dispatch |
+| Memory | `knowledge_gaps` table in OA's own Postgres (Drizzle), dedup'd by `sha256(kind\|tool\|hypothesis_norm)` |
+| Reactivity | `findResolvedGap()` injects "Known fix from prior run" into the next prompt |
+| Environment | The repo, the sandbox VM, the PR surface, `apps/web` itself |
+
+The arrow back from Environment to Memory is the closed loop. Most agent demos stop at Tools → Environment.
+
+### The Raj demand-driven approach
+
+Most agent context strategies are *push*: dump the wiki into a vector DB, pile on MCP servers, hope the model figures it out. That approach caps around 30% accuracy on real institutional knowledge.
+
+Raj Kapadia's pattern flips it to **pull**:
+
+1. Let the agent fail.
+2. Capture *what it needed* — error, attempted tool, hypothesis, the field it expected.
+3. Triage the gap once. Close it with a PR URL + `must_mention[]` tokens.
+4. The next run on a similar blueprint pre-reads the resolution and threads it into the prompt as a constraint.
+
+Each iteration compounds. The prompt slab + tool catalog get smarter every session, not just less broken.
+
+The closed loop in code:
+
+```
+session ends → /api/agent-gaps/ingest writes/dedups a knowledge_gaps row →
+  card appears in Backlog →
+  operator flips Auto-execute and drags to In Progress →
+  moveCardOnBoard() synthesizes a blueprint and POSTs /api/sendero/dispatch →
+  buildSelfHealPreamble injects prior fix (findResolvedGap) →
+  agent runs in a fresh sandbox with the constraint pre-loaded →
+  callback writes terminal state → card moves to Review (success) or back to Backlog (fail, occurrence_count++)
+```
+
+### Surfaces
+
+| Path | Purpose |
+|---|---|
+| `app/agent-gaps/page.tsx` | Server component — auth gate + initial board state |
+| `app/agent-gaps/agent-gaps-board-client.tsx` | Client kanban + drag-and-drop + optimistic updates |
+| `app/agent-gaps/agent-gap-card.tsx` | Card with severity pill, occurrence count, auto-execute toggle |
+| `app/agent-gaps/agent-gap-detail-sheet.tsx` | Detail sheet on click — hypothesis, error, must_mention chips, PR links |
+| `components/agent-gaps/kanban.tsx` | Minimal dnd-kit primitives (KanbanRoot/Column/Item/SortableContext) |
+| `lib/agent-gaps/{queries,mutations,blueprint,normalize}.ts` | Pure Drizzle + crypto, no external services |
+| `app/api/agent-gaps/route.ts` | `GET` board state |
+| `app/api/agent-gaps/[gapId]/move/route.ts` | `POST` move card; fires dispatch if auto-execute |
+| `app/api/agent-gaps/[gapId]/auto-execute/route.ts` | `POST` toggle |
+| `app/api/agent-gaps/ingest/route.ts` | `POST` from minion runners — writes/dedups gaps + progresses originating card |
+| `lib/db/schema.ts` `knowledgeGaps` | Drizzle table + 3 enum string unions |
+| `lib/db/migrations/0037_late_eternals.sql` | Generated migration |
+| `.agents/skills/raj-demand-driven-context/SKILL.md` | Native skill installed for in-VM consumption |
+
+### Env vars
+
+```env
+# Required for ingest auth + outbound dispatch
+OPEN_AGENTS_CALLBACK_SECRET=         # bearer token for /api/agent-gaps/ingest
+OPEN_AGENTS_SENDERO_INGRESS_SECRET=     # bearer token to call /api/sendero/dispatch
+AGENT_GAPS_DEFAULT_REPO_SLUG=        # optional fallback "owner/name" when a gap has no repo_slug
+
+# Optional override; defaults to http://localhost:3000 for self-dispatch
+OPEN_AGENTS_INTERNAL_URL=
+```
+
+### Inspiration & primary sources
+
+- **Raj Kapadia — "Demand-Driven Context for AI Agents"**: https://www.youtube.com/watch?v=_QAVExf_1uw
+- **Stripe Minions** — one-shot end-to-end coding agents: https://stripe.dev/blog/minions-stripes-one-shot-end-to-end-coding-agents
+- **Ramp — Why we built our background agent**: https://builders.ramp.com/post/why-we-built-our-background-agent
+- **Vercel AI SDK 6**: https://vercel.com/blog/ai-sdk-6
+- **Vercel AI SDK docs**: https://ai-sdk.dev/docs/introduction
+- **How to build AI agents with Vercel and the AI SDK**: https://vercel.com/kb/guide/how-to-build-ai-agents-with-vercel-and-the-ai-sdk
+- **Vercel Agent**: https://vercel.com/docs/agent
+- **Vercel Sandbox SDK Reference**: https://vercel.com/docs/vercel-sandbox/sdk-reference
+- **Building an agent with OpenAI Agents SDK and Vercel Sandbox**: https://vercel.com/kb/guide/building-an-agent-with-openai-agents-sdk-and-vercel-sandbox
+
+The native skill at `.agents/skills/raj-demand-driven-context/SKILL.md` is documentation the in-VM agent reads when it lands a self-heal preamble in its prompt — it tells the agent how to honor the constraint and how to phrase its own structured failure report when it gets stuck.
