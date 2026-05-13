@@ -17,6 +17,11 @@ workers_dev = true
 preview_urls = true
 
 [vars]
+# Production worker port at the CF Workers Builds runtime. NOT the local-dev
+# port — local dev runs via `bun run --cwd apps/edge dev` on :3021 (see
+# package.json scripts.dev). DO NOT `wrangler dev` against this config
+# locally without overriding `--port`: it would bind 8787 which is also
+# `@bu/shiva`'s local-dev port (desk-v1). See docs/local-dev-ports.md.
 PORT = "8787"
 # Force Prisma's Neon driver adapter — module-top `makeClient()` otherwise
 # falls back to the Node path and crashes on Worker boot.
