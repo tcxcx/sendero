@@ -237,6 +237,15 @@ export async function runReportKnowledgeGap(
     reportedByUserId: ctx?.traveler?.userId ?? null,
   });
 
+  // Fire-and-forget mirror to Sendero Minions kanban board (direction A
+  // of the agent-gaps seam). The local Postgres KnowledgeGap row is the
+  // authority for scanner / regression replay; the mirror exists so
+  // operators can drag the same gap on the Minions Kanban and trigger
+  // auto-execute. Failures here never affect the agent turn.
+  void mirrorToAgentGapsBoard(input).catch(() => {
+    /* swallowed — local row is source of truth */
+  });
+
   if (result.isNew) {
     return {
       status: 'reported',
@@ -251,6 +260,53 @@ export async function runReportKnowledgeGap(
     occurrenceCount: result.occurrenceCount,
     message: `This gap has been seen ${result.occurrenceCount} times. Severity: ${severity}.`,
   };
+}
+
+// ── Sendero Minions mirror — fire-and-forget direction-A POST ────────
+
+const MIRROR_TIMEOUT_MS = 2000;
+
+/**
+ * Mirror a gap report to the Sendero Minions Kanban board via the
+ * shared HTTP seam. Best-effort, fail-soft, single retry-less attempt.
+ *
+ * The local Postgres KnowledgeGap row remains the source of truth for
+ * the Sendero scanner and regression replay; the mirror exists so
+ * operators get a draggable Kanban card on the Minions side and can
+ * flip auto-execute to dispatch a sandbox session.
+ */
+async function mirrorToAgentGapsBoard(input: ReportKnowledgeGapInput): Promise<void> {
+  const baseUrl = process.env.AGENT_GAPS_BASE_URL;
+  const secret = process.env.AGENT_GAPS_INGEST_SECRET;
+  if (!baseUrl || !secret) return;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MIRROR_TIMEOUT_MS);
+
+  try {
+    await fetch(new URL('/api/agent-gaps/ingest', baseUrl), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${secret}`,
+      },
+      body: JSON.stringify({
+        kind: input.kind,
+        toolName: input.toolName,
+        errorMessage: input.errorMessage,
+        attemptedInput: input.attemptedInput,
+        hypothesis: input.hypothesis,
+        suggestedFix: input.suggestedFix,
+        blockingPr: input.blockingTraveler ?? false,
+        surface: input.surface ?? input.channelKind ?? 'sendero-agent-turn',
+      }),
+      signal: controller.signal,
+    });
+  } catch {
+    // Intentional — caller in runReportKnowledgeGap is awaiting nothing.
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ── Tool registration ────────────────────────────────────────────────
