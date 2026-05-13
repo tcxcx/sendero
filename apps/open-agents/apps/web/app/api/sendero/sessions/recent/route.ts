@@ -1,5 +1,5 @@
-// BUFI ingress: list-recent bot-user sessions for the morning digest cron.
-// Same shared Bearer secret as /api/bufi/dispatch.
+// SENDERO ingress: list-recent bot-user sessions for the morning digest cron.
+// Same shared Bearer secret as /api/sendero/dispatch.
 
 import crypto from 'node:crypto';
 import { and, eq, gte } from 'drizzle-orm';
@@ -7,10 +7,10 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { sessions } from '@/lib/db/schema';
 
-const BUFI_BOT_USER_ID = 'bufi-bridge-bot';
+const SENDERO_BOT_USER_ID = 'sendero-bridge-bot';
 
 function verifyBufiIngress(req: NextRequest): boolean {
-  const secret = process.env.OPEN_AGENTS_BUFI_INGRESS_SECRET;
+  const secret = process.env.OPEN_AGENTS_SENDERO_INGRESS_SECRET;
   if (!secret) return false;
   const auth = req.headers.get('authorization');
   if (!auth) return false;
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       createdAt: sessions.createdAt,
     })
     .from(sessions)
-    .where(and(eq(sessions.userId, BUFI_BOT_USER_ID), gte(sessions.createdAt, sinceDate)))
+    .where(and(eq(sessions.userId, SENDERO_BOT_USER_ID), gte(sessions.createdAt, sinceDate)))
     .limit(50);
 
   return NextResponse.json(rows);

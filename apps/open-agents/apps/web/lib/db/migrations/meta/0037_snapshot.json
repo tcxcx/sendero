@@ -921,20 +921,20 @@
           "primaryKey": false,
           "notNull": false
         },
-        "bufi_callback_url": {
-          "name": "bufi_callback_url",
+        "sendero_callback_url": {
+          "name": "sendero_callback_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "bufi_callback_secret": {
-          "name": "bufi_callback_secret",
+        "sendero_callback_secret": {
+          "name": "sendero_callback_secret",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "bufi_callback_fired_at": {
-          "name": "bufi_callback_fired_at",
+        "sendero_callback_fired_at": {
+          "name": "sendero_callback_fired_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false

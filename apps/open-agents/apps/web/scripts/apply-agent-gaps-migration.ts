@@ -3,7 +3,7 @@
  * One-shot apply of 0037_late_eternals.sql (knowledge_gaps table).
  *
  * Bypasses the Drizzle migration tracker because earlier migrations in
- * the journal conflict with the current DB state (sessions.bufi_callback_url
+ * the journal conflict with the current DB state (sessions.sendero_callback_url
  * already exists). This script is idempotent — uses IF NOT EXISTS guards.
  */
 
@@ -27,13 +27,13 @@ const sqlPath = join(
 );
 const raw = readFileSync(sqlPath, "utf8");
 
-// drizzle-kit folded three sessions.bufi_callback_* ALTERs into our 0037
+// drizzle-kit folded three sessions.sendero_callback_* ALTERs into our 0037
 // because the migration journal lost track of them (they already exist in
 // DB). Strip those — they're pre-existing drift, not new schema.
 const stripped = raw
   .split("--> statement-breakpoint")
   .filter(
-    (stmt) => !/ALTER TABLE "sessions" ADD COLUMN "bufi_callback/.test(stmt),
+    (stmt) => !/ALTER TABLE "sessions" ADD COLUMN "sendero_callback/.test(stmt),
   )
   .join("--> statement-breakpoint");
 

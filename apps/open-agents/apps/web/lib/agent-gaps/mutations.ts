@@ -3,7 +3,7 @@
  * beyond OA's own database.
  *
  * The auto-execute path on `moveCardOnBoard` fires the OA agent dispatch
- * directly (no BUFI hop). See env vars at the top of `dispatchGapToMinion`.
+ * directly (no SENDERO hop). See env vars at the top of `dispatchGapToMinion`.
  */
 
 import crypto from "node:crypto";
@@ -224,9 +224,9 @@ async function dispatchGapToMinion(
   // this to a remote OA instance.
   const baseUrl =
     process.env.OPEN_AGENTS_INTERNAL_URL ?? "http://localhost:3000";
-  const secret = process.env.OPEN_AGENTS_BUFI_INGRESS_SECRET;
+  const secret = process.env.OPEN_AGENTS_SENDERO_INGRESS_SECRET;
   if (!secret) {
-    return { ok: false, error: "OPEN_AGENTS_BUFI_INGRESS_SECRET required" };
+    return { ok: false, error: "OPEN_AGENTS_SENDERO_INGRESS_SECRET required" };
   }
   const repoSlug = row.repoSlug ?? process.env.AGENT_GAPS_DEFAULT_REPO_SLUG;
   if (!repoSlug) {
@@ -239,7 +239,7 @@ async function dispatchGapToMinion(
   const blueprint: GapBlueprint = buildBlueprintFromGap(row);
   const [owner, name] = repoSlug.split("/");
   try {
-    const res = await fetch(`${baseUrl}/api/bufi/dispatch`, {
+    const res = await fetch(`${baseUrl}/api/sendero/dispatch`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret}`,

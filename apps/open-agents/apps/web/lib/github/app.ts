@@ -185,7 +185,7 @@ export function getAppOctokit(): Octokit {
 
 /**
  * Return an Octokit authenticated as a specific GitHub App installation
- * (scope = entire installation, not a single repo). Used by the BUFI
+ * (scope = entire installation, not a single repo). Used by the SENDERO
  * bridge bot which needs to look up repo metadata before knowing the
  * repository id (and so can't use `mintInstallationToken`, which requires
  * a single pre-known repo id).

@@ -1,9 +1,9 @@
-// BUFI bridge ingress — server-to-server entry point for the desk-v1
+// SENDERO bridge ingress — server-to-server entry point for the desk-v1
 // minion pipeline. Bypasses the standard better-auth OAuth flow; gated
-// by a shared Bearer secret (OPEN_AGENTS_BUFI_INGRESS_SECRET).
+// by a shared Bearer secret (OPEN_AGENTS_SENDERO_INGRESS_SECRET).
 //
 // All sessions created here are owned by a stable bot user
-// (id: "bufi-bridge-bot") so they're visible + auditable in the OA
+// (id: "sendero-bridge-bot") so they're visible + auditable in the OA
 // web UI alongside human-driven sessions.
 //
 // See: docs/superpowers/specs/2026-05-11-phase-1-minion-bridge.md
@@ -21,9 +21,9 @@ import { createSessionWithInitialChat } from '@/lib/db/sessions';
 import { getAppOctokit } from '@/lib/github/app';
 import { APP_DEFAULT_MODEL_ID } from '@/lib/models';
 
-const BUFI_BOT_USER_ID = 'bufi-bridge-bot';
-const BUFI_BOT_USERNAME = 'bufi-bridge-bot';
-const BUFI_BOT_EMAIL = 'bridge@bu.finance';
+const SENDERO_BOT_USER_ID = 'sendero-bridge-bot';
+const SENDERO_BOT_USERNAME = 'sendero-bridge-bot';
+const SENDERO_BOT_EMAIL = 'bridge@sendero.travel';
 
 interface DispatchRequestBody {
   blueprint: {
@@ -39,16 +39,16 @@ interface DispatchRequestBody {
   prompt: string;
   /**
    * Optional. When set, OA persists this on the session row and a polling
-   * workflow (bufi-callback.ts) POSTs `{sessionId, status, prUrl?}` to
+   * workflow (sendero-callback.ts) POSTs `{sessionId, status, prUrl?}` to
    * `url` with `Authorization: Bearer ${secret}` when the session reaches
-   * terminal state. Lets BUFI update Linear + Slack instantly instead of
+   * terminal state. Lets SENDERO update Linear + Slack instantly instead of
    * waiting on the morning digest cron.
    */
   callback?: { url: string; secret: string };
 }
 
 function verifyBufiIngress(req: NextRequest): boolean {
-  const secret = process.env.OPEN_AGENTS_BUFI_INGRESS_SECRET;
+  const secret = process.env.OPEN_AGENTS_SENDERO_INGRESS_SECRET;
   if (!secret) return false;
   const auth = req.headers.get('authorization');
   if (!auth) return false;
@@ -65,24 +65,24 @@ async function getOrCreateBufiBotUser(): Promise<string> {
   const existing = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.id, BUFI_BOT_USER_ID))
+    .where(eq(users.id, SENDERO_BOT_USER_ID))
     .limit(1);
   if (existing[0]) return existing[0].id;
 
   await db.insert(users).values({
-    id: BUFI_BOT_USER_ID,
-    username: BUFI_BOT_USERNAME,
-    email: BUFI_BOT_EMAIL,
+    id: SENDERO_BOT_USER_ID,
+    username: SENDERO_BOT_USERNAME,
+    email: SENDERO_BOT_EMAIL,
     emailVerified: true,
-    name: 'BUFI Bridge Bot',
+    name: 'SENDERO Bridge Bot',
     isAdmin: false,
   });
-  return BUFI_BOT_USER_ID;
+  return SENDERO_BOT_USER_ID;
 }
 
 /**
  * Ensure a github_installations row exists for the bot user pointing at
- * the BUFI GitHub App's installation on `accountLogin` (e.g. BuFi007).
+ * the SENDERO GitHub App's installation on `accountLogin` (e.g. BuFi007).
  *
  * This lets the standard OA flow — verifyRepoAccess → mintInstallationToken
  * → connectSandbox({ githubToken }) — work for bot-dispatched sessions
@@ -95,7 +95,7 @@ async function ensureBufiInstallation(accountLogin: string): Promise<void> {
     .from(githubInstallations)
     .where(
       and(
-        eq(githubInstallations.userId, BUFI_BOT_USER_ID),
+        eq(githubInstallations.userId, SENDERO_BOT_USER_ID),
         eq(githubInstallations.accountLogin, accountLogin)
       )
     )
@@ -135,13 +135,13 @@ async function ensureBufiInstallation(accountLogin: string): Promise<void> {
 
   if (!install) {
     throw new Error(
-      `GitHub App not installed on '${accountLogin}'. Install the BUFI Open Agents Bot app on this account and grant repo access.`
+      `GitHub App not installed on '${accountLogin}'. Install the SENDERO Open Agents Bot app on this account and grant repo access.`
     );
   }
 
   await db.insert(githubInstallations).values({
     id: nanoid(),
-    userId: BUFI_BOT_USER_ID,
+    userId: SENDERO_BOT_USER_ID,
     installationId: install.id,
     accountLogin,
     accountType: install.accountType,
@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
   try {
     botUserId = await getOrCreateBufiBotUser();
   } catch (error) {
-    console.error('[bufi-dispatch] bot user seed failed:', error);
+    console.error('[sendero-dispatch] bot user seed failed:', error);
     return NextResponse.json({ error: 'Bot user provisioning failed' }, { status: 500 });
   }
 
@@ -208,7 +208,7 @@ export async function POST(req: NextRequest) {
   try {
     await ensureBufiInstallation(body.repo.owner);
   } catch (error) {
-    console.error('[bufi-dispatch] github installation seed failed:', error);
+    console.error('[sendero-dispatch] github installation seed failed:', error);
     return NextResponse.json(
       { error: 'github_app_not_installed', message: (error as Error).message },
       { status: 502 }
@@ -231,18 +231,18 @@ export async function POST(req: NextRequest) {
       session: {
         id: sessionId,
         userId: botUserId,
-        title: `BUFI: ${body.blueprint.title}`,
+        title: `SENDERO: ${body.blueprint.title}`,
         repoOwner: body.repo.owner,
         repoName: body.repo.name,
         branch: body.repo.branch,
         cloneUrl,
         autoCommitPushOverride: true,
         autoCreatePrOverride: true,
-        // Persist the BUFI callback config if provided — picked up by
-        // the bufi-callback polling workflow that fires the POST on
+        // Persist the SENDERO callback config if provided — picked up by
+        // the sendero-callback polling workflow that fires the POST on
         // terminal state.
-        bufiCallbackUrl: body.callback?.url ?? null,
-        bufiCallbackSecret: body.callback?.secret ?? null,
+        senderoCallbackUrl: body.callback?.url ?? null,
+        senderoCallbackSecret: body.callback?.secret ?? null,
       },
       initialChat: {
         id: chatId,
@@ -253,7 +253,7 @@ export async function POST(req: NextRequest) {
     session = result.session;
     chat = result.chat;
   } catch (error) {
-    console.error('[bufi-dispatch] createSessionWithInitialChat failed:', error);
+    console.error('[sendero-dispatch] createSessionWithInitialChat failed:', error);
     return NextResponse.json({ error: 'Session creation failed' }, { status: 500 });
   }
 
@@ -281,21 +281,21 @@ export async function POST(req: NextRequest) {
 
     // Callback config (body.callback) is persisted on session row for a
     // future fire-on-completion mechanism. We're not firing it yet —
-    // the bufi-callback workflow approach tripped Vercel Workflow's
+    // the sendero-callback workflow approach tripped Vercel Workflow's
     // workflow-node-module-error plugin (DB-via-postgres import chain not
     // permitted from workflow files). The morning digest cron remains the
     // v0 reporting path. Live updates is a v1 follow-up that should use
-    // a non-workflow polling pattern (BUFI cron polling OA, or Trigger.dev
+    // a non-workflow polling pattern (SENDERO cron polling OA, or Trigger.dev
     // task) rather than a Vercel Workflow.
   } catch (error) {
-    console.error('[bufi-dispatch] runAgentWorkflow start failed:', error);
+    console.error('[sendero-dispatch] runAgentWorkflow start failed:', error);
     return NextResponse.json(
       { error: 'Workflow start failed', sessionId: session.id, chatId: chat.id },
       { status: 500 }
     );
   }
 
-  console.log('[bufi-dispatch] dispatched', {
+  console.log('[sendero-dispatch] dispatched', {
     taskId: body.blueprint.taskId,
     repo: `${body.repo.owner}/${body.repo.name}`,
     sessionId: session.id,

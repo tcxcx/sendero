@@ -245,7 +245,7 @@ Every pillar in that diagram has a concrete home in this app:
 | Pillar | Implementation |
 |---|---|
 | Human Control | `app/agent-gaps` kanban — authenticated operator only |
-| Delegate Tasks | `lib/agent-gaps/mutations.ts` `moveCardOnBoard` → `POST /api/bufi/dispatch` |
+| Delegate Tasks | `lib/agent-gaps/mutations.ts` `moveCardOnBoard` → `POST /api/sendero/dispatch` |
 | Tools | Vercel Sandbox (`packages/sandbox`) + `@open-agents/agent` |
 | Autonomous Action | `auto_execute_on_in_progress` flag on each row — drag = dispatch |
 | Memory | `knowledge_gaps` table in OA's own Postgres (Drizzle), dedup'd by `sha256(kind\|tool\|hypothesis_norm)` |
@@ -273,7 +273,7 @@ The closed loop in code:
 session ends → /api/agent-gaps/ingest writes/dedups a knowledge_gaps row →
   card appears in Backlog →
   operator flips Auto-execute and drags to In Progress →
-  moveCardOnBoard() synthesizes a blueprint and POSTs /api/bufi/dispatch →
+  moveCardOnBoard() synthesizes a blueprint and POSTs /api/sendero/dispatch →
   buildSelfHealPreamble injects prior fix (findResolvedGap) →
   agent runs in a fresh sandbox with the constraint pre-loaded →
   callback writes terminal state → card moves to Review (success) or back to Backlog (fail, occurrence_count++)
@@ -302,7 +302,7 @@ session ends → /api/agent-gaps/ingest writes/dedups a knowledge_gaps row →
 ```env
 # Required for ingest auth + outbound dispatch
 OPEN_AGENTS_CALLBACK_SECRET=         # bearer token for /api/agent-gaps/ingest
-OPEN_AGENTS_BUFI_INGRESS_SECRET=     # bearer token to call /api/bufi/dispatch
+OPEN_AGENTS_SENDERO_INGRESS_SECRET=     # bearer token to call /api/sendero/dispatch
 AGENT_GAPS_DEFAULT_REPO_SLUG=        # optional fallback "owner/name" when a gap has no repo_slug
 
 # Optional override; defaults to http://localhost:3000 for self-dispatch

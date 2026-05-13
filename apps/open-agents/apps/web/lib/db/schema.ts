@@ -153,14 +153,14 @@ export const sessions = pgTable(
     // Optional per-session override for auto PR creation after auto-commit.
     // null means "use the user's default preference".
     autoCreatePrOverride: boolean("auto_create_pr_override"),
-    // BUFI bridge: where to POST when this session reaches terminal state.
-    // Set only on sessions created via /api/bufi/dispatch with a callback
-    // field. A polling workflow (bufi-callback.ts) watches sessions with
+    // SENDERO bridge: where to POST when this session reaches terminal state.
+    // Set only on sessions created via /api/sendero/dispatch with a callback
+    // field. A polling workflow (sendero-callback.ts) watches sessions with
     // this column set and fires the POST when status flips to completed/
     // failed/archived. firedAt prevents double-firing.
-    bufiCallbackUrl: text("bufi_callback_url"),
-    bufiCallbackSecret: text("bufi_callback_secret"),
-    bufiCallbackFiredAt: timestamp("bufi_callback_fired_at"),
+    senderoCallbackUrl: text("sendero_callback_url"),
+    senderoCallbackSecret: text("sendero_callback_secret"),
+    senderoCallbackFiredAt: timestamp("sendero_callback_fired_at"),
     globalSkillRefs: jsonb("global_skill_refs")
       .$type<GlobalSkillRef[]>()
       .notNull()
@@ -407,7 +407,7 @@ export type UsageEvent = typeof usageEvents.$inferSelect;
 export type NewUsageEvent = typeof usageEvents.$inferInsert;
 
 // =============================================================================
-// Agent Gaps — Raj demand-driven loop (OA-native, no BUFI dependency).
+// Agent Gaps — Raj demand-driven loop (OA-native, no SENDERO dependency).
 //
 // When a minion session terminates with a recoverable failure, we record what
 // the agent needed but could not get (tool, env, schema, etc.). Rows dedup on

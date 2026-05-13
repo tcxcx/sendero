@@ -1,6 +1,6 @@
 /**
  * Inbound: a minion (or anything else) reports a knowledge gap. Used as
- * the OA-internal replacement for the legacy BUFI callback path — when
+ * the OA-internal replacement for the legacy SENDERO callback path — when
  * a session terminates in failure/archived state, the OA dispatch
  * runner calls this endpoint to record the gap. Also progresses the
  * originating board card if `originatingGapId` is provided.

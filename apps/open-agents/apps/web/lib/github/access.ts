@@ -3,13 +3,13 @@ import { withScopedInstallationOctokit } from './app';
 import { getUserOctokit } from './client';
 
 /**
- * BUFI bridge bot user — server-to-server dispatched sessions own no
+ * SENDERO bridge bot user — server-to-server dispatched sessions own no
  * OAuth token. We bypass the user-octokit precondition for this user
  * and trust the App installation scope alone.
  *
  * See: docs/superpowers/specs/2026-05-11-phase-1-minion-bridge.md
  */
-const BUFI_BOT_USER_ID = 'bufi-bridge-bot';
+const SENDERO_BOT_USER_ID = 'sendero-bridge-bot';
 
 export type RepoAccessDeniedReason =
   | 'no_user_token'
@@ -77,9 +77,9 @@ export async function verifyRepoAccess(params: {
 }): Promise<RepoAccessResult> {
   const { userId, owner, repo, requiredUserPermission = 'read' } = params;
 
-  // BUFI bridge bot: no OAuth token by design — fall through to App-only
+  // SENDERO bridge bot: no OAuth token by design — fall through to App-only
   // verification using the persisted github_installations row.
-  if (userId === BUFI_BOT_USER_ID) {
+  if (userId === SENDERO_BOT_USER_ID) {
     return verifyRepoAccessAppOnly({ userId, owner, repo });
   }
 
@@ -143,7 +143,7 @@ export async function verifyRepoAccess(params: {
 }
 
 /**
- * App-only repo access check — used for the BUFI bridge bot which has no
+ * App-only repo access check — used for the SENDERO bridge bot which has no
  * OAuth token. Uses the App installation directly to fetch the repo id +
  * default branch.
  *
