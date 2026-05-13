@@ -26,7 +26,20 @@ const ARC_TESTNET_CAIP2 = 'eip155:5042002';
 const ARC_USDC = '0x3600000000000000000000000000000000000000';
 const GATEWAY_WALLET_ARC = '0x0077777d7EBA4688BDeF3E311b846F25870A19B9';
 
-const facilitator = new BatchFacilitatorClient();
+// Circle Gateway facilitator URL. Defaults to testnet for the testnet-beta
+// network mode; flip to `https://gateway-api.circle.com` on mainnet cutover
+// alongside the `SENDERO_NETWORK_MODE=production` switch documented in
+// CLAUDE.md. Network/asset/verifyingContract values for the testnet seller
+// chain (Arc Testnet) are confirmed via Circle's discovery endpoint:
+//
+//   GET https://gateway-api-testnet.circle.com/v1/x402/supported
+//
+// which also pins `minValiditySeconds: 604800` (7 days) — see
+// `maxTimeoutSeconds` below.
+const CIRCLE_GATEWAY_FACILITATOR_URL =
+  process.env.CIRCLE_GATEWAY_FACILITATOR_URL ?? 'https://gateway-api-testnet.circle.com';
+
+const facilitator = new BatchFacilitatorClient({ url: CIRCLE_GATEWAY_FACILITATOR_URL });
 
 export interface X402Context {
   payer: string;
@@ -56,7 +69,12 @@ function buildRequirements(toolName: string, priceUsdc: string) {
     asset: ARC_USDC,
     amount: usdcAtomic(priceUsdc).toString(),
     payTo: sellerAddress(),
-    maxTimeoutSeconds: 345_600, // 4 days — required for batched settlement
+    // Circle Gateway requires the EIP-3009 `validBefore` to be at least
+    // `minValiditySeconds` (604_800 = 7 days) in the future at settle time,
+    // per the `/v1/x402/supported` discovery endpoint. The buyer's signer
+    // sets `validBefore` from this `maxTimeoutSeconds`, so it must clear
+    // the 7-day floor with a buffer. 604_900 matches Circle's own docs.
+    maxTimeoutSeconds: 604_900,
     description: `Sendero tool call: ${toolName}`,
     extra: {
       name: 'GatewayWalletBatched',
