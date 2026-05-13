@@ -65,22 +65,22 @@ ALTER TABLE "signing_events"
   ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- CreateIndex
-CREATE INDEX CONCURRENTLY "compliance_decisions_tenantId_decidedAt_idx"
+CREATE INDEX "compliance_decisions_tenantId_decidedAt_idx"
   ON "compliance_decisions"("tenantId", "decidedAt" DESC);
 
-CREATE INDEX CONCURRENTLY "compliance_decisions_tenantId_recipientAddress_decidedAt_idx"
+CREATE INDEX "compliance_decisions_tenantId_recipientAddress_decidedAt_idx"
   ON "compliance_decisions"("tenantId", "recipientAddress", "decidedAt" DESC);
 
-CREATE INDEX CONCURRENTLY "compliance_decisions_intentId_idx"
+CREATE INDEX "compliance_decisions_intentId_idx"
   ON "compliance_decisions"("intentId");
 
-CREATE INDEX CONCURRENTLY "compliance_decisions_expiresAt_idx"
+CREATE INDEX "compliance_decisions_expiresAt_idx"
   ON "compliance_decisions"("expiresAt");
 
-CREATE INDEX CONCURRENTLY "compliance_decisions_providerRequestId_idx"
+CREATE INDEX "compliance_decisions_providerRequestId_idx"
   ON "compliance_decisions"("providerRequestId");
 
-CREATE INDEX CONCURRENTLY "signing_events_complianceDecisionId_idx"
+CREATE INDEX "signing_events_complianceDecisionId_idx"
   ON "signing_events"("complianceDecisionId");
 
 -- Append-only enforcement.

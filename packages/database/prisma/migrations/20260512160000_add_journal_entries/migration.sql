@@ -47,22 +47,22 @@ ALTER TABLE "journal_entries"
   ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- CreateIndex
-CREATE UNIQUE INDEX CONCURRENTLY "journal_entries_transactionId_legIndex_key"
+CREATE UNIQUE INDEX "journal_entries_transactionId_legIndex_key"
   ON "journal_entries"("transactionId", "legIndex");
 
-CREATE INDEX CONCURRENTLY "journal_entries_tenantId_createdAt_idx"
+CREATE INDEX "journal_entries_tenantId_createdAt_idx"
   ON "journal_entries"("tenantId", "createdAt" DESC);
 
-CREATE INDEX CONCURRENTLY "journal_entries_tenantId_account_createdAt_idx"
+CREATE INDEX "journal_entries_tenantId_account_createdAt_idx"
   ON "journal_entries"("tenantId", "account", "createdAt" DESC);
 
-CREATE INDEX CONCURRENTLY "journal_entries_transactionId_idx"
+CREATE INDEX "journal_entries_transactionId_idx"
   ON "journal_entries"("transactionId");
 
-CREATE INDEX CONCURRENTLY "journal_entries_contextKind_contextRef_idx"
+CREATE INDEX "journal_entries_contextKind_contextRef_idx"
   ON "journal_entries"("contextKind", "contextRef");
 
-CREATE INDEX CONCURRENTLY "journal_entries_complianceDecisionId_idx"
+CREATE INDEX "journal_entries_complianceDecisionId_idx"
   ON "journal_entries"("complianceDecisionId");
 
 -- Append-only enforcement.

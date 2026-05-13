@@ -52,14 +52,14 @@ ALTER TABLE "gateway_transfer_intents"
   ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- CreateIndex
-CREATE UNIQUE INDEX CONCURRENTLY "gateway_transfer_intents_gatewayTransferLogId_key"
+CREATE UNIQUE INDEX "gateway_transfer_intents_gatewayTransferLogId_key"
   ON "gateway_transfer_intents"("gatewayTransferLogId");
 
-CREATE INDEX CONCURRENTLY "gateway_transfer_intents_tenantId_state_createdAt_idx"
+CREATE INDEX "gateway_transfer_intents_tenantId_state_createdAt_idx"
   ON "gateway_transfer_intents"("tenantId", "state", "createdAt");
 
-CREATE INDEX CONCURRENTLY "gateway_transfer_intents_state_updatedAt_idx"
+CREATE INDEX "gateway_transfer_intents_state_updatedAt_idx"
   ON "gateway_transfer_intents"("state", "updatedAt");
 
-CREATE INDEX CONCURRENTLY "gateway_transfer_intents_burnIntentSalt_idx"
+CREATE INDEX "gateway_transfer_intents_burnIntentSalt_idx"
   ON "gateway_transfer_intents"("burnIntentSalt");

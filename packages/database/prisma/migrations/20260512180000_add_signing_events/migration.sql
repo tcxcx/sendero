@@ -30,19 +30,19 @@ ALTER TABLE "signing_events"
   ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- CreateIndex
-CREATE INDEX CONCURRENTLY "signing_events_principalId_createdAt_idx"
+CREATE INDEX "signing_events_principalId_createdAt_idx"
   ON "signing_events"("principalId", "createdAt" DESC);
 
-CREATE INDEX CONCURRENTLY "signing_events_signerAddress_createdAt_idx"
+CREATE INDEX "signing_events_signerAddress_createdAt_idx"
   ON "signing_events"("signerAddress", "createdAt" DESC);
 
-CREATE INDEX CONCURRENTLY "signing_events_intentId_idx"
+CREATE INDEX "signing_events_intentId_idx"
   ON "signing_events"("intentId");
 
-CREATE INDEX CONCURRENTLY "signing_events_messageHash_idx"
+CREATE INDEX "signing_events_messageHash_idx"
   ON "signing_events"("messageHash");
 
-CREATE INDEX CONCURRENTLY "signing_events_createdAt_idx"
+CREATE INDEX "signing_events_createdAt_idx"
   ON "signing_events"("createdAt");
 
 -- Append-only enforcement.

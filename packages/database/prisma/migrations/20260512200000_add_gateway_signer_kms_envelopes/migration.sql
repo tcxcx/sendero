@@ -37,8 +37,8 @@ ALTER TABLE "user_gateway_signers"
   );
 
 -- CreateIndex
-CREATE INDEX CONCURRENTLY "tenant_gateway_signers_kekProvider_updatedAt_idx"
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "tenant_gateway_signers_kekProvider_updatedAt_idx"
   ON "tenant_gateway_signers"("kekProvider", "updatedAt");
 
-CREATE INDEX CONCURRENTLY "user_gateway_signers_kekProvider_updatedAt_idx"
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "user_gateway_signers_kekProvider_updatedAt_idx"
   ON "user_gateway_signers"("kekProvider", "updatedAt");
