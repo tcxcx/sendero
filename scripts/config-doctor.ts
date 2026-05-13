@@ -198,8 +198,12 @@ async function checkEnvExample() {
     new Bun.Glob('packages/**/src/**/*.tsx'),
   ];
 
+  // `apps/open-agents/` is a git subtree of vercel-labs/open-agents with its
+  // OWN .env.example (apps/open-agents/apps/web/.env.example) that the
+  // sendero-arc-minions Vercel project validates against. Skip it here so
+  // Sendero's root contract doesn't have to absorb OA's env surface.
   const skipRe =
-    /(^|\/)(node_modules|\.next|\.next-turbo|\.next-user|\.next-sendero|\.turbo|dist|build|\.cache-user|\.ponder)(\/|$)|\.test\.tsx?$|\.spec\.tsx?$|(^|\/)scripts\//;
+    /(^|\/)(node_modules|\.next|\.next-turbo|\.next-user|\.next-sendero|\.turbo|dist|build|\.cache-user|\.ponder|open-agents)(\/|$)|\.test\.tsx?$|\.spec\.tsx?$|(^|\/)scripts\//;
 
   for (const glob of patterns) {
     for await (const file of glob.scan({ cwd: REPO_ROOT, dot: false })) {

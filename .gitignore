@@ -1,3 +1,6 @@
+# Scratch directory for ad-hoc clones / source reading
+tmp/
+
 # Next.js
 .next/
 .next-beta-test/

@@ -49,6 +49,14 @@ export interface SystemPromptSections {
   travelDocumentHint?: string;
   /** Extra guidelines (confidence caveats, follow-up handling, etc.). */
   responseGuidelines?: string;
+  /**
+   * Self-heal preamble injected when a similar hypothesis has been
+   * resolved before on the Minions agent-gaps board. Carries the prior
+   * fix_summary + must_mention tokens so the agent doesn't
+   * re-investigate the same root cause. Built by
+   * `buildSelfHealPreamble()` against the Minions find-resolved seam.
+   */
+  selfHealPreamble?: string;
 }
 
 const DEFAULT_RESPONSE_GUIDELINES = `
@@ -118,6 +126,14 @@ function localeSteering(locale: string | null | undefined): string | null {
  */
 export function buildSystemPrompt(sections: SystemPromptSections): string {
   const parts: string[] = [sections.persona.trim()];
+
+  // Self-heal preamble injected first after persona so the agent sees
+  // the prior-fix advisory before any live runtime context. The block
+  // builder (buildSelfHealPreamble) already wraps in a heading + must-
+  // mention list; we trust it verbatim here.
+  if (sections.selfHealPreamble?.trim()) {
+    parts.push(sections.selfHealPreamble.trim());
+  }
 
   if (sections.localeSlice) {
     parts.push(renderLocaleSlicePrompt(sections.localeSlice));

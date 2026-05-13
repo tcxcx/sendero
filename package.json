@@ -6,6 +6,7 @@
   "description": "Sendero × Arc — AI travel agent monorepo. apps/{app, edge, docs, storybook} + packages/{auth, database, tools, circle, duffel, arc, erc8183, nanopayments, env}. Circle Arc Hackathon Spring 2026.",
   "workspaces": [
     "apps/*",
+    "!apps/open-agents",
     "packages/*"
   ],
   "packageManager": "bun@1.3.10",
@@ -23,6 +24,7 @@
     "dev:indexer": "turbo run dev --filter=@sendero/indexer",
     "dev:pitch": "bun run pitch/serve.ts",
     "dev:admin": "turbo run dev --filter=@sendero/admin",
+    "dev:minions": "PORT=${MINIONS_PORT:-3014} bun run --cwd apps/open-agents/apps/web dev",
     "dev:complete": "turbo run dev --ui=stream --filter=@sendero/app --filter=@sendero/marketing --filter=@sendero/help --filter=@sendero/docs --filter=@sendero/edge --filter=@sendero/indexer --filter=@sendero/storybook --filter=@sendero/admin",
     "dev:all": "turbo run dev --ui=stream",
     "indexer:codegen": "turbo run codegen --filter=@sendero/indexer",
