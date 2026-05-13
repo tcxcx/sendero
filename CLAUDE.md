@@ -657,3 +657,8 @@ Both gated by `AGENT_GAPS_INGEST_SECRET` (constant-time compare). Env vars set o
 - M3: direction-B live completion callback (from BuFi007)
 - M4: paired Langfuse + Phoenix observability — Sendero-specific, no upstream
 - M5: ATEO play (from BuFi007 — identify commits when ready)
+
+**Dashboard URLs (not in any Vercel doc — record once, reuse forever):**
+- Sign-in-with-Vercel OAuth apps: `https://vercel.com/account/settings/sign-in-with-vercel` (personal account scope, NOT under integrations console which is marketplace-only)
+- Marketplace integrations console: `https://vercel.com/dashboard/integrations/console` (do NOT use for OAuth-only apps)
+- Each Sign-in-with-Vercel app has a `connection_cl_*` ID in the URL once created.
