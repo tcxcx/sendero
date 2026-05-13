@@ -59,6 +59,8 @@ export const TOOL_PRICING: Record<string, string> = {
   travel_safety_aid: '0.005',
   recommend_restaurants: '0.002',
   export_route_map: '0.002',
+  airport_info: '0.005',
+  pricing_benchmark: '0.05',
 
   // Composed concierge + ops artifacts
   restaurant_route_card: '0.005',
