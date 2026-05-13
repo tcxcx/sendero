@@ -141,10 +141,22 @@ export const TOOL_PRICING: Record<string, string> = {
 /** USDC has 6 decimals on every chain. */
 const USDC_DECIMALS = 6;
 
+/**
+ * Default price for tools with no explicit `TOOL_PRICING` entry.
+ * Per CLAUDE.md `## Default-free tool pricing`: every tool needs a
+ * pricing *policy*, most should be `'0'` until they create real infra
+ * cost worth charging for. Reads, config lookups, balances, and
+ * explainers default-free; external API calls + on-chain writes go
+ * in TOOL_PRICING explicitly.
+ *
+ * Keeping this here (vs. forcing every tool name into TOOL_PRICING)
+ * avoids 500s on the edge worker when a new tool ships before its
+ * price entry — the request just runs free instead of throwing.
+ */
+export const DEFAULT_FREE_PRICE = '0';
+
 export function priceFor(toolName: string): string {
-  const p = TOOL_PRICING[toolName];
-  if (!p) throw new Error(`No price configured for tool: ${toolName}`);
-  return p;
+  return TOOL_PRICING[toolName] ?? DEFAULT_FREE_PRICE;
 }
 
 /** Decimal "0.005" → atomic "5000" (6 decimals). */
