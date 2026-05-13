@@ -1,41 +1,32 @@
 /**
- * Hono middleware that gates a route behind a Circle Nanopayments
- * (x402-batched) payment.
+ * Hono middleware that gates a route behind a Circle Gateway nanopayment.
  *
  * Flow per request:
- *   1. No `Payment-Signature` header → 402 Payment Required with a
- *      base64-encoded `PAYMENT-REQUIRED` header the buyer client can
- *      parse. Body includes human-readable details.
- *   2. Header present → decode, call `BatchFacilitatorClient.settle`.
- *      On success, attach `{ payer, txRef, amountUsdc }` to the Hono
- *      context and `next()` through to the handler.
- *   3. Settle rejected → 402 again with the error reason.
+ *   1. No `Payment-Signature` header → 402 with multi-accept envelope
+ *      built from Circle's `/v1/x402/supported` discovery. Every network
+ *      the facilitator supports is advertised; the buyer picks one.
+ *   2. Header present → decode, match buyer's chosen requirements against
+ *      our advertised list (anti-tampering), settle via the facilitator.
+ *   3. Settle rejected → 402 with the error reason.
  *
- * Uses Circle's managed facilitator by default. Gateway batches
- * authorizations off-chain into one settled Arc tx — that's what
- * makes $0.0005 per call economically viable.
+ * Single env var (`CIRCLE_GATEWAY_FACILITATOR_URL`) flips testnet → mainnet.
+ * No hardcoded chain constants: network, asset, verifyingContract, and the
+ * 7-day `minValiditySeconds` floor all come from discovery.
+ *
+ * Seller address is one EVM EOA reused across every supported chain
+ * (same private key → same address on every EVM network). Buyers from any
+ * chain's Gateway pool can pay; settlement lands on whichever chain the
+ * buyer chose.
  */
 
-import type { MiddlewareHandler } from 'hono';
 import { BatchFacilitatorClient } from '@circle-fin/x402-batching/server';
-import { priceFor, usdcAtomic } from '@sendero/tools/pricing';
+import type { MiddlewareHandler } from 'hono';
+
 import { logMeter } from '@sendero/tools/meter';
+import { priceFor, usdcAtomic } from '@sendero/tools/pricing';
 
-// Arc Testnet canonical values.
-const ARC_TESTNET_CAIP2 = 'eip155:5042002';
-const ARC_USDC = '0x3600000000000000000000000000000000000000';
-const GATEWAY_WALLET_ARC = '0x0077777d7EBA4688BDeF3E311b846F25870A19B9';
+import { getSupportedKinds, type X402SupportedKind } from './x402-discovery';
 
-// Circle Gateway facilitator URL. Defaults to testnet for the testnet-beta
-// network mode; flip to `https://gateway-api.circle.com` on mainnet cutover
-// alongside the `SENDERO_NETWORK_MODE=production` switch documented in
-// CLAUDE.md. Network/asset/verifyingContract values for the testnet seller
-// chain (Arc Testnet) are confirmed via Circle's discovery endpoint:
-//
-//   GET https://gateway-api-testnet.circle.com/v1/x402/supported
-//
-// which also pins `minValiditySeconds: 604800` (7 days) — see
-// `maxTimeoutSeconds` below.
 const CIRCLE_GATEWAY_FACILITATOR_URL =
   process.env.CIRCLE_GATEWAY_FACILITATOR_URL ?? 'https://gateway-api-testnet.circle.com';
 
@@ -45,9 +36,43 @@ export interface X402Context {
   payer: string;
   amountUsdc: string;
   settlementTx: string;
+  network: string;
 }
 
-/** Seller address from env (the EOA receiving nanopayment settlement). */
+interface PaymentRequirements {
+  scheme: 'exact';
+  network: string;
+  asset: string;
+  amount: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  description: string;
+  extra: {
+    name: string;
+    version: string;
+    verifyingContract: string;
+  };
+}
+
+/**
+ * Buyer-submitted payload. Shape mirrors the SDK's `PaymentPayload`
+ * (required `x402Version` + `payload`, optional `accepted` carrying the
+ * requirements the buyer signed against). We only inspect `accepted`
+ * here and hand the rest to the facilitator unchanged.
+ */
+interface DecodedPaymentPayload {
+  x402Version: number;
+  payload: Record<string, unknown>;
+  accepted?: PaymentRequirements;
+  resource?: { url: string; description: string; mimeType: string };
+  extensions?: Record<string, unknown>;
+}
+
+/**
+ * Seller EOA. One address, reused across every supported EVM chain since
+ * the same private key controls the same address everywhere. Resolution
+ * order mirrors what the rest of the codebase already uses.
+ */
 function sellerAddress(): string {
   const a =
     process.env.SENDERO_SELLER_ADDRESS ||
@@ -61,27 +86,55 @@ function sellerAddress(): string {
   return a;
 }
 
-/** Build the PaymentRequirements the buyer needs to sign against. */
-function buildRequirements(toolName: string, priceUsdc: string) {
+/** Convert one discovery kind into a PaymentRequirements for the given tool + price. */
+function kindToRequirements(
+  kind: X402SupportedKind,
+  toolName: string,
+  priceUsdc: string,
+  seller: string
+): PaymentRequirements {
+  const usdc = kind.extra.assets.find(a => a.symbol === 'USDC') ?? kind.extra.assets[0];
   return {
     scheme: 'exact',
-    network: ARC_TESTNET_CAIP2,
-    asset: ARC_USDC,
+    network: kind.network,
+    asset: usdc.address,
     amount: usdcAtomic(priceUsdc).toString(),
-    payTo: sellerAddress(),
-    // Circle Gateway requires the EIP-3009 `validBefore` to be at least
-    // `minValiditySeconds` (604_800 = 7 days) in the future at settle time,
-    // per the `/v1/x402/supported` discovery endpoint. The buyer's signer
-    // sets `validBefore` from this `maxTimeoutSeconds`, so it must clear
-    // the 7-day floor with a buffer. 604_900 matches Circle's own docs.
-    maxTimeoutSeconds: 604_900,
+    payTo: seller,
+    // Clear the discovery-advertised floor with a buffer so the buyer's
+    // `validBefore` is still in-window when the batch settles.
+    maxTimeoutSeconds: Math.max(kind.extra.minValiditySeconds + 100, 604_900),
     description: `Sendero tool call: ${toolName}`,
     extra: {
-      name: 'GatewayWalletBatched',
-      version: '1',
-      verifyingContract: GATEWAY_WALLET_ARC,
+      name: kind.extra.name,
+      version: kind.extra.version,
+      verifyingContract: kind.extra.verifyingContract,
     },
   };
+}
+
+/** Build the full accepts[] array — one entry per supported network. */
+async function buildAccepts(toolName: string, priceUsdc: string): Promise<PaymentRequirements[]> {
+  const kinds = await getSupportedKinds(CIRCLE_GATEWAY_FACILITATOR_URL);
+  const seller = sellerAddress();
+  return kinds.map(k => kindToRequirements(k, toolName, priceUsdc, seller));
+}
+
+/** Find the advertised requirements the buyer claims to be paying against. */
+function matchAccepted(
+  advertised: PaymentRequirements[],
+  accepted: PaymentRequirements | undefined
+): PaymentRequirements | null {
+  if (!accepted) return null;
+  return (
+    advertised.find(
+      r =>
+        r.network === accepted.network &&
+        r.asset.toLowerCase() === accepted.asset?.toLowerCase() &&
+        r.amount === accepted.amount &&
+        r.payTo.toLowerCase() === accepted.payTo?.toLowerCase() &&
+        r.extra.verifyingContract.toLowerCase() === accepted.extra?.verifyingContract?.toLowerCase()
+    ) ?? null
+  );
 }
 
 function base64Encode(obj: unknown): string {
@@ -116,10 +169,24 @@ export function requirePayment(toolName: string): MiddlewareHandler {
       return next();
     }
 
-    const requirements = buildRequirements(toolName, priceUsdc);
+    let advertised: PaymentRequirements[];
+    try {
+      advertised = await buildAccepts(toolName, priceUsdc);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logMeter({
+        at: Date.now(),
+        toolName,
+        priceUsdc,
+        status: 'rejected',
+        note: `discovery failed: ${message}`,
+      });
+      return c.json({ error: 'discovery_unavailable', message }, 503);
+    }
+
     const header = c.req.header('Payment-Signature');
 
-    // 1. No signature — respond 402 with the ask.
+    // 1. No signature — respond 402 with the multi-accept ask.
     if (!header) {
       logMeter({
         at: Date.now(),
@@ -133,17 +200,17 @@ export function requirePayment(toolName: string): MiddlewareHandler {
           error: 'payment_required',
           message: `This endpoint costs ${priceUsdc} USDC. Sign an EIP-3009 authorization and retry.`,
           x402Version: 2,
-          accepts: [requirements],
+          accepts: advertised,
         },
         402,
-        { 'PAYMENT-REQUIRED': base64Encode({ x402Version: 2, accepts: [requirements] }) }
+        { 'PAYMENT-REQUIRED': base64Encode({ x402Version: 2, accepts: advertised }) }
       );
     }
 
-    // 2. Decode payload.
-    let payload;
+    // 2. Decode payload + verify the buyer's chosen requirements are one we advertised.
+    let payload: DecodedPaymentPayload;
     try {
-      payload = base64Decode<any>(header);
+      payload = base64Decode(header);
     } catch {
       logMeter({
         at: Date.now(),
@@ -155,9 +222,28 @@ export function requirePayment(toolName: string): MiddlewareHandler {
       return c.json({ error: 'invalid_payment_payload' }, 402);
     }
 
-    // 3. Settle with the facilitator (verify + settle in one call).
+    const matched = matchAccepted(advertised, payload.accepted);
+    if (!matched) {
+      logMeter({
+        at: Date.now(),
+        toolName,
+        priceUsdc,
+        status: 'rejected',
+        note: 'payment_requirements_mismatch',
+      });
+      return c.json(
+        { error: 'payment_requirements_mismatch', hint: 'buyer.accepted not in advertised set' },
+        402
+      );
+    }
+
+    // 3. Settle with the facilitator against the matched requirements.
+    //    Cast through `unknown` because the SDK types `accepted` as
+    //    `Record<string, unknown>`; we've already validated the shape via
+    //    `matchAccepted` above so the facilitator sees the exact bytes the
+    //    buyer signed.
     try {
-      const settle = await facilitator.settle(payload, requirements);
+      const settle = await facilitator.settle(payload as unknown as Parameters<typeof facilitator.settle>[0], matched);
       if (!settle.success) {
         logMeter({
           at: Date.now(),
@@ -167,24 +253,17 @@ export function requirePayment(toolName: string): MiddlewareHandler {
           payer: settle.payer,
           note: settle.errorReason ?? 'settle rejected',
         });
-        return c.json(
-          {
-            error: 'payment_rejected',
-            reason: settle.errorReason,
-          },
-          402
-        );
+        return c.json({ error: 'payment_rejected', reason: settle.errorReason }, 402);
       }
 
       const ctx: X402Context = {
         payer: settle.payer ?? 'unknown',
         amountUsdc: priceUsdc,
         settlementTx: settle.transaction,
+        network: matched.network,
       };
       c.set('x402', ctx);
 
-      // 4. Log the paid event. Tool handler may add its own downstream
-      // events (e.g. the onchain tx hash for settle_split).
       logMeter({
         at: Date.now(),
         toolName,
@@ -192,6 +271,7 @@ export function requirePayment(toolName: string): MiddlewareHandler {
         status: 'paid',
         payer: ctx.payer,
         settlementRef: ctx.settlementTx,
+        note: `network=${matched.network}`,
       });
 
       await next();
