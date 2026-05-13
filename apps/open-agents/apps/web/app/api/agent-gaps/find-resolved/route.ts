@@ -16,30 +16,30 @@
  * default; caller can override via ?minOverlap.
  */
 
-import crypto from "node:crypto";
-import { type NextRequest, NextResponse } from "next/server";
-import { findResolvedGap } from "@/lib/agent-gaps/queries";
-import type { KnowledgeGapKind } from "@/lib/db/schema";
+import crypto from 'node:crypto';
+import { type NextRequest, NextResponse } from 'next/server';
+import { findResolvedGap } from '@/lib/agent-gaps/queries';
+import type { KnowledgeGapKind } from '@/lib/db/schema';
 
 const KIND_VALUES: KnowledgeGapKind[] = [
-  "tool_input_mismatch",
-  "tool_not_found",
-  "tool_error_unrecoverable",
-  "instruction_missing",
-  "env_missing",
-  "schema_drift",
-  "runtime_constraint",
-  "build_failure",
-  "test_failure",
-  "pr_rejected",
-  "sandbox_timeout",
-  "other",
+  'tool_input_mismatch',
+  'tool_not_found',
+  'tool_error_unrecoverable',
+  'instruction_missing',
+  'env_missing',
+  'schema_drift',
+  'runtime_constraint',
+  'build_failure',
+  'test_failure',
+  'pr_rejected',
+  'sandbox_timeout',
+  'other',
 ];
 
 function verifyAuth(req: NextRequest): boolean {
   const secret = process.env.OPEN_AGENTS_CALLBACK_SECRET;
   if (!secret) return false;
-  const auth = req.headers.get("authorization");
+  const auth = req.headers.get('authorization');
   if (!auth) return false;
   const expected = `Bearer ${secret}`;
   if (auth.length !== expected.length) return false;
@@ -52,26 +52,23 @@ function verifyAuth(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!verifyAuth(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const url = new URL(req.url);
-  const hypothesis = url.searchParams.get("hypothesis");
+  const hypothesis = url.searchParams.get('hypothesis');
   if (!hypothesis || hypothesis.trim().length === 0) {
-    return NextResponse.json(
-      { error: "hypothesis query param required" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: 'hypothesis query param required' }, { status: 400 });
   }
 
-  const toolName = url.searchParams.get("toolName") ?? undefined;
-  const kindParam = url.searchParams.get("kind");
+  const toolName = url.searchParams.get('toolName') ?? undefined;
+  const kindParam = url.searchParams.get('kind');
   const kind =
     kindParam && (KIND_VALUES as string[]).includes(kindParam)
       ? (kindParam as KnowledgeGapKind)
       : undefined;
 
-  const minOverlapParam = url.searchParams.get("minOverlap");
+  const minOverlapParam = url.searchParams.get('minOverlap');
   const minOverlap = minOverlapParam ? Number(minOverlapParam) : undefined;
 
   try {
@@ -79,8 +76,7 @@ export async function GET(req: NextRequest) {
       hypothesis,
       toolName,
       kind,
-      minOverlap:
-        minOverlap && Number.isFinite(minOverlap) ? minOverlap : undefined,
+      minOverlap: minOverlap && Number.isFinite(minOverlap) ? minOverlap : undefined,
     });
 
     if (!result) {
@@ -102,9 +98,6 @@ export async function GET(req: NextRequest) {
       score: result.score,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }
