@@ -66,6 +66,7 @@ export interface TripEvent {
     | 'refunded'
     | 'stamped'
     | 'handed_off'
+    | 'document_scanned'
     // Cron-fired proactive nudges (Phase 4).
     | 'checkin_reminder'
     | 'arrival_playbook'
@@ -88,6 +89,13 @@ export interface TripEvent {
   toolArgs?: string;
   priceMicroUsdc?: string;
   status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'internal';
+  documentKind?: 'invoice' | 'receipt' | 'boarding_pass' | 'id_document';
+  extractedAt?: string;
+  extractionRef?: {
+    provider?: unknown;
+    imageSha256?: unknown;
+  };
+  redactedFields?: Record<string, unknown>;
   // Forward-compatible bag for fields not yet typed.
   [key: string]: unknown;
 }
@@ -203,4 +211,58 @@ export async function resolveActiveTripForUser(args: {
     select: { id: true },
   });
   return trip?.id ?? null;
+}
+
+/**
+ * Resolve a trip by OCR'd boarding-pass facts. This intentionally
+ * refuses ambiguous matches: no PNR, no match, cross-tenant, traveler
+ * mismatch, terminal trip, or >1 matching booking all return null.
+ */
+export async function resolveTripByBoardingPass(args: {
+  tenantId: string;
+  userId: string;
+  pnr: string | null | undefined;
+  flightNumber: string | null | undefined;
+  departureDate: string | null | undefined;
+}): Promise<{ id: string } | null> {
+  const { tenantId, userId, pnr, flightNumber, departureDate } = args;
+  if (!tenantId || !userId || !pnr || !flightNumber || !departureDate) return null;
+
+  const bookings = await prisma.booking.findMany({
+    where: {
+      tenantId,
+      metadata: {
+        path: ['pnr'],
+        equals: pnr,
+      },
+      AND: [
+        {
+          metadata: {
+            path: ['flightNumber'],
+            equals: flightNumber,
+          },
+        },
+        {
+          metadata: {
+            path: ['departureDate'],
+            equals: departureDate,
+          },
+        },
+      ],
+      trip: {
+        tenantId,
+        travelerId: userId,
+        status: { notIn: ['completed', 'canceled', 'failed'] },
+      },
+    },
+    take: 2,
+    select: {
+      trip: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (bookings.length !== 1) return null;
+  return bookings[0]?.trip?.id ? { id: bookings[0].trip.id } : null;
 }

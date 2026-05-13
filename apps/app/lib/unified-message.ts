@@ -81,9 +81,15 @@ export interface UnifiedMessage {
  */
 export function eventsToUnifiedMessages(events: Prisma.JsonValue): UnifiedMessage[] {
   if (!Array.isArray(events)) return [];
-  return events
-    .map((raw, i): UnifiedMessage | null => mapOneEvent(raw, i))
-    .filter((m): m is UnifiedMessage => m !== null);
+  const seen = new Set<string>();
+  const messages: UnifiedMessage[] = [];
+  for (let i = 0; i < events.length; i += 1) {
+    const message = mapOneEvent(events[i], i);
+    if (!message || seen.has(message.id)) continue;
+    seen.add(message.id);
+    messages.push(message);
+  }
+  return messages;
 }
 
 function mapOneEvent(raw: unknown, idx: number): UnifiedMessage | null {
@@ -167,6 +173,40 @@ function mapOneEvent(raw: unknown, idx: number): UnifiedMessage | null {
       author: { kind: 'agent', displayName: 'Sendero AI', initials: 'S' },
       toolName: pickString(r.toolName) ?? 'tool',
       ...(rows ? { rows } : {}),
+    };
+  }
+
+  if (kind === 'document_scanned') {
+    const documentKind = pickDocumentKind(r.documentKind);
+    const extractionRef =
+      r.extractionRef && typeof r.extractionRef === 'object'
+        ? (r.extractionRef as Record<string, unknown>)
+        : null;
+    const imageSha256 = extractionRef ? pickString(extractionRef.imageSha256) : undefined;
+    const extractedAt = pickString(r.extractedAt);
+    const summary = pickString(r.summary);
+    const redactedFields =
+      r.redactedFields && typeof r.redactedFields === 'object'
+        ? (r.redactedFields as Record<string, unknown>)
+        : undefined;
+
+    return {
+      id,
+      at,
+      channel: channel ?? 'internal',
+      direction: 'internal',
+      kind: 'tool_result',
+      author: { kind: 'agent', displayName: 'Sendero AI', initials: 'S' },
+      toolName: 'document_scanned',
+      rows: [
+        {
+          ...(documentKind ? { documentKind } : {}),
+          ...(extractedAt ? { extractedAt } : {}),
+          ...(imageSha256 ? { imageSha256 } : {}),
+          ...(summary ? { summary } : {}),
+          ...(redactedFields ? { redactedFields } : {}),
+        },
+      ],
     };
   }
 
@@ -295,6 +335,15 @@ function pickStatus(v: unknown): DeliveryStatus | undefined {
     v === 'failed' ||
     v === 'internal'
   ) {
+    return v;
+  }
+  return undefined;
+}
+
+function pickDocumentKind(
+  v: unknown
+): 'invoice' | 'receipt' | 'boarding_pass' | 'id_document' | undefined {
+  if (v === 'invoice' || v === 'receipt' || v === 'boarding_pass' || v === 'id_document') {
     return v;
   }
   return undefined;

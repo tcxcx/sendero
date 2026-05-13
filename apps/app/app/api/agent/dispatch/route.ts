@@ -25,8 +25,14 @@ import {
   type ModelTier,
   runAgentTurn,
 } from '@sendero/agent';
-import { buildAgentPersona } from '@/lib/agent-persona';
 import { capture, flush, hashDistinctId } from '@sendero/analytics/server';
+import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
+import { resolvePlan } from '@sendero/billing/plans';
+import { type MeterPayerType, prisma } from '@sendero/database';
+import { filterPublicTools, toolList } from '@sendero/tools';
+import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
+import { PayerResolutionError, resolvePayer } from '@sendero/tools/lib/resolve-payer';
+import { z } from 'zod';
 
 import {
   authorizeDispatch,
@@ -41,22 +47,21 @@ import {
   resolveSegment,
   resolveTenantPlan,
 } from '@/lib/agent-auth';
+import { buildAgentPersona } from '@/lib/agent-persona';
 import { resolveTenantFromApiKey } from '@/lib/api-key-auth';
 import { makeCreditAwareMeterStore } from '@/lib/credit-store';
-import { resolvePlan } from '@sendero/billing/plans';
-import { resolvePayer, PayerResolutionError } from '@sendero/tools/lib/resolve-payer';
-import type { MeterPayerType } from '@sendero/database';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
-import { enforcePolicyChain } from '@/lib/transfer-policy';
-import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
-import { appendTripEvent, type TripEvent } from '@/lib/trip-events';
-import { buildResponseHeaders } from '@sendero/auth/dispatch-auth';
-import { filterPublicTools, toolList } from '@sendero/tools';
-import { buildAiSdkTools } from '@sendero/tools/adapters/ai-sdk';
 import { buildBoundExternalWorkflowTools } from '@/lib/external-workflow-tools';
+import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
+import {
+  lobsterTrapVerdictHeader,
+  persistLobsterTrapAlerts,
+  type LobsterTrapInspectionReport,
+} from '@/lib/lobstertrap';
 import { buildStartWorkflowTool } from '@/lib/start-workflow-tool';
-import { z } from 'zod';
+import { enforcePolicyChain } from '@/lib/transfer-policy';
+import { appendTripEvent, resolveTripByBoardingPass, type TripEvent } from '@/lib/trip-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -305,6 +310,9 @@ export async function POST(req: NextRequest) {
                 ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
               },
               channelIdentityId: body.channelIdentityId,
+              appendTripEvent,
+              resolveTripByBoardingPass,
+              readTripEvents,
             },
           }),
         ]
@@ -394,7 +402,20 @@ export async function POST(req: NextRequest) {
   }
 
   const tier: ModelTier = 'smart';
-  const modelHandle = resolveModel(tier);
+  const lobsterTrapReports: LobsterTrapInspectionReport[] = [];
+  const lobsterTrapContext = {
+    tenantId: body.tenantId,
+    userId: body.userId,
+    channel: body.channel,
+    turnId: agentInput.turnId,
+    tripId: body.tripId ?? null,
+    authMode: apiKey ? ('api_key' as const) : ('internal' as const),
+    x402: Boolean(apiKey),
+    onReport: (report: LobsterTrapInspectionReport) => {
+      lobsterTrapReports.push(report);
+    },
+  };
+  const modelHandle = resolveModel(tier, lobsterTrapContext);
   if (!modelHandle) {
     return NextResponse.json(
       {
@@ -467,6 +488,9 @@ export async function POST(req: NextRequest) {
       tenantId: body.tenantId,
       ...(body.travelerPhone ? { phone: body.travelerPhone } : {}),
     },
+    appendTripEvent,
+    resolveTripByBoardingPass,
+    readTripEvents,
     ...(body.channelIdentityId ? { channelIdentityId: body.channelIdentityId } : {}),
     // Caller identity flows from the API key resolver into every tool
     // handler via ctx.caller. Tools that gate on scope or key type
@@ -592,6 +616,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  await persistLobsterTrapAlerts({
+    tenantId: body.tenantId,
+    reports: lobsterTrapReports,
+    context: lobsterTrapContext,
+  });
+
   await flush();
 
   if (result.blocked) {
@@ -609,6 +639,7 @@ export async function POST(req: NextRequest) {
       status: 402,
       headers: {
         'content-type': 'application/json',
+        'x-sendero-lobstertrap-verdict': lobsterTrapVerdictHeader(lobsterTrapReports),
         ...buildResponseHeaders({ bearer, meterId: 'blocked', body: blockedBody }),
       },
     });
@@ -625,6 +656,7 @@ export async function POST(req: NextRequest) {
     status: 200,
     headers: {
       'content-type': 'application/json',
+      'x-sendero-lobstertrap-verdict': lobsterTrapVerdictHeader(lobsterTrapReports),
       ...buildResponseHeaders({
         bearer,
         meterId: result.billed ? (result.trail[0]?.toolName ?? 'chat_reply') : 'free',
@@ -653,4 +685,12 @@ function ledgerChannelFromDispatchChannel(channel: Channel): TripEvent['channel'
     default:
       return null;
   }
+}
+
+async function readTripEvents(args: { tripId: string; tenantId: string }): Promise<TripEvent[]> {
+  const trip = await prisma.trip.findFirst({
+    where: { id: args.tripId, tenantId: args.tenantId },
+    select: { events: true },
+  });
+  return Array.isArray(trip?.events) ? (trip.events as unknown as TripEvent[]) : [];
 }

@@ -50,6 +50,12 @@ import { prisma } from '@sendero/database';
 import { detectLocale, LOCALE_COOKIE_NAME } from '@sendero/locale';
 import type { LanguageModel } from 'ai';
 
+import {
+  createLobsterTrapModel,
+  lobsterTrapConfigured,
+  type LobsterTrapContext,
+} from '@/lib/lobstertrap';
+
 const DISPATCH_SECRET_HEADER = 'x-sendero-dispatch-secret';
 
 /**
@@ -291,7 +297,16 @@ export function buildPlanOverrides(tier: PlanTier) {
  *      Anthropic via `directProviderCascade` in `@sendero/agent`.
  *   3. Else return null and the route 503s with a clear error.
  */
-export function resolveModel(tier: ModelTier): LanguageModel | string | null {
+export function resolveModel(
+  tier: ModelTier,
+  lobsterTrapContext?: LobsterTrapContext
+): LanguageModel | string | null {
+  if (lobsterTrapConfigured() && lobsterTrapContext) {
+    return createLobsterTrapModel({
+      modelId: selectModel({ tier }).model,
+      context: lobsterTrapContext,
+    });
+  }
   if (gatewayConfigured()) {
     return selectModel({ tier }).model;
   }

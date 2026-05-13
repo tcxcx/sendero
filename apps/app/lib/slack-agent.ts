@@ -53,6 +53,7 @@ import {
   resolveModel,
   type ModelTier,
 } from './agent-models';
+import { persistLobsterTrapAlerts, type LobsterTrapInspectionReport } from './lobstertrap';
 import { senderoSlackTools } from './slack-agent-tools';
 import { markThreadSubscribed } from './slack-thread-subscription';
 import { appendTripEvent, resolveActiveTripForUser } from './trip-events';
@@ -231,7 +232,19 @@ export async function runSlackAgentTurn(
   // direct-provider cascade) unless the caller explicitly pins one.
   // NEVER hardcode a single model here — the gateway IS the redundancy.
   const tier: ModelTier = args.tier ?? 'smart';
-  const initialModel = args.model ?? resolveModel(tier);
+  const lobsterTrapReports: LobsterTrapInspectionReport[] = [];
+  const lobsterTrapContext = {
+    tenantId: args.install.tenantId,
+    userId: args.senderoUserId,
+    channel: 'slack',
+    turnId,
+    authMode: 'internal' as const,
+    x402: false,
+    onReport: (report: LobsterTrapInspectionReport) => {
+      lobsterTrapReports.push(report);
+    },
+  };
+  const initialModel = args.model ?? resolveModel(tier, lobsterTrapContext);
   if (!initialModel) {
     throw new Error(
       'No AI model available — set AI_GATEWAY_API_KEY (preferred) or one of ' +
@@ -406,6 +419,12 @@ export async function runSlackAgentTurn(
         `tools=[${meterEvents.map(m => m.toolName).join(',')}]`
     );
   }
+
+  await persistLobsterTrapAlerts({
+    tenantId: args.install.tenantId,
+    reports: lobsterTrapReports,
+    context: lobsterTrapContext,
+  });
 
   // Surface tool-emitted share cards as native Block Kit cards in the
   // thread BEFORE the agent's text reply. Each share renders through

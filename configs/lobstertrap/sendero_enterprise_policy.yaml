@@ -1,0 +1,177 @@
+version: "1.0"
+policy_name: "sendero-enterprise-agent-trust"
+
+default_action: ALLOW
+
+ingress_rules:
+  - name: deny_prompt_injection
+    description: "Block instruction hierarchy attacks before the agent sees tools."
+    priority: 120
+    action: DENY
+    deny_message: "[Sendero Trust Layer] Blocked: prompt injection detected."
+    conditions:
+      - field: contains_injection_patterns
+        match_type: boolean
+        value: true
+
+  - name: deny_exfiltration
+    description: "Block attempts to move secrets, trip data, or vault contents to outside systems."
+    priority: 118
+    action: DENY
+    deny_message: "[Sendero Trust Layer] Blocked: data exfiltration attempt detected."
+    conditions:
+      - field: contains_exfiltration
+        match_type: boolean
+        value: true
+
+  - name: deny_credentials
+    description: "Block prompts that include or request API keys, wallet secrets, seed phrases, or credentials."
+    priority: 116
+    action: DENY
+    deny_message: "[Sendero Trust Layer] Blocked: credential exposure detected."
+    conditions:
+      - field: contains_credentials
+        match_type: boolean
+        value: true
+
+  - name: deny_credential_access_intent
+    description: "Block requests to reveal, recover, or enumerate credentials even when no literal secret is present."
+    priority: 115
+    action: DENY
+    deny_message: "[Sendero Trust Layer] Blocked: credential access request detected."
+    conditions:
+      - field: intent_category
+        match_type: exact
+        value: "credential_access"
+
+  - name: deny_sensitive_paths
+    description: "Block access to local secrets, deployment env, SSH keys, and vault material."
+    priority: 114
+    action: DENY
+    deny_message: "[Sendero Trust Layer] Blocked: sensitive path access denied."
+    conditions:
+      - field: contains_sensitive_paths
+        match_type: boolean
+        value: true
+
+  - name: deny_dangerous_commands
+    description: "Block shell or network commands that could mutate infra or fetch remote payloads."
+    priority: 112
+    action: DENY
+    deny_message: "[Sendero Trust Layer] Blocked: dangerous command detected."
+    conditions:
+      - field: contains_system_commands
+        match_type: boolean
+        value: true
+      - field: risk_score
+        match_type: threshold
+        value: 0.25
+
+  - name: review_role_impersonation
+    description: "Human review for messages trying to become admin, system, compliance, or developer."
+    priority: 108
+    action: HUMAN_REVIEW
+    conditions:
+      - field: contains_role_impersonation
+        match_type: boolean
+        value: true
+
+  - name: review_undeclared_high_risk
+    description: "Human review when detected intent/risk diverges from declared agent intent."
+    priority: 100
+    action: HUMAN_REVIEW
+    conditions:
+      - field: risk_score
+        match_type: threshold
+        value: 0.55
+
+  - name: log_code_execution
+    description: "Allow but audit code execution requests for developer and MCP traffic."
+    priority: 40
+    action: LOG
+    conditions:
+      - field: intent_category
+        match_type: exact
+        value: "code_execution"
+
+  - name: log_network_intent
+    description: "Allow but audit network/API intent so x402 callers are explainable."
+    priority: 35
+    action: LOG
+    conditions:
+      - field: intent_category
+        match_type: exact
+        value: "network"
+
+egress_rules:
+  - name: deny_credential_leak
+    description: "Never return secrets, bearer tokens, API keys, private keys, or seed phrases."
+    priority: 120
+    action: DENY
+    deny_message: "[Sendero Trust Layer] Output blocked: credential leak detected."
+    conditions:
+      - field: contains_credentials
+        match_type: boolean
+        value: true
+
+  - name: deny_pii_leak
+    description: "Never return passport, driver-license, card, phone, or other PII from the agent layer."
+    priority: 118
+    action: DENY
+    deny_message: "[Sendero Trust Layer] Output blocked: PII leak detected."
+    conditions:
+      - field: contains_pii
+        match_type: boolean
+        value: true
+
+  - name: quarantine_exfiltration_output
+    description: "Quarantine model output that appears to package data for exfiltration."
+    priority: 116
+    action: QUARANTINE
+    conditions:
+      - field: contains_exfiltration
+        match_type: boolean
+        value: true
+
+rate_limits:
+  requests_per_minute: 90
+  requests_per_hour: 1200
+  burst_threshold: 20
+
+network:
+  egress_policy: allowlist
+  allowed_domains:
+    - "api.openai.com"
+    - "api.anthropic.com"
+    - "generativelanguage.googleapis.com"
+    - "gateway.ai.vercel.com"
+    - "api.duffel.com"
+    - "api.circle.com"
+    - "gateway-api-testnet.circle.com"
+    - "docs.self.xyz"
+  denied_domains:
+    - "*.onion"
+    - "pastebin.com"
+    - "webhook.site"
+    - "requestbin.com"
+    - "ngrok-free.app"
+
+filesystem:
+  denied_paths:
+    - "/etc/**"
+    - "/root/**"
+    - "**/.ssh/**"
+    - "**/.env"
+    - "**/.env.*"
+    - "**/*secret*"
+    - "**/*password*"
+    - "**/*private*key*"
+    - "**/passport_vault/**"
+    - "**/contracts/broadcast/**"
+    - "**/sendero-gateway-relayer.json"
+  allowed_read_paths:
+    - "/tmp/agent_workspace/**"
+    - "/workspace/**"
+    - "/app/**"
+  allowed_write_paths:
+    - "/tmp/agent_workspace/**"

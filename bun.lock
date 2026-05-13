@@ -149,6 +149,7 @@
         "@sendero/kapso": "workspace:*",
         "@sendero/langfuse": "workspace:*",
         "@sendero/llms": "workspace:*",
+        "@sendero/lobster-trap": "workspace:*",
         "@sendero/locale": "workspace:*",
         "@sendero/multisig": "workspace:*",
         "@sendero/nanopayments": "workspace:*",
@@ -746,6 +747,14 @@
       "name": "@sendero/llms",
       "version": "0.1.0",
       "devDependencies": {
+        "typescript": "^5.8.3",
+      },
+    },
+    "packages/lobster-trap": {
+      "name": "@sendero/lobster-trap",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/node": "^22.9.0",
         "typescript": "^5.8.3",
       },
     },
@@ -2263,6 +2272,8 @@
     "@sendero/langfuse": ["@sendero/langfuse@workspace:packages/langfuse"],
 
     "@sendero/llms": ["@sendero/llms@workspace:packages/llms"],
+
+    "@sendero/lobster-trap": ["@sendero/lobster-trap@workspace:packages/lobster-trap"],
 
     "@sendero/locale": ["@sendero/locale@workspace:packages/locale"],
 
