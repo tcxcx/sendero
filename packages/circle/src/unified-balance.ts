@@ -12,20 +12,25 @@
  * `apps/app/lib/gateway-treasury.ts`).
  */
 
+import { createSolanaKitAdapterFromPrivateKey } from '@circle-fin/adapter-solana-kit';
 import type { GetBalancesResult, SpendResult } from '@circle-fin/unified-balance-kit';
-import { prisma } from '@sendero/database';
+import { type Prisma, prisma } from '@sendero/database';
 import type { Address } from 'viem';
 
-import { createSolanaKitAdapterFromPrivateKey } from '@circle-fin/adapter-solana-kit';
-
+import { createLogOnlyComplianceDecision } from './compliance';
 import { GATEWAY_CHAINS } from './gateway';
+import {
+  createGatewayTransferIntent,
+  decimalUsdcToMicro,
+  markGatewayTransferIntent,
+} from './gateway-intent';
 import type { TenantGatewaySigner, TenantSolanaSigner } from './gateway-signer';
 import { getOrCreateGatewaySigner, getTenantSolanaSigner } from './gateway-signer';
 import {
-  type GatewayChainKey,
-  type Principal,
   circleWalletsPrincipal,
+  type GatewayChainKey,
   getBalances,
+  type Principal,
   spend,
   viemPrincipal,
 } from './unified-gateway';
@@ -257,6 +262,13 @@ async function spendWithMintRetry(args: Parameters<typeof spend>[0]) {
   } catch (err) {
     const trace = extractRetryTrace(err);
     if (!trace) throw err;
+    await markGatewayTransferIntent({
+      intentId: args.gatewayIntentId,
+      state: 'burn_attested',
+      attestation: trace.attestation,
+      apiSignature: trace.signature,
+      failedReason: err instanceof Error ? err.message : String(err),
+    });
     console.warn('[unified-balance] mint failed; retrying with attestation', {
       tenantId: args.sources[0]?.principal.label,
       toChainKey: args.toChainKey,
@@ -274,6 +286,9 @@ export interface TenantUnifiedSpendArgs {
   amount: string;
   destinationChain?: string;
   recipient?: string;
+  gatewayTransferLogId?: string | null;
+  journalContextRef?: string;
+  journalContextKind?: 'spend' | 'bridge';
 }
 
 export interface TenantUnifiedSpendResult {
@@ -295,6 +310,10 @@ export async function spendTenantUnifiedUsd(
   const ctx = await getTenantUnifiedBalanceContext(args.tenantId);
   const destinationChain = resolveUnifiedBalanceChain(args.destinationChain);
   const recipient = args.recipient ?? ctx.signer.address;
+  const journalContextKind = args.journalContextKind ?? 'spend';
+  const journalContextRef =
+    args.journalContextRef ??
+    `tenant:${args.tenantId}:${destinationChain}:${recipient}:${args.amount}:${Date.now()}`;
 
   // EVM signer + any self-custody Sol signers from ctx. The self-custody
   // Sol path is Phase 4.5: createSolanaKitAdapterFromPrivateKey wraps an
@@ -305,11 +324,66 @@ export async function spendTenantUnifiedUsd(
     { principal: ctx.principal, sourceAccount: ctx.signer.address },
     ...ctx.extraSpendPrincipals.map(p => ({ principal: p })),
   ];
-  const result = await spendWithMintRetry({
-    sources,
-    toChainKey: destinationChain,
-    recipient,
-    amount: args.amount,
+  const amountMicroUsdc = decimalUsdcToMicro(args.amount);
+  const intentId = await createGatewayTransferIntent({
+    tenantId: args.tenantId,
+    gatewayTransferLogId: args.gatewayTransferLogId ?? null,
+    signerKind: 'app-kit-principal',
+    sourceChain: null,
+    destinationChain,
+    amountMicroUsdc,
+    recipientAddress: recipient,
+    metadata: { source: 'spendTenantUnifiedUsd' },
+  });
+  const complianceDecision = await createLogOnlyComplianceDecision({
+    tenantId: args.tenantId,
+    intentId,
+    recipientAddress: recipient,
+    recipientChain: destinationChain,
+    amountMicroUsdc,
+    contextKind: journalContextKind,
+    contextRef: journalContextRef,
+    metadata: {
+      mode: 'log_only',
+      source: 'spendTenantUnifiedUsd',
+      gatewayTransferLogId: args.gatewayTransferLogId ?? null,
+    },
+  });
+
+  let result: Awaited<ReturnType<typeof spendWithMintRetry>>;
+  try {
+    result = await spendWithMintRetry({
+      sources,
+      toChainKey: destinationChain,
+      recipient,
+      amount: args.amount,
+      gatewayIntentId: intentId,
+      journal: {
+        tenantId: args.tenantId,
+        complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+        contextKind: journalContextKind,
+        contextRef: journalContextRef,
+      },
+    });
+  } catch (err) {
+    await markGatewayTransferIntent({
+      intentId,
+      state: 'mint_failed_terminal',
+      failedReason: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
+
+  await markGatewayTransferIntent({
+    intentId,
+    state: 'mint_confirmed',
+    mintTxHash: result.txHash,
+    metadata: {
+      tenantId: args.tenantId,
+      destinationChain,
+      recipient,
+      allocations: result.allocations as unknown as Record<string, unknown>[],
+    } as Prisma.InputJsonValue,
   });
 
   return {

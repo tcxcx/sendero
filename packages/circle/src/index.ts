@@ -15,6 +15,7 @@ export {
   toMicro,
   type WalletBalancesMicro,
 } from './balance-sync';
+export * as compliance from './compliance';
 export * as gateway from './gateway';
 export {
   depositToGateway,
@@ -25,10 +26,12 @@ export {
   transferViaGatewayFromSources,
 } from './gateway';
 export {
-  depositTravelerToGateway,
   type DepositTravelerToGatewayArgs,
   type DepositTravelerToGatewayResult,
+  depositTravelerToGateway,
 } from './gateway-deposit-traveler';
+export * as gatewayIntent from './gateway-intent';
+export * as journal from './journal';
 export * as modularWallets from './modular-wallets';
 export {
   type CircleSdkLike,
@@ -36,55 +39,8 @@ export {
   type ProvisionTenantWalletResult,
   provisionTenantWallet,
 } from './provision-tenant-wallet';
+export * as signingEvent from './signing-event';
 export * as unifiedBalance from './unified-balance';
-export * as unifiedGateway from './unified-gateway';
-export {
-  type BridgeArgs as UnifiedBridgeArgs,
-  type BridgeResult as UnifiedBridgeResult,
-  type CustomFee,
-  type DelegateArgs,
-  type EnsureSolanaGasArgs,
-  type EnsureSolanaGasResult,
-  type EvmAddressAudit,
-  type EvmAddressByChain,
-  auditEvmAddresses,
-  bridge,
-  ensureSolanaGas,
-  isSolanaChainKey,
-  setSolanaPlatformLowAlertCallback,
-  type DepositArgs as UnifiedDepositArgs,
-  type DepositForArgs as UnifiedDepositForArgs,
-  type DepositResult as UnifiedDepositResult,
-  type GatewayChainKey,
-  type GetBalancesArgs as UnifiedGetBalancesArgs,
-  type InitiateRemoveFundArgs,
-  type Principal,
-  type Principal as GatewayPrincipal,
-  type RemoveFundArgs,
-  type SpendArgs as UnifiedSpendArgs,
-  type SpendResult as UnifiedSpendResult,
-  type SpendSource,
-  type SupportedToken as UnifiedSupportedToken,
-  addDelegate,
-  circleWalletsPrincipal,
-  delegateViemPrincipal,
-  deposit,
-  depositFor,
-  estimateSpend,
-  getAppKitInstance,
-  getBalances,
-  getDelegateStatus,
-  getUnifiedBalanceNamespace,
-  initiateRemoveFund,
-  queryDepositorBalances,
-  removeDelegate,
-  removeFund,
-  resolveTravelerPrincipal,
-  spend,
-  treasuryPrincipal,
-  unifiedBalanceChainName,
-  viemPrincipal,
-} from './unified-gateway';
 export {
   getTenantUnifiedBalanceContext,
   getTenantUnifiedBalances,
@@ -95,6 +51,54 @@ export {
   type TenantUnifiedSpendArgs,
   type TenantUnifiedSpendResult,
 } from './unified-balance';
+export * as unifiedGateway from './unified-gateway';
+export {
+  addDelegate,
+  auditEvmAddresses,
+  type BridgeArgs as UnifiedBridgeArgs,
+  type BridgeResult as UnifiedBridgeResult,
+  bridge,
+  type CustomFee,
+  circleWalletsPrincipal,
+  type DelegateArgs,
+  type DepositArgs as UnifiedDepositArgs,
+  type DepositForArgs as UnifiedDepositForArgs,
+  type DepositResult as UnifiedDepositResult,
+  delegateViemPrincipal,
+  deposit,
+  depositFor,
+  type EnsureSolanaGasArgs,
+  type EnsureSolanaGasResult,
+  type EvmAddressAudit,
+  type EvmAddressByChain,
+  ensureSolanaGas,
+  estimateSpend,
+  type GatewayChainKey,
+  type GetBalancesArgs as UnifiedGetBalancesArgs,
+  getAppKitInstance,
+  getBalances,
+  getDelegateStatus,
+  getUnifiedBalanceNamespace,
+  type InitiateRemoveFundArgs,
+  initiateRemoveFund,
+  isSolanaChainKey,
+  type Principal,
+  type Principal as GatewayPrincipal,
+  queryDepositorBalances,
+  type RemoveFundArgs,
+  removeDelegate,
+  removeFund,
+  resolveTravelerPrincipal,
+  type SpendArgs as UnifiedSpendArgs,
+  type SpendResult as UnifiedSpendResult,
+  type SpendSource,
+  type SupportedToken as UnifiedSupportedToken,
+  setSolanaPlatformLowAlertCallback,
+  spend,
+  treasuryPrincipal,
+  unifiedBalanceChainName,
+  viemPrincipal,
+} from './unified-gateway';
 export * as wallets from './wallets';
 // Flat re-exports of the most-used names so consumers can say
 // `import { getTreasuryAdapter } from '@sendero/circle'`.

@@ -51,9 +51,15 @@ import {
   MarkupAmbiguousInputError,
   type MarkupBreakdown,
   type MarkupConfig,
-  MarkupStrategyNotSupportedV1,
 } from '@sendero/billing/markup';
 import type { PlanTier } from '@sendero/billing/plans';
+import { createLogOnlyComplianceDecision } from '@sendero/circle/compliance';
+import {
+  type BalancedJournalLegs,
+  journalAccounts,
+  journalTransactionId,
+  writeJournalEntry,
+} from '@sendero/circle/journal';
 import { SENDERO_GUEST_ESCROW_ABI } from '@sendero/guest';
 import { getActiveTraceId } from '@sendero/langfuse';
 import { type Address, encodeFunctionData, type Hex } from 'viem';
@@ -216,7 +222,7 @@ function toBig(v: bigint | string | number): bigint {
  * (no @sendero/billing/pricing import that needs a `BillingSegment`).
  */
 function perCallMicro(): bigint {
-  const decimal = TOOL_PRICING['confirm_booking'] ?? '0.003';
+  const decimal = TOOL_PRICING.confirm_booking ?? '0.003';
   return usdcAtomic(decimal);
 }
 
@@ -247,7 +253,7 @@ export interface ConfirmBookingDeps {
       externalId: string;
       metadata: Record<string, unknown> | null;
     };
-    tenant: { id: string; clerkOrgId: string | null };
+    tenant: { id: string; clerkOrgId: string | null; primaryChain?: 'arc' | 'sol' };
     policy: {
       version: number;
       markupConfig: MarkupConfig;
@@ -378,7 +384,11 @@ export function dbDependencies(): ConfirmBookingDeps {
           externalId: booking.externalId ?? '',
           metadata: (booking.metadata as Record<string, unknown> | null) ?? null,
         },
-        tenant: { id: booking.tenant.id, clerkOrgId: booking.tenant.clerkOrgId ?? null },
+        tenant: {
+          id: booking.tenant.id,
+          clerkOrgId: booking.tenant.clerkOrgId ?? null,
+          primaryChain: booking.tenant.primaryChain as 'arc' | 'sol',
+        },
         policy: {
           version: policy.version,
           markupConfig: policy.markupConfig as MarkupConfig,
@@ -777,6 +787,80 @@ export async function runConfirmBooking(
       ? { payerUserId: input.travelerUserId }
       : {}),
   });
+
+  const liabilityAccount =
+    payerType === 'traveler' && input.travelerUserId
+      ? journalAccounts.userLiability(input.travelerUserId)
+      : journalAccounts.tenantLiability(ctx.booking.tenantId);
+  const chainAccount = ctx.tenant.primaryChain === 'sol' ? 'Sol_Devnet' : 'Arc_Testnet';
+  const transactionId = journalTransactionId('booking_confirm', ctx.booking.id);
+  const complianceDecision = await createLogOnlyComplianceDecision({
+    tenantId: ctx.booking.tenantId,
+    userId: payerType === 'traveler' ? (input.travelerUserId ?? null) : null,
+    recipientAddress: input.vendorAddress,
+    recipientChain: chainAccount,
+    amountMicroUsdc:
+      breakdown.costMicroUsdc + breakdown.tenantTakeMicroUsdc + breakdown.senderoTakeMicroUsdc,
+    contextKind: 'booking_confirm',
+    contextRef: ctx.booking.id,
+    metadata: {
+      mode: 'log_only',
+      source: 'confirm_booking',
+      bookingId: ctx.booking.id,
+      bookingExternalId: ctx.booking.externalId,
+      payerType: payerType ?? null,
+    },
+  });
+  const journalLegs = [
+    {
+      transactionId,
+      tenantId: ctx.booking.tenantId,
+      userId: payerType === 'traveler' ? (input.travelerUserId ?? null) : null,
+      complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      account: liabilityAccount,
+      direction: 'debit',
+      amountMicroUsdc:
+        breakdown.costMicroUsdc + breakdown.tenantTakeMicroUsdc + breakdown.senderoTakeMicroUsdc,
+      contextKind: 'booking_confirm',
+      contextRef: ctx.booking.id,
+      metadata: { bookingId: ctx.booking.id, bookingExternalId: ctx.booking.externalId },
+    },
+    {
+      transactionId,
+      tenantId: ctx.booking.tenantId,
+      userId: payerType === 'traveler' ? (input.travelerUserId ?? null) : null,
+      complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      account: journalAccounts.gatewayAsset(chainAccount),
+      direction: 'credit',
+      amountMicroUsdc: breakdown.costMicroUsdc,
+      contextKind: 'booking_confirm',
+      contextRef: ctx.booking.id,
+      metadata: { leg: 'vendor', vendorAddress: input.vendorAddress },
+    },
+    {
+      transactionId,
+      tenantId: ctx.booking.tenantId,
+      complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      account: journalAccounts.tenantLiability(ctx.booking.tenantId),
+      direction: 'credit',
+      amountMicroUsdc: breakdown.tenantTakeMicroUsdc,
+      contextKind: 'booking_confirm',
+      contextRef: ctx.booking.id,
+      metadata: { leg: 'agency', agencyAddress: ctx.agencyAddress },
+    },
+    {
+      transactionId,
+      tenantId: ctx.booking.tenantId,
+      complianceDecisionId: complianceDecision?.complianceDecisionId ?? null,
+      account: journalAccounts.revenueFee(),
+      direction: 'credit',
+      amountMicroUsdc: breakdown.senderoTakeMicroUsdc,
+      contextKind: 'booking_confirm',
+      contextRef: ctx.booking.id,
+      metadata: { leg: 'fee', perCallMicroUsdc: callMicro.toString() },
+    },
+  ].filter(leg => leg.amountMicroUsdc > 0n) as unknown as BalancedJournalLegs;
+  await writeJournalEntry(journalLegs);
 
   return {
     bookingId: ctx.booking.id,

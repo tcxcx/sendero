@@ -51,6 +51,8 @@ export const gatewayTransferTool: ToolDef = {
       amount: input.amount,
       destinationChain: input.to,
       recipient: input.recipient,
+      journalContextRef: `gateway-transfer:${ctx.traveler.tenantId}:${input.to}:${input.recipient ?? 'self'}:${input.amount}`,
+      journalContextKind: input.from && input.from !== input.to ? 'bridge' : 'spend',
     });
     return {
       state: 'success',

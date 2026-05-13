@@ -104,6 +104,31 @@ Circle Gas Station is EVM-only. Solana DCWs are regular Solana accounts that nee
 - **Fail-soft contract:** missing env → `{ topped: false, reason: 'platform_wallet_not_configured' }`. The SDK still surfaces the real "Insufficient SOL" error rather than this code crashing.
 - **NOT for traveler-side balance display.** The DCW's lamports get spent on tx fees; users may see ~0.01 SOL appear briefly then drop. Cosmetic only. Treat as platform plumbing.
 
+## Gateway signer KMS rewrap (Phase 5 Step 5)
+
+Tenant + user Gateway signer private keys live in two parallel forms during the canary:
+- **Legacy** `tenant_gateway_signers.encryptedPrivateKey` / `user_gateway_signers.encryptedPrivateKey` — AES-GCM under env-mode `SENDERO_KEK`. Kept as rollback fallback.
+- **KMS envelope** `newEnvelope` (BYTEA) + `kmsKeyResource` + `kmsKeyVersion` — per-row AES-GCM with KMS-wrapped DEK.
+
+Schema enum: `SignerKekProvider` (`env-v1` | `kms-v1`). CHECK constraint: rows must have `kekProvider='env-v1'` OR (`newEnvelope IS NOT NULL AND kmsKeyResource IS NOT NULL`). Both columns coexist; rollback is `READ_MODE=off`, never a schema mutation.
+
+**Runtime gate** (`packages/circle/src/gateway-signer.ts::shouldReadKmsEnvelope`):
+1. Row must be `kms-v1` with envelope + key resource.
+2. `SENDERO_GATEWAY_SIGNER_KMS_READ_MODE`: `canary` (default) → check canary list; `all` → every kms-v1 row; `off` → force env-mode.
+3. Canary lists: `SENDERO_GATEWAY_SIGNER_KMS_CANARY_TENANTS` / `..._CANARY_USERS` (comma-sep IDs, `*` wildcard). Tenant + user gates are independent.
+
+**Canary applied** 2026-05-13 on prod: all 13 rows rewrapped to `kms-v1` (11 tenants + 2 users), envelope ~767 bytes each. Only `cmp24bjrh0000ol9kf6vl1v6v` (sendero-sandbox) is in the canary tenant list — others stay on env-mode decrypt via preserved `encryptedPrivateKey`. KMS key: `projects/sendero-494217/locations/us/keyRings/sendero-tenants/cryptoKeys/gateway-signer-canary` (software, ENCRYPT_DECRYPT, v1).
+
+**DO NOT "rotate" `SENDERO_KEK`** — there is no re-encrypt-with-new-KEK pathway. Env-mode KEK only exists to decrypt pre-cutover ciphertexts. Replacing it bricks every env-v1 row. Correct shape:
+1. Rewrap all rows → `kms-v1`.
+2. `READ_MODE=all` activates KMS everywhere.
+3. Then *retire* (delete) `SENDERO_KEK`. Drop `encryptedPrivateKey` in a follow-up migration.
+4. If a fresh env-mode fallback is needed later, add `SENDERO_KEK_V2` alongside (encryption package keys on `kekVersion`).
+
+**Rewrap script**: `apps/app/scripts/migrate-kek-to-kms.ts`. Defaults dry-run. Flags: `--tenant <id>`, `--user <id>`, `--all-tenants`, `--all-users`, `--limit N`, `--apply`. Decrypts via env mode → re-derives the account address → refuses to write on address mismatch (corruption guard) → KMS encrypt + round-trip verify → compare-and-swap UPDATE keyed on (kekProvider='env-v1', encryptedPrivateKey unchanged, kekVersion).
+
+**Full canary runbook (S5.1–S5.10)**: `docs/PHASE_5_PRODUCTION_HARDENING_RUNBOOK.md`.
+
 ## SenderoStamps deployment runbook (Circle SCP, Arc-Testnet)
 
 Live: `0xcc0fa83535675a856d773cfbc71232c3d7b71a03` (proxy) → `0xCCf28A443e35F8bD982b8E8651bE9f6caFEd4672` (thirdweb TokenERC1155). Circle ERC-1155 template `aea21da6-0aa2-4971-9a1a-5098842b1248`. Gas via Circle Gas Station (fiat).

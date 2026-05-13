@@ -20,11 +20,11 @@
  *      confirmation, return the signature.
  */
 
-import { env } from '@sendero/env';
-import { getCircle } from '@sendero/circle/wallets';
 import { spendTenantUnifiedUsd } from '@sendero/circle/unified-balance';
 import { ensureSolanaGas } from '@sendero/circle/unified-gateway';
+import { getCircle } from '@sendero/circle/wallets';
 import { prisma } from '@sendero/database';
+import { env } from '@sendero/env';
 import bs58 from 'bs58';
 
 export interface SolOnchainInstruction {
@@ -167,7 +167,7 @@ export async function submitSolPrefund(
     );
   }
   tx.feePayer = new PublicKey(buyerAddress);
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash('confirmed');
+  const { blockhash } = await conn.getLatestBlockhash('confirmed');
   tx.recentBlockhash = blockhash;
 
   // Step 4: serialize unsigned tx, send to Circle for signing.
@@ -302,6 +302,8 @@ async function ensureBuyerUsdc(args: {
     amount: gapDecimal,
     destinationChain: 'Sol_Devnet',
     recipient: args.buyerAddress,
+    journalContextRef: `prefund-sol:${args.tenantId}:${args.buyerAddress}:${gapMicro.toString()}`,
+    journalContextKind: 'bridge',
   });
   // Brief poll for attestation. Circle's Sol Gateway mint typically
   // reflects within a few seconds.
