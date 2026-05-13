@@ -35,9 +35,6 @@ CREATE TABLE "knowledge_gaps" (
 	CONSTRAINT "knowledge_gaps_dedup_hash_unique" UNIQUE("dedup_hash")
 );
 --> statement-breakpoint
-ALTER TABLE "sessions" ADD COLUMN "sendero_callback_url" text;--> statement-breakpoint
-ALTER TABLE "sessions" ADD COLUMN "sendero_callback_secret" text;--> statement-breakpoint
-ALTER TABLE "sessions" ADD COLUMN "sendero_callback_fired_at" timestamp;--> statement-breakpoint
 CREATE INDEX "idx_knowledge_gaps_board" ON "knowledge_gaps" USING btree ("board_column","board_position");--> statement-breakpoint
 CREATE INDEX "idx_knowledge_gaps_status_severity" ON "knowledge_gaps" USING btree ("status","severity");--> statement-breakpoint
 CREATE INDEX "idx_knowledge_gaps_last_seen" ON "knowledge_gaps" USING btree ("last_seen_at");
