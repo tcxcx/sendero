@@ -1,0 +1,26 @@
+{
+  "name": "@sendero/lobster-trap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero enterprise trust-layer package for Veea Lobster Trap policy packs, metadata, audit summaries, and red-team fixtures.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./audit": "./src/audit.ts",
+    "./metadata": "./src/metadata.ts",
+    "./policy": "./src/policy.ts",
+    "./redteam": "./src/redteam.ts",
+    "./types": "./src/types.ts",
+    "./utils": "./src/utils.ts"
+  },
+  "scripts": {
+    "test": "bun test src",
+    "typecheck": "tsc --noEmit",
+    "redteam": "bun run scripts/run-redteam.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.8.3"
+  }
+}

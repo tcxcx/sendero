@@ -52,6 +52,8 @@
       "@sendero/multisig/constants": ["packages/multisig/src/constants.ts"],
       "@sendero/multisig/modular": ["packages/multisig/src/modular/index.ts"],
       "@sendero/nanopayments": ["packages/nanopayments/src/index.ts"],
+      "@sendero/lobster-trap": ["packages/lobster-trap/src/index.ts"],
+      "@sendero/lobster-trap/*": ["packages/lobster-trap/src/*"],
       "@sendero/whatsapp": ["./packages/whatsapp/src/index.ts"],
       "@sendero/whatsapp/*": ["./packages/whatsapp/src/*"],
       "@sendero/slack": ["./packages/slack/src/index.ts"],

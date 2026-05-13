@@ -53,6 +53,11 @@ import { makeCreditAwareMeterStore } from '@/lib/credit-store';
 import { filterToolsByScopes } from '@/lib/dispatch-scopes';
 import { enforceRequestSignature, scopesRequireSignature } from '@/lib/dispatch-signing';
 import { gateDeclineMessage, reputationGate } from '@/lib/reputation-gate';
+import {
+  lobsterTrapVerdictHeader,
+  persistLobsterTrapAlerts,
+  type LobsterTrapInspectionReport,
+} from '@/lib/lobstertrap';
 import { buildStartWorkflowTool } from '@/lib/start-workflow-tool';
 import { enforcePolicyChain } from '@/lib/transfer-policy';
 import { appendTripEvent, resolveTripByBoardingPass, type TripEvent } from '@/lib/trip-events';
@@ -387,7 +392,20 @@ export async function POST(req: NextRequest) {
   }
 
   const tier: ModelTier = 'smart';
-  const modelHandle = resolveModel(tier);
+  const lobsterTrapReports: LobsterTrapInspectionReport[] = [];
+  const lobsterTrapContext = {
+    tenantId: body.tenantId,
+    userId: body.userId,
+    channel: body.channel,
+    turnId: agentInput.turnId,
+    tripId: body.tripId ?? null,
+    authMode: apiKey ? ('api_key' as const) : ('internal' as const),
+    x402: Boolean(apiKey),
+    onReport: (report: LobsterTrapInspectionReport) => {
+      lobsterTrapReports.push(report);
+    },
+  };
+  const modelHandle = resolveModel(tier, lobsterTrapContext);
   if (!modelHandle) {
     return NextResponse.json(
       {
@@ -588,6 +606,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  await persistLobsterTrapAlerts({
+    tenantId: body.tenantId,
+    reports: lobsterTrapReports,
+    context: lobsterTrapContext,
+  });
+
   await flush();
 
   if (result.blocked) {
@@ -605,6 +629,7 @@ export async function POST(req: NextRequest) {
       status: 402,
       headers: {
         'content-type': 'application/json',
+        'x-sendero-lobstertrap-verdict': lobsterTrapVerdictHeader(lobsterTrapReports),
         ...buildResponseHeaders({ bearer, meterId: 'blocked', body: blockedBody }),
       },
     });
@@ -621,6 +646,7 @@ export async function POST(req: NextRequest) {
     status: 200,
     headers: {
       'content-type': 'application/json',
+      'x-sendero-lobstertrap-verdict': lobsterTrapVerdictHeader(lobsterTrapReports),
       ...buildResponseHeaders({
         bearer,
         meterId: result.billed ? (result.trail[0]?.toolName ?? 'chat_reply') : 'free',
