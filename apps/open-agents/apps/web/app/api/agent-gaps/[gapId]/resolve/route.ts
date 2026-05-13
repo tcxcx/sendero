@@ -16,12 +16,12 @@
  * source of truth; the dataset is downstream observability.
  */
 
-import { after } from "next/server";
-import { type NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { resolveGap } from "@/lib/agent-gaps/mutations";
-import { pushResolvedToPhoenix } from "@/lib/observability/phoenix-sync";
-import { getServerSession } from "@/lib/session/get-server-session";
+import { after } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { resolveGap } from '@/lib/agent-gaps/mutations';
+import { pushResolvedToPhoenix } from '@/lib/observability/phoenix-sync';
+import { getServerSession } from '@/lib/session/get-server-session';
 
 const bodySchema = z.object({
   resolutionPrUrl: z.string().url(),
@@ -29,13 +29,10 @@ const bodySchema = z.object({
   mustMention: z.array(z.string().min(1)).default([]),
 });
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ gapId: string }> },
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ gapId: string }> }) {
   const session = await getServerSession();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { gapId } = await params;
@@ -44,7 +41,7 @@ export async function POST(
   try {
     raw = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {
@@ -75,18 +72,12 @@ export async function POST(
           resolvedAt: updated.resolvedAt ?? new Date(),
         });
       } catch (err) {
-        console.warn(
-          "[resolve] phoenix push failed:",
-          err instanceof Error ? err.message : err,
-        );
+        console.warn('[resolve] phoenix push failed:', err instanceof Error ? err.message : err);
       }
     });
 
     return NextResponse.json({ ok: true, gapId: updated.id });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }

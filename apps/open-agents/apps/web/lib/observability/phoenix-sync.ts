@@ -13,13 +13,10 @@
  * Best-effort, fail-soft. Errors logged, never thrown.
  */
 
-import { createClient } from "@arizeai/phoenix-client";
-import {
-  appendDatasetExamples,
-  createDataset,
-} from "@arizeai/phoenix-client/datasets";
+import { createClient } from '@arizeai/phoenix-client';
+import { appendDatasetExamples, createDataset } from '@arizeai/phoenix-client/datasets';
 
-const DATASET_NAME = "sendero-minions-resolved-gaps";
+const DATASET_NAME = 'sendero-minions-resolved-gaps';
 const DATASET_DESC =
   "Resolved knowledge gaps from the Sendero Minions kanban board. Nightly evaluator scores new traces matching a resolved entry's hypothesis_norm but missing the must_mention tokens as a self-heal regression.";
 
@@ -38,7 +35,7 @@ export interface PhoenixResolvedGapExample {
 function isPhoenixConfigured(): boolean {
   return Boolean(
     process.env.PHOENIX_API_KEY &&
-      (process.env.PHOENIX_COLLECTOR_ENDPOINT || process.env.PHOENIX_BASE_URL),
+      (process.env.PHOENIX_COLLECTOR_ENDPOINT || process.env.PHOENIX_BASE_URL)
   );
 }
 
@@ -46,8 +43,8 @@ function buildPhoenixClient() {
   const baseUrl = (
     process.env.PHOENIX_COLLECTOR_ENDPOINT ||
     process.env.PHOENIX_BASE_URL ||
-    "https://app.phoenix.arize.com"
-  ).replace(/\/$/, "");
+    'https://app.phoenix.arize.com'
+  ).replace(/\/$/, '');
   return createClient({
     options: {
       baseUrl,
@@ -67,10 +64,10 @@ function buildPhoenixClient() {
  * Never throws.
  */
 export async function pushResolvedToPhoenix(
-  ex: PhoenixResolvedGapExample,
+  ex: PhoenixResolvedGapExample
 ): Promise<{ ok: boolean; reason?: string }> {
   if (!isPhoenixConfigured()) {
-    return { ok: false, reason: "phoenix_not_configured" };
+    return { ok: false, reason: 'phoenix_not_configured' };
   }
 
   const client = buildPhoenixClient();
@@ -90,7 +87,7 @@ export async function pushResolvedToPhoenix(
     },
     metadata: {
       resolvedAt: ex.resolvedAt.toISOString(),
-      source: "sendero-minions-kanban",
+      source: 'sendero-minions-kanban',
     },
   };
 
@@ -113,16 +110,13 @@ export async function pushResolvedToPhoenix(
       });
       return { ok: true };
     } catch (createErr) {
-      const msg =
-        createErr instanceof Error
-          ? createErr.message
-          : String(createErr);
+      const msg = createErr instanceof Error ? createErr.message : String(createErr);
       console.warn(
-        "[phoenix-sync] dataset push failed:",
+        '[phoenix-sync] dataset push failed:',
         msg,
-        "(append err:",
+        '(append err:',
         appendErr instanceof Error ? appendErr.message : appendErr,
-        ")",
+        ')'
       );
       return { ok: false, reason: msg };
     }

@@ -50,20 +50,17 @@ export async function fetchResolvedGap(args: {
   if (!baseUrl || !secret) return null;
   if (!args.hypothesis || args.hypothesis.trim().length === 0) return null;
 
-  const url = new URL("/api/agent-gaps/find-resolved", baseUrl);
-  url.searchParams.set("hypothesis", args.hypothesis);
-  if (args.toolName) url.searchParams.set("toolName", args.toolName);
-  if (args.kind) url.searchParams.set("kind", args.kind);
+  const url = new URL('/api/agent-gaps/find-resolved', baseUrl);
+  url.searchParams.set('hypothesis', args.hypothesis);
+  if (args.toolName) url.searchParams.set('toolName', args.toolName);
+  if (args.kind) url.searchParams.set('kind', args.kind);
 
   const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(),
-    args.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-  );
+  const timer = setTimeout(() => controller.abort(), args.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
   try {
     const res = await fetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: { authorization: `Bearer ${secret}` },
       signal: controller.signal,
     });
@@ -99,22 +96,22 @@ export async function buildSelfHealPreamble(args: {
   if (!fixSummary) return null;
 
   const lines: string[] = [
-    "## Known fix from prior run",
-    "",
+    '## Known fix from prior run',
+    '',
     `A similar hypothesis was resolved before: "${hypothesis}"`,
-    "",
+    '',
     `**Fix:** ${fixSummary}`,
   ];
 
   if (mustMention && mustMention.length > 0) {
-    lines.push("");
-    lines.push(`**Must mention:** ${mustMention.join(", ")}`);
+    lines.push('');
+    lines.push(`**Must mention:** ${mustMention.join(', ')}`);
   }
 
   if (resolutionPrUrl) {
-    lines.push("");
+    lines.push('');
     lines.push(`**Resolution PR:** ${resolutionPrUrl}`);
   }
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
