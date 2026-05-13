@@ -139,14 +139,6 @@ The five Frontier sponsors below each map to a load-bearing surface in Sendero t
 - **Where in code:** `Tenant.primaryChain` cascade in [`CLAUDE.md`](./CLAUDE.md#tenant-primarychain--cascade-invariant) · settlement adapters in [`packages/guest/src/solana.ts`](./packages/guest/src/solana.ts) · platform Solana hot-wallet runbook in [`CLAUDE.md`](./CLAUDE.md#solana-gas-abstraction-platform-hot-wallet).
 - **Docs:** [Squads Multisig](https://squads.xyz/multisig) · [Altitude](https://altitude.xyz)
 
-### 👻 Phantom — wallet UX + CASH stablecoin
-
-**Phantom Connect** is the recommended embedded wallet for Frontier. Sendero uses it as the traveler-facing wallet layer: email sign-in for first-time travelers, native Phantom for crypto-native users. The same Phantom session signs Squads multisig proposals on the operator side and traveler-side `claim_trip` calls for guest-pass redemptions on the consumer side. **CASH** is the stablecoin surfaced inside the Phantom wallet for tipping, in-app commerce, and prize-payout flows downstream of Sendero (e.g. operator referral rewards, agent-to-agent payouts).
-
-- **Why:** consumer travel demands an onboarding flow that doesn't ask the traveler to learn what a seed phrase is. Phantom Connect ships email-first wallet provisioning with native escape hatches for the travelers who already have a Phantom mobile app — exactly the bimodal user base every TMC absorbing AI agents has to serve.
-- **Where in code:** wallet hydration in [`apps/app/components/`](./apps/app/components) (`ClerkWalletBridge` mounted in `AppChrome`) · share-link claim flow in [`packages/guest`](./packages/guest).
-- **Docs:** [Phantom Connect](https://docs.phantom.com/phantom-connect) · [React starter](https://github.com/Th3Ya0vi/phantom-embedded-react-starter) · [CASH](https://docs.phantom.com/cash)
-
 ### 🟦 Coinbase CDP — x402, agentic market, onramp/offramp
 
 **x402** is how Sendero monetizes its MCP tools to *other AI agents*. Every priced tool in [`packages/tools`](./packages/tools) carries a `priceFor(toolName)` policy; the edge worker's `requirePayment` middleware speaks x402 directly. Agents calling Sendero's `/api/mcp` or `/tools/:name` endpoints settle in stablecoin per-call, no checkout flow, no retained card. The **CDP facilitator** verifies + settles. Sendero registers itself in **Agentic Market** as discoverable agent infrastructure for travel ops, and points operators to **Coinbase Onramp/Offramp** for fiat ↔ stablecoin funding when MoonPay isn't the preferred rail. The **Agentic Wallet Skills** repo informed the shape of `gateway_balance`, `gateway_transfer`, and `swap_and_bridge` in our tool catalog.
