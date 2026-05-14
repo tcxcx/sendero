@@ -563,12 +563,7 @@ export function projectItinerariesResponse(
             if (!singleTicketsById.has(offer.id)) {
               singleTicketsById.set(
                 offer.id,
-                projectFlightOffer(
-                  typedOffer,
-                  fallbackOrigin,
-                  fallbackDestination,
-                  'single_ticket'
-                )
+                projectFlightOffer(typedOffer, fallbackOrigin, fallbackDestination, 'single_ticket')
               );
             }
           } else if (offer.type === 'split_ticket') {

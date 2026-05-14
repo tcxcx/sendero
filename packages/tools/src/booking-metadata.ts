@@ -154,9 +154,7 @@ export type BookFlightBookingMetadata = z.infer<typeof bookFlightMetadataSchema>
  * blobs on existing rows and we don't want a single bad row to brick
  * the invoice generator or the audit export.
  */
-export function parseBookingMetadata(
-  raw: unknown
-): BookingMetadataV1 | null {
+export function parseBookingMetadata(raw: unknown): BookingMetadataV1 | null {
   const parsed = bookingMetadataSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }

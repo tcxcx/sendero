@@ -255,8 +255,7 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
     const splitTicketRequested = input.includeSplitTicket && Boolean(input.returnDate);
     const platformDisable = process.env.SENDERO_FLIGHTS_DISABLE_SPLIT_TICKET === 'true';
     const tenantAllowsSplit = await resolveTenantAllowsSplitTicket(ctx);
-    const useItineraryView =
-      splitTicketRequested && tenantAllowsSplit && !platformDisable;
+    const useItineraryView = splitTicketRequested && tenantAllowsSplit && !platformDisable;
 
     try {
       if (useItineraryView) {
@@ -279,6 +278,22 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
           singleTickets: topSingle,
           slices: topSlices,
         };
+
+        // Provenance stamp — write the offer ids we surfaced into
+        // Trip.metadata.recentSplitTicketSearch so book_trip can verify
+        // it's not being called with arbitrary offer ids the agent
+        // sourced elsewhere (Codex finding c). Fire-and-forget — a
+        // metadata write must NOT block returning search results.
+        if (ctx?.tripId) {
+          void persistSplitTicketSearchProvenance({
+            tripId: ctx.tripId,
+            offerIds: [
+              ...topSingle.map(o => o.id),
+              ...topSlices.flatMap(s => s.splitTickets.map(o => o.id)),
+            ],
+          });
+        }
+
         return share ? { ...payload, share } : payload;
       }
 
@@ -406,6 +421,47 @@ function buildSearchFlightsShare(args: SearchFlightShareInput): {
  * false when the metadata key is missing, the lookup errors, or no
  * tenant id is on the call context. Defaults to safe-off.
  */
+/**
+ * Provenance stamp — persist the offer ids returned by an itinerary-view
+ * search into `Trip.metadata.recentSplitTicketSearch` (with an ISO
+ * `savedAt`). `book_trip` later verifies every offer id it's asked to
+ * book was surfaced here, within a TTL window. Per Codex finding (c):
+ * defense against an agent invoking `book_trip` with arbitrary
+ * `off_*` IDs sourced outside Sendero's search path.
+ *
+ * Fire-and-forget — a failed metadata write must not block the search
+ * response.
+ */
+async function persistSplitTicketSearchProvenance(args: {
+  tripId: string;
+  offerIds: string[];
+}): Promise<void> {
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: args.tripId },
+      select: { metadata: true },
+    });
+    const meta = (trip?.metadata as Record<string, unknown> | null) ?? {};
+    await prisma.trip.update({
+      where: { id: args.tripId },
+      data: {
+        metadata: {
+          ...meta,
+          recentSplitTicketSearch: {
+            offerIds: args.offerIds,
+            savedAt: new Date().toISOString(),
+          },
+        } as object,
+      },
+    });
+  } catch (err) {
+    console.warn('[search_flights] persistSplitTicketSearchProvenance failed (non-fatal)', {
+      tripId: args.tripId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 async function resolveTenantAllowsSplitTicket(ctx: ToolContext | undefined): Promise<boolean> {
   const tenantId = ctx?.traveler?.tenantId;
   if (!tenantId) return false;

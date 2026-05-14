@@ -181,6 +181,32 @@ export const bookTripTool: ToolDef<BookTripInput> = {
     // min-layover check below assumes adjacent indices.
     const slices = [...validated.slices].sort((a, b) => a.sliceIndex - b.sliceIndex);
 
+    // ── Provenance check (Codex finding c) ────────────────────────
+    // Every offer id MUST have been surfaced by a same-trip
+    // search_flights itinerary-view call within the TTL window. This
+    // blocks an agent invoking book_trip with arbitrary off_* ids
+    // sourced outside Sendero's search path (e.g. cross-tenant
+    // exfiltration, prompt injection, stale offer reuse).
+    const provenanceFailure = await checkOfferProvenance({
+      tripId: validated.tripId,
+      offerIds: slices.map(s => s.offerId),
+    });
+    if (provenanceFailure) {
+      return {
+        tripId: validated.tripId,
+        state: 'rejected' as const,
+        slices: slices.map(s => ({
+          sliceIndex: s.sliceIndex,
+          offerId: s.offerId,
+          state: 'pending' as const,
+        })),
+        handoffRequired: {
+          reason: 'offer_provenance_missing',
+          suggestedAction: provenanceFailure,
+        },
+      } satisfies BookTripResult;
+    }
+
     // ── Pre-hold validation (Codex finding g) ─────────────────────
     // Peek offer segments BEFORE phase-1 so we never burn Duffel hold
     // quota on a combo that violates route continuity or min-layover.
@@ -587,6 +613,72 @@ function validateRouteAndLayover(args: {
     }
   }
   return null;
+}
+
+/**
+ * Provenance TTL — recentSplitTicketSearch must have been stamped by
+ * `search_flights` within this many minutes for its offer ids to be
+ * honored. Duffel offers themselves typically expire within ~30 min;
+ * giving the customer the entire offer-validity window matches their
+ * UX expectation while preventing stale-offer replay.
+ */
+const PROVENANCE_TTL_MINUTES = 30;
+
+/**
+ * Verify every offer id was surfaced by a same-trip `search_flights`
+ * itinerary-view call within the TTL window. Returns null on pass; on
+ * fail returns a human-readable reason for the handoff payload.
+ *
+ * Per Codex finding (c): without this check, an enabled tenant + a
+ * compromised / mis-prompted agent could submit arbitrary `off_*` ids
+ * to book_trip. The search-flights provenance stamp is the only path
+ * that legitimately produces split-ticket offer ids in this flow.
+ */
+async function checkOfferProvenance(args: {
+  tripId: string;
+  offerIds: string[];
+}): Promise<string | null> {
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: args.tripId },
+      select: { metadata: true },
+    });
+    const meta = trip?.metadata as
+      | { recentSplitTicketSearch?: { offerIds?: unknown; savedAt?: unknown } }
+      | null
+      | undefined;
+    const stamp = meta?.recentSplitTicketSearch;
+    if (!stamp) {
+      return 'No recent split-ticket search found on this trip. Call `search_flights` with `includeSplitTicket: true` first; the offer ids it returns must be used within 30 min.';
+    }
+    const savedAt = typeof stamp.savedAt === 'string' ? Date.parse(stamp.savedAt) : NaN;
+    if (!Number.isFinite(savedAt)) {
+      return 'Split-ticket search stamp is malformed (missing or invalid `savedAt`). Re-run `search_flights`.';
+    }
+    const ageMs = Date.now() - savedAt;
+    if (ageMs > PROVENANCE_TTL_MINUTES * 60_000) {
+      return `Split-ticket search stamp is ${Math.round(ageMs / 60_000)}min old (TTL ${PROVENANCE_TTL_MINUTES}min). Re-run \`search_flights\` to refresh.`;
+    }
+    const allowed = new Set<string>(
+      Array.isArray(stamp.offerIds)
+        ? stamp.offerIds.filter((v): v is string => typeof v === 'string')
+        : []
+    );
+    const missing = args.offerIds.filter(id => !allowed.has(id));
+    if (missing.length > 0) {
+      return `Offer ids not in recent split-ticket search results: ${missing.join(', ')}. The offer ids book_trip accepts must come from the same trip's most recent \`search_flights\` itinerary-view response.`;
+    }
+    return null;
+  } catch (err) {
+    // Fail closed on a lookup error — refuse rather than honor a
+    // potentially-fraudulent request. The handoff message tells the
+    // operator what to investigate.
+    console.warn('[book_trip] checkOfferProvenance failed (failing closed)', {
+      tripId: args.tripId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return 'Provenance lookup failed. Retry once; if it persists, request_human_handoff so an operator can investigate.';
+  }
 }
 
 async function resolveTenantAllowsSplitTicket(ctx: ToolContext | undefined): Promise<boolean> {
