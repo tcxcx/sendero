@@ -21,6 +21,7 @@ import type {
   StaysSearchResult,
 } from '@duffel/api/types';
 import { env } from '@sendero/env';
+import { z } from 'zod';
 
 import type {
   DuffelAirlineCreditCreateWire,
@@ -441,29 +442,82 @@ export async function searchFlightsItineraries(
     );
   }
 
-  const json = (await res.json()) as { data?: DuffelItineraryViewResponseWire };
-  return projectItinerariesResponse(json.data, params.origin, params.destination);
+  const json = (await res.json()) as { data?: unknown };
+  const parsed = duffelItineraryViewResponseSchema.safeParse(json.data);
+  if (!parsed.success) {
+    // Defensive degradation: Duffel hasn't fully documented the
+    // view=itineraries shape yet. A schema miss here is a signal worth
+    // logging, but read-only search must not throw and break the
+    // agent turn. Return empty so the caller falls back to the flat
+    // singleTicket-only view.
+    console.warn('[duffel] itinerary-view schema mismatch — returning empty result', {
+      error: parsed.error.issues.slice(0, 3),
+    });
+    return { singleTickets: [], slices: [] };
+  }
+  return projectItinerariesResponse(parsed.data, params.origin, params.destination);
 }
 
 /**
  * Internal shape of the `view=itineraries` response from
  * `POST /air/offer_requests`. Modeled defensively because Duffel hasn't
  * exposed this shape in the TypeScript SDK yet — fields may shift before
- * GA. Anything not understood is ignored; offers we can classify
- * (`type: single_ticket | split_ticket`) flow through.
+ * GA. The schema is intentionally permissive: every field is optional,
+ * unknown keys pass through, and every nested array drops null/undefined
+ * entries via `.nullable()` + `.transform(filter)` so a single bad row
+ * can't blow up projection.
  */
-interface DuffelItineraryViewResponseWire {
-  slices?: Array<{
-    origin?: { iata_code?: string } | string;
-    destination?: { iata_code?: string } | string;
-    departure_date?: string;
-    itineraries?: Array<{
-      brands?: Array<{
-        offers?: Array<RawItineraryOffer>;
-      }>;
-    }>;
-  }>;
+
+// Origin/destination arrive either as a bare IATA string or as a place
+// object. Union covers both Duffel response variants.
+const placeRefSchema = z.union([
+  z.string(),
+  z.object({ iata_code: z.string().optional() }).passthrough(),
+]);
+
+// Helper: array of nullable T → array of non-null T after filtering.
+function nonNullableArray<T extends z.ZodTypeAny>(inner: T) {
+  return z
+    .array(inner.nullable())
+    .transform(arr => arr.filter((x): x is z.infer<T> => x !== null && x !== undefined));
 }
+
+const rawItineraryOfferSchema = z
+  .object({
+    id: z.string().optional(),
+    type: z.enum(['single_ticket', 'split_ticket']).optional(),
+  })
+  .passthrough();
+
+const rawItineraryBrandSchema = z
+  .object({
+    offers: nonNullableArray(rawItineraryOfferSchema).optional(),
+  })
+  .passthrough();
+
+const rawItinerarySchema = z
+  .object({
+    brands: nonNullableArray(rawItineraryBrandSchema).optional(),
+  })
+  .passthrough();
+
+const rawItinerarySliceSchema = z
+  .object({
+    origin: placeRefSchema.optional(),
+    destination: placeRefSchema.optional(),
+    departure_date: z.string().optional(),
+    itineraries: nonNullableArray(rawItinerarySchema).optional(),
+  })
+  .passthrough();
+
+/** Exported for unit tests only. Do not depend on this in app code. */
+export const duffelItineraryViewResponseSchema = z
+  .object({
+    slices: nonNullableArray(rawItinerarySliceSchema).optional(),
+  })
+  .passthrough();
+
+type DuffelItineraryViewResponseWire = z.infer<typeof duffelItineraryViewResponseSchema>;
 
 type RawItineraryOffer = Omit<Offer, 'available_services'> & {
   type?: 'single_ticket' | 'split_ticket';
@@ -478,7 +532,8 @@ function extractIataCode(field: unknown): string | undefined {
   return undefined;
 }
 
-function projectItinerariesResponse(
+/** Exported for unit tests only. Do not depend on this in app code. */
+export function projectItinerariesResponse(
   data: DuffelItineraryViewResponseWire | undefined,
   fallbackOrigin: string,
   fallbackDestination: string
@@ -486,6 +541,9 @@ function projectItinerariesResponse(
   const singleTicketsById = new Map<string, FlightOfferSummary>();
   const sliceBuckets: ItinerarySliceOffers[] = [];
 
+  // Zod transforms have already filtered null/undefined entries out of
+  // the nested arrays — the only remaining defense is to skip offers
+  // missing an `id` (they're un-projectable + un-bookable).
   for (const rawSlice of data?.slices ?? []) {
     const sliceOrigin = extractIataCode(rawSlice.origin) ?? fallbackOrigin;
     const sliceDestination = extractIataCode(rawSlice.destination) ?? fallbackDestination;
@@ -500,16 +558,22 @@ function projectItinerariesResponse(
       for (const brand of itinerary.brands ?? []) {
         for (const offer of brand.offers ?? []) {
           if (!offer || !offer.id) continue;
+          const typedOffer = offer as unknown as RawItineraryOffer;
           if (offer.type === 'single_ticket') {
             if (!singleTicketsById.has(offer.id)) {
               singleTicketsById.set(
                 offer.id,
-                projectFlightOffer(offer, fallbackOrigin, fallbackDestination, 'single_ticket')
+                projectFlightOffer(
+                  typedOffer,
+                  fallbackOrigin,
+                  fallbackDestination,
+                  'single_ticket'
+                )
               );
             }
           } else if (offer.type === 'split_ticket') {
             bucket.splitTickets.push(
-              projectFlightOffer(offer, sliceOrigin, sliceDestination, 'split_ticket')
+              projectFlightOffer(typedOffer, sliceOrigin, sliceDestination, 'split_ticket')
             );
           }
           // Defensively ignore offers that arrive without a recognized type;
@@ -868,6 +932,42 @@ export async function getOfferOriginDestinationIso2(offerId: string): Promise<{
     originCountryAlpha2: originCountry,
     destinationCountryAlpha2: outboundDestCountry,
     isInternational,
+  };
+}
+
+/**
+ * Peek at an offer's slice segment shape without creating a Duffel
+ * hold order. Used by `book_trip` to pre-validate route continuity
+ * and min-layover BEFORE phase-1 `createHoldOrder` — Codex review
+ * caught that the post-hold check was burning Duffel hold quota
+ * whenever a bad combo slipped through.
+ *
+ * Returns the first-segment departure + last-segment arrival of the
+ * offer's outbound slice, plus origin/destination IATA. Returns
+ * nulls when the offer payload is missing slice/segment data
+ * (defensive — real Duffel offers always carry slices).
+ */
+export async function peekOfferSegments(offerId: string): Promise<{
+  offerId: string;
+  originIata: string | null;
+  destinationIata: string | null;
+  departureAt: string | null;
+  arrivalAt: string | null;
+  segments: NormalizedFlightSegment[];
+}> {
+  const duffel = getDuffel();
+  const offerResp = await duffel.offers.get(offerId);
+  const offer = offerResp.data as unknown as DuffelOfferWireMinimal;
+  const projected = projectOfferSegments(offer);
+  const first = projected.segments[0];
+  const last = projected.segments[projected.segments.length - 1];
+  return {
+    offerId,
+    originIata: projected.originIata,
+    destinationIata: projected.destinationIata,
+    departureAt: first?.departureAt ?? null,
+    arrivalAt: last?.arrivalAt ?? null,
+    segments: projected.segments,
   };
 }
 
