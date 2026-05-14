@@ -104,6 +104,31 @@ Circle Gas Station is EVM-only. Solana DCWs are regular Solana accounts that nee
 - **Fail-soft contract:** missing env → `{ topped: false, reason: 'platform_wallet_not_configured' }`. The SDK still surfaces the real "Insufficient SOL" error rather than this code crashing.
 - **NOT for traveler-side balance display.** The DCW's lamports get spent on tx fees; users may see ~0.01 SOL appear briefly then drop. Cosmetic only. Treat as platform plumbing.
 
+## Gateway signer KMS rewrap (Phase 5 Step 5)
+
+Tenant + user Gateway signer private keys live in two parallel forms during the canary:
+- **Legacy** `tenant_gateway_signers.encryptedPrivateKey` / `user_gateway_signers.encryptedPrivateKey` — AES-GCM under env-mode `SENDERO_KEK`. Kept as rollback fallback.
+- **KMS envelope** `newEnvelope` (BYTEA) + `kmsKeyResource` + `kmsKeyVersion` — per-row AES-GCM with KMS-wrapped DEK.
+
+Schema enum: `SignerKekProvider` (`env-v1` | `kms-v1`). CHECK constraint: rows must have `kekProvider='env-v1'` OR (`newEnvelope IS NOT NULL AND kmsKeyResource IS NOT NULL`). Both columns coexist; rollback is `READ_MODE=off`, never a schema mutation.
+
+**Runtime gate** (`packages/circle/src/gateway-signer.ts::shouldReadKmsEnvelope`):
+1. Row must be `kms-v1` with envelope + key resource.
+2. `SENDERO_GATEWAY_SIGNER_KMS_READ_MODE`: `canary` (default) → check canary list; `all` → every kms-v1 row; `off` → force env-mode.
+3. Canary lists: `SENDERO_GATEWAY_SIGNER_KMS_CANARY_TENANTS` / `..._CANARY_USERS` (comma-sep IDs, `*` wildcard). Tenant + user gates are independent.
+
+**Canary applied** 2026-05-13 on prod: all 13 rows rewrapped to `kms-v1` (11 tenants + 2 users), envelope ~767 bytes each. Only `cmp24bjrh0000ol9kf6vl1v6v` (sendero-sandbox) is in the canary tenant list — others stay on env-mode decrypt via preserved `encryptedPrivateKey`. KMS key: `projects/sendero-494217/locations/us/keyRings/sendero-tenants/cryptoKeys/gateway-signer-canary` (software, ENCRYPT_DECRYPT, v1).
+
+**DO NOT "rotate" `SENDERO_KEK`** — there is no re-encrypt-with-new-KEK pathway. Env-mode KEK only exists to decrypt pre-cutover ciphertexts. Replacing it bricks every env-v1 row. Correct shape:
+1. Rewrap all rows → `kms-v1`.
+2. `READ_MODE=all` activates KMS everywhere.
+3. Then *retire* (delete) `SENDERO_KEK`. Drop `encryptedPrivateKey` in a follow-up migration.
+4. If a fresh env-mode fallback is needed later, add `SENDERO_KEK_V2` alongside (encryption package keys on `kekVersion`).
+
+**Rewrap script**: `apps/app/scripts/migrate-kek-to-kms.ts`. Defaults dry-run. Flags: `--tenant <id>`, `--user <id>`, `--all-tenants`, `--all-users`, `--limit N`, `--apply`. Decrypts via env mode → re-derives the account address → refuses to write on address mismatch (corruption guard) → KMS encrypt + round-trip verify → compare-and-swap UPDATE keyed on (kekProvider='env-v1', encryptedPrivateKey unchanged, kekVersion).
+
+**Full canary runbook (S5.1–S5.10)**: `docs/PHASE_5_PRODUCTION_HARDENING_RUNBOOK.md`.
+
 ## SenderoStamps deployment runbook (Circle SCP, Arc-Testnet)
 
 Live: `0xcc0fa83535675a856d773cfbc71232c3d7b71a03` (proxy) → `0xCCf28A443e35F8bD982b8E8651bE9f6caFEd4672` (thirdweb TokenERC1155). Circle ERC-1155 template `aea21da6-0aa2-4971-9a1a-5098842b1248`. Gas via Circle Gas Station (fiat).
@@ -630,3 +655,35 @@ Production agents fall back to `request_human_handoff` (Sendero-native, fully wi
 **Debugging chain:** gap board → Langfuse trace (via `traceId` on the gap row) → Vercel logs (`vercel logs <deployment>`) → Cloudflare worker logs (when `kind: 'runtime_constraint'`). Total ~5 min from gap surfacing to root cause; ask Claude one question and it walks all four sources in parallel.
 
 **Pre-push gate:** if you're tempted to expose either gap-tool to a production caller, the answer is `request_human_handoff` instead. The handler-level gate is load-bearing — don't soften it.
+
+## Sendero Open-Agents — sibling fork of vercel-labs/open-agents
+
+The Raj demand-driven kanban + auto-execute loop ships from a **separate GitHub repository**, not from this monorepo. Forked directly from `vercel-labs/open-agents` (peer to `BuFi007/desk-v1`, not downstream of it). Repo: `github.com/tcxcx/sendero-open-agents`. Deployed independently to Vercel.
+
+```
+       vercel-labs/open-agents (upstream)
+                │
+   ┌────────────┼────────────┐
+   │            │            │
+BuFi007/    tcxcx/        <future
+desk-v1    sendero-       verticals>
+            open-agents
+```
+
+**Three siblings, no vendoring.** Sendero monorepo never imports OA code. Integration is two HTTP boundaries:
+- Sendero → Minions: `POST /api/agent-gaps/ingest` (mirrors gap reports)
+- Minions → Sendero: `GET /api/agent-gaps/find-resolved` (self-heal preamble lookup)
+
+Both gated by `AGENT_GAPS_INGEST_SECRET` (constant-time compare). Env vars set on Sendero side: `AGENT_GAPS_BASE_URL`, `AGENT_GAPS_INGEST_SECRET`. **NOT yet wired** — base fork must deploy first, kanban migration second, observability third.
+
+**Migration phases (cherry-picks against tcxcx/sendero-open-agents `main`):**
+- M1: kanban + agent-gaps loop (from `BuFi007/desk-v1 tcxcx/minions-raj-loop` — 5 raj commits: `fa667a3fc`, `aa5840087`, `67def7729`, `486806a9e`, `ac56aa978`)
+- M2: GH App install token + bridge-bot pattern (from BuFi007)
+- M3: direction-B live completion callback (from BuFi007)
+- M4: paired Langfuse + Phoenix observability — Sendero-specific, no upstream
+- M5: ATEO play (from BuFi007 — identify commits when ready)
+
+**Dashboard URLs (not in any Vercel doc — record once, reuse forever):**
+- Sign-in-with-Vercel OAuth apps: `https://vercel.com/account/settings/sign-in-with-vercel` (personal account scope, NOT under integrations console which is marketplace-only)
+- Marketplace integrations console: `https://vercel.com/dashboard/integrations/console` (do NOT use for OAuth-only apps)
+- Each Sign-in-with-Vercel app has a `connection_cl_*` ID in the URL once created.

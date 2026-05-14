@@ -137,6 +137,9 @@ export async function POST(req: NextRequest) {
         amount: body.amount,
         recipient: body.to,
         destinationChain: 'Arc_Testnet',
+        gatewayTransferLogId: log.id,
+        journalContextRef: log.id,
+        journalContextKind: 'spend',
       });
       await assertArcUsdcMintedToRecipient({
         txHash: result.txHash,

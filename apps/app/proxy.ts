@@ -41,6 +41,7 @@ const isPublicRoute = createRouteMatcher([
   '/robots.txt',
   '/sitemap.xml',
   '/api/mcp(.*)', // public MCP discovery + tool invocation surface
+  '/api/openapi.json', // public OpenAPI 3.1 spec — Scalar / Postman / external agents discover the tool catalog without auth (per-tool auth still required at /api/agent/dispatch). File-level comment in app/api/openapi.json/route.ts says "Public — no auth required to read the spec itself."
   '/api/workflows/list', // public workflow discovery for other agents
   '/api/agent/runtime', // public model/tool runtime metadata; no tenant data
   '/api/agent/identity', // public agent identity and reputation metadata

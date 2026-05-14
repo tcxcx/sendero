@@ -13,6 +13,15 @@ export interface JsonSchemaObject {
   [key: string]: unknown;
 }
 
+export interface TripEvent {
+  id: string;
+  kind: string;
+  direction: 'inbound' | 'outbound' | 'internal';
+  channel: 'whatsapp' | 'slack' | 'sms' | 'email' | 'web' | 'internal';
+  createdAt: string;
+  [key: string]: unknown;
+}
+
 export interface ToolContext {
   /** Active Trip.id for this tool turn, when the caller is scoped to a trip. */
   tripId?: string;
@@ -86,6 +95,19 @@ export interface ToolContext {
     /** User.id of the traveler-side wallet bearer when type='traveler'. */
     travelerUserId?: string;
   };
+  appendTripEvent?: (args: {
+    tripId: string;
+    tenantId: string;
+    event: TripEvent;
+  }) => Promise<boolean>;
+  resolveTripByBoardingPass?: (args: {
+    tenantId: string;
+    userId: string;
+    pnr: string | null | undefined;
+    flightNumber: string | null | undefined;
+    departureDate: string | null | undefined;
+  }) => Promise<{ id: string } | null>;
+  readTripEvents?: (args: { tripId: string; tenantId: string }) => Promise<TripEvent[]>;
 }
 
 export interface ToolDef<I = any, O = any> {

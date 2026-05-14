@@ -90,3 +90,126 @@ export async function notifyPlatformWalletLow(args: PlatformWalletLowAlertArgs):
     });
   }
 }
+
+export interface JournalReconcileBreakArgs {
+  breaks: Array<{
+    tenantId: string;
+    chain: string;
+    journalMicroUsdc: string;
+    balanceMicroUsdc: string;
+    deltaMicroUsdc: string;
+  }>;
+}
+
+export async function notifyJournalReconcileBreak(args: JournalReconcileBreakArgs): Promise<void> {
+  const botToken = process.env.SLACK_BOT_TOKEN;
+  const channelId = process.env.SLACK_CHANNEL_ID;
+  if (!botToken || !channelId) {
+    console.warn(
+      '[journal-reconcile-alert] SLACK_BOT_TOKEN / SLACK_CHANNEL_ID not set — alert dropped',
+      { breaks: args.breaks.length }
+    );
+    return;
+  }
+
+  const sample = args.breaks
+    .slice(0, 10)
+    .map(
+      b =>
+        `• tenant=\`${b.tenantId}\` chain=\`${b.chain}\` journal=\`${b.journalMicroUsdc}\` ` +
+        `balance=\`${b.balanceMicroUsdc}\` delta=\`${b.deltaMicroUsdc}\``
+    )
+    .join('\n');
+  const text =
+    `:warning: *Gateway journal reconciliation break* — ${args.breaks.length} mismatch(es)\n` +
+    sample;
+
+  try {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Authorization: `Bearer ${botToken}`,
+      },
+      body: JSON.stringify({
+        channel: channelId,
+        text,
+        unfurl_links: false,
+        unfurl_media: false,
+      }),
+    });
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+    if (!body?.ok) {
+      console.warn('[journal-reconcile-alert] Slack chat.postMessage rejected', {
+        slackError: body?.error ?? `http_${res.status}`,
+      });
+    }
+  } catch (err) {
+    console.warn('[journal-reconcile-alert] Slack send threw', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+export interface GatewayIntentStuckAlertArgs {
+  intents: Array<{
+    id: string;
+    tenantId: string;
+    state: string;
+    destinationChain: string;
+    amountMicroUsdc: string;
+    ageMinutes: number;
+  }>;
+}
+
+export async function notifyGatewayIntentStuck(args: GatewayIntentStuckAlertArgs): Promise<void> {
+  const botToken = process.env.SLACK_BOT_TOKEN;
+  const channelId = process.env.SLACK_CHANNEL_ID;
+  if (!botToken || !channelId) {
+    console.warn(
+      '[gateway-intent-alert] SLACK_BOT_TOKEN / SLACK_CHANNEL_ID not set — alert dropped',
+      {
+        intents: args.intents.length,
+      }
+    );
+    return;
+  }
+
+  const sample = args.intents
+    .slice(0, 10)
+    .map(
+      intent =>
+        `• intent=\`${intent.id}\` tenant=\`${intent.tenantId}\` state=\`${intent.state}\` ` +
+        `dest=\`${intent.destinationChain}\` amount=\`${intent.amountMicroUsdc}\` age=\`${intent.ageMinutes}m\``
+    )
+    .join('\n');
+  const text =
+    `:warning: *Gateway transfer intent stuck* — ${args.intents.length} intent(s) need review\n` +
+    sample;
+
+  try {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Authorization: `Bearer ${botToken}`,
+      },
+      body: JSON.stringify({
+        channel: channelId,
+        text,
+        unfurl_links: false,
+        unfurl_media: false,
+      }),
+    });
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+    if (!body?.ok) {
+      console.warn('[gateway-intent-alert] Slack chat.postMessage rejected', {
+        slackError: body?.error ?? `http_${res.status}`,
+      });
+    }
+  } catch (err) {
+    console.warn('[gateway-intent-alert] Slack send threw', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}

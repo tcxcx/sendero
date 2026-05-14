@@ -59,6 +59,8 @@ export const TOOL_PRICING: Record<string, string> = {
   travel_safety_aid: '0.005',
   recommend_restaurants: '0.002',
   export_route_map: '0.002',
+  airport_info: '0.005',
+  pricing_benchmark: '0.05',
 
   // Composed concierge + ops artifacts
   restaurant_route_card: '0.005',
@@ -101,15 +103,60 @@ export const TOOL_PRICING: Record<string, string> = {
   // settlement-tier per-call rate ($1.00 micro) to mirror confirm_booking.
   get_tenant_pricing_policy: '0.0005',
   activate_tenant_pricing_policy: '1.00',
+
+  // ── Managed workflow surface ─────────────────────────────────────
+  // Each entry mirrors `WORKFLOW_PRICING` in `@sendero/workflows/pricing`
+  // with the tool-name transform `sendero.X` → `sendero_X` (MCP tool names
+  // must match `^[a-zA-Z0-9_-]{1,128}$`, no dots). The drift-guard test
+  // in `__tests__/workflow-pricing-sync.test.ts` keeps both maps in lock-
+  // step — if it fires, sync the new workflow to both places. We inline
+  // rather than import @sendero/workflows because tools is below it in
+  // the dep graph (workflows peer-deps tools/types).
+  //
+  // Top tier ($0.25) — escrow + ticketing + money movement
+  sendero_book_flight: '0.25',
+  sendero_guest_prefund: '0.25',
+  sendero_book_with_ancillaries: '0.25',
+  sendero_book_stay_with_loyalty: '0.25',
+  sendero_cancel_order_with_credits: '0.25',
+  sendero_refund: '0.25',
+  sendero_cancellation_recovery: '0.25',
+  sendero_group_trip: '0.25',
+  sendero_agency_cohort: '0.25',
+  sendero_ops_quote_to_book: '0.25',
+  sendero_ops_rebook_refund: '0.25',
+  // Mid tier ($0.15) — read + replan, hold but no settle
+  sendero_trip_delay_replanner: '0.15',
+  sendero_verify_travel_documents: '0.15',
+  // Read tier ($0.10) — pure orchestrated reads
+  sendero_travel_safety_brief: '0.10',
+  sendero_check_in_reminder: '0.10',
+
+  // Resume an externally-launched workflow that paused awaiting input.
+  // Priced as a sub-cent read because the original workflow already
+  // paid the tier price; resume is a cheap re-entry point.
+  resume_workflow: '0.001',
 };
 
 /** USDC has 6 decimals on every chain. */
 const USDC_DECIMALS = 6;
 
+/**
+ * Default price for tools with no explicit `TOOL_PRICING` entry.
+ * Per CLAUDE.md `## Default-free tool pricing`: every tool needs a
+ * pricing *policy*, most should be `'0'` until they create real infra
+ * cost worth charging for. Reads, config lookups, balances, and
+ * explainers default-free; external API calls + on-chain writes go
+ * in TOOL_PRICING explicitly.
+ *
+ * Keeping this here (vs. forcing every tool name into TOOL_PRICING)
+ * avoids 500s on the edge worker when a new tool ships before its
+ * price entry — the request just runs free instead of throwing.
+ */
+export const DEFAULT_FREE_PRICE = '0';
+
 export function priceFor(toolName: string): string {
-  const p = TOOL_PRICING[toolName];
-  if (!p) throw new Error(`No price configured for tool: ${toolName}`);
-  return p;
+  return TOOL_PRICING[toolName] ?? DEFAULT_FREE_PRICE;
 }
 
 /** Decimal "0.005" → atomic "5000" (6 decimals). */

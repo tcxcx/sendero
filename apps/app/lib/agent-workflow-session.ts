@@ -131,7 +131,7 @@ export interface PersistedAgentWorkflowContext {
   /** Channel + identity that owns this run — used by the webhook
    *  resume path to find the right Session row. */
   channelIdentityId: string;
-  channel: 'whatsapp' | 'slack' | 'web';
+  channel: AgentWorkflowChannel;
 }
 
 function isPersistedAgentContext(raw: unknown): raw is PersistedAgentWorkflowContext {
@@ -170,8 +170,15 @@ function contextFromRun(
 
 // ─── subject-key conventions ─────────────────────────────────────────
 
+/**
+ * Channel adapters that own an agent-workflow Session. `api` is the
+ * marker for external-API-key callers (no channelIdentity, keyed by
+ * the API key id or, on first start, the workflow runId).
+ */
+export type AgentWorkflowChannel = 'whatsapp' | 'slack' | 'web' | 'api';
+
 export function agentWorkflowSubjectKey(args: {
-  channel: 'whatsapp' | 'slack' | 'web';
+  channel: AgentWorkflowChannel;
   channelIdentityId: string;
 }): string {
   return `agent:${args.channel}:${args.channelIdentityId}`;
@@ -197,7 +204,7 @@ export function buildAgentWorkflowToolRegistry(ctx: ToolContext = {}): ToolRegis
 export interface StartAgentWorkflowArgs {
   tenantId: string;
   /** Channel adapter that owns this run — drives Session subjectKey. */
-  channel: 'whatsapp' | 'slack' | 'web';
+  channel: AgentWorkflowChannel;
   /** ChannelIdentity row id — keys the Session per-traveler. */
   channelIdentityId: string;
   /** Optional Sendero User id stamped on the Session row. */
@@ -284,7 +291,7 @@ export async function startAgentWorkflow(
 
 export interface LoadPausedArgs {
   tenantId: string;
-  channel: 'whatsapp' | 'slack' | 'web';
+  channel: AgentWorkflowChannel;
   channelIdentityId: string;
 }
 
@@ -328,7 +335,7 @@ export interface ResumeAgentWorkflowArgs {
   /** Override channel/identity if they differ from the persisted ctx
    *  (rare — channel re-binding). */
   channelIdentityId?: string;
-  channel?: 'whatsapp' | 'slack' | 'web';
+  channel?: AgentWorkflowChannel;
   userId?: string | null;
   /** Optional active trip for the step-event ledger fan-out. */
   tripId?: string | null;
@@ -391,7 +398,7 @@ interface PersistAndProjectArgs {
   def: WorkflowDef;
   tenantId: string;
   subjectKey: string;
-  channel: 'whatsapp' | 'slack' | 'web';
+  channel: AgentWorkflowChannel;
   channelIdentityId: string;
   userId: string | null;
   existingSessionId?: string;

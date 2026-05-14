@@ -1,0 +1,20 @@
+{
+  "name": "@sendero/pasillo-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sendero → Pasillo (BUFI API gateway) HTTP client. Vercel OIDC + HMAC defense-in-depth auth, idempotency-keyed POSTs, typed methods over the ramp/* + customers/* surface.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth/oidc": "./src/auth/oidc.ts",
+    "./auth/hmac": "./src/auth/hmac.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "*"
+  }
+}

@@ -38,7 +38,13 @@
  *   in-process is the right primitive here.
  */
 
-import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from 'node:crypto';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -74,6 +80,25 @@ export interface DecryptArgs {
   contextId: string;
   /** KEK version the row was encrypted under (stored separately). */
   kekVersion: number;
+}
+
+export interface KmsEnvelopeEncryptArgs {
+  plaintext: string;
+  purpose: EncryptionPurpose;
+  contextId: string;
+  kmsKeyName: string;
+}
+
+export interface KmsEnvelopeDecryptArgs {
+  envelope: Uint8Array | Buffer;
+  purpose: EncryptionPurpose;
+  contextId: string;
+}
+
+export interface KmsEnvelopeMetadata {
+  kmsKeyName: string;
+  kmsKeyVersion?: string;
+  createdAt: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -185,8 +210,7 @@ async function loadKekFromKms(version: number): Promise<Buffer> {
     );
   }
 
-  const { KeyManagementServiceClient } = await import('@google-cloud/kms');
-  const client = new KeyManagementServiceClient();
+  const client = await kmsClient();
   const [response] = await client.decrypt({
     name: resource,
     ciphertext: Buffer.from(ciphertext, 'base64'),
@@ -303,5 +327,195 @@ export async function decrypt(args: DecryptArgs): Promise<string> {
   } catch {
     // Don't leak which input failed — surface a uniform error.
     throw new Error('decrypt: authentication failed (tampered ciphertext or wrong context)');
+  }
+}
+
+// ── Per-row KMS envelope encryption ───────────────────────────────────
+
+type KmsEnvelopeV1 = {
+  v: 1;
+  alg: 'AES-256-GCM';
+  wrap: 'gcp-kms';
+  purpose: EncryptionPurpose;
+  contextIdSha256: string;
+  kmsKeyName: string;
+  kmsKeyVersion?: string;
+  wrappedDek: string;
+  iv: string;
+  ciphertext: string;
+  tag: string;
+  createdAt: string;
+};
+
+/**
+ * Encrypt a secret under a fresh random DEK and wrap that DEK with a
+ * Google Cloud KMS key. The returned Buffer is JSON by design: opaque
+ * to Postgres but readable during incident response without custom
+ * binary tooling. The plaintext DEK never leaves process memory except
+ * through the KMS Encrypt RPC.
+ */
+export async function encryptKmsEnvelope(
+  args: KmsEnvelopeEncryptArgs
+): Promise<{ envelope: Buffer; metadata: KmsEnvelopeMetadata }> {
+  if (!args.contextId) throw new Error('encryptKmsEnvelope: contextId required');
+  if (!args.kmsKeyName) throw new Error('encryptKmsEnvelope: kmsKeyName required');
+
+  const dek = randomBytes(KEY_LEN);
+  const iv = randomBytes(IV_LEN);
+  const aad = kmsEnvelopeAad(args.purpose, args.contextId, args.kmsKeyName);
+  const cipher = createCipheriv('aes-256-gcm', dek, iv);
+  cipher.setAAD(aad);
+  const ciphertext = Buffer.concat([cipher.update(args.plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  const client = await kmsClient();
+  const [wrapped] = await client.encrypt({
+    name: args.kmsKeyName,
+    plaintext: dek,
+  });
+  if (!wrapped.ciphertext) {
+    throw new Error(`KMS encrypt returned no ciphertext for ${args.kmsKeyName}`);
+  }
+
+  const createdAt = new Date().toISOString();
+  const envelope: KmsEnvelopeV1 = {
+    v: 1,
+    alg: 'AES-256-GCM',
+    wrap: 'gcp-kms',
+    purpose: args.purpose,
+    contextIdSha256: contextIdHash(args.contextId),
+    kmsKeyName: args.kmsKeyName,
+    kmsKeyVersion: wrapped.name,
+    wrappedDek: Buffer.from(wrapped.ciphertext).toString('base64'),
+    iv: iv.toString('base64'),
+    ciphertext: ciphertext.toString('base64'),
+    tag: tag.toString('base64'),
+    createdAt,
+  };
+  return {
+    envelope: Buffer.from(JSON.stringify(envelope), 'utf8'),
+    metadata: {
+      kmsKeyName: args.kmsKeyName,
+      kmsKeyVersion: wrapped.name,
+      createdAt,
+    },
+  };
+}
+
+/**
+ * Decrypt a per-row KMS envelope produced by encryptKmsEnvelope().
+ * Purpose and contextId are authenticated both by envelope metadata and
+ * by AES-GCM AAD, so moving an envelope between tenants/users fails.
+ */
+export async function decryptKmsEnvelope(args: KmsEnvelopeDecryptArgs): Promise<string> {
+  const envelope = parseKmsEnvelope(args.envelope);
+  if (envelope.purpose !== args.purpose) {
+    throw new Error(`decryptKmsEnvelope: purpose mismatch (${envelope.purpose})`);
+  }
+  const expectedContextHash = contextIdHash(args.contextId);
+  const actual = Buffer.from(envelope.contextIdSha256, 'hex');
+  const expected = Buffer.from(expectedContextHash, 'hex');
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    throw new Error('decryptKmsEnvelope: contextId mismatch');
+  }
+
+  const client = await kmsClient();
+  const [unwrapped] = await client.decrypt({
+    name: envelope.kmsKeyName,
+    ciphertext: Buffer.from(envelope.wrappedDek, 'base64'),
+  });
+  if (!unwrapped.plaintext) {
+    throw new Error(`KMS decrypt returned no plaintext for ${envelope.kmsKeyName}`);
+  }
+  const dek =
+    typeof unwrapped.plaintext === 'string'
+      ? Buffer.from(unwrapped.plaintext, 'base64')
+      : Buffer.from(unwrapped.plaintext);
+  if (dek.length !== KEY_LEN) {
+    throw new Error(`KMS-unwrapped DEK is ${dek.length} bytes, expected ${KEY_LEN}`);
+  }
+
+  const decipher = createDecipheriv('aes-256-gcm', dek, Buffer.from(envelope.iv, 'base64'));
+  decipher.setAAD(kmsEnvelopeAad(args.purpose, args.contextId, envelope.kmsKeyName));
+  decipher.setAuthTag(Buffer.from(envelope.tag, 'base64'));
+  try {
+    return Buffer.concat([
+      decipher.update(Buffer.from(envelope.ciphertext, 'base64')),
+      decipher.final(),
+    ]).toString('utf8');
+  } catch {
+    throw new Error('decryptKmsEnvelope: authentication failed');
+  }
+}
+
+export function readKmsEnvelopeMetadata(envelopeBytes: Uint8Array | Buffer): KmsEnvelopeMetadata {
+  const envelope = parseKmsEnvelope(envelopeBytes);
+  return {
+    kmsKeyName: envelope.kmsKeyName,
+    kmsKeyVersion: envelope.kmsKeyVersion,
+    createdAt: envelope.createdAt,
+  };
+}
+
+function parseKmsEnvelope(envelopeBytes: Uint8Array | Buffer): KmsEnvelopeV1 {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(envelopeBytes).toString('utf8'));
+  } catch {
+    throw new Error('KMS envelope is not valid JSON');
+  }
+  if (!parsed || typeof parsed !== 'object') throw new Error('KMS envelope is empty');
+  const envelope = parsed as Partial<KmsEnvelopeV1>;
+  if (
+    envelope.v !== 1 ||
+    envelope.alg !== 'AES-256-GCM' ||
+    envelope.wrap !== 'gcp-kms' ||
+    !envelope.purpose ||
+    !envelope.contextIdSha256 ||
+    !envelope.kmsKeyName ||
+    !envelope.wrappedDek ||
+    !envelope.iv ||
+    !envelope.ciphertext ||
+    !envelope.tag ||
+    !envelope.createdAt
+  ) {
+    throw new Error('KMS envelope has invalid shape');
+  }
+  return envelope as KmsEnvelopeV1;
+}
+
+function kmsEnvelopeAad(purpose: EncryptionPurpose, contextId: string, kmsKeyName: string): Buffer {
+  return Buffer.from(
+    `sendero.kms-envelope.v1|purpose=${purpose}|context=${contextId}|key=${kmsKeyName}`,
+    'utf8'
+  );
+}
+
+function contextIdHash(contextId: string): string {
+  const mac = createHmac('sha256', HKDF_SALT);
+  mac.update(contextId);
+  return mac.digest('hex');
+}
+
+async function kmsClient() {
+  const { KeyManagementServiceClient } = await import('@google-cloud/kms');
+  const rawJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (!rawJson) return new KeyManagementServiceClient();
+
+  try {
+    const credentials = JSON.parse(rawJson) as {
+      client_email?: string;
+      private_key?: string;
+      project_id?: string;
+    };
+    return new KeyManagementServiceClient({
+      credentials,
+      projectId: process.env.GOOGLE_CLOUD_PROJECT ?? credentials.project_id,
+    });
+  } catch {
+    console.warn(
+      '[encryption] GOOGLE_APPLICATION_CREDENTIALS_JSON is set but invalid; falling back to ADC'
+    );
+    return new KeyManagementServiceClient();
   }
 }

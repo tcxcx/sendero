@@ -50,6 +50,7 @@ import {
   selectModel,
 } from './models';
 import { buildSystemPrompt, renderWorkflowsBlock } from './prompt';
+import { buildSelfHealPreamble } from './self-heal';
 import { appendTurn, type ConversationState, type SessionStore } from './session';
 
 export interface TripSnapshot {
@@ -226,8 +227,16 @@ async function _runAgentTurnInner(
   const recentTurnsBlock = renderRecentTurns(state);
   const attachmentsHintBlock = renderAttachmentsHint(input);
   const travelDocumentHintBlock = renderTravelEligibilityHint();
+  // Self-heal preamble: ask the Minions board whether a similar
+  // hypothesis was resolved before. Fail-soft — returns null on
+  // missing env (loop not configured), timeout, or any error. Adds at
+  // most ~1.5s of latency to the turn when the seam is wired.
+  const selfHealPreamble = input.text
+    ? await buildSelfHealPreamble({ hypothesis: input.text })
+    : null;
   const systemPrompt = buildSystemPrompt({
     persona: args.persona,
+    selfHealPreamble: selfHealPreamble ?? undefined,
     locale: input.actor.locale,
     localeSlice: localeSliceMatchesRequestedLanguage(localeSlice.locale, input.actor.locale)
       ? localeSlice

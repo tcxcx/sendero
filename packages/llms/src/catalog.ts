@@ -68,6 +68,16 @@ export const AGENT_TOOL_CATALOG: LlmsItem[] = [
     description: 'Validate and geocode travel-critical addresses such as hotels and pickups.',
   },
   {
+    label: 'airport_info',
+    description:
+      'Resolve a 3-letter IATA airport code to canonical metadata (name, city, country, timezone, lat/lon, ICAO). Backed by Duffel.',
+  },
+  {
+    label: 'pricing_benchmark',
+    description:
+      'Anonymized route-level pricing intelligence. Returns median, p25, p75, and sample size from the rolling booking window for an origin/destination pair (IATA or ISO country). K-anonymity enforced (n ≥ 20) — sub-threshold pairs return `{ available: false }` with no partial leak. The aggregate compounds every booking; the network gets smarter the more agents transact through Sendero. Premium read tier.',
+  },
+  {
     label: 'timezone_brief',
     description: 'Explain time zone, offsets, and local-time context for a trip stop.',
   },
@@ -641,8 +651,8 @@ export function buildSenderoAppLlms(options: SurfaceOptions = {}): LlmsTxtConfig
         items: AGENT_TOOL_CATALOG,
       },
       {
-        heading: 'Managed Workflow Catalog',
-        body: 'Workflows are named plans for agents that want Sendero to orchestrate multiple tool calls, external pauses, escrow transitions, and invoice generation. Discover the live set via the MCP endpoint or `/api/workflows/list`.',
+        heading: 'Managed Workflow Catalog (premium — agents buy outcomes, not steps)',
+        body: 'Replace hand-rolled queues and retries with durable, resumable code. Workflows are the productized layer above the primitive tools: instead of paying per-call to chain `search_flights → check_policy → reserve_booking → commit_booking → settle_booking → generate_booking_invoice` yourself — and managing failure, retry, and state across user replies — call one workflow (e.g. `sendero.book_flight`) and Sendero runs the multi-step plan end-to-end. Durable execution with pause/resume across channels, on-chain escrow coherence, single settled artifact (trip + invoice + ledger). Priced at a 10–20× premium over the underlying primitives because the agent caller buys the **outcome**, not the steps. Pricing tiers: read `$0.10`, mid `$0.15`, escrow/ticketing/money `$0.25`. Discover the live set with prices via the MCP endpoint or `/api/workflows/list`.',
         items: AGENT_WORKFLOW_CATALOG,
       },
       {

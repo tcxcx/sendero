@@ -242,6 +242,8 @@ import { ensureFlightCustomerTool } from './ensure-flight-customer';
 import { exportRouteMapTool } from './export-route-map';
 import { faucetDripTool } from './faucet';
 import { findAirportsNearbyTool } from './find-airports-nearby';
+import { airportInfoTool } from './airport-info';
+import { pricingBenchmarkTool } from './pricing-benchmark';
 import { mintStampTool, refreshStampUriTool } from './mint-stamp';
 import { moonpayTopupTool } from './moonpay-topup';
 import { getMoonpayTopupStatusTool } from './get-moonpay-topup-status';
@@ -924,6 +926,8 @@ export const toolList: ToolDef[] = [
   addBaggageTool,
   // Advanced flight flows (air + stays + credits + conditions + places)
   findAirportsNearbyTool,
+  airportInfoTool,
+  pricingBenchmarkTool,
   displayOfferConditionsTool,
   listStayRatesTool,
   quoteStayTool,

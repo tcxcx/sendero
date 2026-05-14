@@ -46,6 +46,12 @@ import {
 } from '@sendero/billing';
 import type { LanguageModel } from 'ai';
 
+import {
+  createLobsterTrapModel,
+  lobsterTrapConfigured,
+  type LobsterTrapContext,
+} from '@/lib/lobstertrap';
+
 export type { ModelTier };
 export { gatewayErrorAllowsDirectRetry };
 
@@ -54,7 +60,16 @@ export { gatewayErrorAllowsDirectRetry };
  * fallback. Returns `null` if neither path is available; caller should 503
  * with a clear error.
  */
-export function resolveModel(tier: ModelTier): LanguageModel | string | null {
+export function resolveModel(
+  tier: ModelTier,
+  lobsterTrapContext?: LobsterTrapContext
+): LanguageModel | string | null {
+  if (lobsterTrapConfigured() && lobsterTrapContext) {
+    return createLobsterTrapModel({
+      modelId: selectModel({ tier }).model,
+      context: lobsterTrapContext,
+    });
+  }
   if (gatewayConfigured()) {
     return selectModel({ tier }).model;
   }

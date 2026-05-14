@@ -510,6 +510,31 @@ Start with [`apps/docs/content/docs/agent-to-agent-booking.mdx`](./apps/docs/con
 
 <br />
 
+## Sendero Minions — the agent's own bug tracker
+
+`sendero-arc-minions` is a sibling Vercel project (a fork of `vercel-labs/open-agents` living in [`apps/open-agents/`](./apps/open-agents)) that runs the **Raj demand-driven loop** — the agent's own Kanban-style bug tracker. When Sendero's agent hits a missing tool, wrong field name, dead instruction, or unrecoverable error, [`report_knowledge_gap`](./packages/tools/src/report-knowledge-gap.ts) files a card on the Minions board, deduped by `sha256(kind | tool_name | hypothesis_norm)` so the same root cause never opens twice. Operators drag a card to **"in_progress"** with the auto-execute switch on, and Minions kicks off a sandboxed OA session against the target repo to propose a fix as a PR — all without leaving the board.
+
+The two apps are integrated via a single HTTP seam:
+
+- **Direction A** — Sendero → Minions: `POST /api/agent-gaps/ingest` with `Authorization: Bearer ${AGENT_GAPS_INGEST_SECRET}` mirrors a gap report onto the Minions board.
+- **Direction B** — Minions → Sendero: `GET /api/agent-gaps/find-resolved` lets a running session ask "has anyone fixed this hypothesis before?" so prior fixes get injected back into the agent's system prompt as a self-heal preamble.
+
+On top of the loop, every card carries paired observability — **Phoenix →** and **Langfuse →** badges pointing at the same OpenTelemetry `trace_id`. The Sendero monolith and Minions both boot with a dual OTel processor (`@arizeai/phoenix-client` + `@langfuse/otel`), so one click takes an operator from a kanban card into Phoenix's entity-keyed cluster view *or* Langfuse's prompt + LLM-judge view of the exact same agent turn. On `resolveGap`, the `(hypothesis, fix_summary, must_mention)` triple gets pushed to a Phoenix `sendero-minions-resolved-gaps` dataset; a nightly evaluator scores any future trace whose `hypothesis_norm` matches a resolved entry but doesn't mention the `must_mention` tokens as a **self-heal regression** — closing the demand-driven loop.
+
+| | Main Sendero | Minions |
+|---|---|---|
+| Vercel project | `sendero-arc-web` | `sendero-arc-minions` |
+| Neon DB | Sendero main | isolated branch |
+| Langfuse project | `sendero` | `sendero-minions` |
+| Phoenix project | `sendero` | `sendero-minions` |
+| Slack channel | varies | `#sendero-minions` |
+| Slack app | Sendero bot | Sendero Minions app |
+| GitHub App | Sendero bot | `sendero-arc-minions` |
+
+The fork is tracked as a `git subtree` from upstream `vercel-labs/open-agents` so Vercel's upstream improvements flow in cleanly via `git subtree pull`, while Sendero-specific layers (the paired observability, the rename pass from BuFi's bridge-bot pattern to Sendero's, the migration adjustments) live as ordinary commits on top.
+
+<br />
+
 ## Why we built this
 
 Inspired by Y Combinator's thesis that **vertical AI agents may become larger businesses than SaaS** ([Lightcone](https://www.youtube.com/watch?v=ASABxNenD_U), [YC Shorts](https://www.youtube.com/shorts/lvmmk85ArWg)). The deeper idea is **replicability**: a template for vertical AI agents on Solana, paid for with nanopayments and usage-based billing instead of flat SaaS seats. Price tracks **work actually completed** in fully automated flows, which weakens the assumption that every workflow must live behind a traditional product UI.

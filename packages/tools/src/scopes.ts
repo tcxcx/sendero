@@ -135,6 +135,46 @@ export function toolToScope(toolName: string): KeyScope {
   if (toolName === 'report_knowledge_gap' || toolName === 'list_available_tools') {
     return 'utilities';
   }
+  // ── Managed workflow tier mapping ─────────────────────────────────
+  // Workflow tool names are `sendero_<workflow_id>` (mirror of the
+  // workflowId → toolName transform in `@sendero/workflows/external-tools`).
+  // Scope is derived from the pricing tier so adding a new workflow at
+  // the right price band auto-classifies the scope. Keep the lists in
+  // sync with `TOOL_PRICING`.
+  if (toolName.startsWith('sendero_')) {
+    if (
+      toolName === 'sendero_book_flight' ||
+      toolName === 'sendero_book_with_ancillaries' ||
+      toolName === 'sendero_book_stay_with_loyalty' ||
+      toolName === 'sendero_guest_prefund' ||
+      toolName === 'sendero_cancel_order_with_credits' ||
+      toolName === 'sendero_refund' ||
+      toolName === 'sendero_cancellation_recovery' ||
+      toolName === 'sendero_group_trip' ||
+      toolName === 'sendero_agency_cohort' ||
+      toolName === 'sendero_ops_quote_to_book' ||
+      toolName === 'sendero_ops_rebook_refund'
+    ) {
+      return 'settlement';
+    }
+    if (
+      toolName === 'sendero_trip_delay_replanner' ||
+      toolName === 'sendero_verify_travel_documents'
+    ) {
+      return 'bookings';
+    }
+    // sendero_travel_safety_brief, sendero_check_in_reminder, and any
+    // future read-tier workflow.
+    return 'trip_assistance';
+  }
+  if (toolName === 'resume_workflow') {
+    // Resuming a paused workflow exercises whatever scope the original
+    // start granted — but resume itself is just a re-entry, so we give
+    // it `trip_assistance` (read-mostly default scope can resume a
+    // read-tier workflow it started). The scope check on the underlying
+    // workflow re-fires when the next step runs.
+    return 'trip_assistance';
+  }
   return 'utilities';
 }
 
@@ -194,6 +234,24 @@ export const PRIVILEGED_TOOLS: ReadonlySet<string> = new Set([
   // and template-cost-bearing; HMAC requirement keeps a leaked
   // bearer key from spamming traveler phones.
   'broadcast_to_group_trip',
+  // Managed workflows that touch settlement / ticketing / refunds.
+  // Mirrors the top-tier ($0.25) entries in `TOOL_PRICING` and the
+  // 'settlement' scope branch above. Mid-tier workflows
+  // (sendero_trip_delay_replanner, sendero_verify_travel_documents)
+  // are scoped to 'bookings' but not signature-required — they read +
+  // plan without committing real money. Read-tier workflows are open
+  // (trip_assistance, no HMAC).
+  'sendero_book_flight',
+  'sendero_book_with_ancillaries',
+  'sendero_book_stay_with_loyalty',
+  'sendero_guest_prefund',
+  'sendero_cancel_order_with_credits',
+  'sendero_refund',
+  'sendero_cancellation_recovery',
+  'sendero_group_trip',
+  'sendero_agency_cohort',
+  'sendero_ops_quote_to_book',
+  'sendero_ops_rebook_refund',
 ]);
 // Note: channel-provisioning tools (kapso_*, slack_*) are NOT listed
 // here.  They're `internal: true` on their ToolDef, which strips them

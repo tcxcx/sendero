@@ -9,9 +9,8 @@
  * Run: `bun test apps/app/lib/__tests__/unified-message.test.ts`
  */
 
-import { describe, expect, test } from 'bun:test';
-
 import { eventsToUnifiedMessages } from '../unified-message';
+import { describe, expect, test } from 'bun:test';
 
 describe('eventsToUnifiedMessages', () => {
   test('empty / non-array → empty', () => {
@@ -137,6 +136,82 @@ describe('eventsToUnifiedMessages', () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.kind).toBe('tool_result');
     expect(out[0]!.rows).toHaveLength(2);
+  });
+
+  for (const documentKind of ['invoice', 'receipt', 'boarding_pass', 'id_document'] as const) {
+    test(`document_scanned ${documentKind}: renders structured tool result row`, () => {
+      const out = eventsToUnifiedMessages([
+        {
+          id: `doc_${documentKind}`,
+          kind: 'document_scanned',
+          documentKind,
+          direction: 'internal',
+          channel: 'internal',
+          createdAt: '2026-05-12T10:00:00Z',
+          extractedAt: '2026-05-12T10:00:01Z',
+          extractionRef: { provider: 'google', imageSha256: `sha_${documentKind}` },
+          summary: `${documentKind} extracted`,
+          redactedFields: { sample: 'masked' },
+        },
+      ]);
+      expect(out).toHaveLength(1);
+      expect(out[0]!.kind).toBe('tool_result');
+      expect(out[0]!.toolName).toBe('document_scanned');
+      expect(out[0]!.direction).toBe('internal');
+      expect(out[0]!.rows).toEqual([
+        {
+          documentKind,
+          extractedAt: '2026-05-12T10:00:01Z',
+          imageSha256: `sha_${documentKind}`,
+          summary: `${documentKind} extracted`,
+          redactedFields: { sample: 'masked' },
+        },
+      ]);
+    });
+  }
+
+  test('duplicate document_scanned event ids render once', () => {
+    const event = {
+      id: 'doc_same_image',
+      kind: 'document_scanned',
+      documentKind: 'receipt',
+      direction: 'internal',
+      channel: 'internal',
+      createdAt: '2026-05-12T10:00:00Z',
+      extractedAt: '2026-05-12T10:00:01Z',
+      extractionRef: { provider: 'google', imageSha256: 'sha_same' },
+    };
+    const out = eventsToUnifiedMessages([event, event]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.id).toBe('doc_same_image');
+  });
+
+  test('booked, paid, and stamped remain on legacy text fallback for this PR', () => {
+    const out = eventsToUnifiedMessages([
+      {
+        id: 'booked_1',
+        kind: 'booked',
+        text: 'Booking confirmed.',
+        createdAt: '2026-05-12T10:00:00Z',
+      },
+      {
+        id: 'paid_1',
+        kind: 'paid',
+        text: 'Payment received.',
+        createdAt: '2026-05-12T10:01:00Z',
+      },
+      {
+        id: 'stamped_1',
+        kind: 'stamped',
+        text: 'Stamp minted.',
+        createdAt: '2026-05-12T10:02:00Z',
+      },
+    ]);
+    expect(out.map(m => [m.id, m.kind, m.direction])).toEqual([
+      ['booked_1', 'message', 'internal'],
+      ['paid_1', 'message', 'internal'],
+      ['stamped_1', 'message', 'internal'],
+    ]);
   });
 
   test('chronological order is preserved (mapper does not re-sort)', () => {

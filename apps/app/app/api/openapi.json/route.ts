@@ -22,6 +22,8 @@ import { buildOpenApiDoc, toolList } from '@sendero/tools';
 import { resolvePublicOrigin } from '@sendero/seo';
 import { NextResponse } from 'next/server';
 
+import { buildBoundExternalWorkflowTools } from '@/lib/external-workflow-tools';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-static';
 export const revalidate = 3600;
@@ -35,9 +37,12 @@ export function GET() {
     // `/openapi/v1.0.0.json` on the docs site so phased SDK rollouts can
     // target it during the transition.
     title: 'Sendero Agent Tools',
-    version: '1.1.0',
+    version: '1.2.0',
     serverUrl: origin,
-    tools: toolList,
+    // Workflow tools (`sendero_*` + `resume_workflow`) are bound to a
+    // null api key here — the doc only consumes name/description/schema,
+    // never the handler. Dispatch + MCP rebind per-request.
+    tools: [...toolList, ...buildBoundExternalWorkflowTools({})],
   });
   return NextResponse.json(doc, {
     headers: {
