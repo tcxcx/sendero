@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { searchFlights, type FlightSearchParams } from '@sendero/duffel';
+import {
+  searchFlights,
+  searchFlightsItineraries,
+  type FlightSearchParams,
+  type FlightOfferSummary,
+  type ItinerarySliceOffers,
+} from '@sendero/duffel';
 import { prisma } from '@sendero/database';
 import type { ToolDef, ToolContext } from './types';
 import { ensureFlightCustomer } from './ensure-flight-customer';
@@ -71,6 +77,15 @@ const inputSchema = z.object({
   customerUserId: z.string().optional(),
   /** Auto-ensure the session traveler has a Duffel CustomerUser and match it. */
   linkSessionTraveler: z.boolean().default(false),
+  /**
+   * Surface Duffel split-ticket combinations alongside single-ticket offers.
+   * Only effective on multi-slice searches (returnDate set) AND when the
+   * tenant has opted in via `Tenant.metadata.flights.allowSplitTicket`.
+   * When both gates align, the response shape changes from flat
+   * `{ offers }` to grouped `{ mode: 'itineraries', singleTickets, slices }`.
+   * See docs/duffel-split-ticket-integration.md.
+   */
+  includeSplitTicket: z.boolean().default(false),
 });
 
 type SearchFlightsInput = z.infer<typeof inputSchema>;
@@ -145,6 +160,12 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
       airlineCreditIds: { type: 'array', items: { type: 'string' } },
       customerUserId: { type: 'string' },
       linkSessionTraveler: { type: 'boolean', default: false },
+      includeSplitTicket: {
+        type: 'boolean',
+        default: false,
+        description:
+          'Opt-in flag to surface Duffel split-ticket combos. Requires a return-date search and tenant feature flag `flights.allowSplitTicket`. See docs/duffel-split-ticket-integration.md.',
+      },
     },
   },
   async handler(input, ctx?: ToolContext) {
@@ -207,26 +228,61 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
     }
     if (!resolvedOrigin) {
       return {
+        mode: 'flat' as const,
         offers: [],
         share: undefined,
         error:
           'origin_required: pass `origin` (3-letter IATA) or first call `book_flight` so the journey has a current location to default from.',
       };
     }
+    const sharedParams: FlightSearchParams = {
+      origin: resolvedOrigin,
+      destination: input.destination,
+      departureDate: input.departureDate,
+      returnDate: input.returnDate,
+      passengers: input.passengers,
+      cabinClass: input.cabinClass,
+      privateFares: input.privateFares,
+      leisureFareTypes: input.leisureFareTypes,
+      loyaltyProgrammeAccounts,
+      airlineCreditIds: input.airlineCreditIds as FlightSearchParams['airlineCreditIds'],
+      customerUserId,
+    };
+
+    // Split-ticket gate: only effective on multi-slice searches AND when
+    // the tenant has opted in. Platform-wide kill-switch
+    // SENDERO_FLIGHTS_DISABLE_SPLIT_TICKET overrides both.
+    const splitTicketRequested = input.includeSplitTicket && Boolean(input.returnDate);
+    const platformDisable = process.env.SENDERO_FLIGHTS_DISABLE_SPLIT_TICKET === 'true';
+    const tenantAllowsSplit = await resolveTenantAllowsSplitTicket(ctx);
+    const useItineraryView =
+      splitTicketRequested && tenantAllowsSplit && !platformDisable;
+
     try {
-      const offers = await searchFlights({
-        origin: resolvedOrigin,
-        destination: input.destination,
-        departureDate: input.departureDate,
-        returnDate: input.returnDate,
-        passengers: input.passengers,
-        cabinClass: input.cabinClass,
-        privateFares: input.privateFares,
-        leisureFareTypes: input.leisureFareTypes,
-        loyaltyProgrammeAccounts,
-        airlineCreditIds: input.airlineCreditIds as FlightSearchParams['airlineCreditIds'],
-        customerUserId,
-      });
+      if (useItineraryView) {
+        const result = await searchFlightsItineraries(sharedParams);
+        const topSingle = result.singleTickets.slice(0, 3);
+        const topSlices = result.slices.map(s => ({
+          ...s,
+          splitTickets: s.splitTickets.slice(0, 3),
+        }));
+        const share = buildSplitTicketShare({
+          origin: resolvedOrigin,
+          destination: input.destination,
+          departureDate: input.departureDate,
+          returnDate: input.returnDate ?? null,
+          singleTickets: topSingle,
+          slices: topSlices,
+        });
+        const payload = {
+          mode: 'itineraries' as const,
+          singleTickets: topSingle,
+          slices: topSlices,
+        };
+        return share ? { ...payload, share } : payload;
+      }
+
+      const offers = await searchFlights(sharedParams);
       const top = offers.slice(0, 3);
       const share = buildSearchFlightsShare({
         origin: resolvedOrigin,
@@ -234,7 +290,8 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
         departureDate: input.departureDate,
         offers: top,
       });
-      return share ? { offers: top, share } : { offers: top };
+      const payload = { mode: 'flat' as const, offers: top };
+      return share ? { ...payload, share } : payload;
     } catch (err) {
       // Duffel can throw bare Error('') from network failures, past-
       // date validation, or sandbox-empty-corridor cases. Throwing
@@ -265,6 +322,7 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
         message: trimmed,
       });
       return {
+        mode: 'flat' as const,
         offers: [],
         status,
         error: trimmed,
@@ -338,6 +396,105 @@ function buildSearchFlightsShare(args: SearchFlightShareInput): {
     title: `Flights ${args.origin} → ${args.destination}`,
     body: head,
     bullets: lines,
+    primaryCta: { label: 'Hold cheapest', kind: 'select_offer' },
+  };
+}
+
+/**
+ * Resolve whether the calling tenant has opted into split-ticket searches.
+ * Reads `Tenant.metadata.flights.allowSplitTicket` (boolean). Returns
+ * false when the metadata key is missing, the lookup errors, or no
+ * tenant id is on the call context. Defaults to safe-off.
+ */
+async function resolveTenantAllowsSplitTicket(ctx: ToolContext | undefined): Promise<boolean> {
+  const tenantId = ctx?.traveler?.tenantId;
+  if (!tenantId) return false;
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { metadata: true },
+    });
+    const meta = tenant?.metadata as
+      | { flights?: { allowSplitTicket?: unknown } }
+      | null
+      | undefined;
+    return meta?.flights?.allowSplitTicket === true;
+  } catch (err) {
+    console.warn('[search_flights] tenant split-ticket gate lookup failed (defaulting off)', err);
+    return false;
+  }
+}
+
+interface SplitTicketShareInput {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate: string | null;
+  singleTickets: FlightOfferSummary[];
+  slices: ItinerarySliceOffers[];
+}
+
+/**
+ * Build the share card for an itinerary-view (split-ticket-enabled)
+ * search. Surfaces both the cheapest single-ticket option AND the
+ * best split-ticket combo (cheapest per slice) so the customer can
+ * compare. Falls back to null when neither variant has bookable
+ * offers.
+ */
+function buildSplitTicketShare(args: SplitTicketShareInput): {
+  title: string;
+  body: string;
+  bullets: string[];
+  primaryCta: { label: string; kind: 'select_offer' };
+} | null {
+  const sliceCombo = args.slices.map(s => s.splitTickets[0]).filter(Boolean);
+  const hasCompleteSplit = sliceCombo.length === args.slices.length && sliceCombo.length > 0;
+  const cheapestSingle = args.singleTickets[0] ?? null;
+  if (!hasCompleteSplit && !cheapestSingle) return null;
+
+  const fmtPrice = (offer: { price?: string; currency?: string }) =>
+    offer.price && offer.currency ? `${offer.currency} ${offer.price}` : null;
+
+  const splitTotal = hasCompleteSplit
+    ? sliceCombo.reduce((sum, o) => sum + Number(o.price || 0), 0)
+    : null;
+  const splitCcy = hasCompleteSplit ? sliceCombo[0]?.currency : null;
+  const singleTotal = cheapestSingle ? Number(cheapestSingle.price || 0) : null;
+
+  const bullets: string[] = [];
+  if (cheapestSingle) {
+    const price = fmtPrice(cheapestSingle);
+    const carrier = cheapestSingle.airline ?? cheapestSingle.airlineIataCode ?? 'Unknown';
+    bullets.push(`Single ticket · ${carrier}${price ? ` · ${price}` : ''}`);
+  }
+  if (hasCompleteSplit && splitTotal !== null && splitCcy) {
+    const carriers = Array.from(
+      new Set(sliceCombo.map(o => o.airlineIataCode || o.airline || '?'))
+    ).join(' + ');
+    bullets.push(`Split ticket · ${carriers} · ${splitCcy} ${splitTotal.toFixed(2)}`);
+  }
+
+  let savings: string | null = null;
+  if (
+    hasCompleteSplit &&
+    singleTotal !== null &&
+    splitTotal !== null &&
+    Number.isFinite(singleTotal) &&
+    Number.isFinite(splitTotal) &&
+    splitTotal < singleTotal
+  ) {
+    const diff = singleTotal - splitTotal;
+    const ccy = cheapestSingle?.currency ?? splitCcy ?? '';
+    savings = ` · split saves ${ccy} ${diff.toFixed(2)}`;
+  }
+
+  const dateRange = args.returnDate
+    ? `${args.departureDate} → ${args.returnDate}`
+    : args.departureDate;
+  return {
+    title: `Flights ${args.origin} ↔ ${args.destination}`,
+    body: `${dateRange}${savings ?? ''}`,
+    bullets,
     primaryCta: { label: 'Hold cheapest', kind: 'select_offer' },
   };
 }
