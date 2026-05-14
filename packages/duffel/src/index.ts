@@ -177,6 +177,13 @@ export interface FlightOfferSummary {
   }>;
   /** True when `slices.length >= 2` — convenience flag for the agent prompt. */
   isRoundTrip: boolean;
+  /**
+   * Set only when surfaced via `searchFlightsItineraries`. Identifies whether
+   * the offer covers the entire trip (`single_ticket`) or only one slice
+   * (`split_ticket`). Absent on legacy `searchFlights` results.
+   * See https://duffel.com/docs/guides/selling-split-ticket-itineraries.
+   */
+  offerType?: 'single_ticket' | 'split_ticket';
 }
 
 export async function searchFlights(params: FlightSearchParams): Promise<FlightOfferSummary[]> {
@@ -236,62 +243,292 @@ export async function searchFlights(params: FlightSearchParams): Promise<FlightO
   const offerRequest = response.data as unknown as OfferRequest;
   const offers = (offerRequest.offers || []).slice(0, 10);
 
-  return offers.map((o: Omit<Offer, 'available_services'>): FlightOfferSummary => {
-    const firstSegment = o.slices?.[0]?.segments?.[0];
-    const lastSegment = o.slices?.[0]?.segments?.[o.slices[0].segments.length - 1];
-    const owner = o.owner;
-    const iata = owner?.iata_code || '';
-    // Phase B.1 — project every slice. Round-trip = 2 slices, open-jaw / multi-city N.
-    const projectedSlices = (o.slices ?? []).map(slice => {
-      const segs = slice.segments ?? [];
-      const first = segs[0];
-      const last = segs[segs.length - 1];
-      return {
-        originCode: first?.origin?.iata_code ?? '',
-        originCity: first?.origin?.city_name ?? null,
-        destinationCode: last?.destination?.iata_code ?? '',
-        destinationCity: last?.destination?.city_name ?? null,
-        departure: first?.departing_at ?? '',
-        arrival: last?.arriving_at ?? '',
-        duration: slice.duration ?? '',
-        stops: Math.max(0, segs.length - 1),
-      };
-    });
+  return offers.map(o =>
+    projectFlightOffer(o as Omit<Offer, 'available_services'>, params.origin, params.destination)
+  );
+}
+
+/**
+ * Project a single Duffel offer to the Sendero-canonical `FlightOfferSummary`.
+ * Shared between `searchFlights` (flat result) and `searchFlightsItineraries`
+ * (split-ticket grouped result). Fallback origin/destination is used only
+ * when the offer itself doesn't expose segment IATA codes — e.g. when the
+ * adapter is invoked with city codes (`NYC`) that Duffel re-anchors to a
+ * specific airport (`JFK`).
+ */
+function projectFlightOffer(
+  o: Omit<Offer, 'available_services'>,
+  fallbackOrigin?: string,
+  fallbackDestination?: string,
+  offerType?: 'single_ticket' | 'split_ticket'
+): FlightOfferSummary {
+  const firstSegment = o.slices?.[0]?.segments?.[0];
+  const lastSegment = o.slices?.[0]?.segments?.[o.slices[0].segments.length - 1];
+  const owner = o.owner;
+  const iata = owner?.iata_code || '';
+  const projectedSlices = (o.slices ?? []).map(slice => {
+    const segs = slice.segments ?? [];
+    const first = segs[0];
+    const last = segs[segs.length - 1];
     return {
-      id: o.id,
-      airline: owner?.name || 'Unknown',
-      airlineIataCode: iata,
-      // Prefer Duffel-supplied URLs; fall back to the CDN pattern that exists
-      // for every IATA carrier.
-      airlineLogoUrl:
-        owner?.logo_symbol_url ||
-        (iata
-          ? `https://assets.duffel.com/img/airlines/for-light-background/full-color-logo/${iata}.svg`
-          : null),
-      airlineLockupUrl:
-        owner?.logo_lockup_url ||
-        (iata
-          ? `https://assets.duffel.com/img/airlines/for-light-background/full-color-lockup/${iata}.svg`
-          : null),
-      airlineConditionsOfCarriageUrl: owner?.conditions_of_carriage_url || null,
-      price: o.total_amount,
-      currency: o.total_currency,
-      departure: firstSegment?.departing_at || '',
-      arrival: lastSegment?.arriving_at || '',
-      originCode: firstSegment?.origin?.iata_code || params.origin,
-      originCity: firstSegment?.origin?.city_name || null,
-      destinationCode: lastSegment?.destination?.iata_code || params.destination,
-      destinationCity: lastSegment?.destination?.city_name || null,
-      duration: o.slices?.[0]?.duration || '',
-      stops: Math.max(0, (o.slices?.[0]?.segments?.length || 1) - 1),
-      cabinClass: firstSegment?.passengers?.[0]?.cabin_class || 'economy',
-      expiresAt: o.expires_at,
-      holdable: o.payment_requirements?.requires_instant_payment === false,
-      paymentRequiredBy: o.payment_requirements?.payment_required_by ?? null,
-      slices: projectedSlices,
-      isRoundTrip: projectedSlices.length >= 2,
+      originCode: first?.origin?.iata_code ?? '',
+      originCity: first?.origin?.city_name ?? null,
+      destinationCode: last?.destination?.iata_code ?? '',
+      destinationCity: last?.destination?.city_name ?? null,
+      departure: first?.departing_at ?? '',
+      arrival: last?.arriving_at ?? '',
+      duration: slice.duration ?? '',
+      stops: Math.max(0, segs.length - 1),
     };
   });
+  return {
+    id: o.id,
+    airline: owner?.name || 'Unknown',
+    airlineIataCode: iata,
+    airlineLogoUrl:
+      owner?.logo_symbol_url ||
+      (iata
+        ? `https://assets.duffel.com/img/airlines/for-light-background/full-color-logo/${iata}.svg`
+        : null),
+    airlineLockupUrl:
+      owner?.logo_lockup_url ||
+      (iata
+        ? `https://assets.duffel.com/img/airlines/for-light-background/full-color-lockup/${iata}.svg`
+        : null),
+    airlineConditionsOfCarriageUrl: owner?.conditions_of_carriage_url || null,
+    price: o.total_amount,
+    currency: o.total_currency,
+    departure: firstSegment?.departing_at || '',
+    arrival: lastSegment?.arriving_at || '',
+    originCode: firstSegment?.origin?.iata_code || fallbackOrigin || '',
+    originCity: firstSegment?.origin?.city_name || null,
+    destinationCode: lastSegment?.destination?.iata_code || fallbackDestination || '',
+    destinationCity: lastSegment?.destination?.city_name || null,
+    duration: o.slices?.[0]?.duration || '',
+    stops: Math.max(0, (o.slices?.[0]?.segments?.length || 1) - 1),
+    cabinClass: firstSegment?.passengers?.[0]?.cabin_class || 'economy',
+    expiresAt: o.expires_at,
+    holdable: o.payment_requirements?.requires_instant_payment === false,
+    paymentRequiredBy: o.payment_requirements?.payment_required_by ?? null,
+    slices: projectedSlices,
+    isRoundTrip: projectedSlices.length >= 2,
+    ...(offerType ? { offerType } : {}),
+  };
+}
+
+/**
+ * Per-slice split-ticket offers as returned by the Duffel itinerary view
+ * (`view=itineraries` + `include_split_ticket=true`). Each entry corresponds
+ * to one slice of the original search request.
+ */
+export interface ItinerarySliceOffers {
+  /** IATA code of the slice's origin airport. */
+  originCode: string;
+  /** IATA code of the slice's destination airport. */
+  destinationCode: string;
+  /** RFC3339 (date-only) departure date for the slice. */
+  departureDate: string;
+  /**
+   * One-way offers covering only this slice. Customer picks one offer per
+   * slice; the assembled trip is N independent Duffel orders.
+   */
+  splitTickets: FlightOfferSummary[];
+}
+
+/**
+ * Result of `searchFlightsItineraries`. Two parallel arrays — the agent
+ * presents the customer with EITHER one `singleTickets` offer (covers the
+ * whole trip from one carrier) OR one `splitTickets` offer per slice.
+ * Never a mix; that's not a valid Duffel construct.
+ *
+ * Per Duffel: median 300% more bookable itineraries are unlocked when
+ * split-ticket combos are surfaced.
+ * https://duffel.com/docs/guides/selling-split-ticket-itineraries
+ */
+export interface FlightSearchItinerariesResult {
+  /**
+   * Full-trip offers from a single carrier covering every slice. These
+   * book exactly as today's single-ticket flow.
+   */
+  singleTickets: FlightOfferSummary[];
+  /**
+   * Per-slice split-ticket offers, in the same order as the original
+   * search request's slices.
+   */
+  slices: ItinerarySliceOffers[];
+}
+
+/**
+ * Search flights with Duffel's grouped itinerary view, surfacing
+ * split-ticket combinations alongside the standard single-ticket offers.
+ *
+ * Uses raw HTTPS rather than `duffel.offerRequests.create()` because the
+ * SDK (v4.24) does not yet model `include_split_ticket` or the
+ * `view=itineraries` query param. Auth headers are reused — token comes
+ * from `env.duffelApiToken()` same as the SDK path. When/if Duffel
+ * promotes split-ticket to the SDK, this can collapse back into the
+ * `duffel.offerRequests.create` call site.
+ */
+export async function searchFlightsItineraries(
+  params: FlightSearchParams
+): Promise<FlightSearchItinerariesResult> {
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+
+  const passengerCount = params.passengers ?? 1;
+  const passengers: DuffelOfferRequestPassengerWire[] = Array.from(
+    { length: passengerCount },
+    (_unused, idx) => {
+      const wire: DuffelOfferRequestPassengerWire = { type: 'adult' };
+      const fareType = params.leisureFareTypes?.[idx];
+      if (fareType) wire.fare_type = fareType;
+      if (idx === 0 && params.customerUserId) wire.user_id = params.customerUserId;
+      const loyalty = params.loyaltyProgrammeAccounts?.[idx];
+      if (loyalty?.length) {
+        wire.loyalty_programme_accounts = loyalty.map(l => ({
+          airline_iata_code: l.airlineIataCode,
+          account_number: l.accountNumber,
+        }));
+      }
+      return wire;
+    }
+  );
+
+  const slices: { origin: string; destination: string; departure_date: string }[] = [
+    {
+      origin: params.origin,
+      destination: params.destination,
+      departure_date: params.departureDate,
+    },
+  ];
+  if (params.returnDate) {
+    slices.push({
+      origin: params.destination,
+      destination: params.origin,
+      departure_date: params.returnDate,
+    });
+  }
+
+  const body: Record<string, unknown> = {
+    slices,
+    passengers,
+    cabin_class: params.cabinClass ?? 'economy',
+    include_split_ticket: true,
+    return_offers: true,
+  };
+  if (params.privateFares && Object.keys(params.privateFares).length) {
+    body.private_fares = params.privateFares;
+  }
+  if (params.airlineCreditIds?.length) {
+    body.airline_credit_ids = params.airlineCreditIds;
+  }
+
+  const res = await fetch('https://api.duffel.com/air/offer_requests?view=itineraries', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'application/json',
+      'Duffel-Version': 'v2',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ data: body }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `duffel.offer_requests (view=itineraries) ${res.status}: ${text.slice(0, 400)}`
+    );
+  }
+
+  const json = (await res.json()) as { data?: DuffelItineraryViewResponseWire };
+  return projectItinerariesResponse(json.data, params.origin, params.destination);
+}
+
+/**
+ * Internal shape of the `view=itineraries` response from
+ * `POST /air/offer_requests`. Modeled defensively because Duffel hasn't
+ * exposed this shape in the TypeScript SDK yet — fields may shift before
+ * GA. Anything not understood is ignored; offers we can classify
+ * (`type: single_ticket | split_ticket`) flow through.
+ */
+interface DuffelItineraryViewResponseWire {
+  slices?: Array<{
+    origin?: { iata_code?: string } | string;
+    destination?: { iata_code?: string } | string;
+    departure_date?: string;
+    itineraries?: Array<{
+      brands?: Array<{
+        offers?: Array<RawItineraryOffer>;
+      }>;
+    }>;
+  }>;
+}
+
+type RawItineraryOffer = Omit<Offer, 'available_services'> & {
+  type?: 'single_ticket' | 'split_ticket';
+};
+
+function extractIataCode(field: unknown): string | undefined {
+  if (typeof field === 'string') return field;
+  if (field && typeof field === 'object' && 'iata_code' in field) {
+    const v = (field as { iata_code?: unknown }).iata_code;
+    if (typeof v === 'string') return v;
+  }
+  return undefined;
+}
+
+function projectItinerariesResponse(
+  data: DuffelItineraryViewResponseWire | undefined,
+  fallbackOrigin: string,
+  fallbackDestination: string
+): FlightSearchItinerariesResult {
+  const singleTicketsById = new Map<string, FlightOfferSummary>();
+  const sliceBuckets: ItinerarySliceOffers[] = [];
+
+  for (const rawSlice of data?.slices ?? []) {
+    const sliceOrigin = extractIataCode(rawSlice.origin) ?? fallbackOrigin;
+    const sliceDestination = extractIataCode(rawSlice.destination) ?? fallbackDestination;
+    const bucket: ItinerarySliceOffers = {
+      originCode: sliceOrigin,
+      destinationCode: sliceDestination,
+      departureDate: rawSlice.departure_date ?? '',
+      splitTickets: [],
+    };
+
+    for (const itinerary of rawSlice.itineraries ?? []) {
+      for (const brand of itinerary.brands ?? []) {
+        for (const offer of brand.offers ?? []) {
+          if (!offer || !offer.id) continue;
+          if (offer.type === 'single_ticket') {
+            if (!singleTicketsById.has(offer.id)) {
+              singleTicketsById.set(
+                offer.id,
+                projectFlightOffer(offer, fallbackOrigin, fallbackDestination, 'single_ticket')
+              );
+            }
+          } else if (offer.type === 'split_ticket') {
+            bucket.splitTickets.push(
+              projectFlightOffer(offer, sliceOrigin, sliceDestination, 'split_ticket')
+            );
+          }
+          // Defensively ignore offers that arrive without a recognized type;
+          // surfacing them would risk presenting a non-bookable combo to
+          // the agent.
+        }
+      }
+    }
+
+    sliceBuckets.push(bucket);
+  }
+
+  // Cap the number of offers we surface so the agent prompt stays bounded.
+  // Single-tickets share the cap; per-slice split-tickets share their own.
+  const TOP_N = 10;
+  const singleTickets = Array.from(singleTicketsById.values()).slice(0, TOP_N);
+  const slices = sliceBuckets.map(b => ({ ...b, splitTickets: b.splitTickets.slice(0, TOP_N) }));
+
+  return { singleTickets, slices };
 }
 
 /**
