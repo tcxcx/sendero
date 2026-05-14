@@ -53,6 +53,7 @@ import {
   payFromBalance,
   createOrderCancellation,
   confirmOrderCancellation,
+  peekOfferSegments,
   type HoldOrderParams,
   type HoldOrderResult,
 } from '@sendero/duffel';
@@ -102,7 +103,17 @@ interface BookTripResult {
   handoffRequired?: { reason: string; suggestedAction: string };
 }
 
-const MIN_LAYOVER_HOURS = 3;
+/**
+ * Soft default minimum layover (hours) between consecutive slices.
+ * Used when the tenant has not overridden via `metadata.flights.minLayoverHours`.
+ */
+const MIN_LAYOVER_HOURS_SOFT_DEFAULT = 3;
+/**
+ * Platform hard floor (hours). Tenant overrides clamp to >= this.
+ * Anything below would risk single-slice disruption cascading into
+ * a missed downstream flight with no protection.
+ */
+const MIN_LAYOVER_HOURS_HARD_FLOOR = 2;
 
 export const bookTripTool: ToolDef<BookTripInput> = {
   name: 'book_trip',
@@ -169,6 +180,49 @@ export const bookTripTool: ToolDef<BookTripInput> = {
     // min-layover check below assumes adjacent indices.
     const slices = [...validated.slices].sort((a, b) => a.sliceIndex - b.sliceIndex);
 
+    // ── Pre-hold validation (Codex finding g) ─────────────────────
+    // Peek offer segments BEFORE phase-1 so we never burn Duffel hold
+    // quota on a combo that violates route continuity or min-layover.
+    // The post-hold `checkMinLayoverViolation` remains as a paranoid
+    // backstop in case a peek and a hold ever disagree.
+    const minLayoverHours = await resolveTenantMinLayoverHours(ctx);
+    let peeks: Awaited<ReturnType<typeof peekOfferSegments>>[];
+    try {
+      peeks = await Promise.all(slices.map(s => peekOfferSegments(s.offerId)));
+    } catch (err) {
+      return {
+        tripId: validated.tripId,
+        state: 'rejected' as const,
+        slices: slices.map(s => ({
+          sliceIndex: s.sliceIndex,
+          offerId: s.offerId,
+          state: 'pending' as const,
+        })),
+        handoffRequired: {
+          reason: 'offer_peek_failed',
+          suggestedAction: `Could not fetch one or more Duffel offers for pre-hold validation (${errorMessage(err)}). Inventory may have expired; ask the customer to re-search.`,
+        },
+      } satisfies BookTripResult;
+    }
+
+    const prevalidation = validateRouteAndLayover({
+      slices,
+      peeks,
+      minLayoverHours,
+    });
+    if (prevalidation) {
+      return {
+        tripId: validated.tripId,
+        state: 'rejected' as const,
+        slices: slices.map(s => ({
+          sliceIndex: s.sliceIndex,
+          offerId: s.offerId,
+          state: 'pending' as const,
+        })),
+        handoffRequired: prevalidation,
+      } satisfies BookTripResult;
+    }
+
     // ── Phase 1 — Hold every slice ─────────────────────────────────
     const sliceResults: SliceResult[] = slices.map(s => ({
       sliceIndex: s.sliceIndex,
@@ -220,8 +274,11 @@ export const bookTripTool: ToolDef<BookTripInput> = {
       }
     }
 
-    // ── Min-layover guard (after holds so we have actual segment times) ─
-    const layoverViolation = checkMinLayoverViolation(holds);
+    // ── Min-layover guard (defensive backstop — pre-hold pass above
+    //    already validated against offer peek data; reaching here would
+    //    mean the held order's actual segment times disagreed with the
+    //    offer peek, which Duffel does not normally allow).
+    const layoverViolation = checkMinLayoverViolation(holds, minLayoverHours);
     if (layoverViolation) {
       const rolledBack = await rollbackHolds(holds, sliceResults);
       return {
@@ -232,7 +289,7 @@ export const bookTripTool: ToolDef<BookTripInput> = {
         ),
         handoffRequired: {
           reason: 'insufficient_layover',
-          suggestedAction: `${layoverViolation.message} Pick offers with at least ${MIN_LAYOVER_HOURS}h between slice ${layoverViolation.priorIndex} arrival and slice ${layoverViolation.nextIndex} departure.`,
+          suggestedAction: `${layoverViolation.message} Pick offers with at least ${minLayoverHours}h between slice ${layoverViolation.priorIndex} arrival and slice ${layoverViolation.nextIndex} departure.`,
         },
       } satisfies BookTripResult;
     }
@@ -446,7 +503,10 @@ interface LayoverViolation {
   message: string;
 }
 
-function checkMinLayoverViolation(holds: HoldOrderResult[]): LayoverViolation | null {
+function checkMinLayoverViolation(
+  holds: HoldOrderResult[],
+  minLayoverHours: number
+): LayoverViolation | null {
   for (let i = 1; i < holds.length; i++) {
     const prior = holds[i - 1];
     const next = holds[i];
@@ -459,12 +519,71 @@ function checkMinLayoverViolation(holds: HoldOrderResult[]): LayoverViolation | 
     const nextMs = Date.parse(nextDeparture);
     if (!Number.isFinite(priorMs) || !Number.isFinite(nextMs)) continue;
     const hours = (nextMs - priorMs) / 3_600_000;
-    if (hours < MIN_LAYOVER_HOURS) {
+    if (hours < minLayoverHours) {
       return {
         priorIndex: i - 1,
         nextIndex: i,
         layoverHours: hours,
-        message: `Layover of ${hours.toFixed(1)}h between slice ${i - 1} arrival and slice ${i} departure is below the ${MIN_LAYOVER_HOURS}h minimum for split-ticket trips.`,
+        message: `Layover of ${hours.toFixed(1)}h between slice ${i - 1} arrival and slice ${i} departure is below the ${minLayoverHours}h minimum for split-ticket trips.`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Pre-hold validation: route continuity (slice N+1 origin == slice N
+ * destination, case-insensitive) + min-layover floor. Returns a handoff
+ * payload on failure (caller surfaces as `state: 'rejected'`), or `null`
+ * when the combo is acceptable.
+ *
+ * Codex finding (g): running this BEFORE phase-1 `createHoldOrder` saves
+ * Duffel hold quota on bad combos that would otherwise get caught only
+ * after every slice was held.
+ */
+function validateRouteAndLayover(args: {
+  slices: ReadonlyArray<{ sliceIndex?: number; offerId?: string; idempotencyKey?: string }>;
+  peeks: ReadonlyArray<{
+    offerId: string;
+    originIata: string | null;
+    destinationIata: string | null;
+    departureAt: string | null;
+    arrivalAt: string | null;
+  }>;
+  minLayoverHours: number;
+}): NonNullable<BookTripResult['handoffRequired']> | null {
+  const { slices, peeks, minLayoverHours } = args;
+  for (let i = 1; i < peeks.length; i++) {
+    const prior = peeks[i - 1];
+    const next = peeks[i];
+    const priorSlice = slices[i - 1];
+    const nextSlice = slices[i];
+
+    // Route continuity. Reject when both sides are known and disagree.
+    // Missing peek data → defer to backstop rather than block; some
+    // edge-case offers may not project a destination IATA, and the
+    // hold result carries canonical segment data either way.
+    const priorDest = prior.destinationIata?.toUpperCase() ?? null;
+    const nextOrigin = next.originIata?.toUpperCase() ?? null;
+    if (priorDest && nextOrigin && priorDest !== nextOrigin) {
+      return {
+        reason: 'origin_destination_mismatch',
+        suggestedAction: `Slice ${nextSlice.sliceIndex} departs from ${nextOrigin} but slice ${priorSlice.sliceIndex} arrives at ${priorDest}. Split-ticket combos must be airport-to-airport continuous (no surface transit). Pick offers whose origins/destinations align.`,
+      };
+    }
+
+    // Min-layover floor.
+    const priorArrival = prior.arrivalAt;
+    const nextDeparture = next.departureAt;
+    if (!priorArrival || !nextDeparture) continue;
+    const priorMs = Date.parse(priorArrival);
+    const nextMs = Date.parse(nextDeparture);
+    if (!Number.isFinite(priorMs) || !Number.isFinite(nextMs)) continue;
+    const hours = (nextMs - priorMs) / 3_600_000;
+    if (hours < minLayoverHours) {
+      return {
+        reason: 'insufficient_layover',
+        suggestedAction: `Layover of ${hours.toFixed(1)}h between slice ${priorSlice.sliceIndex} arrival and slice ${nextSlice.sliceIndex} departure is below the ${minLayoverHours}h minimum for split-ticket trips. Pick offers with a larger gap.`,
       };
     }
   }
@@ -486,6 +605,36 @@ async function resolveTenantAllowsSplitTicket(ctx: ToolContext | undefined): Pro
     return meta?.flights?.allowSplitTicket === true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Resolve the effective min-layover floor for a tenant. Reads
+ * `Tenant.metadata.flights.minLayoverHours` and clamps to the platform
+ * hard floor (`MIN_LAYOVER_HOURS_HARD_FLOOR`); defaults to the soft
+ * default (`MIN_LAYOVER_HOURS_SOFT_DEFAULT`) when unset. The platform
+ * hard floor is non-negotiable — anything below would risk single-slice
+ * disruption cascading into a missed downstream flight.
+ */
+async function resolveTenantMinLayoverHours(ctx: ToolContext | undefined): Promise<number> {
+  const tenantId = ctx?.traveler?.tenantId;
+  if (!tenantId) return MIN_LAYOVER_HOURS_SOFT_DEFAULT;
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { metadata: true },
+    });
+    const meta = tenant?.metadata as
+      | { flights?: { minLayoverHours?: unknown } }
+      | null
+      | undefined;
+    const raw = meta?.flights?.minLayoverHours;
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+      return Math.max(raw, MIN_LAYOVER_HOURS_HARD_FLOOR);
+    }
+    return MIN_LAYOVER_HOURS_SOFT_DEFAULT;
+  } catch {
+    return MIN_LAYOVER_HOURS_SOFT_DEFAULT;
   }
 }
 
