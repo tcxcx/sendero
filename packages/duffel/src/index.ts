@@ -753,16 +753,50 @@ export async function createHoldOrder(params: HoldOrderParams): Promise<HoldOrde
     }));
   }
 
-  const response = await duffel.orders.create(
-    order as unknown as Parameters<typeof duffel.orders.create>[0]
-  );
-  const orderData = response.data as unknown as {
-    id: string;
-    booking_reference: string;
-    total_amount: string;
-    total_currency: string;
-    payment_status?: { payment_required_by?: string };
+  // Raw fetch instead of `duffel.orders.create(order)` because the SDK
+  // (v4.24) doesn't expose custom HTTP headers. Duffel uses the
+  // `Idempotency-Key` request header (NOT the body-level
+  // `metadata.idempotency_key`) to dedupe POST /air/orders. Without
+  // the header, a retry creates a second order. book_trip relies on
+  // this for its hold-phase retry semantics.
+  // https://duffel.com/docs/api/overview/idempotency
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const orderRes = await fetch('https://api.duffel.com/air/orders', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Accept-Encoding': 'gzip',
+      'Content-Type': 'application/json',
+      'Duffel-Version': 'v2',
+      'Idempotency-Key': params.idempotencyKey,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ data: order }),
+  });
+  if (!orderRes.ok) {
+    const rawBody = await orderRes.text();
+    // Log raw body internally with redaction; surface a sanitized message
+    // upstream so supplier-internal text doesn't reach the agent / customer.
+    console.warn('[duffel] orders.create failed', {
+      status: orderRes.status,
+      offerId: params.offerId,
+      bodyPreview: rawBody.slice(0, 200),
+    });
+    throw new Error(
+      `duffel.orders.create failed (HTTP ${orderRes.status}). Check server logs for supplier-side detail.`
+    );
+  }
+  const response = (await orderRes.json()) as {
+    data: {
+      id: string;
+      booking_reference: string;
+      total_amount: string;
+      total_currency: string;
+      payment_status?: { payment_required_by?: string };
+    };
   };
+  const orderData = response.data;
 
   // Project the offer's slices into Sendero's normalized segment shape.
   // We use the offer (not the order response) because Duffel orders in
@@ -963,28 +997,65 @@ export interface PayFromBalanceResult {
   currency: string;
 }
 
-export async function payFromBalance(orderId: string): Promise<PayFromBalanceResult> {
+export async function payFromBalance(
+  orderId: string,
+  options?: { idempotencyKey?: string }
+): Promise<PayFromBalanceResult> {
   const duffel = getDuffel();
 
-  // Fetch latest price before paying (Duffel best practice)
+  // Fetch latest price before paying (Duffel best practice).
   const latest = await duffel.orders.get(orderId);
   const totalAmount = latest.data.total_amount;
   const totalCurrency = latest.data.total_currency;
 
-  const createPayment: CreatePayment = {
-    order_id: orderId,
-    payment: {
-      type: 'balance',
-      amount: totalAmount,
-      currency: totalCurrency,
-    },
+  // Raw fetch (instead of `duffel.payments.create`) so we can attach the
+  // `Idempotency-Key` request header — the SDK doesn't expose custom
+  // headers. Without idempotency a retry pays twice; book_trip relies
+  // on this for partial-paid recovery.
+  // https://duffel.com/docs/api/overview/idempotency
+  const token = env.duffelApiToken();
+  if (!token) throw new Error('DUFFEL_API_TOKEN not set.');
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Accept-Encoding': 'gzip',
+    'Content-Type': 'application/json',
+    'Duffel-Version': 'v2',
+    Authorization: `Bearer ${token}`,
   };
-  const response = await duffel.payments.create(createPayment);
-  const paymentData: Payment = response.data;
+  if (options?.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey;
+  }
+  const payRes = await fetch('https://api.duffel.com/air/payments', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      data: {
+        order_id: orderId,
+        payment: {
+          type: 'balance',
+          amount: totalAmount,
+          currency: totalCurrency,
+        },
+      },
+    }),
+  });
+  if (!payRes.ok) {
+    const rawBody = await payRes.text();
+    console.warn('[duffel] payments.create failed', {
+      status: payRes.status,
+      orderId,
+      bodyPreview: rawBody.slice(0, 200),
+    });
+    throw new Error(
+      `duffel.payments.create failed (HTTP ${payRes.status}). Check server logs for supplier-side detail.`
+    );
+  }
+  const response = (await payRes.json()) as { data: Payment };
+  const paymentData = response.data;
 
   return {
     paymentId: paymentData.id,
-    // SDK Payment type has no `status` field; balance payments always succeed synchronously.
+    // Balance payments always succeed synchronously per Duffel docs.
     status: 'succeeded',
     amount: totalAmount,
     currency: totalCurrency,

@@ -238,13 +238,20 @@ export const bookTripTool: ToolDef<BookTripInput> = {
     }
 
     // ── Phase 2 — Pay every held slice ────────────────────────────
-    // v1: sequential, fail-loud-on-partial. v2 adds auto-refund / retry.
+    // v1: sequential. On payment failure, cancel any HELD-but-unpaid
+    // slices (free pre-payment refund), leave paid slices in place
+    // (auto-refund per airline rule is v2), and persist durable state
+    // so the operator handoff has a complete picture.
     const paidOrderIds: string[] = [];
     for (let i = 0; i < holds.length; i++) {
       const hold = holds[i];
       const result = sliceResults[i];
       try {
-        await payFromBalance(hold.orderId);
+        await payFromBalance(hold.orderId, {
+          idempotencyKey:
+            slices[i].idempotencyKey ??
+            `book-trip-${validated.tripId}-slice-${slices[i].sliceIndex}-pay`,
+        });
         paidOrderIds.push(hold.orderId);
 
         const booking = await persistBookingForSlice({
@@ -260,21 +267,41 @@ export const bookTripTool: ToolDef<BookTripInput> = {
         result.state = 'failed';
         result.failureReason = errorMessage(err);
 
-        // v1 — do NOT auto-refund. Surface to operator. Earlier paid
-        // slices stay ticketed; the operator decides whether the
-        // airline allows hold-window refund or whether to honor the
-        // partial commit with a credit.
+        // Clean up any held-but-unpaid slices LATER in the sequence —
+        // they exist as Duffel orders awaiting payment and would
+        // expire on their own, but proactive cancel keeps the supplier
+        // ledger tidy and frees the seat inventory.
+        const unpaidHolds = holds.slice(i + 1);
+        const rolledBackUnpaid = await rollbackHolds(unpaidHolds, sliceResults);
+
+        // Persist durable state on Trip.metadata.splitTicketState so
+        // an operator-driven retry (or a follow-up handoff resolution)
+        // can read which slices ended where.
+        await persistTripState({
+          tripId: validated.tripId,
+          state: 'partial_paid',
+          sliceResults,
+        });
+
         return {
           tripId: validated.tripId,
           state: 'partial_paid',
-          slices: sliceResults,
+          slices: sliceResults.map(sr =>
+            rolledBackUnpaid.has(sr.duffelOrderId ?? '') ? { ...sr, state: 'rolled_back' } : sr
+          ),
           handoffRequired: {
             reason: `pay_failed_slice_${slices[i].sliceIndex}_after_${paidOrderIds.length}_paid`,
-            suggestedAction: `Operator must reconcile: ${paidOrderIds.length} slice(s) ticketed (Duffel orders: ${paidOrderIds.join(', ')}), slice ${slices[i].sliceIndex} payment failed (${result.failureReason ?? 'unknown'}). Decide refund (within airline hold-window) or credit-for-customer.`,
+            suggestedAction: `Operator must reconcile: ${paidOrderIds.length} slice(s) ticketed (Duffel orders: ${paidOrderIds.join(', ') || 'none'}); slice ${slices[i].sliceIndex} payment failed (${result.failureReason ?? 'unknown'}); ${rolledBackUnpaid.size} unpaid hold(s) cancelled. Decide refund within airline hold-window or credit-for-customer for ticketed slices.`,
           },
         } satisfies BookTripResult;
       }
     }
+
+    await persistTripState({
+      tripId: validated.tripId,
+      state: 'all_paid',
+      sliceResults,
+    });
 
     return {
       tripId: validated.tripId,
@@ -283,6 +310,52 @@ export const bookTripTool: ToolDef<BookTripInput> = {
     } satisfies BookTripResult;
   },
 };
+
+/**
+ * Persist split-ticket state to `Trip.metadata.splitTicketState` so a
+ * downstream operator-handoff resolution (or an automated retry pass
+ * once v2 lands) has a durable per-slice picture. Fire-and-forget at
+ * the boundary — we don't want a metadata write to mask a partial-paid
+ * outcome the caller needs to see.
+ */
+async function persistTripState(args: {
+  tripId: string;
+  state: BookTripResult['state'];
+  sliceResults: SliceResult[];
+}): Promise<void> {
+  try {
+    const existing = await prisma.trip.findUnique({
+      where: { id: args.tripId },
+      select: { metadata: true },
+    });
+    const meta = (existing?.metadata as Record<string, unknown> | null) ?? {};
+    const next = {
+      ...meta,
+      splitTicketState: {
+        state: args.state,
+        slices: args.sliceResults.map(s => ({
+          sliceIndex: s.sliceIndex,
+          offerId: s.offerId,
+          state: s.state,
+          duffelOrderId: s.duffelOrderId ?? null,
+          bookingId: s.bookingId ?? null,
+          pnr: s.pnr ?? null,
+          failureReason: s.failureReason ?? null,
+        })),
+        updatedAt: new Date().toISOString(),
+      },
+    };
+    await prisma.trip.update({
+      where: { id: args.tripId },
+      data: { metadata: next as object },
+    });
+  } catch (err) {
+    console.warn('[book_trip] persistTripState failed (non-fatal)', {
+      tripId: args.tripId,
+      err: errorMessage(err),
+    });
+  }
+}
 
 async function rollbackHolds(
   holds: HoldOrderResult[],
