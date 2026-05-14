@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { z } from 'zod';
 import {
   searchFlights,
@@ -282,19 +284,28 @@ export const searchFlightsTool: ToolDef<SearchFlightsInput> = {
         // Provenance stamp — write the offer ids we surfaced into
         // Trip.metadata.recentSplitTicketSearch so book_trip can verify
         // it's not being called with arbitrary offer ids the agent
-        // sourced elsewhere (Codex finding c). Fire-and-forget — a
-        // metadata write must NOT block returning search results.
+        // sourced elsewhere (Codex finding c).
+        //
+        // AWAITED (not fire-and-forget) per Codex PR54-1 — a same-turn
+        // book_trip call would otherwise race the write and reject
+        // valid offers. The DB roundtrip is ~5-20ms and runs after the
+        // search response is already computed, so latency cost is
+        // marginal vs the correctness gain.
+        let searchId: string | undefined;
         if (ctx?.tripId) {
-          void persistSplitTicketSearchProvenance({
+          searchId = randomUUID();
+          await persistSplitTicketSearchProvenance({
             tripId: ctx.tripId,
             offerIds: [
               ...topSingle.map(o => o.id),
               ...topSlices.flatMap(s => s.splitTickets.map(o => o.id)),
             ],
+            searchId,
           });
         }
 
-        return share ? { ...payload, share } : payload;
+        const enriched = searchId ? { ...payload, searchId } : payload;
+        return share ? { ...enriched, share } : enriched;
       }
 
       const offers = await searchFlights(sharedParams);
@@ -435,6 +446,7 @@ function buildSearchFlightsShare(args: SearchFlightShareInput): {
 async function persistSplitTicketSearchProvenance(args: {
   tripId: string;
   offerIds: string[];
+  searchId: string;
 }): Promise<void> {
   try {
     const trip = await prisma.trip.findUnique({
@@ -442,14 +454,33 @@ async function persistSplitTicketSearchProvenance(args: {
       select: { metadata: true },
     });
     const meta = (trip?.metadata as Record<string, unknown> | null) ?? {};
+    const existing = meta.recentSplitTicketSearch as
+      | { savedAt?: unknown }
+      | null
+      | undefined;
+    const existingSavedAtMs =
+      typeof existing?.savedAt === 'string' ? Date.parse(existing.savedAt) : NaN;
+    const nowMs = Date.now();
+    // Codex PR54-2 — refuse to overwrite a newer stamp. Two concurrent
+    // search_flights calls (e.g. operator + agent both probing in
+    // parallel) shouldn't let the older write win and shadow a newer
+    // search's offers.
+    if (Number.isFinite(existingSavedAtMs) && existingSavedAtMs >= nowMs) {
+      console.warn(
+        '[search_flights] persistSplitTicketSearchProvenance: skipping write, existing stamp is newer',
+        { tripId: args.tripId, existingSavedAtMs, nowMs }
+      );
+      return;
+    }
     await prisma.trip.update({
       where: { id: args.tripId },
       data: {
         metadata: {
           ...meta,
           recentSplitTicketSearch: {
+            searchId: args.searchId,
             offerIds: args.offerIds,
-            savedAt: new Date().toISOString(),
+            savedAt: new Date(nowMs).toISOString(),
           },
         } as object,
       },

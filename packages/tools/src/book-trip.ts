@@ -82,6 +82,16 @@ const inputSchema = z.object({
   tripId: z.string().min(1),
   passenger: passengerSchema,
   slices: z.array(sliceSchema).min(2).max(4),
+  /**
+   * Search-time identifier echoed back to bind this booking to the
+   * exact `search_flights` itinerary call that surfaced the offers.
+   * Returned alongside the search result as `searchId` when itinerary
+   * mode is active. When provided here, `book_trip` verifies it
+   * matches the stamp on `Trip.metadata.recentSplitTicketSearch`,
+   * defeating stale / out-of-order overwrite races. Optional for
+   * back-compat with callers that pre-date this round of hardening.
+   */
+  searchId: z.string().uuid().optional(),
 });
 
 type BookTripInput = z.infer<typeof inputSchema>;
@@ -151,6 +161,12 @@ export const bookTripTool: ToolDef<BookTripInput> = {
           },
         },
       },
+      searchId: {
+        type: 'string',
+        format: 'uuid',
+        description:
+          'UUID returned by the search_flights itinerary-view response. Pass it back to bind this booking to that exact search and defeat stale-stamp races. Optional but recommended.',
+      },
     },
   },
   async handler(input, ctx?: ToolContext) {
@@ -190,6 +206,7 @@ export const bookTripTool: ToolDef<BookTripInput> = {
     const provenanceFailure = await checkOfferProvenance({
       tripId: validated.tripId,
       offerIds: slices.map(s => s.offerId),
+      searchId: validated.searchId,
     });
     if (provenanceFailure) {
       return {
@@ -215,7 +232,12 @@ export const bookTripTool: ToolDef<BookTripInput> = {
     const minLayoverHours = await resolveTenantMinLayoverHours(ctx);
     let peeks: Awaited<ReturnType<typeof peekOfferSegments>>[];
     try {
-      peeks = await Promise.all(slices.map(s => peekOfferSegments(s.offerId)));
+      // Codex PR54-3 — parallel Promise.all + a single transient
+      // Duffel 429/5xx tanks the entire booking. Wrap with bounded
+      // retry; if the parallel pass still fails after backoff, fall
+      // back to sequential (slices are capped at 4 by the input
+      // schema so the worst case is 4 serial calls).
+      peeks = await peekAllSegmentsWithFallback(slices.map(s => s.offerId));
     } catch (err) {
       return {
         tripId: validated.tripId,
@@ -616,6 +638,53 @@ function validateRouteAndLayover(args: {
 }
 
 /**
+ * Bounded peek with parallel-then-sequential fallback (Codex PR54-3).
+ *
+ * Strategy:
+ *  1. Try Promise.all of all peeks once. If every offer resolves,
+ *     return — fast path, ~150ms for 2 slices.
+ *  2. If any peek throws, classify by error message:
+ *     - 429 / 5xx / network-ish → retryable
+ *     - 4xx / fatal → not retryable, surface immediately
+ *  3. On retryable failure, wait 250ms and retry parallel once more.
+ *  4. If parallel still fails, fall back to SEQUENTIAL peeks (slices
+ *     capped at 4 by input schema — worst case 4 serial calls,
+ *     ~600ms). Sequential avoids triggering Duffel's per-host rate
+ *     limiter for the same set of offer ids in close succession.
+ *  5. Any error during the sequential pass throws — the outer
+ *     `peeks` try/catch surfaces it as `offer_peek_failed`.
+ */
+async function peekAllSegmentsWithFallback(
+  offerIds: string[]
+): Promise<Awaited<ReturnType<typeof peekOfferSegments>>[]> {
+  try {
+    return await Promise.all(offerIds.map(id => peekOfferSegments(id)));
+  } catch (err) {
+    const msg = errorMessage(err).toLowerCase();
+    const retryable =
+      msg.includes('429') ||
+      msg.includes('rate') ||
+      msg.includes('5') /* covers 500/502/503/504 substrings */ ||
+      msg.includes('network') ||
+      msg.includes('timeout') ||
+      msg.includes('econnreset');
+    if (!retryable) throw err;
+    await new Promise<void>(r => setTimeout(r, 250));
+    try {
+      return await Promise.all(offerIds.map(id => peekOfferSegments(id)));
+    } catch (_secondParallelErr) {
+      // Sequential fallback. Errors here propagate; outer caller
+      // converts to a structured rejection.
+      const out: Awaited<ReturnType<typeof peekOfferSegments>>[] = [];
+      for (const id of offerIds) {
+        out.push(await peekOfferSegments(id));
+      }
+      return out;
+    }
+  }
+}
+
+/**
  * Provenance TTL — recentSplitTicketSearch must have been stamped by
  * `search_flights` within this many minutes for its offer ids to be
  * honored. Duffel offers themselves typically expire within ~30 min;
@@ -637,6 +706,7 @@ const PROVENANCE_TTL_MINUTES = 30;
 async function checkOfferProvenance(args: {
   tripId: string;
   offerIds: string[];
+  searchId?: string;
 }): Promise<string | null> {
   try {
     const trip = await prisma.trip.findUnique({
@@ -644,7 +714,13 @@ async function checkOfferProvenance(args: {
       select: { metadata: true },
     });
     const meta = trip?.metadata as
-      | { recentSplitTicketSearch?: { offerIds?: unknown; savedAt?: unknown } }
+      | {
+          recentSplitTicketSearch?: {
+            offerIds?: unknown;
+            savedAt?: unknown;
+            searchId?: unknown;
+          };
+        }
       | null
       | undefined;
     const stamp = meta?.recentSplitTicketSearch;
@@ -658,6 +734,18 @@ async function checkOfferProvenance(args: {
     const ageMs = Date.now() - savedAt;
     if (ageMs > PROVENANCE_TTL_MINUTES * 60_000) {
       return `Split-ticket search stamp is ${Math.round(ageMs / 60_000)}min old (TTL ${PROVENANCE_TTL_MINUTES}min). Re-run \`search_flights\` to refresh.`;
+    }
+    // Codex PR54-2 — when the caller supplies a `searchId`, it MUST
+    // match the stamp's id. This defeats stale-stamp / out-of-order
+    // race where a slower search_flights write lands AFTER a newer
+    // one. Callers that don't supply searchId fall back to TTL-only
+    // verification (back-compat for pre-hardening agents).
+    if (args.searchId) {
+      const stampedSearchId =
+        typeof stamp.searchId === 'string' ? stamp.searchId : undefined;
+      if (stampedSearchId !== args.searchId) {
+        return `searchId mismatch (expected stamp \`${args.searchId}\`, found \`${stampedSearchId ?? 'none'}\`). The most recent search_flights response is stale or was overwritten. Re-run \`search_flights\` and pass the new searchId.`;
+      }
     }
     const allowed = new Set<string>(
       Array.isArray(stamp.offerIds)

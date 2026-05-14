@@ -476,16 +476,32 @@ const placeRefSchema = z.union([
 ]);
 
 // Helper: array of nullable T → array of non-null T after filtering.
+// `.catch(null)` makes each element parse-resilient: an inner-schema
+// failure produces `null` instead of throwing the whole array. The
+// transform then strips nulls. Used so a strict offer-schema that
+// requires id/type/total_amount/etc. silently drops malformed offers
+// rather than rejecting the entire response (Codex PR54-4).
 function nonNullableArray<T extends z.ZodTypeAny>(inner: T) {
   return z
-    .array(inner.nullable())
+    .array(inner.nullable().catch(null))
     .transform(arr => arr.filter((x): x is z.infer<T> => x !== null && x !== undefined));
 }
 
+// Codex PR54-4 — require the minimum fields downstream `projectFlightOffer`
+// reads before booking. Offers missing total_amount / total_currency /
+// expires_at cannot be priced or held; surfacing them to the agent risks
+// a confident-but-broken "found N options" response. Require them and
+// let the parser silently drop malformed offers via the nonNullableArray
+// wrapper at the brand level (each brand's offers array is `.nullable()`
+// then `.transform(filter)`, so a strict-but-failed parse becomes null
+// and gets filtered out).
 const rawItineraryOfferSchema = z
   .object({
-    id: z.string().optional(),
-    type: z.enum(['single_ticket', 'split_ticket']).optional(),
+    id: z.string().min(1),
+    type: z.enum(['single_ticket', 'split_ticket']),
+    total_amount: z.string().min(1),
+    total_currency: z.string().min(1),
+    expires_at: z.string().min(1),
   })
   .passthrough();
 
