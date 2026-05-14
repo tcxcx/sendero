@@ -468,6 +468,14 @@ async function persistSplitTicketSearchProvenance(args: {
     // safe against two concurrent search_flights calls — only the
     // call that holds the OLDER existing-savedAt loses; both calls
     // can run concurrently without read-then-write race.
+    //
+    // The `savedAt` cast is GUARDED against malformed strings via a
+    // regex match (Codex PR54-6). Without the guard, an existing
+    // stamp with a non-ISO `savedAt` would throw at the cast site,
+    // the catch below would swallow the error, and the new stamp
+    // would never land — silently losing provenance. The
+    // `^\d{4}-\d{2}-\d{2}T` prefix matches ISO 8601 (Z + offset
+    // variants both fall through the `~` regex).
     const result = await prisma.$executeRaw`
       UPDATE trips
          SET metadata = jsonb_set(
@@ -479,7 +487,11 @@ async function persistSplitTicketSearchProvenance(args: {
        WHERE id = ${args.tripId}
          AND (
            metadata->'recentSplitTicketSearch'->>'savedAt' IS NULL
-           OR (metadata->'recentSplitTicketSearch'->>'savedAt')::timestamptz < NOW()
+           OR (
+             metadata->'recentSplitTicketSearch'->>'savedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+             AND (metadata->'recentSplitTicketSearch'->>'savedAt')::timestamptz < NOW()
+           )
+           OR metadata->'recentSplitTicketSearch'->>'savedAt' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
          )
     `;
     if (result === 0) {

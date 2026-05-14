@@ -696,11 +696,7 @@ function isRetryableSupplierError(err: unknown): boolean {
           e && typeof e === 'object' && 'type' in e
             ? String((e as { type?: unknown }).type ?? '')
             : '';
-        if (
-          type === 'rate_limit_error' ||
-          type === 'api_error' ||
-          type === 'service_unavailable'
-        ) {
+        if (type === 'rate_limit_error' || type === 'api_error' || type === 'service_unavailable') {
           return true;
         }
       }
@@ -725,18 +721,21 @@ function isRetryableSupplierError(err: unknown): boolean {
   ) {
     return true;
   }
-  // (4) HTTP-status substrings — anchor 5xx to "http 5" so we don't
-  // match unrelated occurrences of the digit "5" in offer ids.
+  // (4) HTTP-status substrings — anchor to a status-context keyword
+  // AND a digit boundary so we don't false-match offer ids that
+  // happen to contain "500"/"503" as a substring.
+  // ONLY 429 (rate limit) + 5xx (server error) are retryable. 4xx
+  // other than 429 mean "your request is bad" — retrying won't help.
+  // Pattern accepts: `HTTP 503`, `status: 429`, `code=500`, etc.
+  // The `\b` boundary ensures we match the full 3-digit status.
+  const statusContextRe = /(?:^|[^a-z0-9])(?:http|status|code)\s*[:=]?\s*(429|5\d\d)\b/i;
+  if (statusContextRe.test(both)) return true;
+  // The word "rate" still indicates rate-limiting in supplier-side
+  // free text (e.g. "rate limit exceeded"). Keep this signal separate
+  // from the status-code check.
   return (
-    both.includes('429') ||
-    both.includes(' rate') ||
-    both.includes('http 5') ||
-    both.includes('500') ||
-    both.includes('502') ||
-    both.includes('503') ||
-    both.includes('504') ||
-    both.includes('network') ||
-    both.includes('timeout')
+    /\brate[ -]?(?:limit|limited)\b/i.test(both) ||
+    /\b(?:network|timeout)\b/i.test(both)
   );
 }
 

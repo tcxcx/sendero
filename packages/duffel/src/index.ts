@@ -478,30 +478,38 @@ const placeRefSchema = z.union([
 // Helper: array of nullable T → array of non-null T after filtering.
 // Each entry is parsed with `inner.safeParse`; failures (e.g. an
 // offer missing required total_amount/expires_at after the PR54-4
-// hardening) produce a logged warning + are filtered out. Passing
-// a `label` gates the warning to the level where it matters (we
-// only label offers — outer arrays are noisy + rarely the culprit).
-// Codex PR54-4 + regression note: telemetry when offers get
-// silently dropped.
+// hardening) are filtered out. Passing a `label` enables BATCHED
+// drop telemetry: drops accumulate during the transform pass and
+// a single `console.warn` summarizes count + first-sample issue
+// preview at the end (Codex PR54-7: per-element logs were a
+// log-storm risk on a 10-bad-offer response).
 function nonNullableArray<T extends z.ZodTypeAny>(inner: T, label?: string) {
-  return z.array(z.unknown()).transform(arr =>
-    arr.flatMap(item => {
-      if (item === null || item === undefined) return [];
+  return z.array(z.unknown()).transform(arr => {
+    const out: z.infer<T>[] = [];
+    let dropCount = 0;
+    let sampleIssues: Array<{ path: string; message: string }> | null = null;
+    for (const item of arr) {
+      if (item === null || item === undefined) continue;
       const parsed = inner.safeParse(item);
       if (!parsed.success) {
-        if (label) {
-          console.warn(`[duffel] zod dropped malformed ${label}`, {
-            issuePreview: parsed.error.issues.slice(0, 3).map(i => ({
-              path: i.path.join('.'),
-              message: i.message,
-            })),
-          });
+        dropCount += 1;
+        if (label && sampleIssues === null) {
+          sampleIssues = parsed.error.issues.slice(0, 3).map(i => ({
+            path: i.path.join('.'),
+            message: i.message,
+          }));
         }
-        return [];
+        continue;
       }
-      return [parsed.data as z.infer<T>];
-    })
-  );
+      out.push(parsed.data as z.infer<T>);
+    }
+    if (label && dropCount > 0) {
+      console.warn(`[duffel] zod dropped ${dropCount} malformed ${label}(s)`, {
+        sampleIssues,
+      });
+    }
+    return out;
+  });
 }
 
 // Codex PR54-4 — require the minimum fields downstream `projectFlightOffer`

@@ -114,9 +114,26 @@ export function readBookingSegment(
  * accept those reads and surface the discriminator without
  * over-constraining the shape. */
 
+/**
+ * Forward-looking variant for the day book_flight is migrated to stamp
+ * `source: 'book_flight'` on its metadata writes. Today book_flight
+ * writes `{ paymentStatus, usdcSettlement? }` with NO source field
+ * (book-flight.ts:1378) — those rows fail the discriminator and fall
+ * through `parseBookingMetadata` to `null`, which is the safe defensive
+ * behavior.
+ *
+ * When the future migration lands, this variant ensures the stamped
+ * metadata carries at least `paymentStatus` (the field every
+ * book_flight write site already produces). Codex PR54-5: prevents a
+ * malformed-but-source-tagged blob from passing the discriminator
+ * unchallenged. Other fields stay passthrough since `book_flight`
+ * writes a wide set (segments projection, eTicket URLs, journey state,
+ * markup snapshot, etc.) and locking them all here would over-constrain.
+ */
 const bookFlightMetadataSchema = z
   .object({
     source: z.literal('book_flight'),
+    paymentStatus: z.string().min(1),
   })
   .passthrough();
 
