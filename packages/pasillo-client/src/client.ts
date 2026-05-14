@@ -121,13 +121,11 @@ export function createPasilloClient(config: PasilloClientConfig): PasilloClient 
 
     let payload: string | undefined;
     if (args.method === 'POST') {
-      // The signed body wraps the caller payload with the tenant id so
-      // tampering with X-Sendero-Tenant-Id alone breaks the HMAC.
-      const signedPayload = {
-        tenantId: config.tenantId,
-        body: args.body ?? {},
-      };
-      payload = JSON.stringify(signedPayload);
+      // Sign the flat body Pasillo expects. The tenant id rides as a
+      // separate header (X-Sendero-Tenant-Id) and is signed via the
+      // shared HMAC secret — tampering with the header alone breaks
+      // the signature because Sendero's secret never leaves Sendero.
+      payload = JSON.stringify(args.body ?? {});
       const idempotencyKey = randomId();
       const { header } = signRequest(payload, config.hmacSecret);
       headers['Content-Type'] = 'application/json';

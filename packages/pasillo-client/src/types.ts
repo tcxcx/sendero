@@ -13,34 +13,55 @@
  * Sendero release.
  */
 
-export type Corridor =
-  /** USD (USA) ↔ USD (Ecuador) — Pasillo's flagship lane. */
-  'usd_us_to_usd_ec' | 'usd_ec_to_usd_us' | 'usd_to_usdc' | 'usdc_to_usd';
+/**
+ * Pasillo corridor codes, mirroring `corridorSchema` in
+ * `desk-v1/apps/pasillo/src/common/schema.ts`. ISO-3166 alpha-2 pairs:
+ *   - ES-EC = Spain ↔ Ecuador
+ *   - US-EC = United States ↔ Ecuador
+ *   - EC-EC = Ecuador internal lane
+ */
+export type Corridor = 'ES-EC' | 'US-EC' | 'EC-EC';
 
-export type RampDirection = 'usd-to-usdc' | 'usdc-to-usd';
+/** USDC ↔ fiat lane direction. Mirrors `directionSchema`. */
+export type RampDirection = 'on-ramp' | 'off-ramp';
 
 /** CAIP-2 destination chain identifier, e.g. `eip155:5042002` (Arc Testnet). */
 export type DestinationChain = string;
 
+/**
+ * Developer-fee structure. Optional on the wire — when present, Pasillo
+ * routes the bps cut to the supplied EVM address on top of its own
+ * platform fee. Bps must be 1-500 (0.01%-5%).
+ */
+export interface DeveloperFee {
+  developerFeeBps: number;
+  developerFeeRecipientAddress: `0x${string}`;
+}
+
 export interface QuoteRequest {
-  /** Atomic-string amount in the source unit (USDC = 6 decimals). */
-  amount: string;
+  /** Atomic integer amount in source unit (6-decimal USDC). Pasillo caps at 10_000_000 ($100k). */
+  amount: number;
   corridor: Corridor;
   direction: RampDirection;
   destinationChain?: DestinationChain;
-  /** Optional developer fee in basis points (0-500 = 0%-5%). */
-  developerFee?: number;
+  /** Optional EVM destination wallet for on-ramp settlements. */
+  walletAddress?: `0x${string}`;
+  developerFee?: DeveloperFee;
 }
 
 export interface QuoteResponse {
   quoteId: string;
-  /** Atomic-string. Source amount the buyer commits. */
-  fromAmount: string;
-  /** Atomic-string. Destination amount the buyer receives, net of fees. */
-  toAmount: string;
-  feeBps: number;
-  expiresAt: string;
+  amount: number;
+  grossFee: number;
+  developerFee: number;
+  developerFeeBps?: number;
+  developerFeeRecipientAddress?: string;
+  totalFee: number;
+  netAmount: number;
   corridor: Corridor;
+  direction: RampDirection;
+  destinationChain?: DestinationChain;
+  expiresAt: string;
 }
 
 export interface RampExecuteRequest {
