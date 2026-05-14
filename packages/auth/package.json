@@ -37,7 +37,7 @@
     "@sendero/database": "*",
     "@sendero/tools": "*",
     "hono": "^4.12.14",
-    "next": "^16.2.4",
+    "next": "^16.2.6",
     "react": "^19.1.0",
     "viem": "^2.21.0",
     "webauthn-p256": "0.0.5",
