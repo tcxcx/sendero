@@ -22,6 +22,14 @@
       "schedule": "7 * * * *"
     },
     {
+      "path": "/api/cron/journal-reconcile",
+      "schedule": "17 6 * * *"
+    },
+    {
+      "path": "/api/cron/gateway-intent-reconcile",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/phoenix-promote-successes",
       "schedule": "0 */6 * * *"
     },
