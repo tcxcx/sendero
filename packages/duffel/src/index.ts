@@ -476,15 +476,32 @@ const placeRefSchema = z.union([
 ]);
 
 // Helper: array of nullable T → array of non-null T after filtering.
-// `.catch(null)` makes each element parse-resilient: an inner-schema
-// failure produces `null` instead of throwing the whole array. The
-// transform then strips nulls. Used so a strict offer-schema that
-// requires id/type/total_amount/etc. silently drops malformed offers
-// rather than rejecting the entire response (Codex PR54-4).
-function nonNullableArray<T extends z.ZodTypeAny>(inner: T) {
-  return z
-    .array(inner.nullable().catch(null))
-    .transform(arr => arr.filter((x): x is z.infer<T> => x !== null && x !== undefined));
+// Each entry is parsed with `inner.safeParse`; failures (e.g. an
+// offer missing required total_amount/expires_at after the PR54-4
+// hardening) produce a logged warning + are filtered out. Passing
+// a `label` gates the warning to the level where it matters (we
+// only label offers — outer arrays are noisy + rarely the culprit).
+// Codex PR54-4 + regression note: telemetry when offers get
+// silently dropped.
+function nonNullableArray<T extends z.ZodTypeAny>(inner: T, label?: string) {
+  return z.array(z.unknown()).transform(arr =>
+    arr.flatMap(item => {
+      if (item === null || item === undefined) return [];
+      const parsed = inner.safeParse(item);
+      if (!parsed.success) {
+        if (label) {
+          console.warn(`[duffel] zod dropped malformed ${label}`, {
+            issuePreview: parsed.error.issues.slice(0, 3).map(i => ({
+              path: i.path.join('.'),
+              message: i.message,
+            })),
+          });
+        }
+        return [];
+      }
+      return [parsed.data as z.infer<T>];
+    })
+  );
 }
 
 // Codex PR54-4 — require the minimum fields downstream `projectFlightOffer`
@@ -507,7 +524,11 @@ const rawItineraryOfferSchema = z
 
 const rawItineraryBrandSchema = z
   .object({
-    offers: nonNullableArray(rawItineraryOfferSchema).optional(),
+    // Pass the label so a strict-offer-schema parse failure is logged
+    // for telemetry (Codex PR54-4 follow-up). Other nested arrays
+    // (brands, itineraries, slices) drop silently — they don't have
+    // strict required fields that legitimately fail validation.
+    offers: nonNullableArray(rawItineraryOfferSchema, 'itinerary offer').optional(),
   })
   .passthrough();
 

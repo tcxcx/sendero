@@ -434,14 +434,24 @@ function buildSearchFlightsShare(args: SearchFlightShareInput): {
  */
 /**
  * Provenance stamp — persist the offer ids returned by an itinerary-view
- * search into `Trip.metadata.recentSplitTicketSearch` (with an ISO
- * `savedAt`). `book_trip` later verifies every offer id it's asked to
- * book was surfaced here, within a TTL window. Per Codex finding (c):
- * defense against an agent invoking `book_trip` with arbitrary
- * `off_*` IDs sourced outside Sendero's search path.
+ * search into `Trip.metadata.recentSplitTicketSearch`. `book_trip` later
+ * verifies every offer id it's asked to book was surfaced here, within
+ * a TTL window. Per Codex finding (c): defense against an agent
+ * invoking `book_trip` with arbitrary `off_*` IDs sourced outside
+ * Sendero's search path.
  *
- * Fire-and-forget — a failed metadata write must not block the search
- * response.
+ * AWAITED at every caller (NOT fire-and-forget). A same-turn book_trip
+ * call would otherwise race the write and reject valid offers (Codex
+ * PR54-1). The DB roundtrip cost (~5-20ms) is on the search response
+ * critical path but the correctness gain is non-negotiable. Future
+ * developers: do NOT convert this back to `void persist…`.
+ *
+ * Stale-write defeat via DB-side NOW() in a single atomic UPDATE
+ * (Codex PR54-2). The previous app-server-side `Date.now()` comparison
+ * was vulnerable to inter-node clock drift; here Postgres's own clock
+ * decides which stamp is "newer". This makes the write conditional —
+ * `metadata->'recentSplitTicketSearch'->>'savedAt'` is either missing,
+ * unparseable, or strictly older than NOW() before the update fires.
  */
 async function persistSplitTicketSearchProvenance(args: {
   tripId: string;
@@ -449,42 +459,39 @@ async function persistSplitTicketSearchProvenance(args: {
   searchId: string;
 }): Promise<void> {
   try {
-    const trip = await prisma.trip.findUnique({
-      where: { id: args.tripId },
-      select: { metadata: true },
-    });
-    const meta = (trip?.metadata as Record<string, unknown> | null) ?? {};
-    const existing = meta.recentSplitTicketSearch as
-      | { savedAt?: unknown }
-      | null
-      | undefined;
-    const existingSavedAtMs =
-      typeof existing?.savedAt === 'string' ? Date.parse(existing.savedAt) : NaN;
-    const nowMs = Date.now();
-    // Codex PR54-2 — refuse to overwrite a newer stamp. Two concurrent
-    // search_flights calls (e.g. operator + agent both probing in
-    // parallel) shouldn't let the older write win and shadow a newer
-    // search's offers.
-    if (Number.isFinite(existingSavedAtMs) && existingSavedAtMs >= nowMs) {
+    const newStamp = {
+      searchId: args.searchId,
+      offerIds: args.offerIds,
+      savedAt: new Date().toISOString(),
+    };
+    // Atomic conditional jsonb upsert. The WHERE clause makes this
+    // safe against two concurrent search_flights calls — only the
+    // call that holds the OLDER existing-savedAt loses; both calls
+    // can run concurrently without read-then-write race.
+    const result = await prisma.$executeRaw`
+      UPDATE trips
+         SET metadata = jsonb_set(
+           COALESCE(metadata, '{}'::jsonb),
+           '{recentSplitTicketSearch}',
+           ${JSON.stringify(newStamp)}::jsonb,
+           true
+         )
+       WHERE id = ${args.tripId}
+         AND (
+           metadata->'recentSplitTicketSearch'->>'savedAt' IS NULL
+           OR (metadata->'recentSplitTicketSearch'->>'savedAt')::timestamptz < NOW()
+         )
+    `;
+    if (result === 0) {
+      // Either tripId doesn't exist or a newer stamp already won. The
+      // latter is the expected race-loss path; the former is a
+      // misuse upstream. Log either way at warn so ops can spot the
+      // never-existed case in production.
       console.warn(
-        '[search_flights] persistSplitTicketSearchProvenance: skipping write, existing stamp is newer',
-        { tripId: args.tripId, existingSavedAtMs, nowMs }
+        '[search_flights] persistSplitTicketSearchProvenance: 0 rows updated (newer stamp won OR tripId not found)',
+        { tripId: args.tripId, searchId: args.searchId }
       );
-      return;
     }
-    await prisma.trip.update({
-      where: { id: args.tripId },
-      data: {
-        metadata: {
-          ...meta,
-          recentSplitTicketSearch: {
-            searchId: args.searchId,
-            offerIds: args.offerIds,
-            savedAt: new Date(nowMs).toISOString(),
-          },
-        } as object,
-      },
-    });
   } catch (err) {
     console.warn('[search_flights] persistSplitTicketSearchProvenance failed (non-fatal)', {
       tripId: args.tripId,

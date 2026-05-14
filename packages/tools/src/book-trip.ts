@@ -660,15 +660,7 @@ async function peekAllSegmentsWithFallback(
   try {
     return await Promise.all(offerIds.map(id => peekOfferSegments(id)));
   } catch (err) {
-    const msg = errorMessage(err).toLowerCase();
-    const retryable =
-      msg.includes('429') ||
-      msg.includes('rate') ||
-      msg.includes('5') /* covers 500/502/503/504 substrings */ ||
-      msg.includes('network') ||
-      msg.includes('timeout') ||
-      msg.includes('econnreset');
-    if (!retryable) throw err;
+    if (!isRetryableSupplierError(err)) throw err;
     await new Promise<void>(r => setTimeout(r, 250));
     try {
       return await Promise.all(offerIds.map(id => peekOfferSegments(id)));
@@ -682,6 +674,70 @@ async function peekAllSegmentsWithFallback(
       return out;
     }
   }
+}
+
+/**
+ * Classify an error from a Duffel call as retryable. Covers four
+ * shapes (Codex PR54-3 surfaced the misses against the original
+ * substring-only check):
+ *   1. Duffel SDK structured errors with `errors[].type` ∈ retryable set
+ *   2. Native fetch errors (`TypeError`, often `fetch failed`)
+ *   3. Node net errors: ENOTFOUND, ECONNRESET, ETIMEDOUT (NO http status
+ *      in the message; checked by cause + message)
+ *   4. HTTP-status substrings in throw message — 429, 5xx, rate, etc.
+ */
+function isRetryableSupplierError(err: unknown): boolean {
+  // (1) Duffel SDK structured shape — { errors: [{ type, code, ... }] }
+  if (err && typeof err === 'object' && 'errors' in err) {
+    const errs = (err as { errors?: unknown }).errors;
+    if (Array.isArray(errs)) {
+      for (const e of errs) {
+        const type =
+          e && typeof e === 'object' && 'type' in e
+            ? String((e as { type?: unknown }).type ?? '')
+            : '';
+        if (
+          type === 'rate_limit_error' ||
+          type === 'api_error' ||
+          type === 'service_unavailable'
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+  // (2) Native fetch — global fetch throws TypeError on network failure
+  if (err instanceof TypeError) return true;
+  const msg = errorMessage(err).toLowerCase();
+  const cause =
+    err && typeof err === 'object' && 'cause' in err
+      ? String((err as { cause?: unknown }).cause ?? '').toLowerCase()
+      : '';
+  const both = `${msg} ${cause}`;
+  // (3) Node net errors — no HTTP status, only error codes in the message/cause
+  if (
+    both.includes('enotfound') ||
+    both.includes('econnreset') ||
+    both.includes('econnrefused') ||
+    both.includes('etimedout') ||
+    both.includes('eai_again') ||
+    both.includes('fetch failed')
+  ) {
+    return true;
+  }
+  // (4) HTTP-status substrings — anchor 5xx to "http 5" so we don't
+  // match unrelated occurrences of the digit "5" in offer ids.
+  return (
+    both.includes('429') ||
+    both.includes(' rate') ||
+    both.includes('http 5') ||
+    both.includes('500') ||
+    both.includes('502') ||
+    both.includes('503') ||
+    both.includes('504') ||
+    both.includes('network') ||
+    both.includes('timeout')
+  );
 }
 
 /**
@@ -741,8 +797,7 @@ async function checkOfferProvenance(args: {
     // one. Callers that don't supply searchId fall back to TTL-only
     // verification (back-compat for pre-hardening agents).
     if (args.searchId) {
-      const stampedSearchId =
-        typeof stamp.searchId === 'string' ? stamp.searchId : undefined;
+      const stampedSearchId = typeof stamp.searchId === 'string' ? stamp.searchId : undefined;
       if (stampedSearchId !== args.searchId) {
         return `searchId mismatch (expected stamp \`${args.searchId}\`, found \`${stampedSearchId ?? 'none'}\`). The most recent search_flights response is stale or was overwritten. Re-run \`search_flights\` and pass the new searchId.`;
       }
