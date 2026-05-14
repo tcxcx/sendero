@@ -59,6 +59,7 @@ import {
 } from '@sendero/duffel';
 import { prisma } from '@sendero/database';
 import type { ToolDef, ToolContext } from './types';
+import { serializeBookTripMetadata } from './booking-metadata';
 
 const passengerSchema = z.object({
   name: z.string().min(1),
@@ -475,12 +476,10 @@ async function persistBookingForSlice(args: {
         totalUsd: args.hold.totalAmount ?? '0',
         currency: args.hold.totalCurrency ?? 'USD',
         segments: args.hold.segments as object,
-        metadata: {
-          source: 'book_trip',
+        metadata: serializeBookTripMetadata({
           sliceIndex: args.sliceIndex,
           offerId: args.offerId,
-          splitTicket: true,
-        },
+        }),
         bookedAt: new Date(),
       },
       select: { id: true },
@@ -624,10 +623,7 @@ async function resolveTenantMinLayoverHours(ctx: ToolContext | undefined): Promi
       where: { id: tenantId },
       select: { metadata: true },
     });
-    const meta = tenant?.metadata as
-      | { flights?: { minLayoverHours?: unknown } }
-      | null
-      | undefined;
+    const meta = tenant?.metadata as { flights?: { minLayoverHours?: unknown } } | null | undefined;
     const raw = meta?.flights?.minLayoverHours;
     if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
       return Math.max(raw, MIN_LAYOVER_HOURS_HARD_FLOOR);
