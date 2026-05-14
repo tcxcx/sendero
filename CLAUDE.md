@@ -129,6 +129,42 @@ Schema enum: `SignerKekProvider` (`env-v1` | `kms-v1`). CHECK constraint: rows m
 
 **Full canary runbook (S5.1–S5.10)**: `docs/PHASE_5_PRODUCTION_HARDENING_RUNBOOK.md`.
 
+## Duffel split-ticket integration (PRs #53 + #54)
+
+Sendero surfaces both single-ticket AND split-ticket (multi-carrier, per-slice one-way) flight offers via Duffel's `include_split_ticket: true` + `view=itineraries` API. Per Duffel: median **3× more bookable itineraries** + 25% more combinable departure times.
+
+**Gating** (all three must align):
+- `Tenant.metadata.flights.allowSplitTicket === true` — opt-in per TMC. Off by default.
+- `search_flights` input `includeSplitTicket: true` — the LLM passes it when round-trip + the customer asked for max options.
+- Search has `returnDate` (multi-slice). One-way is single-ticket only.
+- Platform kill-switch: `SENDERO_FLIGHTS_DISABLE_SPLIT_TICKET=true` (Vercel env) overrides everything.
+
+**Tools** (`packages/tools/src/`):
+- `search_flights` — discriminated response: `{ mode: 'flat', offers }` vs `{ mode: 'itineraries', singleTickets, slices, searchId }`. Returns a UUID `searchId` for provenance binding.
+- `book_trip` — multi-slice orchestrator with two-phase hold-all → pay-all. Per-slice idempotency keys (`book-trip-{tripId}-slice-{i}-{hold|pay}`) → real Duffel retry safety via `Idempotency-Key` HTTP header on `/air/orders` + `/air/payments`. NOT used for single-ticket — agent calls `book_flight` for those.
+
+**Safety guards inside `book_trip`** (in order):
+1. **Tenant gate** — re-checked even though `search_flights` also gates. Defense in depth.
+2. **Offer provenance binding** — every `offerId` must appear in `Trip.metadata.recentSplitTicketSearch.offerIds` saved by the same trip's most recent `search_flights` itinerary call within 30min TTL. When `searchId` is supplied, it must match the stamp's `searchId` (defeats stale / out-of-order overwrite races). `search_flights` writes the stamp via atomic Prisma `$executeRaw` with `WHERE … < NOW()` so Postgres's clock decides "newer" (clock-skew-safe).
+3. **Peek validation** (pre-hold, no Duffel orders created yet): bounded retry parallel → backoff → sequential fallback via `peekAllSegmentsWithFallback(offerIds)`. Retryable-error classifier covers Duffel SDK structured errors (`err.errors[].type`), native fetch `TypeError`, Node net codes (`ENOTFOUND/ECONNRESET/ETIMEDOUT`), HTTP-status substrings. Then validates origin/destination continuity + min-layover (default 3h soft, 2h hard floor; tenant override via `Tenant.metadata.flights.minLayoverHours` clamped to `Math.max(raw, 2)`).
+4. **Phase-1 rollback** — any `createHoldOrder` failure cancels every prior hold via Duffel two-step `createOrderCancellation → confirmOrderCancellation` (free pre-payment).
+5. **Phase-2 partial-paid** — payment failure after one or more slices paid: cancels remaining held-but-unpaid slices, persists `Trip.metadata.splitTicketState` with per-slice snapshot, returns handoff to operator. Auto-refund per airline rule is deferred to v3.
+
+**Booking persistence**: each successful slice produces one `Booking` row under the same `tripId`. `Booking.metadata` carries `{ source: 'book_trip', sliceIndex, offerId, splitTicket: true }` via the typed writer `serializeBookTripMetadata` — `BookingMetadataV1` discriminated union with zod validator in `booking-metadata.ts`. Defensive reader `parseBookingMetadata(unknown): BookingMetadataV1 | null` for downstream code.
+
+**Adapter** (`packages/duffel/src/index.ts`):
+- `searchFlightsItineraries(params)` — raw fetch (SDK 4.24 doesn't model these params); zod-validated response via `duffelItineraryViewResponseSchema` + `nonNullableArray` helper that logs offer-level silent drops for telemetry.
+- `peekOfferSegments(offerId)` — public peek helper for pre-hold validation.
+- `createHoldOrder` + `payFromBalance` swapped from SDK to raw fetch with `Idempotency-Key` header.
+
+**Deferred to v3** (not in PR #54):
+- Per-slice Gateway-escrow `reserve → commit` cycles (`book_trip` writes Bookings directly today; `book_flight` does single-slice escrow)
+- Auto-refund per airline hold-window rule on partial-paid
+- Channel-render bespoke single + split combo cards
+- Travel-insurance auto-bundle on split-ticket selection
+
+**Full design** in `docs/duffel-split-ticket-integration.md`. Tests: `packages/tools/src/book-trip.test.ts` (15 tests covering state machine), `packages/duffel/src/index.test.ts` (zod schema variants), `packages/tools/src/booking-metadata.test.ts` (metadata union, 6 added).
+
 ## SenderoStamps deployment runbook (Circle SCP, Arc-Testnet)
 
 Live: `0xcc0fa83535675a856d773cfbc71232c3d7b71a03` (proxy) → `0xCCf28A443e35F8bD982b8E8651bE9f6caFEd4672` (thirdweb TokenERC1155). Circle ERC-1155 template `aea21da6-0aa2-4971-9a1a-5098842b1248`. Gas via Circle Gas Station (fiat).

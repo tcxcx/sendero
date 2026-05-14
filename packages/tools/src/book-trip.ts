@@ -53,11 +53,13 @@ import {
   payFromBalance,
   createOrderCancellation,
   confirmOrderCancellation,
+  peekOfferSegments,
   type HoldOrderParams,
   type HoldOrderResult,
 } from '@sendero/duffel';
 import { prisma } from '@sendero/database';
 import type { ToolDef, ToolContext } from './types';
+import { serializeBookTripMetadata } from './booking-metadata';
 
 const passengerSchema = z.object({
   name: z.string().min(1),
@@ -80,6 +82,16 @@ const inputSchema = z.object({
   tripId: z.string().min(1),
   passenger: passengerSchema,
   slices: z.array(sliceSchema).min(2).max(4),
+  /**
+   * Search-time identifier echoed back to bind this booking to the
+   * exact `search_flights` itinerary call that surfaced the offers.
+   * Returned alongside the search result as `searchId` when itinerary
+   * mode is active. When provided here, `book_trip` verifies it
+   * matches the stamp on `Trip.metadata.recentSplitTicketSearch`,
+   * defeating stale / out-of-order overwrite races. Optional for
+   * back-compat with callers that pre-date this round of hardening.
+   */
+  searchId: z.string().uuid().optional(),
 });
 
 type BookTripInput = z.infer<typeof inputSchema>;
@@ -102,7 +114,17 @@ interface BookTripResult {
   handoffRequired?: { reason: string; suggestedAction: string };
 }
 
-const MIN_LAYOVER_HOURS = 3;
+/**
+ * Soft default minimum layover (hours) between consecutive slices.
+ * Used when the tenant has not overridden via `metadata.flights.minLayoverHours`.
+ */
+const MIN_LAYOVER_HOURS_SOFT_DEFAULT = 3;
+/**
+ * Platform hard floor (hours). Tenant overrides clamp to >= this.
+ * Anything below would risk single-slice disruption cascading into
+ * a missed downstream flight with no protection.
+ */
+const MIN_LAYOVER_HOURS_HARD_FLOOR = 2;
 
 export const bookTripTool: ToolDef<BookTripInput> = {
   name: 'book_trip',
@@ -139,6 +161,12 @@ export const bookTripTool: ToolDef<BookTripInput> = {
           },
         },
       },
+      searchId: {
+        type: 'string',
+        format: 'uuid',
+        description:
+          'UUID returned by the search_flights itinerary-view response. Pass it back to bind this booking to that exact search and defeat stale-stamp races. Optional but recommended.',
+      },
     },
   },
   async handler(input, ctx?: ToolContext) {
@@ -168,6 +196,81 @@ export const bookTripTool: ToolDef<BookTripInput> = {
     // Sort by sliceIndex so we always hold in itinerary order — the
     // min-layover check below assumes adjacent indices.
     const slices = [...validated.slices].sort((a, b) => a.sliceIndex - b.sliceIndex);
+
+    // ── Provenance check (Codex finding c) ────────────────────────
+    // Every offer id MUST have been surfaced by a same-trip
+    // search_flights itinerary-view call within the TTL window. This
+    // blocks an agent invoking book_trip with arbitrary off_* ids
+    // sourced outside Sendero's search path (e.g. cross-tenant
+    // exfiltration, prompt injection, stale offer reuse).
+    const provenanceFailure = await checkOfferProvenance({
+      tripId: validated.tripId,
+      offerIds: slices.map(s => s.offerId),
+      searchId: validated.searchId,
+    });
+    if (provenanceFailure) {
+      return {
+        tripId: validated.tripId,
+        state: 'rejected' as const,
+        slices: slices.map(s => ({
+          sliceIndex: s.sliceIndex,
+          offerId: s.offerId,
+          state: 'pending' as const,
+        })),
+        handoffRequired: {
+          reason: 'offer_provenance_missing',
+          suggestedAction: provenanceFailure,
+        },
+      } satisfies BookTripResult;
+    }
+
+    // ── Pre-hold validation (Codex finding g) ─────────────────────
+    // Peek offer segments BEFORE phase-1 so we never burn Duffel hold
+    // quota on a combo that violates route continuity or min-layover.
+    // The post-hold `checkMinLayoverViolation` remains as a paranoid
+    // backstop in case a peek and a hold ever disagree.
+    const minLayoverHours = await resolveTenantMinLayoverHours(ctx);
+    let peeks: Awaited<ReturnType<typeof peekOfferSegments>>[];
+    try {
+      // Codex PR54-3 — parallel Promise.all + a single transient
+      // Duffel 429/5xx tanks the entire booking. Wrap with bounded
+      // retry; if the parallel pass still fails after backoff, fall
+      // back to sequential (slices are capped at 4 by the input
+      // schema so the worst case is 4 serial calls).
+      peeks = await peekAllSegmentsWithFallback(slices.map(s => s.offerId));
+    } catch (err) {
+      return {
+        tripId: validated.tripId,
+        state: 'rejected' as const,
+        slices: slices.map(s => ({
+          sliceIndex: s.sliceIndex,
+          offerId: s.offerId,
+          state: 'pending' as const,
+        })),
+        handoffRequired: {
+          reason: 'offer_peek_failed',
+          suggestedAction: `Could not fetch one or more Duffel offers for pre-hold validation (${errorMessage(err)}). Inventory may have expired; ask the customer to re-search.`,
+        },
+      } satisfies BookTripResult;
+    }
+
+    const prevalidation = validateRouteAndLayover({
+      slices,
+      peeks,
+      minLayoverHours,
+    });
+    if (prevalidation) {
+      return {
+        tripId: validated.tripId,
+        state: 'rejected' as const,
+        slices: slices.map(s => ({
+          sliceIndex: s.sliceIndex,
+          offerId: s.offerId,
+          state: 'pending' as const,
+        })),
+        handoffRequired: prevalidation,
+      } satisfies BookTripResult;
+    }
 
     // ── Phase 1 — Hold every slice ─────────────────────────────────
     const sliceResults: SliceResult[] = slices.map(s => ({
@@ -220,8 +323,11 @@ export const bookTripTool: ToolDef<BookTripInput> = {
       }
     }
 
-    // ── Min-layover guard (after holds so we have actual segment times) ─
-    const layoverViolation = checkMinLayoverViolation(holds);
+    // ── Min-layover guard (defensive backstop — pre-hold pass above
+    //    already validated against offer peek data; reaching here would
+    //    mean the held order's actual segment times disagreed with the
+    //    offer peek, which Duffel does not normally allow).
+    const layoverViolation = checkMinLayoverViolation(holds, minLayoverHours);
     if (layoverViolation) {
       const rolledBack = await rollbackHolds(holds, sliceResults);
       return {
@@ -232,7 +338,7 @@ export const bookTripTool: ToolDef<BookTripInput> = {
         ),
         handoffRequired: {
           reason: 'insufficient_layover',
-          suggestedAction: `${layoverViolation.message} Pick offers with at least ${MIN_LAYOVER_HOURS}h between slice ${layoverViolation.priorIndex} arrival and slice ${layoverViolation.nextIndex} departure.`,
+          suggestedAction: `${layoverViolation.message} Pick offers with at least ${minLayoverHours}h between slice ${layoverViolation.priorIndex} arrival and slice ${layoverViolation.nextIndex} departure.`,
         },
       } satisfies BookTripResult;
     }
@@ -418,12 +524,10 @@ async function persistBookingForSlice(args: {
         totalUsd: args.hold.totalAmount ?? '0',
         currency: args.hold.totalCurrency ?? 'USD',
         segments: args.hold.segments as object,
-        metadata: {
-          source: 'book_trip',
+        metadata: serializeBookTripMetadata({
           sliceIndex: args.sliceIndex,
           offerId: args.offerId,
-          splitTicket: true,
-        },
+        }),
         bookedAt: new Date(),
       },
       select: { id: true },
@@ -446,7 +550,10 @@ interface LayoverViolation {
   message: string;
 }
 
-function checkMinLayoverViolation(holds: HoldOrderResult[]): LayoverViolation | null {
+function checkMinLayoverViolation(
+  holds: HoldOrderResult[],
+  minLayoverHours: number
+): LayoverViolation | null {
   for (let i = 1; i < holds.length; i++) {
     const prior = holds[i - 1];
     const next = holds[i];
@@ -459,16 +566,261 @@ function checkMinLayoverViolation(holds: HoldOrderResult[]): LayoverViolation | 
     const nextMs = Date.parse(nextDeparture);
     if (!Number.isFinite(priorMs) || !Number.isFinite(nextMs)) continue;
     const hours = (nextMs - priorMs) / 3_600_000;
-    if (hours < MIN_LAYOVER_HOURS) {
+    if (hours < minLayoverHours) {
       return {
         priorIndex: i - 1,
         nextIndex: i,
         layoverHours: hours,
-        message: `Layover of ${hours.toFixed(1)}h between slice ${i - 1} arrival and slice ${i} departure is below the ${MIN_LAYOVER_HOURS}h minimum for split-ticket trips.`,
+        message: `Layover of ${hours.toFixed(1)}h between slice ${i - 1} arrival and slice ${i} departure is below the ${minLayoverHours}h minimum for split-ticket trips.`,
       };
     }
   }
   return null;
+}
+
+/**
+ * Pre-hold validation: route continuity (slice N+1 origin == slice N
+ * destination, case-insensitive) + min-layover floor. Returns a handoff
+ * payload on failure (caller surfaces as `state: 'rejected'`), or `null`
+ * when the combo is acceptable.
+ *
+ * Codex finding (g): running this BEFORE phase-1 `createHoldOrder` saves
+ * Duffel hold quota on bad combos that would otherwise get caught only
+ * after every slice was held.
+ */
+function validateRouteAndLayover(args: {
+  slices: ReadonlyArray<{ sliceIndex?: number; offerId?: string; idempotencyKey?: string }>;
+  peeks: ReadonlyArray<{
+    offerId: string;
+    originIata: string | null;
+    destinationIata: string | null;
+    departureAt: string | null;
+    arrivalAt: string | null;
+  }>;
+  minLayoverHours: number;
+}): NonNullable<BookTripResult['handoffRequired']> | null {
+  const { slices, peeks, minLayoverHours } = args;
+  for (let i = 1; i < peeks.length; i++) {
+    const prior = peeks[i - 1];
+    const next = peeks[i];
+    const priorSlice = slices[i - 1];
+    const nextSlice = slices[i];
+
+    // Route continuity. Reject when both sides are known and disagree.
+    // Missing peek data → defer to backstop rather than block; some
+    // edge-case offers may not project a destination IATA, and the
+    // hold result carries canonical segment data either way.
+    const priorDest = prior.destinationIata?.toUpperCase() ?? null;
+    const nextOrigin = next.originIata?.toUpperCase() ?? null;
+    if (priorDest && nextOrigin && priorDest !== nextOrigin) {
+      return {
+        reason: 'origin_destination_mismatch',
+        suggestedAction: `Slice ${nextSlice.sliceIndex} departs from ${nextOrigin} but slice ${priorSlice.sliceIndex} arrives at ${priorDest}. Split-ticket combos must be airport-to-airport continuous (no surface transit). Pick offers whose origins/destinations align.`,
+      };
+    }
+
+    // Min-layover floor.
+    const priorArrival = prior.arrivalAt;
+    const nextDeparture = next.departureAt;
+    if (!priorArrival || !nextDeparture) continue;
+    const priorMs = Date.parse(priorArrival);
+    const nextMs = Date.parse(nextDeparture);
+    if (!Number.isFinite(priorMs) || !Number.isFinite(nextMs)) continue;
+    const hours = (nextMs - priorMs) / 3_600_000;
+    if (hours < minLayoverHours) {
+      return {
+        reason: 'insufficient_layover',
+        suggestedAction: `Layover of ${hours.toFixed(1)}h between slice ${priorSlice.sliceIndex} arrival and slice ${nextSlice.sliceIndex} departure is below the ${minLayoverHours}h minimum for split-ticket trips. Pick offers with a larger gap.`,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Bounded peek with parallel-then-sequential fallback (Codex PR54-3).
+ *
+ * Strategy:
+ *  1. Try Promise.all of all peeks once. If every offer resolves,
+ *     return — fast path, ~150ms for 2 slices.
+ *  2. If any peek throws, classify by error message:
+ *     - 429 / 5xx / network-ish → retryable
+ *     - 4xx / fatal → not retryable, surface immediately
+ *  3. On retryable failure, wait 250ms and retry parallel once more.
+ *  4. If parallel still fails, fall back to SEQUENTIAL peeks (slices
+ *     capped at 4 by input schema — worst case 4 serial calls,
+ *     ~600ms). Sequential avoids triggering Duffel's per-host rate
+ *     limiter for the same set of offer ids in close succession.
+ *  5. Any error during the sequential pass throws — the outer
+ *     `peeks` try/catch surfaces it as `offer_peek_failed`.
+ */
+async function peekAllSegmentsWithFallback(
+  offerIds: string[]
+): Promise<Awaited<ReturnType<typeof peekOfferSegments>>[]> {
+  try {
+    return await Promise.all(offerIds.map(id => peekOfferSegments(id)));
+  } catch (err) {
+    if (!isRetryableSupplierError(err)) throw err;
+    await new Promise<void>(r => setTimeout(r, 250));
+    try {
+      return await Promise.all(offerIds.map(id => peekOfferSegments(id)));
+    } catch (_secondParallelErr) {
+      // Sequential fallback. Errors here propagate; outer caller
+      // converts to a structured rejection.
+      const out: Awaited<ReturnType<typeof peekOfferSegments>>[] = [];
+      for (const id of offerIds) {
+        out.push(await peekOfferSegments(id));
+      }
+      return out;
+    }
+  }
+}
+
+/**
+ * Classify an error from a Duffel call as retryable. Covers four
+ * shapes (Codex PR54-3 surfaced the misses against the original
+ * substring-only check):
+ *   1. Duffel SDK structured errors with `errors[].type` ∈ retryable set
+ *   2. Native fetch errors (`TypeError`, often `fetch failed`)
+ *   3. Node net errors: ENOTFOUND, ECONNRESET, ETIMEDOUT (NO http status
+ *      in the message; checked by cause + message)
+ *   4. HTTP-status substrings in throw message — 429, 5xx, rate, etc.
+ */
+function isRetryableSupplierError(err: unknown): boolean {
+  // (1) Duffel SDK structured shape — { errors: [{ type, code, ... }] }
+  if (err && typeof err === 'object' && 'errors' in err) {
+    const errs = (err as { errors?: unknown }).errors;
+    if (Array.isArray(errs)) {
+      for (const e of errs) {
+        const type =
+          e && typeof e === 'object' && 'type' in e
+            ? String((e as { type?: unknown }).type ?? '')
+            : '';
+        if (type === 'rate_limit_error' || type === 'api_error' || type === 'service_unavailable') {
+          return true;
+        }
+      }
+    }
+  }
+  // (2) Native fetch — global fetch throws TypeError on network failure
+  if (err instanceof TypeError) return true;
+  const msg = errorMessage(err).toLowerCase();
+  const cause =
+    err && typeof err === 'object' && 'cause' in err
+      ? String((err as { cause?: unknown }).cause ?? '').toLowerCase()
+      : '';
+  const both = `${msg} ${cause}`;
+  // (3) Node net errors — no HTTP status, only error codes in the message/cause
+  if (
+    both.includes('enotfound') ||
+    both.includes('econnreset') ||
+    both.includes('econnrefused') ||
+    both.includes('etimedout') ||
+    both.includes('eai_again') ||
+    both.includes('fetch failed')
+  ) {
+    return true;
+  }
+  // (4) HTTP-status substrings — anchor to a status-context keyword
+  // AND a digit boundary so we don't false-match offer ids that
+  // happen to contain "500"/"503" as a substring.
+  // ONLY 429 (rate limit) + 5xx (server error) are retryable. 4xx
+  // other than 429 mean "your request is bad" — retrying won't help.
+  // Pattern accepts: `HTTP 503`, `status: 429`, `code=500`, etc.
+  // The `\b` boundary ensures we match the full 3-digit status.
+  const statusContextRe = /(?:^|[^a-z0-9])(?:http|status|code)\s*[:=]?\s*(429|5\d\d)\b/i;
+  if (statusContextRe.test(both)) return true;
+  // The word "rate" still indicates rate-limiting in supplier-side
+  // free text (e.g. "rate limit exceeded"). Keep this signal separate
+  // from the status-code check.
+  return (
+    /\brate[ -]?(?:limit|limited)\b/i.test(both) ||
+    /\b(?:network|timeout)\b/i.test(both)
+  );
+}
+
+/**
+ * Provenance TTL — recentSplitTicketSearch must have been stamped by
+ * `search_flights` within this many minutes for its offer ids to be
+ * honored. Duffel offers themselves typically expire within ~30 min;
+ * giving the customer the entire offer-validity window matches their
+ * UX expectation while preventing stale-offer replay.
+ */
+const PROVENANCE_TTL_MINUTES = 30;
+
+/**
+ * Verify every offer id was surfaced by a same-trip `search_flights`
+ * itinerary-view call within the TTL window. Returns null on pass; on
+ * fail returns a human-readable reason for the handoff payload.
+ *
+ * Per Codex finding (c): without this check, an enabled tenant + a
+ * compromised / mis-prompted agent could submit arbitrary `off_*` ids
+ * to book_trip. The search-flights provenance stamp is the only path
+ * that legitimately produces split-ticket offer ids in this flow.
+ */
+async function checkOfferProvenance(args: {
+  tripId: string;
+  offerIds: string[];
+  searchId?: string;
+}): Promise<string | null> {
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: args.tripId },
+      select: { metadata: true },
+    });
+    const meta = trip?.metadata as
+      | {
+          recentSplitTicketSearch?: {
+            offerIds?: unknown;
+            savedAt?: unknown;
+            searchId?: unknown;
+          };
+        }
+      | null
+      | undefined;
+    const stamp = meta?.recentSplitTicketSearch;
+    if (!stamp) {
+      return 'No recent split-ticket search found on this trip. Call `search_flights` with `includeSplitTicket: true` first; the offer ids it returns must be used within 30 min.';
+    }
+    const savedAt = typeof stamp.savedAt === 'string' ? Date.parse(stamp.savedAt) : NaN;
+    if (!Number.isFinite(savedAt)) {
+      return 'Split-ticket search stamp is malformed (missing or invalid `savedAt`). Re-run `search_flights`.';
+    }
+    const ageMs = Date.now() - savedAt;
+    if (ageMs > PROVENANCE_TTL_MINUTES * 60_000) {
+      return `Split-ticket search stamp is ${Math.round(ageMs / 60_000)}min old (TTL ${PROVENANCE_TTL_MINUTES}min). Re-run \`search_flights\` to refresh.`;
+    }
+    // Codex PR54-2 — when the caller supplies a `searchId`, it MUST
+    // match the stamp's id. This defeats stale-stamp / out-of-order
+    // race where a slower search_flights write lands AFTER a newer
+    // one. Callers that don't supply searchId fall back to TTL-only
+    // verification (back-compat for pre-hardening agents).
+    if (args.searchId) {
+      const stampedSearchId = typeof stamp.searchId === 'string' ? stamp.searchId : undefined;
+      if (stampedSearchId !== args.searchId) {
+        return `searchId mismatch (expected stamp \`${args.searchId}\`, found \`${stampedSearchId ?? 'none'}\`). The most recent search_flights response is stale or was overwritten. Re-run \`search_flights\` and pass the new searchId.`;
+      }
+    }
+    const allowed = new Set<string>(
+      Array.isArray(stamp.offerIds)
+        ? stamp.offerIds.filter((v): v is string => typeof v === 'string')
+        : []
+    );
+    const missing = args.offerIds.filter(id => !allowed.has(id));
+    if (missing.length > 0) {
+      return `Offer ids not in recent split-ticket search results: ${missing.join(', ')}. The offer ids book_trip accepts must come from the same trip's most recent \`search_flights\` itinerary-view response.`;
+    }
+    return null;
+  } catch (err) {
+    // Fail closed on a lookup error — refuse rather than honor a
+    // potentially-fraudulent request. The handoff message tells the
+    // operator what to investigate.
+    console.warn('[book_trip] checkOfferProvenance failed (failing closed)', {
+      tripId: args.tripId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return 'Provenance lookup failed. Retry once; if it persists, request_human_handoff so an operator can investigate.';
+  }
 }
 
 async function resolveTenantAllowsSplitTicket(ctx: ToolContext | undefined): Promise<boolean> {
@@ -486,6 +838,33 @@ async function resolveTenantAllowsSplitTicket(ctx: ToolContext | undefined): Pro
     return meta?.flights?.allowSplitTicket === true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Resolve the effective min-layover floor for a tenant. Reads
+ * `Tenant.metadata.flights.minLayoverHours` and clamps to the platform
+ * hard floor (`MIN_LAYOVER_HOURS_HARD_FLOOR`); defaults to the soft
+ * default (`MIN_LAYOVER_HOURS_SOFT_DEFAULT`) when unset. The platform
+ * hard floor is non-negotiable — anything below would risk single-slice
+ * disruption cascading into a missed downstream flight.
+ */
+async function resolveTenantMinLayoverHours(ctx: ToolContext | undefined): Promise<number> {
+  const tenantId = ctx?.traveler?.tenantId;
+  if (!tenantId) return MIN_LAYOVER_HOURS_SOFT_DEFAULT;
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { metadata: true },
+    });
+    const meta = tenant?.metadata as { flights?: { minLayoverHours?: unknown } } | null | undefined;
+    const raw = meta?.flights?.minLayoverHours;
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+      return Math.max(raw, MIN_LAYOVER_HOURS_HARD_FLOOR);
+    }
+    return MIN_LAYOVER_HOURS_SOFT_DEFAULT;
+  } catch {
+    return MIN_LAYOVER_HOURS_SOFT_DEFAULT;
   }
 }
 

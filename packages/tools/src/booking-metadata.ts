@@ -18,7 +18,18 @@
  *     re-itemize an open invoice.
  *   - Keeps the schema migration light. We can promote to a column in v2
  *     without breaking existing callers.
+ *
+ * v2 addition (PR #53 split-ticket follow-up, Codex finding f):
+ * a discriminated `BookingMetadataV1` union + `bookingMetadataSchema`
+ * zod validator + safe reader/writer. Today only the `book_trip`
+ * (split-ticket) write site is migrated to the typed writer — the
+ * `book_flight` variant stays a passthrough record because its shape
+ * evolves frequently and we don't want to break the existing legacy
+ * writes. Future per-source variants can tighten the schema one
+ * source at a time without breaking back-compat.
  */
+
+import { z } from 'zod';
 
 /**
  * Customer-facing invoice itemization mode.
@@ -74,4 +85,112 @@ export function readBookingSegment(
 ): string | null {
   const v = metadata?.segment;
   return typeof v === 'string' ? v : null;
+}
+
+/* -------------------------------------------------------------------- *
+ * BookingMetadataV1 — discriminated union (Codex review finding f)
+ * -------------------------------------------------------------------- *
+ *
+ * Background. `Booking.metadata` is `Json?` in Prisma. Until this v2
+ * iteration of the split-ticket PR, the `book_trip` write at
+ * `book-trip.ts::persistBookingForSlice` was a plain object literal:
+ *
+ *   metadata: { source: 'book_trip', sliceIndex, offerId, splitTicket: true }
+ *
+ * No shared TS type, no runtime validator. A typo at the write site
+ * silently produced bad metadata that the reader couldn't trust.
+ *
+ * The union below pins down the shape per `source` discriminator,
+ * with a runtime zod validator (`bookingMetadataSchema`), a safe
+ * defensive reader (`parseBookingMetadata`), and a typed writer
+ * (`serializeBookTripMetadata`).
+ *
+ * The `book_flight` variant is INTENTIONALLY a passthrough record
+ * (`.passthrough()` in zod terms). `book_flight` writes a much
+ * wider set of fields (policySnapshot, invoiceItemization, segment,
+ * markup, payer, etc.) and migrating that surface lives in a
+ * follow-up — we don't want to break legacy writes today. The
+ * passthrough variant lets `parseBookingMetadata` still safely
+ * accept those reads and surface the discriminator without
+ * over-constraining the shape. */
+
+/**
+ * Forward-looking variant for the day book_flight is migrated to stamp
+ * `source: 'book_flight'` on its metadata writes. Today book_flight
+ * writes `{ paymentStatus, usdcSettlement? }` with NO source field
+ * (book-flight.ts:1378) — those rows fail the discriminator and fall
+ * through `parseBookingMetadata` to `null`, which is the safe defensive
+ * behavior.
+ *
+ * When the future migration lands, this variant ensures the stamped
+ * metadata carries at least `paymentStatus` (the field every
+ * book_flight write site already produces). Codex PR54-5: prevents a
+ * malformed-but-source-tagged blob from passing the discriminator
+ * unchallenged. Other fields stay passthrough since `book_flight`
+ * writes a wide set (segments projection, eTicket URLs, journey state,
+ * markup snapshot, etc.) and locking them all here would over-constrain.
+ */
+const bookFlightMetadataSchema = z
+  .object({
+    source: z.literal('book_flight'),
+    paymentStatus: z.string().min(1),
+  })
+  .passthrough();
+
+const bookTripMetadataSchema = z.object({
+  source: z.literal('book_trip'),
+  sliceIndex: z.number().int().min(0).max(5),
+  offerId: z.string().regex(/^off_/),
+  splitTicket: z.literal(true),
+});
+
+/**
+ * Runtime validator. Use `parseBookingMetadata` for defensive parsing —
+ * this is exported for advanced callers (e.g. typed inference, tests).
+ */
+export const bookingMetadataSchema = z.discriminatedUnion('source', [
+  bookFlightMetadataSchema,
+  bookTripMetadataSchema,
+]);
+
+/**
+ * Typed metadata blob the rest of the codebase can rely on for the two
+ * known sources. Other (legacy / segment-only / policy-only) reads of
+ * `Booking.metadata` that lack a `source` field stay safe — they just
+ * fall through `parseBookingMetadata` as `null`.
+ */
+export type BookingMetadataV1 = z.infer<typeof bookingMetadataSchema>;
+
+export type BookTripBookingMetadata = z.infer<typeof bookTripMetadataSchema>;
+export type BookFlightBookingMetadata = z.infer<typeof bookFlightMetadataSchema>;
+
+/**
+ * Defensive reader. Returns the parsed union on a match, `null` on
+ * anything else (missing discriminator, bad shape, non-object). Reads
+ * MUST NOT throw — `Booking.metadata` carries legacy / out-of-union
+ * blobs on existing rows and we don't want a single bad row to brick
+ * the invoice generator or the audit export.
+ */
+export function parseBookingMetadata(raw: unknown): BookingMetadataV1 | null {
+  const parsed = bookingMetadataSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Typed writer for the `book_trip` (split-ticket) persist path. Returns
+ * a fully-typed `BookTripBookingMetadata` the caller hands directly to
+ * Prisma's `metadata` field. Validates input at the boundary so a typo
+ * at the call site (`sliceIdx` for `sliceIndex`, missing `offerId`,
+ * etc.) becomes a TypeScript error.
+ */
+export function serializeBookTripMetadata(input: {
+  sliceIndex: number;
+  offerId: string;
+}): BookTripBookingMetadata {
+  return {
+    source: 'book_trip',
+    sliceIndex: input.sliceIndex,
+    offerId: input.offerId,
+    splitTicket: true,
+  };
 }
