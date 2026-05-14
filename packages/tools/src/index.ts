@@ -200,6 +200,7 @@ import { setTripKindTool } from './set-trip-kind';
 import { sweepDcwToGatewayTool } from './sweep-dcw-to-gateway';
 import { takeMeHomeTool } from './take-me-home';
 import { bookFlightTool } from './book-flight';
+import { bookTripTool } from './book-trip';
 import { selectSeatTool } from './select-seat';
 import { addBaggageTool } from './add-baggage';
 import { bookStayTool } from './book-stay';
@@ -841,6 +842,7 @@ export {
 export const toolList: ToolDef[] = [
   searchFlightsTool,
   bookFlightTool,
+  bookTripTool,
   searchHotelsTool,
   checkTreasuryTool,
   gatewayBalanceTool,
